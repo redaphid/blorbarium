@@ -31,7 +31,9 @@ constexpr int kHopMaxPx = 36;                    // leap height at strength 1, s
 constexpr int kShadowAlpha = 150;               // the contact shadow's darkest, standing (of 256)
 constexpr int kShadowWidePct = 30;               // its half-width, as a share of the body frame's width
 constexpr int kHatchlingWide = kOne * 116 / 100, kHatchlingTall = kOne * 90 / 100;
-constexpr int kElderSat = 96;                    // x/128
+constexpr int kOldSat = 40, kOldDim = 24;        // at the end of an elder's life: skin, belly, cloak saturation x/128, darker by x/256
+constexpr int kOldSlowPct = 60, kOldShallowPct = 50;   // his breath that much slower and shallower
+constexpr int kOldShorterPct = 6, kOldWiderPct = 3;    // and he settles that much shorter and wider
 constexpr int kMinScale = kOne / 16;
 constexpr int kEggLean = kOne * 16 / 100;        // shear at full wobble
 constexpr int kClutchGapPx = 66;
@@ -166,7 +168,13 @@ struct Colours {
   bool skin[256];
 };
 
-void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t spotHue, Colours& out) {
+// Ageing (old256: 0 young .. 256 at the end of an elder's life) greys the
+// skin, belly and cloak over his genetic colours.
+bool ages(uint8_t region) {
+  return region == blorb::region::skin.v || region == blorb::region::belly.v || region == blorb::region::cloak.v;
+}
+
+void buildColours(const SpritePack& pack, const Tint* tints, int old256, int8_t spotHue, Colours& out) {
   std::memset(&out, 0, sizeof(out));
   Tint clamped[blorb::kRegionCount];
   for (size_t r = 0; r < blorb::kRegionCount; ++r)
@@ -176,7 +184,15 @@ void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t 
   for (int i = 0; i < imin(count, 256); ++i) {
     const PaletteEntry& e = pal[i];
     Rgb c{e.r, e.g, e.b};
-    if (e.region < blorb::kRegionCount) c = tinted(c, clamped[e.region], elder ? kElderSat : 128);
+    if (e.region < blorb::kRegionCount) {
+      Tint t = clamped[e.region];
+      int sat = 128;
+      if (ages(e.region)) {
+        sat = 128 - (128 - kOldSat) * old256 / 256;
+        t.val = uint8_t(t.val * (256 - kOldDim * old256 / 256) / 256);
+      }
+      c = tinted(c, t, sat);
+    }
     out.base[i] = out.spot[i] = to565(c);
     out.skin[i] = e.region == blorb::region::skin.v;
     if (out.skin[i]) out.spot[i] = to565(tinted(c, Tint{spotHue, 128, 92}, 128));
@@ -475,11 +491,12 @@ Motion motionOf(const Appearance& a, int maxLift) {
 }
 
 int breathPx(const Appearance& a) {
-  int period = a.asleep ? kSleepBreathTicks : kBreathTicks, half = period / 2;
+  const int old = unit256(a.elderly);
+  int period = (a.asleep ? kSleepBreathTicks : kBreathTicks) * (25600 + kOldSlowPct * old) / 25600, half = period / 2;
   int t = int((a.poseTick + mix32(a.lifeSeed, 0xB0B)) % uint32_t(period));
   int tri = t < half ? t : period - t;
-  int amp = kBreathPx + (a.intensity >= Fx::ratio(3, 4) ? 1 : 0);
-  return (amp * tri * 2 + half) / (2 * half);
+  int amp100 = (kBreathPx + (a.intensity >= Fx::ratio(3, 4) ? 1 : 0)) * (25600 - kOldShallowPct * old) / 256;
+  return (amp100 * tri * 2 + half * 100) / (2 * half * 100);
 }
 
 struct FaceShown { ExprId now, from; int mix; };   // mix: 0..256 of `now` over `from`
@@ -599,7 +616,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer == 0) { mottle.density = a.marks[i].variant; spotHue = a.marks[i].tint.hue; }
   Colours col;
-  buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
+  buildColours(pack, a.regions, unit256(a.elderly), spotHue, col);
 
   // Away from home he shrinks a little, easing with his distance from it, so
   // he fits beside the dish's items; at home he fills the panel.
@@ -612,6 +629,9 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     base.kx = k * kHatchlingWide / kOne;
     base.ky = k * kHatchlingTall / kOne;
   }
+  const int old = unit256(a.elderly);   // an old frog settles lower; placement keeps his middle home
+  base.ky = base.ky * (25600 - kOldShorterPct * old) / 25600;
+  base.kx = base.kx * (25600 + kOldWiderPct * old) / 25600;
   const blorb::ReflexInfo* reflex = a.reflexActive ? reflexInfo(a.reflex) : nullptr;
   FrameRef bodies[2] = {pack.body(blorb::pose::idle, a.stage, a.poseTick),
                         pack.body(reflex ? reflex->pose : a.pose, a.stage, a.poseTick)};
@@ -657,7 +677,7 @@ int eggShear(Fx wobble, uint16_t tick, int lean) {
 
 void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Colours col;
-  buildColours(pack, a.regions, false, 0, col);
+  buildColours(pack, a.regions, 0, 0, col);
   FrameRef f = pack.egg(a.eggProgress);
   const Xf variants[2] = {{kOne, kOne, 0, kEggLean}, {kOne, kOne, 0, -kEggLean}};
   const Disc d = envelope({&f, 1, &f, 1, variants, 2}, middle(f, Xf{}), 0);
@@ -672,7 +692,7 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 
 void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Colours col;
-  buildColours(pack, a.regions, false, 0, col);
+  buildColours(pack, a.regions, 0, 0, col);
   FrameRef f = pack.remains();
   const Xf rest{};
   const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, middle(f, rest), 0);
@@ -701,7 +721,7 @@ void drawClutch(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     tints[blorb::region::cloak.v] = a.eggs[i].cloak;
     tints[blorb::region::shell.v] = a.eggs[i].shell;
     Colours col;
-    buildColours(pack, tints, false, 0, col);
+    buildColours(pack, tints, 0, 0, col);
     Place p;
     p.xf.kx = p.xf.ky = imin(kOne, kOne * kClutchEggPx / imax(1, f.h));
     p.x = kSide / 2 + (2 * i - (n - 1)) * kClutchGapPx / 2;

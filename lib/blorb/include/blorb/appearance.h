@@ -18,6 +18,10 @@ namespace blorb {
 // Foresee action runs, glow is at least this, whatever the genes say. Genes
 // make it brighter and tint it; they cannot make it invisible.
 constexpr Fx kForeseeGlowFloor = Fx::ratio(6, 10);
+// An elder greys and slows as his life falls from where the starter turns
+// elder to where it dies (its become_elder and die receptors), so the ageing
+// eases in from the stage switch and is complete at the end.
+constexpr Fx kElderLife = Fx::ratio(46, 255), kLastLife = Fx::ratio(26, 255);
 
 struct Appearance {
   // Kind selects the stage art: Egg, Creature (with `stage`: Baby/Child =
@@ -32,6 +36,7 @@ struct Appearance {
   DishPos at{};
   Fx facing{};
   uint8_t scalePct = 100;           // 100 = adult base; hatchlings ~55; size genes and locus add
+  Fx elderly{};                     // 0 until he is an elder, then rising to 1 as his life runs out
   PoseId pose{};
   uint16_t poseTick = 0;
 

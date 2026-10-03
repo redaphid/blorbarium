@@ -148,6 +148,44 @@ TEST(Framing, AtHomeHeAndTheEggFillThePanel) {
   if (std::getenv("FRAMING_REPORT")) std::printf("adult %dx%d egg %dx%d\n", adult.w, adult.h, e.w, e.h);
 }
 
+// The mean saturation of what he draws over the empty dish.
+double saturation(const Appearance& a) {
+  Appearance none = a;
+  none.kind = Appearance::Kind::Remains;
+  none.remainsFade = Fx::one();
+  auto him = render(a), empty = render(none);
+  double sum = 0;
+  int n = 0;
+  for (int i = 0; i < kSide * kSide; ++i) {
+    if (him->px[i] == empty->px[i]) continue;
+    int r = r5(him->px[i]) * 255 / 31, g = g6(him->px[i]) * 255 / 63, b = b5(him->px[i]) * 255 / 31;
+    int hi = std::max({r, g, b}), lo = std::min({r, g, b});
+    if (hi > 0) sum += double(hi - lo) / hi, ++n;
+  }
+  return n ? sum / n : 0;
+}
+
+// The user: "none of the elders look old". Over an elder's life he greys and
+// settles lower, from nothing at the stage switch, so it never pops.
+TEST(Ageing, AnElderGreysAndSettlesAsHisLifeRunsOut) {
+  Appearance adult = atHome(Stage::Adult, 100), elder = adult;
+  elder.stage = Stage::Elder;
+  auto a = render(adult), e = render(elder);
+  EXPECT_TRUE(std::equal(a->px, a->px + kSide * kSide, e->px)) << "turning elder changes nothing at first";
+  double sat[3];
+  for (int i = 0; i < 3; ++i) {
+    elder.elderly = Fx::ratio(i, 2);
+    sat[i] = saturation(elder);
+  }
+  EXPECT_LT(sat[1], sat[0]);
+  EXPECT_LT(sat[2], sat[1]);
+  EXPECT_LT(sat[2], sat[0] * 0.8) << "at the end he is clearly greyer: " << sat[0] << " to " << sat[2];
+  Middle young = middleOf(adult), old = middleOf(elder);
+  EXPECT_LT(old.h, young.h - 5) << "he settles lower";
+  EXPECT_NEAR(old.x, kMiddle, kOffBy);
+  EXPECT_NEAR(old.y, kMiddle, kOffBy);
+}
+
 // The converter's glow rule, on the panel's colours.
 bool teal(uint16_t p) {
   int r = r5(p) * 255 / 31, g = g6(p) * 255 / 63, b = b5(p) * 255 / 31;

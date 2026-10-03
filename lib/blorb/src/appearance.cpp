@@ -100,6 +100,8 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.at = body.at;
   a.facing = body.facing;
   a.scalePct = scaleFor(c.stage(), c.phenotype(), chem.locus[locus::size.v]);
+  if (c.stage() == Stage::Elder)
+    a.elderly = clamp01(Fx::ratio(kElderLife.raw - chem.chem[chem::life.v].raw, kElderLife.raw - kLastLife.raw));
   a.pose = body.pose;
   a.poseTick = body.poseTick;
   a.expression = c.face().current;
@@ -183,6 +185,7 @@ Appearance portrait(const Genome& g, Stage stage, uint16_t generation, uint32_t 
   a.stage = stage;
   a.lifeSeed = g.hash();
   a.scalePct = scaleFor(stage, p, Fx::zero());
+  if (stage == Stage::Elder) a.elderly = Fx::ratio(1, 2);   // an elder ancestor, partway grey
   a.pose = pose::idle;
   a.expression = a.previous = expr::neutral;
   a.lastStim = stim::none;
