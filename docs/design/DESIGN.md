@@ -338,6 +338,9 @@ Each unit is small, names its files and ends in a check that can be run. Do not 
 | 18 | Frame goldens | `tests/film.py`, `tests/feeds/*.txt`, `test/golden/*.png`, `tools/sim_film.sh` | `sim_film.sh` green on the nine states |
 | 19 | Grungo pack converter | `tools/sprite_pack.py`, `pets/grungo/grungo_pack.h` | converter output is byte-stable across runs; every eye anchor falls inside the eye mask; goldens re-blessed once, reviewed as PNGs |
 | 20 | Firmware on the 1.28 | `src/hw/*.h`, `src/main.cpp`, `tools/partitions_16mb.csv`, `merge_image.py`, `pick_port.py` | `pio run -e badge128` on Windows; on the board: minimum free heap at least 24 KB through a save, a death and a pick; `HASH` after a scripted serial feed equals the host hash |
+| 21 (future) | Phone-side foresight: on a visit, the website runs this engine compiled to WebAssembly. It receives the creature's snapshot over BLE, simulates many futures, and returns bounded brain-weight updates and pre-screened clutch mutations, which the board validates and caps before applying | an Emscripten build of `lib/blorb`; `Keepsake::encode`/`decode` as the one self-contained blob pair; new verbs in `defs/commands.def` for the proposals; board-side caps in `brain.cpp` and `mutate.cpp` | the WASM build and the host replay the same snapshot and script to the same `Dish` hash; a proposal past its caps is refused; a mutation the board's `viability()` rejects is never applied |
+
+Unit 21 is not built yet. Two constraints keep its door open now: `lib/blorb` stays buildable by Emscripten (no threads, no platform headers, no reliance on undefined behaviour, integer determinism), and the whole snapshot crosses the wire through the `Keepsake::encode`/`decode` pair.
 
 ## 11. Tradeoffs accepted
 
