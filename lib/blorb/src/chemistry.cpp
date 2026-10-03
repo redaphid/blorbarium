@@ -93,7 +93,9 @@ void Chemistry::stepCoarse(const ChemRules& rules, uint32_t stride, uint32_t tic
   }
   for (const Reaction& r : rules.reactions) react(chem, r, fxMin(Fx::one(), Fx::sat(int64_t(r.rate.raw) * stride)));
   for (uint16_t i = 0; i < kChemSlots; ++i) {
-    chem[i] = applyDecayTicks(chem[i], rules.decay[i], decayTicks(rules.decay[i], tick, stride));
+    const Decay& d = rules.decay[i];
+    if (d.keep != Decay{}.keep && chem[i] != Fx::zero())
+      chem[i] = applyDecayTicks(chem[i], d, decayTicks(d, tick, stride));
     if (i != 0) chem[i] = clamp01(chem[i] + pending[i]);
   }
   receive(*this, rules);
