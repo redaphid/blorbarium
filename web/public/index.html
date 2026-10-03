@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blorbarium</title>
+<meta name="description" content="Talk to grungo's dish over Bluetooth.">
+<meta name="theme-color" content="#2f3a1c">
+<link rel="icon" href="grungo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column, a petri dish holding grungo up top, then readouts. */
+:root {
+  --bg: #eef0e2;
+  --surface: #f9faf1;
+  --fg: #23291a;
+  --muted: #646d52;
+  --olive: #6b7a2e;
+  --olive-soft: #d9dfba;
+  --teal: #1d8a83;
+  --teal-soft: #c6e6e2;
+  --cloak: #5b4632;
+  --line: #d3d7bf;
+  --warn: #b0542a;
+  --font-display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161a10; --surface: #20261a; --fg: #e7ebd6; --muted: #a3ab8b;
+    --olive: #a7b85a; --olive-soft: #39421f; --teal: #4fc4bb; --teal-soft: #173d3a;
+    --cloak: #a58a6c; --line: #343c26; --warn: #e3875a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161a10; --surface: #20261a; --fg: #e7ebd6; --muted: #a3ab8b;
+  --olive: #a7b85a; --olive-soft: #39421f; --teal: #4fc4bb; --teal-soft: #173d3a;
+  --cloak: #a58a6c; --line: #343c26; --warn: #e3875a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.5 var(--font-body);
+  padding-inline: 16px;
+  padding-block: calc(env(safe-area-inset-top, 0px) + 16px) calc(env(safe-area-inset-bottom, 0px) + 32px);
+}
+main { max-width: 30rem; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.wordmark { font: 800 1.15rem/1 var(--font-display); letter-spacing: 0.01em; color: var(--olive); margin: 0; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); font-size: 0.85rem; color: var(--muted);
+}
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill[data-s="connected"] { color: var(--teal); }
+.pill[data-s="connected"]::before { background: var(--teal); box-shadow: 0 0 0 3px var(--teal-soft); }
+.pill[data-s="connecting"]::before { background: var(--olive); animation: pulse 1s ease-in-out infinite; }
+.pill[data-s="lost"] { color: var(--warn); }
+.pill[data-s="lost"]::before { background: var(--warn); }
+@keyframes pulse { 50% { opacity: 0.25; } }
+
+.dish-wrap { display: grid; justify-items: center; gap: 14px; text-align: center; }
+.dish {
+  width: min(78vw, 300px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 50% 42%, var(--surface) 0 52%, var(--olive-soft) 100%);
+  border: 6px solid var(--teal-soft);
+  box-shadow: inset 0 0 0 2px var(--teal), inset 0 -18px 30px -12px var(--olive-soft), 0 10px 30px -18px var(--fg);
+  display: grid; place-items: center; overflow: hidden;
+}
+.dish::after {
+  content: ""; position: absolute; inset: 9%; border-radius: 50%;
+  border: 1px dashed var(--teal); opacity: 0.35; pointer-events: none;
+}
+.dish img { width: 78%; height: auto; transform: translateY(4%); }
+.dish[data-phase="egg"] img, .dish[data-phase="clutch"] img { filter: grayscale(0.6) opacity(0.5); }
+.dish[data-asleep="1"] img { filter: saturate(0.6) brightness(0.85); }
+h1 { font: 800 clamp(2rem, 9vw, 2.6rem)/1.05 var(--font-display); margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+.meta { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.doing { margin: 0; font-size: 0.95rem; color: var(--teal); }
+
+.notice { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 10px; padding: 14px 16px; }
+.notice strong { display: block; font-family: var(--font-display); font-size: 1.1rem; margin-bottom: 4px; }
+.notice p { margin: 0; color: var(--muted); }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button {
+  font: 700 1rem var(--font-body); border-radius: 999px; padding: 12px 22px; cursor: pointer;
+  border: 2px solid var(--teal); background: var(--teal); color: var(--surface);
+}
+button.ghost { background: transparent; color: var(--teal); }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--olive); outline-offset: 2px; }
+
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+h2 { margin: 0; font: 500 0.8rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+
+.drives { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.drive { display: grid; grid-template-columns: 7.5rem 1fr 2.5rem; align-items: center; gap: 10px; font-size: 0.95rem; }
+.bar { height: 10px; border-radius: 5px; background: var(--olive-soft); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--olive); border-radius: 5px; transition: width 0.4s ease; }
+.drive[data-high="1"] .bar > i { background: var(--warn); }
+.drive b { font: 500 0.8rem var(--font-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.95rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; overflow-wrap: anywhere; }
+.hash { color: var(--teal); }
+details summary { cursor: pointer; color: var(--teal); font-weight: 700; }
+.genes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; max-height: 18rem; overflow-y: auto; }
+.genes li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 0.9rem; }
+.genes li:nth-child(odd) { background: var(--bg); }
+.genes small { font-family: var(--font-mono); color: var(--muted); font-size: 0.78rem; }
+.tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 7px; border-radius: 999px; margin-left: 6px; background: var(--olive-soft); color: var(--fg); }
+.tag.mind { background: var(--teal-soft); }
+
+form { display: flex; gap: 10px; flex-wrap: wrap; }
+input {
+  flex: 1 1 10rem; min-width: 0; font: 1rem var(--font-body); padding: 11px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+}
+.hint { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.hint[data-tone="ok"] { color: var(--teal); }
+.hint[data-tone="err"] { color: var(--warn); }
+footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="wordmark">blorbarium</p>
+    <span class="pill" id="status" data-s="idle" role="status" aria-live="polite">Not connected</span>
+  </header>
+
+  <div class="notice" id="unsupported" hidden>
+    <strong>Open this page in Chrome on Android to talk to grungo.</strong>
+    <p>This browser can't use Bluetooth. iPhone browsers and Firefox don't support it yet.</p>
+  </div>
+
+  <div class="dish-wrap">
+    <div class="dish" id="dish"><img src="grungo.png" alt="grungo, a green frog in a brown hood" width="384" height="384"></div>
+    <h1 id="name">grungo</h1>
+    <p class="meta" id="meta">Bring your phone close to the dish and connect.</p>
+    <p class="doing" id="doing" hidden></p>
+    <div class="actions">
+      <button id="connect" type="button">Connect to grungo</button>
+      <button id="reconnect" type="button" class="ghost" hidden>Reconnect</button>
+    </div>
+  </div>
+
+  <section id="drivesBox" hidden>
+    <h2>How he feels</h2>
+    <ul class="drives" id="drives"></ul>
+  </section>
+
+  <section id="genomeBox" hidden>
+    <h2>Genome</h2>
+    <dl class="kv">
+      <dt>Genome hash</dt><dd class="hash" id="genomeHash">…</dd>
+      <dt>Genes</dt><dd id="geneCount">…</dd>
+      <dt>Dish hash</dt><dd id="dishHash">…</dd>
+      <dt>Firmware</dt><dd id="fw">…</dd>
+    </dl>
+    <details>
+      <summary>Show every gene</summary>
+      <ul class="genes" id="genes"></ul>
+    </details>
+  </section>
+
+  <section id="nameBox" hidden>
+    <h2>Name</h2>
+    <form id="nameForm" autocomplete="off">
+      <input id="nameInput" name="name" maxlength="15" pattern="[A-Za-z0-9_\-]{1,15}" placeholder="grungo" aria-label="New name" required>
+      <button type="submit">Rename</button>
+    </form>
+    <p class="hint" id="nameHint">Up to 15 letters, numbers, - or _.</p>
+  </section>
+
+  <footer id="footer">Made for grungo's keeper.</footer>
+</main>
+
+<script>
+"use strict";
+const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const DRIVES = ["hunger", "sleepiness", "boredom", "loneliness", "fear", "pain", "discomfort", "need_touch"];
+const DRIVE_LABEL = { need_touch: "need touch" };
+const GENE_KINDS = {
+  0x01: ["chem", "body"], 0x02: ["reaction", "body"], 0x03: ["emitter", "body"], 0x04: ["receptor", "body"],
+  0x10: ["stimulus", "mind"], 0x11: ["instinct", "mind"], 0x12: ["expression", "mind"], 0x13: ["temperament", "mind"],
+  0x20: ["palette", "look"], 0x21: ["size", "look"], 0x22: ["mark", "look"],
+  0x30: ["mutation", "life"], 0x31: ["egg", "life"], 0x32: ["metabolism", "life"], 0x7f: ["note", "life"],
+};
+const STAGES = ["baby", "child", "adult", "elder"];
+const NAME_RE = /^[A-Za-z0-9_-]{1,15}$/;
+const params = new URLSearchParams(location.search);
+const $ = (id) => document.getElementById(id);
+
+// key=value pairs out of a reply line
+function kv(text) {
+  const out = {};
+  for (const m of text.matchAll(/([A-Za-z_]+)=(\S*)/g)) out[m[1]] = m[2];
+  return out;
+}
+
+// One request/response channel over any line transport. Replies are
+// "#<hexid> + ..." lines closed by "#<hexid> OK ..." or "#<hexid> ERR <code> <text>";
+// "! ..." lines are unsolicited events.
+class Link {
+  constructor(transport, onEvent) {
+    this.transport = transport;
+    this.onEvent = onEvent;
+    this.nextId = 1;
+    this.pending = new Map();
+    this.chain = Promise.resolve();
+    transport.onLine = (line) => this.receive(line);
+  }
+  receive(line) {
+    if (line.startsWith("!")) return this.onEvent(line.slice(1).trim());
+    const m = /^#([0-9a-fA-F]+) (\+|OK|ERR)(?: (.*))?$/.exec(line);
+    if (!m) return;
+    const p = this.pending.get(parseInt(m[1], 16));
+    if (!p) return;
+    const body = m[3] || "";
+    if (m[2] === "+") return void p.lines.push(body);
+    this.pending.delete(parseInt(m[1], 16));
+    clearTimeout(p.timer);
+    if (m[2] === "OK") p.resolve({ lines: p.lines, ok: body });
+    else p.reject(Object.assign(new Error(body), { code: parseInt(body, 10) }));
+  }
+  // Requests go one at a time: the board answers each line before reading the next.
+  send(cmd, timeoutMs = 8000) {
+    const run = () => new Promise((resolve, reject) => {
+      const id = this.nextId;
+      this.nextId = this.nextId >= 0xffffff ? 1 : this.nextId + 1;
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("TIMEOUT " + cmd)); }, timeoutMs);
+      this.pending.set(id, { lines: [], resolve, reject, timer });
+      this.transport.write(`#${id.toString(16)} ${cmd}\n`).catch((e) => { this.pending.delete(id); clearTimeout(timer); reject(e); });
+    });
+    const result = this.chain.then(run, run);
+    this.chain = result.catch(() => {});
+    return result;
+  }
+  failAll(reason) {
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error(reason)); }
+    this.pending.clear();
+  }
+}
+
+// Nordic UART over Web Bluetooth. Notifications can split a line, so buffer to "\n".
+class BleTransport {
+  constructor(onDrop) { this.onDrop = onDrop; this.buf = ""; this.device = null; this.rx = null; this.onLine = () => {}; }
+  async pick() {
+    const want = params.get("d");
+    const filters = want ? [{ name: want }] : [{ services: [NUS] }, { namePrefix: "blorb-" }];
+    this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS] });
+    this.device.addEventListener("gattserverdisconnected", () => this.onDrop());
+  }
+  async open() {
+    const server = await this.device.gatt.connect();
+    const svc = await server.getPrimaryService(NUS);
+    this.rx = await svc.getCharacteristic(RX);
+    const tx = await svc.getCharacteristic(TX);
+    this.buf = "";
+    tx.addEventListener("characteristicvaluechanged", (e) => {
+      this.buf += new TextDecoder().decode(e.target.value);
+      let nl;
+      while ((nl = this.buf.indexOf("\n")) >= 0) {
+        const line = this.buf.slice(0, nl).replace(/\r$/, "");
+        this.buf = this.buf.slice(nl + 1);
+        if (line) this.onLine(line);
+      }
+    });
+    await tx.startNotifications();
+  }
+  async write(text) {
+    const bytes = new TextEncoder().encode(text);
+    for (let i = 0; i < bytes.length; i += 20) {
+      const part = bytes.slice(i, i + 20);
+      if (this.rx.writeValueWithResponse) await this.rx.writeValueWithResponse(part);
+      else await this.rx.writeValue(part);
+    }
+  }
+  get name() { return this.device ? this.device.name : ""; }
+}
+
+// ?mock=1: a fake board with a canned grungo, so the page can be checked without the badge.
+class MockTransport {
+  constructor() {
+    this.onLine = () => {};
+    this.name = "blorb-7a3f";
+    this.petName = "grungo";
+    const genes = [[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
+      [0x12,4,0],[0x13,5,0],[0x20,6,0],[0x20,6,2],[0x21,2,0],[0x22,4,2],[0x30,3,0],[0x31,4,2],[0x32,4,0],[0x7f,8,0]];
+    const bytes = [];
+    genes.forEach(([type, len, stage], i) => {
+      bytes.push(type, len, 0, stage, 0, 128, (i + 1) & 255, 0);
+      for (let k = 0; k < len; k++) bytes.push((i * 37 + k * 11) & 255);
+    });
+    this.genome = new Uint8Array(bytes);
+  }
+  async write(text) {
+    const m = /^#([0-9a-f]+) (\S+) ?(.*)\n$/.exec(text);
+    const id = m[1], verb = m[2], args = m[3];
+    const lines = [];
+    if (verb === "TIME") lines.push("OK caught_up=0");
+    else if (verb === "HELLO") lines.push(`OK fw=0.3.0 fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
+    else if (verb === "STATE") lines.push(
+      "+ phase=creature gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0",
+      "+ drives hunger=412 sleepiness=180 boredom=655 loneliness=290 fear=40 pain=0 discomfort=120 need_touch=520",
+      "+ body life=930 injury=0 glow=610 dreaming=0",
+      "+ dish pantry=3 pellets=1 night=0 time=known", "OK");
+    else if (verb === "GENOME") {
+      const bin = String.fromCharCode(...this.genome);
+      lines.push(`+ 0 ${btoa(bin)}`, `OK ${this.genome.length} 9c41e07b`);
+    } else if (verb === "HASH") lines.push("OK hash=5e2a91d0 tick=1987460");
+    else if (verb === "SUB") lines.push("OK events=0x03");
+    else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
+    else lines.push("ERR 404 UNKNOWN_VERB");
+    lines.forEach((l, i) => setTimeout(() => this.onLine(`#${id} ${l}`), 40 + i * 25));
+  }
+}
+
+const ui = {
+  status(s, text) { const el = $("status"); el.dataset.s = s; el.textContent = text; },
+  show(id, on) { $(id).hidden = !on; },
+};
+
+function formatAge(ticks) {
+  const mins = Math.floor(ticks / 600);
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  if (d) return `${d}d ${h}h old`;
+  if (h) return `${h}h ${m}m old`;
+  return `${m}m old`;
+}
+
+function renderState(s) {
+  const dish = $("dish");
+  dish.dataset.phase = s.phase || "";
+  dish.dataset.asleep = s.asleep || "0";
+  const gen = `generation ${s.gen ?? "?"}`;
+  let meta;
+  if (s.phase === "creature") meta = `${s.stage} · ${formatAge(Number(s.age || 0))} · ${gen}`;
+  else if (s.phase === "egg") meta = `an egg, ${Math.round(Number(s.progress || 0) / 10)}% hatched · ${gen}`;
+  else meta = `${s.eggs ?? "some"} eggs waiting to be picked · ${gen}`;
+  $("meta").textContent = meta;
+  const doing = s.phase === "creature" ? (s.asleep === "1" ? "asleep" : `${s.action?.replace(/_/g, " ")}, looking ${s.face}`) : "";
+  $("doing").textContent = doing;
+  ui.show("doing", !!doing);
+}
+
+function renderDrives(d) {
+  $("drives").replaceChildren(...DRIVES.filter((k) => k in d).map((k) => {
+    const v = Math.max(0, Math.min(1000, Number(d[k])));
+    const li = document.createElement("li");
+    li.className = "drive";
+    li.dataset.high = v >= 700 ? "1" : "0";
+    li.innerHTML = `<span></span><span class="bar" role="meter" aria-valuemin="0" aria-valuemax="100"><i></i></span><b></b>`;
+    li.children[0].textContent = DRIVE_LABEL[k] || k;
+    li.children[1].setAttribute("aria-valuenow", Math.round(v / 10));
+    li.children[1].setAttribute("aria-label", DRIVE_LABEL[k] || k);
+    li.querySelector("i").style.width = `${v / 10}%`;
+    li.children[2].textContent = Math.round(v / 10);
+    return li;
+  }));
+  ui.show("drivesBox", true);
+}
+
+function decodeGenes(bytes) {
+  const genes = [];
+  for (let at = 0; at + 8 <= bytes.length;) {
+    const [type, len, , stage] = bytes.subarray(at, at + 4);
+    const uid = bytes[at + 6] | (bytes[at + 7] << 8);
+    const [name, cls] = GENE_KINDS[type] || [`unknown 0x${type.toString(16)}`, "life"];
+    genes.push({ uid, name, cls, stage: STAGES[stage & 3], len });
+    at += 8 + len;
+  }
+  return genes;
+}
+
+function renderGenome(hash, genes) {
+  $("genomeHash").textContent = hash;
+  const byClass = {};
+  for (const g of genes) byClass[g.cls] = (byClass[g.cls] || 0) + 1;
+  $("geneCount").textContent = `${genes.length} (` + Object.entries(byClass).map(([c, n]) => `${n} ${c}`).join(", ") + ")";
+  $("genes").replaceChildren(...genes.map((g) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span><span class="n"></span><span class="tag"></span></span><small></small>`;
+    li.querySelector(".n").textContent = g.name;
+    const tag = li.querySelector(".tag");
+    tag.textContent = g.cls;
+    if (g.cls === "mind") tag.classList.add("mind");
+    li.querySelector("small").textContent = `#${g.uid} · from ${g.stage} · ${g.len}b`;
+    return li;
+  }));
+  ui.show("genomeBox", true);
+}
+
+let link = null, transport = null, poll = null;
+
+async function refreshState() {
+  const r = await link.send("STATE");
+  for (const line of r.lines) {
+    if (line.startsWith("phase=")) renderState(kv(line));
+    else if (line.startsWith("drives")) renderDrives(kv(line));
+  }
+}
+
+async function refreshHello() {
+  const h = kv((await link.send("HELLO")).ok);
+  $("name").textContent = h.name || "grungo";
+  $("nameInput").placeholder = h.name || "grungo";
+  $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
+  return h;
+}
+
+async function loadGenome() {
+  const r = await link.send("GENOME", 15000);
+  const [len, crc] = r.ok.split(" ");
+  const bytes = new Uint8Array(Number(len));
+  for (const line of r.lines) {
+    const [off, b64] = line.split(" ");
+    const bin = atob(b64);
+    for (let i = 0; i < bin.length; i++) bytes[Number(off) + i] = bin.charCodeAt(i);
+  }
+  renderGenome(crc, decodeGenes(bytes));
+}
+
+async function session() {
+  ui.status("connecting", "Saying hello…");
+  const now = Math.floor(Date.now() / 1000);
+  const tz = -new Date().getTimezoneOffset();
+  await link.send(`TIME ${now} ${tz}`);
+  await refreshHello();
+  await refreshState();
+  ui.status("connected", "Connected");
+  ui.show("connect", false);
+  ui.show("reconnect", false);
+  ui.show("nameBox", true);
+  await loadGenome().catch((e) => console.warn("genome", e));
+  link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
+  link.send("SUB state stage hatched died").catch(() => {});
+  clearInterval(poll);
+  poll = setInterval(() => refreshState().catch(() => {}), 10000);
+}
+
+function onEvent(text) {
+  if (text.startsWith("STATE ")) renderState(kv(text));
+  else if (/^(STAGE|HATCHED|DIED|PICKED|CLUTCH)/.test(text)) refreshState().catch(() => {});
+}
+
+function onDrop() {
+  clearInterval(poll);
+  if (link) link.failAll("disconnected");
+  ui.status("lost", "Lost connection");
+  ui.show("reconnect", true);
+}
+
+async function connect() {
+  try {
+    if (params.has("mock")) {
+      transport = new MockTransport();
+    } else {
+      transport = new BleTransport(onDrop);
+      ui.status("connecting", "Choose the dish…");
+      await transport.pick();
+      ui.status("connecting", "Connecting…");
+      await transport.open();
+    }
+    link = new Link(transport, onEvent);
+    await session();
+  } catch (e) {
+    console.error(e);
+    if (e.name === "NotFoundError") ui.status("idle", "No dish chosen");
+    else { ui.status("lost", "Couldn't connect"); ui.show("reconnect", !!(transport && transport.device)); }
+  }
+}
+
+async function reconnect() {
+  try {
+    ui.status("connecting", "Reconnecting…");
+    await transport.open();
+    link = new Link(transport, onEvent);
+    await session();
+  } catch (e) {
+    console.error(e);
+    ui.status("lost", "Still out of reach. Move closer and try again");
+  }
+}
+
+$("nameForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("nameInput").value.trim();
+  const hint = $("nameHint");
+  if (!NAME_RE.test(name)) { hint.dataset.tone = "err"; hint.textContent = "Use 1 to 15 letters, numbers, - or _."; return; }
+  hint.dataset.tone = ""; hint.textContent = "Sending…";
+  try {
+    await link.send(`TWIST rename ${name}`);
+    const h = await refreshHello();
+    hint.dataset.tone = "ok";
+    hint.textContent = h.name === name ? `He answers to ${name} now.` : `The dish replied with ${h.name}.`;
+    $("nameInput").value = "";
+  } catch (err) {
+    hint.dataset.tone = "err";
+    hint.textContent = `The dish said no (${err.message}).`;
+  }
+});
+
+$("connect").addEventListener("click", connect);
+$("reconnect").addEventListener("click", reconnect);
+
+if (params.has("mock")) {
+  $("footer").textContent = "Mock mode: a pretend dish, nothing is sent over Bluetooth.";
+  connect();
+} else if (!navigator.bluetooth) {
+  ui.show("unsupported", true);
+  $("connect").disabled = true;
+  ui.status("idle", "Bluetooth unavailable");
+}
+</script>
+</body>
+</html>

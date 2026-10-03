@@ -1,0 +1,6 @@
+{
+  "name": "blorbarium",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./public" },
+  "routes": [{ "pattern": "blorb.hypnodroid.com", "custom_domain": true }]
+}
