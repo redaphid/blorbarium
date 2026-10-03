@@ -89,9 +89,10 @@ class GenomeBuilder {
 };
 
 // Expression filter: a pure function of the header and the lineage's situation.
+// A gate past bit 31 names no feat, so it never opens.
 constexpr bool expressedAt(const GeneHeader& h, Stage stage, uint32_t legacyFeats) {
   return !(h.flags & GeneFlags::Dormant) && h.stage == stage &&
-         (h.featGate == 0 || ((legacyFeats >> (h.featGate - 1)) & 1u) != 0);
+         (h.featGate == 0 || (h.featGate <= 32 && ((legacyFeats >> (h.featGate - 1)) & 1u) != 0));
 }
 
 // The starter genome every new lineage begins from: grungo's temperament
