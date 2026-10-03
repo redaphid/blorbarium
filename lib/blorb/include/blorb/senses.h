@@ -65,6 +65,7 @@ struct DetectorBase {
 
 struct TiltDetector : DetectorBase {      // EMA tilt -> tilt_x/tilt_y, upside_down; Flipped/Righted
   void sample(const BodySample&, uint32_t ms, SenseOut&);
+  void turn(uint8_t quarters);           // the screen turned: (x, y) -> (y, -x) a quarter, as orient's toScreen
  private: Fx sx_, sy_; bool upside_ = false;
 };
 struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 4 jolts >= 0.55 g in 900 ms; free fall then impact -> Dropped

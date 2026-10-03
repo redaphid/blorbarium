@@ -33,7 +33,7 @@ constexpr uint32_t kButtonHoldMs = 1200;
 constexpr int32_t kWarmSpanCx10 = 30;              // 3 C above the baseline is warmth 1
 constexpr int32_t kWarmBaselineSamples = 32768;    // about 11 minutes at 50 Hz
 constexpr int32_t kMotionFullMg = 500;
-constexpr Fx kTiltSmooth = Fx::ratio(1, 16);       // orient.h's 0.25 per 100 ms, at 50 Hz
+constexpr Fx kTiltSmooth = Fx::ratio(1, 3);        // 87% of a new tilt within 100 ms, so the marble answers the hand
 constexpr Fx kMotionSmooth = Fx::ratio(1, 8);
 constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr Fx kHalfPi{26353589};                    // pi/2 in Q8.24
@@ -179,6 +179,16 @@ void TiltDetector::sample(const BodySample& s, uint32_t, SenseOut& out) {
   out.set(locus::tilt_x, clamp01(kHalf + sx_ * kHalf));
   out.set(locus::tilt_y, clamp01(kHalf + sy_ * kHalf));
   out.set(locus::upside_down, flag(upside_));
+}
+
+// Without this the smoothed tilt keeps the old frame after a turn, and for
+// its settling time the marble rolls toward an edge that is no longer down.
+void TiltDetector::turn(uint8_t quarters) {
+  for (uint8_t q = 0; q < (quarters & 3); ++q) {
+    Fx x = sx_;
+    sx_ = sy_;
+    sy_ = -x;
+  }
 }
 
 void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {

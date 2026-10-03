@@ -56,6 +56,7 @@ class Dish {
 
   // Every IMU read, at 50 Hz. Runs the detectors only; effects land at the next tick.
   void sample(const BodySample&, uint32_t nowMs);
+  void turned(uint8_t quarters) { detectors_.tilt.turn(quarters); }   // the board turned the screen
 
   // As often as you like. Runs zero or more 100 ms ticks to catch nowMs up
   // (at most 10 per call, so a frame is never starved), handles inbound
@@ -120,6 +121,7 @@ class Dish {
   CatchUp lastCatchUp_;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
+  uint32_t nowMs_ = 0;             // the last tick() call: how far into a tick appearance() is drawn
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
 };

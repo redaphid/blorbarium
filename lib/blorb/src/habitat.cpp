@@ -14,14 +14,14 @@ constexpr Fx kHalf = Fx::ratio(1, 2);
 
 // The marble should read as glass on a smooth dish, not a bead in syrup. In
 // dish units (the rim is 0.92, about 105 px out) per 100 ms tick: a 20 to 30
-// degree tilt rolls it from rest rim to rim in 10 to 12 ticks, peaking near
-// 0.35 a tick (400 px/s); levelled, it coasts to a stop within about two
-// seconds; under about 5 degrees it stays put, so a hand's wobble cannot
-// jiggle it. That speed is up to a third of the dish a tick, so it steps in
+// degree tilt rolls it from rest rim to rim in 8 to 10 ticks, peaking near
+// 0.45 a tick (500 px/s), under a second even through the senses' smoothing;
+// levelled, it coasts to a stop within about two seconds; under about 4
+// degrees it stays put, so a hand's wobble cannot jiggle it. That speed is up to a third of the dish a tick, so it steps in
 // quarters: the rim and his hit range see its path, not only where a tick ends.
 constexpr int kMarbleSubsteps = 4;
-constexpr Fx kMarbleGravity = Fx::ratio(1, 5);       // speed gained per tick per unit of downhill
-constexpr Fx kMarbleRolling = Fx::ratio(1, 125);     // speed lost per tick at any speed; also the static stick
+constexpr Fx kMarbleGravity = Fx::ratio(3, 10);       // speed gained per tick per unit of downhill
+constexpr Fx kMarbleRolling = Fx::ratio(1, 100);     // speed lost per tick at any speed; also the static stick
 constexpr Fx kRimBounce = Fx::ratio(6, 10);          // share of outward speed returned inward
 
 uint64_t isqrt64(uint64_t v) {

@@ -27,7 +27,7 @@ namespace orient {
 
 constexpr uint32_t kSampleMs = 100;   // ORIENT_SAMPLE_MS: every fifth 50 Hz sample
 constexpr uint32_t kSettleMs = 600;   // ORIENT_DWELL_MS: a knock past a boundary does not flip it
-constexpr float kFlatG = 0.35f;       // TILT_MIN_G: face up the in-plane vector is noise
+constexpr float kFlatG = 0.6f;        // under about 37 degrees from flat the screen holds: tilting to roll the marble must not turn it
 constexpr float kJoltG = 0.25f;       // TILT_MAX_SHAKE_G: further off 1 g is a hand, not gravity
 constexpr float kSmooth = 0.25f;      // TILT_SMOOTH, per 10 Hz sample: about 1 s to follow a turn
 

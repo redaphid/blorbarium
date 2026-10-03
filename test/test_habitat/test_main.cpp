@@ -186,7 +186,7 @@ TEST(Roll, TiltRollsPelletsAndTheMarbleDownhill) {
   }
   EXPECT_LT(d(w.h.marble.at.x), -0.01);
   w.steps(5, kLevel, raisedPlusY);
-  EXPECT_LT(d(w.h.marble.vy), 0.0);
+  EXPECT_LT(d(w.h.marble.at.y), -0.01) << "off the curved rim its velocity can point anywhere; where it went cannot";
 }
 
 TEST(Roll, NothingLeavesTheRimHoweverLongItIsTilted) {
