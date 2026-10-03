@@ -339,6 +339,16 @@ void operator delete(void* q) noexcept {
   if (p[1]) budget::live -= p[0];
   std::free(p);
 }
+void* operator new(size_t n, const std::nothrow_t&) noexcept {
+  try {
+    return operator new(n);
+  } catch (...) {
+    return nullptr;
+  }
+}
+void* operator new[](size_t n, const std::nothrow_t& t) noexcept { return operator new(n, t); }
+void operator delete(void* q, const std::nothrow_t&) noexcept { operator delete(q); }
+void operator delete[](void* q, const std::nothrow_t&) noexcept { operator delete(q); }
 void* operator new[](size_t n) { return operator new(n); }
 void operator delete[](void* q) noexcept { operator delete(q); }
 void operator delete(void* q, size_t) noexcept { operator delete(q); }
