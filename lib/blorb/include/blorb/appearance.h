@@ -11,6 +11,7 @@
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
+#include "blorb/thoughts.h"
 
 namespace blorb {
 
@@ -84,6 +85,14 @@ struct Appearance {
   StimId lastStim{};                // acknowledges a gesture even when the brain ignores it
   uint16_t ticksSinceStim = 0;
   bool timeUnknown = false;   // no wall-time source yet: the renderer asks for a phone visit
+
+  // A line scrolling once across the dish (thoughts.h): the row, the line as
+  // his voice says it, and how far through its pass (0..1). The time-unknown
+  // marquee outranks it.
+  bool thinking = false, prophecy = false;
+  ThoughtId thought{};
+  char line[kThoughtLineCap]{};
+  Fx thoughtPhase{};
 };
 
 Appearance present(const Occupant&, const Habitat&, const PetClock&, uint32_t tick);

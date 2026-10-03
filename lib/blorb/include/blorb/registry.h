@@ -72,6 +72,17 @@ namespace care {
 #include "blorb/defs/care.def"
 #undef BLORB_CARE
 }  // namespace care
+namespace topic {
+inline constexpr TopicId none{255};   // a thought, not a prophecy
+#define BLORB_TOPIC(id, name) inline constexpr TopicId name{id};
+#include "blorb/defs/topics.def"
+#undef BLORB_TOPIC
+}  // namespace topic
+namespace voice {
+#define BLORB_VOICE(id, name, firstOnly) inline constexpr VoiceId name{id};
+#include "blorb/defs/voices.def"
+#undef BLORB_VOICE
+}  // namespace voice
 namespace feat {
 #define BLORB_FEAT(bit, name) inline constexpr uint32_t name = uint32_t(1) << (bit);
 #include "blorb/defs/feats.def"
@@ -90,6 +101,9 @@ struct RegionInfo { RegionId id; const char* name; };
 struct ReflexInfo { ReflexId id; const char* name; LocusId trigger; uint16_t ticks; ExprId face; PoseId pose; };
 struct CareInfo   { CareId id; const char* name; DriveId drive; StimId gesture; };
 struct FeatInfo   { uint8_t bit; const char* name; };
+struct TopicInfo  { TopicId id; const char* name; };
+struct VoiceInfo  { VoiceId id; const char* name; bool firstOnly; };
+struct FrameInfo  { VoiceId voice; const char* prefix; const char* suffix; };
 
 inline constexpr ChemInfo CHEMICALS[] = {
 #define BLORB_CHEM(id, name, rgb, show) {ChemId{id}, #name, rgb, show != 0},
@@ -147,12 +161,30 @@ inline constexpr FeatInfo FEATS[] = {
 #undef BLORB_FEAT
 };
 
+inline constexpr TopicInfo TOPICS[] = {
+#define BLORB_TOPIC(id, name) {TopicId{id}, #name},
+#include "blorb/defs/topics.def"
+#undef BLORB_TOPIC
+};
+inline constexpr VoiceInfo VOICES[] = {
+#define BLORB_VOICE(id, name, firstOnly) {VoiceId{id}, #name, firstOnly != 0},
+#include "blorb/defs/voices.def"
+#undef BLORB_VOICE
+};
+inline constexpr FrameInfo FRAMES[] = {
+#define BLORB_FRAME(v, prefix, suffix) {voice::v, prefix, suffix},
+#include "blorb/defs/voices.def"
+#undef BLORB_FRAME
+};
+
 // ---- derived dimensions --------------------------------------------------------
 template <class T, size_t N> constexpr size_t countOf(const T (&)[N]) { return N; }
 inline constexpr size_t kDriveCount = countOf(DRIVES);
 inline constexpr size_t kActionCount = countOf(ACTIONS);
 inline constexpr size_t kRegionCount = countOf(REGIONS);
 inline constexpr size_t kReflexCount = countOf(REFLEXES);
+inline constexpr size_t kTopicCount = countOf(TOPICS);
+inline constexpr size_t kVoiceCount = countOf(VOICES);
 
 // The brain's feature vector: every situation locus, then the recent locus of
 // every situation stimulus. Order is table order; saves key weights by locus id.
@@ -186,7 +218,8 @@ constexpr bool stimIdsFitRecentRange() {
 }
 static_assert(idsUnique(CHEMICALS) && idsUnique(DRIVES) && idsUnique(LOCI) && idsUnique(STIMULI) &&
               idsUnique(ACTIONS) && idsUnique(POSES) && idsUnique(EXPRESSIONS) && idsUnique(REGIONS) &&
-              idsUnique(REFLEXES) && idsUnique(CARES), "a registry has a duplicate id");
+              idsUnique(REFLEXES) && idsUnique(CARES) && idsUnique(TOPICS) && idsUnique(VOICES),
+              "a registry has a duplicate id");
 static_assert(stimIdsFitRecentRange(), "stimulus ids must be < 64 so their recent loci fit 64..127");
 static_assert(kDriveCount <= 15, "drive chemicals are 1..15; 16 is life");
 static_assert(countOf(FEATS) <= 32, "feats are a 32-bit set");

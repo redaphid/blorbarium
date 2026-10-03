@@ -1,0 +1,12 @@
+// Prophecy topics: what he tends to foresee. The oracle gene weights each
+// topic, so one seer is all pellets and another all doom. A prophecy row in
+// thoughts.def names its topic; a plain thought has none.
+// Stable ids: never renumber, never reuse.
+// BLORB_TOPIC(id, name)
+BLORB_TOPIC(0, food)
+BLORB_TOPIC(1, danger)
+BLORB_TOPIC(2, sky)
+BLORB_TOPIC(3, owner)
+BLORB_TOPIC(4, doom)
+BLORB_TOPIC(5, luck)
+BLORB_TOPIC(6, pond)
