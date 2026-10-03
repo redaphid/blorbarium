@@ -26,8 +26,8 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
   counting through deep sleep (the user may fit a small battery, and the
   board deep-sleeps when unplugged, so on wake the elapsed time is known),
   then the time a phone visit gives with `TIME` over BLE, then unknown.
-  Deep sleep, unplug detection and battery measurement are hardware units
-  after this branch's stop point; only the seam and host fakes for both
+  Deep sleep, unplug detection, battery measurement and the RTC itself are
+  build unit 23 (DESIGN section 10); only the seam and host fakes for both
   sources exist now.
 - With no source, he resumes as if no time passed, and catches up once a
   source appears. While time is unknown, `Appearance::timeUnknown` is set
