@@ -35,7 +35,8 @@ struct PetClock {
   static constexpr uint32_t kDayTicks = 24 * kTicksPerHour;
   uint32_t petTicks = 0;
   int32_t phaseOffsetTicks = 0;
-  uint32_t darkRunTicks = 0;
+  uint32_t darkRunTicks = 0;                               // consecutive lidded ticks; > 0 means lidded now
+  uint32_t entrainedTicks = 0;                             // phase moved by entrainment since pet midnight
   Fx dayFraction() const;                                  // 0 = pet midnight, 0.5 = pet noon
   bool night() const;
   void advance(bool lidded);                               // +1 tick and entrainment
@@ -66,13 +67,16 @@ struct TiltDetector : DetectorBase {      // EMA tilt -> tilt_x/tilt_y, upside_d
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: Fx sx_, sy_; bool upside_ = false;
 };
-struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 4 jolts >= 0.55 g in 900 ms; FreeFall; Dropped
+struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 4 jolts >= 0.55 g in 900 ms; free fall then impact -> Dropped
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t jolts_[4]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
+ private:
+  enum class Fall : uint8_t { None, Falling, Free, Landing };
+  uint32_t jolts_[4]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
+  bool rattled_ = false; Fall fall_ = Fall::None; uint32_t fallSince_ = 0;
 };
 struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> held; PickedUp/PutDown; Cradle when still 3 s
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t heldSince_ = 0, stillSince_ = 0, lastCradle_ = 0; bool held_ = false;
+ private: uint32_t heldSince_ = 0, stillSince_ = 0, lastCradle_ = 0; bool held_ = false, cradled_ = false;
 };
 struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit
   void sample(const BodySample&, uint32_t ms, SenseOut&);
@@ -89,14 +93,15 @@ struct LidDetector : DetectorBase {       // az < -0.8 g for 2 s -> lidded, LidD
 };
 struct WarmthDetector : DetectorBase {    // die temperature vs a slow baseline -> warmth; unknown -> 0
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: int32_t baseline_ = 0;
+ private: int32_t baseline_ = 0; bool known_ = false;
 };
 struct TouchDetector : DetectorBase {     // touch locus, Touched; silent on the 1.28
   void sample(const BodySample&, uint32_t ms, SenseOut&);
+ private: bool was_ = false;
 };
 struct DayDetector : DetectorBase {       // day_sin/day_cos/light from PetClock; Dusk/Dawn edges
   void tick(const TickContext&, SenseOut&);
- private: bool wasNight_ = false;
+ private: bool wasNight_ = false, primed_ = false;
 };
 struct OwnerDetector : DetectorBase {     // owner_near; OwnerArrived/OwnerLeft edges
   void tick(const TickContext&, SenseOut&);
