@@ -350,7 +350,9 @@ function renderState(s) {
   else if (s.phase === "egg") meta = `an egg, ${Math.round(Number(s.progress || 0) / 10)}% hatched · ${gen}`;
   else meta = `${s.eggs ?? "some"} eggs waiting to be picked · ${gen}`;
   $("meta").textContent = meta;
-  const doing = s.phase === "creature" ? (s.asleep === "1" ? "asleep" : `${s.action?.replace(/_/g, " ")}, looking ${s.face}`) : "";
+  const action = (s.action || "").replace(/_/g, " ");
+  const doing = s.phase !== "creature" ? "" : s.asleep === "1" ? "asleep"
+    : s.face && s.face !== s.action && s.face !== "neutral" ? `${action}, looking ${s.face}` : action;
   $("doing").textContent = doing;
   ui.show("doing", !!doing);
 }
