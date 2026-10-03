@@ -29,7 +29,7 @@ MISSES = os.path.join(ROOT, "outputs", "misses")
 # script's clock, the frame is shot.
 CASES = {
     "idle": 17600,          # the resting cases rest home first, to 16400
-    "eating": 8800,         # he bites near 8000 and chews to 9600
+    "eating": 7600,         # the pellet is at his mouth from about 7200 to 8000
     "foresee_glow": 18400,
     "shake_hop": 17600,     # the shake fires near 17200; at 17600 he is in the air
     "sleep": 19000,
