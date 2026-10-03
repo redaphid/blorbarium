@@ -83,6 +83,21 @@ static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 
+// The "tap me with your phone" marquee asks for the time. Until the website
+// exists nothing can answer, and with no battery every replug forgets the
+// time, so the board does not ask. The sim keeps it for its golden.
+#if defined(BADGE_BOARD_SIM)
+static constexpr bool kAskForTime = true;
+#else
+static constexpr bool kAskForTime = false;
+#endif
+
+static blorb::Appearance shown() {
+  blorb::Appearance a = dish->appearance();
+  if (!kAskForTime) a.timeUnknown = false;
+  return a;
+}
+
 static blorb::BodySample readBody() {
   blorb::BodySample s;
   if (!imuOk || !imu::read(s)) {
@@ -238,7 +253,7 @@ void loop() {
 #endif
   step(now);
   if (now - lastFrame >= kFrameMs) {
-    paint::draw(dish->appearance(), grungoPack(), canvas);
+    paint::draw(shown(), grungoPack(), canvas);
     boardPresent(display, canvas);
     lastFrame = now;
   }
