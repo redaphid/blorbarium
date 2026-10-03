@@ -293,49 +293,69 @@ class Sketch:
         return Sprite(rgb, lab, origin, list(eyes))
 
 
-OLIVE, OLIVE_DARK, OLIVE_LIGHT = (116, 155, 80), (86, 118, 60), (176, 205, 132)
-TEAL, TEAL_RIM = (80, 240, 220), (230, 255, 250)
-HOOD, HOOD_DARK, HOOD_LIGHT = (83, 66, 44), (58, 46, 31), (112, 92, 62)
+EGG_ROWS = 72                           # contracts.md: the egg is about 72 px tall
+EGG_FROGLET = (510, 692), (82, 106)     # the froglet in the hollow, in the art's pixels
+EGG_CRACKS = [[(14, 18), (18, 14), (22, 18), (26, 14)], [(26, 14), (30, 19), (34, 15), (38, 19)],
+              [(30, 19), (31, 24)]]     # device pixels, across the jelly's dome
 
 
-def egg(stage):
-    # TODO(egg-art): a procedural stand-in until a person picks the egg. Replace it with
-    # the picked egg_hood frame (art-plan section 3, `forge.py pick grungo egg_hood <n>`;
-    # egg-hood-s1007 is the recommended seed): copy it into pets/grungo/art/, label it with
-    # per-subject hue rules (jelly -> shell, hood -> cloak, froglet eyes -> glow), downscale
-    # it with this file's downscaler at 668 px -> 72 px, take the eye anchors from the
-    # froglet's teal blobs, and keep these three stages as crack overlays on that frame.
-    k = Sketch(60, 78)
-    jelly = k.mask("ellipse", 3, 10, 57, 77)
-    k.fill(jelly, OLIVE, REGION["shell"])
-    k.fill(jelly & ~k.mask("ellipse", 0, 6, 53, 71), OLIVE_DARK, REGION["shell"])
-    k.fill(jelly & k.mask("ellipse", 10, 34, 20, 50), OLIVE_LIGHT, REGION["shell"])
-    froglet = jelly & k.mask("ellipse", 15, 40, 45, 70)
-    k.fill(froglet, (92, 126, 66), REGION["shell"])
-    for x in (23.5, 36.5):
-        k.fill(k.mask("ellipse", x - 4.6, 44.4, x + 4.6, 53.6), (24, 20, 16), INVARIANT)
-        k.fill(k.mask("ellipse", x - 3.6, 45.4, x + 3.6, 52.6), TEAL, REGION["glow"])
-        k.fill(k.mask("ellipse", x - 2.6, 45.6, x - 0.4, 47.8), TEAL_RIM, REGION["glow"])
-    cracks = [[(15, 35), (19, 31.5), (23, 35.5), (27, 32)], [(27, 32), (31, 36), (35, 32), (39, 35.5), (44, 32)],
-              [(31, 36), (32.5, 41)]]
-    for line in cracks[:stage]:
-        k.fill(k.mask("line", [(x, y + 1.2) for x, y in line], width=1.2) & jelly, OLIVE_LIGHT, REGION["shell"])
-        k.fill(k.mask("line", line, width=1.0) & jelly, (24, 20, 16), INVARIANT)
-    stalks = np.zeros_like(jelly)
-    for (x0, y0, x1, y1) in ((23, 12, 19, 3), (37, 12, 41, 3)):
-        stalks |= k.mask("line", [(x0, y0), (x1, y1)], width=2.2) | k.mask("ellipse", x1 - 2.2, y1 - 2.2, x1 + 2.2, y1 + 2.2)
-    k.fill(stalks, OLIVE, REGION["shell"])
-    k.outline(stalks, 1.0)
-    hem = [(x / 2, 50 - 1.6 * abs(math.sin(x / 2 * math.pi / 6))) for x in range(0, 121)]
-    hood = (k.mask("ellipse", 0, 6, 60, 66) & ~k.mask("ellipse", 13, 20, 47, 74)
-            & k.mask("polygon", [(0, 0), (60, 0)] + hem[::-1]))
-    k.fill(hood, HOOD, REGION["cloak"])
-    k.fill(hood & k.mask("ellipse", 4, 8, 28, 30), HOOD_LIGHT, REGION["cloak"])
-    for fold in ([(30, 7), (30, 17)], [(16, 12), (9, 26), (8, 40)], [(44, 12), (51, 26), (52, 40)], [(22, 9), (17, 20)]):
-        k.fill(hood & k.mask("line", fold, width=1.0), HOOD_DARK, REGION["cloak"])
-    k.outline(hood, 1.0)
-    k.outline(jelly | hood | stalks, 1.2)
-    return k.sprite((30, 76), [(23, 49, 3), (36, 49, 3)])
+def label_egg(rgb, alpha, eyes, froglet):
+    """The egg's own rules, first match wins: the froglet's teal eyes and their shine
+    are glow, ink is the outline, the brown hollow is cloak, the froglet's green is
+    skin (so a clutch shows each child's skin genes), and the jelly is shell."""
+    r, g, b = (rgb[..., i].astype(int) for i in range(3))
+    h, s, v = to_hsv(rgb)
+    eye_zone = np.zeros(alpha.shape, bool)
+    for x, y, er in eyes:
+        eye_zone |= disc(alpha.shape, x, y, 1.6 * er)
+    green = (h >= 55) & (h <= 150) & (s > 0.15)
+    brown = ((h <= 50) | (h >= 330)) & (s > 0.25)
+    (fx, fy), (frx, fry) = froglet
+    frog = flood((round(fx), round(fy + 0.4 * fry)), green & disc(alpha.shape, fx, fy, frx, fry))
+    hollow = disc(alpha.shape, fx, fy, 1.35 * frx, 1.35 * fry)
+    rules = [
+        (eye_zone & (((g > 150) & (b > 120) & (r < 0.7 * g)) | ((s < 0.25) & (v > 0.8))), REGION["glow"]),
+        (hollow & brown & (v >= 0.06), REGION["cloak"]),   # the hollow is dark: cloak genes must still show there
+        ((v < 0.16) | brown, INVARIANT),                    # brown outside the hollow is the ink ring's soft edge
+        (frog, REGION["skin"]),
+    ]
+    lab = np.select([c for c, _ in rules], [k for _, k in rules], REGION["shell"]).astype(np.uint8)
+    lab[alpha == 0] = CLEAR
+    return lab
+
+
+def egg_art():
+    """The picked egg (sprite-expressions raw/egg, `egg` in eyes.json) at device scale,
+    EGG_ROWS tall. It is scaled first so the shared downscaler's CELL lands on that height."""
+    eyes = json.loads((ART / "eyes.json").read_text())["egg"]["eyes"]
+    im = Image.open(ART / "frames/egg.png").convert("RGBA")
+    k = EGG_ROWS * CELL / (im.getbbox()[3] - im.getbbox()[1])
+    im = im.convert("RGBa").resize((round(im.width * k), round(im.height * k)), Image.LANCZOS).convert("RGBA")
+    a = np.asarray(im)
+    rgb, alpha = a[..., :3].copy(), a[..., 3]
+    (fx, fy), (frx, fry) = EGG_FROGLET
+    lab = label_egg(rgb, alpha, [(e["x"] * k, e["y"] * k, e["r"] * k) for e in eyes], ((fx * k, fy * k), (frx * k, fry * k)))
+    ys, xs = np.nonzero(alpha)
+    cols = -(-(int(xs.max()) + 1 - int(xs.min())) // CELL)
+    gx = (int(xs.min()) + int(xs.max()) + 1) // 2 - cols * CELL // 2
+    gy = int(ys.max()) + 1 - EGG_ROWS * CELL
+    rgb, lab = downscale(rgb, lab, gx, gy, cols, EGG_ROWS)
+    anchors = [(int((e["x"] * k - gx) // CELL), int((e["y"] * k - gy) // CELL), max(1, round(e["r"] * k / CELL))) for e in eyes]
+    return Sprite(rgb, lab, (cols // 2, EGG_ROWS - 1), anchors)
+
+
+def egg(art, stage):
+    """The egg with `stage` of its cracks inked across the dome: whole, cracking, hatching."""
+    s = Sprite(art.rgb.copy(), art.region.copy(), art.origin, list(art.eyes))
+    w, h = s.size
+    jelly = s.region == REGION["shell"]
+    for line in EGG_CRACKS[:stage]:
+        for dy, colour, region in ((1, (196, 222, 150), REGION["shell"]), (0, (24, 20, 16), INVARIANT)):
+            im = Image.new("L", (w, h))
+            ImageDraw.Draw(im).line([(x, y + dy) for x, y in line], fill=255)
+            m = (np.asarray(im) > 0) & jelly
+            s.rgb[m], s.region[m] = colour, region
+    return s
 
 
 def fly(body, stripe, wing, eye):
@@ -531,7 +551,8 @@ def build():
 
     frames_out = {"Body": body}
     frames_out.update({f"Face_{e}": faces[e] for _, e in EXPRESSIONS})
-    frames_out.update({f"Egg{i}": egg(cracks) for i, cracks in enumerate((0, 1, 3))})
+    whole = egg_art()
+    frames_out.update({f"Egg{i}": egg(whole, cracks) for i, cracks in enumerate((0, 1, 3))})
     frames_out["Remains"] = remains(frames["sleep"], labels["sleep"], feet)
     frames_out["ItemPellet"] = fly((46, 48, 56), (84, 86, 98), (206, 226, 236), (170, 40, 32))
     frames_out["ItemRotten"] = fly((112, 126, 96), (90, 102, 78), (172, 184, 164), (120, 128, 92))
