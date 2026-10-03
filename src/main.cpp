@@ -26,6 +26,7 @@ using PetStorage = hw::NvsFsStorage;
 #endif
 
 #include "hw/imu_qmi8658.h"
+#include "hw/orient.h"
 #include "debug_verbs.h"
 
 // The protocol over the serial line. A cable has no connect event, so the
@@ -82,6 +83,7 @@ static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
+static orient::Up up{ORIENT_R0};
 
 // The "tap me with your phone" marquee asks for the time. Until the website
 // exists nothing can answer, and with no battery every replug forgets the
@@ -113,7 +115,10 @@ static blorb::BodySample readBody() {
 static void step(uint32_t now) {
   if (now - lastSample >= blorb::kSampleMs) {
     lastBody = readBody();
-    dish->sample(lastBody, now);
+    // The panel and the engine turn together, so downhill is down on the glass.
+    const uint8_t rot = up.sample(lastBody, now);
+    if (rot != display.getRotation()) display.setRotation(rot);
+    dish->sample(up.toScreen(lastBody), now);
     lastSample = now;
   }
   dish->tick(now, phone);
@@ -184,12 +189,12 @@ static void reportStatus(uint32_t now) {
   if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
   Serial.printf(
       "[hw] up=%u heap=%u minheap=%u big=%u psram_free=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x "
-      "age=%u imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
+      "age=%u imu ax=%d ay=%d az=%d mg rot=%u t=%sC tap=%u button=%d\n",
       unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
       unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
-      lastBody.ay, lastBody.az, temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
+      lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
 }
 #endif
 
