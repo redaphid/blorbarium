@@ -265,17 +265,21 @@ Labels: **measured** (where), **arithmetic**, or **estimate**. Revised after the
 | of which `Brain` / `Chemistry` / `ChemRules` arrays | 5,560 / 2,048 / 2,096 B | measured, ESP32-S3 compiler |
 | Engine heap at its peak: genome, phenotype rule vectors, one save's blob, one lineage frame, the clutch's dry runs, the phone's replies | 16,879 B | measured on x86-64 through a whole life, a reboot and eleven phone reads (`test_dish` `Budget.*`, held under 20 KB); 32-bit pointers make the ESP32's smaller (inferred) |
 | of which a creature's keepsake blob, during a save or `SNAPSHOT` | about 9.5 KB, written once at its exact size | measured |
-| Loop task stack | 8,192 B | arduino-esp32's default; the engine reaches 4,816 B of it (measured on x86-64, same test); no frame is over 2,560 B on the ESP32-S3 (`tools/stack_check.sh`) |
+| Loop task stack (the Dish task) | 16,384 B, `kDishStackBytes` | set by `SET_LOOP_TASK_STACK_SIZE` in `src/main.cpp`; high-water mark 12,296 to 12,488 B free, so about 4.0 KB used, through boot, saves, a reboot, a `DEBUG stage adult` warp and 5 minutes of running (measured on the board); no frame is over 2,560 B (`tools/stack_check.sh`) |
 | Other task stacks (BLE host, idle, timer, IPC) | about 15 KB | estimate |
 | NimBLE host heap | 40 to 70 KB | estimate |
 | LittleFS caches | about 10 KB | estimate |
 | Lineage in RAM | 40 B, plus one frame (under 2 KB) while a read walks the log | measured (`sizeof`, `test_lifecycle` largest read) |
-| **Peak internal use** | **about 265 to 295 KB of 327 KB, so 32 to 62 KB free** | arithmetic over the rows above; to be measured in build unit 20 |
+| **Peak internal use** | **about 265 to 295 KB of 327 KB, so 32 to 62 KB free** | arithmetic over the rows above, superseded by the measured rows below |
+| Static RAM (DRAM data + bss), badge128 | 147,536 B without BLE; 160,744 B with BLE | measured, `pio run -e badge128` (builds 2431fea and e9a1689) |
+| Free heap after boot, no BLE | 219,652 B free, minimum 212,704 B, largest internal block 196,596 B | measured on the board, `[hw] up=` line, build 2431fea, 5 minutes running |
+| Free heap after boot, BLE advertising | 138,820 B free, minimum 138,324 B, largest internal block 126,964 B | measured on the board, build e9a1689; NimBLE took about 81 KB, above the 40 to 70 KB estimate |
+| PSRAM | 2,095,007 B, 2,089,203 B free; nothing is allocated there yet | measured, `ESP.getPsramSize()` on first boot |
 | Sprite art (grungo body plus ten face patches, 8 bpp, RLE) | under 70 KB of flash, no RAM | estimate from grungo.md |
 
 This budget holds with no PSRAM. Build unit 20 logs the minimum free heap across a boot, a save, a death and a clutch pick, and fails under 24 KB, and logs the loop task's stack high-water mark. If the heap is short (a NimBLE host larger than estimated), the lever is to draw the canvas in 48-row bands (23 KB instead of 115 KB). The 1.46 board puts the canvas in its 8 MB PSRAM.
 
-**PSRAM on the 1.28 is unverified.** `platformio.ini`'s `badge128` env sets `-DBOARD_HAS_PSRAM` and `memory_type = qio_qspi` (quad PSRAM), while this section assumes none. Nobody has read a board yet, and the flag came from the sibling project's env. Unit 20 must print `ESP.getPsramSize()` on the board's first boot and then correct whichever is wrong: this section, or the env. Until then nothing depends on PSRAM, so either answer is safe. If the board has it, the canvas moves there and the margin grows by 115 KB.
+**PSRAM on the 1.28 is settled: the board has 2 MB.** esptool reads it as "Embedded PSRAM 2MB (AP_3v3)" on an ESP32-S3 QFN56 rev v0.2, and the firmware's first boot printed `psram size=2095007`. So the `badge128` env's `-DBOARD_HAS_PSRAM` and quad `qio_qspi` are right, and this section's no-PSRAM assumption is conservative. Nothing uses PSRAM yet. With BLE on, internal RAM keeps 138 KB free against the 24 KB floor, so the canvas stays in internal RAM. Moving it to PSRAM is the lever if internal RAM ever runs short.
 
 Compute, all **estimates** at 240 MHz: chemistry about 300 rules per tick at 10 Hz is about 0.12 M cycles/s; the brain about 4k multiply-adds per think at 5 Hz is about 0.2 M cycles/s; detectors at 50 Hz about 0.1 M cycles/s. Under 0.3 percent of one core. A viability dry run (576 coarse steps) is about 30 ms, one per tick during the vigil. Drawing is the cost: compositing about 15 cycles a pixel at 25 fps is about 9 percent of a core, and the SPI push at the board's 40 MHz is 23 ms a frame (arithmetic), so the bus is busy about 58 percent of the time at 25 fps. That is why the target is 25 fps, not 30.
 

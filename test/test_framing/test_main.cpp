@@ -205,7 +205,8 @@ TEST(Faces, ShutEyesOnlyWhileHeIsAsleep) {
   };
   auto same = [](const Canvas240& x, const Canvas240& y) { return std::equal(x.px, x.px + kSide * kSide, y.px); };
   EXPECT_TRUE(same(*face(expr::asleep, false), *face(expr::sleepy, false))) << "awake, the asleep face shows lidded";
-  EXPECT_FALSE(same(*face(expr::asleep, true), *face(expr::sleepy, true))) << "asleep, his eyes are shut";
+  EXPECT_TRUE(same(*face(expr::happy, true), *face(expr::asleep, true))) << "asleep, his eyes are shut whatever he feels";
+  EXPECT_FALSE(same(*face(expr::asleep, true), *face(expr::happy, false))) << "and awake they are not";
 }
 
 int main(int argc, char** argv) {

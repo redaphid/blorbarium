@@ -235,3 +235,56 @@ body-only.
   are future rows.
 - Tests: `Twist.ThePhoneCannotDeliverPlainFood` and
   `Twist.AProphecyTreatMakesHimGlowAndDoesNotFeedHim` in `test_protocol`.
+
+## 11. Unit 20 on the real board (2026-10-03)
+
+The attached board was the Waveshare ESP32-S3-LCD-1.28 (CH343 `1A86:55D3`
+on COM10): ESP32-S3 QFN56 rev v0.2, 16 MB quad flash, 2 MB embedded quad
+PSRAM. It carried the cyber-puck badge firmware (`FW 1.4.0`, pet "dragon"),
+which was backed up whole before the first write (two 16 MB reads, sha256
+`b06cdfa4...3dec`, kept at `D:\projects\bak\blorbarium\`).
+
+- **PSRAM.** The board has 2 MB (`psram size=2095007`), so the `badge128`
+  env's quad PSRAM flags stay, and DESIGN section 8 records it. Nothing is
+  allocated there yet.
+- **Flash layout.** PlatformIO does not read `board_build.flash_size`, so the
+  board manifest's 8 MB default and `default_8MB.csv` won. `[esp32]` now sets
+  `board_upload.flash_size = 16MB` and `board_build.partitions =
+  tools/partitions_16mb.csv`. The image header byte is `0x4f` (16 MB).
+  The table adds a raw 2 MiB `art` partition (type 0x40) for future sprite
+  breeds, read memory-mapped, so `petfs` is 5,760 KiB rather than the OTA
+  survey's 7.6 MiB. Read back from the board:
+  nvs 0x9000 20K, otadata 0xe000 8K, app0 0x10000 4M, app1 0x410000 4M,
+  pet 0x810000 256K, art 0x850000 2M, petfs 0xa50000 5760K,
+  coredump 0xff0000 64K.
+- **Snapshot keys.** The `pet` NVS keys are the engine's slot names, `snap.a`
+  and `snap.b`, not entry 5's `save_a` and `save_b`. `hw::NvsFsStorage`
+  routes every `snap.*` name to NVS and every other name to LittleFS, so the
+  engine's names stay the same on every platform.
+- **C++ standard.** The S3 core forces `-std=gnu++11` over the repo's
+  gnu++17, so `[esp32]` sets `build_unflags = -std=gnu++11`.
+- **`word` is a macro.** The core's `Arduino.h` defines `word(...)` as
+  `makeWord`. That turned the IMU decoder's `word(i)` lambda into a byte
+  index, so every axis read 0. The lambda is renamed, and `sim/Arduino.h`
+  now carries every function-like macro the core defines, so the sim fails
+  the way the board would.
+- **Dish task stack.** The Arduino loop task runs the Dish with
+  `kDishStackBytes = 16384` (`SET_LOOP_TASK_STACK_SIZE`). The measured
+  high-water mark is 12,296 to 12,488 B free, so about 4 KB is used. The
+  extra margin is kept for BLE callbacks and future verbs.
+- **The board does not ask for the time.** With no battery and no website
+  yet, every replug forgets wall time, so the "tap me" marquee would show
+  forever. `kAskForTime = false` on the board, and the sim keeps the marquee
+  for its golden. With no time source the Dish resumes without a catch-up.
+- **Power cuts.** EN-pin resets at random moments, many during a save (a
+  `TIME` line saves at once), brought the same pet back every time: 25 of
+  25, 25 of 25 and 13 of 13 boots across three builds. 40 of the cuts came
+  during a requested save, and 29 of those before the save had replied.
+- **Debug verb.** `DEBUG stage <hatchling|child|adult|elder>` is a
+  serial-only line, never a protocol verb, so a phone cannot skip his
+  childhood (entries 4 and 10). It ages him through his own genome's stage
+  receptors, then saves.
+- **Asleep means shut eyes.** On the board, STATE said `asleep=1 face=happy`
+  while the screen showed open eyes. `faceFor` now draws the asleep face
+  whenever he is asleep, whatever his genes feel, after the glow and reflex
+  rules.
