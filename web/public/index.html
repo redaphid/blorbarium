@@ -126,6 +126,12 @@ input {
 .hint { margin: 0; font-size: 0.88rem; color: var(--muted); }
 .hint[data-tone="ok"] { color: var(--teal); }
 .hint[data-tone="err"] { color: var(--warn); }
+#sayInput { text-transform: uppercase; }
+.debug { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
+.debug ol { list-style: none; margin: 10px 0 0; padding: 0; font: 0.72rem/1.45 var(--font-mono); max-height: 60vh; overflow: auto; }
+.debug li { white-space: pre-wrap; overflow-wrap: anywhere; }
+.debug li[data-dir="out"] { color: var(--teal); }
+.debug li[data-dir="err"] { color: var(--warn); }
 footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -181,6 +187,20 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <p class="hint" id="nameHint">Up to 15 letters, numbers, - or _.</p>
   </section>
 
+  <section id="sayBox" hidden>
+    <h2 id="sayTitle">grungo speaks!</h2>
+    <form id="sayForm" autocomplete="off">
+      <input id="sayInput" name="say" maxlength="56" placeholder="HELLO FRIEND" aria-label="What he should say" required>
+      <button type="submit">Say it</button>
+    </form>
+    <p class="hint" id="sayHint">Up to 56 characters. He shows it on his screen.</p>
+  </section>
+
+  <details id="debugBox" class="debug" hidden>
+    <summary>Debug log</summary>
+    <ol id="debugLog"></ol>
+  </details>
+
   <footer id="footer">Made for grungo's keeper.</footer>
 </main>
 
@@ -209,6 +229,29 @@ function kv(text) {
   return out;
 }
 
+// ?debug=1: every raw line in and out, timestamped, for a phone screenshot.
+const DEBUG = params.has("debug");
+function debugLog(dir, text) {
+  if (!DEBUG) return;
+  const t = new Date();
+  const stamp = t.toTimeString().slice(0, 8) + "." + String(t.getMilliseconds()).padStart(3, "0");
+  const li = document.createElement("li");
+  li.dataset.dir = dir;
+  li.textContent = `${stamp} ${dir === "out" ? "→" : dir === "in" ? "←" : "!!"} ${text}`;
+  const log = $("debugLog");
+  log.append(li);
+  while (log.children.length > 600) log.firstChild.remove();
+}
+
+function crc32(bytes) {
+  let c = ~0;
+  for (const b of bytes) {
+    c ^= b;
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return (~c >>> 0).toString(16).padStart(8, "0");
+}
+
 // One request/response channel over any line transport. Replies are
 // "#<hexid> + ..." lines closed by "#<hexid> OK ..." or "#<hexid> ERR <code> <text>";
 // "! ..." lines are unsolicited events.
@@ -222,6 +265,7 @@ class Link {
     transport.onLine = (line) => this.receive(line);
   }
   receive(line) {
+    debugLog("in", line);
     if (line.startsWith("!")) return this.onEvent(line.slice(1).trim());
     const m = /^#([0-9a-fA-F]+) (\+|OK|ERR)(?: (.*))?$/.exec(line);
     if (!m) return;
@@ -244,9 +288,18 @@ class Link {
       const line = `#${id.toString(16)} ${cmd}`;
       if (line.length > 200) return reject(new Error("TOO_LONG"));
       this.nextId = this.nextId >= 0xffffff ? 1 : this.nextId + 1;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("TIMEOUT " + cmd)); }, timeoutMs);
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        debugLog("err", `timeout after ${timeoutMs} ms: ${line}`);
+        reject(new Error("TIMEOUT"));
+      }, timeoutMs);
       this.pending.set(id, { lines: [], resolve, reject, timer });
-      this.transport.write(line + "\n").catch((e) => { this.pending.delete(id); clearTimeout(timer); reject(e); });
+      debugLog("out", line);
+      this.transport.write(line + "\n").catch((e) => {
+        this.pending.delete(id); clearTimeout(timer);
+        debugLog("err", `write failed: ${e.message}`);
+        reject(e);
+      });
     });
     const result = this.chain.then(run, run);
     this.chain = result.catch(() => {});
@@ -330,11 +383,14 @@ class MockTransport {
       "+ body life=930 injury=0 glow=610 dreaming=0",
       "+ dish pantry=3 pellets=1 night=0 time=known", "OK");
     else if (verb === "GENOME") {
-      const bin = String.fromCharCode(...this.genome);
-      lines.push(`+ 0 ${btoa(bin)}`, `OK ${this.genome.length} 9c41e07b`);
+      for (let at = 0; at < this.genome.length; at += 120) {
+        lines.push(`+ ${at} ${btoa(String.fromCharCode(...this.genome.subarray(at, at + 120)))}`);
+      }
+      lines.push(`OK ${this.genome.length} ${crc32(this.genome)}`);
     } else if (verb === "HASH") lines.push("OK hash=5e2a91d0 tick=1987460");
     else if (verb === "SUB") lines.push("OK events=0x03");
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
+    else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
     else lines.push("ERR 404 UNKNOWN_VERB");
     const feed = lineReader((line) => this.onLine(line));
     const chunks = [];
@@ -370,9 +426,9 @@ function renderState(s) {
   else if (s.phase === "egg") meta = `an egg, ${Math.round(Number(s.progress || 0) / 10)}% hatched · ${gen}`;
   else meta = `${s.eggs ?? "some"} eggs waiting to be picked · ${gen}`;
   $("meta").textContent = meta;
-  const action = (s.action || "").replace(/_/g, " ");
-  const doing = s.phase !== "creature" ? "" : s.asleep === "1" ? "asleep"
-    : s.face && s.face !== s.action && s.face !== "neutral" ? `${action}, looking ${s.face}` : action;
+  // Asleep comes only from asleep=1; the action is shown as reported, even "sleep".
+  const action = (s.action || "?").replace(/_/g, " ");
+  const doing = s.phase !== "creature" ? "" : `${s.asleep === "1" ? "Asleep" : "Awake"} · doing: ${action}`;
   $("doing").textContent = doing;
   ui.show("doing", !!doing);
 }
@@ -438,20 +494,49 @@ async function refreshHello() {
   const h = kv((await link.send("HELLO")).ok);
   $("name").textContent = h.name || "grungo";
   $("nameInput").placeholder = h.name || "grungo";
+  $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
   $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
   return h;
 }
 
-async function loadGenome() {
-  const r = await link.send("GENOME", 15000);
-  const [len, crc] = r.ok.split(" ");
-  const bytes = new Uint8Array(Number(len));
+// GENOME replies "+ <offset> <base64>" lines (120 bytes each) and "OK <len> <crc32>".
+async function fetchGenome() {
+  const r = await link.send("GENOME", 30000);
+  const m = /^(\d+) ([0-9a-f]{8})$/.exec(r.ok.trim());
+  if (!m) throw new Error(`odd GENOME ending: ${r.ok}`);
+  const bytes = new Uint8Array(Number(m[1]));
+  let filled = 0;
   for (const line of r.lines) {
-    const [off, b64] = line.split(" ");
-    const bin = atob(b64);
-    for (let i = 0; i < bin.length; i++) bytes[Number(off) + i] = bin.charCodeAt(i);
+    const c = /^(\d+) ([A-Za-z0-9+/]+=*)$/.exec(line.trim());
+    if (!c) { debugLog("err", `bad GENOME line: ${line}`); continue; }
+    const bin = atob(c[2]);
+    for (let i = 0; i < bin.length; i++) bytes[Number(c[1]) + i] = bin.charCodeAt(i);
+    filled += bin.length;
   }
-  renderGenome(crc, decodeGenes(bytes));
+  const got = crc32(bytes);
+  if (filled !== bytes.length || got !== m[2]) {
+    throw new Error(`garbled: ${filled}/${bytes.length} bytes, crc ${got} vs ${m[2]}`);
+  }
+  return { crc: m[2], bytes };
+}
+
+async function loadGenome() {
+  let g;
+  try { g = await fetchGenome(); } catch (e) {
+    if (e.code === 404) throw e;
+    debugLog("err", `GENOME: ${e.message}, retrying`);
+    g = await fetchGenome();
+  }
+  renderGenome(g.crc, decodeGenes(g.bytes));
+}
+
+function genomeUnavailable(text) {
+  $("genomeHash").textContent = text;
+  $("geneCount").textContent = text;
+  const li = document.createElement("li");
+  li.textContent = text;
+  $("genes").replaceChildren(li);
+  ui.show("genomeBox", true);
 }
 
 async function session() {
@@ -465,13 +550,12 @@ async function session() {
   ui.show("connect", false);
   ui.show("reconnect", false);
   ui.show("nameBox", true);
+  ui.show("sayBox", true);
+  await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
-    console.warn("genome", e);
-    $("genomeHash").textContent = e.code === 404 ? "not on this firmware" : "couldn't read";
-    $("geneCount").textContent = "…";
-    ui.show("genomeBox", true);
+    debugLog("err", `GENOME failed: ${e.message}`);
+    genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
   });
-  link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   link.send("SUB state stage hatched died").catch(() => {});
   clearInterval(poll);
   poll = setInterval(() => refreshState().catch(() => {}), 10000);
@@ -539,7 +623,30 @@ $("nameForm").addEventListener("submit", async (e) => {
   }
 });
 
+$("sayInput").addEventListener("input", (e) => {
+  const el = e.target, at = el.selectionStart;
+  el.value = el.value.toUpperCase();
+  el.setSelectionRange(at, at);
+});
+
+$("sayForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("sayInput").value.toUpperCase().trim().slice(0, 56);
+  const hint = $("sayHint");
+  if (!text) return;
+  hint.dataset.tone = ""; hint.textContent = "Sending…";
+  try {
+    const r = await link.send(`TWIST say ${text}`);
+    hint.dataset.tone = "ok";
+    hint.textContent = `He said "${text}" (dish replied OK ${r.ok}).`;
+  } catch (err) {
+    hint.dataset.tone = "err";
+    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The dish said no (${err.message}).`;
+  }
+});
+
 $("connect").addEventListener("click", connect);
+if (DEBUG) ui.show("debugBox", true);
 $("reconnect").addEventListener("click", reconnect);
 
 if (params.has("mock")) {
