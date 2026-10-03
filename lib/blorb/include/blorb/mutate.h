@@ -8,9 +8,11 @@
 // across generations and apply() refuses an op whose gene is missing.
 //
 // Guarantees, each a host test:
-//  * the child parses, expresses and passes viability() for any parent and seed;
-//  * at least one Look-class change of at least minVisibleDelta and at least one
-//    Mind-class change per egg, so every egg looks and acts different;
+//  * no mutation is lethal: the child passes viability(), or it is the parent
+//    unchanged with an empty diff (a phone EDIT can leave a non-viable parent);
+//  * apart from that unchanged fallback, at least one Look-class change of at
+//    least minVisibleDelta and at least one Mind-class change per egg, so every
+//    egg looks and acts different;
 //  * apply(parent, diff) == child, byte for byte;
 //  * the same (parent, policy, heirlooms, seed) always gives the same child.
 #include <cstdint>
@@ -48,7 +50,8 @@ MutationPolicy policyOf(const Genome&, Fx wildBonus);
 struct Offspring { Genome genome; MutationDiff diff; };
 
 // Retries a non-viable roll from the same rng stream (still deterministic) up
-// to 8 times, then falls back to a point-mutation-only pass.
+// to 8 times, then falls back to the forced Look and Mind changes alone, and
+// to the parent itself if even those fail viability().
 Offspring mutate(const Genome& parent, const MutationPolicy&, const std::vector<Belief>& heirlooms, Rng&);
 
 std::optional<Genome> apply(const Genome& parent, const MutationDiff&);

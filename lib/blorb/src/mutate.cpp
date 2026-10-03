@@ -347,7 +347,8 @@ Offspring mutate(const Genome& parent, const MutationPolicy& pol, const std::vec
   Draft d = startFrom(parent);
   forceLook(d, parent, pol, rng);
   forceMind(d, parent, pol, rng);
-  return Offspring{std::move(d.cur), std::move(d.diff)};
+  if (viability(d.cur).ok) return Offspring{std::move(d.cur), std::move(d.diff)};
+  return Offspring{parent, {}};
 }
 
 std::optional<Genome> apply(const Genome& parent, const MutationDiff& diff) {

@@ -112,6 +112,26 @@ TEST(Heredity, RetriesStillReturnAViableChild) {
   EXPECT_GT(fallbacks, 0) << "the wild policy never exhausted its retries";
 }
 
+// A phone EDIT can leave a living parent that fails viability(). Every random
+// pass inherits the lethal life gene, so most seeds reach the fallback, which
+// must not hand on the forced changes unchecked: the child is viable, or it is
+// the parent with no mutation at all.
+TEST(Heredity, TheFallbackNeverHatchesAnUncheckedChild) {
+  const Genome lethal = withByte(parent(), lifeGene(parent()), 1, 1);
+  ASSERT_FALSE(viability(lethal).ok);
+  const MutationPolicy pol = policyOf(lethal, Fx::zero());
+  int unchanged = 0;
+  for (uint64_t seed = 0; seed < 50; ++seed) {
+    Rng rng = Rng::seeded(seed);
+    Offspring o = mutate(lethal, pol, {}, rng);
+    if (viability(o.genome).ok) continue;
+    ASSERT_EQ(o.genome.bytes(), lethal.bytes()) << "seed " << seed << ": a non-viable child that is not the parent";
+    ASSERT_TRUE(o.diff.ops.empty()) << "seed " << seed;
+    ++unchanged;
+  }
+  EXPECT_GT(unchanged, 0) << "no seed reached the fallback";
+}
+
 TEST(Heredity, ApplyRefusesAMissingGeneOrAStaleByte) {
   MutationDiff missing{{MutDel{GeneUid{60000}}}};
   EXPECT_FALSE(apply(parent(), missing).has_value());

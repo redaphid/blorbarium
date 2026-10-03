@@ -165,7 +165,7 @@ What carries across a run, all through the genome:
 3. Unlocks: feats earned by any ancestor (`reached_elder`, `well_fed`, `fifth_generation`) raise clutch size and wild mutation, and wake feat-gated genes.
 4. The note gene: an inherited motto the owner can edit.
 
-Every egg has at least one Look change of at least `minVisibleDelta` and at least one Mind change, so each egg looks and acts different. `viability()` checks the static shape and runs a chemistry-only dry run of 48 pet-hours, so a lethal mutation never hatches. `mutate` retries from the same stream, so the result stays deterministic per seed.
+Every egg has at least one Look change of at least `minVisibleDelta` and at least one Mind change, so each egg looks and acts different. `viability()` checks the static shape and runs a chemistry-only dry run of 48 pet-hours, so a lethal mutation never hatches. `mutate` retries from the same stream, so the result stays deterministic per seed. After 8 retries it tries the forced Look and Mind changes alone, then hands on the parent unchanged. The fallback is viability-checked too, so no path hatches a lethal mutation. A phone EDIT can leave a non-viable parent, and its eggs then usually carry no change.
 
 ## 4. Body-only and phone-only interactions (ask 4)
 
