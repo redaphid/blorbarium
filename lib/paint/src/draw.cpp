@@ -503,16 +503,16 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
 }
 
 // Depth by the floor: an item standing higher in the dish than his feet is
-// behind him, one level with them or lower is in front. One behind him and
-// inside his footprint is under his body, which hides it; the art's gap
-// between the feet would otherwise show it.
+// behind him, one level with them or lower is in front. One standing on his
+// footprint (the floor his body covers, out to his shadow's front edge) is
+// under him and hidden; the art's gap between the feet would otherwise show it.
 void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Disc& d, const Colours& col,
                const Place& him, int foot, bool front) {
   for (int i = 0; i < imin(a.itemCount, 8); ++i) {
     Place q = placeAt(a.items[i].at, d, Xf{});
     bool inFront = q.y >= him.y;
     if (inFront != front) continue;
-    if (!inFront && iabs(q.x - him.x) <= foot && him.y - q.y <= foot) continue;
+    if (iabs(q.x - him.x) <= foot && q.y - him.y >= -foot && q.y - him.y <= foot / 4) continue;
     blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
   }
 }

@@ -397,7 +397,7 @@ TEST(Hop, LiftsTheSpriteByStrengthTimesTheMax) {
 TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
   BlockPack pack;
   const uint16_t kChip = rgb565(200, 40, 40);
-  for (double dy : {0.08, -0.08}) {
+  for (double dy : {0.14, -0.08}) {
     Appearance a = adult();
     a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(dy)}};
     a.itemCount = 1;
@@ -407,14 +407,16 @@ TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
   }
 }
 
-TEST(Items, OneJustBehindHisFeetDoesNotShowBetweenHisLegs) {
+TEST(Items, OneUnderHimDoesNotShowBetweenHisLegs) {
   LegsPack pack;
   const uint16_t kChip = rgb565(200, 40, 40);
   Appearance a = adult();
   a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(-0.06)}};
   a.itemCount = 1;
   EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, behind his legs";
-  a.items[0].at.y = fx(0.06);
+  a.items[0].at.y = fx(0.02);
+  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, at his toes";
+  a.items[0].at.y = fx(0.14);
   EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
 }
 
