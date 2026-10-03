@@ -90,6 +90,23 @@ A name fits in 15 characters (the saved name is 16 bytes). A missing, too long
 (`Grungo_the_sixteenth`) or invalid name is
 `ERR 400 BAD_ARGS`, as in `TWIST rename bad!name`.
 
+### TWIST say
+
+```
+#60 TWIST say Hello, Grungo!
+#60 OK say
+```
+
+He says the rest of the line on the marquee, in his croak face, for one pass
+across the dish (7 s plus 0.4 s a character), and then his own thoughts
+resume. Nothing cuts it short. The text is uppercased and kept to what the
+font draws: A to Z, 0 to 9, space and `. , ! ? - ' :`. Other characters are
+dropped, spaces at either end are trimmed, and the line stops at 56
+characters. An empty line, or one with nothing left (`TWIST say @#$`), is
+`ERR 400 BAD_ARGS`. During an egg or a clutch it is `ERR 409 NOT_NOW`. It
+works before `TIME`. It is never saved or hashed, and a reboot forgets it.
+If he is asleep he stays asleep and says it with his eyes shut.
+
 ### HASH
 
 ```
