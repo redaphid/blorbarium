@@ -4,6 +4,7 @@
 #include <cstring>
 #include "blorb/dish.h"
 #include "blorb/protocol.h"
+#include "blorb/thoughts.h"
 
 namespace blorb {
 namespace {
@@ -110,6 +111,22 @@ TwistStatus twist_prophecy_treat(Dish& dish, Args& a) {
   if (!c) return TwistStatus::NotNow;
   c->inject(chem::vision, c->chemistry().chem[chem::vision.v] + kProphecyTreatVision);
   return TwistStatus::Applied;
+}
+
+// The whole rest of the line: uppercased, cut to what the marquee font draws,
+// trimmed of spaces at either end, and capped at what the strip holds.
+TwistStatus twist_say(Dish& dish, Args& a) {
+  char line[kMaxSaidText];
+  size_t n = 0;
+  for (char c : a.rest) {
+    if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+    if (!inFont(c) || (c == ' ' && n == 0)) continue;
+    if (n == kMaxSaidText) break;
+    line[n++] = c;
+  }
+  while (n && line[n - 1] == ' ') --n;
+  if (n == 0) return TwistStatus::Malformed;
+  return dish.say(std::string_view(line, n)) ? TwistStatus::Shown : TwistStatus::NotNow;
 }
 
 }  // namespace blorb

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include "blorb/creature.h"
 #include "blorb/habitat.h"
 #include "blorb/senses.h"
@@ -142,6 +143,10 @@ size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out);
 // How long a line holds: one pass of the marquee, which moves 3 px a tick
 // over the dish's chord (about 200 px) plus 12 px a character.
 constexpr uint16_t kThoughtLeadTicks = 70, kThoughtTicksPerChar = 4;
+constexpr uint16_t passTicks(size_t len) { return uint16_t(kThoughtLeadTicks + len * kThoughtTicksPerChar); }
+
+// What the phone has him say (TWIST say): the longest line the strip holds.
+constexpr size_t kMaxSaidText = kThoughtLineCap - 1;
 
 // ---- choosing ---------------------------------------------------------------------
 struct ThoughtPick { ThoughtId id; uint16_t num; };
@@ -158,16 +163,22 @@ class Thinker {
   void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook);
   // Sim scripts and tests: that line starts now, as if its condition held.
   void force(ThoughtId, const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick);
+  // The phone's line (already in the font, at most kMaxSaidText): it starts
+  // now over anything showing, and no thought or prophecy cuts it short.
+  void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
   // Fills the Appearance's line. While he prophesies he wears the foresee
-  // face and glow, and the shake's hop does not show.
-  void show(Appearance&, uint32_t tick) const;
+  // face and glow, and the shake's hop does not show; while he says the
+  // phone's line he wears the croak face. Before wall time only the phone's
+  // line shows: the time-unknown marquee outranks his own.
+  void show(Appearance&, uint32_t tick, bool wallKnown) const;
 
   static constexpr uint32_t kWarmUpTicks = 3 * kTicksPerMinute;        // a hatchling's first minutes are wordless
   static constexpr uint32_t kQuietTicks = kTicksPerMinute;             // after a line, at least this ...
   static constexpr uint32_t kQuietJitterTicks = 2 * kTicksPerMinute;   // ... plus up to this, drawn
 
  private:
-  struct Shown { ThoughtId id; bool prophecy; uint32_t since; uint16_t ticks; char line[kThoughtLineCap]; };
+  enum class Spoken : uint8_t { thought, prophecy, said };   // his own line, a shake's foretelling, the phone's
+  struct Shown { Spoken kind; ThoughtId id; uint32_t since; uint16_t ticks; char line[kThoughtLineCap]; };
   void meet(const Creature&, const Lineage&, uint32_t tick);
   void start(const Creature&, ThoughtPick, uint32_t tick, Rng&);
 

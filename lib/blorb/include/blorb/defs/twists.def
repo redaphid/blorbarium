@@ -14,3 +14,4 @@ BLORB_TWIST(rename,    "<name>")                                  // 1..15 of A-
 BLORB_TWIST(pick,      "<egg>")                                   // choose a clutch egg
 BLORB_TWIST(prophecy,  "<feature> <action> <drive> <permille>")   // set one brain weight
 BLORB_TWIST(prophecy_treat, "")                                   // a treat baked from the phone's futures: vision, so he glows; no food
+BLORB_TWIST(say,       "<text>")                                  // the rest of the line, up to 56 drawable: he croaks it once on the marquee; never saved

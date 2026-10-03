@@ -48,10 +48,13 @@ class Reply {
   void ok(const char* fmt = "", ...);
   void err(uint16_t code, const char* text);
   bool succeeded() const { return ok_; }
+  // A success that changed only what is drawn, so a kMutating verb leaves the keepsake clean.
+  Reply& unsaved() { unsaved_ = true; return *this; }
+  bool changedSave() const { return ok_ && !unsaved_; }
  private:
   Link& link_;
   uint32_t id_;
-  bool ok_ = false;
+  bool ok_ = false, unsaved_ = false;
 };
 
 // The text sink gene describe_<name>() and describeDiff() write into.
@@ -61,7 +64,7 @@ struct Describe {
   void field(const char* name, const char* value);
 };
 
-enum CmdFlags : uint8_t { kMutating = 1 };   // a successful run marks the keepsake dirty
+enum CmdFlags : uint8_t { kMutating = 1 };   // a successful run marks the keepsake dirty, unless its reply is unsaved()
 struct CommandInfo { const char* verb; void (*run)(Dish&, const Request&, Reply&); uint8_t flags; };
 
 #define BLORB_CMD(VERB, name, flags) void cmd_##name(Dish&, const Request&, Reply&);
@@ -75,8 +78,9 @@ inline constexpr CommandInfo COMMANDS[] = {
 };
 
 // A twist parses all of its args before it touches the dish, so a refused op
-// leaves the state exactly as it was.
-enum class TwistStatus : uint8_t { Applied, Malformed, OutOfRange, NotNow, BodyOnly };
+// leaves the state exactly as it was. Shown is applied to the screen alone:
+// nothing saved changed, so the keepsake is not written.
+enum class TwistStatus : uint8_t { Applied, Shown, Malformed, OutOfRange, NotNow, BodyOnly };
 struct TwistInfo { const char* name; const char* args; TwistStatus (*apply)(Dish&, Args&); };
 
 #define BLORB_TWIST(name, args) TwistStatus twist_##name(Dish&, Args&);

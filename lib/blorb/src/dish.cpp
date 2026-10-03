@@ -183,6 +183,12 @@ void Dish::think(ThoughtId id) {
     thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_);
 }
 
+bool Dish::say(std::string_view line) {
+  const Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (c) thinker_.say(line, *c, lineage_, tick_);
+  return c != nullptr;
+}
+
 bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
   Creature* c = std::get_if<Creature>(&live_.occupant);
   if (!c || !c->editGene(uid, offset, value)) return false;
@@ -210,7 +216,7 @@ void Dish::save() {
 Appearance Dish::appearance() const {
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   a.timeUnknown = !wallKnown_;
-  if (wallKnown_ && std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
+  if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_, wallKnown_);
   return a;
 }
 

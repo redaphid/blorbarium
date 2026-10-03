@@ -175,6 +175,34 @@ TEST(Thoughts, LinesNeverChangeTheCreature) {
   EXPECT_EQ(talking.dish.hash(), quiet.dish.hash()) << "a line is presentation: the replay hash ignores it";
 }
 
+TEST(Say, ThePhonesLineCrossesOnceInTheCroakFaceThenHisThoughtsComeBack) {
+  Rig r;
+  r.pastWarmUp();
+  const std::string line = "HELLO FROG";
+  ASSERT_TRUE(r.dish.say(line));
+  r.run(100);
+  Appearance a = r.dish.appearance();
+  EXPECT_TRUE(a.thinking);
+  EXPECT_FALSE(a.prophecy);
+  EXPECT_EQ(std::string(a.line), line);
+  EXPECT_EQ(a.expression, expr::croak);
+  r.dish.fire(stim::shake);
+  r.run(passTicks(line.size()) * kTickMs - 200);
+  a = r.dish.appearance();
+  EXPECT_EQ(std::string(a.line), line) << "neither a thought nor a shake's prophecy cuts the phone's line short";
+  EXPECT_EQ(a.expression, expr::croak);
+  EXPECT_GT(a.thoughtPhase, Fx::ratio(9, 10)) << "most of the way across";
+  r.run(200);
+  a = r.dish.appearance();
+  EXPECT_NE(std::string(a.line), line) << "gone after one pass";
+  EXPECT_NE(a.expression, expr::croak);
+  const size_t before = r.said.size();
+  r.run(10 * kMinute);
+  bool thought = false;
+  for (size_t k = before; k < r.said.size(); ++k) thought = thought || r.said[k].text != line;
+  EXPECT_TRUE(thought) << "his own lines resume";
+}
+
 TEST(Prophecy, AShakeSometimesForetellsInsteadOfAHopWearingTheForeseeFace) {
   Rig r;
   r.pastWarmUp();
