@@ -46,34 +46,34 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
 This folds into units 12 (the anchor in the snapshot), 13 (`TIME` feeds the
 phone source) and 14 (the seam, the catch-up and its tests).
 
-## 4. User-directed: the board is authoritative; the phone only proposes
+## 4. User-directed: one writer at a time, through a lease
 
-Binding rule: the microcontroller holds the authoritative state. The phone
-reads a read-only snapshot and proposes; the board validates, caps or
-rejects every proposal through its own rules. No wire verb sets state
-directly. Audit of the designed verbs (section 6 of DESIGN.md), before any
-protocol code existed:
+The user (2026-10-02): "the phone can mutate the state, once it gets the
+current board from the device. This isn't a security thing. It's a
+consistency thing. Same keepsake = same world." So the state has exactly
+one writer at a time, handed over by a lease. (An earlier same-day reading,
+with proposals capped by the board, was superseded and never built.)
 
-| Verb | As designed | Now |
-|---|---|---|
-| reads (`HELLO` .. `HASH`, `BACKUP`) | read-only | unchanged; `STATE` and `HELLO` also report `v=<stateVersion>` |
-| `STIM` | fires a Phone-source stimulus | unchanged in kind (an input his own genes interpret), but carries `v=` |
-| `EDIT <uid> <hex>` | rewrote an owner-editable gene body | **changed.** `EDIT v=<n> <uid> <offset> <value>` proposes one byte. The board applies it through the mutation path (`apply()` of a one-op `MutationDiff`, recorded in the lineage), only on `OwnerEditable` genes, and caps the move to `kMaxOwnerEditDelta` per byte per edit. Then `viability()` must pass, or the edit is refused |
-| `NAME` | set the name | carries `v=`; the board trims it and filters it to printable ASCII |
-| `PICK i` | picked an egg | carries `v=`; the index must name an egg in the current clutch |
-| `TIME` | set the clock | carries `v=`; it feeds the phone time source (entry 3). The catch-up cap bounds its effect, and a wall time earlier than the anchor is refused |
-| `RESTORE` | replaced the snapshot | **changed.** It is a proposal too. With consent, the board decodes the blob through `Keepsake::decode` and accepts it only if the lineage id is this board's, the genome parses and passes `viability()`, and its own boot checks pass. Otherwise it is refused and nothing changes |
+1. On connect the board pushes nothing. The phone sends `LEASE`. The board
+   replies with the whole snapshot (`Keepsake::encode`, as base64 `+` lines)
+   and `OK lease=<id> <len> <crc32>`, and pauses its own simulation while the
+   lease is held.
+2. The phone may change anything (run the engine as WebAssembly, edit genes,
+   apply stimuli). There are no caps and no per-field checks.
+3. `RETURN <id> <len> <crc32>` with the blob as `+` lines writes the whole
+   state back. The board accepts it only if the lease is current and the blob
+   is well formed (it decodes, the CRC matches, the format version is known).
+   It then resumes simulating from exactly that state and saves at once. If
+   the genome changed, it appends a lineage checkpoint so every ancestor still
+   replays. `RELEASE <id>` hands the lease back with no write.
+4. If the link drops, or the phone sends nothing for `kLeaseTimeoutTicks`, the
+   lease expires and the board resumes from its own paused state. A later
+   `RETURN` with that id is refused. A malformed blob is refused and leaves
+   the board untouched, paused under the same lease.
 
-Staleness: the board keeps a `stateVersion`, saved in the snapshot and bumped
-on every change a phone could have read (hatch, stage, death, pick, edit,
-rename, restore). Every mutating verb (`kMutating` in `commands.def`) must
-carry `v=<n>`. The dispatcher checks it in one place, and a mismatch answers
-`ERR 409 STALE v=<current>`. Unit 21's brain-weight proposals will use the
-same version check and board-side caps.
-
-On connect the board pushes nothing. The phone requests the snapshot (`STATE`
-for the summary, `BACKUP` for the whole `Keepsake::encode` blob), and both
-replies carry `v=<stateVersion>`, which every later proposal quotes. Events
-flow only after the phone sends `SUB`. This was already the design's
-request-and-reply shape; the rule makes the version and the silence on
-connect explicit.
+What this removes from DESIGN.md section 6: the state-writing verbs `EDIT`,
+`NAME`, `STIM`, `PICK`, `BACKUP` and `RESTORE`, and with them the
+button-hold consent. The phone does all of those by editing the leased
+state. The read verbs stay, `SUB` events stay, and `TIME` stays, because it
+is an input to the time source (entry 3), not a state write. The body keeps
+every care loop, so the toy is still complete with no phone.
