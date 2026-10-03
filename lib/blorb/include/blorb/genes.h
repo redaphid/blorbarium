@@ -31,6 +31,7 @@ struct StimulusGene    { uint8_t stim, flags, chem[3], amount[3]; };            
 struct InstinctGene    { uint8_t cue[3], action, drive, level, strength; };          // cue 255 = unused
 struct ExpressionGene  { uint8_t face, weight, drive[3], amount[3]; };               // drive mix -> face
 struct TemperamentGene { uint8_t learnRate, forgetRate, explore, habituation, dreamEvery, dreamLen, traceHalfLife; };
+struct OracleGene      { uint8_t chance, voice, topics[7]; };                         // prophecy on a shake; voice mod VOICES; topic weights
 struct PaletteGene     { uint8_t region, hue, sat, val, chemBound, gain; };          // region mod kRegionCount
 struct SizeGene        { uint8_t base, growth, squash; };
 struct MarkGene        { uint8_t layer, variant, tint, chemBound; };                 // overlay variant mod the pack's count
@@ -38,6 +39,8 @@ struct MutationPolicyGene { uint8_t point, dup, del, wake, sleep, wild, heirloom
 struct EggGene         { uint8_t incubateMinutes, warmthBoost, hatchBurstDreams; };
 struct MetabolismGene  { uint8_t pantrySize, refillHours, rotMinutes, biteSize; };
 struct NoteGene        { uint8_t text[24]; };                                         // family motto; owner-editable
+
+static_assert(sizeof(OracleGene::topics) == kTopicCount, "OracleGene's layout is frozen: a new topic is a new gene type");
 
 // ---- registry ------------------------------------------------------------------------
 struct GeneTypeInfo {

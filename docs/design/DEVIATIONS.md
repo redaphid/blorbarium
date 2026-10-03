@@ -235,3 +235,41 @@ body-only.
   are future rows.
 - Tests: `Twist.ThePhoneCannotDeliverPlainFood` and
   `Twist.AProphecyTreatMakesHimGlowAndDoesNotFeedHim` in `test_protocol`.
+
+## 11. User-directed: thoughts, prophecies and his voice (asks 18 and 19)
+
+He says a line now and then, scrolled once across the dish. A shake may
+bring a prophecy instead of a hop. What he foresees and how he says it are
+genetic. `lib/blorb/include/blorb/thoughts.h` is the entry point.
+
+- **Registries.** `defs/thoughts.def` holds every line. A row with topic
+  `none` is a thought; a row with a topic (`defs/topics.def`) is a
+  prophecy. Each row names a predicate over what anyone could see of him,
+  plus a priority, a cooldown and its text. `defs/voices.def` holds the
+  voices and the frames each one wraps a line in. `defs/thought_lines.def`
+  holds a voice's own words for a row, which replace the frame. That last
+  table is data only, so a generated table (the `dialogue` branch,
+  `tools/dialogue/`) is a file swap.
+- **The oracle gene** (`OracleGene`, type 0x14, class Mind): the chance a
+  shake foretells, the voice (its byte taken modulo the voices) and a weight
+  per topic. It mutates like any gene, so siblings can differ. A genome
+  without one keeps grungo's species default (`Phenotype::Oracle`), so a
+  lineage older than the gene still prophesies.
+- **Presentation, not life.** The `Thinker` lives in the Dish beside the
+  occupant. It is never saved or hashed, and it draws from its own seed
+  (genome hash and tick), never the creature's rng. A replay is
+  bit-identical with or without it, and a reboot starts it afresh. It runs
+  only while wall time is known, so "TAP ME WITH YOUR PHONE" always wins.
+- **Pacing.** A hatchling says nothing for its first three minutes. After
+  each thought comes a quiet gap of one to three minutes. Lines of priority
+  `kUrgentThought` and up, and prophecies, interject during the gap without
+  restarting it.
+- **Prophecy versus hop is presentation only.** On a prophecy, `show()` sets
+  the foresee face and glow and hides the shake's hop. The body still ran
+  the hop reflex, so `LifeStats::hops` counts it. Making the engine skip the
+  reflex would mean the Thinker writing creature state, which the
+  presentation seam forbids.
+- **Face.** The renderer measures the rows every face patch and eye halo can
+  cover where he stands. When those rows reach the band above his head, the
+  line runs in a low band above the care hint instead
+  (`Thought.NeverCoversHisFaceAnywhereInTheDish` in `test_paint`).

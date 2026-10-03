@@ -235,6 +235,21 @@ void describe_palette(const GeneView& v, Describe& d) {
   d.field("gain", g.gain);
 }
 
+// ---- oracle --------------------------------------------------------------------
+const MutRule rules_oracle[] = {N, A, N, N, N, N, N, N, N};
+void express_oracle(const GeneView& v, Phenotype& p) {
+  auto g = decode<OracleGene>(v);
+  p.oracle.chance = g.chance;
+  p.oracle.voice = VOICES[g.voice % kVoiceCount].id;
+  std::copy(std::begin(g.topics), std::end(g.topics), p.oracle.topics);
+}
+void describe_oracle(const GeneView& v, Describe& d) {
+  auto g = decode<OracleGene>(v);
+  d.field("chance", g.chance);
+  d.field("voice", VOICES[g.voice % kVoiceCount].name);
+  for (size_t t = 0; t < kTopicCount; ++t) d.field(TOPICS[t].name, g.topics[t]);
+}
+
 // ---- size ----------------------------------------------------------------------
 const MutRule rules_size[] = {N, N, N};
 void express_size(const GeneView& v, Phenotype& p) {

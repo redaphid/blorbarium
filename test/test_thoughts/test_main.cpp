@@ -26,7 +26,30 @@ Genome edited(Genome g, uint8_t type, uint8_t firstByte, uint8_t offset, uint8_t
   });
   return *b.build();
 }
+constexpr uint8_t kOracle = GeneKindOf<OracleGene>::value;
+
 Genome quickEgg() { return edited(starterGenome(7), GeneKindOf<EggGene>::value, 255, 0, 1); }
+// The founder with an oracle gene (grungo's species default when it carries none), one byte set.
+Genome oracle(uint8_t offset, uint8_t value, Genome g = quickEgg()) {
+  bool carries = false;
+  g.forEach([&](const GeneView& v) { carries = carries || v.header.type == kOracle; });
+  if (!carries) {
+    const Phenotype::Oracle d{};
+    OracleGene body{d.chance, d.voice.v, {}};
+    std::copy(std::begin(d.topics), std::end(d.topics), body.topics);
+    g = *GenomeBuilder::from(g).append(body, GeneFlags::Mutable).build();
+  }
+  return edited(g, kOracle, 255, offset, value);
+}
+Genome withChance(uint8_t chance) { return oracle(0, chance); }
+Genome withVoice(VoiceId v) { return oracle(1, v.v); }
+// Every topic weight 1 but `favourite`'s, so its prophecies dominate whatever holds.
+Genome leaning(TopicId favourite) {
+  Genome g = quickEgg();
+  for (size_t t = 0; t < kTopicCount; ++t) g = oracle(uint8_t(2 + t), t == favourite.v ? 255 : 1, g);
+  return g;
+}
+
 struct Line { uint32_t tick; ThoughtId id; std::string text; bool prophecy; };
 
 struct Rig {
@@ -175,38 +198,57 @@ TEST(Thoughts, LinesNeverChangeTheCreature) {
   EXPECT_EQ(talking.dish.hash(), quiet.dish.hash()) << "a line is presentation: the replay hash ignores it";
 }
 
-TEST(Prophecy, AShakeSometimesForetellsInsteadOfAHopWearingTheForeseeFace) {
-  Rig r;
-  r.pastWarmUp();
-  const int prophecies = r.shakes(40, 20 * kSecond);
-  EXPECT_GT(prophecies, 2) << "grungo foretells about one shake in four";
-  EXPECT_LT(prophecies, 25);
-  for (int i = 0; i < 40; ++i) {
-    r.dish.fire(stim::shake);
-    r.run(400);
-    Appearance a = r.dish.appearance();
-    if (!(a.thinking && a.prophecy && a.thoughtPhase < Fx::ratio(1, 10))) {
-      r.run(20 * kSecond);
-      continue;
-    }
-    EXPECT_FALSE(a.reflexActive) << "the hop does not show while he foretells";
-    EXPECT_EQ(a.expression, expr::foresee);
-    EXPECT_TRUE(a.foreseeing);
-    EXPECT_GE(a.glow, kForeseeGlowFloor);
-    EXPECT_TRUE(thoughtInfo(a.thought)->prophecy());
-    return;
-  }
-  ADD_FAILURE() << "forty shakes and no fresh prophecy";
+TEST(Prophecy, TheOracleGeneSetsHowOftenAShakeForetells) {
+  auto prophecies = [](uint8_t chance) {
+    Rig r(withChance(chance));
+    r.pastWarmUp();
+    return r.shakes(40, 20 * kSecond);
+  };
+  const int never = prophecies(0), sometimes = prophecies(64), always = prophecies(255);
+  EXPECT_EQ(never, 0);
+  EXPECT_GT(sometimes, 2) << "about one shake in four";
+  EXPECT_LT(sometimes, 20);
+  EXPECT_GT(always, 20) << "a seer who always foretells, cooldowns allowing";
+  EXPECT_GT(always, sometimes);
 }
 
-TEST(Prophecy, TheVoiceChangesHowTheSameLineIsSaid) {
-  char mystic[kThoughtLineCap], hoarder[kThoughtLineCap], terse[kThoughtLineCap];
-  thoughtLine(thought::p_mud, 0, voice::mystic, 0, mystic);
-  thoughtLine(thought::p_mud, 0, voice::hoarder, 0, hoarder);
-  thoughtLine(thought::p_mud, 0, voice::terse, 0, terse);
-  EXPECT_STRNE(mystic, hoarder);
-  EXPECT_STRNE(mystic, terse);
-  EXPECT_NE(std::string(hoarder).find("MUD"), std::string::npos) << "the voice frames the line; it keeps its meaning";
+TEST(Prophecy, HeForetellsInsteadOfHoppingWearingTheForeseeFace) {
+  Rig r(withChance(255));
+  r.pastWarmUp();
+  r.dish.fire(stim::shake);
+  r.run(400);
+  Appearance a = r.dish.appearance();
+  ASSERT_TRUE(a.thinking && a.prophecy);
+  EXPECT_FALSE(a.reflexActive) << "the hop does not show while he foretells";
+  EXPECT_EQ(a.expression, expr::foresee);
+  EXPECT_TRUE(a.foreseeing);
+  EXPECT_GE(a.glow, kForeseeGlowFloor);
+
+  Rig hopper(withChance(0));
+  hopper.pastWarmUp();
+  hopper.dish.fire(stim::shake);
+  hopper.run(400);
+  EXPECT_TRUE(hopper.dish.appearance().reflexActive) << "with no oracle, a shake is a hop";
+}
+
+TEST(Prophecy, TopicGenesShiftWhatHeForesees) {
+  auto foodShare = [](const Genome& g) {
+    Rig r(g);
+    r.pastWarmUp();
+    const Heirlooms none;
+    const Observed o{r.creature(), r.dish.habitat(), r.dish.clock(), none, r.dish.tickCount()};
+    int food = 0;
+    constexpr int kDraws = 2000;
+    for (int i = 0; i < kDraws; ++i) {
+      Rng rng = Rng::seeded(uint64_t(i) * 7919u + 1);
+      std::optional<ThoughtPick> p = chooseProphecy(o, nullptr, rng);
+      if (p && thoughtInfo(p->id)->topic == topic::food) ++food;
+    }
+    return double(food) / kDraws;
+  };
+  const double gourmand = foodShare(leaning(topic::food)), pondish = foodShare(leaning(topic::pond));
+  EXPECT_GT(gourmand, 0.8);
+  EXPECT_LT(pondish, 0.1);
 }
 
 TEST(Heirloom, TheLineageNamesTheGenerationThatLearnedAFear) {
@@ -229,6 +271,20 @@ TEST(Heirloom, TheLineageNamesTheGenerationThatLearnedAFear) {
   char out[kThoughtLineCap];
   thoughtLine(thought::ancestor_fear, found.at[0].learnedBy, voice::terse, 0, out);
   EXPECT_STREQ(out, "GEN 3 WAS SCARED OF THIS TOO");
+}
+
+TEST(Voice, TheVoiceGeneChangesHowTheSameLineIsSaid) {
+  auto said = [](VoiceId v) {
+    Rig r(withVoice(v));
+    r.pastWarmUp();
+    r.dish.think(thought::p_mud);
+    r.run(100);
+    return std::string(r.dish.appearance().line);
+  };
+  const std::string mystic = said(voice::mystic), hoarder = said(voice::hoarder), terse = said(voice::terse);
+  EXPECT_NE(mystic, hoarder);
+  EXPECT_NE(mystic, terse);
+  EXPECT_NE(std::string(hoarder).find("MUD"), std::string::npos) << "the voice frames the line; it keeps its meaning";
 }
 
 TEST(Voice, EveryVoiceSaysEveryLineWithinTheFontAndTheCap) {

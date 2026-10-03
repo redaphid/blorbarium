@@ -196,6 +196,19 @@ static void debug(const char* verb, const char* a, const char* b) {
     for (const auto& t : blorb::THOUGHTS)
       if (!strcmp(t.name, a)) { dish->think(t.id); return; }
     fprintf(stderr, "sim: no thought named %s\n", a);
+  } else if (!strcmp(verb, "voice")) {
+    // Rewrites the oracle gene's voice byte, as a mutation would.
+    for (const auto& v : blorb::VOICES) {
+      if (strcmp(v.name, a)) continue;
+      bool edited = false;
+      c->genome().forEach([&](const blorb::GeneView& g) {
+        if (!edited && g.header.type == blorb::GeneKindOf<blorb::OracleGene>::value)
+          edited = c->editGene(g.header.uid, 1, v.id.v);
+      });
+      if (!edited) fprintf(stderr, "sim: no oracle gene to give a voice\n");
+      return;
+    }
+    fprintf(stderr, "sim: no voice named %s\n", a);
   } else if (!strcmp(verb, "die")) {
     // Life to zero: the genome's own receptors on low life write die and
     // cause, so the death runs the path a real one does.
