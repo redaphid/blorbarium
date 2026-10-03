@@ -59,17 +59,18 @@ std::vector<uint8_t> encode(int w, int h, const std::function<uint8_t(int, int)>
 // the canvas. Its foresee face is an empty patch whose anchors sit low on the body.
 constexpr uint16_t kOlive = (12 << 11) | (32 << 5) | 6;   // (96, 128, 48)
 struct BlockPack : paint::SpritePack {
-  static constexpr int kW = 60, kH = 80;
+  static constexpr int kW = 60, kH = 80, kItem = 10;
   static constexpr paint::EyeAnchor kBodyEyes[2] = {{18, 16, 6}, {42, 16, 6}};
   static constexpr paint::EyeAnchor kPatchEyes[2] = {{12, 60, 5}, {48, 60, 5}};
   std::vector<uint8_t> solid = encode(kW, kH, [](int, int) { return uint8_t(1); });
   std::vector<uint8_t> clear = encode(kW, kH, [](int, int) { return uint8_t(0); });
-  PaletteEntry pal[2] = {{0, 0, 0, 255}, {96, 128, 48, 255}};
+  std::vector<uint8_t> chip = encode(kItem, kItem, [](int, int) { return uint8_t(2); });
+  PaletteEntry pal[3] = {{0, 0, 0, 255}, {96, 128, 48, 255}, {200, 40, 40, 255}};
 
   FrameRef frame(const std::vector<uint8_t>& rle, const paint::EyeAnchor* eyes) const {
     return FrameRef{rle.data(), kW, kH, kW / 2, kH - 1, {eyes[0], eyes[1]}, 2};
   }
-  const PaletteEntry* palette(uint16_t& n) const override { n = 2; return pal; }
+  const PaletteEntry* palette(uint16_t& n) const override { n = 3; return pal; }
   RegionBand band(blorb::RegionId) const override { return {-128, 127, 0, 255, 0, 255}; }
   FrameRef body(blorb::PoseId, blorb::Stage, uint16_t) const override { return frame(solid, kBodyEyes); }
   FrameRef face(blorb::ExprId e, blorb::Stage) const override {
@@ -78,7 +79,15 @@ struct BlockPack : paint::SpritePack {
   FrameRef mark(uint8_t, uint8_t) const override { return FrameRef{}; }
   FrameRef egg(Fx) const override { return frame(solid, kBodyEyes); }
   FrameRef remains() const override { return frame(solid, kBodyEyes); }
-  FrameRef item(Appearance::Item::What) const override { return FrameRef{}; }
+  FrameRef item(Appearance::Item::What) const override {
+    return FrameRef{chip.data(), kItem, kItem, kItem / 2, kItem - 1, {}, 0};
+  }
+};
+
+// The block on two legs: the bottom rows are open between them, as grungo's are.
+struct LegsPack : BlockPack {
+  std::vector<uint8_t> legs = encode(kW, kH, [](int x, int y) { return uint8_t(y >= kH - 20 && x >= 20 && x < 40 ? 0 : 1); });
+  FrameRef body(blorb::PoseId, blorb::Stage, uint16_t) const override { return frame(legs, kBodyEyes); }
 };
 
 struct Box { int x0 = kSide, y0 = kSide, x1 = -1, y1 = -1; int count = 0; };
@@ -381,6 +390,32 @@ TEST(Hop, LiftsTheSpriteByStrengthTimesTheMax) {
   EXPECT_EQ(squash.y1, down.y1);
   EXPECT_GT(squash.y0, down.y0);
   EXPECT_LT(squash.x0, down.x0);
+}
+
+// Items used to draw behind him whatever their depth, so one at his feet
+// peeked out between them; the floor now decides what is in front.
+TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
+  BlockPack pack;
+  const uint16_t kChip = rgb565(200, 40, 40);
+  for (double dy : {0.08, -0.08}) {
+    Appearance a = adult();
+    a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(dy)}};
+    a.itemCount = 1;
+    int shown = find(*render(a, pack), kChip).count;
+    if (dy > 0) EXPECT_EQ(shown, BlockPack::kItem * BlockPack::kItem) << "below his feet: in front, whole";
+    else EXPECT_EQ(shown, 0) << "above his feet: behind him";
+  }
+}
+
+TEST(Items, OneJustBehindHisFeetDoesNotShowBetweenHisLegs) {
+  LegsPack pack;
+  const uint16_t kChip = rgb565(200, 40, 40);
+  Appearance a = adult();
+  a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(-0.06)}};
+  a.itemCount = 1;
+  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, behind his legs";
+  a.items[0].at.y = fx(0.06);
+  EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
 }
 
 // A still frame of a leap only reads as one if something stays on the floor.

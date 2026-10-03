@@ -62,6 +62,27 @@ Genome withStartleGain(int scale) {
 
 }  // namespace
 
+// He used to walk onto the marble and stand on it for good, so every frame
+// after a chase showed it between his feet.
+TEST(Chase, HeNosesTheMarbleOnAndNeverStandsOnIt) {
+  Rig r;
+  r.habitat.marble.at = DishPos{Fx::ratio(3, 10), Fx::zero()};
+  int under = 0, touches = 0;
+  bool wasTouching = false;
+  for (int i = 0; i < 400; ++i) {
+    r.c.force(action::chase);
+    r.step();
+    Fx dx = r.habitat.marble.at.x - r.c.body().at.x, dy = r.habitat.marble.at.y - r.c.body().at.y;
+    Fx d2 = dx * dx + dy * dy;
+    under += d2 <= Fx::ratio(36, 10000);
+    bool touching = d2 <= Fx::ratio(144, 10000);
+    touches += touching && !wasTouching;
+    wasTouching = touching;
+  }
+  EXPECT_GE(touches, 3) << "he keeps catching it up";
+  EXPECT_LE(under, 20) << "ticks of 400 with the marble within 0.06 of his feet";
+}
+
 TEST(Reflex, AShakeHopsWithTheAlarmedFace) {
   Rig r;
   r.run(50);
