@@ -11,6 +11,7 @@ constexpr Fx kRoam = Fx::ratio(85, 100);      // he stays this far in, short of 
 constexpr Fx kNearRim = Fx::ratio(78, 100);   // Curl stops here
 constexpr Fx kWanderTurn = Fx::ratio(1, 10);  // most a wander heading changes per tick, in half turns
 constexpr Fx kHopTurn = Fx::ratio(1, 16);
+constexpr uint16_t kChewTicks = 15;            // he holds the bite this long, so eating can be seen
 constexpr Fx kNoseRange = Fx::ratio(12, 100);  // the marble this close, he noses it on ...
 constexpr Fx kNoseSpeed = Fx::ratio(3, 100);   // ... at twice his walk: it rolls about half the dish
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
@@ -121,8 +122,20 @@ Status Wander::step(Body& b, ActionCtx& c) {
   return Status::Running;
 }
 
-// Done once he bites, or when there is nothing to eat.
+// A fresh Eat walks to food; one decided again mid-chew finishes the mouthful.
+void Eat::start(Body& b, ActionCtx&) {
+  if (b.pose != pose::eat || b.poseTick + 1u >= kChewTicks) b.pose = pose::walk;
+}
+
+// To the nearest pellet and bite it, then chew for kChewTicks with the eating
+// locus up; done after the chew, or when there is nothing to eat. The chew
+// is timed by the eat pose's poseTick, so the behaviour keeps no state.
 Status Eat::step(Body& b, ActionCtx& c) {
+  if (b.pose == pose::eat) {
+    if (b.poseTick + 1u >= kChewTicks) return Status::Done;
+    c.out.set(locus::eating, Fx::one());
+    return Status::Running;
+  }
   std::optional<DishPos> pellet = c.habitat.nearestPellet(b.at);
   if (!pellet) return Status::Done;
   b.pose = pose::walk;
@@ -135,7 +148,7 @@ Status Eat::step(Body& b, ActionCtx& c) {
   c.out.fire(stim::fed);   // a rotten pellet still fills him, so he stops at one
   if (bite->rotten) c.out.fire(stim::fed_bad);
   c.out.set(locus::eating, Fx::one());
-  return Status::Done;
+  return Status::Running;
 }
 
 // The creature ends a sleep (sleep_gate falls, or a stimulus that wakes).

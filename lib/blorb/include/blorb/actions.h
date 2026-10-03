@@ -50,7 +50,9 @@ struct Base {
 };
 struct Rest : Base { Status step(Body&, ActionCtx&); };                 // idle, breathe
 struct Wander : Base { Status step(Body&, ActionCtx&); };               // random walk inside the rim
-struct Eat : Base { Status step(Body&, ActionCtx&); };                  // to the nearest pellet, bite(); eating locus
+struct Eat : Base {                                                     // to the nearest pellet, bite(), chew; eating locus
+  void start(Body&, ActionCtx&); Status step(Body&, ActionCtx&);
+};
 struct Sleep : Base {                                                   // asleep locus; Done when sleep_gate drops
   void start(Body&, ActionCtx&); Status step(Body&, ActionCtx&); void stop(Body&, ActionCtx&);
 };
