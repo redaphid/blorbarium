@@ -30,9 +30,9 @@ def wsl(path: Path) -> str:
 
 
 def lines_from_def(n, seed=7):
-    text = (REPO / "lib/blorb/include/blorb/defs/dialogue.def").read_text(encoding="utf-8")
-    rows = re.findall(r'BLORB_LINE\((\w+), (\w+), (\w+), "(.*)"\)', text)
-    return [r[3] for r in random.Random(seed).sample(rows, n)]
+    text = (REPO / "lib/blorb/include/blorb/defs/thought_lines.def").read_text(encoding="utf-8")
+    rows = re.findall(r'^BLORB_LINE\(\s*\w+,\s*\w+,\s*"(.*)"\)', text, re.M)
+    return random.Random(seed).sample(rows, n)
 
 
 def gxx(*args):

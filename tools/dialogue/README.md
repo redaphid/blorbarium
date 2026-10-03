@@ -3,8 +3,9 @@
 This tool writes the sayings Grungo shows on the marquee. A small base
 (non-instruct) language model continues pages of a fake field notebook, and a
 filter keeps the lines the device can show and a gift can carry. The output is
-one table, `lib/blorb/include/blorb/defs/dialogue.def`, keyed by voice, topic
-and hybrid pair. `samples.md` has lines to judge.
+`lib/blorb/include/blorb/defs/thought_lines.def`, the thoughts registry's
+table of voiced lines (see [Table format](#table-format)). `samples.md` has
+lines to judge.
 
 ## Run it
 
@@ -145,51 +146,57 @@ to 8.
 
 ## Table format
 
-No `origin/thoughts` branch existed when this was written, so the table uses
-a simple voice × topic → lines format in the repo's X-macro style:
+The output is the thoughts registry's `thought_lines.def`, the table its
+header says the dialogue generator may replace wholesale:
 
 ```c
-BLORB_VOICE(id, name)                      // 7 rows; ids stable, from voices.toml
-BLORB_TOPIC(id, name)                      // 10 rows; ids stable
-BLORB_LINE(voiceA, voiceB, topic, "TEXT")  // voiceA == voiceB: a pure voice
-                                           // otherwise a hybrid, in [blends] order
+BLORB_LINE(thought, voice, text)   // thought: a thoughts.def row; voice: a voices.def row
 ```
 
-All three macros default to empty and are undefined at the end, so a consumer
-defines only the ones it needs:
+When a (thought, voice) pair has rows, Grungo says one of them in place of
+the row's own text inside that voice's frame. `thoughts.h` checks every row
+at compile time: font characters only, at most one `#`, and at most
+`kMaxVoicedText` (52) characters. Generated lines are 32 characters or fewer
+and have no `#`.
 
-```cpp
-enum class Voice : uint8_t {
-#define BLORB_VOICE(id, name) name = id,
-#include "blorb/defs/dialogue.def"
-};
-enum class Topic : uint8_t {
-#define BLORB_TOPIC(id, name) name = id,
-#include "blorb/defs/dialogue.def"
-};
-struct Saying { Voice a, b; Topic topic; const char* text; };
-constexpr Saying kSayings[] = {
-#define BLORB_LINE(a, b, t, text) {Voice::a, Voice::b, Topic::t, text},
-#include "blorb/defs/dialogue.def"
-};
-```
+The generator reads `thoughts.def` and `voices.def` from this tree when they
+exist and from `origin/thoughts` until then. Override that ref with
+`THOUGHTS_REF`. Each (voice, topic) cell maps onto the registry like this:
 
-Rows are sorted by (voiceA, voiceB, topic), so each cell is a contiguous run.
-If a thoughts registry defines its own voice and topic enums, it can define
-`BLORB_LINE` against them by name and skip `BLORB_VOICE` and `BLORB_TOPIC`. A
-genome crossed between two voices that have no generated hybrid cell can
-alternate lines from the two pure cells. That is the same interleaving the
-hybrid prompts use, done at runtime.
+- **Voice.** A voice maps to the registry voice named by its `registry` key in
+  `voices.toml`, or by its own name. `paranoid_hoarder` maps to `hoarder`. A
+  hybrid maps to `<A>_x_<B>` in registry names, for example
+  `mystic_x_hoarder`.
+- **Topic.** A topic's lines go to the rows listed in its `rows` key. Without
+  `rows`, they go to every prophecy row of the same-named topic whose
+  condition is `anytime`. A generated line knows nothing of hunger or night,
+  so it never takes a conditional row. Lines are spread round-robin over the
+  rows.
+- **Extra topics.** Shaking, sleep and held are not prophecy topics in
+  `topics.def`. They map to plain thought rows: `ground_lies`, then
+  `heavy_eyes` and `dream_pellets`, then `put_me_down` and `warm_hands`.
+- **Hand-written rows.** The rows hand-written on the thoughts branch live in
+  `voices.toml` under `[hand]` and are emitted first, so regenerating keeps
+  them.
+
+A voice that `voices.def` lacks (today `forecast` and every hybrid) is held
+back, and the header of `thought_lines.def` counts its lines. The lines stay
+in `raw.jsonl` and in `samples.md`. To ship them, add the row to `voices.def`
+(for example `BLORB_VOICE(6, forecast, 0)` with a `BLORB_FRAME`) and rerun
+with `DIALOGUE_OFFLINE=1`. No GPU is needed.
+
+On the ESP32, a `VoicedLine` is 8 bytes (two one-byte ids, padding and a
+pointer) plus its NUL-terminated text. The header states the total.
 
 ## Files
 
 | file | role |
 |---|---|
 | `generate.sh` | The single entry point. |
-| `voices.toml` | Hand-written voices, topics, seeds, blend pairs and seasoning markers. |
+| `voices.toml` | Hand-written voices, topics, seeds, blend pairs, seasoning markers, registry mapping and hand rows. |
 | `lexicon.py`, `lexicon.json` | The sporefall-art flavour lexicon and the step that builds it. |
 | `blocklist.txt`, `blocklist.py` | The gift filter, shared by both steps. |
-| `generate.py` | Pages, the proxy client, the filter, and the table and samples writers. |
+| `generate.py` | Pages, the proxy client, the filter, the registry mapping, and the table and samples writers. |
 | `raw.jsonl` | Every completion, with its model, digest, options and seed. |
 | `samples.md` | 8 random lines per voice, hybrids, seasoning and sporefall-word lines. |
 | `render_marquee.py`, `marquee_main.cpp` | Renders lines with the engine's own marquee code into a PNG. |
