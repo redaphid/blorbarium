@@ -17,7 +17,7 @@
 // shake, arrows tilt.
 //
 // Script and stdin lines:
-//   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
+//   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !care <ms>  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
@@ -121,6 +121,40 @@ static void release() {
 
 static uint32_t argMs(const char* arg, uint32_t fallback) { return arg && *arg ? uint32_t(atoi(arg)) : fallback; }
 
+// ---- the caretaker -------------------------------------------------------------
+// `!care <ms>`: for that long, warps included, an owner glances at the glass
+// every 30 s and makes the gesture the care hint names (care.def), then rests,
+// as test/support/scripted_owner.h does from his drives. BOOT only when the
+// dish shows no pellet: a second would rot before he wanted it, and he eats rot.
+static uint32_t careUntil = 0, careNextLook = 0;
+
+static void care() {
+  constexpr uint32_t kLookMs = 30000, kRestMs = 2000, kPressMs = 200, kCradleMs = 4000, kTuckMs = 10 * 60000;
+  const uint32_t now = millis();
+  if (!simBefore(now, careUntil) || simBefore(now, careNextLook)) return;
+  careNextLook = now + kLookMs;
+  const blorb::Appearance a = dish->appearance();
+  if (!a.hasHint) return;
+  blorb::StimId gesture{};
+  for (const auto& c : blorb::CARES)
+    if (c.id.v == a.hint.v) gesture = c.gesture;
+  SimHand& h = Wire.hand;
+  if (gesture.v == blorb::stim::button.v) {
+    for (uint8_t i = 0; i < a.itemCount; i++)
+      if (a.items[i].what != blorb::Appearance::Item::What::Marble) return;
+    press(PIN_BOOT_BUTTON, kPressMs);
+    careNextLook = now + kPressMs + kRestMs;
+  } else if (gesture.v == blorb::stim::cradle.v) {
+    h.holdUntil = now + kCradleMs;
+    careNextLook = now + kCradleMs + kRestMs;
+  } else if (gesture.v == blorb::stim::knock.v) {
+    h.tap = 1;
+  } else if (gesture.v == blorb::stim::lid_down.v) {
+    h.lidUntil = now + kTuckMs;
+    careNextLook = now + kTuckMs + kRestMs;
+  }
+}
+
 static void hand(const char* word, const char* a, const char* b) {
   SimHand& h = Wire.hand;
   const uint32_t now = millis();
@@ -132,6 +166,7 @@ static void hand(const char* word, const char* a, const char* b) {
   else if (!strcmp(word, "lid")) { if (*a) h.lidUntil = now + argMs(a, 0); else h.lidded = true; }
   else if (!strcmp(word, "hold")) h.holdUntil = now + argMs(a, 5000);
   else if (!strcmp(word, "button")) press(PIN_BOOT_BUTTON, argMs(a, 150));
+  else if (!strcmp(word, "care")) { careUntil = now + argMs(a, 0); careNextLook = now; }
   else if (!strcmp(word, "shot")) shoot(a);
   else fprintf(stderr, "sim: unknown hand line !%s\n", word);
 }
@@ -167,6 +202,7 @@ static void warp(uint32_t ticks) {
   while (simBefore(millis(), until)) {
     simWarpMs += blorb::kSampleMs;
     release();
+    care();
     step(millis());
   }
 }
@@ -231,6 +267,7 @@ static int run(bool* running) {
     due.swap(simPending);   // a warp reads stdin and may queue more; those wait a frame
     for (const std::string& line : due) simLine(line);
     release();
+    care();
     loop();
     const uint32_t after = millis() - started - simWarpMs;
     if (shotPath && after >= shotAfterMs) {
