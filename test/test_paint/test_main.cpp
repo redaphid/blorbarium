@@ -319,8 +319,13 @@ TEST(Face, CrossfadesFromPreviousThenSettles) {
   EXPECT_GE(midwayDiffers, 3);   // a blink can take one tick
 }
 
+// The block with no face patches, so the halo has only the body's anchors.
+struct FacelessPack : BlockPack {
+  FrameRef face(blorb::ExprId, blorb::Stage) const override { return FrameRef{}; }
+};
+
 TEST(Halo, RingsTheEyeAnchorsAndLeavesFarPixelsAlone) {
-  BlockPack pack;
+  FacelessPack pack;
   for (uint16_t t = 0; t < 8; ++t) {   // every step of the 1.25 Hz pulse, trough included
     Appearance a = adult();
     a.foreseeing = true;
@@ -344,7 +349,7 @@ TEST(Halo, RingsTheEyeAnchorsAndLeavesFarPixelsAlone) {
 }
 
 TEST(Halo, FollowsTheAnchorsThroughTheHop) {
-  BlockPack pack;
+  FacelessPack pack;
   Appearance rest = adult();
   rest.foreseeing = true;
   Box restBox = find(*render(rest, pack), kOlive);
@@ -480,7 +485,10 @@ TEST(Hop, LeavesADarkShadowOnTheFloorUnderHim) {
   Box down = find(*render(rest, pack), kOlive);
   auto up = render(hopping(rest, fx(0.45), Fx::one()), pack);
   ASSERT_LT(find(*up, kOlive).y1, down.y1 - 20) << "he is in the air";
-  auto away = render(adult(-0.8, 0), pack);
+  Appearance gone = rest;
+  gone.kind = Appearance::Kind::Remains;
+  gone.remainsFade = Fx::one();
+  auto away = render(gone, pack);
   auto luma = [&](const Canvas240& cv, int x, int y) {
     uint16_t p = cv.px[y * kSide + x];
     return ((p >> 11) & 31) * 2 + ((p >> 5) & 63) + (p & 31) * 2;

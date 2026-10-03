@@ -112,6 +112,49 @@ TEST(Eat, AHopMidChewEndsTheMouthful) {
   }
 }
 
+// He used to rest wherever a wander left him, so the dish showed him off to
+// one side; home is the middle, and rest takes him back there.
+void wanderOff(Rig& r) {
+  for (int i = 0; i < 200; ++i) {
+    r.c.force(action::wander);
+    r.step();
+  }
+  Fx x = r.c.body().at.x, y = r.c.body().at.y;
+  ASSERT_GT(x * x + y * y, Fx::ratio(4, 100)) << "the wander left the middle";
+}
+
+TEST(Rest, HeAmblesHomeToTheMiddleAndStandsThere) {
+  Rig r;
+  wanderOff(r);
+  for (int i = 0; i < 400; ++i) {
+    r.c.force(action::rest);
+    r.step();
+  }
+  EXPECT_EQ(r.c.body().at.x, Fx::zero());
+  EXPECT_EQ(r.c.body().at.y, Fx::zero());
+  EXPECT_EQ(r.c.body().pose, pose::idle) << "home, he stands";
+}
+
+TEST(Foresee, HeAmblesHomeAndForeseesInTheMiddle) {
+  Rig r;
+  wanderOff(r);
+  for (int i = 0; i < 400; ++i) {
+    r.c.force(action::foresee);
+    r.step();
+  }
+  EXPECT_EQ(r.c.body().at.x, Fx::zero());
+  EXPECT_EQ(r.c.body().at.y, Fx::zero());
+  EXPECT_EQ(r.c.body().pose, pose::foresee);
+}
+
+TEST(CatchUp, AStretchWithNobodyThereEndsWithHimHome) {
+  Rig r;
+  wanderOff(r);
+  r.c.tickCoarse(SenseOut{}, 600, r.tick);
+  EXPECT_EQ(r.c.body().at.x, Fx::zero());
+  EXPECT_EQ(r.c.body().at.y, Fx::zero());
+}
+
 // He used to walk onto the marble and stand on it for good, so every frame
 // after a chase showed it between his feet.
 TEST(Chase, HeNosesTheMarbleOnAndNeverStandsOnIt) {

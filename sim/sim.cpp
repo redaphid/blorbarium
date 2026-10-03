@@ -19,6 +19,7 @@
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
+//   DEBUG stage <hatchling|child|adult|elder>
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
 
@@ -138,27 +139,7 @@ static void hand(const char* word, const char* a, const char* b) {
 
 // ---- debug verbs ---------------------------------------------------------------
 // They reach into the engine through the Dish's own accessors and never cross
-// the wire, so nothing here can leak into the protocol.
-
-// "0.8" or "1" to Fx, in integers.
-static blorb::Fx parseLevel(const char* s) {
-  int32_t whole = 0, frac = 0, scale = 1;
-  const bool neg = *s == '-';
-  if (neg) ++s;
-  for (; *s >= '0' && *s <= '9'; ++s) whole = whole * 10 + (*s - '0');
-  if (*s == '.')
-    for (++s; *s >= '0' && *s <= '9' && scale < 100000; ++s) { frac = frac * 10 + (*s - '0'); scale *= 10; }
-  const blorb::Fx v = blorb::Fx::ratio(whole * scale + frac, scale);
-  return neg ? -v : v;
-}
-
-static bool chemByName(const char* name, blorb::ChemId& out) {
-  for (const auto& c : blorb::CHEMICALS)
-    if (!strcmp(c.name, name)) { out = c.id; return true; }
-  for (const auto& d : blorb::DRIVES)
-    if (!strcmp(d.name, name)) { out = blorb::driveChem(d.id); return true; }
-  return false;
-}
+// the wire, so nothing here can leak into the protocol (src/debug_verbs.h).
 
 static blorb::Creature* creature() { return std::get_if<blorb::Creature>(&dish->occupant()); }
 
@@ -182,12 +163,16 @@ static void debug(const char* verb, const char* a, const char* b) {
     dish->clock().alignToWall(unix, int16_t(atoi(b)));
     return;
   }
+  if (!strcmp(verb, "stage")) {
+    if (const char* why = debugverbs::growTo(*dish, a, warp)) fprintf(stderr, "sim: DEBUG stage %s: %s\n", a, why);
+    return;
+  }
   blorb::Creature* c = creature();
   if (!c) { fprintf(stderr, "sim: DEBUG %s needs a creature in the dish\n", verb); return; }
   if (!strcmp(verb, "inject")) {
     blorb::ChemId id;
-    if (!chemByName(a, id)) { fprintf(stderr, "sim: no chemical or drive named %s\n", a); return; }
-    c->inject(id, parseLevel(b));
+    if (!debugverbs::chemByName(a, id)) { fprintf(stderr, "sim: no chemical or drive named %s\n", a); return; }
+    c->inject(id, debugverbs::parseLevel(b));
   } else if (!strcmp(verb, "force")) {
     for (const auto& act : blorb::ACTIONS)
       if (!strcmp(act.name, a)) { c->force(act.id); return; }

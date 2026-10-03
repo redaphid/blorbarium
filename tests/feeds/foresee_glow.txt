@@ -4,4 +4,14 @@
 @100 DEBUG warp 18000
 @200 DEBUG inject life 0.5
 @300 DEBUG warp 600
-@400 DEBUG force foresee
+# He rests long enough to amble home from anywhere (0.85 at 0.006 a tick is 14 s).
+@400 DEBUG inject vision 0
+@400 DEBUG force rest
+@2400 DEBUG force rest
+@4400 DEBUG force rest
+@6400 DEBUG force rest
+@8400 DEBUG force rest
+@10400 DEBUG force rest
+@12400 DEBUG force rest
+@14400 DEBUG force rest
+@16400 DEBUG force foresee

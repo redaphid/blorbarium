@@ -20,6 +20,7 @@ constexpr int kMaxFrameW = 320;
 
 // ---- tuning: each a one-line change ------------------------------------------
 constexpr Fx kFaceThreshold = Fx::ratio(1, 4);   // a weaker face shows neutral
+constexpr Fx kGlowingEyes = Fx::ratio(1, 4);     // a fainter glow (fading after a foresight) shows no ring and no teal eyes
 constexpr uint16_t kCrossfadeTicks = 3;
 constexpr uint16_t kBlinkCycleTicks = 40;        // a blink about every 4 s ...
 constexpr uint16_t kBlinkJitterTicks = 24;       // ... at a lifeSeed-chosen tick within each cycle
@@ -263,22 +264,44 @@ void visitOutline(const Outline& o, Visit&& visit) {
   }
 }
 
-// The smallest-ish disc, relative to the stand point, holding all of it.
-struct Disc { int x = 0, y = 0, r = 0; };   // Q4
-Disc envelope(const Outline& o, int marginQ4) {
+// The middle of the box around a frame's opaque pixels, relative to its stand point.
+Pt middle(const FrameRef& f, const Xf& xf) {
   int x0 = 1 << 30, y0 = 1 << 30, x1 = -(1 << 30), y1 = -(1 << 30);
-  visitOutline(o, [&](Pt p, int reach) {
-    x0 = imin(x0, p.x - reach); x1 = imax(x1, p.x + reach);
-    y0 = imin(y0, p.y - reach); y1 = imax(y1, p.y + reach);
+  visitOutline({&f, 1, nullptr, 0, &xf, 1}, [&](Pt p, int) {
+    x0 = imin(x0, p.x); x1 = imax(x1, p.x);
+    y0 = imin(y0, p.y); y1 = imax(y1, p.y);
   });
-  if (x0 > x1) return {};
-  Disc d{(x0 + x1) / 2, (y0 + y1) / 2, 0};
+  if (x0 > x1) return {0, 0};
+  return {(x0 + x1) / 2, (y0 + y1) / 2};
+}
+
+// The disc about `centre` (his body's middle at rest), relative to the stand
+// point, holding all of it standing: halo, squash and every face. A dish
+// position puts the centre there, so home is his body in the middle of the
+// panel and his travel is the same every way from it.
+struct Disc { int x = 0, y = 0, r = 0; };   // Q4
+Disc envelope(const Outline& o, Pt centre, int marginQ4) {
+  Disc d{centre.x, centre.y, 0};
   visitOutline(o, [&](Pt p, int reach) {
     int64_t dx = p.x - d.x, dy = p.y - d.y;
     d.r = imax(d.r, int(isqrt(uint64_t(dx * dx + dy * dy))) + reach);
   });
   d.r += marginQ4 + 16;   // + the stand point's rounding
   return d;
+}
+
+// How far the figure standing at `p` can rise before any of it would leave
+// the panel (px). The leap is all upward, so it is capped here rather than
+// kept free everywhere, which would push home off the middle or shrink travel.
+int headroom(const Outline& o, const Place& p, int marginQ4) {
+  int64_t room = kSide * 16;
+  visitOutline(o, [&](Pt q, int reach) {
+    const int64_t x = int64_t(p.x) * 16 + q.x - kSide * 8, y = int64_t(p.y) * 16 + q.y - kSide * 8;
+    const int64_t r = kSide * 8 - reach - marginQ4 - 16;
+    const int64_t up = r > (x < 0 ? -x : x) ? y + int64_t(isqrt(uint64_t(r * r - x * x))) : 0;
+    room = up < room ? up : room;
+  });
+  return room > 0 ? int(room / 16) : 0;
 }
 
 // A dish position (the unit disc) to a stand point whose envelope stays inside
@@ -368,9 +391,12 @@ void ring(Canvas240& cv, Pt c, int rc, int g8, int amp, const Rgb& tint, int spa
   }
 }
 
+// The ring and the teal eyes go together: while he foresees, and while the glow fades after.
+bool eyesGlow(const Appearance& a) { return a.foreseeing || a.glow >= kGlowingEyes; }
+
 void halo(Canvas240& cv, const Appearance& a, const SpritePack& pack, const FrameRef& eyes, const Place& p) {
   int g8 = unit256(a.glow);
-  if (g8 == 0) return;
+  if (g8 == 0 || !eyesGlow(a)) return;
   int amp = imin(256, g8 * 3 / 2) * kPulse[a.poseTick % kPulseTicks] / 256;
   int sparks = 0;
   if (a.glow > kSparkGlow) {
@@ -460,19 +486,21 @@ bool yawning(const Appearance& a) {
 }
 
 FaceShown faceFor(const Appearance& a) {
+  // Glowing, he wears the foresee face whatever his genes or a reflex pick, with no blink or yawn.
+  if (eyesGlow(a)) return {expr::foresee, expr::foresee, 256};
   if (a.reflexActive) {
     const blorb::ReflexInfo* r = reflexInfo(a.reflex);
     ExprId f = r ? r->face : expr::alarmed;
     return {f, f, 256};
   }
-  ExprId now = a.intensity >= kFaceThreshold ? a.expression : expr::neutral;
+  // Shut eyes are for sleep: drowsy but awake, he is lidded.
+  auto awake = [&](ExprId e) { return e == expr::asleep && !a.asleep ? expr::sleepy : e; };
+  ExprId now = awake(a.intensity >= kFaceThreshold ? a.expression : expr::neutral);
   bool resting = now == expr::asleep || now == expr::sleepy || now == expr::yawn;
-  // No blink or yawn while asleep, or while foreseeing (the halo would jump to the blink's anchors).
-  bool idleLife = !a.asleep && !a.foreseeing;
-  if (idleLife && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};
-  if (idleLife && !resting && blinking(a)) return {expr::asleep, expr::asleep, 256};
-  if (a.exprTicks < kCrossfadeTicks && a.previous != now)
-    return {now, a.previous, (a.exprTicks + 1) * 256 / (kCrossfadeTicks + 1)};
+  if (!a.asleep && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};
+  if (!a.asleep && !resting && blinking(a)) return {expr::asleep, expr::asleep, 256};
+  if (a.exprTicks < kCrossfadeTicks && awake(a.previous) != now)
+    return {now, awake(a.previous), (a.exprTicks + 1) * 256 / (kCrossfadeTicks + 1)};
   return {now, now, 256};
 }
 
@@ -575,14 +603,16 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   FrameRef eyed[2 + kFaces] = {bodies[0], bodies[1]};
   for (int i = 0; i < kFaces; ++i) eyed[2 + i] = pack.face(blorb::EXPRESSIONS[i].id, a.stage);
 
-  const int maxLift = kHopMaxPx * base.ky / kOne;
-  Xf variants[2 + kReflexMotionCount] = {base, {base.kx, base.ky, maxLift, 0}};
+  Xf variants[1 + kReflexMotionCount] = {base};
   for (int i = 0; i < kReflexMotionCount; ++i) {
     const Motion& w = kReflexMotions[i].widest;
-    variants[2 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
+    variants[1 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
   }
-  const Disc d = envelope({bodies, 2, eyed, 2 + kFaces, variants, 2 + kReflexMotionCount}, (kBreathPx + 1) * 16);
+  const Outline figure{bodies, 2, eyed, 2 + kFaces, variants, 1 + kReflexMotionCount};
+  constexpr int kMarginQ4 = (kBreathPx + 1) * 16;
+  const Disc d = envelope(figure, middle(bodies[0], base), kMarginQ4);
   Place p = placeAt(a.at, d, base);
+  const int maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, p, kMarginQ4));
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   drawItems(a, pack, cv, d, col, p, foot, false);
@@ -614,7 +644,7 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.egg(a.eggProgress);
   const Xf variants[2] = {{kOne, kOne, 0, kEggLean}, {kOne, kOne, 0, -kEggLean}};
-  const Disc d = envelope({&f, 1, &f, 1, variants, 2}, 0);
+  const Disc d = envelope({&f, 1, &f, 1, variants, 2}, middle(f, Xf{}), 0);
   Place p = placeAt(a.at, d, Xf{});
   drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   Fx shake = a.wobble + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
@@ -629,7 +659,7 @@ void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.remains();
   const Xf rest{};
-  const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, 0);
+  const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, middle(f, rest), 0);
   Place p = placeAt(a.at, d, rest);
   drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   blit(cv, f, p, col, 256 - unit256(a.remainsFade), nullptr);
@@ -738,9 +768,12 @@ void hint(Canvas240& cv, const Appearance& a) {
 // the glass, so neither the band nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
-void timeUnknown(Canvas240& cv, uint32_t nowMs) {
-  const int top = kSide / 2 + kTimeUnknownStrip.dy - kTimeUnknownStrip.clipH / 2;
-  for (int y = top; y < top + kTimeUnknownStrip.clipH; ++y) {
+// Low when he stands high in the dish, so the line never crosses his face.
+void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
+  Marquee strip = kTimeUnknownStrip;
+  if (low) strip.dy = -strip.dy;
+  const int top = kSide / 2 + strip.dy - strip.clipH / 2;
+  for (int y = top; y < top + strip.clipH; ++y) {
     const int half = chordHalf(y);
     for (int x = kSide / 2 - half; x < kSide / 2 + half; ++x) {
       const int toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
@@ -748,7 +781,7 @@ void timeUnknown(Canvas240& cv, uint32_t nowMs) {
       px = blend(px, 0, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
     }
   }
-  drawMarqueeAt(cv, kTimeUnknownStrip, kFreeSans9pt7b, kTimeUnknownMarquee,
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, kTimeUnknownMarquee,
                 to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
@@ -764,7 +797,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   }
   pips(cv, a.pantry);
   hint(cv, a);
-  if (a.timeUnknown) timeUnknown(cv, nowMs);
+  if (a.timeUnknown) timeUnknown(cv, nowMs, a.at.y < Fx::zero());
   mask(cv);
 }
 

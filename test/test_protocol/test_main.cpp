@@ -524,7 +524,7 @@ TEST(Golden, Chem) {
       "#62 + locus=0 name=always level=1000",    "#62 + locus=1 name=tilt_x level=500",
       "#62 + locus=2 name=tilt_y level=500",     "#62 + locus=7 name=day_sin level=503",
       "#62 + locus=8 name=day_cos level=1000",   "#62 + locus=9 name=owner_near level=1000",
-      "#62 + locus=16 name=marble_near level=780", "#62 + locus=18 name=pantry level=1000",
+      "#62 + locus=16 name=marble_near level=437", "#62 + locus=18 name=pantry level=1000",
       "#62 + locus=136 name=glow level=436",     "#62 OK 21",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);

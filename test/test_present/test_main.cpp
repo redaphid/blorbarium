@@ -116,7 +116,7 @@ TEST(Golden, Hatchling) {
   r.hatch();
   r.run(20000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=70,-208 facing=781 scale=55 pose=0/4 face=0<0 349 t210 "
+            "kind=1 gen=0 stage=0 seed=50b440b1 at=0,0 facing=603 scale=55 pose=0/4 face=0<0 349 t210 "
             "reflex=0/0 0 0 glow=1000 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 "
             "fade=0 eggs=0@0 hint=0/0 0 stim=255+65535 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
             "r0,128,128 r0,140,255 r11,128,128 m0,4,0 i2@52,-545 pantry=4");

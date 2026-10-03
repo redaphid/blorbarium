@@ -26,16 +26,26 @@ using PetStorage = hw::NvsFsStorage;
 #endif
 
 #include "hw/imu_qmi8658.h"
+#include "debug_verbs.h"
 
 // The protocol over the serial line. A cable has no connect event, so the
-// owner counts as near once a line has arrived.
+// owner counts as near once a line has arrived. A `DEBUG ` line is held back
+// from the protocol for the loop to run after the tick (src/debug_verbs.h).
 class SerialLink : public blorb::Link {
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
   bool heard_ = false;
+  char debug_[sizeof(line_) + 1] = "";
+  char taken_[sizeof(line_) + 1] = "";
 
  public:
   bool connected() override { return heard_; }
+  const char* takeDebug() {
+    if (!debug_[0]) return nullptr;
+    std::memcpy(taken_, debug_, sizeof(taken_));
+    debug_[0] = 0;
+    return taken_;
+  }
   std::optional<std::string_view> readLine() override {
     while (Serial.available() > 0) {
       const int c = Serial.read();
@@ -47,6 +57,11 @@ class SerialLink : public blorb::Link {
       heard_ = true;
       const size_t n = len_;
       len_ = 0;
+      if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
+        std::memcpy(debug_, line_ + 6, n - 6);
+        debug_[n - 6] = 0;
+        continue;
+      }
       return std::string_view(line_, n);
     }
     return std::nullopt;
@@ -67,6 +82,21 @@ static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
+
+// The "tap me with your phone" marquee asks for the time. Until the website
+// exists nothing can answer, and with no battery every replug forgets the
+// time, so the board does not ask. The sim keeps it for its golden.
+#if defined(BADGE_BOARD_SIM)
+static constexpr bool kAskForTime = true;
+#else
+static constexpr bool kAskForTime = false;
+#endif
+
+static blorb::Appearance shown() {
+  blorb::Appearance a = dish->appearance();
+  if (!kAskForTime) a.timeUnknown = false;
+  return a;
+}
 
 static blorb::BodySample readBody() {
   blorb::BodySample s;
@@ -153,10 +183,11 @@ static void reportStatus(uint32_t now) {
   char temp[12] = "?";
   if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
   Serial.printf(
-      "[hw] up=%u heap=%u minheap=%u big=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x age=%u "
-      "imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
+      "[hw] up=%u heap=%u minheap=%u big=%u psram_free=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x "
+      "age=%u imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
       unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
-      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
+      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+      unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
       lastBody.ay, lastBody.az, temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
 }
@@ -183,11 +214,46 @@ void setup() {
 #endif
 }
 
+#if !defined(BADGE_BOARD_SIM)
+// Powered time a DEBUG warp ran ahead of the wall: the loop's clock is millis() plus this.
+static uint32_t warpMs = 0;
+
+static void warp(uint32_t ticks) {
+  for (uint32_t done = 0; done < ticks; done += 10) {
+    warpMs += 10 * blorb::kTickMs;
+    dish->tick(millis() + warpMs, phone);   // at most 10 ticks a call
+    if (done % 2000 == 0) delay(1);          // let the idle task run
+  }
+}
+
+static void runDebug(const char* line) {
+  char verb[16] = "", a[32] = "";
+  std::sscanf(line, "%15s %31s", verb, a);
+  if (std::strcmp(verb, "stage") != 0) {
+    Serial.printf("[hw] debug: unknown verb '%s' (try: DEBUG stage adult)\n", verb);
+    return;
+  }
+  const uint32_t t0 = millis();
+  const char* why = debugverbs::growTo(*dish, a, warp);
+  const OccupantSummary o = summarize(dish->occupant());
+  const auto* c = std::get_if<blorb::Creature>(&dish->occupant());
+  constexpr const char* kStage[] = {"hatchling", "child", "adult", "elder"};
+  Serial.printf("[hw] debug stage %s: %s stage=%s occupant=%s gen=%u genome=%08x age=%u writes=%u in %u ms\n", a,
+                why ? why : "ok", c ? kStage[size_t(c->stage())] : "-", o.kind, unsigned(o.gen), unsigned(o.genome),
+                unsigned(o.age), unsigned(store.writes()), unsigned(millis() - t0));
+}
+#endif
+
 void loop() {
+#if !defined(BADGE_BOARD_SIM)
+  if (const char* line = phone.takeDebug()) runDebug(line);
+  const uint32_t now = millis() + warpMs;
+#else
   const uint32_t now = millis();
+#endif
   step(now);
   if (now - lastFrame >= kFrameMs) {
-    paint::draw(dish->appearance(), grungoPack(), canvas, now);
+    paint::draw(shown(), grungoPack(), canvas, now);
     boardPresent(display, canvas);
     lastFrame = now;
   }
