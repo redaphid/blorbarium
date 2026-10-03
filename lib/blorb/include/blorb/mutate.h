@@ -41,6 +41,7 @@ struct MutationPolicy {
   uint8_t heirloomMax;        // learned beliefs that may become instinct genes
   Fx heirloomMinConfidence;
   uint8_t minVisibleDelta;    // the forced Look change moves its byte at least this far
+  uint8_t lookSlot = 0;       // which hue step the forced Look change takes; a clutch gives each egg its own
 };
 MutationPolicy policyOf(const Genome&, Fx wildBonus);
 

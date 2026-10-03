@@ -314,9 +314,9 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=eat face=neutral asleep=0",
-      "#2b + drives hunger=301 sleepiness=0 boredom=3 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
-      "#2b + body life=1000 injury=0 glow=0 dreaming=0",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0",
+      "#2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
+      "#2b + body life=1000 injury=0 glow=436 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=1 time=unknown",
       "#2b OK",
   };
@@ -344,9 +344,8 @@ TEST(Golden, Diff) {
       "#3c + point=38",  "#3c + kind=receptor",   "#3c + byte=4", "#3c + from=128", "#3c + to=132",
       "#3c + point=56",  "#3c + kind=stimulus",   "#3c + byte=6", "#3c + from=115", "#3c + to=123",
       "#3c + point=90",  "#3c + kind=expression", "#3c + byte=1", "#3c + from=0",   "#3c + to=6",
-      "#3c + point=93",  "#3c + kind=palette",    "#3c + byte=5", "#3c + from=0",   "#3c + to=3",
-      "#3c + point=100", "#3c + kind=size",       "#3c + byte=0", "#3c + from=128", "#3c + to=104",
-      "#3c OK 5",
+      "#3c + point=91",  "#3c + kind=palette",    "#3c + byte=1", "#3c + from=139", "#3c + to=168",
+      "#3c OK 4",
   };
   EXPECT_EQ(link.sent, want);
 }

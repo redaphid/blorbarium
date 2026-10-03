@@ -220,7 +220,7 @@ TEST(Founding, TheMarbleStartsOnASeededSpotClearOfTheHatchling) {
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
 // The device prints its own from HASH after the same feed (unit 20).
 TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
-  constexpr uint32_t kCommitted = 0xbefe1badu;
+  constexpr uint32_t kCommitted = 0x426c730au;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);

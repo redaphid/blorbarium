@@ -48,15 +48,16 @@ BELLY_SEED, BELLY_AXES = (487, 622), (175, 140)
 BUDGET = {"skin": 60, "belly": 20, "cloak": 44, "eye": 32, "mouth": 24, "glow": 24, "shell": 14, INVARIANT: 37}
 
 # How far palette genes may move each region (Tint units: hue in 1/256 turn, sat and
-# val 128 = x1), so he stays grungo.
+# val 128 = x1), so he stays grungo. Skin spans at least the engine's forced-change
+# reach (mutate.cpp: hue -24 to +40, val 96 to 160), so a sibling's step is never swallowed.
 BANDS = {
-    "skin": (-16, 40, 96, 176, 96, 160),    # yellow olive to blue-green, frog greens only
+    "skin": (-24, 40, 96, 176, 96, 160),    # ochre olive to blue-green, frog greens only
     "belly": (-8, 8, 104, 152, 112, 144),
     "cloak": (-16, 36, 80, 200, 80, 176),   # rust through brown to moss
     "eye": (-8, 30, 96, 176, 96, 192),      # red-brown to amber and gold
     "mouth": (-6, 6, 104, 152, 112, 144),
     "glow": (-20, 20, 112, 160, 112, 160),  # around teal, never dim enough to hide
-    "shell": (-16, 40, 96, 176, 96, 160),   # the egg follows the skin's range
+    "shell": (-24, 40, 96, 176, 96, 160),   # the egg follows the skin's range
 }
 
 
