@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <utility>
+#include "blorb/appearance.h"
 
 namespace blorb {
 namespace {
@@ -60,7 +61,9 @@ Clutch Creature::layClutch(uint8_t clutchSize, Fx wildBonus, uint32_t) {
 
 Offspring Clutch::child(uint8_t i) const {
   Rng rng = Rng::seeded(seeds[i < kMaxClutch ? i : 0]);
-  return mutate(parent, policyOf(parent, wildBonus), heirlooms, rng);
+  MutationPolicy pol = policyOf(parent, wildBonus);
+  pol.lookSlot = i;
+  return mutate(parent, pol, heirlooms, rng);
 }
 
 // The vigil first; then Button or Knock moves the cursor, ButtonHold or
@@ -81,15 +84,9 @@ std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
 void Clutch::derivePreviewStep() {
   if (previewed >= count) return;
   Offspring o = child(previewed);
-  Phenotype p{};
-  expressStage(o.genome, Stage::Baby, 0, p);
+  const Appearance born = portrait(o.genome, Stage::Baby, generation, 0);
   EggPreview& e = previews[previewed];
-  e = EggPreview{};
-  for (const Phenotype::Paint& paint : p.palette) {
-    if (paint.region == region::skin) e.skin = paint.tint;
-    if (paint.region == region::cloak) e.cloak = paint.tint;
-    if (paint.region == region::shell) e.shell = paint.tint;
-  }
+  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0};
   for (const MutationOp& op : o.diff.ops) {
     GeneUid uid = std::visit([](const auto& x) -> GeneUid {
       if constexpr (std::is_same_v<std::decay_t<decltype(x)>, MutHeirloom>) return x.after;

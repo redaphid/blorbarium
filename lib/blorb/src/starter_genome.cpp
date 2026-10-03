@@ -229,7 +229,8 @@ Genome starterGenome(uint32_t speciesSeed) {
   g.face(expr::yawn, 0, drive::sleepiness, 500, drive::boredom, 200);
 
   // ---- look: olive skin, pale belly, brown cloak, red-brown eyes, teal glow ------
-  g.b.append(PaletteGene{region::skin.v, g.nudge(128, 6), 128, 128, kNone, 0}, kLook);
+  // Skin hue starts mid-way in the forced change's reach (mutate.cpp), so a child steps either way.
+  g.b.append(PaletteGene{region::skin.v, g.nudge(136, 6), 128, 128, kNone, 0}, kLook);
   g.b.append(PaletteGene{region::belly.v, 128, 128, g.nudge(140, 6), kNone, 0}, kLook);
   g.b.append(PaletteGene{region::cloak.v, 128, 128, g.nudge(128, 10), kNone, 0}, kLook);
   g.b.append(PaletteGene{region::eye.v, 128, 128, 128, kNone, 0}, kLook);

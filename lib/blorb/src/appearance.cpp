@@ -30,14 +30,18 @@ uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) {
 }
 
 // Region tints and marks from the genes; the later gene for a region wins, so
-// a woken dormant colour shows. `chem` binds tints to chemical levels; a
-// portrait has none.
+// a woken dormant colour shows. With no shell gene the egg's jelly takes the
+// skin's tint, so an egg shows the hatchling's colour. `chem` binds tints to
+// chemical levels; a portrait has none.
 void look(const Phenotype& p, const Chemistry* chem, Appearance& a) {
+  bool shellGene = false;
   for (const Phenotype::Paint& paint : p.palette) {
     Tint t = paint.tint;
     if (chem && paint.hasBound) t.val = clampByte(t.val + scaled(chem->chem[paint.bound.v] * paint.gain, kBoundValSteps));
     a.regions[paint.region.v % kRegionCount] = t;
+    shellGene = shellGene || paint.region.v % kRegionCount == region::shell.v;
   }
+  if (!shellGene) a.regions[region::shell.v] = a.regions[region::skin.v];
   if (chem) {
     int shift = scaled(chem->locus[locus::hue_shift.v], kHueShiftSteps);
     for (Tint& t : a.regions) t.hue = int8_t(((int(t.hue) + shift + 128) & 255) - 128);
