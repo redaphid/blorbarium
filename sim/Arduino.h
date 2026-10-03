@@ -123,3 +123,76 @@ class SimSerial {
 };
 
 static SimSerial Serial;
+
+// The core's function-like macros, typedefs and std usings, copied from
+// framework-arduinoespressif32 2.0.17 cores/esp32/Arduino.h (the S3's branch),
+// so a name that collides with one breaks the sim build as it breaks the
+// board's. word() turned imu_qmi8658.h's word(i) into makeWord(i) and zeroed
+// every axis on the board while the sim read them fine.
+#include <algorithm>
+#include <cmath>
+
+#ifndef __STRINGIFY
+#define __STRINGIFY(a) #a
+#endif
+
+#define _min(a,b) ((a)<(b)?(a):(b))
+#define _max(a,b) ((a)>(b)?(a):(b))
+#define _abs(x) ((x)>0?(x):-(x))
+#define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#define _round(x)     ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
+#define radians(deg) ((deg)*DEG_TO_RAD)
+#define degrees(rad) ((rad)*RAD_TO_DEG)
+#define sq(x) ((x)*(x))
+
+#define sei() portENABLE_INTERRUPTS()
+#define cli() portDISABLE_INTERRUPTS()
+#define interrupts() sei()
+#define noInterrupts() cli()
+
+#define clockCyclesPerMicrosecond() ( (long int)getCpuFrequencyMhz() )
+#define clockCyclesToMicroseconds(a) ( (a) / clockCyclesPerMicrosecond() )
+#define microsecondsToClockCycles(a) ( (a) * clockCyclesPerMicrosecond() )
+
+#define lowByte(w) ((uint8_t) ((w) & 0xff))
+#define highByte(w) ((uint8_t) ((w) >> 8))
+
+#define bitRead(value, bit) (((value) >> (bit)) & 0x01)
+#define bitSet(value, bit) ((value) |= (1UL << (bit)))
+#define bitClear(value, bit) ((value) &= ~(1UL << (bit)))
+#define bitToggle(value, bit) ((value) ^= (1UL << (bit)))
+#define bitWrite(value, bit, bitvalue) ((bitvalue) ? bitSet(value, bit) : bitClear(value, bit))
+
+#ifndef _NOP
+#define _NOP() do { __asm__ volatile ("nop"); } while (0)
+#endif
+
+#define bit(b) (1UL << (b))
+#define _BV(b) (1UL << (b))
+
+#define digitalPinToTimer(pin)      (0)
+#define analogInPinToBit(P)         (P)
+#define digitalPinToPort(pin)       ((digitalPinToGPIONumber(pin)>31)?1:0)
+#define digitalPinToBitMask(pin)    (1UL << (digitalPinToGPIONumber(pin)&31))
+#define portOutputRegister(port)    ((volatile uint32_t*)((port)?GPIO_OUT1_REG:GPIO_OUT_REG))
+#define portInputRegister(port)     ((volatile uint32_t*)((port)?GPIO_IN1_REG:GPIO_IN_REG))
+#define portModeRegister(port)      ((volatile uint32_t*)((port)?GPIO_ENABLE1_REG:GPIO_ENABLE_REG))
+#define analogInputToDigitalPin(p)  (((p)<NUM_ANALOG_INPUTS)?(analogChannelToDigitalPin(p)):-1)
+#define digitalPinToInterrupt(p)    ((((uint8_t)digitalPinToGPIONumber(p))<NUM_DIGITAL_PINS)?(p):NOT_AN_INTERRUPT)
+#define digitalPinHasPWM(p)         (((uint8_t)digitalPinToGPIONumber(p))<NUM_DIGITAL_PINS)
+
+typedef bool boolean;
+typedef uint8_t byte;
+typedef unsigned int word;
+
+using std::abs;
+using std::isinf;
+using std::isnan;
+using std::max;
+using std::min;
+using std::round;
+
+static inline uint16_t makeWord(uint16_t w) { return w; }
+static inline uint16_t makeWord(uint8_t h, uint8_t l) { return uint16_t(h << 8 | l); }
+
+#define word(...) makeWord(__VA_ARGS__)
