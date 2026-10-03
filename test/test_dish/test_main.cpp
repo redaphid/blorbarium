@@ -2,6 +2,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "links.h"
 #include "mem_storage.h"
@@ -40,10 +41,11 @@ struct Box {
   std::optional<Dish> dish;
   NullLink link;
   uint32_t ms = 0;
+  uint32_t seed = 7;
 
   explicit Box(Genome g = quickEgg()) : founder(std::move(g)) { rtc.poweredMs = &ms; }
   Dish& boot() {
-    dish.emplace(store, 7, kLineage, DishOptions{&rtc, &founder});
+    dish.emplace(store, seed, kLineage, DishOptions{&rtc, &founder});
     ms = 0;
     dish->tick(ms, link);
     return *dish;
@@ -193,12 +195,32 @@ TEST(Boot, ANewerFormatRunsReadOnlyAndWritesNothing) {
   EXPECT_EQ(box.store.files, before);
 }
 
+// ---- founding a life --------------------------------------------------------------------
+
+// Items draw behind him, so a marble left where he hatches peeks out between his feet.
+TEST(Founding, TheMarbleStartsOnASeededSpotClearOfTheHatchling) {
+  std::vector<DishPos> spots;
+  for (uint32_t seed : {7u, 8u, 9u}) {
+    Box box;
+    box.seed = seed;
+    box.boot();
+    box.hatch();
+    DishPos him = box.creature().body().at, m = box.dish->habitat().marble.at;
+    Fx dx = m.x - him.x, dy = m.y - him.y;
+    EXPECT_GE(dx * dx + dy * dy, Fx::ratio(2, 10)) << "seed " << seed << ": the marble starts at least 0.45 from him";
+    EXPECT_LE(m.x * m.x + m.y * m.y, Fx::ratio(1, 2)) << "seed " << seed << ": and well inside the rim";
+    spots.push_back(m);
+  }
+  EXPECT_TRUE(spots[0].x != spots[1].x || spots[0].y != spots[1].y) << "the spot comes from the seed";
+  EXPECT_TRUE(spots[1].x != spots[2].x || spots[1].y != spots[2].y);
+}
+
 // ---- the replay check -----------------------------------------------------------------------
 
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
 // The device prints its own from HASH after the same feed (unit 20).
 TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
-  constexpr uint32_t kCommitted = 0x5b0d61dfu;
+  constexpr uint32_t kCommitted = 0xbefe1badu;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);

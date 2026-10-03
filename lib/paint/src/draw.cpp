@@ -499,10 +499,22 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
     }
 }
 
-void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Disc& d, const Colours& col) {
-  for (int i = 0; i < imin(a.itemCount, 8); ++i)
-    blit(cv, pack.item(a.items[i].what), placeAt(a.items[i].at, d, Xf{}), col, 256, nullptr);
+// Depth by the floor: an item standing higher in the dish than his feet is
+// behind him, one level with them or lower is in front. One behind him and
+// inside his footprint is under his body, which hides it; the art's gap
+// between the feet would otherwise show it.
+void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Disc& d, const Colours& col,
+               const Place& him, int foot, bool front) {
+  for (int i = 0; i < imin(a.itemCount, 8); ++i) {
+    Place q = placeAt(a.items[i].at, d, Xf{});
+    bool inFront = q.y >= him.y;
+    if (inFront != front) continue;
+    if (!inFront && iabs(q.x - him.x) <= foot && him.y - q.y <= foot) continue;
+    blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
+  }
 }
+
+int footHalfW(const FrameRef& f, int kx) { return f.w * kx / kOne * kShadowWidePct / 100; }
 
 void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Mottle mottle{a.lifeSeed, 0};
@@ -533,11 +545,12 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   }
   const Disc d = envelope({bodies, 2, eyed, 2 + kFaces, variants, 2 + kReflexMotionCount}, (kBreathPx + 1) * 16);
   Place p = placeAt(a.at, d, base);
-  drawItems(a, pack, cv, d, col);
-
   const FrameRef& body = bodies[1];
+  const int foot = footHalfW(body, base.kx);
+  drawItems(a, pack, cv, d, col, p, foot, false);
+
   Motion m = motionOf(a, maxLift);
-  shadow(cv, p, body.w * base.kx / kOne * kShadowWidePct / 100, m.lift, maxLift);
+  shadow(cv, p, foot, m.lift, maxLift);
   p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift, 0};
   if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
   const Mottle* spots = mottle.density ? &mottle : nullptr;
@@ -550,6 +563,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, 256, spots);
   blit(cv, now, p, col, face.mix, spots);
   halo(cv, a, pack, now.eyeCount ? now : body, p);
+  drawItems(a, pack, cv, d, col, p, foot, true);
 }
 
 int eggShear(Fx wobble, uint16_t tick, int lean) {
@@ -563,11 +577,12 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const Xf variants[2] = {{kOne, kOne, 0, kEggLean}, {kOne, kOne, 0, -kEggLean}};
   const Disc d = envelope({&f, 1, &f, 1, variants, 2}, 0);
   Place p = placeAt(a.at, d, Xf{});
-  drawItems(a, pack, cv, d, col);
+  drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   Fx shake = a.wobble + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
   p.xf.shear = eggShear(shake, a.poseTick, kEggLean);
   blit(cv, f, p, col, 256, nullptr);
   halo(cv, a, pack, f, p);
+  drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), true);
 }
 
 void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
@@ -577,8 +592,9 @@ void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const Xf rest{};
   const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, 0);
   Place p = placeAt(a.at, d, rest);
-  drawItems(a, pack, cv, d, col);
+  drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   blit(cv, f, p, col, 256 - unit256(a.remainsFade), nullptr);
+  drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), true);
 }
 
 void fill(Canvas240& cv, int x0, int y0, int x1, int y1, const Rgb& c, int alpha) {   // half-open

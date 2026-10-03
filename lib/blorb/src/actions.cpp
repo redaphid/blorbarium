@@ -11,6 +11,8 @@ constexpr Fx kRoam = Fx::ratio(85, 100);      // he stays this far in, short of 
 constexpr Fx kNearRim = Fx::ratio(78, 100);   // Curl stops here
 constexpr Fx kWanderTurn = Fx::ratio(1, 10);  // most a wander heading changes per tick, in half turns
 constexpr Fx kHopTurn = Fx::ratio(1, 16);
+constexpr Fx kNoseRange = Fx::ratio(12, 100);  // the marble this close, he noses it on ...
+constexpr Fx kNoseSpeed = Fx::ratio(3, 100);   // ... at twice his walk: it rolls about half the dish
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
 constexpr Fx kHalf = Fx::ratio(1, 2);
 
@@ -176,9 +178,17 @@ Status Curl::step(Body& b, ActionCtx&) {
 Status FollowTilt::step(Body& b, ActionCtx& c) { return walkWithTilt(b, c, false, pose::walk); }
 Status FleeTilt::step(Body& b, ActionCtx& c) { return walkWithTilt(b, c, true, pose::flee); }
 
+// Reaching the marble he noses it on the way he is walking, so the chase goes
+// on and he never comes to stand on it.
 Status Chase::step(Body& b, ActionCtx& c) {
   b.pose = pose::walk;
-  walkTo(b, c.habitat.marble.at, kWalk);
+  Marble& m = c.habitat.marble;
+  walkTo(b, m.at, kWalk);
+  Fx dx = m.at.x - b.at.x, dy = m.at.y - b.at.y;
+  if (dx * dx + dy * dy <= kNoseRange * kNoseRange) {
+    m.vx = cosTurn(b.facing) * kNoseSpeed;
+    m.vy = sinTurn(b.facing) * kNoseSpeed;
+  }
   return Status::Running;
 }
 
