@@ -38,11 +38,13 @@ CASES = {
     "clutch": 3000,
     "remains": 3000,
     "time_unknown": 6000,
+    "thought": 9000,        # a thought, partway through its one pass
+    "prophecy": 9000,       # a prophecy after a shake: foresee face, no hop
 }
 
 # A case that must not look like another: a hop that drew as idle once passed
 # its golden because the golden was idle too. Share of the disc that must differ.
-UNLIKE = {"shake_hop": ("idle", 0.02)}
+UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01)}
 
 # A pixel has moved when a channel is further off than this; the panel is
 # RGB565, so neighbouring colours are 4 to 8 counts apart.

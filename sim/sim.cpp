@@ -192,6 +192,10 @@ static void debug(const char* verb, const char* a, const char* b) {
     for (const auto& act : blorb::ACTIONS)
       if (!strcmp(act.name, a)) { c->force(act.id); return; }
     fprintf(stderr, "sim: no action named %s\n", a);
+  } else if (!strcmp(verb, "think")) {
+    for (const auto& t : blorb::THOUGHTS)
+      if (!strcmp(t.name, a)) { dish->think(t.id); return; }
+    fprintf(stderr, "sim: no thought named %s\n", a);
   } else if (!strcmp(verb, "die")) {
     // Life to zero: the genome's own receptors on low life write die and
     // cause, so the death runs the path a real one does.
