@@ -82,6 +82,7 @@ struct Appearance {
 
   StimId lastStim{};                // acknowledges a gesture even when the brain ignores it
   uint16_t ticksSinceStim = 0;
+  bool timeUnknown = false;   // no wall-time source yet: the renderer asks for a phone visit
 };
 
 Appearance present(const Occupant&, const Habitat&, const PetClock&, uint32_t tick);
