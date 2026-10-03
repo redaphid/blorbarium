@@ -13,6 +13,7 @@ BLORB_CMD(BRAIN,    brain,    0)
 BLORB_CMD(LINEAGE,  lineage,  0)
 BLORB_CMD(ANCESTOR, ancestor, 0)
 BLORB_CMD(DIFF,     diff,     0)
+BLORB_CMD(PORTRAIT, portrait, 0)          // PORTRAIT <gen> [stage]: an ancestor's look
 BLORB_CMD(CLUTCH,   clutch,   0)
 BLORB_CMD(SNAPSHOT, snapshot, 0)          // the whole Keepsake::encode blob
 BLORB_CMD(TWIST,    twist,    kMutating)  // TWIST <kind> <args>
