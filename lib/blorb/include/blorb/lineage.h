@@ -11,6 +11,7 @@
 // kKeepDetailGenerations are compacted away when the log passes its cap.
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <variant>
 #include <vector>
 #include "blorb/creature.h"
@@ -61,12 +62,19 @@ class Lineage {
   void compactIfNeeded();                                           // idempotent
 
  private:
+  void visit(void (*f)(const LineageEntry&, void*), void* ctx) const;   // forEach without the template
   Storage* store_ = nullptr;
   uint64_t id_ = 0;
   uint16_t generation_ = 0;
   uint32_t legacyFeats_ = 0;
   char name_[16] = {};
 };
+
+template <class F> void Lineage::forEach(F&& f) const {
+  using Fn = std::remove_reference_t<F>;
+  visit([](const LineageEntry& e, void* ctx) { (*static_cast<Fn*>(ctx))(e); },
+        const_cast<void*>(static_cast<const void*>(&f)));
+}
 
 // ---- feats and unlocks ---------------------------------------------------------
 #define BLORB_FEAT(bit, name) bool feat_##name(const LifeStats&, uint16_t generation);

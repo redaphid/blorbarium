@@ -1,5 +1,7 @@
 #include "blorb/creature.h"
 
+#include <algorithm>
+#include <type_traits>
 #include <utility>
 
 namespace blorb {
@@ -36,6 +38,71 @@ Fx Egg::progress() const {
   uint64_t total = uint64_t(rules_.incubateTicks) * kIncubateUnit;
   if (total == 0) return Fx::one();
   return clamp01(Fx::sat((int64_t(incubated_) << Fx::kFrac) / int64_t(total)));
+}
+
+// ---- the clutch -----------------------------------------------------------------------
+
+Clutch Creature::layClutch(uint8_t clutchSize, Fx wildBonus, uint32_t) {
+  Clutch c;
+  c.parent = genome_;
+  c.generation = uint16_t(generation_ + 1);
+  c.heirlooms = brain_.strongestBeliefs(policyOf(genome_, wildBonus).heirloomMax);
+  c.wildBonus = wildBonus;
+  for (uint64_t& s : c.seeds) {
+    uint64_t hi = rng_.next();   // two statements: the order of the draws must not depend on the compiler
+    s = hi << 32 | rng_.next();
+  }
+  c.count = uint8_t(std::clamp<int>(clutchSize, 1, kMaxClutch));
+  c.cause = cause();
+  c.reached = stage_;
+  return c;
+}
+
+Offspring Clutch::child(uint8_t i) const {
+  Rng rng = Rng::seeded(seeds[i < kMaxClutch ? i : 0]);
+  return mutate(parent, policyOf(parent, wildBonus), heirlooms, rng);
+}
+
+// The vigil first; then Button or Knock moves the cursor, ButtonHold or
+// DoubleKnock picks, and the timeout picks the cursor. One egg needs no choice.
+std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
+  ++sinceDeath;
+  if (sinceDeath < kVigilTicks) return std::nullopt;
+  if (count <= 1) return uint8_t(0);
+  for (uint8_t i = 0; i < senses.stimCount; ++i) {
+    StimId s = senses.stimuli[i];
+    if (s == stim::button_hold || s == stim::double_knock) return cursor;
+    if (s == stim::button || s == stim::knock) cursor = uint8_t((cursor + 1) % count);
+  }
+  if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return cursor;
+  return std::nullopt;
+}
+
+void Clutch::derivePreviewStep() {
+  if (previewed >= count) return;
+  Offspring o = child(previewed);
+  Phenotype p{};
+  expressStage(o.genome, Stage::Baby, 0, p);
+  EggPreview& e = previews[previewed];
+  e = EggPreview{};
+  for (const Phenotype::Paint& paint : p.palette) {
+    if (paint.region == region::skin) e.skin = paint.tint;
+    if (paint.region == region::cloak) e.cloak = paint.tint;
+    if (paint.region == region::shell) e.shell = paint.tint;
+  }
+  for (const MutationOp& op : o.diff.ops) {
+    GeneUid uid = std::visit([](const auto& x) -> GeneUid {
+      if constexpr (std::is_same_v<std::decay_t<decltype(x)>, MutHeirloom>) return x.after;
+      else return x.gene;
+    }, op);
+    std::optional<GeneView> v = o.genome.find(uid);
+    if (!v) v = parent.find(uid);
+    const GeneTypeInfo* info = v ? geneType(v->header.type) : nullptr;
+    bool mind = std::holds_alternative<MutHeirloom>(op) || (info && info->cls == GeneClass::Mind);
+    e.mindChanges = uint8_t(e.mindChanges + mind);
+    e.lookChanges = uint8_t(e.lookChanges + (!mind && info && info->cls == GeneClass::Look));
+  }
+  ++previewed;
 }
 
 uint32_t Egg::hash() const {
