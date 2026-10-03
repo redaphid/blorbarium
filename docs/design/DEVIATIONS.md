@@ -278,8 +278,8 @@ which was backed up whole before the first write (two 16 MB reads, sha256
   for its golden. With no time source the Dish resumes without a catch-up.
 - **Power cuts.** EN-pin resets at random moments, many during a save (a
   `TIME` line saves at once), brought the same pet back every time: 25 of
-  25, 25 of 25 and 13 of 13 boots across three builds. 40 of the cuts came
-  during a requested save, and 29 of those before the save had replied.
+  25, 25 of 25, 13 of 13 and 11 of 11 boots across four builds. 47 of the cuts came
+  during a requested save, and 34 of those before the save had replied.
 - **Debug verb.** `DEBUG stage <hatchling|child|adult|elder>` is a
   serial-only line, never a protocol verb, so a phone cannot skip his
   childhood (entries 4 and 10). It ages him through his own genome's stage
