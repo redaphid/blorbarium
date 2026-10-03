@@ -485,7 +485,7 @@ void cmd_clutch(Dish& dish, const Request&, Reply& r) {
 }
 
 void cmd_snapshot(Dish& dish, const Request&, Reply& r) {
-  std::vector<uint8_t> blob = Keepsake::encode(dish.snapshot());
+  std::vector<uint8_t> blob = Keepsake::encode(dish.live());
   r.chunks(blob.data(), blob.size());
 }
 

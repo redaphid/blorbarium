@@ -27,7 +27,7 @@ Settings settingsOf(const char* name) {
 // A creature some minutes into a life: a pellet dropped and eaten or not, a
 // shake (so a reflex, adrenaline and learning), and self-stimuli pending.
 Snapshot creatureSnapshot() {
-  Creature c = Creature::hatch(Egg(Offspring{starterGenome(7), {}}, 3, 0), feat::reached_adult, 0);
+  Creature c(Egg(Offspring{starterGenome(7), {}}, 3, 0), feat::reached_adult, 0);
   Habitat h;
   h.pantry = c.phenotype().habitat.pantrySize;
   Behaviours b;
@@ -72,11 +72,13 @@ Snapshot clutchSnapshot() {
 
 std::vector<uint8_t> roundTrip(const Snapshot& s) {
   std::vector<uint8_t> blob = Keepsake::encode(s);
-  std::optional<Snapshot> back = Keepsake::decode(blob.data(), blob.size());
-  EXPECT_TRUE(back.has_value());
-  if (!back) return {};
-  EXPECT_EQ(back->hash(), s.hash());
-  return Keepsake::encode(*back);
+  Snapshot back;
+  if (!Keepsake::decode(blob.data(), blob.size(), back)) {
+    ADD_FAILURE() << "does not decode";
+    return {};
+  }
+  EXPECT_EQ(back.hash(), s.hash());
+  return Keepsake::encode(back);
 }
 
 void setFormat(std::vector<uint8_t>& blob, uint16_t format) {
@@ -103,7 +105,8 @@ TEST(Codec, EveryOccupantRoundTripsByteIdentical) {
 TEST(Codec, TheCreatureComesBackAsItWas) {
   Snapshot s = creatureSnapshot();
   std::vector<uint8_t> blob = Keepsake::encode(s);
-  Snapshot back = *Keepsake::decode(blob.data(), blob.size());
+  Snapshot back;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), back));
   const Creature &a = std::get<Creature>(s.occupant), &b = std::get<Creature>(back.occupant);
   EXPECT_EQ(b.hash(), a.hash());
   EXPECT_EQ(b.stats().shaken, 1u);
@@ -131,43 +134,43 @@ TEST(Codec, TheCreatureComesBackAsItWas) {
 TEST(Codec, TheWallAnchorRoundTripsAndUnknownStaysUnknown) {
   Snapshot known = creatureSnapshot();
   std::vector<uint8_t> blob = Keepsake::encode(known);
-  std::optional<Snapshot> back = Keepsake::decode(blob.data(), blob.size());
-  ASSERT_TRUE(back && back->wall);
-  EXPECT_EQ(back->wall->wallSeconds, 1790000000u);
-  EXPECT_EQ(back->wall->tick, 1200u);
+  Snapshot back;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), back) && back.wall);
+  EXPECT_EQ(back.wall->wallSeconds, 1790000000u);
+  EXPECT_EQ(back.wall->tick, 1200u);
 
   Snapshot unknown = eggSnapshot();
   blob = Keepsake::encode(unknown);
-  back = Keepsake::decode(blob.data(), blob.size());
-  ASSERT_TRUE(back);
-  EXPECT_FALSE(back->wall.has_value());
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), back));
+  EXPECT_FALSE(back.wall.has_value()) << "decoding over a known anchor clears it";
 }
 
 TEST(Codec, AnyFlippedByteIsRejectedNeverMisread) {
   std::vector<uint8_t> blob = Keepsake::encode(creatureSnapshot());
+  Snapshot scratch;
   for (size_t at = 0; at < blob.size(); at += 7) {
     std::vector<uint8_t> bad = blob;
     bad[at] ^= uint8_t(1 + at % 255);
-    EXPECT_FALSE(Keepsake::decode(bad.data(), bad.size()).has_value()) << "byte " << at;
+    EXPECT_FALSE(Keepsake::decode(bad.data(), bad.size(), scratch)) << "byte " << at;
   }
   for (size_t len = 0; len < blob.size(); len += 13)
-    EXPECT_FALSE(Keepsake::decode(blob.data(), len).has_value()) << "truncated to " << len;
+    EXPECT_FALSE(Keepsake::decode(blob.data(), len, scratch)) << "truncated to " << len;
 }
 
 TEST(Slots, SavingTwiceLeavesTwoValidSlotsAndLoadTakesTheNewest) {
   MemStorage store;
   Keepsake k(store);
-  ASSERT_EQ(k.load().state, SlotState::Empty);
+  Snapshot l;
+  ASSERT_EQ(k.load(l), SlotState::Empty);
   Snapshot first = eggSnapshot(), second = creatureSnapshot();
   ASSERT_TRUE(k.save(first));
   ASSERT_TRUE(k.save(second));
-  EXPECT_TRUE(Keepsake::decode(store.files["snap.a"].data(), store.files["snap.a"].size()));
-  EXPECT_TRUE(Keepsake::decode(store.files["snap.b"].data(), store.files["snap.b"].size()));
+  EXPECT_TRUE(Keepsake::decode(store.files["snap.a"].data(), store.files["snap.a"].size(), l));
+  EXPECT_TRUE(Keepsake::decode(store.files["snap.b"].data(), store.files["snap.b"].size(), l));
   Keepsake again(store);
-  Loaded l = again.load();
-  ASSERT_EQ(l.state, SlotState::Resumed);
-  EXPECT_EQ(l.snapshot->seq, 2u);
-  EXPECT_EQ(l.snapshot->hash(), second.hash());
+  ASSERT_EQ(again.load(l), SlotState::Resumed);
+  EXPECT_EQ(l.seq, 2u);
+  EXPECT_EQ(l.hash(), second.hash());
 }
 
 TEST(Slots, ATornSlotBLoadsAAndIsQuarantined) {
@@ -181,16 +184,17 @@ TEST(Slots, ATornSlotBLoadsAAndIsQuarantined) {
   store.files["snap.b"] = torn;
 
   Keepsake again(store);
-  Loaded l = again.load();
-  ASSERT_EQ(l.state, SlotState::FellBack);
-  EXPECT_EQ(l.snapshot->seq, 1u);
-  EXPECT_EQ(l.snapshot->hash(), a.hash());
+  Snapshot l;
+  ASSERT_EQ(again.load(l), SlotState::FellBack);
+  EXPECT_EQ(l.seq, 1u);
+  EXPECT_EQ(l.hash(), a.hash());
   EXPECT_EQ(store.files.count("snap.b"), 0u);
   EXPECT_EQ(store.files["rescue/snap.b.0"], torn) << "kept for rescue, never deleted";
 
   ASSERT_TRUE(again.save(clutchSnapshot()));
   EXPECT_EQ(store.files.count("snap.b"), 1u) << "the next save fills the free slot, not the good one";
-  EXPECT_EQ(Keepsake(store).load().snapshot->seq, 2u);
+  ASSERT_EQ(Keepsake(store).load(l), SlotState::Resumed);
+  EXPECT_EQ(l.seq, 2u);
 }
 
 TEST(Slots, BothTornIsCorruptAndBothAreQuarantined) {
@@ -201,9 +205,8 @@ TEST(Slots, BothTornIsCorruptAndBothAreQuarantined) {
   store.files["snap.a"][30] ^= 0xFF;
   store.files["snap.b"].resize(10);
   store.files["rescue/snap.a.0"] = {1, 2, 3};   // an earlier rescue is not overwritten
-  Loaded l = Keepsake(store).load();
-  EXPECT_EQ(l.state, SlotState::Corrupt);
-  EXPECT_FALSE(l.snapshot.has_value());
+  Snapshot l;
+  EXPECT_EQ(Keepsake(store).load(l), SlotState::Corrupt);
   EXPECT_EQ(store.files["rescue/snap.a.0"], (std::vector<uint8_t>{1, 2, 3}));
   EXPECT_EQ(store.files.count("rescue/snap.a.1"), 1u);
   EXPECT_EQ(store.files.count("rescue/snap.b.0"), 1u);
@@ -216,9 +219,8 @@ TEST(Slots, ANewerFormatIsReadOnlyAndUntouched) {
   ASSERT_TRUE(k.save(eggSnapshot()));
   setFormat(store.files["snap.b"], kFormatVersion + 1);
   auto before = store.files;
-  Loaded l = Keepsake(store).load();
-  EXPECT_EQ(l.state, SlotState::NewerFormat);
-  EXPECT_FALSE(l.snapshot.has_value());
+  Snapshot l;
+  EXPECT_EQ(Keepsake(store).load(l), SlotState::NewerFormat);
   EXPECT_EQ(store.files, before);
 }
 
@@ -226,19 +228,19 @@ TEST(Slots, AnUnknownChunkSurvivesASave) {
   Snapshot s = creatureSnapshot();
   s.unknown.push_back(RawChunk{200, 3, {9, 8, 7, 6}});
   std::vector<uint8_t> blob = Keepsake::encode(s);
-  std::optional<Snapshot> back = Keepsake::decode(blob.data(), blob.size());
-  ASSERT_TRUE(back);
-  ASSERT_EQ(back->unknown.size(), 1u);
+  Snapshot back;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), back));
+  ASSERT_EQ(back.unknown.size(), 1u);
 
   MemStorage store;
   Keepsake k(store);
-  ASSERT_TRUE(k.save(*back));
-  Loaded l = Keepsake(store).load();
-  ASSERT_TRUE(l.snapshot);
-  ASSERT_EQ(l.snapshot->unknown.size(), 1u);
-  EXPECT_EQ(l.snapshot->unknown[0].tag, 200);
-  EXPECT_EQ(l.snapshot->unknown[0].ver, 3);
-  EXPECT_EQ(l.snapshot->unknown[0].bytes, (std::vector<uint8_t>{9, 8, 7, 6}));
+  ASSERT_TRUE(k.save(back));
+  Snapshot l;
+  ASSERT_EQ(Keepsake(store).load(l), SlotState::Resumed);
+  ASSERT_EQ(l.unknown.size(), 1u);
+  EXPECT_EQ(l.unknown[0].tag, 200);
+  EXPECT_EQ(l.unknown[0].ver, 3);
+  EXPECT_EQ(l.unknown[0].bytes, (std::vector<uint8_t>{9, 8, 7, 6}));
 }
 
 // The committed fixture is a format-1 keepsake. It must load in every later
@@ -251,15 +253,15 @@ TEST(Fixture, TheCommittedV1KeepsakeLoads) {
   std::vector<uint8_t> blob = readFile(kFixture);
   ASSERT_FALSE(blob.empty()) << kFixture << " is missing (run from the project root)";
   ASSERT_EQ(blob[4] | blob[5] << 8, 1);
-  std::optional<Snapshot> s = Keepsake::decode(blob.data(), blob.size());
-  ASSERT_TRUE(s.has_value());
-  const Creature& c = std::get<Creature>(s->occupant);
+  Snapshot s;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), s));
+  const Creature& c = std::get<Creature>(s.occupant);
   EXPECT_EQ(c.generation(), 3);
   EXPECT_EQ(c.stats().shaken, 1u);
-  EXPECT_STREQ(s->settings.name, "Grungo_IV");
-  ASSERT_TRUE(s->wall);
-  EXPECT_EQ(s->wall->wallSeconds, 1790000000u);
-  EXPECT_EQ(Keepsake::encode(*s), blob) << "format 1 still writes what it read";
+  EXPECT_STREQ(s.settings.name, "Grungo_IV");
+  ASSERT_TRUE(s.wall);
+  EXPECT_EQ(s.wall->wallSeconds, 1790000000u);
+  EXPECT_EQ(Keepsake::encode(s), blob) << "format 1 still writes what it read";
 }
 
 int main(int argc, char** argv) {

@@ -64,47 +64,36 @@ void copyName(char (&to)[16], const char* from) {
 }  // namespace
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), occ_(Clutch{}), rtc_(options.rtc), rng_(Rng::seeded(speciesSeed)) {
+    : store_(store), keep_(store), rtc_(options.rtc) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
-  settings_.lineageId = lineageId;
-  settings_.speciesSeed = speciesSeed;
-  settings_.brightness = kDefaultBrightness;
-  Loaded loaded = keep_.load();
-  if (loaded.state == SlotState::NewerFormat) {
+  live_.rng = Rng::seeded(speciesSeed);
+  live_.settings.lineageId = lineageId;
+  live_.settings.speciesSeed = speciesSeed;
+  live_.settings.brightness = kDefaultBrightness;
+  const SlotState loaded = keep_.load(live_);
+  if (loaded == SlotState::NewerFormat) {
     boot_ = Boot::ReadOnlyNewer;
     readOnly_ = true;
     lineage_ = Lineage::open(nowhere(), founder, lineageId, 0);
-    copyName(settings_.name, lineage_.currentName());
-    occ_ = Egg(Offspring{founder, {}}, 0, 0);
+    copyName(live_.settings.name, lineage_.currentName());
+    live_.occupant = Egg(Offspring{founder, {}}, 0, 0);
     return;
   }
   lineage_ = Lineage::open(store, founder, lineageId, 0);
-  if (loaded.snapshot) {
-    adopt(std::move(*loaded.snapshot));
-    boot_ = loaded.state == SlotState::FellBack ? Boot::FellBack : Boot::Resumed;
+  if (loaded == SlotState::Resumed || loaded == SlotState::FellBack) {
+    live_.seq = 0;
+    tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
+    boot_ = loaded == SlotState::FellBack ? Boot::FellBack : Boot::Resumed;
     return;
   }
   // No readable snapshot: the line goes on from the newest genome the log can rebuild.
   uint16_t generation = lineage_.currentGeneration();
   std::optional<Genome> latest = lineage_.genomeOf(generation);
   bool history = generation > 0 || lineage_.legacyFeats() != 0;
-  boot_ = loaded.state == SlotState::Corrupt || history ? Boot::FromLineage : Boot::Fresh;
-  copyName(settings_.name, lineage_.currentName());
-  occ_ = latest ? Egg(Offspring{std::move(*latest), {}}, generation, 0) : Egg(Offspring{founder, {}}, 0, 0);
+  boot_ = loaded == SlotState::Corrupt || history ? Boot::FromLineage : Boot::Fresh;
+  copyName(live_.settings.name, lineage_.currentName());
+  live_.occupant = latest ? Egg(Offspring{std::move(*latest), {}}, generation, 0) : Egg(Offspring{founder, {}}, 0, 0);
   save();
-}
-
-void Dish::adopt(Snapshot&& s) {
-  clock_ = s.clock;
-  occ_ = std::move(s.occupant);
-  habitat_ = s.habitat;
-  settings_ = s.settings;
-  rng_ = s.rng;
-  wall_ = s.wall;
-  unknown_ = std::move(s.unknown);
-  tick_ = clock_.petTicks;
-  lastSaveTick_ = tick_;
-  lastWallCheckTick_ = tick_;
 }
 
 void Dish::sample(const BodySample& s, uint32_t nowMs) { detectors_.sample(s, nowMs, pending_); }
@@ -130,24 +119,24 @@ void Dish::tick(uint32_t nowMs, Link& link) {
 void Dish::runOneTick(Link& link) {
   SenseOut out = pending_;
   pending_.clear();
-  clock_.advance(detectors_.lid.lidded());
-  detectors_.tick(TickContext{clock_, link.connected(), tick_}, out);
+  live_.clock.advance(detectors_.lid.lidded());
+  detectors_.tick(TickContext{live_.clock, link.connected(), tick_}, out);
   for (uint8_t i = 0; i < out.lociCount; ++i) {
     if (out.loci[i].locus == locus::tilt_x) tiltX_ = out.loci[i].value;
     if (out.loci[i].locus == locus::tilt_y) tiltY_ = out.loci[i].value;
   }
-  if (Creature* c = std::get_if<Creature>(&occ_)) {
+  if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
-    if (fired(out, stim::button)) habitat_.dropPellet(rules, rng_, tick_, out);
-    habitat_.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
+    if (fired(out, stim::button)) live_.habitat.dropPellet(rules, live_.rng, tick_, out);
+    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
     Stage before = c->stage();
-    c->tick(out, habitat_, behaviours_, tick_);
+    c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-  } else if (Egg* e = std::get_if<Egg>(&occ_)) {
+  } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
-    Clutch& k = std::get<Clutch>(occ_);
+    Clutch& k = std::get<Clutch>(live_.occupant);
     k.derivePreviewStep();
     if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
   }
@@ -158,29 +147,29 @@ void Dish::onDeath(Creature& c) {
   lineage_.recordDeath(c, lineage_.currentName(), tick_);
   Unlocks u = unlocksFor(lineage_.legacyFeats());
   Clutch k = c.layClutch(u.clutchSize, u.wildBonus, tick_);
-  occ_ = std::move(k);
+  live_.occupant = std::move(k);
   eventDirty_ = true;
 }
 
 void Dish::onPicked(Clutch& k, uint8_t i) {
   Egg egg(k.child(i), k.generation, tick_);
   lineage_.recordBirth(egg, k, i, tick_);
-  occ_ = std::move(egg);
+  live_.occupant = std::move(egg);
   eventDirty_ = true;
 }
 
 void Dish::onHatch(Egg& e) {
-  Creature born = Creature::hatch(e, lineage_.legacyFeats(), tick_);
-  habitat_ = Habitat{};
-  habitat_.pantry = born.phenotype().habitat.pantrySize;
-  habitat_.pantryTick = tick_;
-  habitat_.marble.at = marbleStart(rng_, born.body().at);
-  occ_ = std::move(born);
+  const Egg egg = std::move(e);   // emplace ends the egg before it builds the creature
+  const Creature& born = live_.occupant.emplace<Creature>(egg, lineage_.legacyFeats(), tick_);
+  live_.habitat = Habitat{};
+  live_.habitat.pantry = born.phenotype().habitat.pantrySize;
+  live_.habitat.pantryTick = tick_;
+  live_.habitat.marble.at = marbleStart(live_.rng, born.body().at);
   eventDirty_ = true;
 }
 
 bool Dish::pick(uint8_t egg) {
-  Clutch* k = std::get_if<Clutch>(&occ_);
+  Clutch* k = std::get_if<Clutch>(&live_.occupant);
   if (!k || egg >= k->count) return false;
   onPicked(*k, egg);
   return true;
@@ -189,7 +178,7 @@ bool Dish::pick(uint8_t egg) {
 void Dish::fire(StimId s) { pending_.fire(s); }
 
 bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
-  Creature* c = std::get_if<Creature>(&occ_);
+  Creature* c = std::get_if<Creature>(&live_.occupant);
   if (!c || !c->editGene(uid, offset, value)) return false;
   lineage_.recordEdit(c->generation(), c->genome());
   eventDirty_ = true;
@@ -198,7 +187,7 @@ bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
 
 void Dish::rename(const char* name) {
   lineage_.rename(name);
-  copyName(settings_.name, lineage_.currentName());
+  copyName(live_.settings.name, lineage_.currentName());
   eventDirty_ = true;
 }
 
@@ -207,18 +196,12 @@ void Dish::flush() {
 }
 
 void Dish::save() {
-  if (keep_.save(snapshot())) lastSaveTick_ = tick_;
+  if (keep_.save(live_)) lastSaveTick_ = tick_;
   eventDirty_ = false;
 }
 
-Snapshot Dish::snapshot() const {
-  return Snapshot{0, clock_, occ_, habitat_, settings_, rng_, wall_, unknown_};
-}
-
-uint32_t Dish::hash() const { return snapshot().hash(); }
-
 Appearance Dish::appearance() const {
-  Appearance a = present(occ_, habitat_, clock_, tick_);
+  Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   a.timeUnknown = !wallKnown_;
   return a;
 }
@@ -226,8 +209,8 @@ Appearance Dish::appearance() const {
 // ---- wall time and the unpowered catch-up --------------------------------------------
 
 std::optional<uint32_t> Dish::wallNow() const {
-  if (!wallKnown_ || !wall_) return std::nullopt;
-  return wall_->wallSeconds + (tick_ - wall_->tick) / kTicksPerSecond;
+  if (!wallKnown_ || !live_.wall) return std::nullopt;
+  return live_.wall->wallSeconds + (tick_ - live_.wall->tick) / kTicksPerSecond;
 }
 
 void Dish::checkWall() {
@@ -241,14 +224,14 @@ void Dish::checkWall() {
   }
   if (!now) return;
   wallKnown_ = true;
-  if (wall_) {
-    int64_t powered = int64_t((tick_ - wall_->tick) / kTicksPerSecond);
-    int64_t gap = int64_t(*now) - int64_t(wall_->wallSeconds) - powered;
+  if (live_.wall) {
+    int64_t powered = int64_t((tick_ - live_.wall->tick) / kTicksPerSecond);
+    int64_t gap = int64_t(*now) - int64_t(live_.wall->wallSeconds) - powered;
     if (gap > -kDriftSeconds && gap < kDriftSeconds) return;
     // A source that runs backwards is believed from here on; only a forward gap is lived.
     if (gap > 0) catchUp(uint32_t(std::min<int64_t>(gap * kTicksPerSecond, UINT32_MAX)));
   }
-  wall_ = WallAnchor{*now, tick_};
+  live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
 }
 
@@ -261,15 +244,15 @@ void Dish::catchUp(uint32_t ticks) {
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {
     uint32_t n = std::min(left, kCatchUpStride);
-    if (Creature* c = std::get_if<Creature>(&occ_)) {
+    if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
       advanceClock(n);
       SenseOut senses;
-      detectors_.day.tick(TickContext{clock_, false, tick_}, senses);
-      habitat_.step(c->phenotype().habitat, kLevel, kLevel, c->body().at, tick_ + n - 1, senses);
+      detectors_.day.tick(TickContext{live_.clock, false, tick_}, senses);
+      live_.habitat.step(c->phenotype().habitat, kLevel, kLevel, c->body().at, tick_ + n - 1, senses);
       c->tickCoarse(senses, n, tick_);
       tick_ += n;
       if (c->dead()) onDeath(*c);
-    } else if (Egg* e = std::get_if<Egg>(&occ_)) {
+    } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
       bool ready = false;
       uint32_t i = 0;
       while (i < n && !ready) {
@@ -281,7 +264,7 @@ void Dish::catchUp(uint32_t ticks) {
       tick_ += n;
       if (ready) onHatch(*e);
     } else {
-      Clutch& k = std::get<Clutch>(occ_);
+      Clutch& k = std::get<Clutch>(live_.occupant);
       n = left;
       if (k.sinceDeath < Clutch::kVigilTicks)
         k.sinceDeath = uint32_t(std::min<uint64_t>(Clutch::kVigilTicks, uint64_t(k.sinceDeath) + n));
@@ -295,10 +278,10 @@ void Dish::catchUp(uint32_t ticks) {
 // PetClock::advance n times, unlidded, without the loop: no entrainment, and
 // the day's entrainment allowance resets if a pet midnight passed.
 void Dish::advanceClock(uint32_t ticks) {
-  Fx before = clock_.dayFraction();
-  clock_.petTicks += ticks;
-  clock_.darkRunTicks = 0;
-  if (ticks >= PetClock::kDayTicks || clock_.dayFraction() < before) clock_.entrainedTicks = 0;
+  Fx before = live_.clock.dayFraction();
+  live_.clock.petTicks += ticks;
+  live_.clock.darkRunTicks = 0;
+  if (ticks >= PetClock::kDayTicks || live_.clock.dayFraction() < before) live_.clock.entrainedTicks = 0;
 }
 
 }  // namespace blorb

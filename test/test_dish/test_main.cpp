@@ -1,4 +1,8 @@
 #include <gtest/gtest.h>
+#include <pthread.h>
+#include <cstdio>
+#include <cstring>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -68,7 +72,10 @@ constexpr size_t kDeath = 3;
 
 std::optional<Snapshot> newest(MemStorage& store) {
   MemStorage copy = store;
-  return Keepsake(copy).load().snapshot;
+  Snapshot s;
+  SlotState state = Keepsake(copy).load(s);
+  if (state != SlotState::Resumed && state != SlotState::FellBack) return std::nullopt;
+  return s;
 }
 
 // A day in the dish: a pellet, a shake, a cradle and a knock every 90 minutes.
@@ -277,6 +284,69 @@ TEST(Lifecycle, body_only_full_life) {
     }
   });
   EXPECT_EQ(births, 1);
+}
+
+// ---- the loop task's stack ---------------------------------------------------------------
+
+namespace {
+
+// How deep `body` reaches into a thread stack painted with a known byte, past
+// what an empty thread uses (glibc keeps its thread block at the stack's top).
+size_t stackReach(void* (*body)(void*)) {
+  constexpr size_t kSize = 256 * 1024;
+  alignas(4096) static uint8_t mem[kSize];
+  auto reach = [&](void* (*f)(void*)) {
+    std::memset(mem, 0xA5, kSize);
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstack(&attr, mem, kSize);
+    pthread_t t;
+    pthread_create(&t, &attr, f, nullptr);
+    pthread_join(t, nullptr);
+    pthread_attr_destroy(&attr);
+    size_t untouched = 0;
+    while (untouched < kSize && mem[untouched] == 0xA5) ++untouched;
+    return kSize - untouched;
+  };
+  return reach(body) - reach([](void*) -> void* { return nullptr; });
+}
+
+// What setup() and loop() ask of the engine: a founding boot, a whole life to
+// the next hatch with every save, then a boot that decodes that creature and
+// answers the phone's reads. The Dish lives on the heap, as main.cpp's is static.
+void* lifeAndReboot(void*) {
+  MemStorage store;
+  NullLink quiet;
+  ScriptedOwner owner;
+  Genome founder = shortLived();
+  auto dish = std::make_unique<Dish>(store, 7, 1, DishOptions{nullptr, &founder});
+  for (uint32_t ms = 0; ms < 16 * 3600 * 1000u; ms += kSampleMs) {
+    dish->sample(owner.next(ms, *dish), ms);
+    dish->tick(ms, quiet);
+    const Creature* c = std::get_if<Creature>(&dish->occupant());
+    if (c && c->generation() == 1) break;
+  }
+  ScriptedLink phone;
+  phone.inbound = {"#1 SNAPSHOT", "#2 HASH", "#3 LINEAGE", "#4 ANCESTOR 1", "#5 DIFF 1", "#6 PORTRAIT 0",
+                   "#7 STATE", "#8 GENOME", "#9 BRAIN", "#10 CHEM", "#11 SCHEMA"};
+  dish = std::make_unique<Dish>(store, 7, 1, DishOptions{nullptr, &founder});
+  dish->tick(1000, phone);
+  return nullptr;
+}
+
+}  // namespace
+
+// The firmware runs these calls on the Arduino loop task, whose stack is
+// 8,192 B. x86-64 frames stand in for the ESP32-S3's here (tools/stack_check.sh
+// measures those one function at a time), so the bar keeps a quarter spare.
+// Unit 20 reads the real high-water mark on the board.
+TEST(Stack, ALifeAndARebootFitTheLoopTask) {
+#if defined(__SANITIZE_ADDRESS__)
+  GTEST_SKIP() << "ASan's redzones inflate every frame";
+#endif
+  size_t used = stackReach(lifeAndReboot);
+  std::printf("engine stack high-water: %zu B\n", used);
+  EXPECT_LT(used, 6144u);
 }
 
 // ---- wall time and the unpowered catch-up (DEVIATIONS.md 3) ---------------------------------

@@ -65,15 +65,15 @@ class Dish {
   void flush();                    // explicit save: disconnect, a phone request
 
   // For the command and twist handlers (protocol.cpp, twists.cpp).
-  Occupant& occupant() { return occ_; }
-  const Occupant& occupant() const { return occ_; }
-  Habitat& habitat() { return habitat_; }
-  const Habitat& habitat() const { return habitat_; }
+  Occupant& occupant() { return live_.occupant; }
+  const Occupant& occupant() const { return live_.occupant; }
+  Habitat& habitat() { return live_.habitat; }
+  const Habitat& habitat() const { return live_.habitat; }
   Lineage& lineage() { return lineage_; }
   Protocol& protocol() { return proto_; }
-  const Settings& settings() const { return settings_; }
-  PetClock& clock() { return clock_; }
-  const PetClock& clock() const { return clock_; }
+  const Settings& settings() const { return live_.settings; }
+  PetClock& clock() { return live_.clock; }
+  const PetClock& clock() const { return live_.clock; }
   uint32_t tickCount() const { return tick_; }
   void markDirty() { eventDirty_ = true; }
   bool pick(uint8_t egg);          // the pick twist and the body's clutch choice share this
@@ -82,8 +82,8 @@ class Dish {
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
   void rename(const char* name);
-  Snapshot snapshot() const;       // the live state, as a save and SNAPSHOT see it
-  uint32_t hash() const;           // snapshot().hash(): the replay check and HASH
+  const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
+  uint32_t hash() const { return live_.hash(); }   // the replay check and HASH
 
   // Wall time (DEVIATIONS.md 3). checkWall reads the sources in order; on an
   // unaccounted gap it fast-forwards it, re-anchors and saves at once.
@@ -94,7 +94,6 @@ class Dish {
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
 
  private:
-  void adopt(Snapshot&&);
   void runOneTick(Link&);
   void onDeath(Creature&);         // record death, lay the clutch, save
   void onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save
@@ -107,23 +106,19 @@ class Dish {
   Keepsake keep_;
   Lineage lineage_;
   Protocol proto_;
-  Occupant occ_;
-  Habitat habitat_;
-  PetClock clock_;
-  Settings settings_{};
+  // The saved state, held whole so a save, a hash or SNAPSHOT reads it in
+  // place. Its seq stays 0: the keepsake numbers its own saves.
+  Snapshot live_{};
   Detectors detectors_;
   Behaviours behaviours_;
   SenseOut pending_;               // what the detectors saw since the last tick
   PhoneTime phone_;
   TimeSource* rtc_ = nullptr;
-  std::optional<WallAnchor> wall_;
-  std::vector<RawChunk> unknown_;  // a newer firmware's chunks, carried into every save
   CatchUp lastCatchUp_;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
-  Rng rng_{};
 };
 
 }  // namespace blorb

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <type_traits>
 #include "blorb/creature.h"
 #include "blorb/genes.h"
@@ -362,7 +363,9 @@ std::optional<Genome> apply(const Genome& parent, const MutationDiff& diff) {
 Viability viability(const Genome& g) {
   if (g.bytes().size() > kMaxGenomeBytes) return {false, "over the size cap"};
   Phenotype p{};
-  Chemistry c;
+  // A Phenotype and a Chemistry together are past the stack budget (tools/stack_check.sh).
+  std::unique_ptr<Chemistry> chemistry = std::make_unique<Chemistry>();
+  Chemistry& c = *chemistry;
   expressInto(g, Stage::Baby, p, c);
   if (c.chem[chem::life.v] == Fx::zero()) return {false, "no life chemical seeded"};
   if (std::none_of(p.chem.reactions.begin(), p.chem.reactions.end(), feedsEnergy))

@@ -50,11 +50,12 @@ struct WallAnchor { uint32_t wallSeconds; uint32_t tick; };
 
 // The whole live state: what a save writes and what SNAPSHOT sends the phone.
 // The dish tick is clock.petTicks (both advance once per tick), so it is not
-// stored twice.
+// stored twice. It is about 10 KB, so it is never copied onto the stack: the
+// Dish holds one and the keepsake encodes, hashes and decodes it in place.
 struct Snapshot {
   uint32_t seq;
   PetClock clock;
-  Occupant occupant;
+  Occupant occupant{Clutch{}};
   Habitat habitat;
   Settings settings;
   Rng rng;
@@ -64,17 +65,20 @@ struct Snapshot {
 };
 
 enum class SlotState : uint8_t { Resumed, FellBack, Empty, Corrupt, NewerFormat };
-struct Loaded { SlotState state; std::optional<Snapshot> snapshot; };
 
 class Keepsake {
  public:
   explicit Keepsake(Storage&);
-  Loaded load();                       // Corrupt slots are quarantined before returning
+  // Resumed or FellBack: the newest valid slot is in `into`. Otherwise
+  // `into.occupant` is unspecified and the rest of `into` untouched. Corrupt
+  // slots are quarantined before returning.
+  SlotState load(Snapshot& into);
   bool save(const Snapshot&);          // the other slot, seq + 1; saving twice leaves two valid slots
 
   // Pure codec, for tests and for SNAPSHOT; the whole state crosses the wire as this blob.
+  // A false decode leaves `into` as load's failure does.
   static std::vector<uint8_t> encode(const Snapshot&);
-  static std::optional<Snapshot> decode(const uint8_t*, size_t);
+  static bool decode(const uint8_t*, size_t, Snapshot& into);
   // One pure step per version, each with a committed fixture test/fixtures/keepsake_v<n>.bin.
   static bool migrate(std::vector<uint8_t>& blob, uint16_t fromVersion);
 

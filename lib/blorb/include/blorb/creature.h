@@ -62,9 +62,19 @@ struct Clutch;
 
 class Creature {
  public:
-  // Express Baby, apply initial chemicals, run the hatch burst of dreams so
-  // instincts are wired before the first decision. Rng seeded from the genome hash.
-  static Creature hatch(const Egg&, uint32_t legacyFeats, uint32_t tick);
+  // Hatches the egg: express Baby, apply initial chemicals, run the hatch
+  // burst of dreams so instincts are wired before the first decision. Rng
+  // seeded from the genome hash. A creature is about 10 KB, so the Dish
+  // builds it in place (Occupant::emplace), never on the stack.
+  Creature(const Egg&, uint32_t legacyFeats, uint32_t tick);
+
+  // A creature with nothing set, which only the keepsake can ask for: it
+  // decodes one in place and fills every field.
+  class Blank {
+    friend class Keepsake;
+    Blank() {}
+  };
+  explicit Creature(Blank) {}
 
   // One 100 ms tick, in this order and no other (replays depend on it):
   //  1 sense loci from `senses` (detectors and habitat already wrote them)
@@ -117,12 +127,11 @@ class Creature {
 
  private:
   friend class Keepsake;               // the only other writer of private state
-  Creature() = default;
   Genome genome_;                      // immutable this life: no non-const accessor
   uint16_t generation_ = 0;
   uint32_t legacyFeats_ = 0;
   Stage stage_ = Stage::Baby;
-  Phenotype pheno_;
+  Phenotype pheno_{};                  // zeroed: an unexpressed rule reads as 0
   Chemistry chem_;
   Brain brain_;
   Body body_;
@@ -140,7 +149,7 @@ class Egg {
  public:
   Egg(Offspring child, uint16_t generation, uint32_t laidTick);
   // Time incubates it; held or cradled adds warmthBoost; a knock wobbles it.
-  // True once ready; the Dish then calls Creature::hatch.
+  // True once ready; the Dish then hatches it in place.
   bool tick(const SenseOut&);
   const Genome& genome() const { return child_.genome; }
   const MutationDiff& diff() const { return child_.diff; }

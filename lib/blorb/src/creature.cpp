@@ -112,18 +112,13 @@ void ownLoci(Chemistry& c, const Body& body) {
 
 }  // namespace
 
-Creature Creature::hatch(const Egg& egg, uint32_t legacyFeats, uint32_t tick) {
-  Creature c{};
-  c.genome_ = egg.genome();
-  c.generation_ = egg.generation();
-  c.legacyFeats_ = legacyFeats;
-  c.rng_ = Rng::seeded(c.genome_.hash());
-  express(Stage::Baby, c.genome_, legacyFeats, c.pheno_, c.chem_, c.brain_);
-  for (uint8_t i = 0; i < c.pheno_.egg.hatchBurstDreams; ++i) c.brain_.dream(c.pheno_.temperament, c.rng_);
-  c.actionDone_ = true;   // the brain decides at its first think
-  c.face_.sinceTick = tick;
-  c.pendingSelf_.fire(stim::hatched);
-  return c;
+Creature::Creature(const Egg& egg, uint32_t legacyFeats, uint32_t tick)
+    : genome_(egg.genome()), generation_(egg.generation()), legacyFeats_(legacyFeats), rng_(Rng::seeded(genome_.hash())) {
+  express(Stage::Baby, genome_, legacyFeats, pheno_, chem_, brain_);
+  for (uint8_t i = 0; i < pheno_.egg.hatchBurstDreams; ++i) brain_.dream(pheno_.temperament, rng_);
+  actionDone_ = true;   // the brain decides at its first think
+  face_.sinceTick = tick;
+  pendingSelf_.fire(stim::hatched);
 }
 
 void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behaviours, uint32_t tick) {

@@ -146,10 +146,10 @@ TEST(Snapshot, TheBlobDecodesToTheLiveState) {
   r.run(20000);
   Lines out = r.send("#9 SNAPSHOT");
   std::vector<uint8_t> blob = unchunk(out, "#9");
-  std::optional<Snapshot> s = Keepsake::decode(blob.data(), blob.size());
-  ASSERT_TRUE(s.has_value());
-  EXPECT_EQ(s->hash(), r.dish.hash());
-  EXPECT_EQ(Keepsake::encode(*s), blob);
+  Snapshot s;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), s));
+  EXPECT_EQ(s.hash(), r.dish.hash());
+  EXPECT_EQ(Keepsake::encode(s), blob);
 }
 
 TEST(Twist, AStimulusTwistChangesTheLiveStateWhileTicksRun) {

@@ -12,7 +12,7 @@ constexpr Fx kHalf = Fx::ratio(1, 2);
 
 Creature hatchOf(Genome g) {
   Egg egg(Offspring{std::move(g), {}}, 0, 0);
-  return Creature::hatch(egg, 0, 0);
+  return Creature(egg, 0, 0);
 }
 
 // The Dish's part around one creature: the pet clock, the day detector and the

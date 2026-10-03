@@ -11,7 +11,7 @@ namespace {
 constexpr const char* kLog = "lineage.log";
 
 Creature deadCreature(uint16_t generation = 0) {
-  Creature c = Creature::hatch(Egg(Offspring{starterGenome(7), {}}, generation, 0), 0, 0);
+  Creature c(Egg(Offspring{starterGenome(7), {}}, generation, 0), 0, 0);
   Habitat h;
   Behaviours b;
   c.inject(chem::life, Fx::ratio(5, 100));

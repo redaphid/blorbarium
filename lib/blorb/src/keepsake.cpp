@@ -314,8 +314,8 @@ struct Keepsake::Codec {
 
   // Weights remap by stable id. Habit, the decision's start state and the
   // episodes are positional, so they load only when the saved axes match.
-  static Brain getBrain(In& in) {
-    Brain b;
+  // `b` is a fresh brain.
+  static void getBrain(In& in, Brain& b) {
     Brain::Axes saved;
     for (uint8_t i = 0, n = in.u8(); i < n; ++i) saved.features.push_back(LocusId{in.u8()});
     for (uint8_t i = 0, n = in.u8(); i < n; ++i) saved.actions.push_back(ActionId{in.u8()});
@@ -357,7 +357,6 @@ struct Keepsake::Codec {
       b.episodeHead_ = uint8_t(head % std::size(b.episodes_));
     }
     for (uint16_t i = 0, n = in.u16(); i < n && in.ok; ++i) b.instinctQueue_.push_back(getInstinct(in));
-    return b;
   }
 
   static void putOccupant(Out& o, Out& genome, Out& chemistry, Out& brain, Out& body, Out& stats,
@@ -390,32 +389,33 @@ struct Keepsake::Codec {
     }
   }
 
-  static std::optional<Occupant> getOccupant(const Chunks& c) {
+  // Builds the occupant in place in `out`.
+  static bool getOccupant(const Chunks& c, Occupant& out) {
     auto view = [&](Chunk tag) -> std::optional<In> {
       const auto& b = c.bytes[uint8_t(tag)];
       if (!b) return std::nullopt;
       return In{b->data(), b->size()};
     };
     std::optional<In> occ = view(Chunk::Occupant), gen = view(Chunk::Genome);
-    if (!occ || !gen) return std::nullopt;
+    if (!occ || !gen) return false;
     std::optional<Genome> genome = Genome::parse(gen->p, gen->n);
-    if (!genome) return std::nullopt;
+    if (!genome) return false;
     In& in = *occ;
     switch (Kind(in.u8())) {
       case Kind::Egg: {
         uint16_t generation = in.u16();
         uint32_t laid = in.u32(), incubated = in.u32();
         MutationDiff diff = getDiff(in);
-        if (!in.ok) return std::nullopt;
-        Egg e(Offspring{std::move(*genome), std::move(diff)}, generation, laid);
+        if (!in.ok) return false;
+        Egg& e = out.emplace<Egg>(Offspring{std::move(*genome), std::move(diff)}, generation, laid);
         e.incubated_ = incubated;
-        return Occupant{std::move(e)};
+        return true;
       }
       case Kind::Creature: {
         std::optional<In> chem = view(Chunk::Chemistry), brain = view(Chunk::Brain), body = view(Chunk::Body),
                           stats = view(Chunk::Stats);
-        if (!chem || !brain || !body || !stats) return std::nullopt;
-        Creature c;
+        if (!chem || !brain || !body || !stats) return false;
+        Creature& c = out.emplace<Creature>(Creature::Blank{});
         c.genome_ = std::move(*genome);
         c.generation_ = in.u16();
         c.legacyFeats_ = in.u32();
@@ -434,17 +434,17 @@ struct Keepsake::Codec {
         c.rng_ = getRng(in);
         for (Fx& v : c.chem_.chem) v = chem->fx();
         for (Fx& v : c.chem_.locus) v = chem->fx();
-        c.brain_ = getBrain(*brain);
+        getBrain(*brain, c.brain_);
         c.body_ = getBody(*body);
         c.stats_ = getStats(*stats);
-        if (!in.ok || !chem->ok || !brain->ok || !body->ok || !stats->ok) return std::nullopt;
+        if (!in.ok || !chem->ok || !brain->ok || !body->ok || !stats->ok) return false;
         // Derived, never saved: the phenotype is re-expressed stage by stage.
         // Chemical levels and the instinct queue are saved, so nothing is reseeded.
         for (uint8_t s = 0; s <= uint8_t(c.stage_); ++s) expressStage(c.genome_, Stage(s), c.legacyFeats_, c.pheno_);
-        return Occupant{std::move(c)};
+        return true;
       }
       case Kind::Clutch: {
-        Clutch k;
+        Clutch& k = out.emplace<Clutch>();
         k.parent = std::move(*genome);
         k.generation = in.u16();
         k.wildBonus = in.fx();
@@ -455,11 +455,10 @@ struct Keepsake::Codec {
         k.cause = DeathCause(std::min<uint8_t>(in.u8(), uint8_t(DeathCause::Unknown)));
         k.reached = Stage(in.u8() & 3);
         for (uint8_t i = 0, n = in.u8(); i < n && in.ok; ++i) k.heirlooms.push_back(getBelief(in));
-        if (!in.ok) return std::nullopt;
-        return Occupant{std::move(k)};
+        return in.ok;
       }
     }
-    return std::nullopt;
+    return false;
   }
 
   static std::vector<uint8_t> encode(const Snapshot& s, uint32_t seq) {
@@ -497,19 +496,20 @@ struct Keepsake::Codec {
     return std::move(o.b);
   }
 
-  static std::optional<Snapshot> decode(const uint8_t* data, size_t len) {
-    if (len < kHeaderLen || std::memcmp(data, kMagic, sizeof kMagic) != 0) return std::nullopt;
+  // The occupant goes last, so a blob that fails before it leaves `into` whole.
+  static bool decode(const uint8_t* data, size_t len, Snapshot& into) {
+    if (len < kHeaderLen || std::memcmp(data, kMagic, sizeof kMagic) != 0) return false;
     uint16_t format = uint16_t(data[4] | data[5] << 8);
     uint32_t payloadLen = getLE32(data + 10);
-    if (format != kFormatVersion || payloadLen != len - kHeaderLen) return std::nullopt;
-    if (getLE32(data + kCrcAt) != blobCrc(data, len)) return std::nullopt;
+    if (format != kFormatVersion || payloadLen != len - kHeaderLen) return false;
+    if (getLE32(data + kCrcAt) != blobCrc(data, len)) return false;
     Chunks c;
     for (size_t at = kHeaderLen; at < len;) {
-      if (len - at < kChunkHeaderLen) return std::nullopt;
+      if (len - at < kChunkHeaderLen) return false;
       uint8_t tag = data[at], ver = data[at + 1];
       size_t n = size_t(data[at + 2]) | size_t(data[at + 3]) << 8;
       at += kChunkHeaderLen;
-      if (len - at < n) return std::nullopt;
+      if (len - at < n) return false;
       std::vector<uint8_t> bytes(data + at, data + at + n);
       at += n;
       bool known = tag >= uint8_t(Chunk::Clock) && tag <= uint8_t(Chunk::Wall);
@@ -517,21 +517,30 @@ struct Keepsake::Codec {
       else c.unknown.push_back(RawChunk{tag, ver, std::move(bytes)});
     }
     for (Chunk required : {Chunk::Clock, Chunk::Habitat, Chunk::Rng, Chunk::Settings})
-      if (!c.bytes[uint8_t(required)]) return std::nullopt;
-    std::optional<Occupant> occ = getOccupant(c);
-    if (!occ) return std::nullopt;
+      if (!c.bytes[uint8_t(required)]) return false;
     auto in = [&](Chunk tag) { return In{c.bytes[uint8_t(tag)]->data(), c.bytes[uint8_t(tag)]->size()}; };
-    In clock = in(Chunk::Clock), habitat = in(Chunk::Habitat), rng = in(Chunk::Rng), settings = in(Chunk::Settings);
-    Snapshot s{getLE32(data + 6), getClock(clock), std::move(*occ), getHabitat(habitat), getSettings(settings),
-               getRng(rng), std::nullopt, std::move(c.unknown)};
+    In clockIn = in(Chunk::Clock), habitatIn = in(Chunk::Habitat), rngIn = in(Chunk::Rng), settingsIn = in(Chunk::Settings);
+    const PetClock clock = getClock(clockIn);
+    const Habitat habitat = getHabitat(habitatIn);
+    const Rng rng = getRng(rngIn);
+    const Settings settings = getSettings(settingsIn);
+    std::optional<WallAnchor> wall;
     if (c.bytes[uint8_t(Chunk::Wall)]) {
-      In wall = in(Chunk::Wall);
-      WallAnchor a{wall.u32(), wall.u32()};
-      if (!wall.ok) return std::nullopt;
-      s.wall = a;
+      In wallIn = in(Chunk::Wall);
+      WallAnchor a{wallIn.u32(), wallIn.u32()};
+      if (!wallIn.ok) return false;
+      wall = a;
     }
-    if (!clock.ok || !habitat.ok || !rng.ok || !settings.ok) return std::nullopt;
-    return s;
+    if (!clockIn.ok || !habitatIn.ok || !rngIn.ok || !settingsIn.ok) return false;
+    if (!getOccupant(c, into.occupant)) return false;
+    into.seq = getLE32(data + 6);
+    into.clock = clock;
+    into.habitat = habitat;
+    into.settings = settings;
+    into.rng = rng;
+    into.wall = wall;
+    into.unknown = std::move(c.unknown);
+    return true;
   }
 };
 
@@ -560,40 +569,49 @@ Keepsake::Keepsake(Storage& store) : store_(store) {}
 
 std::vector<uint8_t> Keepsake::encode(const Snapshot& s) { return Codec::encode(s, s.seq); }
 
-std::optional<Snapshot> Keepsake::decode(const uint8_t* data, size_t len) {
-  if (!data) return std::nullopt;
-  return Codec::decode(data, len);
+bool Keepsake::decode(const uint8_t* data, size_t len, Snapshot& into) {
+  return data && Codec::decode(data, len, into);
 }
 
 // Version 1 is the only format; each later one adds one step here and a fixture.
 bool Keepsake::migrate(std::vector<uint8_t>&, uint16_t fromVersion) { return fromVersion == kFormatVersion; }
 
-Loaded Keepsake::load() {
-  struct Slot { SlotState state = SlotState::Empty; std::optional<Snapshot> snap; };
+SlotState Keepsake::load(Snapshot& into) {
+  struct Slot { bool present = false, newer = false, valid = false; std::vector<uint8_t> blob; };
   Slot slots[2];
   for (int i = 0; i < 2; ++i) {
     uint8_t probe;
     if (!store_.read(kSlots[i], &probe, 0)) continue;
-    std::vector<uint8_t> blob(store_.size(kSlots[i]));
-    std::optional<size_t> n = store_.read(kSlots[i], blob.data(), blob.size());
-    blob.resize(n ? std::min(*n, blob.size()) : 0);
-    bool magic = blob.size() >= kHeaderLen && std::memcmp(blob.data(), kMagic, sizeof kMagic) == 0;
-    uint16_t format = magic ? uint16_t(blob[4] | blob[5] << 8) : 0;
-    if (magic && format > kFormatVersion) {
-      slots[i].state = SlotState::NewerFormat;
-      continue;
-    }
-    if (magic && format < kFormatVersion && !migrate(blob, format)) magic = false;
-    slots[i].snap = magic ? decode(blob.data(), blob.size()) : std::nullopt;
-    slots[i].state = slots[i].snap ? SlotState::Resumed : SlotState::Corrupt;
+    Slot& s = slots[i];
+    s.present = true;
+    s.blob.resize(store_.size(kSlots[i]));
+    std::optional<size_t> n = store_.read(kSlots[i], s.blob.data(), s.blob.size());
+    s.blob.resize(n ? std::min(*n, s.blob.size()) : 0);
+    bool magic = s.blob.size() >= kHeaderLen && std::memcmp(s.blob.data(), kMagic, sizeof kMagic) == 0;
+    uint16_t format = magic ? uint16_t(s.blob[4] | s.blob[5] << 8) : 0;
+    s.newer = magic && format > kFormatVersion;
+    if (magic && format < kFormatVersion && !migrate(s.blob, format)) s.blob.clear();
   }
   // A newer firmware's keepsake is left exactly as it is, both slots.
   for (const Slot& s : slots)
-    if (s.state == SlotState::NewerFormat) return Loaded{SlotState::NewerFormat, std::nullopt};
+    if (s.newer) return SlotState::NewerFormat;
+
+  // Decoded one at a time into `into`, the preferred slot last (the higher
+  // header seq, slot a on a tie), so when it is valid it is the one left there.
+  auto seqOf = [](const Slot& s) { return s.blob.size() >= kHeaderLen ? getLE32(s.blob.data() + 6) : 0u; };
+  const int last = seqOf(slots[1]) > seqOf(slots[0]) ? 1 : 0;
+  int best = -1;
+  for (int i : {1 - last, last}) {
+    if (!slots[i].present) continue;
+    slots[i].valid = decode(slots[i].blob.data(), slots[i].blob.size(), into);
+    if (slots[i].valid) best = i;
+  }
+  // The preferred slot failed after the other decoded: `into` holds its debris.
+  if (best >= 0 && best != last && slots[last].present) decode(slots[best].blob.data(), slots[best].blob.size(), into);
 
   bool anyCorrupt = false;
   for (int i = 0; i < 2; ++i) {
-    if (slots[i].state != SlotState::Corrupt) continue;
+    if (!slots[i].present || slots[i].valid) continue;
     anyCorrupt = true;
     char to[32];
     uint8_t probe;
@@ -603,13 +621,10 @@ Loaded Keepsake::load() {
     }
     store_.rename(kSlots[i], to);
   }
-  int best = -1;
-  for (int i = 0; i < 2; ++i)
-    if (slots[i].snap && (best < 0 || slots[i].snap->seq > slots[best].snap->seq)) best = i;
-  if (best < 0) return Loaded{anyCorrupt ? SlotState::Corrupt : SlotState::Empty, std::nullopt};
-  lastSeq_ = slots[best].snap->seq;
+  if (best < 0) return anyCorrupt ? SlotState::Corrupt : SlotState::Empty;
+  lastSeq_ = into.seq;
   nextIsA_ = best == 1;
-  return Loaded{anyCorrupt ? SlotState::FellBack : SlotState::Resumed, std::move(slots[best].snap)};
+  return anyCorrupt ? SlotState::FellBack : SlotState::Resumed;
 }
 
 bool Keepsake::save(const Snapshot& s) {
