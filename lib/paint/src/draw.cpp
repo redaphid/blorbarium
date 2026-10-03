@@ -495,8 +495,9 @@ FaceShown faceFor(const Appearance& a) {
     ExprId f = r ? r->face : expr::alarmed;
     return {f, f, 256};
   }
-  // Shut eyes are for sleep: drowsy but awake, he is lidded.
-  auto awake = [&](ExprId e) { return e == expr::asleep && !a.asleep ? expr::sleepy : e; };
+  // Asleep, his eyes are shut whatever his genes feel. Awake, shut eyes become lidded.
+  if (a.asleep) return {expr::asleep, expr::asleep, 256};
+  auto awake = [&](ExprId e) { return e == expr::asleep ? expr::sleepy : e; };
   ExprId now = awake(a.intensity >= kFaceThreshold ? a.expression : expr::neutral);
   bool resting = now == expr::asleep || now == expr::sleepy || now == expr::yawn;
   if (!a.asleep && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};

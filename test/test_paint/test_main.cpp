@@ -319,6 +319,22 @@ TEST(Face, CrossfadesFromPreviousThenSettles) {
   EXPECT_GE(midwayDiffers, 3);   // a blink can take one tick
 }
 
+// Seen on the board: STATE said asleep=1 face=happy and the screen showed him
+// happy, eyes open. Asleep, his eyes are shut whatever his genes feel.
+TEST(Face, AsleepAlwaysShowsShutEyes) {
+  const auto& pack = paint::placeholderPack();
+  for (blorb::ExprId felt : {blorb::expr::happy, blorb::expr::alarmed, blorb::expr::neutral}) {
+    Appearance a = adult();
+    a.asleep = true;
+    a.intensity = Fx::one();
+    a.exprTicks = 100;
+    a.expression = a.previous = felt;
+    Appearance shut = a;
+    shut.expression = shut.previous = blorb::expr::asleep;
+    EXPECT_EQ(countChanged(*render(a, pack), *render(shut, pack)), 0) << int(felt.v);
+  }
+}
+
 // The block with no face patches, so the halo has only the body's anchors.
 struct FacelessPack : BlockPack {
   FrameRef face(blorb::ExprId, blorb::Stage) const override { return FrameRef{}; }
