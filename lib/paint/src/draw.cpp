@@ -777,6 +777,31 @@ void hint(Canvas240& cv, const Appearance& a) {
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
 // Low when he stands high in the dish, so the line never crosses his face.
+void dimBand(Canvas240& cv, const Marquee& strip) {
+  const int top = kSide / 2 + strip.dy - strip.clipH / 2;
+  for (int y = top; y < top + strip.clipH; ++y) {
+    const int half = chordHalf(y);
+    for (int x = kSide / 2 - half; x < kSide / 2 + half; ++x) {
+      const int toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, 0, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
+    }
+  }
+}
+
+// A thought crosses once: thoughtPhase 0..1 carries it in from the right rim
+// and out past the left, on the same strip the time-unknown line uses.
+void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
+  Marquee strip = kTimeUnknownStrip;
+  if (low) strip.dy = -strip.dy;
+  dimBand(cv, strip);
+  const int width = 2 * marqueeHalf(strip);
+  const int64_t span = width + textWidth(kFreeSans9pt7b, a.line);
+  const uint32_t off = uint32_t(int64_t(a.thoughtPhase.raw) * span / Fx::kOne);
+  drawMarqueeRing(cv, strip, kFreeSans9pt7b, a.line, "", to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
+                  width, off);
+}
+
 void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
   Marquee strip = kTimeUnknownStrip;
   if (low) strip.dy = -strip.dy;
@@ -806,6 +831,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   pips(cv, a.pantry);
   hint(cv, a);
   if (a.timeUnknown) timeUnknown(cv, nowMs, a.at.y < Fx::zero());
+  else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   mask(cv);
 }
 
