@@ -77,6 +77,11 @@ class Creature {
   //  7 face: expression genes over the drive mix, with hysteresis; stats; recent loci halve
   void tick(const SenseOut& senses, Habitat&, Behaviours&, uint32_t tick);
 
+  // The unpowered catch-up (DEVIATIONS.md 3): `ticks` of chemistry in one
+  // coarse step. Sense loci only, no stimuli, brain or behaviour; stages
+  // express as their loci fire and the die locus still ends the life.
+  void tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick);
+
   bool dead() const;
   DeathCause cause() const;
 
@@ -100,7 +105,15 @@ class Creature {
   // Sim scripts and tests only: starts that action at the next tick, as the
   // brain would, and holds it for its minTicks unless it finishes.
   void force(ActionId);
-  void fire(StimId);                   // the STIM verb; the caller has checked source == Phone
+  void fire(StimId);                   // sim scripts and tests: lands with the next tick's stimuli
+
+  // Phone twists (DEVIATIONS.md 4), applied between ticks.
+  // An owner edit of one body byte; the phenotype is re-expressed from the
+  // edited genome. False if the uid is missing or the offset is past the body.
+  bool editGene(GeneUid, uint8_t offset, uint8_t value);
+  // A prophecy: the belief (feature, action, drive) becomes `effect`. False if
+  // an id is on no brain axis.
+  bool prophesy(LocusId feature, ActionId, DriveId, Fx effect);
 
  private:
   friend class Keepsake;               // the only other writer of private state

@@ -1,7 +1,8 @@
 #pragma once
-// The two hardware seams the engine calls out through. Time comes in as an
-// argument and the IMU as data (Dish::sample), so neither needs a seam.
-// Firmware implements these over LittleFS and NimBLE; tests over memory.
+// The hardware seams the engine calls out through. Powered time comes in as
+// an argument and the IMU as data (Dish::sample). Wall time is a seam because
+// the dish lives on through unpowered gaps (DEVIATIONS.md 3).
+// Firmware implements these over LittleFS, NimBLE and an RTC; tests over memory.
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -17,6 +18,17 @@ class Storage {
   virtual bool append(const char* name, const uint8_t* data, size_t len) = 0;
   virtual bool rename(const char* from, const char* to) = 0;                        // quarantine, never delete
   virtual size_t size(const char* name) = 0;
+};
+
+// Wall time in seconds since 1970, or nullopt when this source has none now.
+// The Dish asks its sources in priority order: an RTC that kept counting
+// while unpowered, then the phone's TIME, then none. A firmware that only
+// knows how long it slept implements this as Dish::wallNow() saved before
+// deep sleep plus the time slept.
+class TimeSource {
+ public:
+  virtual ~TimeSource() = default;
+  virtual std::optional<uint32_t> unixSeconds() = 0;
 };
 
 class Link {

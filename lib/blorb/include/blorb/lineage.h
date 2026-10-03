@@ -50,6 +50,9 @@ class Lineage {
   void recordBirth(const Egg&, const Clutch&, uint8_t chosen, uint32_t at);
   void recordDeath(const Creature&, const char* name, uint32_t at);
   void rename(const char* name);
+  // An owner edit changed this generation's genome mid-life: a Checkpoint of
+  // it, so genomeOf(generation) and every later diff replay from the edit.
+  void recordEdit(uint16_t generation, const Genome&);
 
   uint16_t currentGeneration() const { return generation_; }
   uint32_t legacyFeats() const { return legacyFeats_; }   // union of every Death's feats

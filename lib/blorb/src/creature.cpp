@@ -91,6 +91,25 @@ void express(Stage s, const Genome& g, uint32_t feats, Phenotype& p, Chemistry& 
   for (size_t i = instincts; i < p.instincts.size(); ++i) b.queueInstinct(p.instincts[i]);
 }
 
+// Each stage locus past 0.5 expresses the next stage, once.
+void growUp(Stage& stage, LifeStats& stats, const Genome& g, uint32_t feats, Phenotype& p, Chemistry& c, Brain& b) {
+  for (const StageStep& s : kStageSteps)
+    if (stage == s.from && fires(c.locus[s.trigger.v])) {
+      express(s.to, g, feats, p, c, b);
+      stage = s.to;
+      stats.reached = s.to;
+      return;
+    }
+}
+
+// The sense loci the creature writes for itself before the senses land.
+void ownLoci(Chemistry& c, const Body& body) {
+  for (LocusId l : kBehaviourLoci) c.set(l, Fx::zero());
+  c.set(locus::always, Fx::one());
+  c.set(locus::asleep, body.asleep ? Fx::one() : Fx::zero());
+  c.set(locus::age, Fx::one() - c.chem[chem::life.v]);
+}
+
 }  // namespace
 
 Creature Creature::hatch(const Egg& egg, uint32_t legacyFeats, uint32_t tick) {
@@ -113,10 +132,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   pendingSelf_.clear();
 
   // 1 sense loci
-  for (LocusId l : kBehaviourLoci) chem_.set(l, Fx::zero());
-  chem_.set(locus::always, Fx::one());
-  chem_.set(locus::asleep, body_.asleep ? Fx::one() : Fx::zero());
-  chem_.set(locus::age, Fx::one() - chem_.chem[chem::life.v]);
+  ownLoci(chem_, body_);
   for (const SenseOut* in : {&senses, &self})
     for (uint8_t i = 0; i < in->lociCount; ++i) chem_.set(in->loci[i].locus, in->loci[i].value);
 
@@ -158,13 +174,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   chem_.step(pheno_.chem, tick);
 
   // 4 lifecycle
-  for (const StageStep& s : kStageSteps)
-    if (stage_ == s.from && fires(chem_.locus[s.trigger.v])) {
-      express(s.to, genome_, legacyFeats_, pheno_, chem_, brain_);
-      stage_ = s.to;
-      stats_.reached = s.to;
-      break;
-    }
+  growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
   if (dead()) return;
   for (size_t r = 0; r < kReflexCount; ++r) {
     Fx now = chem_.locus[REFLEXES[r].trigger.v];
@@ -230,6 +240,17 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx{chem_.locus[l].raw >> 1};
 }
 
+void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick) {
+  if (dead()) return;
+  ownLoci(chem_, body_);
+  for (uint8_t i = 0; i < senses.lociCount; ++i) chem_.set(senses.loci[i].locus, senses.loci[i].value);
+  chem_.stepCoarse(pheno_.chem, ticks, tick);
+  growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
+  stats_.ageTicks += ticks;
+  // Recent loci halve every tick, so a coarse step leaves nothing of them.
+  for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx::zero();
+}
+
 bool Creature::dead() const { return fires(chem_.locus[locus::die.v]); }
 
 DeathCause Creature::cause() const { return causeOf(chem_.locus[locus::cause.v]); }
@@ -241,6 +262,22 @@ void Creature::inject(ChemId c, Fx level) {
 void Creature::force(ActionId a) { forced_ = a; }
 
 void Creature::fire(StimId s) { pendingSelf_.fire(s); }
+
+bool Creature::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
+  std::optional<GeneView> v = genome_.find(uid);
+  if (!v || offset >= v->header.len) return false;
+  std::optional<Genome> edited = GenomeBuilder::from(genome_).setByte(uid, offset, value).build();
+  if (!edited) return false;
+  genome_ = std::move(*edited);
+  // Levels and the instinct queue are live state, so nothing is reseeded or requeued.
+  pheno_ = Phenotype{};
+  for (uint8_t s = 0; s <= uint8_t(stage_); ++s) expressStage(genome_, Stage(s), legacyFeats_, pheno_);
+  return true;
+}
+
+bool Creature::prophesy(LocusId feature, ActionId a, DriveId d, Fx effect) {
+  return brain_.setWeight(feature, a, d, effect);
+}
 
 // Field by field, so struct padding never reaches the hash.
 uint32_t Creature::hash() const {

@@ -175,6 +175,13 @@ std::vector<Belief> Brain::strongestBeliefs(uint8_t n) const {
   return out;
 }
 
+bool Brain::setWeight(LocusId feature, ActionId action, DriveId drive, Fx effect) {
+  int f = featureIndex(feature), a = rowIndex(ACTIONS, action), d = rowIndex(DRIVES, drive);
+  if (f < 0 || a < 0 || d < 0) return false;
+  w_[f][a][d] = toQ15(effect);
+  return true;
+}
+
 Fx Brain::predict(LocusId feature, ActionId action, DriveId drive) const {
   int f = featureIndex(feature), a = rowIndex(ACTIONS, action), d = rowIndex(DRIVES, drive);
   if (f < 0 || a < 0 || d < 0) return Fx::zero();
