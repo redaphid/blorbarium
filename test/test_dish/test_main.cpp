@@ -136,6 +136,19 @@ TEST(Saving, EveryFiveMinutesAndAtOnceOnAnEvent) {
   EXPECT_LT(std::get<Creature>(s->occupant).stats().ageTicks, 10u) << "the hatch saved within the same tick() call";
 }
 
+TEST(Saving, AFailedEventSaveStaysUrgentAndRetries) {
+  Box box;
+  box.boot();
+  box.run(1000);
+  const uint32_t seq = newest(box.store)->seq;
+  box.store.tearAt(0);
+  box.dish->markDirty();
+  box.dish->tick(box.ms, box.link);
+  ASSERT_EQ(newest(box.store)->seq, seq) << "the torn save wrote nothing";
+  box.dish->tick(box.ms, box.link);
+  EXPECT_EQ(newest(box.store)->seq, seq + 1) << "the next tick() retries, not the five-minute save";
+}
+
 TEST(Saving, ADisconnectSaves) {
   Box box;
   box.boot();

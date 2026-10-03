@@ -196,7 +196,8 @@ void Dish::flush() {
 }
 
 void Dish::save() {
-  if (keep_.save(live_)) lastSaveTick_ = tick_;
+  if (!keep_.save(live_)) return;   // an event save stays urgent and retries on the next tick() call
+  lastSaveTick_ = tick_;
   eventDirty_ = false;
 }
 
