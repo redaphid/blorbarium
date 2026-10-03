@@ -97,6 +97,9 @@ class Creature {
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
   void inject(ChemId, Fx);             // sim scripts and tests only; no wire verb reaches it
+  // Sim scripts and tests only: starts that action at the next tick, as the
+  // brain would, and holds it for its minTicks unless it finishes.
+  void force(ActionId);
   void fire(StimId);                   // the STIM verb; the caller has checked source == Phone
 
  private:
@@ -113,7 +116,9 @@ class Creature {
   LifeStats stats_;
   FaceState face_;
   ActionId action_{};
-  uint32_t actionStart_ = 0;
+  uint32_t actionStart_ = 0;           // in stats_.ageTicks
+  bool actionDone_ = false;            // its behaviour finished and stopped; the brain picks next
+  std::optional<ActionId> forced_;     // force(), applied at the next tick
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
 };
