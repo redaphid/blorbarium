@@ -22,6 +22,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/board_lcd128.h"
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
+#include "hw/link_nus.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
 
@@ -76,6 +77,12 @@ static constexpr uint32_t kFrameMs = 40;   // 25 fps: the SPI push is 23 ms of e
 
 static PetStorage store;
 static SerialLink phone;
+#if defined(BADGE_BOARD_SIM)
+static blorb::Link& host = phone;
+#else
+static hw::NusLink ble;
+static hw::TwoLinks host(phone, ble);   // DEBUG lines stay on the cable: only SerialLink holds them back
+#endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 static BoardDisplay display;
 static paint::Canvas240 canvas;
@@ -116,7 +123,7 @@ static void step(uint32_t now) {
     dish->sample(lastBody, now);
     lastSample = now;
   }
-  dish->tick(now, phone);
+  dish->tick(now, host);
 }
 
 #if !defined(BADGE_BOARD_SIM)
@@ -211,6 +218,9 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
   reportBoot();
+  const char* name = ble.begin(mac);
+  Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
 #endif
 }
 
@@ -221,7 +231,7 @@ static uint32_t warpMs = 0;
 static void warp(uint32_t ticks) {
   for (uint32_t done = 0; done < ticks; done += 10) {
     warpMs += 10 * blorb::kTickMs;
-    dish->tick(millis() + warpMs, phone);   // at most 10 ticks a call
+    dish->tick(millis() + warpMs, host);    // at most 10 ticks a call
     if (done % 2000 == 0) delay(1);          // let the idle task run
   }
 }
