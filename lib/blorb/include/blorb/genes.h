@@ -22,6 +22,12 @@ enum class GeneClass : uint8_t { Body, Mind, Look, Life };   // mutate() guarant
 // The pack clamps it to the region's band.
 struct Tint { int8_t hue = 0; uint8_t sat = 128, val = 128; };   // hue in 1/256 turn; 128 = x1
 
+struct Rgb { int r, g, b; };
+// The renderer's recolour, here so heredity can see what a tint change looks
+// like: it moves the colour in HSV, so shading ramps keep their steps.
+// satScale is x/128 on top of the tint's own sat.
+Rgb tinted(Rgb, Tint, int satScale);
+
 // ---- bodies (every field uint8_t) ----------------------------------------------
 struct ChemGene        { uint8_t chem, halfLife, initial; };                         // decay + starting level
 struct ReactionGene    { uint8_t a, qa, b, qb, c, qc, d, qd, rate; };                // qa*A + qb*B -> qc*C + qd*D

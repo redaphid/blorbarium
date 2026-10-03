@@ -27,16 +27,33 @@ constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr Fx kPinned = Fx::ratio(99, 100);
 
 // The forced Look change steps the skin's hue or value: the skin covers the
-// hatchling, and with no shell gene the clutch egg's jelly takes its tint. A
-// step lands inside the reach every pack's skin band gives (byte - 128, as
-// Tint reads it), so a band cannot swallow it. Each egg of a clutch takes its
-// own slot, and no two slots look alike, so siblings differ from each other.
-constexpr int kForcedStep = 24, kForcedSpread = 16;   // hue: 34 to 56 degrees; value: x0.19 to x0.25
-struct LookSlot { uint8_t offset; int dir, low, high; };
-constexpr uint8_t kHueByte = 1, kValByte = 3;         // PaletteGene body offsets
-constexpr LookSlot kLookSlots[] = {
-    {kHueByte, 1, -24, 40}, {kValByte, -1, -32, 32}, {kHueByte, -1, -24, 40}, {kValByte, 1, -32, 32}};
+// hatchling, and with no shell gene the clutch egg's jelly takes its tint.
+// Each egg of a clutch takes its own slot, and no two slots look alike, so
+// siblings differ from each other.
+constexpr int kForcedStep = 24, kForcedSpread = 16;   // hue: 34 to 56 degrees; value: x0.19 to x0.31
+// A skin channel: the PaletteGene body byte, the Tint value it reads as
+// (byte - bias), and grungo's skin band for it, which the renderer clamps to.
+struct Channel {
+  uint8_t offset;
+  int bias, low, high;
+  int of(Tint t) const { return offset == 1 ? t.hue : offset == 2 ? t.sat : t.val; }
+};
+constexpr Channel kHue{1, 128, -24, 40}, kSat{2, 0, 96, 176}, kVal{3, 0, 96, 160};
+constexpr int kReach = 64;   // a step this long lands on the band's far edge from anywhere in it
+struct LookSlot { Channel ch; int dir; };
+constexpr LookSlot kLookSlots[] = {{kHue, 1}, {kVal, -1}, {kHue, -1}, {kVal, 1}};
 constexpr uint32_t kLookSlotCount = sizeof(kLookSlots) / sizeof(kLookSlots[0]);
+
+// Grungo's hatchling skin, one colour per sixteenth of its 846 skin pixels,
+// darkest first. A skin change is measured on it the way test_look measures
+// the render: a colour has moved once a channel moves past kChannelTol. Over
+// the whole band, 9 of 16 never rendered under 403 pixels, the test's 400.
+constexpr Rgb kSkinRamp[] = {
+    {49, 56, 33},    {57, 60, 41},    {57, 65, 41},    {66, 73, 41},   {66, 77, 49},   {74, 101, 49},
+    {82, 109, 57},   {90, 121, 57},   {107, 134, 66},  {107, 146, 74}, {115, 154, 66}, {115, 162, 74},
+    {123, 166, 74},  {132, 174, 74},  {156, 182, 99},  {181, 211, 140}};
+constexpr int kChannelTol = 24;
+constexpr int kSkinFloor = 9;
 
 // Bytes whose change shows on the creature, per Look kind: tint hue, sat and
 // val; mark density and tint; body size.
@@ -193,23 +210,73 @@ std::optional<GeneView> skinGene(const Genome& g) {
   return genes.back();
 }
 
-// False when the genome has no free skin palette gene.
+// The skin a hatchling shows, as the renderer draws it: the last skin palette
+// gene expressed at Baby, clamped to the band.
+Tint shownSkin(const Genome& g) {
+  Tint t;
+  g.forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<PaletteGene>::value && knownKind(v.header) &&
+        expressedAt(v.header, Stage::Baby, 0) && v.body[0] % kRegionCount == region::skin.v)
+      t = Tint{int8_t(int(v.body[1]) - 128), v.body[2], v.body[3]};
+  });
+  auto in = [&](const Channel& c) { return std::clamp(c.of(t), c.low, c.high); };
+  return Tint{int8_t(in(kHue)), uint8_t(in(kSat)), uint8_t(in(kVal))};
+}
+
+int movedColours(Tint a, Tint b) {
+  int n = 0;
+  for (const Rgb& c : kSkinRamp) {
+    const Rgb x = tinted(c, a, 128), y = tinted(c, b, 128);
+    n += std::max({std::abs(x.r - y.r), std::abs(x.g - y.g), std::abs(x.b - y.b)}) > kChannelTol;
+  }
+  return n;
+}
+
+// False when the genome has no free skin palette gene. Each move starts from
+// the skin the parent shows, so a band cannot swallow it, and the first rung
+// whose child moves kSkinFloor ramp colours is kept. A slot short of the floor
+// first goes further its own way, then adds a sat step, which no sibling's
+// slot takes, and only then turns round onto a sibling's side. If no rung
+// clears the floor, the one that moved the most. Some op must also move the
+// byte it finds, which the random pass may already have moved, a full kForcedStep.
 bool forceSkin(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
   const LookSlot& slot = kLookSlots[(parent.hash() + pol.lookSlot) % kLookSlotCount];
   std::optional<GeneView> skin = skinGene(d.cur);
   if (!skin) return false;
-  const GeneView& v = *skin;
-  // The step is from the parent's byte, which the random pass may already
-  // have moved; the op itself must also move the byte it finds a full step.
-  const int was = int(v.body[slot.offset]) - 128;
-  std::optional<GeneView> pv = parent.find(v.header.uid);
-  const int from = pv && pv->header.type == v.header.type ? int(pv->body[slot.offset]) - 128 : was;
-  const int step = kForcedStep + int(rng.below(kForcedSpread + 1));
-  auto land = [&](int dir) { return std::clamp(from + dir * step, slot.low, slot.high); };
-  auto full = [&](int to) { return std::abs(to - from) >= kForcedStep && std::abs(to - was) >= kForcedStep; };
-  int to = land(slot.dir);
-  if (!full(to) && full(land(-slot.dir))) to = land(-slot.dir);
-  return d.add(MutPoint{v.header.uid, slot.offset, uint8_t(was + 128), uint8_t(to + 128), false});
+  const Tint was = shownSkin(parent);
+  const int stride = kForcedStep + int(rng.below(kForcedSpread + 1)), dir = slot.dir;
+  const Channel& own = slot.ch;
+  const Channel& other = own.offset == kHue.offset ? kVal : kHue;
+  const struct { Channel ch; int by, satBy; } rungs[] = {
+      {own, dir * stride, 0},   {own, dir * (stride + kForcedSpread), 0}, {own, dir * kReach, 0},
+      {own, dir * kReach, dir * kReach}, {own, dir * kReach, -dir * kReach},
+      {own, -dir * stride, 0},  {own, -dir * kReach, 0},
+      {other, dir * kReach, 0}, {other, -dir * kReach, 0}};
+  std::optional<Draft> best;
+  int bestMoved = -1;
+  for (const auto& r : rungs) {
+    Draft t = d;
+    int bytes = 0;
+    auto move = [&](const Channel& c, int by) {
+      const uint8_t now = skin->body[c.offset];
+      const int to = std::clamp(c.of(was) + by, c.low, c.high) + c.bias;
+      if (to == now) return;
+      bytes = std::max(bytes, std::abs(to - now));
+      t.add(MutPoint{skin->header.uid, c.offset, now, uint8_t(to), false});
+    };
+    move(r.ch, r.by);
+    if (r.satBy) move(kSat, r.satBy);
+    if (bytes < kForcedStep) continue;
+    const int moved = movedColours(was, shownSkin(t.cur));
+    if (moved >= kSkinFloor) {
+      d = std::move(t);
+      return true;
+    }
+    if (moved > bestMoved) best = std::move(t), bestMoved = moved;
+  }
+  if (!best) return false;
+  d = std::move(*best);
+  return true;
 }
 
 void forceLook(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
