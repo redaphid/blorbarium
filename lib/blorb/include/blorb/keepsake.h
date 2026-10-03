@@ -36,20 +36,31 @@ enum class Chunk : uint8_t {
   Body = 6,
   Stats = 7,
   Habitat = 8,
-  Rng = 9,
+  Rng = 9,         // the dish's stream (pellet drops); the creature's rides in Occupant
   Settings = 10,
+  Wall = 11,       // the wall anchor; absent while wall time has never been known
 };
 
 struct Settings { char name[16]; uint64_t lineageId; uint32_t speciesSeed; uint8_t brightness; };
 struct RawChunk { uint8_t tag, ver; std::vector<uint8_t> bytes; };
 
+// The last wall time a TimeSource gave and the dish tick it was read at, so
+// the unpowered gap is wallNow - wallSeconds - (tick now - tick) / 10.
+struct WallAnchor { uint32_t wallSeconds; uint32_t tick; };
+
+// The whole live state: what a save writes and what SNAPSHOT sends the phone.
+// The dish tick is clock.petTicks (both advance once per tick), so it is not
+// stored twice.
 struct Snapshot {
   uint32_t seq;
   PetClock clock;
   Occupant occupant;
   Habitat habitat;
   Settings settings;
+  Rng rng;
+  std::optional<WallAnchor> wall;
   std::vector<RawChunk> unknown;   // newer firmware's chunks, carried
+  uint32_t hash() const;           // every saved field: the replay and SNAPSHOT check
 };
 
 enum class SlotState : uint8_t { Resumed, FellBack, Empty, Corrupt, NewerFormat };
@@ -61,13 +72,14 @@ class Keepsake {
   Loaded load();                       // Corrupt slots are quarantined before returning
   bool save(const Snapshot&);          // the other slot, seq + 1; saving twice leaves two valid slots
 
-  // Pure codec, for tests and for BACKUP / RESTORE.
+  // Pure codec, for tests and for SNAPSHOT; the whole state crosses the wire as this blob.
   static std::vector<uint8_t> encode(const Snapshot&);
   static std::optional<Snapshot> decode(const uint8_t*, size_t);
   // One pure step per version, each with a committed fixture test/fixtures/keepsake_v<n>.bin.
   static bool migrate(std::vector<uint8_t>& blob, uint16_t fromVersion);
 
  private:
+  struct Codec;    // keepsake.cpp; a member, so it reaches the private state Keepsake is a friend of
   Storage& store_;
   uint32_t lastSeq_ = 0;
   bool nextIsA_ = true;
