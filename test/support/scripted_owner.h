@@ -7,7 +7,7 @@
 // cursor once and holds BOOT to pick.
 #include <cstdint>
 #include <variant>
-#include "bench.h"
+#include "blorb/dish.h"
 #include "traces.h"
 
 namespace blorbtest {
@@ -16,8 +16,8 @@ class ScriptedOwner {
  public:
   struct Counts { uint32_t presses = 0, cradles = 0, tucks = 0, picks = 0, cursorMoves = 0; };
 
-  blorb::BodySample next(uint32_t ms, const Bench& bench) {
-    if (ms >= until_) choose(ms, bench);
+  blorb::BodySample next(uint32_t ms, const blorb::Dish& dish) {
+    if (ms >= until_) choose(ms, dish);
     switch (gesture_) {
       case Gesture::Press:
       case Gesture::Hold: return pressed();
@@ -38,21 +38,21 @@ class ScriptedOwner {
     until_ = ms + forMs;
   }
 
-  void choose(uint32_t ms, const Bench& bench) {
+  void choose(uint32_t ms, const blorb::Dish& dish) {
     using namespace blorb;
     // Every gesture ends at rest for a moment, so the detectors see a release.
     if (gesture_ != Gesture::Rest) return act(Gesture::Rest, ms, 2000);
-    if (const auto* c = std::get_if<Creature>(&bench.occupant())) {
+    if (const auto* c = std::get_if<Creature>(&dish.occupant())) {
       const Chemistry& chem = c->chemistry();
-      bool night = bench.clock().night();
+      bool night = dish.clock().night();
       if (night && !wasNight_ && !c->body().asleep) {
         wasNight_ = night;
         ++counts_.tucks;
         return act(Gesture::Lid, ms, kTuckMs);
       }
       wasNight_ = night;
-      if (chem.drive(drive::hunger) >= Fx::ratio(25, 100) && !bench.habitat().nearestPellet(DishPos{}) &&
-          bench.habitat().pantry > 0) {
+      if (chem.drive(drive::hunger) >= Fx::ratio(25, 100) && !dish.habitat().nearestPellet(DishPos{}) &&
+          dish.habitat().pantry > 0) {
         ++counts_.presses;
         return act(Gesture::Press, ms, kPressMs);
       }
@@ -60,11 +60,11 @@ class ScriptedOwner {
         ++counts_.cradles;
         return act(Gesture::Cradle, ms, kCradleMs);
       }
-    } else if (std::holds_alternative<Egg>(bench.occupant())) {
+    } else if (std::holds_alternative<Egg>(dish.occupant())) {
       ++counts_.cradles;
       return act(Gesture::Cradle, ms, kCradleMs);
     } else {
-      const Clutch& k = std::get<Clutch>(bench.occupant());
+      const Clutch& k = std::get<Clutch>(dish.occupant());
       if (k.sinceDeath >= Clutch::kVigilTicks) {
         if (k.count > 1 && k.cursor == 0) {
           ++counts_.cursorMoves;
