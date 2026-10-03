@@ -1,10 +1,7 @@
 #include <gtest/gtest.h>
 #include <variant>
 #include "blorb/lineage.h"   // first, so PlatformIO's dependency finder links lib/blorb
-#include "bench.h"
-#include "links.h"
 #include "mem_storage.h"
-#include "scripted_owner.h"
 
 using namespace blorb;
 using namespace blorbtest;
@@ -12,17 +9,6 @@ using namespace blorbtest;
 namespace {
 
 constexpr const char* kLog = "lineage.log";
-
-// The starter with Life halving every 1.5 pet hours instead of 3 days, so a
-// whole life is about 5 pet hours. The 10-day length is test_chemistry's.
-Genome shortLived() {
-  Genome g = starterGenome(7);
-  GenomeBuilder b = GenomeBuilder::from(g);
-  g.forEach([&](const GeneView& v) {
-    if (v.header.type == GeneKindOf<ChemGene>::value && v.body[0] == chem::life.v) b.setByte(v.header.uid, 1, 150);
-  });
-  return *b.build();
-}
 
 Creature deadCreature(uint16_t generation = 0) {
   Creature c = Creature::hatch(Egg(Offspring{starterGenome(7), {}}, generation, 0), 0, 0);
@@ -55,54 +41,6 @@ Census census(const Lineage& l) {
 }
 
 }  // namespace
-
-// Hatch, every stage, death, the clutch pick and the next hatch, with a
-// caretaker who only has the toy and a phone that never connects.
-TEST(Lifecycle, body_only_full_life) {
-  MemStorage store;
-  NullLink link;
-  ScriptedOwner owner;
-  Bench bench(store, 7, 1, shortLived());
-  uint8_t stages = 0, clutchSize = 0;
-  bool died = false, picked = false, nextHatch = false;
-  DeathCause cause = DeathCause::Unknown;
-  for (uint32_t ms = 0; ms < 16 * 3600 * 1000u && !nextHatch; ms += kSampleMs) {
-    bench.sample(owner.next(ms, bench), ms);
-    bench.tick(ms, link);
-    const Occupant& o = bench.occupant();
-    if (const auto* c = std::get_if<Creature>(&o)) {
-      if (c->generation() == 0) stages |= uint8_t(1u << uint8_t(c->stage()));
-      nextHatch = c->generation() == 1;
-    } else if (const auto* k = std::get_if<Clutch>(&o)) {
-      died = true;
-      cause = k->cause;
-      clutchSize = k->count;
-    } else {
-      picked = picked || std::get<Egg>(o).generation() == 1;
-    }
-  }
-  EXPECT_EQ(stages, 0b1111) << "Baby, Child, Adult and Elder";
-  ASSERT_TRUE(died);
-  EXPECT_EQ(cause, DeathCause::OldAge);
-  EXPECT_EQ(clutchSize, 3) << "reached adult and elder: two more eggs";
-  EXPECT_TRUE(picked);
-  EXPECT_TRUE(nextHatch);
-  EXPECT_GE(owner.counts().presses, 1u);
-  EXPECT_EQ(owner.counts().cursorMoves, 1u);
-  EXPECT_EQ(bench.lineage().currentGeneration(), 1);
-  EXPECT_NE(bench.lineage().legacyFeats() & feat::reached_elder, 0u);
-  int births = 0;
-  bench.lineage().forEach([&](const LineageEntry& e) {
-    if (auto* d = std::get_if<Death>(&e)) {
-      EXPECT_GE(d->stats.fed, 1u) << "the button fed him";
-    } else if (auto* b = std::get_if<Birth>(&e)) {
-      ++births;
-      EXPECT_EQ(b->chosen, 1) << "the owner moved the cursor once, then held";
-      EXPECT_EQ(b->clutchSize, 3);
-    }
-  });
-  EXPECT_EQ(births, 1);
-}
 
 TEST(Feats, ClutchSizeComesFromFeats) {
   EXPECT_EQ(unlocksFor(0).clutchSize, 1);

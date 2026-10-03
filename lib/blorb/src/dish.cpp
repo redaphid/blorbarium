@@ -249,9 +249,12 @@ void Dish::catchUp(uint32_t ticks) {
       tick_ += n;
       if (c->dead()) onDeath(*c);
     } else if (Egg* e = std::get_if<Egg>(&occ_)) {
-      uint32_t i = 0;
       bool ready = false;
-      while (i < n && !ready) ready = e->tick(SenseOut{}), ++i;
+      uint32_t i = 0;
+      while (i < n && !ready) {
+        ready = e->tick(SenseOut{});
+        ++i;
+      }
       n = i;
       advanceClock(n);
       tick_ += n;
