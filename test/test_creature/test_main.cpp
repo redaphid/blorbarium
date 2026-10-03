@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
+#include <initializer_list>
 #include <utility>
+#include <vector>
 #include "blorb/creature.h"
 
 using namespace blorb;
@@ -176,6 +178,65 @@ TEST(Lifecycle, LowLifeDiesOfOldAgeAndTheTickStops) {
   uint32_t h = r.c.hash();
   r.run(20);
   EXPECT_EQ(r.c.hash(), h) << "a dead creature does not tick";
+}
+
+namespace {
+
+// The starter plus a poison death: toxin past 0.9 writes Poisoned's code and dies.
+Genome withPoisonDeath() {
+  constexpr uint8_t kPoisonedCode = 128 + 8 * 8;   // 8/16 as a signed byte
+  GenomeBuilder b = GenomeBuilder::from(starterGenome(7));
+  b.append(ReceptorGene{chem::toxin.v, locus::cause.v, 230, kPoisonedCode, 128, 1}, GeneFlags::Mutable);
+  b.append(ReceptorGene{chem::toxin.v, locus::die.v, 230, 255, 128, 1}, GeneFlags::Mutable);
+  return *b.build();
+}
+
+// The chemical a cause receptor reads, at the level that fires it.
+struct Trigger { ChemId chem; Fx level; };
+std::vector<Trigger> causeTriggers(const Phenotype& p) {
+  std::vector<Trigger> out;
+  for (const Receptor& r : p.chem.receptors)
+    if (r.locus == locus::cause) out.push_back({r.chem, r.invert ? Fx::zero() : Fx::one()});
+  return out;
+}
+
+ChemId starvationChem(const Phenotype& p) {
+  for (const Trigger& t : causeTriggers(p))
+    if (t.chem != chem::life && t.chem != chem::injury && t.chem != chem::toxin) return t.chem;
+  return ChemId{0};
+}
+
+DeathCause dieOf(std::initializer_list<Trigger> triggers) {
+  Rig r(withPoisonDeath());
+  r.run(10);
+  for (const Trigger& t : triggers) r.c.inject(t.chem, t.level);
+  r.step();
+  return r.c.dead() ? r.c.cause() : DeathCause::Unknown;
+}
+
+}  // namespace
+
+TEST(Lifecycle, EachCauseAloneDecodesToItself) {
+  Rig r(withPoisonDeath());
+  ASSERT_EQ(causeTriggers(r.c.phenotype()).size(), 4u);
+  ChemId starving = starvationChem(r.c.phenotype());
+  ASSERT_NE(starving.v, 0);
+  EXPECT_EQ(dieOf({{chem::life, Fx::ratio(5, 100)}}), DeathCause::OldAge);
+  EXPECT_EQ(dieOf({{starving, Fx::one()}}), DeathCause::Starved);
+  EXPECT_EQ(dieOf({{chem::injury, Fx::one()}}), DeathCause::Injured);
+  EXPECT_EQ(dieOf({{chem::toxin, Fx::one()}}), DeathCause::Poisoned);
+}
+
+// Causes that fire together sum on one locus; the sum must still name the
+// most serious one, not a third cause.
+TEST(Lifecycle, OldAndStarvingDiesStarvedAndWorseCausesWin) {
+  ChemId starving = starvationChem(Rig(withPoisonDeath()).c.phenotype());
+  const Trigger old{chem::life, Fx::ratio(5, 100)}, starved{starving, Fx::one()}, injured{chem::injury, Fx::one()},
+      poisoned{chem::toxin, Fx::one()};
+  EXPECT_EQ(dieOf({old, starved}), DeathCause::Starved);
+  EXPECT_EQ(dieOf({old, injured}), DeathCause::Injured);
+  EXPECT_EQ(dieOf({starved, injured}), DeathCause::Injured);
+  EXPECT_EQ(dieOf({old, starved, injured, poisoned}), DeathCause::Poisoned);
 }
 
 TEST(Replay, SameGenomeAndInputsGiveTheSameHash) {
