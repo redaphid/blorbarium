@@ -110,6 +110,51 @@ def literal_pieces(value, indent):
     return ("\n" + indent).join('"%s"' % p for p in pieces)
 
 
+LITERAL = r'"(?:[^"\\]|\\.)*"'
+# gtest prints a container as { "a", "b" }; past 32 elements it ends in "...",
+# which this refuses, so a truncated list is never blessed.
+STRINGS = re.compile(r"%s(?:,\s*%s)*" % (LITERAL, LITERAL))
+
+
+def braces(src, open_at):
+    """The offset of the brace closing the one at `open_at`, skipping string literals."""
+    depth, i = 0, open_at
+    while i < len(src):
+        c = src[i]
+        if c == '"':
+            i = re.compile(LITERAL).match(src, i).end()
+            continue
+        depth += c == "{"
+        depth -= c == "}"
+        if depth == 0:
+            return i
+        i += 1
+    return None
+
+
+def rewrite_strings(src, span, args, expected, value):
+    """The source with the expected list of strings (inline, or a variable defined above) set to `value`."""
+    items = re.findall(LITERAL, value)
+    if "{" in expected:
+        open_at = src.index("{", span[0] + len(args[0]) + 1)
+    else:
+        if not re.fullmatch(r"\w+", expected):
+            return None
+        defs = list(re.finditer(r"\b%s\s*=?\s*\{" % expected, src[: span[0]]))
+        if not defs:
+            return None
+        open_at = defs[-1].end() - 1
+    close_at = braces(src, open_at)
+    if close_at is None:
+        return None
+    body = src[open_at + 1:close_at]
+    if "\n" not in body:
+        return src[: open_at + 1] + ", ".join(items) + src[close_at:]
+    indent = re.search(r"\n(\s*)\S", body).group(1)
+    closing = body[body.rfind("\n"):]
+    return src[: open_at + 1] + "".join("\n%s%s," % (indent, s) for s in items) + closing + src[close_at:]
+
+
 def rebless(log_text, root):
     unhandled = 0
     edits = {}
@@ -134,6 +179,14 @@ def rebless(log_text, root):
             new_arg = expected[: len(expected) - len(expected.lstrip())] + literal_pieces(value, indent)
             src = src[: span[0]] + args[0] + "," + new_arg + src[span[1]:]
             print("blessed %s:%d" % (path, line))
+        elif value.startswith("{") and value.endswith("}") and STRINGS.fullmatch(value[1:-1].strip() or '""'):
+            new = rewrite_strings(src, span, args, stripped, value)
+            if new is None:
+                print("left alone (no string list to rewrite): %s:%d" % (path, line))
+                unhandled += 1
+                continue
+            src = new
+            print("blessed %s:%d (string list)" % (path, line))
         elif re.fullmatch(r"k\w+", stripped) and re.fullmatch(r"\d+", value):
             pat = re.compile(r"(\b%s\s*=\s*)0x[0-9a-fA-F]+u\b" % stripped)
             if not pat.search(src):
