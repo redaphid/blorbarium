@@ -41,6 +41,10 @@ struct Phenotype {
   std::vector<StimResponse> stimuli;   // several genes for one stimulus all apply
   std::vector<Instinct> instincts;     // every instinct expressed so far
   Size size{};
+  // How a recent-stimulus locus fades each tick. Scaling by exactly 1/2 is the
+  // shift a genome without a memory gene has always had.
+  static constexpr Decay kOneTickMemory{uint32_t(1) << 31, 0};
+  Decay recentFade = kOneTickMemory;
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
@@ -79,12 +83,14 @@ class Creature {
   // One 100 ms tick, in this order and no other (replays depend on it):
   //  1 sense loci from `senses` (detectors and habitat already wrote them)
   //  2 stimuli -> stimulus genes -> chemicals; recent loci = 1; whenAsleep gate; wakes
+  //    ends a sleep, an interrupting stimulus ends a waking action
   //  3 chemistry.step
   //  4 lifecycle: stage loci express the next stage once; die locus; reflex
   //    loci rising past 0.5 start a reflex (strength = locus level)
   //  5 brain on even ticks: think while awake, dream while asleep
   //  6 behaviour step, unless a reflex owns the body; its stimuli land next tick
-  //  7 face: expression genes over the drive mix, with hysteresis; stats; recent loci halve
+  //  7 face: expression genes over the drive mix, with hysteresis; stats; recent loci fade
+  //    at the memory gene's half-life (one tick without one)
   void tick(const SenseOut& senses, Habitat&, Behaviours&, uint32_t tick);
 
   // The unpowered catch-up (DEVIATIONS.md 3): `ticks` of chemistry in one

@@ -252,6 +252,9 @@ Genome starterGenome(uint32_t speciesSeed) {
   const char motto[] = "it is WRITTEN";
   for (size_t i = 0; i + 1 < sizeof motto; ++i) note.text[i] = uint8_t(motto[i]);
   g.b.append(note, GeneFlags::OwnerEditable);
+  // A stimulus stays recent through the decision it forces and the next. Never
+  // deleted: losing it would snap the line back to a one-tick memory.
+  g.b.append(MemoryGene{timeByte(3 * kSecond)}, kVital);
 
   return *g.b.build();
 }

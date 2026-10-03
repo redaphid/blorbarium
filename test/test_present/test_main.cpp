@@ -105,8 +105,8 @@ TEST(Golden, Egg) {
   Rig r(starterGenome(7));
   r.run(10000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=0 gen=0 stage=0 seed=d414320c at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 "
-            "0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=999 egg=5 fade=0 eggs=0@0 "
+            "kind=0 gen=0 stage=0 seed=eb27fd26 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 "
+            "glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=999 egg=5 fade=0 eggs=0@0 "
             "hint=0/0 0 stim=0+0 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 "
             "r11,128,128 m0,4,0 i2@0,0 pantry=0");
 }
@@ -116,9 +116,9 @@ TEST(Golden, Hatchling) {
   r.hatch();
   r.run(20000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=70,-208 facing=781 scale=55 pose=0/4 face=0<0 349 t210 "
+            "kind=1 gen=0 stage=0 seed=91c9a5b1 at=213,49 facing=-750 scale=55 pose=1/80 face=0<0 349 t210 "
             "reflex=0/0 0 0 glow=1000 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=255+65535 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
+            "fade=0 eggs=0@0 hint=0/0 0 stim=33+41 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
             "r0,128,128 r0,140,255 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
@@ -129,10 +129,10 @@ TEST(Golden, IdleAdult) {
   r.creature().force(action::rest);
   r.run(1000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=2 seed=50b440b1 at=0,0 facing=0 scale=103 pose=0/29 face=0<0 349 t30 "
-            "reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=255+65535 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
-            "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
+            "kind=1 gen=0 stage=2 seed=91c9a5b1 at=113,0 facing=0 scale=103 pose=0/9 face=0<0 349 t30 reflex=0/0 "
+            "0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 fade=0 eggs=0@0 "
+            "hint=0/0 0 stim=35+30 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 "
+            "r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
 TEST(Golden, Eating) {
@@ -143,9 +143,9 @@ TEST(Golden, Eating) {
   r.creature().force(action::eat);
   r.runUntil([&] { return r.dish.appearance().mouth != Mouthful::Nothing; }, 60000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=64,62 facing=242 scale=55 pose=2/0 face=0<0 349 t19 "
+            "kind=1 gen=0 stage=0 seed=91c9a5b1 at=86,50 facing=316 scale=55 pose=2/0 face=0<0 349 t15 "
             "reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=1 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=8+9 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
+            "fade=0 eggs=0@0 hint=0/0 0 stim=8+6 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
             "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=3");
 }
 
@@ -155,10 +155,10 @@ TEST(Golden, Foresee) {
   r.creature().force(action::foresee);
   r.run(1500);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=0,0 facing=0 scale=55 pose=4/24 face=0<0 349 t25 "
-            "reflex=0/0 0 0 glow=1000 seer=1 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=33+14 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
-            "r0,128,128 r0,140,255 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
+            "kind=1 gen=0 stage=0 seed=91c9a5b1 at=53,0 facing=0 scale=55 pose=4/23 face=0<0 349 t25 reflex=0/0 "
+            "0 0 glow=1000 seer=1 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 fade=0 "
+            "eggs=0@0 hint=0/0 0 stim=33+15 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 "
+            "r0,140,255 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
 TEST(Golden, Hop) {
@@ -172,10 +172,10 @@ TEST(Golden, Hop) {
   r.runUntil([&] { return r.dish.appearance().reflexActive; }, 3000);
   r.run(300);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=0,0 facing=0 scale=55 pose=9/4 face=2<0 643 t5 reflex=1/0 "
-            "416 643 glow=1000 seer=0 asleep=0 dream=0 call=1 mouth=0 injury=0 wobble=0 night=998 egg=0 fade=0 "
-            "eggs=0@0 hint=0/0 0 stim=2+5 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 "
-            "r0,140,255 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
+            "kind=1 gen=0 stage=0 seed=91c9a5b1 at=239,0 facing=0 scale=55 pose=9/4 face=2<0 643 t5 reflex=1/0 "
+            "416 643 glow=0 seer=0 asleep=1 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 fade=0 "
+            "eggs=0@0 hint=0/0 0 stim=2+6 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 "
+            "r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
 TEST(Golden, Sleep) {
@@ -186,10 +186,10 @@ TEST(Golden, Sleep) {
   r.runUntil([&] { return r.dish.appearance().asleep; }, 10000);
   r.run(2000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=50b440b1 at=0,0 facing=0 scale=55 pose=3/30 face=8<0 953 t21 "
-            "reflex=0/0 0 0 glow=0 seer=0 asleep=1 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=255+65535 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
-            "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
+            "kind=1 gen=0 stage=0 seed=91c9a5b1 at=53,0 facing=0 scale=55 pose=3/29 face=8<0 953 t21 reflex=0/0 "
+            "0 0 glow=0 seer=0 asleep=1 dream=0 call=0 mouth=0 injury=0 wobble=0 night=998 egg=0 fade=0 eggs=0@0 "
+            "hint=0/0 0 stim=35+31 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 "
+            "r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
 TEST(Golden, Remains) {
@@ -198,10 +198,10 @@ TEST(Golden, Remains) {
   r.creature().inject(chem::life, Fx::ratio(5, 100));
   r.run(60000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=2 gen=0 stage=1 seed=50b440b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 "
-            "0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=997 egg=0 fade=33 eggs=1@0 "
+            "kind=2 gen=0 stage=1 seed=91c9a5b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 "
+            "glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=997 egg=0 fade=33 eggs=1@0 "
             "hint=0/0 0 stim=0+0 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 "
-            "r11,128,128 m0,4,0 i2@52,-545 pantry=4 e0,2,4");
+            "r11,128,128 m0,4,0 i2@52,-545 pantry=4 e0,3,3");
 }
 
 TEST(Golden, Clutch) {
@@ -211,10 +211,10 @@ TEST(Golden, Clutch) {
   r.creature().inject(chem::life, Fx::ratio(5, 100));
   r.run(Clutch::kVigilTicks * kTickMs + 5000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=3 gen=1 stage=0 seed=50b440b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 "
-            "0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=956 egg=0 fade=0 eggs=3@0 "
+            "kind=3 gen=1 stage=0 seed=91c9a5b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 "
+            "glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=956 egg=0 fade=0 eggs=3@0 "
             "hint=0/0 0 stim=0+0 unknown=1 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 "
-            "r0,128,128 i2@52,-545 pantry=4 e0,2,4 e0,1,4 e114,2,5");
+            "r0,128,128 i2@52,-545 pantry=4 e0,3,3 e0,2,8 e0,1,5");
 }
 
 // ---- properties ------------------------------------------------------------------------
@@ -338,10 +338,10 @@ TEST(Mouth, WhatHeBitIsWhatHeChews) {
     EXPECT_EQ(c.body().mouth, Mouthful::Nothing) << "and then it is gone";
     if (bitten == Mouthful::RottenPellet)
       EXPECT_EQ(atBite,
-                "kind=1 gen=0 stage=0 seed=d414320c at=0,0 facing=0 scale=55 pose=2/0 face=0<0 349 t54100 "
-                "reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=1000 egg=0 "
-                "fade=0 eggs=0@0 hint=0/0 0 stim=35+1 unknown=0 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
-                "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@0,0 pantry=0");
+                "kind=1 gen=0 stage=0 seed=eb27fd26 at=0,0 facing=0 scale=55 pose=2/0 face=0<0 349 t54100 reflex=0/0 "
+                "0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=1000 egg=0 fade=0 "
+                "eggs=0@0 hint=0/0 0 stim=35+1 unknown=0 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 "
+                "r0,140,160 r11,128,128 m0,4,0 i2@0,0 pantry=0");
   }
 }
 

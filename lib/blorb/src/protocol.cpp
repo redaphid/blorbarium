@@ -294,7 +294,8 @@ void cmd_schema(Dish&, const Request&, Reply& r) {
   for (const DriveInfo& x : DRIVES) row("drive %u %s", unsigned(x.id.v), x.name);
   for (const LocusInfo& x : LOCI) row("locus %u %s %s %d", unsigned(x.id.v), x.name, kDirs[uint8_t(x.dir)], int(x.situation));
   for (const StimInfo& x : STIMULI)
-    row("stim %u %s %s %d", unsigned(x.id.v), x.name, kSources[uint8_t(x.source)], int(x.situation));
+    row("stim %u %s %s %d %d", unsigned(x.id.v), x.name, kSources[uint8_t(x.source)], int(x.situation),
+        int(x.interrupts));
   for (const ActionInfo& x : ACTIONS)
     row("action %u %s %u %s", unsigned(x.id.v), x.name, unsigned(x.minTicks),
         x.selfStim == stim::none ? "none" : nameOf(STIMULI, x.selfStim));

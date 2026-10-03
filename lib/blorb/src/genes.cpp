@@ -217,6 +217,21 @@ void describe_temperament(const GeneView& v, Describe& d) {
   d.field("traceHalfLife", g.traceHalfLife);
 }
 
+// ---- memory --------------------------------------------------------------------
+// The half-life of a recent-stimulus locus, so how long the brain still sees a
+// stimulus as its situation. Capped near a minute: past that, "recent" would
+// mean "ever" and the feature would turn into a bias.
+constexpr uint8_t kLongestMemory = 72;
+const MutRule rules_memory[] = {N};
+void express_memory(const GeneView& v, Phenotype& p) {
+  auto g = decode<MemoryGene>(v);
+  p.recentFade = g.recentHalfLife == 0 ? Phenotype::kOneTickMemory
+                                       : decayFromByte(std::min(g.recentHalfLife, kLongestMemory));
+}
+void describe_memory(const GeneView& v, Describe& d) {
+  d.field("recentHalfLife", decode<MemoryGene>(v).recentHalfLife);
+}
+
 // ---- palette -------------------------------------------------------------------
 const MutRule rules_palette[] = {X, N, N, N, A, N};
 void express_palette(const GeneView& v, Phenotype& p) {

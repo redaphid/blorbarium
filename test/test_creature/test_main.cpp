@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <initializer_list>
+#include <optional>
 #include <utility>
 #include <vector>
 #include "blorb/creature.h"
@@ -308,6 +309,139 @@ TEST(Lifecycle, OldAndStarvingDiesStarvedAndWorseCausesWin) {
   EXPECT_EQ(dieOf({old, injured}), DeathCause::Injured);
   EXPECT_EQ(dieOf({starved, injured}), DeathCause::Injured);
   EXPECT_EQ(dieOf({old, starved, injured, poisoned}), DeathCause::Poisoned);
+}
+
+namespace {
+
+// The starter with its memory gene set to `halfLifeByte`, or without one.
+Genome withMemory(std::optional<uint8_t> halfLifeByte) {
+  Genome g = starterGenome(7);
+  GenomeBuilder b = GenomeBuilder::from(g);
+  g.forEach([&](const GeneView& v) {
+    if (v.header.type != GeneKindOf<MemoryGene>::value) return;
+    if (halfLifeByte) b.setByte(v.header.uid, 0, *halfLifeByte);
+    else b.erase(v.header.uid);
+  });
+  return *b.build();
+}
+
+// Steps to the brain's next decision of its own and a tick into it. A forced
+// action would not do: force() bypasses the brain, so the brain's own hold
+// and credit would belong to some other action.
+ActionId intoFreshAction(Rig& r) {
+  ActionId was = r.c.action();
+  while (r.c.action() == was && r.tick < 4000) r.step();
+  r.step();
+  return r.c.action();
+}
+
+// Bored, and certain that hopping in circles cures boredom whenever `cue` is
+// recent, so he hops at any decision that sees it. Returns the action he has
+// just chosen, a tick into its hold.
+ActionId bracedFor(Rig& r, LocusId cue) {
+  r.run(50);
+  r.c.prophesy(cue, action::hop_circles, drive::boredom, -Fx::one());
+  r.c.inject(driveChem(drive::boredom), Fx::one());
+  return intoFreshAction(r);
+}
+
+bool interrupts(StimId id) {
+  for (const StimInfo& s : STIMULI) if (s.id == id) return s.interrupts;
+  return false;
+}
+
+Fx believedFear(const Creature& c, ActionId a) {
+  Fx sum;
+  for (LocusId f : FEATURES) sum += c.brain().predict(f, a, drive::fear);
+  return sum;
+}
+
+}  // namespace
+
+TEST(Interrupt, AKnockCutsTheActionShortAndTheNextDecisionSeesIt) {
+  Rig r;
+  ASSERT_NE(bracedFor(r, locus::recent(stim::knock)), action::hop_circles);
+  r.fire(stim::knock);
+  for (uint32_t i = 0; i < kBrainEvery && r.c.action() != action::hop_circles; ++i) r.step();
+  EXPECT_EQ(r.c.action(), action::hop_circles) << "a fresh decision, within one brain period, with the knock recent";
+}
+
+TEST(Interrupt, ANonInterruptingStimulusLeavesTheActionToItsHold) {
+  Rig r;
+  ASSERT_FALSE(interrupts(stim::fed));
+  ActionId held = bracedFor(r, locus::recent(stim::fed));
+  ASSERT_NE(held, action::hop_circles);
+  r.fire(stim::fed);
+  for (uint32_t i = 0; i + 4 < ACTIONS[held.v].minTicks; ++i) {
+    r.step();
+    EXPECT_EQ(r.c.action(), held) << ACTIONS[held.v].name << ", tick " << i << " after the stimulus";
+  }
+}
+
+// The shake's fear lands on the action it cut short at once, not whenever
+// that action's hold would have run out. The brain chose the action, so the
+// credit is its own.
+TEST(Interrupt, AShakeBlamesTheActionItCutShort) {
+  Rig r;
+  r.run(50);
+  ActionId cut = intoFreshAction(r);
+  r.run(2);
+  ASSERT_EQ(r.c.action(), cut) << "still inside its hold";
+  Fx before = believedFear(r.c, cut);
+  r.fire(stim::shake);
+  r.run(kBrainEvery);
+  EXPECT_GT(believedFear(r.c, cut), before + Fx::ratio(5, 100)) << ACTIONS[cut.v].name;
+}
+
+TEST(Interrupt, SleepIsNotInterrupted) {
+  Rig r;
+  r.run(50);
+  r.c.inject(driveChem(drive::sleepiness), Fx::one());
+  r.c.force(action::sleep);
+  r.step();
+  ASSERT_TRUE(r.c.body().asleep);
+  for (const StimInfo& s : STIMULI) {
+    if (!s.interrupts) continue;
+    r.fire(s.id);
+    r.run(kBrainEvery);
+    EXPECT_TRUE(r.c.body().asleep) << s.name;
+    EXPECT_EQ(r.c.action(), action::sleep) << s.name;
+  }
+}
+
+TEST(Memory, WithoutTheGeneARecentLocusHalvesEveryTickAsItAlwaysDid) {
+  Rig r(withMemory(std::nullopt));
+  r.run(50);
+  r.fire(stim::put_down);
+  for (int n = 1; n <= 25; ++n) {
+    EXPECT_EQ(r.locus(locus::recent(stim::put_down)).raw, Fx::kOne >> n) << n << " ticks";
+    r.step();
+  }
+}
+
+TEST(Memory, TheGenesHalfLifeIsHowLongARecentLocusLasts) {
+  for (auto [byte, halfLifeTicks] : {std::pair{uint8_t(13), 20}, std::pair{uint8_t(25), 40}}) {
+    Rig r(withMemory(byte));
+    r.run(50);
+    r.fire(stim::put_down);
+    r.run(halfLifeTicks - 1);
+    Fx left = r.locus(locus::recent(stim::put_down));
+    EXPECT_GT(left, Fx::ratio(46, 100)) << int(byte);
+    EXPECT_LT(left, Fx::ratio(54, 100)) << int(byte);
+  }
+}
+
+// A stimulus that does not interrupt is seen at the decision after the hold
+// only by a creature whose memory outlasts the hold.
+TEST(Memory, TheBrainSeesAStimulusForTheGenesHalfLife) {
+  Rig r(withMemory(49));   // 16 s
+  r.run(50);
+  ActionId held = intoFreshAction(r);
+  r.fire(stim::fed);
+  uint32_t after = 0;
+  while (r.c.action() == held && after < 4000) r.step(), ++after;
+  ASSERT_GE(after, 10u) << ACTIONS[held.v].name << " ended before a one-tick memory would forget";
+  EXPECT_GT(r.locus(locus::recent(stim::fed)), Fx::ratio(6, 10)) << "what the decision " << after << " ticks on read";
 }
 
 TEST(Replay, SameGenomeAndInputsGiveTheSameHash) {

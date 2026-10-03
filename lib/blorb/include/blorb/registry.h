@@ -32,7 +32,7 @@ namespace drive {
 }  // namespace drive
 namespace stim {
 inline constexpr StimId none{255};
-#define BLORB_STIM(id, name, src, sit) inline constexpr StimId name{id};
+#define BLORB_STIM(id, name, src, sit, intr) inline constexpr StimId name{id};
 #include "blorb/defs/stimuli.def"
 #undef BLORB_STIM
 }  // namespace stim
@@ -82,7 +82,7 @@ namespace feat {
 struct ChemInfo   { ChemId id; const char* name; uint16_t rgb565; bool show; };
 struct DriveInfo  { DriveId id; const char* name; };
 struct LocusInfo  { LocusId id; const char* name; LocusDir dir; bool situation; };
-struct StimInfo   { StimId id; const char* name; StimSource source; bool situation; };
+struct StimInfo   { StimId id; const char* name; StimSource source; bool situation, interrupts; };
 struct ActionInfo { ActionId id; const char* name; uint16_t minTicks; StimId selfStim; };
 struct PoseInfo   { PoseId id; const char* name; };
 struct ExprInfo   { ExprId id; const char* name; };
@@ -107,7 +107,7 @@ inline constexpr LocusInfo LOCI[] = {
 #undef BLORB_LOCUS
 };
 inline constexpr StimInfo STIMULI[] = {
-#define BLORB_STIM(id, name, src, sit) {StimId{id}, #name, StimSource::src, sit != 0},
+#define BLORB_STIM(id, name, src, sit, intr) {StimId{id}, #name, StimSource::src, sit != 0, intr != 0},
 #include "blorb/defs/stimuli.def"
 #undef BLORB_STIM
 };

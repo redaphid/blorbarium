@@ -44,8 +44,9 @@ std::vector<int64_t> fingerprint(const Phenotype& p) {
   for (const auto& x : p.faces) f.insert(f.end(), {x.face.v, x.weight.raw});
   for (const auto& x : p.palette) f.insert(f.end(), {x.region.v, x.tint.hue, x.tint.val});
   for (const auto& x : p.marks) f.insert(f.end(), {x.layer, x.variant});
-  f.insert(f.end(), {p.size.base, p.temperament.learnRate.raw, p.egg.incubateTicks, p.habitat.refillTicks,
-                     p.expressedStages, int64_t(p.chem.reactions.size()), int64_t(p.instincts.size())});
+  f.insert(f.end(), {p.size.base, p.temperament.learnRate.raw, p.recentFade.keep, p.egg.incubateTicks,
+                     p.habitat.refillTicks, p.expressedStages, int64_t(p.chem.reactions.size()),
+                     int64_t(p.instincts.size())});
   return f;
 }
 

@@ -149,19 +149,23 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   };
 
   // 2 stimuli through this creature's stimulus genes
-  bool woken = false;
+  bool woken = false, interrupted = false;
   for (const SenseOut* in : {&senses, &self})
     for (uint8_t i = 0; i < in->stimCount; ++i) {
       StimId s = in->stimuli[i];
       chem_.set(locus::recent(s), Fx::one());
       count(stats_, s);
+      const StimInfo* row = rowOf(STIMULI, s);
+      interrupted = interrupted || (row && row->interrupts);
       for (const Phenotype::StimResponse& r : pheno_.stimuli) {
         if (r.stim != s || (body_.asleep && !r.whenAsleep)) continue;
         for (int k = 0; k < 3; ++k) chem_.add(r.chem[k], r.amount[k]);
         woken = woken || r.wakes;
       }
     }
-  if (woken && body_.asleep && !actionDone_) finish();
+  // Ending the action, minTicks or not, makes the next think credit it with
+  // what the stimulus just did and decide while the stimulus is still recent.
+  if (!actionDone_ && (body_.asleep ? woken : interrupted)) finish();
 
   // 3 chemistry
   Fx before[kReflexCount];
@@ -233,7 +237,8 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   for (size_t a = 0; a < kActionCount; ++a)
     if (ACTIONS[a].id == action_) stats_.actionTicks[a] = bump(stats_.actionTicks[a]);
   ++stats_.ageTicks;
-  for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx{chem_.locus[l].raw >> 1};
+  for (uint8_t l = kRecentBase; l < kRecentEnd; ++l)
+    chem_.locus[l] = applyDecay(chem_.locus[l], pheno_.recentFade, tick);
 }
 
 void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick) {
@@ -243,7 +248,7 @@ void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick)
   chem_.stepCoarse(pheno_.chem, ticks, tick);
   growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
   stats_.ageTicks += ticks;
-  // Recent loci halve every tick, so a coarse step leaves nothing of them.
+  // A coarse step spans an unpowered gap, long past any stimulus being recent.
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx::zero();
 }
 

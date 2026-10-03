@@ -52,19 +52,24 @@ void look(const Phenotype& p, const Chemistry* chem, Appearance& a) {
   }
 }
 
-// Recent loci are set to 1 by a stimulus and halve every tick, so the
-// strongest one is the latest stimulus and its halvings are its age.
-void lastStimulus(const Chemistry& c, Appearance& a) {
+// Recent loci are set to 1 by a stimulus and all fade at the same rate, so
+// the strongest one is the latest stimulus, and the ticks that fade takes to
+// bring 1 down to its level are its age.
+void lastStimulus(const Chemistry& c, Decay fade, Appearance& a) {
   a.lastStim = stim::none;
   a.ticksSinceStim = UINT16_MAX;
   int best = -1;
   for (int l = kRecentBase; l < kRecentBase + 64; ++l)
     if (c.locus[l].raw > 0 && (best < 0 || c.locus[l] > c.locus[best])) best = l;
   if (best < 0) return;
-  int halvings = 0;
-  for (int32_t raw = Fx::kOne; raw > c.locus[best].raw && halvings < 32; raw >>= 1) ++halvings;
+  uint16_t lo = 0, hi = UINT16_MAX;
+  while (lo < hi) {
+    uint16_t mid = uint16_t(lo + (hi - lo) / 2);
+    if (applyDecayTicks(Fx::one(), fade, mid) <= c.locus[best]) hi = mid;
+    else lo = uint16_t(mid + 1);
+  }
   a.lastStim = StimId{uint8_t(best - kRecentBase)};
-  a.ticksSinceStim = uint16_t(halvings);
+  a.ticksSinceStim = lo;
 }
 
 // The gesture for the most pressing need, while he is awake to be helped.
@@ -123,7 +128,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
   careHint(c, a);
-  lastStimulus(chem, a);
+  lastStimulus(chem, c.phenotype().recentFade, a);
 }
 
 void presentEgg(const Egg& e, Appearance& a) {

@@ -382,7 +382,7 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
     for (const std::string& l : out) listed = listed || l.rfind(std::string("#5 + twist ") + t.name + " ", 0) == 0;
     EXPECT_TRUE(listed) << t.name;
   }
-  for (const char* row : {"#5 + stim 2 shake body 1", "#5 + gene 32 palette 6 look XNNNAN", "#5 + cmd TWIST 1",
+  for (const char* row : {"#5 + stim 2 shake body 1 1", "#5 + gene 32 palette 6 look XNNNAN", "#5 + cmd TWIST 1",
                           "#5 + locus 133 startle act 0", "#5 + sense tilt"}) {
     bool listed = false;
     for (const std::string& l : out) listed = listed || l == row;
@@ -403,9 +403,9 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=follow_tilt face=neutral asleep=0",
       "#2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
-      "#2b + body life=1000 injury=0 glow=436 dreaming=0",
+      "#2b + body life=1000 injury=0 glow=444 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=1 time=unknown",
       "#2b OK",
   };
@@ -433,7 +433,7 @@ TEST(Golden, Diff) {
       "#3c + point=38",  "#3c + kind=receptor",   "#3c + byte=4", "#3c + from=128", "#3c + to=132",
       "#3c + point=56",  "#3c + kind=stimulus",   "#3c + byte=6", "#3c + from=115", "#3c + to=123",
       "#3c + point=90",  "#3c + kind=expression", "#3c + byte=1", "#3c + from=0",   "#3c + to=6",
-      "#3c + point=91",  "#3c + kind=palette",    "#3c + byte=1", "#3c + from=139", "#3c + to=168",
+      "#3c + point=91",  "#3c + kind=palette",    "#3c + byte=1", "#3c + from=139", "#3c + to=104",
       "#3c OK 4",
   };
   EXPECT_EQ(link.sent, want);
@@ -505,7 +505,7 @@ TEST(Golden, Genome) {
   Lines out = r.send("#60 GENOME");
   EXPECT_EQ(unchunk(out, "#60"), std::get<Creature>(r.dish.occupant()).genome().bytes());
   EXPECT_EQ(out.size(), 14u);
-  EXPECT_EQ(out.back(), "#60 OK 1528 c2e84bf2") << "length and CRC of the quick-egg starter";
+  EXPECT_EQ(out.back(), "#60 OK 1537 1d63d095") << "length and CRC of the quick-egg starter";
 }
 
 TEST(Golden, Chem) {
@@ -520,12 +520,14 @@ TEST(Golden, Chem) {
       "#62 + chem=5 name=fear level=8",          "#62 + chem=6 name=pain level=1",
       "#62 + chem=7 name=discomfort level=3",    "#62 + chem=8 name=need_touch level=1",
       "#62 + chem=16 name=life level=1000",      "#62 + chem=18 name=energy level=800",
-      "#62 + chem=23 name=melatonin level=3",    "#62 + chem=24 name=vision level=88",
+      "#62 + chem=23 name=melatonin level=3",    "#62 + chem=24 name=vision level=97",
       "#62 + locus=0 name=always level=1000",    "#62 + locus=1 name=tilt_x level=500",
       "#62 + locus=2 name=tilt_y level=500",     "#62 + locus=7 name=day_sin level=503",
       "#62 + locus=8 name=day_cos level=1000",   "#62 + locus=9 name=owner_near level=1000",
-      "#62 + locus=16 name=marble_near level=780", "#62 + locus=18 name=pantry level=1000",
-      "#62 + locus=136 name=glow level=436",     "#62 OK 21",
+      "#62 + locus=16 name=marble_near level=769", "#62 + locus=18 name=pantry level=1000",
+      "#62 + locus=96 name=recent_self_called level=3", "#62 + locus=97 name=recent_self_foresaw level=39",
+      "#62 + locus=98 name=recent_woke level=955", "#62 + locus=99 name=recent_hatched level=1",
+      "#62 + locus=136 name=glow level=444",     "#62 OK 25",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);
 }
@@ -552,7 +554,7 @@ TEST(Golden, LineageOverNineGenerations) {
       "#63 + death gen=6 cause=old_age age=0 feats=0x20 name=Grungo",
       "#63 + birth gen=7 chosen=0 of=1 ops=7",
       "#63 + death gen=7 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=8 chosen=0 of=1 ops=9",
+      "#63 + birth gen=8 chosen=0 of=1 ops=8",
       "#63 + checkpoint gen=8",
       "#63 + death gen=8 cause=old_age age=0 feats=0x20 name=Grungo",
       "#63 + birth gen=9 chosen=0 of=1 ops=4",
@@ -584,7 +586,7 @@ TEST(Golden, Portrait) {
   Lines nine = ask(dish, link, "#68 PORTRAIT 9");
   got.insert(got.end(), nine.begin(), nine.end());
   Lines want = {
-      "#67 + stage=baby scale=55 seed=d414320c marks=1",
+      "#67 + stage=baby scale=55 seed=eb27fd26 marks=1",
       "#67 + region=skin hue=11 sat=128 val=128",
       "#67 + region=belly hue=0 sat=128 val=137",
       "#67 + region=cloak hue=0 sat=128 val=118",
@@ -594,14 +596,14 @@ TEST(Golden, Portrait) {
       "#67 + region=shell hue=11 sat=128 val=128",
       "#67 + mark layer=0 variant=4 hue=0",
       "#67 OK",
-      "#68 + stage=adult scale=103 seed=e0415e2f marks=1",
-      "#68 + region=skin hue=13 sat=128 val=158",
+      "#68 + stage=adult scale=103 seed=43485f3a marks=1",
+      "#68 + region=skin hue=3 sat=128 val=159",
       "#68 + region=belly hue=0 sat=128 val=137",
       "#68 + region=cloak hue=-90 sat=110 val=120",
       "#68 + region=eye hue=0 sat=128 val=128",
       "#68 + region=mouth hue=0 sat=128 val=128",
-      "#68 + region=glow hue=0 sat=140 val=160",
-      "#68 + region=shell hue=13 sat=128 val=158",
+      "#68 + region=glow hue=0 sat=128 val=128",
+      "#68 + region=shell hue=3 sat=128 val=159",
       "#68 + mark layer=0 variant=4 hue=0",
       "#68 OK",
   };
@@ -621,9 +623,9 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=5",
-      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=4 mind=8",
-      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=4",
+      "#6d + egg=0 skin=11,128,98 cloak=0,128,118 shell=11,128,98 look=3 mind=3",
+      "#6d + egg=1 skin=-23,128,128 cloak=0,128,118 shell=-23,128,128 look=2 mind=8",
+      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=5",
       "#6d OK eggs=3 cursor=1 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);
