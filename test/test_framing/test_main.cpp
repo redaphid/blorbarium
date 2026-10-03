@@ -24,7 +24,7 @@ constexpr double kOffBy = 1.5;   // px his body's middle may sit from the panel'
 
 std::unique_ptr<Canvas240> render(const Appearance& a) {
   auto cv = std::make_unique<Canvas240>();
-  paint::draw(a, grungoPack(), *cv);
+  paint::draw(a, grungoPack(), *cv, 0);
   return cv;
 }
 
