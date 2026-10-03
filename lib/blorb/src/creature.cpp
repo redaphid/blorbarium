@@ -22,8 +22,14 @@ constexpr StageStep kStageSteps[] = {
 // Stage and die loci fire at 0.5 or more; a reflex starts as its locus rises past 0.5.
 bool fires(Fx level) { return level >= kHalf; }
 
-// The cause locus is banded: 0.1 old age, 0.3 starved, 0.5 injured (starter_genome.cpp).
-DeathCause causeOf(Fx level) { return DeathCause(std::min<int64_t>(4, (int64_t(level.raw) * 5) >> Fx::kFrac)); }
+// Each cause receptor adds its own power of two in sixteenths (starter_genome.cpp),
+// so the sum is unique; the highest set bit wins: Poisoned > Injured > Starved > OldAge.
+DeathCause causeOf(Fx level) {
+  int code = std::min(15, (level.raw + (Fx::kOne >> 5)) >> (Fx::kFrac - 4));
+  for (int bit = 3; bit >= 0; --bit)
+    if (code & (1 << bit)) return DeathCause(bit);
+  return DeathCause::Unknown;
+}
 
 uint16_t bump(uint16_t v) { return v == UINT16_MAX ? v : uint16_t(v + 1); }
 

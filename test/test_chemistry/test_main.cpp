@@ -130,7 +130,12 @@ constexpr uint32_t kFeedEvery = 2 * kTicksPerHour;
 
 bool night(uint32_t tick) { return (tick / kTicksPerHour) % 24 >= 16; }
 
-DeathCause causeOf(Fx level) { return DeathCause(std::min<int64_t>(4, (int64_t(level.raw) * 5) >> Fx::kFrac)); }
+DeathCause causeOf(Fx level) {
+  int code = std::min(15, (level.raw + (Fx::kOne >> 5)) >> (Fx::kFrac - 4));
+  for (int bit = 3; bit >= 0; --bit)
+    if (code & (1 << bit)) return DeathCause(bit);
+  return DeathCause::Unknown;
+}
 
 struct Pet {
   Genome genome = starterGenome(7);

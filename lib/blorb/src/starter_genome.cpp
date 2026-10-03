@@ -64,9 +64,10 @@ constexpr uint8_t kVital = GeneFlags::Mutable;   // may drift, never deleted
 constexpr uint8_t kLook = kGene | GeneFlags::OwnerEditable;
 constexpr uint8_t kDormant = GeneFlags::Dormant;
 
-// Death bands on the cause locus: DeathCause(level * 5), so 0.1 = OldAge,
-// 0.3 = Starved, 0.5 = Injured.
-constexpr uint8_t kCauseOldAge = sgn(100), kCauseStarved = sgn(300), kCauseInjured = sgn(500);
+// Cause receptors write distinct powers of two in sixteenths onto the cause
+// locus, so causes that fire together sum to a unique code (Creature::cause).
+constexpr uint8_t sixteenths(int n) { return uint8_t(128 + n * 8); }   // signedByte's 1/16 steps
+constexpr uint8_t kCauseOldAge = sixteenths(1), kCauseStarved = sixteenths(2), kCauseInjured = sixteenths(4);
 
 constexpr uint8_t d(DriveId id) { return driveChem(id).v; }
 
