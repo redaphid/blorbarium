@@ -31,9 +31,9 @@ OUT = ROOT / "pets/grungo/grungo_pack.h"
 DEFS = ROOT / "lib/blorb/include/blorb/defs"
 COMMAND = "python3 tools/sprite_pack.py"
 
-CELL = 7                      # the 840 px body bbox is 120 px on device (contracts.md)
+CELL = 5                      # the 840 px body bbox is 168 px on device, so he fills the round panel
 GRID = (227, 80)              # the body bbox's top-left in the art; cells align to it
-BODY_CELLS = (82, 120)
+BODY_CELLS = (-(-569 // CELL), 840 // CELL)   # the body bbox, 569 x 840 art pixels
 INVARIANT, CLEAR = 255, 254
 
 ART_NAME = {"croak": "meow", "asleep": "sleep"}   # engine face -> picked frame
@@ -294,7 +294,8 @@ class Sketch:
         return Sprite(rgb, lab, origin, list(eyes))
 
 
-EGG_ROWS = 72                           # contracts.md: the egg is about 72 px tall
+EGG_ROWS = 150                          # the egg fills the panel with room for its rock inside the round mask
+EGG_STEP = EGG_ROWS / 72                 # EGG_CRACKS were drawn on a 72 px egg
 EGG_FROGLET = (510, 692), (82, 106)     # the froglet in the hollow, in the art's pixels
 EGG_CRACKS = [[(14, 18), (18, 14), (22, 18), (26, 14)], [(26, 14), (30, 19), (34, 15), (38, 19)],
               [(30, 19), (31, 24)]]     # device pixels, across the jelly's dome
@@ -353,7 +354,7 @@ def egg(art, stage):
     for line in EGG_CRACKS[:stage]:
         for dy, colour, region in ((1, (196, 222, 150), REGION["shell"]), (0, (24, 20, 16), INVARIANT)):
             im = Image.new("L", (w, h))
-            ImageDraw.Draw(im).line([(x, y + dy) for x, y in line], fill=255)
+            ImageDraw.Draw(im).line([(x * EGG_STEP, (y + dy) * EGG_STEP) for x, y in line], fill=255, width=round(EGG_STEP))
             m = (np.asarray(im) > 0) & jelly
             s.rgb[m], s.region[m] = colour, region
     return s
@@ -392,8 +393,8 @@ def bubble():
 def remains(sleep_rgb, sleep_lab, feet):
     """The asleep frame settled into the bog to his chest: a pool behind him, a soft
     waterline across him, a few spore glints. Cosy, like a warm bath."""
-    grid = (GRID[0] - 7 * CELL, GRID[1])
-    cols, rows = BODY_CELLS[0] + 14, 82
+    grid = (GRID[0] - 49, GRID[1])              # 49 art pixels of pool beyond the body each side
+    cols, rows = -(-(569 + 98) // CELL), -(-574 // CELL)   # down to the pool, 574 art pixels
     H, W = rows * CELL, cols * CELL
     k = Sketch(cols, rows)
     yy, xx = np.mgrid[0:H, 0:W]
