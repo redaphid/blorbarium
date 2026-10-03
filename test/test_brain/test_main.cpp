@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cmath>
 #include "blorb/brain.h"
 
 using namespace blorb;
@@ -234,36 +235,43 @@ TEST(Dreaming, ReplayedEpisodeMovesPredictionFurtherTowardWhatHappened) {
   EXPECT_GE(toDouble(later), -0.3 - 0.005);
 }
 
-TEST(Dreaming, ForgettingFadesBothSignsEvenlyToZero) {
+// One LSB per dream, rounded up, took the same 0.14 off every weight each
+// night: a small lesson was gone by morning while a large one barely moved.
+TEST(Forgetting, ANightFadesBigAndSmallBeliefsByTheSameDesignedFraction) {
   Brain::Axes axes = Brain::currentAxes();
   std::vector<Q15> w(kFeatureCount * kActionCount * kDriveCount);
   auto at = [&](LocusId f, ActionId a, DriveId d) -> Q15& {
     return w[(fi(f) * kActionCount + a.v) * kDriveCount + di(d)];
   };
-  at(locus::light, action::rest, drive::hunger) = Q15{9830};
-  at(locus::light, action::eat, drive::hunger) = Q15{-9830};
-  at(locus::held, action::rest, drive::fear) = Q15{1};
-  at(locus::held, action::eat, drive::fear) = Q15{-1};
+  const Q15 big{16384}, small{1638};   // 0.5 and 0.05
+  at(locus::light, action::rest, drive::hunger) = big;
+  at(locus::light, action::eat, drive::hunger) = Q15{int16_t(-big.v)};
+  at(locus::held, action::rest, drive::fear) = small;
+  at(locus::held, action::eat, drive::fear) = Q15{int16_t(-small.v)};
 
-  Temperament t = midTemperament();
-  Rng rng = Rng::seeded(4);
-  Brain kept;
-  kept.loadWeights(axes, w.data());
-  Temperament never = t;
-  never.forgetRate = Fx::zero();
-  for (int i = 0; i < 50; ++i) kept.dream(never, rng);
-  EXPECT_EQ(kept.predict(locus::light, action::rest, drive::hunger), fromQ15(Q15{9830}));
+  Temperament starter = midTemperament();
+  starter.forgetRate = Fx::unitByte(16);
+  constexpr uint32_t kNight = 4500;
+  const double keep = std::pow(1.0 - 16.0 / 255.0 / 2048.0, kNight);
+  ASSERT_NEAR(1.0 - keep, 0.129, 0.001) << "the designed fade of a 10-hour night";
 
   Brain b;
   b.loadWeights(axes, w.data());
-  for (int i = 0; i < 2000; ++i) b.dream(t, rng);
-  Fx pos = b.predict(locus::light, action::rest, drive::hunger);
-  Fx neg = b.predict(locus::light, action::eat, drive::hunger);
-  EXPECT_LT(pos, frac(3, 10));
-  EXPECT_GT(pos, Fx::zero());
-  EXPECT_EQ(pos, -neg);
-  EXPECT_EQ(b.predict(locus::held, action::rest, drive::fear), Fx::zero());
-  EXPECT_EQ(b.predict(locus::held, action::eat, drive::fear), Fx::zero()) << "a negative weight stuck one step below zero";
+  b.forget(starter, kNight);
+  const double lsb = 1.0 / 32768;
+  struct Cell { LocusId f; DriveId d; Q15 was; };
+  for (Cell c : {Cell{locus::light, drive::hunger, big}, Cell{locus::held, drive::fear, small}}) {
+    Fx pos = b.predict(c.f, action::rest, c.d), neg = b.predict(c.f, action::eat, c.d);
+    EXPECT_NEAR(toDouble(pos), toDouble(fromQ15(c.was)) * keep, lsb) << c.was.v;
+    EXPECT_EQ(pos, -neg) << "both signs fade alike";
+  }
+
+  Brain kept;
+  kept.loadWeights(axes, w.data());
+  Temperament never = starter;
+  never.forgetRate = Fx::zero();
+  kept.forget(never, kNight);
+  EXPECT_EQ(kept.predict(locus::held, action::rest, drive::fear), fromQ15(small));
 }
 
 TEST(Remap, SavedWeightsSurviveAddedReorderedAndRemovedRows) {

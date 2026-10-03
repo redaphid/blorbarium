@@ -39,6 +39,8 @@ const Row* rowOf(const Row (&rows)[N], IdT id) {
   return nullptr;
 }
 
+uint32_t dreamEvery(const Temperament& t) { return std::max<uint32_t>(kBrainEvery, t.dreamEveryTicks); }
+
 uint16_t minTicksOf(ActionId a) {
   const ActionInfo* row = rowOf(ACTIONS, a);
   return row ? row->minTicks : 0;
@@ -133,12 +135,17 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
 
   ActionCtx ctx{habitat, pheno_.habitat, chem_.locus[locus::tilt_x.v], chem_.locus[locus::tilt_y.v], tick, rng_,
                 pendingSelf_};
-  auto finish = [&] {
+  auto stop = [&] {
+    const Temperament& t = pheno_.temperament;
+    if (body_.asleep) brain_.forget(t, (stats_.ageTicks - actionStart_) / dreamEvery(t));
     behaviours.stop(action_, body_, ctx);
+  };
+  auto finish = [&] {
+    stop();
     actionDone_ = true;
   };
   auto switchTo = [&](ActionId a) {
-    if (!actionDone_) behaviours.stop(action_, body_, ctx);
+    if (!actionDone_) stop();
     action_ = a;
     actionStart_ = stats_.ageTicks;
     actionDone_ = false;
@@ -184,7 +191,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     switchTo(*forced_);
     forced_.reset();
   } else if (tick % kBrainEvery == 0 && body_.asleep) {
-    uint32_t every = std::max<uint32_t>(kBrainEvery, t.dreamEveryTicks);
+    uint32_t every = dreamEvery(t);
     uint32_t asleepFor = stats_.ageTicks - actionStart_;
     if (asleepFor >= every && asleepFor / every != (asleepFor - kBrainEvery) / every) {
       body_.dreaming = brain_.dream(t, rng_);
@@ -243,6 +250,8 @@ void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick)
   chem_.stepCoarse(pheno_.chem, ticks, tick);
   growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
   stats_.ageTicks += ticks;
+  // No brain runs in a gap, so time asleep in one is no dreams and nothing forgotten.
+  if (body_.asleep) actionStart_ += ticks;
   // Recent loci halve every tick, so a coarse step leaves nothing of them.
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx::zero();
 }

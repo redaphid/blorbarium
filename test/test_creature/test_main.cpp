@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cmath>
 #include <initializer_list>
 #include <utility>
 #include <vector>
@@ -214,6 +215,69 @@ TEST(Foresee, ForceHoldsTheActionForItsMinTicks) {
   while (r.c.action() == action::foresee && held < 1000) r.step(), ++held;
   EXPECT_GE(held, ACTIONS[action::foresee.v].minTicks);
   EXPECT_GT(r.locus(locus::glow), Fx::zero());
+}
+
+namespace {
+
+const ChemId kSleepiness = driveChem(drive::sleepiness);
+
+// Sleepiness held high opens the sleep gate; the forced Sleep then holds.
+void putToSleep(Rig& r) {
+  for (int i = 0; i < 600 && r.locus(locus::sleep_gate) < kHalf; ++i) {
+    r.c.inject(kSleepiness, Fx::one());
+    r.step();
+  }
+  r.c.force(action::sleep);
+  r.step();
+}
+
+// Asleep for `ticks` more with the gate held open; let go, it closes and he
+// wakes. Returns the ticks he slept.
+uint32_t sleepFor(Rig& r, uint32_t ticks) {
+  putToSleep(r);
+  uint32_t asleep = 1;
+  for (uint32_t i = 0; i < ticks; ++i) {
+    r.c.inject(kSleepiness, Fx::one());
+    r.step();
+    asleep += r.c.body().asleep;
+  }
+  r.c.inject(kSleepiness, Fx::zero());
+  for (int i = 0; i < 50 && r.c.body().asleep; ++i, ++asleep) r.step();
+  return asleep;
+}
+
+}  // namespace
+
+TEST(Sleep, WakingFadesEveryBeliefByTheSameFractionForTheDreamsSlept) {
+  Rig r;
+  const Fx big = Fx::ratio(1, 2), small = Fx::ratio(5, 100);
+  ASSERT_TRUE(r.c.prophesy(locus::upside_down, action::rest, drive::hunger, big));
+  ASSERT_TRUE(r.c.prophesy(locus::upside_down, action::wander, drive::hunger, small));
+  uint32_t asleep = sleepFor(r, 2 * 36000);
+  ASSERT_FALSE(r.c.body().asleep);
+  ASSERT_GE(asleep, 2u * 36000);
+
+  const Temperament& t = r.c.phenotype().temperament;
+  double rate = double(t.forgetRate.raw) / Fx::kOne / 2048;
+  double keep = std::pow(1.0 - rate, double(asleep / t.dreamEveryTicks));
+  ASSERT_LT(keep, 0.98) << "a night long enough to forget something";
+  auto now = [&](ActionId a) { return double(r.c.brain().predict(locus::upside_down, a, drive::hunger).raw) / Fx::kOne; };
+  const double lsb = 1.0 / 32768;
+  EXPECT_NEAR(now(action::rest), 0.5 * keep, 1.5 * lsb);
+  EXPECT_NEAR(now(action::wander), 0.05 * keep, 1.5 * lsb) << "a small belief fades by the same fraction";
+}
+
+// The catch-up runs no brain, so hours unplugged asleep are not dreams.
+TEST(Sleep, AnUnpluggedGapAsleepForgetsNothing) {
+  Rig r;
+  const Fx belief = Fx::ratio(1, 2);
+  ASSERT_TRUE(r.c.prophesy(locus::upside_down, action::rest, drive::hunger, belief));
+  putToSleep(r);
+  ASSERT_TRUE(r.c.body().asleep);
+  r.c.tickCoarse(SenseOut{}, 8 * 36000, r.tick);
+  for (int i = 0; i < 50 && r.c.body().asleep; ++i) r.step();
+  ASSERT_FALSE(r.c.body().asleep);
+  EXPECT_EQ(r.c.brain().predict(locus::upside_down, action::rest, drive::hunger), belief);
 }
 
 TEST(Lifecycle, StagesAdvanceAsLifeFallsEachExpressedOnce) {
