@@ -18,7 +18,8 @@ The run is idempotent. Every completion is cached in `raw.jsonl` under a hash
 of the model, options, seed and prompt, so a rerun asks the model only for
 pages it has not seen. A changed seed line, cloud or lexicon changes those
 prompts and only those prompts. Filtering and output always run again from the
-cache, so filter changes need no GPU.
+cache, so filter changes need no GPU. `DIALOGUE_OFFLINE=1` builds the table
+from cached pages only and skips the model entirely.
 
 Requirements:
 
@@ -37,8 +38,8 @@ instruction tuning. Its Ollama template is `{{ .Prompt }}`. Requests go to
 `/api/generate` with `raw: true`, so no chat template applies, and the model
 predicts how the page goes on. The options are temperature 1.15, top-p 0.95,
 top-k 100 and repeat penalty 1.1, with up to 200 tokens and a stop at a blank
-line. Each pure page is sampled with seeds 1, 2 and 3. Each hybrid page is
-sampled with seeds 1 and 2. `raw.jsonl` records the model digest, the options
+line. Each pure page is sampled with seeds 1 to 8, and each hybrid page with
+seeds 1 to 4. The seed also reshuffles the page's cloud and seed order. `raw.jsonl` records the model digest, the options
 and the seed beside every completion.
 
 ## Prompts are documents
@@ -123,7 +124,11 @@ A generated line is kept only if all of these hold:
   `kFont` in `lib/paint/src/draw.cpp`, which is A-Z, 0-9, space and
   `. , ! ? - ' :`.
 - It is 6 to 32 characters long. The marquee scrolls, so 32 is a readability
-  cap of about two screen widths, not a hardware limit.
+  cap of about two screen widths, not a hardware limit. A longer line keeps
+  its longest run of leading whole sentences that fits. The model copies the
+  length of the seeds, and most of what it writes runs long.
+- It has at least two words and does not end on `:`, `,` or `-`, so lone
+  interjections and dangling fragments drop out.
 - It has no first person ("I", "ME", "MY"). Grungo speaks in the third person.
 - No word or stem from `blocklist.txt` matches. The list covers SOUL.md's Never
   list, sexual content, slurs, profanity and the private-life topics that

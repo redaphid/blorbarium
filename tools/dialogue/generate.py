@@ -36,8 +36,8 @@ DRAW_CPP = REPO / "lib/paint/src/draw.cpp"
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = "llama3.2:3b-text-q8_0"
 OPTIONS = {"temperature": 1.15, "top_p": 0.95, "top_k": 100, "repeat_penalty": 1.1, "num_predict": 200, "stop": ["\n\n"]}
-PURE_SEEDS = (1, 2, 3)
-BLEND_SEEDS = (1, 2)
+PURE_SEEDS = tuple(range(1, 9))
+BLEND_SEEDS = (1, 2, 3, 4)
 SEEDS_PER_PAGE = 8
 FLAVOUR_PER_PAGE = 5
 CAP_PURE, CAP_BLEND = 12, 8
@@ -211,6 +211,9 @@ def run_jobs(jobs, voices, topics, lexicon):
     todo = [(j, p, job_key(p, j.seed)) for j, p in todo]
     missing = [t for t in todo if t[2] not in raw]
     print(f"{len(todo)} pages, {len(missing)} to generate")
+    if os.environ.get("DIALOGUE_OFFLINE"):
+        print("  offline: using cached pages only")
+        todo, missing = [t for t in todo if t[2] in raw], []
     digest = model_digest() if missing else None
     with RAW.open("a", encoding="utf-8") as out:
         for n, (j, p, k) in enumerate(missing, 1):
@@ -244,14 +247,22 @@ FOLD = str.maketrans({"‘": "'", "’": "'", "`": "'", "“": None, "”": None
                       "[": None, "]": None, "_": " ", "~": None})
 
 
+def fit(t):
+    """The longest run of leading whole sentences that fits the cap."""
+    if len(t) <= MAX_CHARS:
+        return t
+    cuts = [m.end() for m in re.finditer(r"[.!?]+(?= )", t) if m.end() <= MAX_CHARS]
+    return t[:cuts[-1]] if cuts else t
+
+
 def clean(text, glyphs):
     """A device-ready line, or None when it cannot be one."""
     t = text.replace("…", "...").translate(FOLD).upper()
-    t = re.sub(r"\s+", " ", t).strip(" -,")
-    if not (MIN_CHARS <= len(t) <= MAX_CHARS) or any(c not in glyphs for c in t):
+    t = fit(re.sub(r"\s+", " ", t).strip(" -,"))
+    if not (MIN_CHARS <= len(t) <= MAX_CHARS) or any(c not in glyphs for c in t) or t[-1] in ":,-":
         return None
     words = re.findall(r"[A-Z0-9']+", t)
-    if not words or FIRST_PERSON & set(words) or blocked(t):
+    if len(words) < 2 or FIRST_PERSON & set(words) or blocked(t):
         return None
     if re.search(r"(.)\1{5,}", t) or re.search(r"[.,!?:'-]{4,}", t.replace("...", "")):
         return None
