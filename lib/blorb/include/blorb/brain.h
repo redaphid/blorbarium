@@ -38,8 +38,9 @@ class Brain {
   Decision think(const Fx features[kFeatureCount], const Fx drives[kDriveCount], Fx arousal,
                  const Temperament&, bool actionFinished, Rng&);
 
-  // Asleep. Each dream applies one queued instinct or replays one episode,
-  // then decays W by forgetRate. True while a dream is showing.
+  // Asleep. Each call is one dream: it applies one queued instinct or replays
+  // one episode, then decays W by forgetRate. True if the dream had content.
+  // The caller paces dreams (dreamEveryTicks) and shows them (dreamLenTicks).
   bool dream(const Temperament&, Rng&);
   void queueInstinct(const Instinct&);
 
@@ -66,7 +67,7 @@ class Brain {
   std::vector<Instinct> instinctQueue_;
   Episode episodes_[16]{};
   uint8_t episodeHead_ = 0;
-  uint32_t dreamTick_ = 0;
+  uint32_t heldTicks_ = UINT32_MAX;   // ticks the current action has run; starts saturated so a fresh brain decides at once
 };
 
 }  // namespace blorb
