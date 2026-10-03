@@ -150,3 +150,31 @@ sampled at exactly 50 Hz as on the device; frames are still drawn every
 40 ms. Until unit 20 the badge envs stop at an `#error`, because
 `src/main.cpp` needs the board, flash storage and BLE headers that unit
 brings.
+
+## 8. Fixes from reviewing the frames
+
+The first full set of simulator frames read wrong in five places. The fixes
+changed the design in these ways:
+
+- **Visible siblings.** `minVisibleDelta` alone let eggs differ by a shade no
+  one could see. The forced Look change now steps the skin's hue or value by
+  24 to 40 inside the band, and each egg in a clutch takes its own slot (hue
+  up, value down, hue down, value up, rotated by the parent's hash), carried
+  by `MutationPolicy::lookSlot`. The skin gene can no longer be deleted or
+  put to sleep, and the egg's jelly follows the skin tint, so the clutch
+  choice shows each child's colour. `test_look` holds it: siblings differ by
+  at least 1957 rendered pixels over 16 parents, and every child differs
+  from its parent. The founder's skin hue moved about 11 degrees cooler to
+  centre it in its band.
+- **Eating reads.** Eat chews for 15 ticks after the bite instead of ending on
+  it, and the renderer draws the bitten fly at his mouth.
+- **Items and his body.** The founder places the marble away from him, he
+  noses it on when he chases it, items sort by depth, and an item inside
+  his footprint is hidden under him.
+- **The hop reads as a leap** with a contact shadow on the floor. film.py
+  fails the hop golden if it matches idle.
+- **The time-unknown marquee** runs rim to rim above his head, each row to
+  its chord, instead of a box over his legs.
+
+Known and left: a rotten bite draws the fresh fly, because `present()` does
+not say which kind he bit.
