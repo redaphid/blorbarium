@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <type_traits>
+#include <vector>
 #include "blorb/genes.h"
 #include "blorb/mutate.h"
 
@@ -154,6 +155,38 @@ TEST(Heredity, HeirloomsBecomeInstinctGenesAndUpdateNextTime) {
   });
   EXPECT_EQ(again, 1) << "updated in place, not added again";
   EXPECT_GE(mindChanges(child.genome, grandchild), 1);
+}
+
+// A uid names one gene for the whole lineage: a gene new in a child (a
+// duplicate's copy, an heirloom) never takes a uid any ancestor has used.
+TEST(Heredity, ANewGeneNeverReusesAnAncestorsUid) {
+  constexpr uint64_t kChains = 120;
+  constexpr int kGenerations = 25;
+  int fresh = 0;
+  for (uint64_t seed = 0; seed < kChains; ++seed) {
+    Genome g = parent();
+    std::vector<bool> used(65536, false);
+    g.forEach([&](const GeneView& v) { used[v.header.uid.v] = true; });
+    Rng rng = Rng::seeded(seed);
+    for (int gen = 0; gen < kGenerations; ++gen) {
+      MutationPolicy pol = policyOf(g, Fx::zero());
+      pol.dupPerGene = Fx::ratio(1, 20);
+      pol.delPerGene = Fx::ratio(1, 10);
+      std::vector<Belief> heirlooms = {{locus::held, action::rest, drive::fear, -Fx::ratio(2, 10), Fx::one()}};
+      Offspring o = mutate(g, pol, gen % 3 == 0 ? heirlooms : std::vector<Belief>{}, rng);
+      for (const MutationOp& op : o.diff.ops) {
+        std::optional<GeneUid> born;
+        if (auto* d = std::get_if<MutDup>(&op)) born = d->copy;
+        if (auto* h = std::get_if<MutHeirloom>(&op)) born = GeneUid{uint16_t(h->gene[6] | h->gene[7] << 8)};
+        if (!born) continue;
+        ++fresh;
+        ASSERT_FALSE(used[born->v]) << "uid " << born->v << " reused, chain " << seed << " generation " << gen + 1;
+      }
+      g = o.genome;
+      g.forEach([&](const GeneView& v) { used[v.header.uid.v] = true; });
+    }
+  }
+  EXPECT_GT(fresh, 500) << "the test must see many new genes";
 }
 
 TEST(Policy, ReadsTheGenomeAndTheFeatBonus) {

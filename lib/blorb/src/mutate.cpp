@@ -193,7 +193,10 @@ void forceMind(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& r
 }
 
 // Each parent gene gets at most one of: wake, delete, sleep, point, duplicate.
+// The gene holding the largest uid is never deleted, so the largest uid only
+// rises and nextUid() never hands out a uid an ancestor used.
 void randomPass(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
+  const GeneUid top{uint16_t(parent.nextUid().v - 1)};
   parent.forEach([&](const GeneView& pv) {
     std::optional<GeneView> v = d.cur.find(pv.header.uid);
     if (!v) return;
@@ -201,7 +204,7 @@ void randomPass(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& 
     const GeneTypeInfo* info = knownKind(h);
     if ((h.flags & GeneFlags::Dormant) && rng.chance(pol.wakePerDormant)) { d.add(MutWake{h.uid}); return; }
     if (h.flags & GeneFlags::Delable) {
-      if (rng.chance(pol.delPerGene)) { d.add(MutDel{h.uid}); return; }
+      if (rng.chance(pol.delPerGene) && h.uid != top) { d.add(MutDel{h.uid}); return; }
       if (!(h.flags & GeneFlags::Dormant) && rng.chance(pol.sleepPerGene)) { d.add(MutSleep{h.uid}); return; }
     }
     if (info && (h.flags & GeneFlags::Mutable) && rng.chance(scaled(pol.pointPerGene, h.mutWeight))) {
