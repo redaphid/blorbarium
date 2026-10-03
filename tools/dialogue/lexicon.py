@@ -198,7 +198,7 @@ def main():
                   f"({ZIPF_REAL_MIN}..{ZIPF_RARE_MAX}; coinages need {COINAGE_MIN_COUNT}+ uses in prompts or lore)",
         "words": words,
         "organic": organic,
-    }, indent=1) + "\n", encoding="utf-8")
+    }, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"lexicon: {sum(map(len, words.values()))} words ({len(organic)} organic) -> {OUT}")
 
 
