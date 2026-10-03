@@ -15,6 +15,7 @@ namespace blorb {
 struct Reaction { ChemId a, b, c, d; uint8_t qa, qb, qc, qd; Fx rate; };
 struct Emitter  { LocusId locus; ChemId chem; Fx threshold, gain; bool digital, invert, clear; uint8_t period; };
 struct Receptor { ChemId chem; LocusId locus; Fx threshold, nominal, gain; bool digital, invert; };
+struct Seed     { ChemId chem; Fx level; };
 
 // Built by gene expression; appended at each stage, never shrunk in a life.
 struct ChemRules {
@@ -22,6 +23,9 @@ struct ChemRules {
   std::vector<Reaction> reactions;
   std::vector<Emitter> emitters;
   std::vector<Receptor> receptors;
+  // Starting levels from chem genes. Whoever runs expressStage sets the
+  // entries it appended, once, so a level is seeded when its gene switches on.
+  std::vector<Seed> seeds;
 };
 
 class Chemistry {
