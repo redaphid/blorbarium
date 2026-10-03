@@ -65,6 +65,27 @@ inline constexpr GeneTypeInfo GENE_TYPES[] = {
 #undef BLORB_GENE
 };
 
+// Body -> type byte, from the same rows, so append<Body> cannot mislabel a gene.
+template <class Body> struct GeneKindOf;
+#define BLORB_GENE(type, name, Body, cls) \
+  template <> struct GeneKindOf<Body> { static constexpr uint8_t value = type; };
+#include "blorb/defs/gene_kinds.def"
+#undef BLORB_GENE
+
+// Appends a known kind with the next free uid (largest so far + 1).
+template <class Body>
+GenomeBuilder& GenomeBuilder::append(const Body& body, uint8_t flags, Stage stage, uint8_t featGate,
+                                     uint8_t mutWeight) {
+  uint16_t top = 0;
+  for (size_t at = 0; at + kGeneHeaderLen <= bytes_.size(); at += kGeneHeaderLen + bytes_[at + 1]) {
+    uint16_t uid = uint16_t(bytes_[at + 6] | (bytes_[at + 7] << 8));
+    top = uid > top ? uid : top;
+  }
+  GeneHeader h{GeneKindOf<Body>::value, uint8_t(sizeof(Body)), flags, stage, featGate, mutWeight,
+               GeneUid{uint16_t(top + 1)}};
+  return append(h, reinterpret_cast<const uint8_t*>(&body));
+}
+
 // O(1) by type byte. nullptr for an unknown type: carried and skipped.
 const GeneTypeInfo* geneType(uint8_t type);
 
