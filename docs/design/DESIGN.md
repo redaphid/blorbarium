@@ -37,7 +37,7 @@ TEST(Reflex, ShakeMakesHimHop) {                    // user ask 8
   MemStorage store; NullLink link; uint32_t ms = 0;
   blorb::Dish dish(store, /*speciesSeed=*/7, /*lineageId=*/1);
   hatchNow(dish, link, ms);
-  for (int i = 0; i < 6; ++i, ms += 80) { dish.sample(jolt(i % 2 == 0), ms); dish.tick(ms, link); }
+  for (int i = 0; i < 8; ++i, ms += 80) { dish.sample(jolt(i % 2 == 0), ms); dish.tick(ms, link); }
   runFor(dish, link, ms, 300);
   auto a = dish.appearance();
   EXPECT_TRUE(a.reflexActive);

@@ -59,7 +59,7 @@ bool shakeMakesHimHop() {   // ask 8
   MemStorage store; NullLink link; uint32_t ms = 0;
   Dish dish(store, /*speciesSeed=*/7, /*lineageId=*/1);
   while (!std::holds_alternative<Creature>(dish.occupant())) runFor(dish, link, ms, 60000);   // incubate, hatch
-  for (int i = 0; i < 6; ++i, ms += 80) { dish.sample(jolt(i % 2 == 0), ms); dish.tick(ms, link); }  // 4+ jolts < 900 ms
+  for (int i = 0; i < 8; ++i, ms += 80) { dish.sample(jolt(i % 2 == 0), ms); dish.tick(ms, link); }  // 4 jolts past 0.55 g in 640 ms
   runFor(dish, link, ms, 300);
   Appearance a = dish.appearance();
   return a.reflexActive && a.reflex == reflex::hop && a.expression == expr::alarmed && a.reflexStrength > Fx::zero();
