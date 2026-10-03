@@ -111,7 +111,7 @@ class Creature {
   ActionId action() const { return action_; }
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
-  void inject(ChemId, Fx);             // sim scripts and tests only; no wire verb reaches it
+  void inject(ChemId, Fx);             // sim scripts, tests and the prophecy_treat twist; clamps to 0..1
   // Sim scripts and tests only: starts that action at the next tick, as the
   // brain would, and holds it for its minTicks unless it finishes.
   void force(ActionId);

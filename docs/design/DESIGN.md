@@ -171,7 +171,7 @@ Every egg has at least one Look change of at least `minVisibleDelta` and at leas
 
 | Loop | Body only, no phone | Phone adds |
 |---|---|---|
-| Feeding | Press BOOT: a pellet drops from the pantry (refills on the pet clock). Tilt rolls pellets to him; he learns to eat. Old pellets rot and make him ill. | Read hunger and pantry. Cannot feed. |
+| Feeding | Press BOOT: a pellet drops from the pantry (refills on the pet clock). Tilt rolls pellets to him; he learns to eat. Old pellets rot and make him ill. | Read hunger and pantry. No plain food: `TWIST stimulus button` and `stimulus fed` are refused `403 BODY_ONLY` (ask 15). Special treats only, each a `defs/twists.def` row with an effect no pellet has: `prophecy_treat` raises vision, so he glows as if foreseeing, and feeds him nothing. Camera-colour and weather treats are future rows. |
 | Comfort | Hold him still and upright (cradle). Righting him after a flip. | `STIM petted`, `STIM spoken_to` |
 | Play | Knock and double knock; tilt to roll the marble, he chases it; shake (a hop, rough play, his genes decide if he likes it) | `STIM played` |
 | Sleep | Pet night on his own clock; lay him face down to tuck him in; a long dark stretch entrains his night to yours | `TIME` snaps his day to the real one |
@@ -244,7 +244,7 @@ Each later idea and the exact files it touches. "Starter genome" is `lib/blorb/s
 | New gene kind | `defs/gene_kinds.def` (row); `genes.h` (body struct); `src/genes.cpp` (`express_`, `describe_`, `rules_`); `creature.h` (a Phenotype field, only if it builds something new) | Only that field |
 | New organ | `defs/gene_kinds.def` (an organ container kind); `genes.h`, `src/genes.cpp`; `chemistry.h` (an organ tag on rules, an organ list in `ChemRules`); `src/chemistry.cpp` (energy cost and stall) | Yes, the one idea that is real engine work |
 | New phone verb | `defs/commands.def` (row); `src/protocol.cpp` (`cmd_<name>`) | No |
-| New phone twist (prophecy, weather, camera colour; DEVIATIONS.md 4) | `defs/twists.def` (row); `src/twists.cpp` (`twist_<name>`, which parses its args and applies them to the live state) | No |
+| New phone twist or special treat (prophecy, weather, camera colour; DEVIATIONS.md 4) | `defs/twists.def` (row); `src/twists.cpp` (`twist_<name>`, which parses its args and applies them to the live state) | No |
 | New game or activity on the device | `defs/games.def` (row: id, name, struct); a struct beside the habitat with `step(input, habitat, SenseOut&)` that reads detector loci and stimuli (tilt, knock, shake, button), moves its own pieces and fires its outcomes as World stimuli; `defs/stimuli.def` (its outcome rows, such as `marble_hit`); `defs/actions.def` and `actions.h` (a play action, if he plays it himself); starter genome (stimulus genes saying what winning or losing does to his drives, and instincts); `lib/paint/src/draw.cpp` (its pieces). Play reaches drives and learning only through the stimulus path, so the brain learns a game like anything else. The tilt-rolled marble and the shake hop are the seeds: the marble moves out of `Habitat` into the first `games.def` row in build unit 24 | No; the Dish steps every row each tick |
 | New face | `defs/expressions.def` (row); pack face patch (falls back to neutral); starter genome (an expression gene) | No |
 | New look | recolour: genes only. New region: `defs/regions.def` (row) plus the converter's tagger and the pack's band. New overlay: pack art for a mark layer, mark genes in the starter genome | No |
@@ -300,7 +300,7 @@ gtest, seeded, no hardware, no wall clock. `test/support/` holds MemStorage (wit
 | mutate | `apply(parent, diff) == child` for 10k seeds; at least one Look and one Mind change per egg; same seed gives the same child; viability rejects a planted lethal (Life half-life byte 1) | unreplayable eggs, dead lineages |
 | lineage | founding plus 40 births rebuild every generation's hash; Birth and Death twice count once; torn tail truncated; compaction keeps summaries | lost or doubled history |
 | keepsake | encode/decode byte-identical; torn slot B loads A; both torn boots `FromLineage`; newer format is read-only and untouched; unknown chunk survives a save; `keepsake_v1.bin` fixture loads forever | lost pets |
-| protocol | fuzzed lines never crash; 201-byte line is ERR; `STIM fed` refused; `RESTORE` without consent refused, with consent accepted once; golden transcripts | protocol drift from the website |
+| protocol | fuzzed lines never crash; 201-byte line is ERR; `TWIST stimulus button` and `stimulus fed` refused `403 BODY_ONLY`; `prophecy_treat` glows and feeds nothing; `RESTORE` without consent refused, with consent accepted once; golden transcripts | protocol drift from the website |
 | present | struct goldens for idle, eating, foresee, hop, sleep, egg, clutch, remains | the seam leaking or drifting |
 | replay | same genome, seed and script: the same `Dish` hash after 24 simulated hours; the hash is committed and the device prints it from `HASH` for the cross-platform check | non-determinism |
 
@@ -334,7 +334,7 @@ Each unit is small, names its files and ends in a check that can be run. Do not 
 | 10 | Mutation and viability | `src/mutate.cpp`, `test/test_mutate/` | 10k replay; variety guarantee; planted lethal rejected |
 | 11 | Egg, clutch, lineage, feats | `src/lineage.cpp`, `src/clutch.cpp`, `test/test_lifecycle/` | `body_only_full_life`; clutch size from feats; idempotent records; ancestor rebuild |
 | 12 | Keepsake | `src/keepsake.cpp`, `test/test_keepsake/`, `test/fixtures/keepsake_v1.bin` | torn slot, newer format, unknown chunk, `FromLineage` |
-| 13 | Protocol | `src/protocol.cpp`, `test/test_protocol/` + transcripts | fuzz; consent; `STIM fed` refused; golden transcripts |
+| 13 | Protocol | `src/protocol.cpp`, `test/test_protocol/` + transcripts | fuzz; consent; `TWIST stimulus button` and `stimulus fed` refused `403 BODY_ONLY`; `prophecy_treat` glows and feeds nothing; golden transcripts |
 | 14 | Dish | `src/dish.cpp`, `test/test_dish/` | pacing, save policy, 24-hour replay hash committed |
 | 15 | Presentation | `src/appearance.cpp`, `test/test_present/` | struct goldens for the nine states |
 | 16 | Renderer and placeholder pack | `lib/paint/src/draw.cpp`, `placeholder_pack.cpp`, `test/test_paint/` | halo pixels ring the given eye anchors; hop lifts the sprite by the expected rows |
@@ -358,7 +358,7 @@ Unit 21 is not built yet. Two constraints keep its door open now: `lib/blorb` st
 - We accept a chemistry-only dry run instead of a full embryo trial: it misses lethality that needs the brain (a creature that never chooses to eat), in exchange for about 20 KB and 30 ms instead of about 41 KB and a minute of CPU.
 - We accept that unpowered time is stasis, so he cannot miss you across a week in a drawer, in exchange for a toy that never needs a wall clock.
 - We accept that a mid-interval unplug rewinds up to 5 minutes of ordinary life, in exchange for no fragile shutdown path; life events save at once.
-- We accept that the phone cannot feed him, so the core loop stays in the body.
+- We accept that the phone gives no plain food, only special treats a pellet cannot be (ask 15), so the core loop stays in the body.
 - We accept the hold gestures (tuck-in, consent, egg pick) colliding with the 1.46's power button (open question 2).
 
 ## 12. Alternatives considered

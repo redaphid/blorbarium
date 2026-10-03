@@ -221,6 +221,39 @@ TEST(Twist, AStimulusTwistChangesTheLiveStateWhileTicksRun) {
   EXPECT_EQ(std::get<Creature>(b.dish.occupant()).stats().shaken, 0u);
 }
 
+// Ask 15: basic food is body-only. Neither the pellet button nor a meal's own
+// stimulus can come from the phone, by name or by number.
+TEST(Twist, ThePhoneCannotDeliverPlainFood) {
+  Rig a, b;
+  a.hatch();
+  b.hatch();
+  for (const char* stim : {"button", "fed", "8", "17"})
+    EXPECT_EQ(a.send(std::string("#1 TWIST stimulus ") + stim), (Lines{"#1 ERR 403 BODY_ONLY"})) << stim;
+  a.run(3000);
+  b.run(3000);
+  EXPECT_EQ(a.dish.hash(), b.dish.hash()) << "a refused feed changed nothing";
+}
+
+// A special treat is what body feeding cannot give: this one is the phone's
+// foresight, so he glows as if foreseeing, and it is no meal.
+TEST(Twist, AProphecyTreatMakesHimGlowAndDoesNotFeedHim) {
+  Rig a, b;
+  a.hatch();
+  b.hatch();
+  EXPECT_EQ(a.send("#1 TWIST prophecy_treat"), (Lines{"#1 OK prophecy_treat"}));
+  a.run(1000);
+  b.run(1000);
+  const Creature& fed = std::get<Creature>(a.dish.occupant());
+  const Creature& plain = std::get<Creature>(b.dish.occupant());
+  EXPECT_GT(a.dish.appearance().glow, b.dish.appearance().glow);
+  EXPECT_EQ(fed.chemistry().chem[chem::food.v], plain.chemistry().chem[chem::food.v]) << "no food chemical";
+  EXPECT_GE(fed.chemistry().drive(drive::hunger), plain.chemistry().drive(drive::hunger)) << "no satiety";
+  EXPECT_EQ(fed.stats().fed, plain.stats().fed);
+  Rig egg;
+  EXPECT_EQ(egg.send("#2 TWIST prophecy_treat"), (Lines{"#2 ERR 409 NOT_NOW"}));
+  EXPECT_EQ(egg.send("#3 TWIST prophecy_treat 5"), (Lines{"#3 ERR 400 BAD_ARGS"}));
+}
+
 // Prework 3: an owner edit is a Checkpoint, so the lineage rebuilds the edited genome.
 TEST(Twist, AGeneEditChangesTheGenomeAndTheLineageRecordsIt) {
   Rig r;
@@ -585,7 +618,7 @@ TEST(Golden, Clutch) {
   elderDies(r);
   ASSERT_TRUE(std::holds_alternative<Clutch>(r.dish.occupant()));
   r.run(Clutch::kVigilTicks * kTickMs);
-  EXPECT_EQ(r.send("#6c TWIST stimulus button"), (Lines{"#6c OK stimulus"}));
+  EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
       "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=5",

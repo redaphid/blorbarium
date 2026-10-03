@@ -76,7 +76,7 @@ inline constexpr CommandInfo COMMANDS[] = {
 
 // A twist parses all of its args before it touches the dish, so a refused op
 // leaves the state exactly as it was.
-enum class TwistStatus : uint8_t { Applied, Malformed, OutOfRange, NotNow };
+enum class TwistStatus : uint8_t { Applied, Malformed, OutOfRange, NotNow, BodyOnly };
 struct TwistInfo { const char* name; const char* args; TwistStatus (*apply)(Dish&, Args&); };
 
 #define BLORB_TWIST(name, args) TwistStatus twist_##name(Dish&, Args&);

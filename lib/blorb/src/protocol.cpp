@@ -500,6 +500,7 @@ void cmd_twist(Dish& dish, const Request& req, Reply& r) {
       case TwistStatus::Malformed: return r.err(400, "BAD_ARGS");
       case TwistStatus::OutOfRange: return r.err(416, "OUT_OF_RANGE");
       case TwistStatus::NotNow: return r.err(409, "NOT_NOW");
+      case TwistStatus::BodyOnly: return r.err(403, "BODY_ONLY");
     }
   }
   r.err(404, "UNKNOWN_TWIST");

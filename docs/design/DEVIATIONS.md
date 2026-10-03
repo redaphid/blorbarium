@@ -60,7 +60,8 @@ that only it can offer, because it is more powerful, online or has sensors.
    each to its live state when it arrives, between ticks, and keeps
    simulating. The board is the only writer, so there is one world.
 3. The board checks only that an op is well formed: it parses, the kind is
-   known, and every id is in range. There are no caps.
+   known, and every id is in range. There are no caps, except that basic
+   food is body-only (entry 10).
 4. Twist kinds are a registry, `defs/twists.def`: one row plus a handler
    `twist_<name>` in `src/twists.cpp` adds a kind. The first rows are
    `stimulus` (fire a stimulus), `gene_edit` (set one gene body byte by uid,
@@ -119,8 +120,8 @@ Each was reported by the unit that made it and reviewed at integration.
   and the dropped remainder is recorded. A death inside a gap runs the
   vigil to its end, but the egg choice waits for the owner rather than
   auto-picking. An egg can hatch inside a gap.
-- **Twists (unit 13).** The `stimulus` twist accepts any registry stimulus,
-  `fed` and `button` included (entry 4: no caps). Each `gene_edit` appends a
+- **Twists (unit 13).** The `stimulus` twist accepts any registry stimulus
+  except `button` and `fed`, which entry 10 makes body-only. Each `gene_edit` appends a
   lineage Checkpoint, so `genomeOf` returns the edited genome.
 - **Renderer (unit 16).** The halo draws whenever `glow > 0`, with a 5 px
   floor on its radius so the egg's small froglet eyes still glow; egg frames
@@ -214,3 +215,23 @@ fix-up series:
   PSRAM, while DESIGN section 8 assumes none. The budget now holds without
   it. Unit 20 reads `ESP.getPsramSize()` off a real board and corrects
   whichever side is wrong.
+
+## 10. User-directed: the phone brings only special food (ask 15)
+
+The verification of `engine` (finding 9) found that entry 4's "no caps"
+let the phone feed him: `TWIST stimulus button` dropped a pellet and
+`stimulus fed` gave a meal's satiety. That contradicted DESIGN sections 4
+and 11 and ask 4. The user chose "Only special food" (ask 15): basic food is
+body-only.
+
+- `TWIST stimulus button` and `TWIST stimulus fed`, by name or number, are
+  refused `403 BODY_ONLY` and change nothing. Every other stimulus still
+  fires, so the rest of entry 4 stands.
+- The phone delivers only special treats that body feeding cannot. Each is a
+  row in `defs/twists.def` whose effect differs from a pellet. The seed is
+  `prophecy_treat`, a treat baked from the phone's futures: it raises the
+  vision chemical by half, so his receptor genes light the foresee glow,
+  and it adds no food and fires no `fed`. Camera-colour and weather treats
+  are future rows.
+- Tests: `Twist.ThePhoneCannotDeliverPlainFood` and
+  `Twist.AProphecyTreatMakesHimGlowAndDoesNotFeedHim` in `test_protocol`.

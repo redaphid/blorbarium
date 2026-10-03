@@ -1,13 +1,16 @@
 // Twists: what the phone can do to the live state (DEVIATIONS.md 4). The board
 // applies one between ticks after checking only that it is well formed: it
 // parses, the kind is known, every id is a registry row or a gene in the
-// genome. There are no caps. A row plus twist_<name> in src/twists.cpp is the
-// whole change; SCHEMA streams the args so the website needs no release.
-// Ids may be given by registry name or by number.
+// genome. There are no caps, with one rule: basic food is body-only (ask 15),
+// so the phone never drops a pellet or fires a meal. It brings special treats
+// instead, each a row here whose effect no pellet has. A row plus
+// twist_<name> in src/twists.cpp is the whole change; SCHEMA streams the args
+// so the website needs no release. Ids may be given by registry name or by number.
 //
 // BLORB_TWIST(name, args)
-BLORB_TWIST(stimulus,  "<stim>")                                  // fired as if sensed, at the next tick
+BLORB_TWIST(stimulus,  "<stim>")                                  // fired as if sensed, at the next tick; not button or fed
 BLORB_TWIST(gene_edit, "<uid> <offset> <value>")                  // one body byte; checkpointed in the lineage
 BLORB_TWIST(rename,    "<name>")                                  // 1..15 of A-Z a-z 0-9 _ -
 BLORB_TWIST(pick,      "<egg>")                                   // choose a clutch egg
 BLORB_TWIST(prophecy,  "<feature> <action> <drive> <permille>")   // set one brain weight
+BLORB_TWIST(prophecy_treat, "")                                   // a treat baked from the phone's futures: vision, so he glows; no food

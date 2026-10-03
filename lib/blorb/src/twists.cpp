@@ -9,6 +9,7 @@ namespace blorb {
 namespace {
 
 constexpr size_t kNameMax = 15;
+constexpr Fx kProphecyTreatVision = Fx::ratio(1, 2);
 
 std::optional<unsigned> smallNumber(std::string_view w) {
   if (w.empty() || w.size() > 3) return std::nullopt;
@@ -55,6 +56,7 @@ TwistStatus twist_stimulus(Dish& dish, Args& a) {
   if (!w || !a.done()) return TwistStatus::Malformed;
   const StimInfo* s = rowNamed(STIMULI, *w);
   if (!s) return TwistStatus::OutOfRange;
+  if (s->id == stim::button || s->id == stim::fed) return TwistStatus::BodyOnly;   // a pellet, or the meal it gives
   dish.fire(s->id);
   return TwistStatus::Applied;
 }
@@ -99,6 +101,14 @@ TwistStatus twist_prophecy(Dish& dish, Args& a) {
   Creature* c = std::get_if<Creature>(&dish.occupant());
   if (!c) return TwistStatus::NotNow;
   c->prophesy(*f, act->id, d->id, Fx{int32_t(int64_t(*permille) * Fx::kOne / 1000)});
+  return TwistStatus::Applied;
+}
+
+TwistStatus twist_prophecy_treat(Dish& dish, Args& a) {
+  if (!a.done()) return TwistStatus::Malformed;
+  Creature* c = std::get_if<Creature>(&dish.occupant());
+  if (!c) return TwistStatus::NotNow;
+  c->inject(chem::vision, c->chemistry().chem[chem::vision.v] + kProphecyTreatVision);
   return TwistStatus::Applied;
 }
 
