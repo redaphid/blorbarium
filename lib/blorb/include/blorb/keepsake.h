@@ -33,7 +33,7 @@ enum class Chunk : uint8_t {
   Genome = 3,      // the occupant's genome (Clutch: the parent's)
   Chemistry = 4,   // chem[256], locus[256] as Fx
   Brain = 5,       // axes (feature, action, drive ids), then W as Q15, habit, episodes, instinct queue
-  Body = 6,
+  Body = 6,        // place, pose, reflex; then the bite in his mouth, present only while he holds one
   Stats = 7,
   Habitat = 8,
   Rng = 9,         // the dish's stream (pellet drops); the creature's rides in Occupant

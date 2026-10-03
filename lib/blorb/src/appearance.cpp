@@ -119,7 +119,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.asleep = body.asleep;
   a.dreaming = body.dreaming;
   a.calling = c.action() == action::call;
-  a.eating = chem.locus[locus::eating.v] >= kHalf;
+  a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
   careHint(c, a);

@@ -176,8 +176,14 @@ changed the design in these ways:
 - **The time-unknown marquee** runs rim to rim above his head, each row to
   its chord, instead of a box over his legs.
 
-Known and left: a rotten bite draws the fresh fly, because `present()` does
-not say which kind he bit.
+A rotten bite used to draw the fresh fly, because `present()` did not say
+which kind he bit. `Body::mouth` (a `Mouthful`: nothing, pellet or rotten
+pellet) is set at the bite and empties when the chew ends or the eat pose is
+left. `Appearance::mouth` replaces `eating`, so the bite shows on the frame it
+leaves the dish. The keepsake's Body chunk carries it as one trailing byte,
+written only while he holds a bite. Every body format 1 could hold encodes
+as before, and a reader that predates it ignores the byte, so `kFormatVersion`
+stays 1.
 
 ## 9. Memory gaps the engine verification found
 

@@ -95,6 +95,23 @@ TEST(Eat, DecidingToEatAgainMidChewFinishesTheMouthful) {
   EXPECT_GE(eating, 14) << "ticks with the eating locus up";
 }
 
+// A shake mid-chew hops him out of the eat pose: the chew is over and the bite
+// with it, so no pellet rides through the hop or the walk that follows.
+TEST(Eat, AHopMidChewEndsTheMouthful) {
+  Rig r;
+  r.habitat.pellets[0] = Pellet{r.c.body().at, 0, true};
+  r.c.force(action::eat);
+  r.run(3);
+  ASSERT_EQ(r.c.body().mouth, Mouthful::Pellet) << "he bit a fresh one";
+  r.fire(stim::shake);
+  ASSERT_EQ(r.c.body().pose, pose::hop);
+  EXPECT_EQ(r.c.body().mouth, Mouthful::Nothing);
+  for (int i = 0; i < 30; ++i) {
+    r.step();
+    EXPECT_EQ(r.c.body().mouth, Mouthful::Nothing) << "tick " << i << " after the hop began";
+  }
+}
+
 // He used to walk onto the marble and stand on it for good, so every frame
 // after a chase showed it between his feet.
 TEST(Chase, HeNosesTheMarbleOnAndNeverStandsOnIt) {
