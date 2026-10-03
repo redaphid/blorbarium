@@ -19,6 +19,7 @@ constexpr int kMaxFrameW = 320;
 
 // ---- tuning: each a one-line change ------------------------------------------
 constexpr Fx kFaceThreshold = Fx::ratio(1, 4);   // a weaker face shows neutral
+constexpr Fx kGlowingEyes = Fx::ratio(1, 4);     // a fainter glow (fading after a foresight) shows no ring and no teal eyes
 constexpr uint16_t kCrossfadeTicks = 3;
 constexpr uint16_t kBlinkCycleTicks = 40;        // a blink about every 4 s ...
 constexpr uint16_t kBlinkJitterTicks = 24;       // ... at a lifeSeed-chosen tick within each cycle
@@ -399,9 +400,12 @@ void ring(Canvas240& cv, Pt c, int rc, int g8, int amp, const Rgb& tint, int spa
   }
 }
 
+// The ring and the teal eyes go together: while he foresees, and while the glow fades after.
+bool eyesGlow(const Appearance& a) { return a.foreseeing || a.glow >= kGlowingEyes; }
+
 void halo(Canvas240& cv, const Appearance& a, const SpritePack& pack, const FrameRef& eyes, const Place& p) {
   int g8 = unit256(a.glow);
-  if (g8 == 0) return;
+  if (g8 == 0 || !eyesGlow(a)) return;
   int amp = imin(256, g8 * 3 / 2) * kPulse[a.poseTick % kPulseTicks] / 256;
   int sparks = 0;
   if (a.glow > kSparkGlow) {
@@ -491,19 +495,21 @@ bool yawning(const Appearance& a) {
 }
 
 FaceShown faceFor(const Appearance& a) {
+  // Glowing, he wears the foresee face whatever his genes or a reflex pick, with no blink or yawn.
+  if (eyesGlow(a)) return {expr::foresee, expr::foresee, 256};
   if (a.reflexActive) {
     const blorb::ReflexInfo* r = reflexInfo(a.reflex);
     ExprId f = r ? r->face : expr::alarmed;
     return {f, f, 256};
   }
-  ExprId now = a.intensity >= kFaceThreshold ? a.expression : expr::neutral;
+  // Shut eyes are for sleep: drowsy but awake, he is lidded.
+  auto awake = [&](ExprId e) { return e == expr::asleep && !a.asleep ? expr::sleepy : e; };
+  ExprId now = awake(a.intensity >= kFaceThreshold ? a.expression : expr::neutral);
   bool resting = now == expr::asleep || now == expr::sleepy || now == expr::yawn;
-  // No blink or yawn while asleep, or while foreseeing (the halo would jump to the blink's anchors).
-  bool idleLife = !a.asleep && !a.foreseeing;
-  if (idleLife && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};
-  if (idleLife && !resting && blinking(a)) return {expr::asleep, expr::asleep, 256};
-  if (a.exprTicks < kCrossfadeTicks && a.previous != now)
-    return {now, a.previous, (a.exprTicks + 1) * 256 / (kCrossfadeTicks + 1)};
+  if (!a.asleep && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};
+  if (!a.asleep && !resting && blinking(a)) return {expr::asleep, expr::asleep, 256};
+  if (a.exprTicks < kCrossfadeTicks && awake(a.previous) != now)
+    return {now, awake(a.previous), (a.exprTicks + 1) * 256 / (kCrossfadeTicks + 1)};
   return {now, now, 256};
 }
 

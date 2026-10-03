@@ -133,6 +133,66 @@ TEST(Framing, HisTravelIsTheSameEveryWayFromHome) {
   }
 }
 
+// The converter's glow rule, on the panel's colours.
+bool teal(uint16_t p) {
+  int r = r5(p) * 255 / 31, g = g6(p) * 255 / 63, b = b5(p) * 255 / 31;
+  return g > 150 && b > 120 && r * 10 < g * 7;
+}
+
+// Whatever face his genes pick, foreseeing shows the foresee face: its eyes
+// are the glow region, so they are the pixels a glow tint moves. Found with
+// the halo off, then held teal under the ring while he foresees and while
+// the glow fades after; a glow too faint for teal eyes draws no ring either.
+TEST(Foresee, TealRingsGoOnlyAroundTealEyes) {
+  for (Stage s : {Stage::Baby, Stage::Adult, Stage::Elder}) {
+    Appearance a = atHome(s, 100);
+    a.pose = blorb::pose::foresee;
+    a.foreseeing = true;
+    a.glow = Fx::zero();
+    Appearance tinted = a;
+    tinted.regions[region::glow.v] = Tint{20, 128, 128};
+    auto plain = render(a), moved = render(tinted);
+    a.glow = kForeseeGlowFloor;
+    auto haloed = render(a);
+    Appearance after = atHome(s, 100);
+    after.glow = Fx::ratio(8, 10);
+    auto fading = render(after);
+    int eyes = 0, tealPlain = 0, tealHaloed = 0, tealFading = 0;
+    for (int i = 0; i < kSide * kSide; ++i) {
+      if (plain->px[i] == moved->px[i]) continue;
+      ++eyes;
+      tealPlain += teal(plain->px[i]);
+      tealHaloed += teal(haloed->px[i]);
+      tealFading += teal(fading->px[i]);
+    }
+    EXPECT_GE(eyes, 30) << stageName(s) << ": no glow-region pixels, so not the foresee face's eyes";
+    EXPECT_GE(tealPlain * 10, eyes * 8) << stageName(s) << ": " << tealPlain << " of " << eyes << " eye pixels are teal";
+    EXPECT_GE(tealHaloed * 10, eyes * 8) << stageName(s) << ": under the halo " << tealHaloed << " of " << eyes;
+    EXPECT_GE(tealFading * 10, eyes * 8) << stageName(s) << ": as the glow fades " << tealFading << " of " << eyes;
+
+    Appearance faint = atHome(s, 100), dark = faint;
+    faint.glow = Fx::ratio(2, 10);
+    auto lit = render(faint), unlit = render(dark);
+    EXPECT_TRUE(std::equal(lit->px, lit->px + kSide * kSide, unlit->px))
+        << stageName(s) << ": a ring around eyes that do not glow";
+  }
+}
+
+// His genes may pick the shut-eyed face for a sleepy mix while he is awake.
+TEST(Faces, ShutEyesOnlyWhileHeIsAsleep) {
+  auto face = [](ExprId e, bool asleep) {
+    Appearance a = atHome(Stage::Adult, 100);
+    a.expression = a.previous = e;
+    a.intensity = Fx::one();
+    a.exprTicks = 20;
+    a.asleep = asleep;
+    return render(a);
+  };
+  auto same = [](const Canvas240& x, const Canvas240& y) { return std::equal(x.px, x.px + kSide * kSide, y.px); };
+  EXPECT_TRUE(same(*face(expr::asleep, false), *face(expr::sleepy, false))) << "awake, the asleep face shows lidded";
+  EXPECT_FALSE(same(*face(expr::asleep, true), *face(expr::sleepy, true))) << "asleep, his eyes are shut";
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
