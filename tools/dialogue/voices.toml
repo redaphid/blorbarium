@@ -1,0 +1,255 @@
+# Grungo's hand-written voice corpus. generate.py builds every prompt from this
+# file: a page of "The Field Notebook of a Pond Seer" headed by a word cloud
+# (voice cloud + topic cloud) and seed sayings, left open for the model to
+# continue. Seeds follow SOUL.md: third person, lowercase, one CAPITAL word.
+# The device font is uppercase, so the filter folds case later.
+#
+# Each voice also draws a few words from lexicon.json (mined from sporefall-art)
+# into its cloud, weighted by its `flavour` table: group name -> weight.
+#
+# Voice and topic ids are stable: they become the BLORB_VOICE / BLORB_TOPIC
+# ids in dialogue.def. Append new ones; never renumber.
+
+[topics.food]
+id = 0
+title = "on FOOD"
+cloud = ["fly", "fat fly", "broth", "moth", "gnat soup", "snack", "crumb", "the good beetle", "lunch", "slurp", "tongue", "second fly", "pantry", "nibble"]
+
+[topics.danger]
+id = 1
+title = "on DANGER"
+cloud = ["clang", "door", "heron", "rootcult", "the wardens", "hood up", "run", "tattle", "loud boot", "shadow", "hide", "crate", "eep", "nope"]
+
+[topics.sky]
+id = 2
+title = "on the SKY and the WEATHER"
+cloud = ["rain on the hull", "teal mist", "cloud", "drizzle", "moon", "fog", "thunder", "drip", "spore glow", "wind", "puddle sky", "the wet"]
+
+[topics.owner]
+id = 3
+title = "on PETER, the keeper"
+cloud = ["peter", "brother peter", "big hands", "visits", "the badge", "warm pocket", "good brother", "back soon", "waving", "friend", "hang again", "peace"]
+
+[topics.doom]
+id = 4
+title = "on DOOM, which is small and damp"
+cloud = ["sinking an inch", "kettle", "soggy sock", "lost bolt", "inevitable", "the inch", "a draught", "fate", "warm bath", "tomorrow", "mildew", "it is coming"]
+
+[topics.luck]
+id = 5
+title = "on LUCK and OMENS"
+cloud = ["shiny pebble", "three bubbles", "lucky bolt", "omen", "a coin", "the good spore", "fortune", "jackpot", "four leaves", "a sign", "winning", "dice"]
+
+[topics.pond]
+id = 6
+title = "on the POND and the BOG"
+cloud = ["bog", "lily", "muck", "ripple", "reed", "tadpole", "pipe", "the deep end", "silt", "algae", "splosh", "warm mud"]
+
+[topics.shaking]
+id = 7
+title = "on BEING SHAKEN"
+cloud = ["shake", "wobble", "rattle", "the big jostle", "bubbles stirred", "dizzy", "slosh", "hood flaps", "the eight ball", "ask again", "rumble", "whirl"]
+
+[topics.sleep]
+id = 8
+title = "on SLEEP"
+cloud = ["nap", "dream", "snore", "the dark", "night frog", "blanket cloak", "drowse", "yawn", "moon", "curl up", "glow worms", "zzz"]
+
+[topics.held]
+id = 9
+title = "on BEING HELD"
+cloud = ["hands", "warm", "lifted", "pocket", "cupped", "the palm", "safe", "squish", "carried", "the big up", "heartbeat", "hold still"]
+
+# ---------------------------------------------------------------------------
+
+[voices.mystic]
+id = 0
+title = "the MYSTIC"
+flavour = { organic = 4, nouns = 2, adjectives = 2, verbs = 1, adverbs = 1 }
+cloud = ["the bubbles", "foreseen", "WRITTEN", "brrrup", "the seeing", "teal", "behold", "lo", "prophecy", "the deep knowing", "verily", "the mist parts", "azerbaijan"]
+general = [
+  "brrrup. the bubbles have spoken. they said blub.",
+  "grungo has foreseen it. it is WRITTEN in the muck.",
+  "the mist parts. behold: a moth.",
+  "lo, the seeing comes. eyes go teal.",
+  "grungo saw this in a bubble. the bubble popped.",
+  "the bubbles said azerbaijan. grungo did not ask.",
+]
+[voices.mystic.seeds]
+food = ["the bubbles foretell a fly. a FAT one.", "grungo has foreseen lunch. it is beetle.", "lo. a crumb approaches from the east."]
+danger = ["the bubbles warn of a door. grungo leaves.", "a clang is WRITTEN. hood goes up early.", "grungo foresaw the heron. grungo is elsewhere."]
+sky = ["the clouds are bubbles too. they agree.", "rain is coming. it was always coming.", "the moon told grungo a secret. it was wet."]
+owner = ["the bubbles said peter would return. and LO.", "brother peter is foretold. croooak.", "grungo saw peter in the mist. waving."]
+doom = ["the station sinks an inch. as FORETOLD.", "the kettle will boil. it is WRITTEN.", "behold, a soggy sock. the prophecy holds."]
+luck = ["three bubbles in a row. it is a SIGN.", "the shiny pebble chose grungo. verily.", "lo, the lucky bolt. it was in the cloak."]
+pond = ["the pond knows. the pond always knows.", "grungo reads the ripples. they say: ripple.", "a tadpole of PROPHECY swims by."]
+shaking = ["the bubbles are stirred. ask again.", "shaken, the seeing says: outlook muddy.", "brrrup. the jostle reveals all. mostly flies."]
+sleep = ["in dreams the bubbles speak louder.", "grungo will nap. it is FORESEEN.", "the dream said: blanket. grungo obeys."]
+held = ["the hands were foretold. warm, as WRITTEN.", "grungo is lifted. the bubbles approve.", "held in the palm, grungo sees much."]
+
+[voices.paranoid_hoarder]
+id = 1
+title = "the HOARDER, who is watching you"
+flavour = { nouns = 5, adjectives = 1, organic = 1 }
+cloud = ["for later", "mine", "the cloak", "pocket", "stash", "counted", "bolt", "pebble", "scrap", "nobody saw", "shhh", "inventory", "tomorrow grungo's problem"]
+general = [
+  "this bolt is for later. everything is for later.",
+  "grungo counted the pebbles. one is a spy.",
+  "nobody look in the cloak. nothing is in the cloak.",
+  "shhh. grungo is hiding a button.",
+  "it is not stealing. it is LATER.",
+  "happy to be a pawn in this scheme. a RICH pawn.",
+]
+[voices.paranoid_hoarder.seeds]
+food = ["one fly for now. nine flies for later.", "who touched the crumb. grungo knows.", "the beetle stash is SAFE. probably."]
+danger = ["grungo is lookout. grungo is also hiding.", "they want the pebble. they cannot have it.", "eep. hood up. stash down.", "the rootcult knows about the button."]
+sky = ["rain is just the sky hoarding water.", "grungo hid a cloud in the cloak. for later.", "the moon is shiny. grungo wants it."]
+owner = ["peter may hold ONE bolt. briefly.", "brother peter is in on the scheme.", "peter is the only one allowed in the stash."]
+doom = ["if the station sinks, the stash sinks too.", "a bolt went missing. it is a CONSPIRACY.", "tomorrow is tomorrow grungo's problem."]
+luck = ["lucky pebble. mine. do not look at it.", "found a coin. it is for LATER.", "the good spore is in the cloak. counted twice."]
+pond = ["the pond is a big pocket. grungo approves.", "something shiny in the silt. MINE.", "the reeds are watching the stash."]
+shaking = ["careful. the cloak is full of bolts.", "shake grungo and things fall out. NO.", "everything rattles. everything is counted."]
+sleep = ["grungo sleeps on the stash. like a dragon.", "one eye open. for the pebbles.", "dreamt of a bigger cloak. more pockets."]
+held = ["held is fine. do not check the pockets.", "warm hands. empty hands. good.", "grungo is carried. the stash comes too."]
+
+[voices.cheerful_doom]
+id = 2
+title = "the CHEERFUL ONE, about the sinking"
+flavour = { adjectives = 3, nouns = 2, organic = 2, adverbs = 1 }
+cloud = ["lovely", "sinking", "an inch", "cosy", "warm bath", "hooray", "oh well", "soggy", "it is fine", "inevitable", "mildew", "nice", "lol"]
+general = [
+  "the station sank an inch! cosy!",
+  "everything is damp forever. hooray!",
+  "oh well! croooak!",
+  "the bog takes all things. gently. like a bath.",
+  "it is all going down, and grungo LOVES it.",
+  "aaaahahahah. the bog. AGAIN. aaahahah.",
+]
+[voices.cheerful_doom.seeds]
+food = ["the fly got away! more fly for the sky!", "soup again! it is always soup! lovely!", "lunch fell in the bog. now bog lunch."]
+danger = ["a clang! hood up! what fun!", "the heron is back! grungo is leaving! bye!", "doors! so many doors! eep!"]
+sky = ["rain forever! the hull sings!", "fog so thick grungo is the fog now. nice.", "thunder! the sky is having a big croak!"]
+owner = ["been thinking about you, friend! hooray!", "peter is here! the inch can wait!", "brother peter, we sink together. COSY.", "peter came back! as he does! hooray!"]
+doom = ["another inch! one day we will be soup!", "the kettle boiled. it was INEVITABLE. yay.", "mildew on the cloak! it is a pattern now!"]
+luck = ["bad luck is just luck that is damp!", "lost the pebble! found a soggier pebble!", "the omen is wet. all omens are wet. great!"]
+pond = ["the pond rises! closer to grungo! hello!", "muck to the knees! muck to the hood! yes!", "the bog is warm today. it is always warm."]
+shaking = ["wheee! the bubbles are all wrong now!", "shaken! stirred! dizzy! croooak!", "everything rattled! nothing broke! mostly!"]
+sleep = ["sleep is just sinking with dreams!", "napping in the warm mud! what a life!", "grungo will sleep through the next inch."]
+held = ["lifted! out of the damp! for a bit!", "warm hands! the warmest! hooray!", "held! like a soggy prize!"]
+
+[voices.terse]
+id = 3
+title = "the TERSE"
+flavour = { nouns = 3, adjectives = 1, max_len = 7 }
+cloud = ["no", "yes", "fly", "hm", "eep", "brrrup", "later", "seen", "wet", "ok", "nope", "mm", "brother"]
+general = [
+  "seen it.",
+  "brrrup. no.",
+  "fly. now.",
+  "hm. wet.",
+  "grungo knew.",
+  "yesss.",
+]
+[voices.terse.seeds]
+food = ["fly. fat. YES.", "snack soon.", "no soup."]
+danger = ["eep. leaving.", "hood. up.", "clang. nope."]
+sky = ["rain. good.", "fog. seen it.", "moon. hm."]
+owner = ["peter. good.", "brother. back.", "peter. WRITTEN."]
+doom = ["inch. fine.", "kettle. soon.", "sock. wet."]
+luck = ["pebble. lucky.", "three bubbles. yes.", "omen. ok."]
+pond = ["bog. home.", "ripple. hm.", "silt. mine."]
+shaking = ["no shake.", "dizzy. ask later.", "outlook: wet."]
+sleep = ["nap.", "dark. good.", "zzz. seen."]
+held = ["warm. ok.", "up. eep. fine.", "hands. YES."]
+
+[voices.rambling]
+id = 4
+title = "the RAMBLER, who goes on"
+flavour = { verbs = 3, adverbs = 3, nouns = 2, adjectives = 1 }
+cloud = ["anyway", "and then", "where was grungo", "the thing is", "long story", "speaking of flies", "duuuude", "forrr surrrree", "somehow", "basically", "cuttings", "a little cinema", "trance night"]
+general = [
+  "anyway the thing about bolts is, well, anyway.",
+  "speaking of flies, which grungo always is.",
+  "long story short, grungo was right, as usual.",
+  "where was grungo. oh. the bog. again.",
+  "duuuude. the bubbles said a whole thing.",
+  "you think a frog could hop a fence unnoticed.",
+]
+[voices.rambling.seeds]
+food = ["and then the fly, which was fat, went left.", "soup, basically, is just a wet sandwich.", "grungo once ate a moth that knew things."]
+danger = ["so the door went clang and grungo went eep.", "the heron, long story, grungo is fine.", "tattled to the wardens. they said ok, sure."]
+sky = ["the rain does this thing where it is rain.", "fog is just a cloud that got lazy, anyway.", "the moon, the thing is, is quite round."]
+owner = ["peter grows plants from little cuttings. wow.", "brother peter, forrr surrrree, the best one.", "talk is the one better thing than dancing."]
+doom = ["the station sinks, but slowly, so, anyway.", "the kettle, and this is important, will boil.", "a sock fell in. it lives there now."]
+luck = ["the pebble was lucky until it was a snack.", "three bubbles, then a fourth, which ruins it.", "found a bolt at a campout once. still lucky."]
+pond = ["the pond has a deep end and a deeper end.", "tadpoles, basically, are just thoughts.", "anyway the reeds are gossips."]
+shaking = ["whoa whoa, the bubbles, they are everywhere.", "being shaken is like a trance night for frogs.", "shake again and grungo will say something new."]
+sleep = ["dreamt of a little cinema. all flies.", "grungo naps, and then naps a bit more.", "the dark is just the day with its hood up."]
+held = ["held like this, grungo remembers being small.", "warm hands, and the thing about warm hands is.", "up we go, and down we, no, up. ok."]
+
+[voices.ominous]
+id = 5
+title = "the OMINOUS, about tiny things"
+flavour = { adjectives = 3, organic = 3, verbs = 2, nouns = 1 }
+cloud = ["it knows", "beware", "soon", "the hour", "whispers", "in the dark", "the kettle", "a reckoning", "do not", "listen", "it watches", "the drip", "processing sounds"]
+general = [
+  "the kettle knows. it has always known.",
+  "beware the drip. it is patient.",
+  "soon. not yet. but soon. a snack.",
+  "listen. the pipe is whispering about lunch.",
+  "the hour of the moth draws near.",
+  "there is a door that rolls up. we follow it.",
+]
+[voices.ominous.seeds]
+food = ["a fly is coming. it does not know yet.", "the soup waits. the soup is patient.", "beware the second fly. it is FATTER."]
+danger = ["the door. it opens. inward.", "something clanged. it will clang AGAIN.", "the heron is a long shadow with opinions."]
+sky = ["the clouds gather. they want a word.", "the rain counts the hull. one. two.", "the moon watches. it is round on purpose."]
+owner = ["peter approaches. the floor knows first.", "the keeper's hand. vast. warm. INEVITABLE.", "brother peter has a scheme. it begins."]
+doom = ["the inch is coming for us all. tuesday.", "the sock is wet. it remembers why.", "the kettle hums. the reckoning is TEA."]
+luck = ["the pebble is lucky. for now.", "three bubbles. do not ask about the fourth.", "the coin landed on its edge. it knows."]
+pond = ["the pond is deeper than it looks. by an inch.", "the reeds whisper. mostly about grungo.", "the silt remembers every bolt."]
+shaking = ["you have stirred the bubbles. they are AWAKE.", "shake. and the future rattles loose.", "the jostle has been noted."]
+sleep = ["when grungo sleeps, the snacks plan.", "the dark is warm. too warm. nice.", "the dream had a door in it. grungo did not."]
+held = ["the hands close. gently. ominously gently.", "lifted, by the great warm ones.", "held. the heartbeat counts down to lunch."]
+
+[voices.forecast]
+id = 6
+title = "the BUBBLE FORECAST, read out at dawn"
+flavour = { adjectives = 3, adverbs = 2, nouns = 2, organic = 1 }
+cloud = ["forecast", "visibility", "outlook", "becoming", "moderate", "occasionally", "sector", "pressure", "falling slowly", "flies", "teleportation unlikely", "warning", "good"]
+general = [
+  "bog sector: mist, becoming peter. good.",
+  "outlook: wet, occasionally fly.",
+  "visibility: one frog. falling slowly.",
+  "pressure rising in the cloak.",
+  "warning: snack, moderate to fat.",
+  "peace be with you. outlook: brother.",
+]
+[voices.forecast.seeds]
+food = ["flies: fat, then fatter. outlook good.", "soup sector: warm, becoming soup.", "gnat levels moderate. tongue advised."]
+danger = ["door activity: high. hood up advised.", "heron: possible later. leave now.", "clang warning for the north pipe."]
+sky = ["rain, then rain, then a bit of rain.", "fog: total. visibility: grungo.", "moon: rising. mood: damp."]
+owner = ["peter: approaching, becoming here.", "brother levels: high. good.", "teleportation: still not existing. peter late."]
+doom = ["station: sinking slowly, one inch. fine.", "kettle: boiling by noon. no change.", "sock sector: soggy, becoming soggier."]
+luck = ["scheme: FORESEEN. fence: hoppable.", "luck: moderate, occasionally pebble.", "omens: three bubbles, good.", "jackpot: unlikely. pebble: likely."]
+pond = ["pond: still, then ripple, then still.", "silt: deep. tadpoles: scattered.", "reed sector: whispering, moderate."]
+shaking = ["shaking: severe. outlook: ask again.", "bubbles: stirred. visibility: dizzy.", "rattle warning: cloak contents."]
+sleep = ["night: dark, becoming darker. nap.", "dreams: scattered flies. good.", "snoring: moderate to croak."]
+held = ["hands: warm. outlook: held.", "lift warning: up, then cosy.", "palm sector: safe. good."]
+
+# Hybrids for the sample generation. Genetics can cross any two voices; these
+# are the pairs generated now. Order matters only for the prompt (A leads).
+[blends]
+pairs = [
+  ["mystic", "paranoid_hoarder"],
+  ["cheerful_doom", "ominous"],
+  ["terse", "rambling"],
+  ["forecast", "mystic"],
+  ["ominous", "paranoid_hoarder"],
+  ["rambling", "cheerful_doom"],
+]
+
+# Words from SOUL.md's Peter section seasoned into the seeds above. Only used
+# to report which generated lines carry that seasoning (samples.md).
+[seasoning]
+markers = ["BROTHER", "DU+DE", "FOR+ SUR+", "AZERBAIJAN", "TELEPORT", "PROCESSING", "FENCE", "PAWN", "SCHEME", "TOMORROW GRUNGO", "CUTTING", "TRANCE", "CAMPOUT", "CINEMA", "DANCING", "PEACE BE", "A+HA+HA", "YES{3,}", "LOOKOUT", "ROLLS UP", "FRIEND"]
