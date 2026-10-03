@@ -106,6 +106,14 @@ def score(runs):
     pun = [share(r["picks"], range(1, 6), ACTS.index("chase")) for r in runs.get("punish", [])]
     ctl = [share(r["picks"], range(1, 6), ACTS.index("chase")) for r in runs.get("life", []) if r["style"] == "rich"]
     m["punish_chase_ratio"] = mean(pun) / mean(ctl) if ctl and mean(ctl) else float("nan")
+    # Time shares, which interrupts cannot inflate the way they inflate switch-ins.
+    trt = [share(r["ticks"], range(1, 9), ACTS.index("call")) for r in runs.get("life", []) if r["style"] == "trainer"]
+    ctt = [share(r["ticks"], range(1, 9), ACTS.index("call")) for r in runs.get("life", []) if r["style"] == "rich"]
+    m["reward_call_time_ratio"] = mean(trt) / mean(ctt) if ctt and mean(ctt) else float("nan")
+    m["reward_time_seed_wins"] = "%d/%d" % (sum(a > b for a, b in zip(trt, ctt)), len(trt))
+    pt = [share(r["ticks"], range(1, 6), ACTS.index("chase")) for r in runs.get("punish", [])]
+    ct = [share(r["ticks"], range(1, 6), ACTS.index("chase")) for r in runs.get("life", []) if r["style"] == "rich"]
+    m["punish_chase_time_ratio"] = mean(pt) / mean(ct) if ct and mean(ct) else float("nan")
 
     def cue(style, days):
         rs = [r for r in runs.get("cue", []) if r["style"] == style]
