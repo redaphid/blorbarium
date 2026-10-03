@@ -87,3 +87,50 @@ snapshot's two slots become the keys `save_a` and `save_b` in `pet`, and
 engine, the keepsake format (header, CRC, append-only TLV tags, unknown
 tags carried) and its tests do not change. While a new firmware image is on
 trial, it writes no save in a newer format.
+
+## 6. Choices made while building, where the design was silent or wrong
+
+Each was reported by the unit that made it and reviewed at integration.
+
+- **Brain (unit 8).** Learning is normalised LMS: the documented update divided
+  by the sum of squared features, so one step moves the prediction exactly
+  `rate` of the way to what was observed and a mutated high learning rate
+  cannot oscillate. Confidence is |effect| / 0.25, capped at 1, because a
+  per-cell update count would cost 1.7 KB of state; `heirloomMinConfidence`
+  therefore acts as a minimum |effect|.
+- **Chemistry (unit 5).** `ChemRules::seeds` holds a chem gene's starting
+  level (the design had nowhere for it). `stepCoarse` splits emission around
+  the decay (the trapezoid rule) and counts decay applications exactly; the
+  plain `stride >> shift` never decayed Life at all. A `featGate` past 32
+  never opens, instead of shifting by 32 or more.
+- **Senses (unit 6).** `PetClock::entrainedTicks` budgets entrainment, so a
+  3-hour misalignment corrects in days rather than months while the bound
+  stays one hour per pet day.
+- **Creature (unit 9).** A rotten bite fires `fed` as well as `fed_bad`;
+  without it he ate every rotten pellet and died of injury within a pet day.
+  `age` is 1 - Life. Death and its cause are read from the loci, never stored.
+- **Death cause.** Cause receptors sum, so the bands are powers of two in
+  sixteenths (OldAge 1, Starved 2, Injured 4, Poisoned 8) decoded by the
+  highest set bit; any combination decodes uniquely.
+- **Uids.** Mutation never deletes the gene holding the largest uid, so the
+  maximum only rises and no uid is reused in a lineage.
+- **Catch-up (unit 14).** Gaps up to 60 s are clock drift; a source that runs
+  backwards re-anchors and catches nothing up; a gap is capped at 30 days
+  and the dropped remainder is recorded. A death inside a gap runs the
+  vigil to its end, but the egg choice waits for the owner rather than
+  auto-picking. An egg can hatch inside a gap.
+- **Twists (unit 13).** The `stimulus` twist accepts any registry stimulus,
+  `fed` and `button` included (entry 4: no caps). Each `gene_edit` appends a
+  lineage Checkpoint, so `genomeOf` returns the edited genome.
+- **Renderer (unit 16).** The halo draws whenever `glow > 0`, with a 5 px
+  floor on its radius so the egg's small froglet eyes still glow; egg frames
+  carry eye anchors. No blink or yawn while asleep or foreseeing, so the halo
+  never jumps. `facing` is not drawn yet.
+- **Grungo pack (unit 19).** The 840 to 120 px downscale is a 7x7 block vote
+  weighted toward outline and glow, with the winning region's mean colour; box
+  and Lanczos filters blurred the ink. The happy, alarmed, annoyed, croak and
+  sleepy irises are shifted to neutral's red-brown before quantising. The egg
+  is the user's pick (`egg-nest-s1007`, ground stripped).
+- **Known gap for unit 20.** `Storage` has no offset read, so `Lineage` reads
+  the whole log into RAM (up to 192 KB). The flash implementation must add a
+  ranged read before the log grows.
