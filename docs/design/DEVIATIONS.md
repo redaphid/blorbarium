@@ -73,3 +73,17 @@ What this changes in DESIGN.md section 6: `EDIT`, `NAME`, `STIM`, `PICK`,
 are twist kinds (`gene_edit`, `rename`, `stimulus`, `pick`) or the
 `SNAPSHOT` read. No verb replaces the whole state. `TIME` stays as the input
 to the phone time source (entry 3).
+
+## 5. Flash layout follows the OTA survey (affects unit 20, not the engine)
+
+DESIGN.md section 6 put the keepsake on LittleFS in a `keepsake` partition.
+The OTA survey (`explore-ota.md` section 5 in the design scratchpad) found
+that the Arduino core auto-erases the first `nvs` partition on a full or
+changed NVS, and recommends the layout unit 20 now ships on its first cable
+flash: nvs, otadata, two 4 MB OTA app slots, a separately labelled `pet` NVS
+partition, a `petfs` LittleFS (format-on-fail off), and coredump. The
+snapshot's two slots become the keys `save_a` and `save_b` in `pet`, and
+`lineage.log` lives on `petfs`. Both sit behind the `Storage` seam, so the
+engine, the keepsake format (header, CRC, append-only TLV tags, unknown
+tags carried) and its tests do not change. While a new firmware image is on
+trial, it writes no save in a newer format.
