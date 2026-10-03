@@ -25,7 +25,7 @@ struct Fx {
   }
   static constexpr Fx zero() { return Fx{0}; }
   static constexpr Fx one() { return Fx{kOne}; }
-  static constexpr Fx ratio(int32_t num, int32_t den) { return sat((int64_t(num) << kFrac) / den); }
+  static constexpr Fx ratio(int32_t num, int32_t den) { return sat(int64_t(num) * kOne / den); }
   // Gene decoders use these two, so every byte value is legal.
   static constexpr Fx unitByte(uint8_t b) { return Fx{int32_t((int64_t(b) * kOne) / 255)}; }       // 0..255 -> 0..1
   static constexpr Fx signedByte(uint8_t b) { return Fx{int32_t((int64_t(b) - 128) * (kOne / 128))}; }  // 128 = 0

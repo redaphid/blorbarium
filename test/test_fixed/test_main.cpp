@@ -19,6 +19,11 @@ TEST(Fx, UnitByteSpansZeroToOne) {
   EXPECT_EQ(Fx::signedByte(0), -Fx::one());
 }
 
+TEST(Fx, RatioHandlesNegativeNumerators) {
+  EXPECT_EQ(Fx::ratio(-1, 2), -Fx::ratio(1, 2));
+  EXPECT_EQ(Fx::ratio(-3, 1).raw, -3 * Fx::kOne);
+}
+
 TEST(Fx, SlowestDriveRateIsStillRepresentable) {
   Fx perTick = Fx::ratio(1, 6 * int32_t(kTicksPerHour));
   EXPECT_GT(perTick.raw, 50);
