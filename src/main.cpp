@@ -116,7 +116,9 @@ static void step(uint32_t now) {
   if (now - lastSample >= blorb::kSampleMs) {
     lastBody = readBody();
     // The panel and the engine turn together, so downhill is down on the glass.
+    const uint8_t was = up.rotation();
     const uint8_t rot = up.sample(lastBody, now);
+    if (rot != was) dish->turned(uint8_t(rot - was));
     if (rot != display.getRotation()) display.setRotation(rot);
     dish->sample(up.toScreen(lastBody), now);
     lastSample = now;
