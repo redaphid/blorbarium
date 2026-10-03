@@ -235,7 +235,7 @@ void Protocol::handle(std::string_view line, Dish& dish, Link& link) {
     size_t from = args.rest.find_first_not_of(' ');
     Request req{*id, *verb, from == std::string_view::npos ? std::string_view{} : args.rest.substr(from)};
     cmd.run(dish, req, reply);
-    if ((cmd.flags & kMutating) && reply.succeeded()) dish.markDirty();
+    if ((cmd.flags & kMutating) && reply.changedSave()) dish.markDirty();
     return;
   }
   reply.err(404, "UNKNOWN_VERB");
@@ -497,6 +497,7 @@ void cmd_twist(Dish& dish, const Request& req, Reply& r) {
     if (*kind != t.name) continue;
     switch (t.apply(dish, a)) {
       case TwistStatus::Applied: return r.ok("%s", t.name);
+      case TwistStatus::Shown: return r.unsaved().ok("%s", t.name);
       case TwistStatus::Malformed: return r.err(400, "BAD_ARGS");
       case TwistStatus::OutOfRange: return r.err(416, "OUT_OF_RANGE");
       case TwistStatus::NotNow: return r.err(409, "NOT_NOW");

@@ -233,9 +233,9 @@ void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
 
 void Thinker::start(const Creature& c, ThoughtPick pick, uint32_t tick, Rng& rng) {
   const ThoughtInfo* info = thoughtInfo(pick.id);
-  Shown s{pick.id, info->prophecy(), tick, 0, {}};
+  Shown s{info->prophecy() ? Spoken::prophecy : Spoken::thought, pick.id, tick, 0, {}};
   const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line);
-  s.ticks = uint16_t(kThoughtLeadTicks + len * kThoughtTicksPerChar);
+  s.ticks = passTicks(len);
   now_ = s;
   readyAt_[info - THOUGHTS] = tick + uint32_t(info->cooldownS) * (1000 / kTickMs);
 }
@@ -245,16 +245,16 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
   const Observed o{c, habitat, clock, heirlooms_, tick};
-  if (shook && !(now_ && now_->prophecy)) {
+  if (shook && (!now_ || now_->kind == Spoken::thought)) {
     Rng rng = seededFor(life_, tick, kOracleSalt);
     if (rng.below(255) < c.phenotype().oracle.chance)
       if (std::optional<ThoughtPick> p = chooseProphecy(o, readyAt_, rng)) return start(c, *p, tick, rng);
   }
   if (now_) {
     if (tick - now_->since < now_->ticks) return;
-    // An urgent line or a prophecy is an interjection: the gap it cut short
-    // still runs, so it cannot crowd out what he was waiting to say.
-    const bool interjection = now_->prophecy || thoughtInfo(now_->id)->priority >= kUrgentThought;
+    // An urgent line, a prophecy or the phone's line is an interjection: the
+    // gap it cut short still runs, so it cannot crowd out what he was waiting to say.
+    const bool interjection = now_->kind != Spoken::thought || thoughtInfo(now_->id)->priority >= kUrgentThought;
     now_.reset();
     if (!interjection) quietUntil_ = tick + kQuietTicks + seededFor(life_, tick).below(kQuietJitterTicks);
     return;
@@ -288,20 +288,30 @@ void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, con
   start(c, ThoughtPick{id, num}, tick, rng);
 }
 
-void Thinker::show(Appearance& a, uint32_t tick) const {
-  if (!now_ || tick - now_->since >= now_->ticks) return;
+void Thinker::say(std::string_view line, const Creature& c, const Lineage& lineage, uint32_t tick) {
+  if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
+  const size_t n = std::min(line.size(), kMaxSaidText);
+  Shown s{Spoken::said, ThoughtId{}, tick, passTicks(n), {}};
+  std::copy(line.begin(), line.begin() + n, s.line);
+  now_ = s;
+}
+
+void Thinker::show(Appearance& a, uint32_t tick, bool wallKnown) const {
+  if (!now_ || tick - now_->since >= now_->ticks || (!wallKnown && now_->kind != Spoken::said)) return;
   a.thinking = true;
-  a.prophecy = now_->prophecy;
+  a.prophecy = now_->kind == Spoken::prophecy;
   a.thought = now_->id;
   std::copy(std::begin(now_->line), std::end(now_->line), a.line);
   a.thoughtPhase = Fx::ratio(int32_t(tick - now_->since), now_->ticks);
-  if (!now_->prophecy) return;
-  // The seer at work: the foresee face and glow, and no hop for the shake that asked.
+  if (now_->kind == Spoken::thought) return;
+  const ExprId face = now_->kind == Spoken::said ? expr::croak : expr::foresee;
   const uint16_t since = uint16_t(std::min<uint32_t>(UINT16_MAX, tick - now_->since));
-  if (a.expression != expr::foresee) a.previous = a.expression;
-  a.expression = expr::foresee;
+  if (a.expression != face) a.previous = a.expression;
+  a.expression = face;
   a.intensity = Fx::one();
   a.exprTicks = since;
+  if (now_->kind == Spoken::said) return;
+  // The seer at work: the foresee glow, and no hop for the shake that asked.
   a.foreseeing = true;
   a.glow = fxMax(a.glow, kForeseeGlowFloor);
   if (a.reflexActive && a.reflex == reflex::hop) a.reflexActive = false;

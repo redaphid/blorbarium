@@ -332,6 +332,50 @@ TEST(Twist, MalformedOpsAreRefusedAndTheStateIsUntouched) {
   EXPECT_EQ(a.dish.hash(), b.dish.hash()) << "nothing a refused op touched shows up later either";
 }
 
+TEST(Twist, SayMapsTheRestOfTheLineAndSavesNothing) {
+  Rig r, quiet;
+  r.hatch();
+  quiet.hatch();
+  const auto stored = r.store.files;
+  const uint32_t hash = r.dish.hash();
+  EXPECT_EQ(r.send("#9 TWIST say  hello, frog! @2 #x \xc3\xa9  "), (Lines{"#9 OK say"}));
+  EXPECT_TRUE(r.store.files == stored) << "a say writes no keepsake";
+  EXPECT_EQ(r.dish.hash(), hash);
+  Appearance a = r.dish.appearance();
+  EXPECT_TRUE(a.thinking) << "it shows before any TIME, as on the board";
+  EXPECT_STREQ(a.line, "HELLO, FROG! 2 X");
+  EXPECT_EQ(a.expression, expr::croak);
+
+  EXPECT_EQ(r.send("#a TWIST say " + std::string(70, 'a')), (Lines{"#a OK say"}));
+  EXPECT_EQ(std::string(r.dish.appearance().line), std::string(56, 'A')) << "capped at 56";
+  for (const char* empty : {"#b TWIST say", "#b TWIST say    ", "#b TWIST say @#$%^&*"})
+    EXPECT_EQ(r.send(empty), (Lines{"#b ERR 400 BAD_ARGS"})) << empty;
+
+  r.run(20000);
+  quiet.run(20000);
+  EXPECT_EQ(r.dish.hash(), quiet.dish.hash()) << "the replay hash never sees a said line";
+  const Genome founder = quickEgg();
+  Dish rebooted(r.store, 7, 0x9f31c2d04a7bull, DishOptions{nullptr, &founder});
+  EXPECT_FALSE(rebooted.appearance().thinking) << "a reboot forgets it";
+
+  const auto beforeRename = r.store.files;
+  EXPECT_EQ(r.send("#c TWIST rename Grungo_V"), (Lines{"#c OK rename"}));
+  EXPECT_FALSE(r.store.files == beforeRename) << "the same check sees a twist that does save";
+}
+
+TEST(Golden, TwistSay) {
+  Rig r;
+  Lines got = r.send("#5f TWIST say hi");
+  r.hatch();
+  for (const char* op : {"#60 TWIST say Hello, Grungo!", "#61 TWIST say", "#62 TWIST say @#$"}) {
+    Lines out = r.send(op);
+    got.insert(got.end(), out.begin(), out.end());
+  }
+  const Lines want = {"#5f ERR 409 NOT_NOW", "#60 OK say", "#61 ERR 400 BAD_ARGS", "#62 ERR 400 BAD_ARGS"};
+  EXPECT_EQ(got, want);
+  EXPECT_STREQ(r.dish.appearance().line, "HELLO, GRUNGO!");
+}
+
 TEST(Link, AConnectedLinkThatSendsNothingReceivesNothing) {
   Rig r;
   r.run(120000);

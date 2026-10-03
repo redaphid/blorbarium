@@ -80,6 +80,7 @@ class Dish {
   bool pick(uint8_t egg);          // the pick twist and the body's clutch choice share this
   void fire(StimId);               // as if a detector saw it; lands at the next tick
   void think(ThoughtId);           // sim scripts and tests: he says that line now (thoughts.h)
+  bool say(std::string_view line); // TWIST say: he croaks the phone's line now; false with no creature
   // One body byte of the creature's genome, recorded in the lineage. False
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
