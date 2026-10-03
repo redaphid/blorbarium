@@ -463,32 +463,46 @@ TEST(Placement, NeverClipsTheHoppingCreatureOrItsHaloAtTheRim) {
   }
 }
 
-TEST(Marquee, AppearsOnlyWhenTimeIsUnknownAndClearsTheFace) {
+// It once sat over his legs in a box narrower than the dish, cutting letters
+// at its hard edges.
+TEST(Marquee, RunsTheDishAboveHisHeadAndNeverCoversHisFace) {
   const auto& pack = paint::placeholderPack();
-  for (double x : {0.0, 0.7, -0.7}) {
-    double y = x == 0.0 ? 1.0 : 0.7;
-    Appearance a = adult(x, y);
+  struct Rows { int top = kSide, bottom = -1, left = kSide, right = -1; };
+  auto changed = [](const Canvas240& a, const Canvas240& b) {
+    Rows r;
+    for (int i = 0; i < kSide * kSide; ++i)
+      if (a.px[i] != b.px[i]) {
+        r.top = std::min(r.top, i / kSide); r.bottom = std::max(r.bottom, i / kSide);
+        r.left = std::min(r.left, i % kSide); r.right = std::max(r.right, i % kSide);
+      }
+    return r;
+  };
+  Appearance nobody;
+  nobody.kind = Appearance::Kind::Clutch;
+  for (auto at : {std::pair{0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.7, 0.7}, {-0.7, -0.7}}) {
+    Appearance a = adult(at.first, at.second);
     auto plain = render(a, pack);
     a.timeUnknown = true;
-    auto marked = render(a, pack);
-    int bandTop = kSide, bandBottom = -1;
-    for (int i = 0; i < kSide * kSide; ++i)
-      if (plain->px[i] != marked->px[i]) { bandTop = std::min(bandTop, i / kSide); bandBottom = std::max(bandBottom, i / kSide); }
-    ASSERT_LE(bandTop, bandBottom) << "no marquee drawn";
-    EXPECT_LE(bandBottom - bandTop, 24);
-    EXPECT_GT(bandTop, 160);
-    int faceBottom = -1;
+    Rows band = changed(*plain, *render(a, pack));
+    ASSERT_LE(band.top, band.bottom) << "no marquee drawn";
+    EXPECT_LE(band.bottom - band.top, 24);
+    EXPECT_GE(band.right - band.left, 150) << "the text runs the dish's width";
+    Rows face;
     for (uint16_t t = 0; t < 4; ++t) {
-      Appearance calm = adult(x, y), startled = calm;
+      Appearance calm = adult(at.first, at.second), startled = calm;
       calm.poseTick = startled.poseTick = t;
       calm.intensity = startled.intensity = Fx::one();
       startled.expression = startled.previous = blorb::expr::alarmed;
-      auto c = render(calm, pack), s = render(startled, pack);
-      for (int i = 0; i < kSide * kSide; ++i)
-        if (c->px[i] != s->px[i]) faceBottom = std::max(faceBottom, i / kSide);
+      Rows f = changed(*render(calm, pack), *render(startled, pack));
+      face.top = std::min(face.top, f.top);
+      face.bottom = std::max(face.bottom, f.bottom);
     }
-    ASSERT_GE(faceBottom, 0);
-    EXPECT_LT(faceBottom, bandTop) << "the marquee covers his face at " << x << "," << y;
+    ASSERT_LE(face.top, face.bottom);
+    EXPECT_TRUE(face.top > band.bottom || face.bottom < band.top)
+        << "the marquee covers his face at " << at.first << "," << at.second;
+    if (at.first == 0.0 && at.second == 0.0) {
+      EXPECT_LT(band.bottom, changed(*plain, *render(nobody, pack)).top) << "above his head";
+    }
   }
   Appearance empty;
   empty.kind = Appearance::Kind::Clutch;
