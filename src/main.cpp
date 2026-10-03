@@ -21,6 +21,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include <esp_heap_caps.h>
 #include "hw/board_lcd128.h"
 #include "hw/storage_nvs_fs.h"
+#include "hw/system_clock.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
 
@@ -98,6 +99,7 @@ SET_LOOP_TASK_STACK_SIZE(kDishStackBytes);
 // whose lines start '#' or '!'.
 static constexpr uint32_t kStatusMs = 10000;
 static hw::StorageState storageState;
+static hw::SystemClock systemClock;
 static uint32_t lastStatus = 0;
 
 static const char* bootName(blorb::Boot b) {
@@ -135,6 +137,8 @@ static void reportBoot() {
   Serial.printf("[hw] storage slots=%s files=%s%s\n", storageState.slots ? "ok" : "FAILED",
                 filesName(storageState.files), filesFailed ? storageState.why : "");
   if (!storageState.slots) Serial.println("[hw] !!! the pet partition will not open: no snapshot loads or saves");
+  if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
+  else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
   const OccupantSummary o = summarize(dish->occupant());
   Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
@@ -166,10 +170,12 @@ void setup() {
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   uint64_t lineage = 0;
   for (uint8_t b : mac) lineage = lineage << 8 | b;
+  blorb::DishOptions options;
 #if !defined(BADGE_BOARD_SIM)
   storageState = store.begin();
+  options.rtc = &systemClock;
 #endif
-  dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage);
+  dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
@@ -186,6 +192,9 @@ void loop() {
     lastFrame = now;
   }
 #if !defined(BADGE_BOARD_SIM)
+  // The same anchor the Dish holds, so a soft reset's rtc reading counts only the unsaved gap.
+  if (dish->timeKnown() && !hw::SystemClock::isSet())
+    if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
 #endif
 }
