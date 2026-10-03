@@ -1,0 +1,470 @@
+{
+ "1": {
+  "class_type": "CheckpointLoaderSimple",
+  "_meta": {
+   "title": "Checkpoint (SDXL Juggernaut XI)"
+  },
+  "inputs": {
+   "ckpt_name": "SDXL1.0\\juggernautXL_juggXIByRundiffusion.safetensors"
+  }
+ },
+ "40": {
+  "class_type": "IPAdapterModelLoader",
+  "_meta": {
+   "title": "IP-Adapter model"
+  },
+  "inputs": {
+   "ipadapter_file": "ip-adapter-plus_sdxl_vit-h.safetensors"
+  }
+ },
+ "41": {
+  "class_type": "CLIPVisionLoader",
+  "_meta": {
+   "title": "CLIP vision"
+  },
+  "inputs": {
+   "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+  }
+ },
+ "30": {
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Input frame"
+  },
+  "inputs": {
+   "image": "grungo_neutral.png"
+  }
+ },
+ "42": {
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Reference A"
+  },
+  "inputs": {
+   "image": "grungo_neutral.png"
+  }
+ },
+ "45": {
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Reference B"
+  },
+  "inputs": {
+   "image": "grungo_neutral.png"
+  }
+ },
+ "46": {
+  "class_type": "BatchImagesNode",
+  "_meta": {
+   "title": "Reference frames"
+  },
+  "inputs": {
+   "images.image0": [
+    "42",
+    0
+   ],
+   "images.image1": [
+    "45",
+    0
+   ]
+  }
+ },
+ "43": {
+  "class_type": "PrepImageForClipVision",
+  "_meta": {
+   "title": "Prep references"
+  },
+  "inputs": {
+   "interpolation": "LANCZOS",
+   "crop_position": "center",
+   "sharpening": 0.0,
+   "image": [
+    "46",
+    0
+   ]
+  }
+ },
+ "44": {
+  "class_type": "IPAdapterAdvanced",
+  "_meta": {
+   "title": "IP-Adapter (identity)"
+  },
+  "inputs": {
+   "weight": 0.5,
+   "weight_type": "ease in-out",
+   "combine_embeds": "average",
+   "start_at": 0.0,
+   "end_at": 0.6,
+   "embeds_scaling": "V only",
+   "model": [
+    "1",
+    0
+   ],
+   "ipadapter": [
+    "40",
+    0
+   ],
+   "image": [
+    "43",
+    0
+   ],
+   "clip_vision": [
+    "41",
+    0
+   ]
+  }
+ },
+ "3": {
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Positive prompt"
+  },
+  "inputs": {
+   "text": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (a slightly wider gentle closed-mouth frog smile:1.3), calm content expression, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background",
+   "clip": [
+    "1",
+    1
+   ]
+  }
+ },
+ "4": {
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "Negative prompt"
+  },
+  "inputs": {
+   "text": "photorealistic, photo, 3d render, blurry, jpeg artifacts, text, watermark, signature, human, person, multiple characters, duplicate, cropped, deformed face, extra eyes, frown, open mouth",
+   "clip": [
+    "1",
+    1
+   ]
+  }
+ },
+ "50": {
+  "class_type": "LoadImageMask",
+  "_meta": {
+   "title": "Mask preset"
+  },
+  "inputs": {
+   "image": "grungo_mask_mouth.png",
+   "channel": "red"
+  }
+ },
+ "55": {
+  "class_type": "LoadImageMask",
+  "_meta": {
+   "title": "Body alpha (leave as is)"
+  },
+  "inputs": {
+   "image": "grungo_alpha.png",
+   "channel": "red"
+  }
+ },
+ "56": {
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Painted strokes inside the body"
+  },
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "multiply",
+   "destination": [
+    "30",
+    1
+   ],
+   "source": [
+    "55",
+    0
+   ]
+  }
+ },
+ "57": {
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Preset + painted"
+  },
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "add",
+   "destination": [
+    "50",
+    0
+   ],
+   "source": [
+    "56",
+    0
+   ]
+  }
+ },
+ "51": {
+  "class_type": "GrowMask",
+  "_meta": {
+   "title": "Grow mask"
+  },
+  "inputs": {
+   "expand": 8,
+   "tapered_corners": true,
+   "mask": [
+    "57",
+    0
+   ]
+  }
+ },
+ "63": {
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Mask as image"
+  },
+  "inputs": {
+   "mask": [
+    "57",
+    0
+   ]
+  }
+ },
+ "64": {
+  "class_type": "ImageBlur",
+  "_meta": {
+   "title": "Soften paste edge (radius <= grow)"
+  },
+  "inputs": {
+   "blur_radius": 8,
+   "sigma": 4.0,
+   "image": [
+    "63",
+    0
+   ]
+  }
+ },
+ "65": {
+  "class_type": "ImageToMask",
+  "_meta": {
+   "title": "Soft mask"
+  },
+  "inputs": {
+   "channel": "red",
+   "image": [
+    "64",
+    0
+   ]
+  }
+ },
+ "66": {
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Soft mask inside the grown mask"
+  },
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "multiply",
+   "destination": [
+    "51",
+    0
+   ],
+   "source": [
+    "65",
+    0
+   ]
+  }
+ },
+ "58": {
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Paste mask (inside the body)"
+  },
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "multiply",
+   "destination": [
+    "66",
+    0
+   ],
+   "source": [
+    "55",
+    0
+   ]
+  }
+ },
+ "59": {
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Mask to image"
+  },
+  "inputs": {
+   "mask": [
+    "58",
+    0
+   ]
+  }
+ },
+ "60": {
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Mask preview"
+  },
+  "inputs": {
+   "images": [
+    "59",
+    0
+   ]
+  }
+ },
+ "32": {
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "Encode input"
+  },
+  "inputs": {
+   "pixels": [
+    "30",
+    0
+   ],
+   "vae": [
+    "1",
+    2
+   ]
+  }
+ },
+ "53": {
+  "class_type": "SetLatentNoiseMask",
+  "_meta": {
+   "title": "Noise only the mask"
+  },
+  "inputs": {
+   "samples": [
+    "32",
+    0
+   ],
+   "mask": [
+    "51",
+    0
+   ]
+  }
+ },
+ "6": {
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "Sampler"
+  },
+  "inputs": {
+   "seed": 1001,
+   "steps": 28,
+   "cfg": 7.0,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 0.6,
+   "model": [
+    "44",
+    0
+   ],
+   "positive": [
+    "3",
+    0
+   ],
+   "negative": [
+    "4",
+    0
+   ],
+   "latent_image": [
+    "53",
+    0
+   ]
+  }
+ },
+ "7": {
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "Decode"
+  },
+  "inputs": {
+   "samples": [
+    "6",
+    0
+   ],
+   "vae": [
+    "1",
+    2
+   ]
+  }
+ },
+ "54": {
+  "class_type": "ImageCompositeMasked",
+  "_meta": {
+   "title": "Paste into input"
+  },
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "resize_source": false,
+   "destination": [
+    "30",
+    0
+   ],
+   "source": [
+    "7",
+    0
+   ],
+   "mask": [
+    "58",
+    0
+   ]
+  }
+ },
+ "61": {
+  "class_type": "InvertMask",
+  "_meta": {
+   "title": "Alpha as background mask"
+  },
+  "inputs": {
+   "mask": [
+    "55",
+    0
+   ]
+  }
+ },
+ "62": {
+  "class_type": "JoinImageWithAlpha",
+  "_meta": {
+   "title": "Re-attach anchor alpha"
+  },
+  "inputs": {
+   "image": [
+    "54",
+    0
+   ],
+   "alpha": [
+    "61",
+    0
+   ]
+  }
+ },
+ "12": {
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Adjusted frame"
+  },
+  "inputs": {
+   "filename_prefix": "grungo/adjust",
+   "images": [
+    "62",
+    0
+   ]
+  }
+ },
+ "13": {
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Raw decode (new silhouettes only)"
+  },
+  "inputs": {
+   "images": [
+    "7",
+    0
+   ]
+  }
+ }
+}
