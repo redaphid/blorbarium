@@ -20,7 +20,7 @@ constexpr int kParents = 16;
 
 std::unique_ptr<paint::Canvas240> render(const Appearance& a) {
   auto cv = std::make_unique<paint::Canvas240>();
-  paint::draw(a, grungoPack(), *cv);
+  paint::draw(a, grungoPack(), *cv, 0);
   return cv;
 }
 

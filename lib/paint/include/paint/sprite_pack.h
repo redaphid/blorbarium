@@ -4,16 +4,17 @@
 // firmware pushes the buffer with LGFX. Not part of the engine: lib/paint may
 // be forked for another character.
 //
-// draw() is pure over (Appearance, pack): every animation (bob, blink, yawn,
-// crossfade, the hop's squash-leap-land, the halo pulse and sparks) is a
-// function of poseTick, exprTicks, reflexPhase and lifeSeed. That is what
+// draw() is pure over (Appearance, pack, nowMs): every animation of him (bob,
+// blink, yawn, crossfade, the hop's squash-leap-land, the halo pulse and
+// sparks) is a function of poseTick, exprTicks, reflexPhase and lifeSeed, and
+// the dish's own furniture (the time-unknown marquee) of nowMs, elapsed real
+// milliseconds, so it moves whatever the simulation is doing. That is what
 // makes the sim's headless shots byte-identical and the goldens stable.
 #include <cstdint>
 #include "blorb/appearance.h"
+#include "paint/canvas.h"
 
 namespace paint {
-
-struct Canvas240 { uint16_t px[240 * 240]; };   // round mask applied at draw time
 
 // The pack's palette. Each entry is tagged with a region (regions.def) by the
 // converter from the art's hue and the eye and mouth masks; 255 = invariant
@@ -53,8 +54,9 @@ class SpritePack {
 // marks, face (crossfade from previous), then the foresee halo: a teal ring
 // around each eye anchor, tinted by the glow region, radius r * (1.5 + 0.5 *
 // glow), pulsing at 1.25 Hz, with up to six orbiting sparks once glow > 0.6;
-// then rim pips (pantry) and the care-hint glyph; then the round mask.
-void draw(const blorb::Appearance&, const SpritePack&, Canvas240&);
+// then rim pips (pantry), the care-hint glyph and the time-unknown marquee;
+// then the round mask.
+void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 
 // A procedural stand-in (circles, a ring, two eyes with anchors) used by the
 // sim and tests until the grungo converter exists.

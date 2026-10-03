@@ -187,7 +187,7 @@ void loop() {
   const uint32_t now = millis();
   step(now);
   if (now - lastFrame >= kFrameMs) {
-    paint::draw(dish->appearance(), grungoPack(), canvas);
+    paint::draw(dish->appearance(), grungoPack(), canvas, now);
     boardPresent(display, canvas);
     lastFrame = now;
   }

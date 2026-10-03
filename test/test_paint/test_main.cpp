@@ -11,6 +11,7 @@
 #include <vector>
 #include "blorb/appearance.h"
 #include "blorb/registry.h"
+#include "paint/marquee.h"
 #include "paint/sprite_pack.h"
 
 using blorb::Appearance;
@@ -35,10 +36,11 @@ bool outsideDish(int x, int y) {
 }
 Fx fx(double v) { return Fx{int32_t(std::lround(v * Fx::kOne))}; }
 
-std::unique_ptr<Canvas240> render(const Appearance& a, const paint::SpritePack& pack, uint16_t fill = 0) {
+std::unique_ptr<Canvas240> render(const Appearance& a, const paint::SpritePack& pack, uint16_t fill = 0,
+                                  uint32_t nowMs = 0) {
   auto cv = std::make_unique<Canvas240>();
   for (uint16_t& p : cv->px) p = fill;
-  paint::draw(a, pack, *cv);
+  paint::draw(a, pack, *cv, nowMs);
   return cv;
 }
 
@@ -231,7 +233,7 @@ TEST(Draw, EveryKindStaysInsideTheCanvasMemory) {
       a.previous = blorb::ExprId{251};
       for (uint32_t& w : g->before) w = 0xDEADBEEF;
       for (uint32_t& w : g->after) w = 0xDEADBEEF;
-      paint::draw(a, paint::placeholderPack(), g->cv);
+      paint::draw(a, paint::placeholderPack(), g->cv, 0);
       for (uint32_t w : g->before) ASSERT_EQ(w, 0xDEADBEEFu);
       for (uint32_t w : g->after) ASSERT_EQ(w, 0xDEADBEEFu);
     }
@@ -557,12 +559,86 @@ TEST(Marquee, RunsTheDishAboveHisHeadAndNeverCoversHisFace) {
       EXPECT_LT(band.bottom, changed(*plain, *render(nobody, pack)).top) << "above his head";
     }
   }
-  Appearance empty;
-  empty.kind = Appearance::Kind::Clutch;
-  empty.timeUnknown = true;
-  auto now = render(empty, pack);
-  empty.poseTick = 1;
-  EXPECT_GT(countChanged(*now, *render(empty, pack)), 0) << "the marquee does not scroll";
+}
+
+// It scrolled by poseTick once. An egg never advances that, so the board showed
+// the line frozen, and a creature's snapped back at every change of pose.
+TEST(Marquee, MovesWithTheClockAndWithNothingElse) {
+  constexpr int kBandTop = 34, kBandEnd = 54;   // draw.cpp's strip: dy -76, 20 rows
+  const auto& pack = paint::placeholderPack();
+  Appearance egg;
+  egg.kind = Appearance::Kind::Egg;
+  Appearance creature = adult();
+  for (Appearance a : {egg, creature}) {
+    a.timeUnknown = true;
+    for (uint32_t t : {0u, 1234u, 600000u}) {
+      auto now = render(a, pack, 0, t), again = render(a, pack, 0, t), later = render(a, pack, 0, t + 500);
+      EXPECT_EQ(countChanged(*now, *again), 0) << "the same instant draws different pixels at " << t;
+      int band = 0, elsewhere = 0;
+      for (int i = 0; i < kSide * kSide; ++i)
+        if (now->px[i] != later->px[i]) ++(i / kSide >= kBandTop && i / kSide < kBandEnd ? band : elsewhere);
+      EXPECT_GT(band, 100) << "the line does not move in half a second from " << t;
+      EXPECT_EQ(elsewhere, 0) << "the clock moves something besides the marquee at " << t;
+    }
+  }
+}
+
+// The widget, off the creature: a blank canvas and a strip.
+constexpr paint::Marquee kStrip = {-76, 0, 20, 38, 20};
+constexpr char kLine[] = "TAP ME WITH YOUR PHONE";
+
+std::unique_ptr<Canvas240> blank() { return std::make_unique<Canvas240>(Canvas240{}); }
+
+TEST(MarqueeWidget, AKeptPhaseGoesRoundAsTheClockDoes) {
+  ASSERT_FALSE(paint::marqueeFits(kStrip, paint::kFreeSans9pt7b, kLine));
+  paint::MarqueePhase phase{};
+  const uint32_t t0 = 5000;
+  uint32_t t = t0;
+  for (uint32_t dt : {0u, 33u, 47u, 33u, 1000u, 4000u, 2500u, 333u, 3000u, 41u}) {   // past one lap
+    t += dt;
+    auto kept = blank(), clock = blank();
+    paint::drawMarquee(*kept, kStrip, phase, paint::kFreeSans9pt7b, kLine, 0xFFFF, t);
+    paint::drawMarqueeAt(*clock, kStrip, paint::kFreeSans9pt7b, kLine, 0xFFFF, t - t0);
+    EXPECT_GT(countChanged(*kept, *blank()), 0) << "nothing drawn at " << t - t0;
+    EXPECT_EQ(countChanged(*kept, *clock), 0) << "the kept phase and the clock part at " << t - t0;
+  }
+}
+
+TEST(MarqueeWidget, ANewLineComesRoundBehindNeverUnderTheReader) {
+  const char* other = "SOMETHING ELSE ENTIRELY, LATER";
+  const auto& f = paint::kFreeSans9pt7b;
+  paint::MarqueePhase phase{};
+  auto draw = [&](const char* s, uint32_t ms) {
+    auto cv = blank();
+    paint::drawMarquee(*cv, kStrip, phase, f, s, 0xFFFF, 1000 + ms);
+    return cv;
+  };
+  draw(kLine, 0);
+  auto swapped = draw(other, 1000), unchanged = blank();
+  paint::drawMarqueeAt(*unchanged, kStrip, f, kLine, 0xFFFF, 1000);
+  EXPECT_EQ(countChanged(*swapped, *unchanged), 0) << "the strip changed text under the reader";
+  draw(other, 5000);
+  auto lapped = draw(other, 9000), want = blank();
+  const uint32_t lap = uint32_t(paint::textWidth(f, kLine) + paint::marqueeHalf(kStrip));
+  ASSERT_GT(9000u * 38 / 1000, lap) << "the first line has not finished its lap";
+  paint::drawMarqueeRing(*want, kStrip, f, other, other, 0xFFFF, 0, (9000u * 38 - lap * 1000) / 1000);
+  EXPECT_EQ(countChanged(*lapped, *want), 0) << "the new line is not the one going round after the lap";
+}
+
+TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
+  const auto& f = paint::kFreeSans9pt7b;
+  const uint32_t life = paint::marqueeTimedDuration(kStrip, f, kLine);
+  auto arriving = blank(), going = blank();
+  paint::drawMarqueeTimed(*arriving, kStrip, f, kLine, 0xFFFF, 0, life);
+  paint::drawMarqueeTimed(*going, kStrip, f, kLine, 0xFFFF, life / 4, life);
+  EXPECT_EQ(countChanged(*arriving, *blank()), 0) << "a said line starts off the right edge";
+  EXPECT_GT(countChanged(*going, *blank()), 0);
+  auto parked = blank(), centred = blank();
+  paint::drawMarqueeTimed(*parked, kStrip, f, "HI", 0xFFFF, 60000, 60000);
+  const int w = paint::textWidth(f, "HI");
+  paint::drawString(*centred, f, "HI", 120 - w / 2, 120 + kStrip.dy, 0xFFFF, {0, 0, 240, 240, 0});
+  EXPECT_GT(countChanged(*parked, *blank()), 0);
+  EXPECT_EQ(countChanged(*parked, *centred), 0) << "a short said line does not park centred";
 }
 
 // PAINT_DUMP=<dir> writes a PPM per state for review.
