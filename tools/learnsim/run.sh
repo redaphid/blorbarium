@@ -22,6 +22,7 @@ for s in $(seq 1 "$seeds"); do
   add cue "FEED=demand" cuecontrol 6 "$s"
   add rot "FEED=demand" sloppy 8 "$s"
   add time "FEED=routine" rich 8 "$s"
+  add timectl "FEED=random" rich 8 "$s"
 done
 for s in $(seq 1 $(( seeds < 4 ? seeds : 4 ))); do
   for st in doting rough punisher trainer quiet; do add lineage "FEED=demand,GARDEN=3" "$st" 40 "$s"; done

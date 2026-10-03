@@ -85,6 +85,7 @@ struct Owner {
   std::mt19937 rng;
   std::string style, feed;
   int lastMealHour = -1;
+  uint32_t seed = 0;
   int presses = 0;            // queued presses (sloppy feeds three at a time)
   bool wasNight = false;
   uint32_t counts[10] = {};
@@ -133,7 +134,17 @@ struct Owner {
         return act(Press, ms, 200);
       }
     } else {
-      for (int mh : {8, 13, 19}) {
+      // routine: 08:00, 13:00, 19:00. random: three hours a day drawn from 09..20, the control
+      // for anticipation, since only a regular hour can be anticipated.
+      int meals[3] = {8, 13, 19};
+      if (feed == "random") {
+        std::mt19937 day(seed * 131u + dish.tickCount() / kTicksPerDay);
+        for (int i = 0; i < 3; ++i) {
+          meals[i] = 9 + int(day() % 12);
+          for (int j = 0; j < i; ++j) if (meals[j] == meals[i]) meals[i] = (meals[i] - 9 + 1) % 12 + 9, j = -1;
+        }
+      }
+      for (int mh : meals) {
         if (int(hour) == mh && lastMealHour != mh) {
           lastMealHour = mh;
           if (!pellet && pantry) return act(Press, ms, 200);
@@ -379,6 +390,7 @@ int main(int argc, char** argv) {
   owner.style = style;
   owner.feed = feed ? feed : "routine";
   owner.rng.seed(seed * 7919u);
+  owner.seed = seed;
   Run run{dish, owner, {}, days, style};
   run.loop();
   run.summary();

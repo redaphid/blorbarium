@@ -138,6 +138,17 @@ def score(runs):
     m["time_eat_nofood_other"] = rate(other, 11)
     m["time_anticipation_ratio"] = (m["time_eat_nofood_pre"] / m["time_eat_nofood_other"]
                                     if m["time_eat_nofood_other"] else float("nan"))
+    ctl = runs.get("timectl", [])
+    def rate_in(rs, hours, i):
+        return sum(r["hour"].get(h, [0] * 12)[i] for r in rs for h in hours) / max(1, len(hours) * len(rs))
+    awake = [10, 11, 12, 14, 15, 16, 17, 18, 20]
+    def premeal_share(rs):
+        tot = rate_in(rs, awake, 11) * len(awake)
+        return rate_in(rs, [12, 18], 11) * 2 / tot if tot else float("nan")
+    m["time_premeal_share_routine"] = premeal_share(tr_)
+    m["time_premeal_share_random"] = premeal_share(ctl)
+    m["time_routine_vs_random"] = (m["time_premeal_share_routine"] / m["time_premeal_share_random"]
+                                   if m["time_premeal_share_random"] else float("nan"))
     best = max(range(11), key=lambda i: rate(pre, i) / max(1e-9, rate(other, i)) if rate(other, i) > 5 else 0)
     m["time_best_action"] = "%s %.2fx" % (ACTS[best], rate(pre, best) / max(1e-9, rate(other, best)))
 
