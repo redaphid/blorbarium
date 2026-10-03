@@ -12,7 +12,8 @@ namespace {
 // rate below 1 converges without overshoot, and mid temperament (0.25) gets
 // within 5 percent of the truth in about 10 trials of one situation.
 constexpr Fx kLearnScale = Fx::ratio(1, 2);
-// Per dream. A mid forgetRate halves an unreinforced weight in about 2800 dreams.
+// Per dream. A mid forgetRate halves an unreinforced weight in about 2800 dreams,
+// and the starter's (16) takes about 13 percent off in a 4500-dream night.
 constexpr Fx kForgetScale = Fx::ratio(1, 2048);
 // Exploration noise per action is uniform in [0, kNoiseScale * (explore + arousal)).
 constexpr Fx kNoiseScale = Fx::ratio(1, 4);
@@ -83,20 +84,6 @@ bool applyInstinct(Weights& w, const Instinct& in) {
   return true;
 }
 
-// Rounds the decrement up, so every weight reaches zero and negative weights
-// fade exactly as fast as positive ones.
-void forget(Weights& w, Fx rate) {
-  if (rate <= Fx::zero()) return;
-  for (auto& plane : w)
-    for (auto& row : plane)
-      for (Q15& q : row) {
-        int32_t mag = std::abs(int32_t(q.v));
-        int32_t dec = int32_t((int64_t(mag) * rate.raw + Fx::kOne - 1) >> Fx::kFrac);
-        int32_t left = std::max(0, mag - dec);
-        q.v = int16_t(q.v < 0 ? -left : left);
-      }
-}
-
 }  // namespace
 
 Decision Brain::think(const Fx features[kFeatureCount], const Fx drives[kDriveCount], Fx arousal,
@@ -152,8 +139,24 @@ bool Brain::dream(const Temperament& t, Rng& rng) {
     int a = rowIndex(ACTIONS, e.action);
     dreamt = a >= 0 && learn(w_, e.features, size_t(a), e.driveDelta, t.learnRate * kLearnScale);
   }
-  forget(w_, t.forgetRate * kForgetScale);
   return dreamt;
+}
+
+// One step for the whole night. Per dream, |w| * rate is under one LSB for
+// nearly every weight, so rounding each dream either freezes small weights
+// (to nearest) or takes the same LSB off every weight (up), a linear fade.
+// The magnitude is rounded, so both signs fade alike.
+void Brain::forget(const Temperament& t, uint32_t dreams) {
+  Fx rate = t.forgetRate * kForgetScale;
+  if (rate <= Fx::zero() || dreams == 0) return;
+  Decay perDream{uint32_t((uint64_t(1) << 32) - (uint64_t(rate.raw) << (32 - Fx::kFrac))), 0};
+  int64_t keep = applyDecayTicks(Fx::one(), perDream, dreams).raw;
+  for (auto& plane : w_)
+    for (auto& row : plane)
+      for (Q15& q : row) {
+        int32_t left = int32_t((std::abs(int32_t(q.v)) * keep + (Fx::kOne >> 1)) >> Fx::kFrac);
+        q.v = int16_t(q.v < 0 ? -left : left);
+      }
 }
 
 void Brain::queueInstinct(const Instinct& in) { instinctQueue_.push_back(in); }

@@ -39,9 +39,13 @@ class Brain {
                  const Temperament&, bool actionFinished, Rng&);
 
   // Asleep. Each call is one dream: it applies one queued instinct or replays
-  // one episode, then decays W by forgetRate. True if the dream had content.
-  // The caller paces dreams (dreamEveryTicks) and shows them (dreamLenTicks).
+  // one episode. True if the dream had content. The caller paces dreams
+  // (dreamEveryTicks) and shows them (dreamLenTicks).
   bool dream(const Temperament&, Rng&);
+  // On waking from `dreams` dreams: every weight keeps (1 - forgetRate *
+  // scale)^dreams of itself, so an unreinforced belief fades by the same
+  // fraction each night whatever its size.
+  void forget(const Temperament&, uint32_t dreams);
   void queueInstinct(const Instinct&);
 
   std::vector<Belief> strongestBeliefs(uint8_t n) const;   // sorted by |effect| * confidence

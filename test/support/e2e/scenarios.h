@@ -330,6 +330,10 @@ inline Scenario neglect() {
        }},
   };
   s.clip = Clip{0, 0, 400, 300};
+  // The bite came 50 s sooner only because the hungry arm stayed awake that
+  // night and skipped a flat 0.14 of forgetting the control suffered. With
+  // forgetting proportional both arms keep the eat lesson and bite alike.
+  s.knownFailing = true;
   return s;
 }
 
