@@ -15,8 +15,13 @@
 #include "board_sim.h"
 #include "mem_storage.h"
 using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: the goldens need it
+#elif defined(BADGE_BOARD_LCD146)
+#error "the 1.46's panel comes after build unit 20, which brings up the 1.28"
 #else
-#error "the 1.28's panel, flash storage and BLE link arrive in build unit 20"
+#include <esp_heap_caps.h>
+#include "hw/board_lcd128.h"
+#include "hw/storage_nvs_fs.h"
+using PetStorage = hw::NvsFsStorage;
 #endif
 
 #include "hw/imu_qmi8658.h"
@@ -60,6 +65,7 @@ static BoardDisplay display;
 static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
+static blorb::BodySample lastBody;
 
 static blorb::BodySample readBody() {
   blorb::BodySample s;
@@ -75,11 +81,82 @@ static blorb::BodySample readBody() {
 // ticks are due. The simulator's warp calls this with no frames between.
 static void step(uint32_t now) {
   if (now - lastSample >= blorb::kSampleMs) {
-    dish->sample(readBody(), now);
+    lastBody = readBody();
+    dish->sample(lastBody, now);
     lastSample = now;
   }
   dish->tick(now, phone);
 }
+
+#if !defined(BADGE_BOARD_SIM)
+// The loop task runs the Dish. The engine reached 4,816 B on x86-64 (DESIGN.md
+// section 8); this is the starting size until the board's high-water mark sets it.
+static constexpr size_t kDishStackBytes = 16 * 1024;
+SET_LOOP_TASK_STACK_SIZE(kDishStackBytes);
+
+// Diagnostics. Every line starts "[hw] " so nobody takes it for the protocol,
+// whose lines start '#' or '!'.
+static constexpr uint32_t kStatusMs = 10000;
+static hw::StorageState storageState;
+static uint32_t lastStatus = 0;
+
+static const char* bootName(blorb::Boot b) {
+  constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer"};
+  return kNames[size_t(b)];
+}
+
+static const char* filesName(hw::StorageState::Files f) {
+  switch (f) {
+    case hw::StorageState::Files::Ok: return "ok";
+    case hw::StorageState::Files::FormattedBlank: return "formatted-blank";
+    case hw::StorageState::Files::Failed: return "FAILED: ";
+  }
+  return "?";
+}
+
+struct OccupantSummary { const char* kind; uint16_t gen; uint32_t genome, age; };
+
+static OccupantSummary summarize(const blorb::Occupant& o) {
+  struct Visit {
+    OccupantSummary operator()(const blorb::Egg& e) const { return {"egg", e.generation(), e.genome().hash(), 0}; }
+    OccupantSummary operator()(const blorb::Creature& c) const {
+      return {"creature", c.generation(), c.genome().hash(), c.stats().ageTicks};
+    }
+    OccupantSummary operator()(const blorb::Clutch& k) const { return {"clutch", k.generation, k.parent.hash(), 0}; }
+  };
+  return std::visit(Visit{}, o);
+}
+
+static void reportBoot() {
+  Serial.printf("[hw] blorbarium %s lcd128\n", BLORB_FW);
+  Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
+  Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
+  const bool filesFailed = storageState.files == hw::StorageState::Files::Failed;
+  Serial.printf("[hw] storage slots=%s files=%s%s\n", storageState.slots ? "ok" : "FAILED",
+                filesName(storageState.files), filesFailed ? storageState.why : "");
+  if (!storageState.slots) Serial.println("[hw] !!! the pet partition will not open: no snapshot loads or saves");
+  Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
+  const OccupantSummary o = summarize(dish->occupant());
+  Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
+                unsigned(o.gen), unsigned(o.genome), unsigned(o.age));
+}
+
+// From the last BodySample the loop took: no second I2C read.
+static void reportStatus(uint32_t now) {
+  if (now - lastStatus < kStatusMs) return;
+  lastStatus = now;
+  const OccupantSummary o = summarize(dish->occupant());
+  char temp[12] = "?";
+  if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
+  Serial.printf(
+      "[hw] up=%u heap=%u minheap=%u big=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x age=%u "
+      "imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
+      unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
+      unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
+      lastBody.ay, lastBody.az, temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
+}
+#endif
 
 void setup() {
   Serial.begin(115200);
@@ -89,8 +166,15 @@ void setup() {
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   uint64_t lineage = 0;
   for (uint8_t b : mac) lineage = lineage << 8 | b;
+#if !defined(BADGE_BOARD_SIM)
+  storageState = store.begin();
+#endif
   dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage);
   display.init();
+#if !defined(BADGE_BOARD_SIM)
+  display.setBrightness(dish->settings().brightness);
+  reportBoot();
+#endif
 }
 
 void loop() {
@@ -101,4 +185,7 @@ void loop() {
     boardPresent(display, canvas);
     lastFrame = now;
   }
+#if !defined(BADGE_BOARD_SIM)
+  reportStatus(now);
+#endif
 }
