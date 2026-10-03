@@ -220,12 +220,55 @@ TEST(Roll, ALevelDishLeavesEverythingWhereItIs) {
   EXPECT_NE(w.h.hash(), before);   // the pantry ticked on
 }
 
-TEST(Marble, RollingIntoHimIsOneHitEvenWhenItComesToRestAgainstHim) {
+// It used to crawl: a held tilt took tens of seconds to carry it across.
+TEST(Marble, A25DegreeTiltRollsItFromRestRimToRimInAboutASecond) {
+  World w;
+  w.creature = at(0, 0.7);
+  w.h.marble.at = at(0.9, 0);
+  Fx raised25 = Fx::ratio(711, 1000);   // 0.5 + sin(25 deg) / 2
+  int crossed = -1;
+  for (int t = 1; t <= 20 && crossed < 0; ++t) {
+    w.step(raised25, kLevel);
+    if (d(w.h.marble.at.x) <= -0.8) crossed = t;
+  }
+  EXPECT_GE(crossed, 8) << "ticks to cross: brisk, not a teleport";
+  EXPECT_LE(crossed, 13) << "ticks to cross";
+}
+
+TEST(Marble, TheRimBouncesItBackWithLessSpeed) {
+  World w;
+  w.creature = at(0, 0.7);
+  w.h.marble.at = at(0.85, 0);
+  w.h.marble.vx = Fx::ratio(2, 10);
+  w.step();
+  EXPECT_LT(d(w.h.marble.vx), -0.2 * 0.4) << "reflected, not just stopped";
+  EXPECT_GT(d(w.h.marble.vx), -0.2 * 0.7) << "and lost energy";
+}
+
+TEST(Marble, ALevelDishLetsItCoastToAStop) {
+  World w;
+  w.creature = at(0, 0.7);
+  w.h.marble.at = at(-0.5, 0);
+  w.h.marble.vx = Fx::ratio(15, 100);
+  w.steps(10);
+  EXPECT_GT(d(w.h.marble.vx), 0.0) << "still rolling after a second";
+  w.steps(15);
+  EXPECT_EQ(w.h.marble.vx, Fx::zero()) << "stopped within two and a half seconds";
+  EXPECT_EQ(w.h.marble.vy, Fx::zero());
+}
+
+// A bounce off the rim that carries it out of his range and back is a second
+// approach; once it rests against him, it hits no more.
+TEST(Marble, RollingIntoHimHitsOncePerApproachAndNotWhileItRestsAgainstHim) {
   World w;
   w.h.marble.at = at(0.3, 0);
   w.creature = at(-0.85, 0);
-  w.steps(600, Fx::ratio(85, 100), kLevel);
-  EXPECT_EQ(w.marbleHits, 1);
+  w.steps(100, Fx::ratio(85, 100), kLevel);
+  EXPECT_GE(w.marbleHits, 1);
+  EXPECT_LE(w.marbleHits, 3) << "one per rim bounce at most";
+  int settled = w.marbleHits;
+  w.steps(500, Fx::ratio(85, 100), kLevel);
+  EXPECT_EQ(w.marbleHits, settled) << "resting against him";
   EXPECT_LT(radius(w.h.marble.at) , 0.92 + 1e-6);
 
   World away;

@@ -10,10 +10,19 @@ constexpr Fx kMarbleHitRange = Fx::ratio(15, 100);
 constexpr Fx kSenseRange = Fx::one();                // *_near is 1 on top of it, 0 this far away or more
 constexpr Fx kLevelDeadZone = Fx::ratio(3, 100);     // about 3 degrees: a dish on a desk stays put
 constexpr Fx kPelletSlide = Fx::ratio(6, 100);       // per tick per unit of tilt; pellets do not coast
-constexpr Fx kMarbleAccel = Fx::ratio(1, 100);       // per tick per unit of tilt
-constexpr Fx kMarbleFriction = Fx::ratio(1, 16);     // velocity lost per tick
-constexpr Fx kRimBounce = Fx::ratio(1, 2);           // share of outward speed returned inward
 constexpr Fx kHalf = Fx::ratio(1, 2);
+
+// The marble should read as glass on a smooth dish, not a bead in syrup. In
+// dish units (the rim is 0.92, about 105 px out) per 100 ms tick: a 20 to 30
+// degree tilt rolls it from rest rim to rim in 10 to 12 ticks, peaking near
+// 0.35 a tick (400 px/s); levelled, it coasts to a stop within about two
+// seconds; under about 5 degrees it stays put, so a hand's wobble cannot
+// jiggle it. That speed is up to a third of the dish a tick, so it steps in
+// quarters: the rim and his hit range see its path, not only where a tick ends.
+constexpr int kMarbleSubsteps = 4;
+constexpr Fx kMarbleGravity = Fx::ratio(1, 5);       // speed gained per tick per unit of downhill
+constexpr Fx kMarbleRolling = Fx::ratio(1, 125);     // speed lost per tick at any speed; also the static stick
+constexpr Fx kRimBounce = Fx::ratio(6, 10);          // share of outward speed returned inward
 
 uint64_t isqrt64(uint64_t v) {
   uint64_t r = 0, bit = uint64_t(1) << 62;
@@ -46,6 +55,39 @@ bool keepInside(DishPos& p, DishPos& normal) {
   normal = DishPos{fxDiv(p.x, r), fxDiv(p.y, r)};
   p = DishPos{normal.x * kRimRadius, normal.y * kRimRadius};
   return true;
+}
+
+Fx perSubstep(Fx perTick) { return Fx{perTick.raw / kMarbleSubsteps}; }
+
+// One tick of rolling; true when the marble came into his hit range during it.
+bool rollMarble(Marble& m, Fx ax, Fx ay, DishPos creature) {
+  const Fx range2 = kMarbleHitRange * kMarbleHitRange, rolling = perSubstep(kMarbleRolling);
+  bool hit = false;
+  for (int s = 0; s < kMarbleSubsteps; ++s) {
+    bool wasClear = dist2(m.at, creature) > range2;
+    m.vx += perSubstep(ax * kMarbleGravity);
+    m.vy += perSubstep(ay * kMarbleGravity);
+    Fx speed = fxSqrt(m.vx * m.vx + m.vy * m.vy);
+    if (speed <= rolling) {
+      m.vx = m.vy = Fx::zero();
+    } else {
+      Fx keep = Fx::one() - fxDiv(rolling, speed);
+      m.vx = m.vx * keep;
+      m.vy = m.vy * keep;
+    }
+    m.at = DishPos{m.at.x + perSubstep(m.vx), m.at.y + perSubstep(m.vy)};
+    DishPos normal{};
+    if (keepInside(m.at, normal)) {
+      Fx outward = m.vx * normal.x + m.vy * normal.y;
+      if (outward > Fx::zero()) {
+        Fx reflect = outward + outward * kRimBounce;
+        m.vx -= normal.x * reflect;
+        m.vy -= normal.y * reflect;
+      }
+    }
+    hit = hit || (wasClear && dist2(m.at, creature) <= range2);
+  }
+  return hit;
 }
 
 Fx nearness(Fx d2) { return clamp01(Fx::one() - fxDiv(fxSqrt(d2), kSenseRange)); }
@@ -82,20 +124,8 @@ void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creatu
     keepInside(p.at, normal);
   }
 
-  bool wasClear = dist2(marble.at, creature) > kMarbleHitRange * kMarbleHitRange;
-  marble.vx += ax * kMarbleAccel - marble.vx * kMarbleFriction;
-  marble.vy += ay * kMarbleAccel - marble.vy * kMarbleFriction;
-  marble.at = DishPos{marble.at.x + marble.vx, marble.at.y + marble.vy};
-  if (keepInside(marble.at, normal)) {
-    Fx outward = marble.vx * normal.x + marble.vy * normal.y;
-    if (outward > Fx::zero()) {
-      Fx cancel = outward + outward * kRimBounce;
-      marble.vx -= normal.x * cancel;
-      marble.vy -= normal.y * cancel;
-    }
-  }
+  if (rollMarble(marble, ax, ay, creature)) out.fire(stim::marble_hit);
   Fx marbleD2 = dist2(marble.at, creature);
-  if (wasClear && marbleD2 <= kMarbleHitRange * kMarbleHitRange) out.fire(stim::marble_hit);
 
   int near = nearestIndex(pellets, creature);
   out.set(locus::food_near, near < 0 ? Fx::zero() : nearness(dist2(pellets[near].at, creature)));
