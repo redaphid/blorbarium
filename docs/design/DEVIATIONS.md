@@ -45,3 +45,35 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
 
 This folds into units 12 (the anchor in the snapshot), 13 (`TIME` feeds the
 phone source) and 14 (the seam, the catch-up and its tests).
+
+## 4. User-directed: the board is authoritative; the phone only proposes
+
+Binding rule: the microcontroller holds the authoritative state. The phone
+reads a read-only snapshot and proposes; the board validates, caps or
+rejects every proposal through its own rules. No wire verb sets state
+directly. Audit of the designed verbs (section 6 of DESIGN.md), before any
+protocol code existed:
+
+| Verb | As designed | Now |
+|---|---|---|
+| reads (`HELLO` .. `HASH`, `BACKUP`) | read-only | unchanged; `STATE` and `HELLO` also report `v=<stateVersion>` |
+| `STIM` | fires a Phone-source stimulus | unchanged in kind (an input his own genes interpret), but carries `v=` |
+| `EDIT <uid> <hex>` | rewrote an owner-editable gene body | **changed.** `EDIT v=<n> <uid> <offset> <value>` proposes one byte. The board applies it through the mutation path (`apply()` of a one-op `MutationDiff`, recorded in the lineage), only on `OwnerEditable` genes, and caps the move to `kMaxOwnerEditDelta` per byte per edit. Then `viability()` must pass, or the edit is refused |
+| `NAME` | set the name | carries `v=`; the board trims it and filters it to printable ASCII |
+| `PICK i` | picked an egg | carries `v=`; the index must name an egg in the current clutch |
+| `TIME` | set the clock | carries `v=`; it feeds the phone time source (entry 3). The catch-up cap bounds its effect, and a wall time earlier than the anchor is refused |
+| `RESTORE` | replaced the snapshot | **changed.** It is a proposal too. With consent, the board decodes the blob through `Keepsake::decode` and accepts it only if the lineage id is this board's, the genome parses and passes `viability()`, and its own boot checks pass. Otherwise it is refused and nothing changes |
+
+Staleness: the board keeps a `stateVersion`, saved in the snapshot and bumped
+on every change a phone could have read (hatch, stage, death, pick, edit,
+rename, restore). Every mutating verb (`kMutating` in `commands.def`) must
+carry `v=<n>`. The dispatcher checks it in one place, and a mismatch answers
+`ERR 409 STALE v=<current>`. Unit 21's brain-weight proposals will use the
+same version check and board-side caps.
+
+On connect the board pushes nothing. The phone requests the snapshot (`STATE`
+for the summary, `BACKUP` for the whole `Keepsake::encode` blob), and both
+replies carry `v=<stateVersion>`, which every later proposal quotes. Events
+flow only after the phone sends `SUB`. This was already the design's
+request-and-reply shape; the rule makes the version and the silence on
+connect explicit.
