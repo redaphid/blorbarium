@@ -90,6 +90,16 @@ struct LegsPack : BlockPack {
   FrameRef body(blorb::PoseId, blorb::Stage, uint16_t) const override { return frame(legs, kBodyEyes); }
 };
 
+// The block with a mouth: its neutral patch tags a 6x4 block centred at frame (30, 52).
+struct MouthPack : BlockPack {
+  std::vector<uint8_t> mouth = encode(kW, kH, [](int x, int y) { return uint8_t(x >= 27 && x < 33 && y >= 50 && y < 54 ? 3 : 0); });
+  PaletteEntry withMouth[4] = {{0, 0, 0, 255}, {96, 128, 48, 255}, {200, 40, 40, 255}, {250, 250, 0, blorb::region::mouth.v}};
+  const PaletteEntry* palette(uint16_t& n) const override { n = 4; return withMouth; }
+  FrameRef face(blorb::ExprId e, blorb::Stage) const override {
+    return e == blorb::expr::neutral ? frame(mouth, kBodyEyes) : FrameRef{};
+  }
+};
+
 struct Box { int x0 = kSide, y0 = kSide, x1 = -1, y1 = -1; int count = 0; };
 Box find(const Canvas240& cv, uint16_t colour) {
   Box b;
@@ -418,6 +428,24 @@ TEST(Items, OneUnderHimDoesNotShowBetweenHisLegs) {
   EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, at his toes";
   a.items[0].at.y = fx(0.14);
   EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
+}
+
+// The pellet he bites leaves the dish; while he eats it is drawn at his
+// mouth, in front of him, and rides the body's transform.
+TEST(Eating, ThePelletHeBitIsInFrontOfHimAtHisMouth) {
+  MouthPack pack;
+  const uint16_t kChip = rgb565(200, 40, 40);
+  Appearance a = adult();
+  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "not eating: nothing at his mouth";
+  a.eating = true;
+  Box body = find(*render(a, pack), kOlive);
+  Box chip = find(*render(a, pack), kChip);
+  ASSERT_EQ(chip.count, BlockPack::kItem * BlockPack::kItem) << "whole, in front of him";
+  double sy = double(body.y1 - body.y0 + 1) / BlockPack::kH;
+  EXPECT_NEAR((chip.x0 + chip.x1) / 2.0, body.x0 + 30, 1.5);
+  EXPECT_NEAR((chip.y0 + chip.y1) / 2.0, body.y0 + 52 * sy, 1.5);
+  Box up = find(*render(hopping(a, fx(0.45), Fx::one()), pack), kChip);
+  EXPECT_EQ(chip.y0 - up.y0, kHopMaxPx) << "it leaps with him";
 }
 
 // A still frame of a leap only reads as one if something stays on the floor.

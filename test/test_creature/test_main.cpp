@@ -62,6 +62,39 @@ Genome withStartleGain(int scale) {
 
 }  // namespace
 
+// The bite used to end Eat at once, so eating showed for one 100 ms tick
+// and no frame could catch him at it.
+TEST(Eat, HeChewsTheBiteForASecondAndAHalfThenStops) {
+  Rig r;
+  r.habitat.pellets[0] = Pellet{r.c.body().at, 0, true};
+  r.c.force(action::eat);
+  int eating = 0, chewingPose = 0;
+  for (int i = 0; i < 40; ++i) {
+    r.step();
+    eating += r.locus(locus::eating) >= kHalf;
+    chewingPose += r.c.body().pose == pose::eat;
+  }
+  EXPECT_FALSE(r.habitat.pellets[0].present) << "he bit it";
+  EXPECT_GE(eating, 14) << "ticks with the eating locus up";
+  EXPECT_LE(eating, 16) << "and then he stops";
+  EXPECT_GE(chewingPose, 14);
+}
+
+// Eat decided again mid-chew (a forced eat, say) used to send him walking
+// with nothing left to walk to, so the mouthful ended there.
+TEST(Eat, DecidingToEatAgainMidChewFinishesTheMouthful) {
+  Rig r;
+  r.habitat.pellets[0] = Pellet{r.c.body().at, 0, true};
+  r.c.force(action::eat);
+  int eating = 0;
+  for (int i = 0; i < 40; ++i) {
+    if (i == 6) r.c.force(action::eat);
+    r.step();
+    eating += r.locus(locus::eating) >= kHalf;
+  }
+  EXPECT_GE(eating, 14) << "ticks with the eating locus up";
+}
+
 // He used to walk onto the marble and stand on it for good, so every frame
 // after a chase showed it between his feet.
 TEST(Chase, HeNosesTheMarbleOnAndNeverStandsOnIt) {

@@ -519,6 +519,48 @@ void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const
 
 int footHalfW(const FrameRef& f, int kx) { return f.w * kx / kOne * kShadowWidePct / 100; }
 
+// The mouth's centre relative to the stand point, in frame pixels (Q4): the
+// mouth-region pixels of the face shown, or of every face of the stage when
+// that one has none (a closed mouth). False when the pack tags no mouth.
+bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
+  uint16_t count = 0;
+  const PaletteEntry* pal = pack.palette(count);
+  int64_t sx = 0, sy = 0, n = 0;
+  auto add = [&](const FrameRef& f) {
+    if (!drawable(f)) return;
+    RowReader rows(f);
+    for (int y = 0; y < f.h; ++y) {
+      const uint8_t* row = rows.seek(y);
+      for (int x = 0; x < f.w; ++x)
+        if (row[x] && row[x] < count && pal[row[x]].region == blorb::region::mouth.v) {
+          sx += (x - f.originX) * 16 + 8;
+          sy += (y - f.originY) * 16 + 8;
+          ++n;
+        }
+    }
+  };
+  add(shown);
+  for (size_t i = 0; n == 0 && i < blorb::countOf(blorb::EXPRESSIONS); ++i) add(pack.face(blorb::EXPRESSIONS[i].id, stage));
+  if (n == 0) return false;
+  out = {int(sx / n), int(sy / n)};
+  return true;
+}
+
+// While he eats, the pellet he bit is in his mouth, in front of him. The bite
+// took it out of the dish, so it is drawn here rather than among the items.
+void pelletInMouth(Canvas240& cv, const SpritePack& pack, const Appearance& a, const FrameRef& face, const Place& p,
+                   const Colours& col) {
+  Pt m{};
+  if (!a.eating || !mouthOf(pack, face, a.stage, m)) return;
+  const FrameRef origin{};
+  Pt c = project(p.xf, origin, m.x, m.y);
+  const FrameRef f = pack.item(Appearance::Item::What::Pellet);
+  Place q;
+  q.x = p.x + floorDiv(c.x + 8, 16) + f.originX - f.w / 2;
+  q.y = p.y + floorDiv(c.y + 8, 16) + f.originY - f.h / 2;
+  blit(cv, f, q, col, 256, nullptr);
+}
+
 void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
@@ -566,6 +608,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, 256, spots);
   blit(cv, now, p, col, face.mix, spots);
   halo(cv, a, pack, now.eyeCount ? now : body, p);
+  pelletInMouth(cv, pack, a, now, p, col);
   drawItems(a, pack, cv, d, col, p, foot, true);
 }
 
