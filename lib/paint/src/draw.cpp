@@ -35,6 +35,8 @@ constexpr int kElderSat = 96;                    // x/128
 constexpr int kMinScale = kOne / 16;
 constexpr int kEggLean = kOne * 16 / 100;        // shear at full wobble
 constexpr int kClutchGapPx = 66;
+constexpr int kClutchEggPx = 72;                 // three eggs side by side, each this tall
+constexpr int kAwayPct = 82;                     // his size at the rim, of his size at home
 constexpr uint8_t kHaloTeal[3] = {64, 236, 214};
 constexpr uint8_t kSparkWhite[3] = {200, 255, 248};
 constexpr uint16_t kPulseTicks = 8;              // 1.25 Hz at 10 ticks a second
@@ -599,7 +601,12 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Colours col;
   buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
 
-  int k = imax(kMinScale, a.scalePct * kOne / 100);
+  // Away from home he shrinks a little, easing with his distance from it, so
+  // he fits beside the dish's items; at home he fills the panel.
+  const int64_t ax = a.at.x.raw, ay = a.at.y.raw;
+  const int64_t away = imin(Fx::kOne, int(isqrt(uint64_t(ax * ax + ay * ay))));
+  const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
+  int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
   Xf base{k, k, 0, 0};
   if (a.stage == Stage::Baby || a.stage == Stage::Child) {
     base.kx = k * kHatchlingWide / kOne;
@@ -696,8 +703,9 @@ void drawClutch(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     Colours col;
     buildColours(pack, tints, false, 0, col);
     Place p;
+    p.xf.kx = p.xf.ky = imin(kOne, kOne * kClutchEggPx / imax(1, f.h));
     p.x = kSide / 2 + (2 * i - (n - 1)) * kClutchGapPx / 2;
-    p.y = kSide / 2 - f.h / 2 + f.originY;
+    p.y = kSide / 2 + (f.originY - f.h / 2) * p.xf.ky / kOne;
     bool chosen = i == a.cursor;
     if (chosen) p.xf.shear = eggShear(Fx::ratio(1, 3), a.poseTick, kEggLean);
     blit(cv, f, p, col, 256, nullptr);

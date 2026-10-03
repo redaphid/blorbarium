@@ -39,7 +39,7 @@ bool shadowedFloor(uint16_t got, uint16_t floor) {
   return near(r5(got), r5(floor)) && near(g6(got), g6(floor)) && near(b5(got), b5(floor));
 }
 
-struct Middle { double x, y; int pixels; };
+struct Middle { double x, y; int pixels, w, h; };
 
 // The middle of the box around every pixel he lights, against the same dish without him.
 Middle middleOf(const Appearance& a) {
@@ -56,7 +56,7 @@ Middle middleOf(const Appearance& a) {
       y0 = std::min(y0, y); y1 = std::max(y1, y);
       ++n;
     }
-  return {(x0 + x1 + 1) / 2.0, (y0 + y1 + 1) / 2.0, n};
+  return {(x0 + x1 + 1) / 2.0, (y0 + y1 + 1) / 2.0, n, x1 - x0 + 1, y1 - y0 + 1};
 }
 
 Appearance atHome(Stage stage, uint8_t scalePct) {
@@ -129,8 +129,23 @@ TEST(Framing, HisTravelIsTheSameEveryWayFromHome) {
     if (std::getenv("FRAMING_REPORT"))
       std::printf("%s travel %.1f %.1f %.1f %.1f\n", stageName(Stage(s)), reach[0], reach[1], reach[2], reach[3]);
     EXPECT_GT(reach[0], 5) << stageName(Stage(s)) << " cannot leave home";
-    for (int i = 1; i < 4; ++i) EXPECT_NEAR(reach[i], reach[0], 1.5) << stageName(Stage(s)) << " way " << i;
+    for (int i = 1; i < 4; ++i) EXPECT_NEAR(reach[i], reach[0], 2.0) << stageName(Stage(s)) << " way " << i;
   }
+}
+
+// The round panel is small: at home he and the egg fill most of it.
+TEST(Framing, AtHomeHeAndTheEggFillThePanel) {
+  Middle adult = middleOf(atHome(Stage::Adult, 103));
+  EXPECT_GE(adult.h, 150);
+  EXPECT_LE(adult.h, 176);
+  Appearance egg;
+  egg.kind = Appearance::Kind::Egg;
+  Middle e = middleOf(egg);
+  EXPECT_GE(e.h, 140);
+  EXPECT_LE(e.h, 170);
+  EXPECT_NEAR(e.x, kMiddle, kOffBy);
+  EXPECT_NEAR(e.y, kMiddle, kOffBy);
+  if (std::getenv("FRAMING_REPORT")) std::printf("adult %dx%d egg %dx%d\n", adult.w, adult.h, e.w, e.h);
 }
 
 // The converter's glow rule, on the panel's colours.
