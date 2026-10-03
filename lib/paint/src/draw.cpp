@@ -272,22 +272,44 @@ void visitOutline(const Outline& o, Visit&& visit) {
   }
 }
 
-// The smallest-ish disc, relative to the stand point, holding all of it.
-struct Disc { int x = 0, y = 0, r = 0; };   // Q4
-Disc envelope(const Outline& o, int marginQ4) {
+// The middle of the box around a frame's opaque pixels, relative to its stand point.
+Pt middle(const FrameRef& f, const Xf& xf) {
   int x0 = 1 << 30, y0 = 1 << 30, x1 = -(1 << 30), y1 = -(1 << 30);
-  visitOutline(o, [&](Pt p, int reach) {
-    x0 = imin(x0, p.x - reach); x1 = imax(x1, p.x + reach);
-    y0 = imin(y0, p.y - reach); y1 = imax(y1, p.y + reach);
+  visitOutline({&f, 1, nullptr, 0, &xf, 1}, [&](Pt p, int) {
+    x0 = imin(x0, p.x); x1 = imax(x1, p.x);
+    y0 = imin(y0, p.y); y1 = imax(y1, p.y);
   });
-  if (x0 > x1) return {};
-  Disc d{(x0 + x1) / 2, (y0 + y1) / 2, 0};
+  if (x0 > x1) return {0, 0};
+  return {(x0 + x1) / 2, (y0 + y1) / 2};
+}
+
+// The disc about `centre` (his body's middle at rest), relative to the stand
+// point, holding all of it standing: halo, squash and every face. A dish
+// position puts the centre there, so home is his body in the middle of the
+// panel and his travel is the same every way from it.
+struct Disc { int x = 0, y = 0, r = 0; };   // Q4
+Disc envelope(const Outline& o, Pt centre, int marginQ4) {
+  Disc d{centre.x, centre.y, 0};
   visitOutline(o, [&](Pt p, int reach) {
     int64_t dx = p.x - d.x, dy = p.y - d.y;
     d.r = imax(d.r, int(isqrt(uint64_t(dx * dx + dy * dy))) + reach);
   });
   d.r += marginQ4 + 16;   // + the stand point's rounding
   return d;
+}
+
+// How far the figure standing at `p` can rise before any of it would leave
+// the panel (px). The leap is all upward, so it is capped here rather than
+// kept free everywhere, which would push home off the middle or shrink travel.
+int headroom(const Outline& o, const Place& p, int marginQ4) {
+  int64_t room = kSide * 16;
+  visitOutline(o, [&](Pt q, int reach) {
+    const int64_t x = int64_t(p.x) * 16 + q.x - kSide * 8, y = int64_t(p.y) * 16 + q.y - kSide * 8;
+    const int64_t r = kSide * 8 - reach - marginQ4 - 16;
+    const int64_t up = r > (x < 0 ? -x : x) ? y + int64_t(isqrt(uint64_t(r * r - x * x))) : 0;
+    room = up < room ? up : room;
+  });
+  return room > 0 ? int(room / 16) : 0;
 }
 
 // A dish position (the unit disc) to a stand point whose envelope stays inside
@@ -584,14 +606,16 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   FrameRef eyed[2 + kFaces] = {bodies[0], bodies[1]};
   for (int i = 0; i < kFaces; ++i) eyed[2 + i] = pack.face(blorb::EXPRESSIONS[i].id, a.stage);
 
-  const int maxLift = kHopMaxPx * base.ky / kOne;
-  Xf variants[2 + kReflexMotionCount] = {base, {base.kx, base.ky, maxLift, 0}};
+  Xf variants[1 + kReflexMotionCount] = {base};
   for (int i = 0; i < kReflexMotionCount; ++i) {
     const Motion& w = kReflexMotions[i].widest;
-    variants[2 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
+    variants[1 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
   }
-  const Disc d = envelope({bodies, 2, eyed, 2 + kFaces, variants, 2 + kReflexMotionCount}, (kBreathPx + 1) * 16);
+  const Outline figure{bodies, 2, eyed, 2 + kFaces, variants, 1 + kReflexMotionCount};
+  constexpr int kMarginQ4 = (kBreathPx + 1) * 16;
+  const Disc d = envelope(figure, middle(bodies[0], base), kMarginQ4);
   Place p = placeAt(a.at, d, base);
+  const int maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, p, kMarginQ4));
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   drawItems(a, pack, cv, d, col, p, foot, false);
@@ -623,7 +647,7 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.egg(a.eggProgress);
   const Xf variants[2] = {{kOne, kOne, 0, kEggLean}, {kOne, kOne, 0, -kEggLean}};
-  const Disc d = envelope({&f, 1, &f, 1, variants, 2}, 0);
+  const Disc d = envelope({&f, 1, &f, 1, variants, 2}, middle(f, Xf{}), 0);
   Place p = placeAt(a.at, d, Xf{});
   drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   Fx shake = a.wobble + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
@@ -638,7 +662,7 @@ void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.remains();
   const Xf rest{};
-  const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, 0);
+  const Disc d = envelope({&f, 1, nullptr, 0, &rest, 1}, middle(f, rest), 0);
   Place p = placeAt(a.at, d, rest);
   drawItems(a, pack, cv, d, col, p, footHalfW(f, kOne), false);
   blit(cv, f, p, col, 256 - unit256(a.remainsFade), nullptr);
@@ -778,17 +802,20 @@ const uint8_t* glyphFor(char c) {
   return kMissingGlyph;
 }
 
-// "Time unknown": a scrolling line across the dish above his head, on a dim
-// band that runs rim to rim, each row to its own chord, and fades out toward
-// the glass, so neither the band nor a letter ends on a straight edge.
+// "Time unknown": a scrolling line across the dish clear of his face (across
+// the top while he stands in the lower half, home included, across the bottom
+// while he is up in the upper half), on a dim band that runs rim to rim, each
+// row to its own chord, and fades out toward the glass, so neither the band
+// nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
-void marquee(Canvas240& cv, uint16_t tick) {
+void marquee(Canvas240& cv, uint16_t tick, bool low) {
+  const int bandTop = low ? kSide - kBandTop - kBandRows : kBandTop;
   auto fade = [](int x, int y) {
     const int half = chordHalf(y), toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
     return imax(0, imin(256, toRim * 256 / kMarqueeFeather));
   };
-  for (int y = kBandTop; y < kBandTop + kBandRows; ++y)
+  for (int y = bandTop; y < bandTop + kBandRows; ++y)
     for (int x = 0; x < kSide; ++x) {
       uint16_t& px = cv.px[y * kSide + x];
       px = blend(px, 0, 140 * fade(x, y) / 256);
@@ -798,7 +825,7 @@ void marquee(Canvas240& cv, uint16_t tick) {
   const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kAdvance + kMarqueeGap;
   const int start = right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
   const uint16_t c = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
-  const int top = kBandTop + (kBandRows - 7 * kScale) / 2;
+  const int top = bandTop + (kBandRows - 7 * kScale) / 2;
   for (int copy = -1; copy <= 1; ++copy)
     for (int i = 0; i < len; ++i) {
       int x0 = start + copy * period + i * kAdvance;
@@ -830,7 +857,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv) {
   }
   pips(cv, a.pantry);
   hint(cv, a);
-  if (a.timeUnknown) marquee(cv, a.poseTick);
+  if (a.timeUnknown) marquee(cv, a.poseTick, a.at.y < Fx::zero());
   mask(cv);
 }
 
