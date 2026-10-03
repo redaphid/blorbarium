@@ -99,6 +99,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
 void Dish::sample(const BodySample& s, uint32_t nowMs) { detectors_.sample(s, nowMs, pending_); }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
+  nowMs_ = nowMs;
   for (int n = 0; n < kMaxTicksPerCall && nowMs - lastTickMs_ >= kTickMs; ++n) {
     lastTickMs_ += kTickMs;
     runOneTick(link);
@@ -207,8 +208,22 @@ void Dish::save() {
   eventDirty_ = false;
 }
 
+namespace {
+// Drawn at 25 fps but moved at 10 Hz, a fast marble would jump a sixth of the
+// dish every fourth frame; it is drawn where its speed carries it since the
+// tick. Only the picture moves: the habitat's state is untouched.
+void projectMarble(Appearance& a, const Marble& m, uint32_t sinceTickMs) {
+  const Fx t = Fx::ratio(int32_t(sinceTickMs < kTickMs ? sinceTickMs : kTickMs), int32_t(kTickMs));
+  const DishPos ahead{m.at.x + m.vx * t, m.at.y + m.vy * t};
+  if (ahead.x * ahead.x + ahead.y * ahead.y > Fx::ratio(92, 100) * Fx::ratio(92, 100)) return;
+  for (uint8_t i = 0; i < a.itemCount; ++i)
+    if (a.items[i].what == Appearance::Item::What::Marble) a.items[i].at = ahead;
+}
+}  // namespace
+
 Appearance Dish::appearance() const {
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
+  projectMarble(a, live_.habitat.marble, nowMs_ - lastTickMs_);
   a.timeUnknown = !wallKnown_;
   if (wallKnown_ && std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
