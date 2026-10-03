@@ -77,28 +77,17 @@ TEST(Viability, RejectsAMissingShape) {
   EXPECT_FALSE(viability(*noFood.build()).ok) << "no food -> energy";
 }
 
-// Every mutate() carries at least one 48-hour dry run, so the 10k seeds check
-// replay and the variety guarantees, and the named first-1000 subset below
-// adds determinism and a viability re-check.
-TEST(Heredity, TenThousandSeedsReplayAndDiffer) {
+TEST(Heredity, TenThousandSeedsReplayRepeatDifferAndLive) {
   const MutationPolicy pol = policyOf(parent(), Fx::zero());
   for (uint64_t seed = 0; seed < 10000; ++seed) {
-    Rng rng = Rng::seeded(seed);
+    Rng rng = Rng::seeded(seed), again = Rng::seeded(seed);
     Offspring o = mutate(parent(), pol, {}, rng);
     std::optional<Genome> replayed = apply(parent(), o.diff);
     ASSERT_TRUE(replayed.has_value()) << "seed " << seed;
     ASSERT_EQ(replayed->bytes(), o.genome.bytes()) << "seed " << seed;
+    ASSERT_EQ(mutate(parent(), pol, {}, again).genome.bytes(), o.genome.bytes()) << "seed " << seed;
     ASSERT_GE(lookChanges(parent(), o, pol.minVisibleDelta), 1) << "seed " << seed;
     ASSERT_GE(mindChanges(parent(), o), 1) << "seed " << seed;
-  }
-}
-
-TEST(Heredity, FirstThousandSeedsRepeatAndAreViable) {
-  const MutationPolicy pol = policyOf(parent(), Fx::zero());
-  for (uint64_t seed = 0; seed < 1000; ++seed) {
-    Rng rng = Rng::seeded(seed), again = Rng::seeded(seed);
-    Offspring o = mutate(parent(), pol, {}, rng);
-    ASSERT_EQ(mutate(parent(), pol, {}, again).genome.bytes(), o.genome.bytes()) << "seed " << seed;
     Viability v = viability(o.genome);
     ASSERT_TRUE(v.ok) << "seed " << seed << ": " << v.reason;
   }
