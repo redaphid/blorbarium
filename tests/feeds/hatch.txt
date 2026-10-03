@@ -1,0 +1,4 @@
+# Wall time first, so the marquee shows only in time_unknown.
+@0 DEBUG time 1790000000
+# Hatched: the hatchling at 55 percent.
+@100 DEBUG warp 18000
