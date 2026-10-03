@@ -153,10 +153,11 @@ static void reportStatus(uint32_t now) {
   char temp[12] = "?";
   if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
   Serial.printf(
-      "[hw] up=%u heap=%u minheap=%u big=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x age=%u "
-      "imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
+      "[hw] up=%u heap=%u minheap=%u big=%u psram_free=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x "
+      "age=%u imu ax=%d ay=%d az=%d mg t=%sC tap=%u button=%d\n",
       unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
-      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
+      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+      unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
       lastBody.ay, lastBody.az, temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
 }
