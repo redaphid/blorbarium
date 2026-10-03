@@ -48,7 +48,10 @@ constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
 // The user may reword this; the font covers A-Z, 0-9, space and . , ! ? - ' :
 constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";
-constexpr int kBandTop = 184, kBandBottom = 202, kBandLeft = 40, kBandRight = 200;   // half-open
+// The empty band above his head, under the pantry pips; the text runs the
+// disc's chord there and fades out over the last pixels at each end.
+constexpr int kBandTop = 34, kBandRows = 18;
+constexpr int kMarqueeFeather = 20;
 constexpr int kMarqueePxPerTick = 3, kMarqueeGap = 48;
 
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
@@ -730,25 +733,38 @@ const uint8_t* glyphFor(char c) {
   return kMissingGlyph;
 }
 
-// "Time unknown": a scrolling line in a dim band at the bottom of the dish.
+// "Time unknown": a scrolling line across the dish above his head, on a dim
+// band that fades out toward the rim rather than ending in a box edge.
 void marquee(Canvas240& cv, uint16_t tick) {
-  fill(cv, kBandLeft, kBandTop, kBandRight, kBandBottom, {0, 0, 0}, 140);
+  const int half = int(isqrt(uint64_t(kSide * kSide / 4 - (kSide / 2 - kBandTop) * (kSide / 2 - kBandTop))));
+  const int left = kSide / 2 - half, right = kSide / 2 + half;   // the chord at the band's narrower, top row
+  auto fade = [&](int x) { return imax(0, imin(256, imin(x - left, right - 1 - x) * 256 / kMarqueeFeather)); };
+  for (int y = kBandTop; y < kBandTop + kBandRows; ++y)
+    for (int x = left; x < right; ++x) {
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, 0, 140 * fade(x) / 256);
+    }
   constexpr int kScale = 2, kAdvance = 6 * kScale;
   const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kAdvance + kMarqueeGap;
-  const int start = kBandRight - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
-  const Rgb c{kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]};
-  const int top = (kBandTop + kBandBottom - 7 * kScale) / 2;
+  const int start = right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
+  const uint16_t c = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
+  const int top = kBandTop + (kBandRows - 7 * kScale) / 2;
   for (int copy = -1; copy <= 1; ++copy)
     for (int i = 0; i < len; ++i) {
       int x0 = start + copy * period + i * kAdvance;
-      if (x0 + kAdvance <= kBandLeft || x0 >= kBandRight) continue;
+      if (x0 + kAdvance <= left || x0 >= right) continue;
       const uint8_t* rows = glyphFor(kTimeUnknownMarquee[i]);
       for (int r = 0; r < 7; ++r)
-        for (int b = 0; b < 5; ++b)
-          if (rows[r] & (0x10 >> b)) {
-            int x = x0 + b * kScale, y = top + r * kScale;
-            fill(cv, imax(x, kBandLeft), y, imin(x + kScale, kBandRight), y + kScale, c, 256);
-          }
+        for (int b = 0; b < 5; ++b) {
+          if (!(rows[r] & (0x10 >> b))) continue;
+          for (int dy = 0; dy < kScale; ++dy)
+            for (int dx = 0; dx < kScale; ++dx) {
+              int x = x0 + b * kScale + dx, y = top + r * kScale + dy;
+              if (x < left || x >= right) continue;
+              uint16_t& px = cv.px[y * kSide + x];
+              px = blend(px, c, fade(x));
+            }
+        }
     }
 }
 
