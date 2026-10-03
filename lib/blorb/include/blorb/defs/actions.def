@@ -6,7 +6,7 @@ BLORB_ACTION( 0, rest,        Rest,        20, none)
 BLORB_ACTION( 1, wander,      Wander,      30, none)
 BLORB_ACTION( 2, eat,         Eat,         20, none)          // walk to the nearest pellet and bite
 BLORB_ACTION( 3, sleep,       Sleep,      300, none)
-BLORB_ACTION( 4, foresee,     Foresee,     25, self_foresaw)  // grungo scries: eyes glow (ask 7)
+BLORB_ACTION( 4, foresee,     Foresee,     15, self_foresaw)  // grungo scries: eyes glow (ask 7)
 BLORB_ACTION( 5, call,        Call,        25, self_called)
 BLORB_ACTION( 6, curl,        Curl,        40, none)          // hood up, toward the rim
 BLORB_ACTION( 7, follow_tilt, FollowTilt,  20, none)

@@ -403,9 +403,9 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=chase face=neutral asleep=0",
       "#2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
-      "#2b + body life=1000 injury=0 glow=436 dreaming=0",
+      "#2b + body life=1000 injury=0 glow=0 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=1 time=unknown",
       "#2b OK",
   };
@@ -520,12 +520,12 @@ TEST(Golden, Chem) {
       "#62 + chem=5 name=fear level=8",          "#62 + chem=6 name=pain level=1",
       "#62 + chem=7 name=discomfort level=3",    "#62 + chem=8 name=need_touch level=1",
       "#62 + chem=16 name=life level=1000",      "#62 + chem=18 name=energy level=800",
-      "#62 + chem=23 name=melatonin level=3",    "#62 + chem=24 name=vision level=88",
+      "#62 + chem=23 name=melatonin level=3",    "#62 + chem=24 name=vision level=29",
       "#62 + locus=0 name=always level=1000",    "#62 + locus=1 name=tilt_x level=500",
       "#62 + locus=2 name=tilt_y level=500",     "#62 + locus=7 name=day_sin level=503",
       "#62 + locus=8 name=day_cos level=1000",   "#62 + locus=9 name=owner_near level=1000",
-      "#62 + locus=16 name=marble_near level=437", "#62 + locus=18 name=pantry level=1000",
-      "#62 + locus=136 name=glow level=436",     "#62 OK 21",
+      "#62 + locus=16 name=marble_near level=413", "#62 + locus=18 name=pantry level=1000",
+      "#62 OK 20",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);
 }
