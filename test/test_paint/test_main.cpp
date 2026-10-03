@@ -317,8 +317,13 @@ TEST(Face, CrossfadesFromPreviousThenSettles) {
   EXPECT_GE(midwayDiffers, 3);   // a blink can take one tick
 }
 
+// The block with no face patches, so the halo has only the body's anchors.
+struct FacelessPack : BlockPack {
+  FrameRef face(blorb::ExprId, blorb::Stage) const override { return FrameRef{}; }
+};
+
 TEST(Halo, RingsTheEyeAnchorsAndLeavesFarPixelsAlone) {
-  BlockPack pack;
+  FacelessPack pack;
   for (uint16_t t = 0; t < 8; ++t) {   // every step of the 1.25 Hz pulse, trough included
     Appearance a = adult();
     a.foreseeing = true;
@@ -342,7 +347,7 @@ TEST(Halo, RingsTheEyeAnchorsAndLeavesFarPixelsAlone) {
 }
 
 TEST(Halo, FollowsTheAnchorsThroughTheHop) {
-  BlockPack pack;
+  FacelessPack pack;
   Appearance rest = adult();
   rest.foreseeing = true;
   Box restBox = find(*render(rest, pack), kOlive);
