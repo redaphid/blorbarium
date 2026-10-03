@@ -134,3 +134,19 @@ Each was reported by the unit that made it and reviewed at integration.
 - **Known gap for unit 20.** `Storage` has no offset read, so `Lineage` reads
   the whole log into RAM (up to 192 KB). The flash implementation must add a
   ranged read before the log grows.
+
+## 7. The grungo pack landed before the simulator
+
+The build plan puts the converter (unit 19) after the simulator and the
+goldens (17, 18), with the goldens drawn first from `placeholderPack()` and
+re-blessed once for grungo. The pack was built in parallel and was ready
+first, so `engine` carries unit 19 (and the user's picked egg) before unit
+17, and the goldens were grungo from their first commit. Nothing was
+re-blessed for the pack swap; the one deliberate re-bless came later, with
+the fixes to what the review frames showed.
+
+The simulator's fixed clock steps 5 ms per loop, not 25 ms, so the IMU is
+sampled at exactly 50 Hz as on the device; frames are still drawn every
+40 ms. Until unit 20 the badge envs stop at an `#error`, because
+`src/main.cpp` needs the board, flash storage and BLE headers that unit
+brings.
