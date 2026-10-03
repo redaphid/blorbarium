@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <vector>
 #include "blorb/fixed.h"
+#include "blorb/ids.h"
 
 namespace e2e {
 
@@ -66,6 +67,17 @@ inline Row repeat(Who who, uint64_t from, uint64_t until, uint64_t every, Gestur
 inline Row daily(Who who, int firstDay, int lastDay, uint64_t hourOfDay, Gesture g, uint64_t jitter = 0) {
   return {who, uint64_t(firstDay) * kD + hourOfDay, g, kD, uint64_t(lastDay + 1) * kD, jitter};
 }
+
+// An owner who answers what they see: while [from, until), each time he is
+// seen starting `when`, they make gesture `g`, at most once per `cooldown`.
+struct Reaction {
+  Who who;
+  uint64_t from, until;
+  blorb::ActionId when;
+  Gesture g;
+  uint64_t cooldown = 0;
+  bool in(Arm arm) const { return who == Who::Both || (who == Who::Treatment) == (arm == Arm::Treatment); }
+};
 
 struct Event { uint64_t at; Gesture g; };
 

@@ -11,6 +11,7 @@
 // flinch, what is in his mouth).
 #include <array>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <string>
 #include <variant>
@@ -116,7 +117,7 @@ struct Tick {
 struct Window {
   uint64_t at = 0, end = 0;
   std::vector<Tick> ticks;                  // one per tick from `at`
-  std::vector<blorb::Appearance> frames;    // every kFrameMs, when the run renders
+  std::vector<blorb::Appearance> frames;    // the clip, when the run renders one
   std::vector<Tick> frameTicks;             // what STATE said at each frame, for captions
 };
 
@@ -131,6 +132,7 @@ struct RunLog {
   std::vector<blorb::DeathCause> causes;    // per death, as STATE reports it in the clutch phase
   uint32_t finalHash = 0;                   // the Dish's replay hash: equal arms never diverged
   uint32_t ticks = 0;
+  uint32_t reactions = 0;                   // gestures the reacting owner made
 
   // Per-hour share of creature ticks spent on `a` over days [first, last].
   double share(blorb::ActionId a, int first, int last, int fromHour = 0, int toHour = 24) const {
@@ -144,7 +146,9 @@ struct RunLog {
   }
 };
 
-constexpr uint64_t kFrameMs = 80;                 // 12.5 fps for the contact sheets and videos
+// The stretch of one watch window to render: `count` frames, `everyMs`
+// apart, from `fromMs` into window number `window`.
+struct Clip { size_t window = 0; uint64_t fromMs = 0, everyMs = 80; uint32_t count = 300; };
 constexpr uint32_t kEpochUnix = 1790812800;       // 2026-10-01 00:00 UTC: wall midnight at founding
 constexpr uint64_t kLineageId = 0xB10Bu;
 
@@ -169,7 +173,12 @@ inline Tick observe(const blorb::Dish& dish) {
   return t;
 }
 
-inline RunLog run(const std::vector<Row>& rows, uint64_t endAt, Arm arm, uint32_t seed, bool frames = false) {
+// `peek` sees the Dish after every tick. It is for diagnosing a root cause
+// (a weight, a captured heirloom), never for a metric.
+using Peek = std::function<void(const blorb::Dish&, uint64_t wallMs)>;
+
+inline RunLog run(const std::vector<Row>& rows, uint64_t endAt, Arm arm, uint32_t seed, const Clip* clip = nullptr,
+                  const Peek& peek = {}, const std::vector<Reaction>& reactions = {}) {
   const std::vector<Event> events = timeline(rows, arm, seed);
   RunLog log;
   blorbtest::MemStorage store;
@@ -183,9 +192,9 @@ inline RunLog run(const std::vector<Row>& rows, uint64_t endAt, Arm arm, uint32_
   std::optional<blorb::Dish> dish;
   dish.emplace(store, seed, kLineageId, blorb::DishOptions{&rtc});
   std::vector<size_t> open;
-  uint64_t nextFrame = 0;
   Phase was = Phase::Egg;
   Tick last;
+  std::vector<uint64_t> lastReacted(reactions.size(), 0);
 
   size_t next = 0;
   while (wall < endAt) {
@@ -216,7 +225,18 @@ inline RunLog run(const std::vector<Row>& rows, uint64_t endAt, Arm arm, uint32_
     dish->tick(boot, link);
     if (dish->tickCount() != before) {
       ++log.ticks;
+      const Tick prev = last;
       const Tick t = last = observe(*dish);
+      const bool started = t.phase == Phase::Creature && (prev.phase != Phase::Creature || prev.action != t.action);
+      for (size_t i = 0; started && i < reactions.size(); ++i) {
+        const Reaction& r = reactions[i];
+        if (!r.in(arm) || wall < r.from || wall >= r.until || t.action != r.when.v) continue;
+        if (lastReacted[i] && wall < lastReacted[i] + r.cooldown) continue;
+        lastReacted[i] = wall;
+        hand.start(r.g, wall);
+        ++log.reactions;
+      }
+      if (peek) peek(*dish, wall);
       if (t.phase != was && t.phase == Phase::Creature) log.hatches.push_back(wall);
       if (t.phase != was && t.phase == Phase::Clutch) {
         log.deaths.push_back(wall);
@@ -240,12 +260,13 @@ inline RunLog run(const std::vector<Row>& rows, uint64_t endAt, Arm arm, uint32_
         ++i;
       }
     }
-    if (frames && !open.empty() && wall >= nextFrame) {
-      for (size_t i : open) {
-        log.windows[i].frames.push_back(dish->appearance());
-        log.windows[i].frameTicks.push_back(last);
+    if (clip && clip->window < log.windows.size()) {
+      Window& w = log.windows[clip->window];
+      const uint64_t from = w.at + clip->fromMs;
+      if (wall >= from && w.frames.size() < clip->count && (wall - from) / clip->everyMs >= w.frames.size()) {
+        w.frames.push_back(dish->appearance());
+        w.frameTicks.push_back(last);
       }
-      nextFrame = wall + kFrameMs;
     }
     wall += blorb::kSampleMs;
     boot += blorb::kSampleMs;

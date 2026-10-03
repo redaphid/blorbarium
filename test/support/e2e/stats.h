@@ -77,6 +77,10 @@ inline Effect compare(const std::vector<double>& t, const std::vector<double>& c
   e.lo = means[kResamples * 25 / 1000];
   e.hi = means[kResamples * 975 / 1000 - 1];
 
+  if (direction == 0) {   // a reported metric with no predicted side: did it move at all
+    e.verdict = e.lo > 0 || e.hi < 0 ? Verdict::Yes : Verdict::No;
+    return e;
+  }
   const double near = direction > 0 ? e.lo : -e.hi;   // the CI's bound nearest zero, in the predicted sense
   const double far = direction > 0 ? e.hi : -e.lo;
   if (near > 0) e.verdict = e.towards >= 0.75 ? Verdict::Yes : Verdict::Weak;

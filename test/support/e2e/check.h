@@ -30,8 +30,9 @@ struct Scenario {
   const char* prediction;              // written before the first run
   std::vector<Row> rows;
   uint64_t endAt;
+  std::vector<Reaction> reactions = {};   // gestures made in answer to what he does
   std::vector<Metric> metrics;         // metrics[0] decides the verdict; the rest are reported
-  size_t showWindow = 0;               // the watch window the contact sheet and the video show
+  Clip clip;                           // the moment the contact sheet and the video show
   bool knownFailing = false;           // measured without a clear effect: the test records it until the engine shows one
 };
 
@@ -54,7 +55,8 @@ inline Result evaluate(const Scenario& s, int seeds) {
   std::atomic<int> next{0};
   auto work = [&] {
     for (int job; (job = next++) < 2 * seeds;)
-      logs[size_t(job)] = run(s.rows, s.endAt, job % 2 ? Arm::Treatment : Arm::Control, uint32_t(job / 2 + 1));
+      logs[size_t(job)] = run(s.rows, s.endAt, job % 2 ? Arm::Treatment : Arm::Control, uint32_t(job / 2 + 1), nullptr,
+                              {}, s.reactions);
   };
   std::vector<std::thread> pool;
   unsigned n = std::max(1u, std::min(std::thread::hardware_concurrency(), unsigned(2 * seeds)));
@@ -167,9 +169,9 @@ inline void write(const Result& r, const std::string& dir) {
   static paint::Canvas240 canvas;
   for (Arm arm : {Arm::Control, Arm::Treatment}) {
     const char* side = arm == Arm::Treatment ? "treatment" : "control";
-    RunLog log = run(s.rows, s.endAt, arm, r.shownSeed, true);
-    if (s.showWindow >= log.windows.size()) continue;
-    const Window& w = log.windows[s.showWindow];
+    RunLog log = run(s.rows, s.endAt, arm, r.shownSeed, &s.clip, {}, s.reactions);
+    if (s.clip.window >= log.windows.size()) continue;
+    const Window& w = log.windows[s.clip.window];
     const std::string out = dir + "/frames/" + s.name + "/" + side;
     detail::mkdirs(out);
     FILE* cap = std::fopen((out + "/captions.txt").c_str(), "w");
@@ -184,9 +186,9 @@ inline void write(const Result& r, const std::string& dir) {
     }
     if (cap) std::fclose(cap);
     std::fprintf(f, "%s\"%s\":{\"at\":%llu,\"count\":%zu}", arm == Arm::Treatment ? "," : "", side,
-                 (unsigned long long)w.at, w.frames.size());
+                 (unsigned long long)(w.at + s.clip.fromMs), w.frames.size());
   }
-  std::fprintf(f, ",\"frameMs\":%llu}}\n", (unsigned long long)kFrameMs);
+  std::fprintf(f, ",\"everyMs\":%llu}}\n", (unsigned long long)s.clip.everyMs);
   std::fclose(f);
 }
 
