@@ -19,15 +19,20 @@ is one named constant, `kNeglectCanKill` in `starter_genome.cpp`, now `true`.
 ## 3. User-directed: time catches up while unplugged (overrides open question 5)
 
 The design chose stasis while unpowered. The user wants unpowered time to
-pass, so a long absence can end in death and a clutch. The board has no RTC
-that survives power-off, so wall time comes through a new seam:
+pass, so a long absence can end in death and a clutch. Wall time comes
+through a new seam (revised the same day: Wi-Fi NTP was dropped):
 
-- `TimeSource` in `seams.h`, queried in priority order: Wi-Fi NTP (the
-  credentials arrive once over BLE; only the seam and a host fake exist
-  now, because Wi-Fi is a hardware unit), then the time a phone visit gives
-  with `TIME`, then none.
+- `TimeSource` in `seams.h`, queried in priority order: an RTC that kept
+  counting through deep sleep (the user may fit a small battery, and the
+  board deep-sleeps when unplugged, so on wake the elapsed time is known),
+  then the time a phone visit gives with `TIME` over BLE, then unknown.
+  Deep sleep, unplug detection and battery measurement are hardware units
+  after this branch's stop point; only the seam and host fakes for both
+  sources exist now.
 - With no source, he resumes as if no time passed, and catches up once a
-  source appears.
+  source appears. While time is unknown, `Appearance::timeUnknown` is set
+  and the renderer scrolls a marquee asking for a phone visit. Its text is
+  one constant, `kTimeUnknownMarquee` in `lib/paint/src/draw.cpp`.
 - The keepsake persists a wall anchor: the last known wall time and the pet
   tick it was read at. When wall time arrives, the unpowered gap is
   `wallNow - anchorWall - poweredSecondsSinceAnchor`. The Dish fast-forwards
