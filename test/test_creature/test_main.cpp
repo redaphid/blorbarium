@@ -194,13 +194,15 @@ TEST(Foresee, HeForeseesOnHisOwnAndHisGlowRises) {
   while (r.tick < kWithin && r.c.action() != action::foresee) r.step();
   ASSERT_EQ(r.c.action(), action::foresee) << "no foresight in " << kWithin / kTicksPerHour << " pet hours";
   Fx atStart = r.locus(locus::glow), peak = atStart;
+  bool posed = true;
   for (int i = 0; i < 30 && r.c.action() == action::foresee; ++i) {
     r.step();
     peak = fxMax(peak, r.locus(locus::glow));
+    if (r.c.action() == action::foresee && !r.c.body().reflex) posed = posed && r.c.body().pose == pose::foresee;
   }
   EXPECT_GT(peak, atStart + Fx::ratio(3, 10));
   EXPECT_GE(peak, Fx::ratio(6, 10));
-  EXPECT_EQ(r.c.body().pose, pose::foresee);
+  EXPECT_TRUE(posed) << "the foresee pose holds while he foresees";
   EXPECT_GE(r.c.stats().foresights, 1u);
 }
 
