@@ -27,6 +27,8 @@ constexpr uint16_t kYawnTicks = 18;
 constexpr uint16_t kBreathTicks = 26, kSleepBreathTicks = 44;
 constexpr int kBreathPx = 2;                     // one more at intensity >= 3/4
 constexpr int kHopMaxPx = 36;                    // leap height at strength 1, scalePct 100
+constexpr int kShadowAlpha = 150;               // the contact shadow's darkest, standing (of 256)
+constexpr int kShadowWidePct = 30;               // its half-width, as a share of the body frame's width
 constexpr int kHatchlingWide = kOne * 116 / 100, kHatchlingTall = kOne * 90 / 100;
 constexpr int kElderSat = 96;                    // x/128
 constexpr int kMinScale = kOne / 16;
@@ -480,6 +482,23 @@ FaceShown faceFor(const Appearance& a) {
   return {now, now, 256};
 }
 
+// A shadow on the dish floor under the stand point. It stays down while he
+// leaps, smaller and fainter the higher he goes, so a still frame reads as airborne.
+void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
+  const int span = 2 * imax(1, maxLift);
+  const int hw = halfW - halfW * imin(lift, span) / (2 * span), hh = imax(1, hw / 4);
+  const int alpha = kShadowAlpha * (span - imin(lift, span)) / span;
+  if (hw <= 0 || alpha <= 0) return;
+  const int64_t r2 = int64_t(hw) * hw * hh * hh;
+  for (int y = imax(0, p.y - hh); y <= imin(kSide - 1, p.y + hh); ++y)
+    for (int x = imax(0, p.x - hw); x <= imin(kSide - 1, p.x + hw); ++x) {
+      const int64_t dx = x - p.x, dy = y - p.y;
+      if (dx * dx * hh * hh + dy * dy * hw * hw > r2) continue;
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, 0, alpha);
+    }
+}
+
 void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Disc& d, const Colours& col) {
   for (int i = 0; i < imin(a.itemCount, 8); ++i)
     blit(cv, pack.item(a.items[i].what), placeAt(a.items[i].at, d, Xf{}), col, 256, nullptr);
@@ -518,6 +537,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 
   const FrameRef& body = bodies[1];
   Motion m = motionOf(a, maxLift);
+  shadow(cv, p, body.w * base.kx / kOne * kShadowWidePct / 100, m.lift, maxLift);
   p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift, 0};
   if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
   const Mottle* spots = mottle.density ? &mottle : nullptr;
