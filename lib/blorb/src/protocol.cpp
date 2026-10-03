@@ -451,6 +451,26 @@ void cmd_diff(Dish& dish, const Request& req, Reply& r) {
   r.ok("%u", unsigned(diff->ops.size()));
 }
 
+void cmd_portrait(Dish& dish, const Request& req, Reply& r) {
+  Args a{req.args};
+  std::optional<uint32_t> gen = a.number(UINT16_MAX);
+  std::optional<uint32_t> stage = a.done() ? std::optional<uint32_t>(uint32_t(Stage::Adult)) : a.number(kStageCount - 1);
+  if (!gen || !stage || !a.done()) return r.err(400, "BAD_ARGS");
+  std::optional<Genome> g = dish.lineage().genomeOf(uint16_t(*gen));
+  if (!g) return r.err(404, "NO_GENOME");
+  Appearance p = portrait(*g, Stage(*stage), uint16_t(*gen), dish.lineage().legacyFeats());
+  r.line("stage=%s scale=%u seed=%08x marks=%u", stageName(p.stage), unsigned(p.scalePct), unsigned(p.lifeSeed),
+         unsigned(p.markCount));
+  for (const RegionInfo& region : REGIONS) {
+    const Tint& t = p.regions[region.id.v];
+    r.line("region=%s hue=%d sat=%u val=%u", region.name, int(t.hue), unsigned(t.sat), unsigned(t.val));
+  }
+  for (uint8_t i = 0; i < p.markCount; ++i)
+    r.line("mark layer=%u variant=%u hue=%d", unsigned(p.marks[i].layer), unsigned(p.marks[i].variant),
+           int(p.marks[i].tint.hue));
+  r.ok();
+}
+
 void cmd_clutch(Dish& dish, const Request&, Reply& r) {
   const Clutch* k = std::get_if<Clutch>(&dish.occupant());
   if (!k) return r.err(409, "NO_CLUTCH");

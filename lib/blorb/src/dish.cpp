@@ -202,6 +202,12 @@ Snapshot Dish::snapshot() const {
 
 uint32_t Dish::hash() const { return snapshot().hash(); }
 
+Appearance Dish::appearance() const {
+  Appearance a = present(occ_, habitat_, clock_, tick_);
+  a.timeUnknown = !wallKnown_;
+  return a;
+}
+
 // ---- wall time and the unpowered catch-up --------------------------------------------
 
 std::optional<uint32_t> Dish::wallNow() const {
