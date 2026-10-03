@@ -35,19 +35,33 @@ def lines_from_def(n, seed=7):
     return [r[3] for r in random.Random(seed).sample(rows, n)]
 
 
-def render(line: str, idx: int):
+def gxx(*args):
+    subprocess.run(["wsl", "-d", DISTRO, "--exec", "g++", "-std=c++17", "-O1",
+                    f"-I{wsl(REPO / 'lib/blorb/include')}", f"-I{wsl(REPO / 'lib/paint/include')}", *args],
+                   check=True)
+
+
+def build_shared():
+    """Everything but draw.cpp, compiled once into one relocatable object."""
     BUILD.mkdir(parents=True, exist_ok=True)
+    srcs = [HERE / "marquee_main.cpp", REPO / "lib/paint/src/placeholder_pack.cpp",
+            *sorted((REPO / "lib/blorb/src").glob("*.cpp"))]
+    objs = []
+    for s in srcs:
+        o = BUILD / f"{s.stem}.o"
+        gxx("-c", wsl(s), "-o", wsl(o))
+        objs.append(wsl(o))
+    return objs
+
+
+def render(line: str, idx: int, shared):
     src = (REPO / "lib/paint/src/draw.cpp").read_text(encoding="utf-8")
     patched, n = MARQUEE_DECL.subn(f'constexpr char kTimeUnknownMarquee[] = "{line}";', src)
     assert n == 1, "draw.cpp no longer declares kTimeUnknownMarquee as expected"
     draw = BUILD / f"draw_{idx}.cpp"
     draw.write_text(patched, encoding="utf-8", newline="\n")
     exe = BUILD / f"marquee_{idx}"
-    srcs = [wsl(draw), wsl(HERE / "marquee_main.cpp"), wsl(REPO / "lib/paint/src/placeholder_pack.cpp")]
-    srcs += [wsl(p) for p in sorted((REPO / "lib/blorb/src").glob("*.cpp"))]
-    subprocess.run(["wsl", "-d", DISTRO, "--exec", "g++", "-std=c++17", "-O1",
-                    f"-I{wsl(REPO / 'lib/blorb/include')}", f"-I{wsl(REPO / 'lib/paint/include')}",
-                    *srcs, "-o", wsl(exe)], check=True)
+    gxx(wsl(draw), *shared, "-o", wsl(exe))
     frames = []
     for tick in (HEAD_TICK, TAIL_TICK):
         ppm = subprocess.run(["wsl", "-d", DISTRO, "--exec", wsl(exe), str(tick)], check=True,
@@ -60,11 +74,12 @@ def main():
     out = Path(sys.argv[1])
     n = int(sys.argv[2]) if len(sys.argv) > 2 else 6
     lines = lines_from_def(n)
+    shared = build_shared()
     sheet = Image.new("RGB", (2 * 240 + 30, n * 250 + 10), (24, 24, 24))
     for i, line in enumerate(lines):
-        for j, frame in enumerate(render(line, i)):
+        for j, frame in enumerate(render(line, i, shared)):
             sheet.paste(frame, (10 + j * 250, 10 + i * 250))
-        print(f"rendered: {line}")
+        print(f"rendered: {line}", flush=True)
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out)
     print(f"wrote {out}")

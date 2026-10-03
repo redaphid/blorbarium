@@ -215,7 +215,7 @@ def run_jobs(jobs, voices, topics, lexicon):
         print("  offline: using cached pages only")
         todo, missing = [t for t in todo if t[2] in raw], []
     digest = model_digest() if missing else None
-    with RAW.open("a", encoding="utf-8") as out:
+    with RAW.open("a", encoding="utf-8", newline="\n") as out:
         for n, (j, p, k) in enumerate(missing, 1):
             r = complete(p, j.seed)
             row = {"key": k, "model": MODEL, "digest": digest, "options": OPTIONS, "seed": j.seed,
