@@ -201,7 +201,7 @@ TEST(Golden, Remains) {
             "kind=2 gen=0 stage=1 seed=50b440b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 "
             "0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=997 egg=0 fade=33 eggs=1@0 "
             "hint=0/0 0 stim=0+0 unknown=1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 "
-            "r11,128,128 m0,4,0 i2@52,-545 pantry=4 e0,2,4");
+            "r11,128,128 m0,4,0 i2@52,-545 pantry=4 e0,2,1");
 }
 
 TEST(Golden, Clutch) {
@@ -214,7 +214,7 @@ TEST(Golden, Clutch) {
             "kind=3 gen=1 stage=0 seed=50b440b1 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 "
             "0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=956 egg=0 fade=0 eggs=3@0 "
             "hint=0/0 0 stim=0+0 unknown=1 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 "
-            "r0,128,128 i2@52,-545 pantry=4 e0,2,4 e0,1,4 e114,2,5");
+            "r0,128,128 i2@52,-545 pantry=4 e0,2,1 e0,1,1 e114,2,2");
 }
 
 // ---- properties ------------------------------------------------------------------------

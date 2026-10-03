@@ -10,7 +10,8 @@
 // Reward is the observed fall of a pressing drive, so eating is good when
 // hungry and worthless when full, and a shake can be fun when bored and awful
 // when tired. Instincts are the same update fed from a gene while dreaming.
-// The strongest rows become heirloom instinct genes at death (mutate.h).
+// What a life learned beyond its instincts becomes heirloom instinct genes
+// at death (mutate.h).
 #include <cstdint>
 #include <vector>
 #include "blorb/fixed.h"
@@ -47,8 +48,17 @@ class Brain {
   // fraction each night whatever its size.
   void forget(const Temperament&, uint32_t dreams);
   void queueInstinct(const Instinct&);
+  // At bedtime: each instinct is queued again at a share of its strength,
+  // unless one for the same cues, action and drive is still waiting, so the
+  // night's first dreams pull its cells back toward the genome.
+  void refreshInstincts(const std::vector<Instinct>&);
 
   std::vector<Belief> strongestBeliefs(uint8_t n) const;   // sorted by |effect| * confidence
+  // What this life built beyond `instincts`, which are rebuilt into a blank
+  // table at full strength: cells whose weight grew away from that table
+  // (|w| > |birth|), never cued on context, with confidence |w - birth| / 0.25
+  // of at least `minConfidence`. Largest change first, at most n; effect is w.
+  std::vector<Belief> lessons(const std::vector<Instinct>& instincts, Fx minConfidence, uint8_t n) const;
   Fx predict(LocusId feature, ActionId, DriveId) const;
 
   // Saves key weights by stable ids, so a firmware that adds a feature, an

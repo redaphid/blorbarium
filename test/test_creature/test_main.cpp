@@ -221,6 +221,8 @@ namespace {
 
 const ChemId kSleepiness = driveChem(drive::sleepiness);
 
+double toDouble(Fx v) { return double(v.raw) / Fx::kOne; }
+
 // Sleepiness held high opens the sleep gate; the forced Sleep then holds.
 void putToSleep(Rig& r) {
   for (int i = 0; i < 600 && r.locus(locus::sleep_gate) < kHalf; ++i) {
@@ -278,6 +280,53 @@ TEST(Sleep, AnUnpluggedGapAsleepForgetsNothing) {
   for (int i = 0; i < 50 && r.c.body().asleep; ++i) r.step();
   ASSERT_FALSE(r.c.body().asleep);
   EXPECT_EQ(r.c.brain().predict(locus::upside_down, action::rest, drive::hunger), belief);
+}
+
+// Experience wore food_near -> eat -> hunger from -0.56 to about 0 over a
+// life, and adults stood on a pellet without eating it.
+TEST(Sleep, AnInstinctWornAwayIsPartlyRestoredOvernight) {
+  Rig r;
+  ASSERT_TRUE(r.c.prophesy(locus::food_near, action::eat, drive::hunger, Fx::zero()));
+  sleepFor(r, 36000);
+  double eat = toDouble(r.c.brain().predict(locus::food_near, action::eat, drive::hunger));
+  EXPECT_LT(eat, -0.1) << "back toward the instinct's -0.7";
+  EXPECT_GT(eat, -0.35) << "a floor to return to, not the whole instinct in one night";
+}
+
+TEST(Sleep, ALessonLearnedOnAnInstinctCellOutlastsTheNight) {
+  Rig r;
+  const double lesson = 0.2, instinct = -0.7;   // eating here made him hungrier
+  ASSERT_TRUE(r.c.prophesy(locus::food_near, action::eat, drive::hunger, Fx::ratio(2, 10)));
+  sleepFor(r, 36000);
+  double eat = toDouble(r.c.brain().predict(locus::food_near, action::eat, drive::hunger));
+  EXPECT_LT(std::abs(eat - lesson), std::abs(eat - instinct)) << eat;
+}
+
+// A full-strength birth table, so even an unused instinct the nightly refresh
+// has pulled all the way to its level is not mistaken for a lesson.
+TEST(Heirlooms, CarryALessonNeverAContextCueOrAnInstinctHeWasBornWith) {
+  Rig r;
+  const Fx lesson = Fx::ratio(4, 10);
+  ASSERT_TRUE(r.c.prophesy(locus::held, action::curl, drive::fear, lesson));
+  ASSERT_TRUE(r.c.prophesy(locus::light, action::rest, drive::hunger, -Fx::ratio(6, 10)));
+  ASSERT_TRUE(r.c.prophesy(locus::marble_near, action::wander, drive::fear, Fx::ratio(5, 10)));
+  ASSERT_TRUE(r.c.prophesy(locus::food_near, action::eat, drive::hunger, -Fx::ratio(7, 10)));
+  ASSERT_TRUE(r.c.prophesy(locus::cradled, action::rest, drive::need_touch, -Fx::ratio(5, 100)));
+
+  Clutch k = r.c.layClutch(1, Fx::zero(), r.tick);
+  ASSERT_EQ(k.heirlooms.size(), 1u);
+  EXPECT_EQ(k.heirlooms[0].feature, locus::held);
+  EXPECT_EQ(k.heirlooms[0].action, action::curl);
+  EXPECT_EQ(k.heirlooms[0].drive, drive::fear);
+  EXPECT_EQ(k.heirlooms[0].effect, fromQ15(toQ15(lesson))) << "the level is what he now believes";
+
+  int inherited = 0;
+  k.child(0).genome.forEach([&](const GeneView& v) {
+    if (!(v.header.flags & GeneFlags::Heirloom)) return;
+    ++inherited;
+    EXPECT_EQ(v.body[0], locus::held.v);
+  });
+  EXPECT_EQ(inherited, 1) << "the lesson is born into the egg";
 }
 
 TEST(Lifecycle, StagesAdvanceAsLifeFallsEachExpressedOnce) {

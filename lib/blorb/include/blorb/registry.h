@@ -81,7 +81,8 @@ namespace feat {
 // ---- rows ----------------------------------------------------------------------
 struct ChemInfo   { ChemId id; const char* name; uint16_t rgb565; bool show; };
 struct DriveInfo  { DriveId id; const char* name; };
-struct LocusInfo  { LocusId id; const char* name; LocusDir dir; bool situation; };
+enum class Situation : uint8_t { None, Cue, Context };   // loci.def's situation column
+struct LocusInfo  { LocusId id; const char* name; LocusDir dir; Situation situation; };
 struct StimInfo   { StimId id; const char* name; StimSource source; bool situation; };
 struct ActionInfo { ActionId id; const char* name; uint16_t minTicks; StimId selfStim; };
 struct PoseInfo   { PoseId id; const char* name; };
@@ -102,7 +103,7 @@ inline constexpr DriveInfo DRIVES[] = {
 #undef BLORB_DRIVE
 };
 inline constexpr LocusInfo LOCI[] = {
-#define BLORB_LOCUS(id, name, dir, sit) {LocusId{id}, #name, LocusDir::dir, sit != 0},
+#define BLORB_LOCUS(id, name, dir, sit) {LocusId{id}, #name, LocusDir::dir, Situation(sit)},
 #include "blorb/defs/loci.def"
 #undef BLORB_LOCUS
 };
@@ -158,7 +159,7 @@ inline constexpr size_t kReflexCount = countOf(REFLEXES);
 // every situation stimulus. Order is table order; saves key weights by locus id.
 constexpr size_t countFeatures() {
   size_t n = 0;
-  for (const LocusInfo& l : LOCI) n += l.situation ? 1 : 0;
+  for (const LocusInfo& l : LOCI) n += l.situation != Situation::None ? 1 : 0;
   for (const StimInfo& s : STIMULI) n += s.situation ? 1 : 0;
   return n;
 }
@@ -166,7 +167,7 @@ inline constexpr size_t kFeatureCount = countFeatures();
 constexpr std::array<LocusId, kFeatureCount> buildFeatures() {
   std::array<LocusId, kFeatureCount> out{};
   size_t i = 0;
-  for (const LocusInfo& l : LOCI) if (l.situation) out[i++] = l.id;
+  for (const LocusInfo& l : LOCI) if (l.situation != Situation::None) out[i++] = l.id;
   for (const StimInfo& s : STIMULI) if (s.situation) out[i++] = locus::recent(s.id);
   return out;
 }
@@ -180,6 +181,10 @@ constexpr bool idsUnique(const T (&rows)[N]) {
       if (rows[i].id == rows[j].id) return false;
   return true;
 }
+constexpr bool situationsKnown() {
+  for (const LocusInfo& l : LOCI) if (uint8_t(l.situation) > uint8_t(Situation::Context)) return false;
+  return true;
+}
 constexpr bool stimIdsFitRecentRange() {
   for (const StimInfo& s : STIMULI) if (s.id.v >= 64) return false;
   return true;
@@ -187,6 +192,7 @@ constexpr bool stimIdsFitRecentRange() {
 static_assert(idsUnique(CHEMICALS) && idsUnique(DRIVES) && idsUnique(LOCI) && idsUnique(STIMULI) &&
               idsUnique(ACTIONS) && idsUnique(POSES) && idsUnique(EXPRESSIONS) && idsUnique(REGIONS) &&
               idsUnique(REFLEXES) && idsUnique(CARES), "a registry has a duplicate id");
+static_assert(situationsKnown(), "a locus situation is 0, 1 (cue) or 2 (context)");
 static_assert(stimIdsFitRecentRange(), "stimulus ids must be < 64 so their recent loci fit 64..127");
 static_assert(kDriveCount <= 15, "drive chemicals are 1..15; 16 is life");
 static_assert(countOf(FEATS) <= 32, "feats are a 32-bit set");

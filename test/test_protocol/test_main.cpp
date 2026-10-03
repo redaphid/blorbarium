@@ -383,7 +383,8 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
     EXPECT_TRUE(listed) << t.name;
   }
   for (const char* row : {"#5 + stim 2 shake body 1", "#5 + gene 32 palette 6 look XNNNAN", "#5 + cmd TWIST 1",
-                          "#5 + locus 133 startle act 0", "#5 + sense tilt"}) {
+                          "#5 + locus 133 startle act 0", "#5 + locus 14 food_near sense 1",
+                          "#5 + locus 6 light sense 2", "#5 + sense tilt"}) {
     bool listed = false;
     for (const std::string& l : out) listed = listed || l == row;
     EXPECT_TRUE(listed) << row;
@@ -621,9 +622,9 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=5",
-      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=4 mind=8",
-      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=4",
+      "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=2",
+      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=4 mind=5",
+      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=1",
       "#6d OK eggs=3 cursor=1 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);

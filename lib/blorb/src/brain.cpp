@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <memory>
 
 namespace blorb {
 namespace {
@@ -25,6 +26,11 @@ constexpr Fx kHabitFade = Fx::ratio(1, 16);
 // moves a drive by a quarter of its range or more is held with certainty.
 constexpr Fx kConfidentEffect = Fx::ratio(1, 4);
 
+// A bedtime refresh nudges an instinct with this share of its gene's
+// strength: enough to stop an unused instinct wearing away, little enough
+// that a lesson learned on the same cell outlasts the night.
+constexpr Fx kRefreshShare = Fx::ratio(1, 4);
+
 constexpr size_t kEpisodes = 16;
 
 using Weights = Q15[kFeatureCount][kActionCount][kDriveCount];
@@ -38,6 +44,16 @@ int rowIndex(const Row (&rows)[N], IdT id) {
 int featureIndex(LocusId id) {
   for (size_t i = 0; i < kFeatureCount; ++i) if (FEATURES[i] == id) return int(i);
   return -1;
+}
+
+bool isContext(LocusId id) {
+  for (const LocusInfo& l : LOCI) if (l.id == id) return l.situation == Situation::Context;
+  return false;
+}
+
+bool sameCells(const Instinct& a, const Instinct& b) {
+  return a.cueCount == b.cueCount && std::equal(a.cue, a.cue + 3, b.cue) && a.action == b.action &&
+         a.drive == b.drive;
 }
 
 Fx absFx(Fx v) { return v < Fx::zero() ? -v : v; }
@@ -161,6 +177,15 @@ void Brain::forget(const Temperament& t, uint32_t dreams) {
 
 void Brain::queueInstinct(const Instinct& in) { instinctQueue_.push_back(in); }
 
+void Brain::refreshInstincts(const std::vector<Instinct>& instincts) {
+  for (Instinct in : instincts) {
+    auto waiting = [&](const Instinct& q) { return sameCells(q, in); };
+    if (std::any_of(instinctQueue_.begin(), instinctQueue_.end(), waiting)) continue;
+    in.strength = in.strength * kRefreshShare;
+    instinctQueue_.push_back(in);
+  }
+}
+
 std::vector<Belief> Brain::strongestBeliefs(uint8_t n) const {
   std::vector<Belief> out;
   for (size_t f = 0; f < kFeatureCount; ++f)
@@ -176,6 +201,36 @@ std::vector<Belief> Brain::strongestBeliefs(uint8_t n) const {
   });
   if (out.size() > n) out.resize(n);
   return out;
+}
+
+// Full strength, not the gene's: the nightly refresh pulls an unused
+// instinct toward its level over a life, so a birth table at gene strength
+// would read that refreshed instinct as something learned.
+std::vector<Belief> Brain::lessons(const std::vector<Instinct>& instincts, Fx minConfidence, uint8_t n) const {
+  struct Table { Weights w{}; };
+  auto table = std::make_unique<Table>();   // 3.5 KB, past a device stack frame's budget
+  Weights& birth = table->w;
+  for (Instinct in : instincts) {
+    in.strength = Fx::one();
+    applyInstinct(birth, in);
+  }
+  struct Lesson { Belief belief; Fx change; };
+  std::vector<Lesson> out;
+  for (size_t f = 0; f < kFeatureCount; ++f) {
+    if (isContext(FEATURES[f])) continue;
+    for (size_t a = 0; a < kActionCount; ++a)
+      for (size_t d = 0; d < kDriveCount; ++d) {
+        Fx w = fromQ15(w_[f][a][d]), was = fromQ15(birth[f][a][d]);
+        if (absFx(w) <= absFx(was)) continue;
+        Fx change = absFx(w - was), confidence = clamp01(divide(change, kConfidentEffect));
+        if (confidence < minConfidence) continue;
+        out.push_back({{FEATURES[f], ACTIONS[a].id, DRIVES[d].id, w, confidence}, change});
+      }
+  }
+  std::stable_sort(out.begin(), out.end(), [](const Lesson& x, const Lesson& y) { return x.change > y.change; });
+  std::vector<Belief> top;
+  for (size_t i = 0; i < out.size() && i < n; ++i) top.push_back(out[i].belief);
+  return top;
 }
 
 bool Brain::setWeight(LocusId feature, ActionId action, DriveId drive, Fx effect) {

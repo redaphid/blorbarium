@@ -150,6 +150,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     actionStart_ = stats_.ageTicks;
     actionDone_ = false;
     behaviours.start(a, body_, ctx);
+    if (body_.asleep) brain_.refreshInstincts(pheno_.instincts);
     const ActionInfo* row = rowOf(ACTIONS, a);
     if (row && row->selfStim != stim::none) pendingSelf_.fire(row->selfStim);
     if (a == action::foresee) stats_.foresights = bump(stats_.foresights);

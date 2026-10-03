@@ -47,7 +47,8 @@ Clutch Creature::layClutch(uint8_t clutchSize, Fx wildBonus, uint32_t) {
   Clutch c;
   c.parent = genome_;
   c.generation = uint16_t(generation_ + 1);
-  c.heirlooms = brain_.strongestBeliefs(policyOf(genome_, wildBonus).heirloomMax);
+  const MutationPolicy pol = policyOf(genome_, wildBonus);
+  c.heirlooms = brain_.lessons(pheno_.instincts, pol.heirloomMinConfidence, pol.heirloomMax);
   c.wildBonus = wildBonus;
   for (uint64_t& s : c.seeds) {
     uint64_t hi = rng_.next();   // two statements: the order of the draws must not depend on the compiler

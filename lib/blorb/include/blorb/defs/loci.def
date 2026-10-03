@@ -3,7 +3,10 @@
 // emitter genes. 64..127 are the recent-stimulus loci, derived from stimuli.def
 // (64 + stim id), so they have no rows here. Act loci (128..191) are written by
 // receptor genes and read by code. 192..255 are free for gene-to-gene circuits.
-// situation = 1 puts the locus in the brain's feature vector.
+// situation puts the locus in the brain's feature vector: 1 as a cue, 2 as
+// context. Context is on almost always (light, the day, age, the marble), so
+// the brain keeps it as a bias term, but a belief cued on it says nothing
+// about a situation and never becomes an heirloom.
 //
 // BLORB_LOCUS(id, name, dir, situation)
 BLORB_LOCUS(  0, always,       Sense, 0)  // 1 every tick: an emitter on it is tonic production
@@ -12,17 +15,17 @@ BLORB_LOCUS(  2, tilt_y,       Sense, 0)
 BLORB_LOCUS(  3, motion,       Sense, 1)
 BLORB_LOCUS(  4, held,         Sense, 1)
 BLORB_LOCUS(  5, upside_down,  Sense, 1)
-BLORB_LOCUS(  6, light,        Sense, 1)  // 0 at pet night or while lidded (face down)
-BLORB_LOCUS(  7, day_sin,      Sense, 1)  // pet day phase, mapped to 0..1
-BLORB_LOCUS(  8, day_cos,      Sense, 1)
+BLORB_LOCUS(  6, light,        Sense, 2)  // 0 at pet night or while lidded (face down)
+BLORB_LOCUS(  7, day_sin,      Sense, 2)  // pet day phase, mapped to 0..1
+BLORB_LOCUS(  8, day_cos,      Sense, 2)
 BLORB_LOCUS(  9, owner_near,   Sense, 1)  // a phone is connected (an optional bonus)
 BLORB_LOCUS( 10, warmth,       Sense, 0)
-BLORB_LOCUS( 11, asleep,       Sense, 1)
+BLORB_LOCUS( 11, asleep,       Sense, 2)  // always 0 while he thinks
 BLORB_LOCUS( 12, eating,       Sense, 0)
-BLORB_LOCUS( 13, age,          Sense, 1)
+BLORB_LOCUS( 13, age,          Sense, 2)
 BLORB_LOCUS( 14, food_near,    Sense, 1)
 BLORB_LOCUS( 15, food_rotten,  Sense, 0)
-BLORB_LOCUS( 16, marble_near,  Sense, 1)
+BLORB_LOCUS( 16, marble_near,  Sense, 2)
 BLORB_LOCUS( 17, cradled,      Sense, 1)
 BLORB_LOCUS( 18, pantry,       Sense, 0)
 BLORB_LOCUS( 19, foreseeing,   Sense, 0)  // written by the Foresee action; emitters turn it into vision

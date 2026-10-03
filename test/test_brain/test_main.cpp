@@ -199,6 +199,21 @@ TEST(Instinct, DreamedInstinctMakesNewbornActOnItsCueWithNoExperience) {
   EXPECT_LE(share(undreamt, situation(frac(9, 10), true), action::eat, t), 0.2) << "queued but never dreamt";
 }
 
+// Naps cut short by a shake must not pile up a refresh per bedtime.
+TEST(Instinct, ABedtimeRefreshWaitsBehindItsOwnQueuedCopy) {
+  Temperament t = midTemperament();
+  const std::vector<Instinct> genome = {instinct(locus::food_near, action::eat, drive::hunger, 40, 200),
+                                        instinct(locus::cradled, action::rest, drive::need_touch, 64, 200)};
+  Brain b;
+  b.refreshInstincts(genome);
+  b.refreshInstincts(genome);
+  Rng rng = Rng::seeded(3);
+  int dreamt = 0;
+  for (int i = 0; i < 6; ++i) dreamt += b.dream(t, rng);
+  EXPECT_EQ(dreamt, 2);
+  EXPECT_LT(b.predict(locus::food_near, action::eat, drive::hunger), Fx::zero()) << "the refresh was dreamt";
+}
+
 TEST(Instinct, NamingNoRegistryRowIsInert) {
   Temperament t = midTemperament();
   t.forgetRate = Fx::zero();

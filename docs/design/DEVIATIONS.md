@@ -96,9 +96,10 @@ Each was reported by the unit that made it and reviewed at integration.
 - **Brain (unit 8).** Learning is normalised LMS: the documented update divided
   by the sum of squared features, so one step moves the prediction exactly
   `rate` of the way to what was observed and a mutated high learning rate
-  cannot oscillate. Confidence is |effect| / 0.25, capped at 1, because a
-  per-cell update count would cost 1.7 KB of state; `heirloomMinConfidence`
-  therefore acts as a minimum |effect|.
+  cannot oscillate. Confidence is |change| / 0.25, capped at 1, where change is w minus
+  the birth table rebuilt from the instincts, because a per-cell update count
+  would cost 1.7 KB of state; `heirloomMinConfidence` therefore acts as a
+  minimum learned change.
 - **Chemistry (unit 5).** `ChemRules::seeds` holds a chem gene's starting
   level (the design had nowhere for it). `stepCoarse` splits emission around
   the decay (the trapezoid rule) and counts decay applications exactly; the
