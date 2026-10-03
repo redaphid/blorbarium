@@ -776,7 +776,6 @@ void hint(Canvas240& cv, const Appearance& a) {
 // the glass, so neither the band nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
-// Low when he stands high in the dish, so the line never crosses his face.
 void dimBand(Canvas240& cv, const Marquee& strip) {
   const int top = kSide / 2 + strip.dy - strip.clipH / 2;
   for (int y = top; y < top + strip.clipH; ++y) {
@@ -797,23 +796,18 @@ void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
   dimBand(cv, strip);
   const int width = 2 * marqueeHalf(strip);
   const int64_t span = width + textWidth(kFreeSans9pt7b, a.line);
-  const uint32_t off = uint32_t(int64_t(a.thoughtPhase.raw) * span / Fx::kOne);
+  const int off = int(int64_t(a.thoughtPhase.raw) * span / Fx::kOne);
+  // Placed by lead at zero offset: the ring's offset wraps at text + half, a
+  // strip short of the crossing, and would bring the line back in from the right.
   drawMarqueeRing(cv, strip, kFreeSans9pt7b, a.line, "", to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
-                  width, off);
+                  width - off, 0);
 }
 
+// Low when he stands high in the dish, so the line never crosses his face.
 void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
   Marquee strip = kTimeUnknownStrip;
   if (low) strip.dy = -strip.dy;
-  const int top = kSide / 2 + strip.dy - strip.clipH / 2;
-  for (int y = top; y < top + strip.clipH; ++y) {
-    const int half = chordHalf(y);
-    for (int x = kSide / 2 - half; x < kSide / 2 + half; ++x) {
-      const int toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
-      uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, 0, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
-    }
-  }
+  dimBand(cv, strip);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, kTimeUnknownMarquee,
                 to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }

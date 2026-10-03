@@ -573,6 +573,36 @@ TEST(Marquee, RunsTheDishAboveHisHeadAndNeverCoversHisFace) {
   }
 }
 
+// A thought crosses once, right to left: in at phase 0, gone by phase 1, and
+// never back in from the right on the way out.
+TEST(Marquee, AThoughtCrossesOnceAndIsGoneBeforeItsPhaseEnds) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult();
+  a.thinking = true;
+  std::snprintf(a.line, sizeof(a.line), "%s", "I SEE A MARBLE IN YOUR FUTURE");
+  const int half = paint::marqueeHalf({-76, 0, 20, 38, 20});
+  const int w = paint::textWidth(paint::kFreeSans9pt7b, a.line), span = 2 * half + w;
+  auto at = [&](int off) {
+    a.thoughtPhase = Fx::ratio(off, span);
+    return render(a, pack);
+  };
+  auto gone = at(span);
+  auto changed = [&](const Canvas240& cv, int fromX, int toX) {
+    int n = 0;
+    for (int y = 0; y < kSide; ++y)
+      for (int x = fromX; x < toX; ++x) n += cv.px[y * kSide + x] != gone->px[y * kSide + x];
+    return n;
+  };
+  EXPECT_EQ(changed(*at(0), 0, kSide), 0) << "the thought starts already on the strip";
+  EXPECT_GT(changed(*at(span / 2), 0, kSide), 100) << "the thought never shows";
+  // Past w + half its tail is left of the middle: the right half is empty and the left is not.
+  for (int off = w + half + 4; off < span - 12; off += 8) {
+    auto cv = at(off);
+    EXPECT_EQ(changed(*cv, kSide / 2, kSide), 0) << "the thought comes back from the right at " << off << " of " << span;
+    EXPECT_GT(changed(*cv, 0, kSide / 2), 0) << "the thought's tail vanished early at " << off << " of " << span;
+  }
+}
+
 // It scrolled by poseTick once. An egg never advances that, so the board showed
 // the line frozen, and a creature's snapped back at every change of pose.
 TEST(Marquee, MovesWithTheClockAndWithNothingElse) {
