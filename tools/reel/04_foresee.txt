@@ -1,0 +1,10 @@
+#> title Foresee
+#> length 11400
+#> from 1400
+#> caption 1400 bored in the afternoon, he scries | the eye glow pulses
+#> reel 1400 6400
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 !care 0

@@ -1,0 +1,24 @@
+#> title Ageing
+#> length 13000
+#> from 400
+#> caption 400 day 2 | an adult
+#> caption 1500 day 3 | Life halves every three days
+#> caption 3000 day 4
+#> caption 4500 day 5
+#> caption 6000 day 6
+#> caption 7500 day 7
+#> caption 9000 day 7.5 | Life falls past the elder receptor
+#> caption 10500 day 8 | an elder
+#> reel 400 11400
+# A cared-for life: the owner answers the care hint all the way through.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@1500 DEBUG warp 864000
+@3000 DEBUG warp 864000
+@4500 DEBUG warp 864000
+@6000 DEBUG warp 864000
+@7500 DEBUG warp 864000
+@9000 DEBUG warp 432000
+@10500 DEBUG warp 432000

@@ -1,0 +1,22 @@
+#> title Death
+#> length 13400
+#> from 400
+#> caption 400 day 9.4 | an old frog
+#> caption 1500 an hour at a time
+#> caption 3500 then four minutes at a time
+#> caption 5500 old age: Life runs out | the remains, for a 30-minute vigil
+#> reel 400 1400
+#> reel 4400 10400
+# He dies of old age about 8,206,800 ticks after hatching: two hours short of
+# that, then two hours an hour at a time, then four minutes at a time.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 DEBUG warp 6400000
+@1500 DEBUG warp 36000
+@2500 DEBUG warp 36000
+@3500 DEBUG warp 2400
+@4500 DEBUG warp 2400
+@5500 DEBUG warp 2400
+@6500 DEBUG warp 2400

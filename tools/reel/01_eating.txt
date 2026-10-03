@@ -1,0 +1,17 @@
+#> title Eating
+#> length 15400
+#> from 600
+#> caption 600 six hours old, and getting hungry
+#> caption 1500 BOOT drops a pellet from the pantry
+#> caption 3000 he scries first
+#> caption 7000 then hunger wins | he waddles over and eats
+#> reel 1000 3000
+#> reel 10000 14000
+# Hatched and cared for until the care hint is about to ask for food; the owner
+# then steps back and presses BOOT once.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 222000
+@300 !care 0
+@1500 !button

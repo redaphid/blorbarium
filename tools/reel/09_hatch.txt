@@ -1,0 +1,21 @@
+#> title Hatching
+#> length 16400
+#> from 2400
+#> caption 2400 the chosen egg
+#> caption 3000 a knock: he wobbles inside
+#> caption 5000 held in a warm hand
+#> caption 8000 nearly half an hour on | the next generation hatches
+#> reel 2400 4400
+#> reel 7600 13600
+# The life, the vigil and the pick from 08_clutch, then the next generation's egg.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 DEBUG warp 6400000
+@350 DEBUG warp 100800
+@400 !button
+@1000 !button 1500
+@3000 !knock
+@5000 !hold 2500
+@8000 DEBUG warp 17880

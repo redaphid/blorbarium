@@ -1,0 +1,21 @@
+#> title Falling asleep
+#> length 13400
+#> from 400
+#> caption 400 22:43, pet night | the moon is the tuck-in hint
+#> caption 1500 BOOT held 1.5 s | tucked in
+#> caption 3000 two pet minutes at a time
+#> reel 1400 8400
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 2016000
+@300 !care 0
+@1500 !button 1500
+@3200 DEBUG warp 1200
+@4400 DEBUG warp 1200
+@5600 DEBUG warp 1200
+@6800 DEBUG warp 1200
+@8000 DEBUG warp 1200
+@9200 DEBUG warp 1200
+@10400 DEBUG warp 1200
+@11600 DEBUG warp 1200
