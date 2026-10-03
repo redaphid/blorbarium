@@ -197,6 +197,37 @@ TEST(Slots, ATornSlotBLoadsAAndIsQuarantined) {
   EXPECT_EQ(l.seq, 2u);
 }
 
+// A newer slot whose CRC holds but whose Stats chunk is empty: it fails only
+// once its creature is half built in the target. Load falls back to the
+// older slot, decoded whole, not the debris.
+TEST(Slots, ANewerSlotThatFailsMidCreatureFallsBackToTheOlderWhole) {
+  MemStorage store;
+  Keepsake k(store);
+  Snapshot older = eggSnapshot();
+  ASSERT_TRUE(k.save(older));
+  ASSERT_TRUE(k.save(creatureSnapshot()));
+  std::vector<uint8_t>& b = store.files["snap.b"];
+  for (size_t at = 18; at + 4 <= b.size();) {
+    const size_t n = size_t(b[at + 2] | b[at + 3] << 8);
+    if (b[at] == uint8_t(Chunk::Stats)) {
+      b.erase(b.begin() + std::ptrdiff_t(at + 4), b.begin() + std::ptrdiff_t(at + 4 + n));
+      b[at + 2] = b[at + 3] = 0;
+      break;
+    }
+    at += 4 + n;
+  }
+  auto le32 = [&](size_t at, uint32_t v) { for (int i = 0; i < 4; ++i) b[at + size_t(i)] = uint8_t(v >> (8 * i)); };
+  le32(10, uint32_t(b.size() - 18));
+  le32(14, 0);
+  le32(14, crc32(b.data(), b.size()));
+
+  Snapshot l;
+  ASSERT_EQ(Keepsake(store).load(l), SlotState::FellBack);
+  EXPECT_EQ(l.seq, 1u);
+  EXPECT_TRUE(std::holds_alternative<Egg>(l.occupant));
+  EXPECT_EQ(l.hash(), older.hash());
+}
+
 TEST(Slots, BothTornIsCorruptAndBothAreQuarantined) {
   MemStorage store;
   Keepsake k(store);

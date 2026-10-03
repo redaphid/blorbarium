@@ -219,6 +219,24 @@ TEST(Lineage, AGrowingLogIsReadAFrameAtATimeAndCompactedUnderItsCap) {
   EXPECT_LE(store.largestRead, 2048u);
 }
 
+// An owner who recolours him again and again in one life. Only the newest
+// Checkpoint of a generation is worth keeping, so the log still fits its cap.
+TEST(Lineage, ManyRecoloursInOneLifeStayUnderTheCap) {
+  MemStorage store;
+  Genome g = starterGenome(7);
+  Lineage l = Lineage::open(store, g, 3, 0);
+  size_t longest = 0;
+  for (int edit = 0; edit < 200; ++edit) {   // about 300 KB of Checkpoints
+    g = recoloured(g, uint8_t(edit));
+    l.recordEdit(0, g);
+    longest = std::max(longest, store.size(kLog));
+  }
+  EXPECT_LE(longest, kLineageByteCap);
+  std::optional<Genome> kept = l.genomeOf(0);
+  ASSERT_TRUE(kept.has_value());
+  EXPECT_EQ(kept->hash(), g.hash()) << "the last recolour is the one kept";
+}
+
 TEST(Egg, WarmthHatchesFaster) {
   auto ticksToHatch = [](bool warm) {
     Egg egg(Offspring{starterGenome(7), {}}, 0, 0);
