@@ -1,0 +1,58 @@
+// v2 SKETCH of defs/loci.def. Rows marked v2 are new or changed.
+//
+// BLORB_LOCUS(id, name, dir, situation)
+BLORB_LOCUS(  0, always,        Sense, 0)
+BLORB_LOCUS(  1, tilt_x,        Sense, 0)
+BLORB_LOCUS(  2, tilt_y,        Sense, 0)
+BLORB_LOCUS(  3, motion,        Sense, 1)
+BLORB_LOCUS(  4, held,          Sense, 1)
+BLORB_LOCUS(  5, upside_down,   Sense, 1)
+BLORB_LOCUS(  6, light,         Sense, 1)
+BLORB_LOCUS(  7, day_sin,       Sense, 1)
+BLORB_LOCUS(  8, day_cos,       Sense, 1)
+BLORB_LOCUS(  9, owner_near,    Sense, 1)
+BLORB_LOCUS( 10, warmth,        Sense, 0)
+BLORB_LOCUS( 11, asleep,        Sense, 0)  // v2: off; the brain only thinks awake, so it was a dead feature
+BLORB_LOCUS( 12, eating,        Sense, 0)
+BLORB_LOCUS( 13, age,           Sense, 1)
+BLORB_LOCUS( 14, food_near,     Sense, 1)
+BLORB_LOCUS( 15, food_rotten,   Sense, 1)  // depth u35
+BLORB_LOCUS( 16, marble_near,   Sense, 1)
+BLORB_LOCUS( 17, cradled,       Sense, 1)
+BLORB_LOCUS( 18, pantry,        Sense, 0)
+BLORB_LOCUS( 19, foreseeing,    Sense, 0)
+BLORB_LOCUS( 20, touch,         Sense, 0)
+BLORB_LOCUS( 21, tilted,        Sense, 1)  // depth u35
+BLORB_LOCUS( 22, fly_near,      Sense, 1)  // v2: nearness of the nearest fly
+BLORB_LOCUS( 23, familiar,      Sense, 0)  // v2: Bond, 0..1, this session's gestures against the owner's print
+BLORB_LOCUS( 24, surprise,      Sense, 0)  // v2: the oracle's recent surprise; genes make it fun or frightening
+BLORB_LOCUS( 25, let_down,      Sense, 0)  // v2: the oracle's recent disappointment
+BLORB_LOCUS( 26, in_game,       Sense, 0)  // v2: a wheel game is running
+BLORB_LOCUS( 27, marble_coming, Sense, 1)  // v2: closing speed when the marble is on course for him
+BLORB_LOCUS( 28, since_contact, Sense, 0)  // v2: Bond, 0 just touched .. 1 at the owner's usual gap
+// v2: the expect band, written by the oracle each beat, one locus per grounded
+// topic (topics.def names them). Emitter genes wire them to chemistry: brace
+// before a shake, appetite before a meal. Six are brain features.
+BLORB_LOCUS( 32, expect_food,    Sense, 1)
+BLORB_LOCUS( 33, expect_owner,   Sense, 1)
+BLORB_LOCUS( 34, expect_held,    Sense, 1)
+BLORB_LOCUS( 35, expect_play,    Sense, 1)
+BLORB_LOCUS( 36, expect_shaking, Sense, 1)
+BLORB_LOCUS( 37, expect_danger,  Sense, 1)
+BLORB_LOCUS( 38, expect_sky,     Sense, 0)
+BLORB_LOCUS( 39, expect_sleep,   Sense, 0)
+BLORB_LOCUS(128, become_child,  Act,   0)
+BLORB_LOCUS(129, become_adult,  Act,   0)
+BLORB_LOCUS(130, become_elder,  Act,   0)
+BLORB_LOCUS(131, die,           Act,   0)
+BLORB_LOCUS(132, cause,         Act,   0)
+BLORB_LOCUS(133, startle,       Act,   0)
+BLORB_LOCUS(134, flinch,        Act,   0)
+BLORB_LOCUS(135, arousal,       Act,   0)
+BLORB_LOCUS(136, glow,          Act,   0)
+BLORB_LOCUS(137, size,          Act,   0)
+BLORB_LOCUS(138, hue_shift,     Act,   0)
+BLORB_LOCUS(139, sleep_gate,    Act,   0)
+BLORB_LOCUS(140, wobble,        Act,   0)
+BLORB_LOCUS(141, oracle_gate,   Act,   0)  // v2: a receptor on oracle_tired writes it; scales the 8-ball's chance (1 = open)
+BLORB_LOCUS(142, trance,        Act,   0)  // v2: the 8-ball sets it; the trance reflex (still, glowing, bubble up)

@@ -1,0 +1,28 @@
+# User decisions and requests (2026-10-02), binding on the synthesis
+
+1. Creatures-style single pet, designed fresh, modular so specific ideas can be added later. Not a port of claude-notification-screen/host/alife.
+2. The user loves genetics and roguelites. Each life is a run, the egg lineage is meta-progression, heredity is legible (family tree, what mutated), and mutation gives visible variety.
+3. The pet dies and lays an egg with a mutated genome. Plain death. Grungo's SOUL.md "never dies" rule was overfitting and is ignored.
+4. It must be a complete toy with no phone. Feeding and every care loop work through the body alone (IMU, BOOT button, clock). The phone is an optional window for genes, family tree, naming and recolouring.
+5. The creature is grungo (see grungo.md). Only his art and personality carry over, not his old engine wiring.
+6. Base design: **candidate B** (the user's pick). Graft from A and C.
+7. Foresee must glow unmistakably all around the eyes so it is obvious he is using powers. Plan: a procedural, pulsing teal halo (with sparks if it reads well), tinted by the glow genes, positioned from per-frame eye-centre data.
+8. "Maybe he jumps when you shake it." A shake is a stimulus whose reflex is a startled hop (alarmed face plus a procedural squash, leap and land). Jump height and startle sensitivity are genetic. Repeated shaking can stress him or be learned as unpleasant.
+10. Neglect can kill ("for adults who love video games; death is fine"). Time catches up while unplugged, not paused. No Wi-Fi. Wall time comes from an RTC kept counting through deep sleep (the user may fit a small battery), else a time sync from a phone visit, else unknown. When unknown, show the marquee "TAP ME WITH YOUR PHONE" and catch up once a source appears. The gap is fast-forwarded through chemistry and ageing, and catch-up is idempotent.
+11. A phone tap advances him with phone computation ("take advantage of the brief contact with the hardware of the phone"). Plan: the website runs the same deterministic engine as WASM. A tap triggers foresee. The phone gets his state over BLE, simulates many futures, and sends back a twist operation (a "prophecy"). Phone senses (camera colour, microphone, weather, time) become stimuli. It all stays optional. Constraints now: the engine stays WASM-clean, and save snapshots are exportable.
+12. Same keepsake = same world (consistency, not security). The board simulates at all times, and the user plays with the device itself a lot while plugged in. The phone is an add-on for twists (heavy compute, internet, sensors). On connect it requests the snapshot and may subscribe. It sends twist operations from a registry, which the board applies to its live state as the single writer. Validation is for well-formedness only. No lease and no pause.
+9. Visual verification uses the simulator from claude-notification-screen (`sim/`, SDL, builds in WSL `survivor`; headless `--shot` is byte-deterministic). Copy and adapt it into blorbarium. Render key states to PNG for review (idle, eating, foresee glow, shake hop, sleep, egg, hatch), and keep goldens so a later change that breaks the look fails a test.
+13. The user plays with the device itself a lot while plugged in ("playing games with it, or whatever"). On-device games are a registry (one row plus a handler each) whose play feeds drives and learning like any stimulus. Seeds: the tilt-rolled marble and the shake hop.
+14. OTA firmware updates from the website over BLE (no Wi-Fi). Examples are in D:\Projects\cyber-puck and the old badge's ble_ota.h (survey: explore-ota.md). Two app slots with rollback. State lives in its own partition that OTA never writes. Old saves stay readable via the versioned format.
+15. Phone feeding: only special food. Basic food is body-only. The phone delivers only special treats (camera colour, weather, prophecy) as twists that body feeding cannot.
+16. "Significant alife development across a variety of non-trivial, interesting axes." The marble is driven by the IMU sensor. The BOOT button does something besides eating. Minigames he learns from.
+17. He rests at the centre of the face and moves to other parts of it when he is doing something.
+18. Foresee shows what he actually sees: his predictions, as visions. Shake him and sometimes he tells the future like an 8-ball, in his voice. A heritable "oracle" chance decides prophecy versus hop.
+19. What he predicts, and the way he says things (his voice), vary with genetics and mutate.
+20. Visual mutations: lots of varieties via ComfyUI and IP-adapter, such as decals (warts and so on) and clothes and accessories.
+21. Scenarios are aspirational (design fiction to drive the design), not descriptions of the current state.
+22. Dialogue is generated offline by a small non-instruct local model in Ollama, prompted from word clouds and seed phrases so it predicts. It should sound kinda weird, with variety by genetics (voice genes and hybrid blends).
+23. Lightly bias his wording and phrases toward the new SOUL.md (C:\Users\hypnodroid\Worktrees\claude-notification-screen-frog), which references interactions between the user and Peter. Voice only, about 1 in 8 to 10 lines.
+23. Lightly bias his wording and phrases toward the new SOUL.md in the claude-notification-screen-frog worktree, which references interactions between the user and Peter. Voice only, about 1 in 8 to 10 lines.
+24. The word clouds need more variety: mine unusual words from D:\Projects\sporefall-art, using the futurama-string-generator method, as a light flavour layer.
+25. Shaking him ALWAYS makes him tell the future (an 8-ball every time). Genetics varies what he predicts and how he says it, never whether he answers.

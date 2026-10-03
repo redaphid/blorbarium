@@ -1,0 +1,24 @@
+// Chemicals the phone names. All 256 slots exist at runtime and genes may use
+// any of them; a row only gives a slot a name and a colour. Drive chemicals
+// are 1..kDriveCount (drives.def) and are not listed here.
+// Stable ids: never renumber, never reuse.
+//
+// BLORB_CHEM(id, name, rgb565, showOnPhone)
+BLORB_CHEM(16, life,       0x07E0, 1)  // decays over the whole life; stage and death receptors read it
+BLORB_CHEM(17, injury,     0xF800, 1)  // a drop, rotten food; heals by its half-life
+BLORB_CHEM(18, energy,     0xFFE0, 1)  // food becomes energy; low energy emits hunger
+BLORB_CHEM(19, food,       0xAFE5, 1)  // what a bite adds
+BLORB_CHEM(20, adrenaline, 0xFBE0, 1)  // a shake raises it; receptors drive startle and arousal
+BLORB_CHEM(21, toxin,      0x4208, 1)  // rotten pellets; reacts into injury
+BLORB_CHEM(22, warmth,     0xFC10, 0)  // a hand's heat; speeds incubation
+BLORB_CHEM(23, melatonin,  0x4010, 0)  // emitted at pet night; reacts into sleepiness
+BLORB_CHEM(24, vision,     0x07FF, 1)  // rises while foreseeing; receptors drive the glow locus
+// v2. Trait chemicals (axis A6): half-lives of days, fed by emitter genes on
+// recent and surprise loci, read by receptor genes. Heritable and visible in
+// DIFF because they are ordinary genes; no Personality struct.
+BLORB_CHEM(25, brace,        0x7BEF, 1)  // v2: made by expect_shaking; a reaction with it eats adrenaline: a foreseen shake gets no hop
+BLORB_CHEM(26, wariness,     0xB596, 1)  // v2: shakes, drops, strange hands, surprise from danger; wears down with cradles
+BLORB_CHEM(27, fondness,     0xFB56, 1)  // v2: familiar hands, kept prophecies, fed at the bell; wears down with neglect
+BLORB_CHEM(28, zest,         0xFE60, 1)  // v2: games and surprise from play; wears down with dull stretches
+BLORB_CHEM(29, oracle_tired, 0x8410, 1)  // v2: each shake adds some; half-life about 20 min; its receptor closes oracle_gate
+BLORB_CHEM(30, torpor,       0x39E7, 1)  // v2: bog sleep; hours of dark and stillness make it; it slows the hunger tonic

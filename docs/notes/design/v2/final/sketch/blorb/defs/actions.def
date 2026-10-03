@@ -1,0 +1,18 @@
+// Actions: the brain's outputs. Each row is a brain column and a behaviour
+// struct in actions.h. The id is stable (saved weights remap by it).
+//
+// BLORB_ACTION(id, name, Type, minTicks, selfStim)   selfStim none = no self-stimulus
+BLORB_ACTION( 0, rest,        Rest,        20, none)
+BLORB_ACTION( 1, wander,      Wander,      30, none)
+BLORB_ACTION( 2, eat,         Eat,         20, none)          // walk to the nearest pellet and bite
+BLORB_ACTION( 3, sleep,       Sleep,      300, none)
+BLORB_ACTION( 4, foresee,     Foresee,     40, self_foresaw)  // grungo scries: eyes glow (ask 7)
+BLORB_ACTION( 5, call,        Call,        25, self_called)
+BLORB_ACTION( 6, curl,        Curl,        40, none)          // hood up, toward the rim
+BLORB_ACTION( 7, follow_tilt, FollowTilt,  20, none)
+BLORB_ACTION( 8, flee_tilt,   FleeTilt,    20, none)
+BLORB_ACTION( 9, chase,       Chase,       15, none)          // after the marble
+BLORB_ACTION(10, hop_circles, HopCircles,  20, none)          // happy hopping, cloak flapping
+BLORB_ACTION(11, beg,         Beg,         25, none)          // v2: walk to the bell and wait, facing out; pays when a pellet drops
+BLORB_ACTION(12, invite,      Invite,      30, none)          // v2: walk home and show his favourite game glyph; a bell accepts
+BLORB_ACTION(13, hunt,        Hunt,        15, none)          // v2 (flies unit): aim the tongue at fly + velocity x lead

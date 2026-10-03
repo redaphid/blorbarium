@@ -1,0 +1,23 @@
+// Omens: the events grungo can foresee. Each is a stimulus he can expect, its
+// topic (a grounded one), and the pictogram his vision bubble draws. At most
+// 16, because an OmenMask is 16 bits. A row adds a column to the oracle's
+// table, a glyph to the pack and a thoughts.def row for the 8-ball's grounded
+// line ("A KNOCK. # MIN. IT IS WRITTEN."). Nothing else changes.
+//
+// BLORB_OMEN(id, name, stim, topic, glyph)
+BLORB_OMEN( 0, knock,    knock,          owner,   knuckle)
+BLORB_OMEN( 1, pat,      double_knock,   owner,   knuckles)
+BLORB_OMEN( 2, bell,     bell,           owner,   bell)
+BLORB_OMEN( 3, lift,     picked_up,      held,    hand)
+BLORB_OMEN( 4, cuddle,   cradle,         held,    cupped)
+BLORB_OMEN( 5, shaking,  shake,          shaking, bolt)
+BLORB_OMEN( 6, tumble,   flipped,        danger,  swirl)
+BLORB_OMEN( 7, bump,     dropped,        danger,  star)
+BLORB_OMEN( 8, pellet,   pellet_dropped, food,    pellet)
+BLORB_OMEN( 9, fly,      fly_hatched,    food,    fly)
+BLORB_OMEN(10, marble,   marble_hit,     play,    marble)
+BLORB_OMEN(11, games,    wheel_opened,   play,    wheel)
+BLORB_OMEN(12, tuck_in,  lid_down,       sleep,   lid)
+BLORB_OMEN(13, dusk,     dusk,           sky,     moon)
+BLORB_OMEN(14, visitor,  reunion,        owner,   door)
+BLORB_OMEN(15, phone,    owner_arrived,  owner,   phone)

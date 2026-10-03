@@ -1,0 +1,16 @@
+// Oracle-only cues: loci the oracle predicts from that the brain does not
+// see, so the brain table does not grow a column for each. A row is the change.
+//
+// BLORB_CUE(locus)
+BLORB_CUE(locus::recent(stim::dropped))
+BLORB_CUE(locus::recent(stim::pellet_dropped))
+BLORB_CUE(locus::recent(stim::fed_bad))
+BLORB_CUE(locus::recent(stim::fly_caught))
+BLORB_CUE(locus::recent(stim::reunion))
+BLORB_CUE(locus::recent(stim::strange_hands))
+BLORB_CUE(locus::recent(stim::wheel_opened))
+BLORB_CUE(locus::recent(stim::game_point))
+BLORB_CUE(locus::recent(stim::lid_down))
+BLORB_CUE(locus::familiar)
+BLORB_CUE(locus::in_game)
+BLORB_CUE(locus::since_contact)

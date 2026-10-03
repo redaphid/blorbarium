@@ -1,0 +1,26 @@
+// Topics: what a line or a vision is about. ONE table for the thoughts
+// marquee, the dialogue generator and the oracle. Ids 0..6 are the thoughts
+// branch's topics.def, 7..9 are the dialogue branch's voices.toml additions,
+// 10 is v2's. Stable ids: never renumber, never reuse.
+//
+//   grounded 1  the oracle can foresee it: it has omens (omens.def) and an
+//               expect_<topic> locus, the day map tracks it by the quarter
+//               hour, and a prophecy on it names a real omen.
+//   grounded 0  improv only. When nothing clears his bar, a shake draws from
+//               these thoughts.def rows ("the bubbles see azerbaijan").
+//
+// OracleGene.topics[] weights every row. Its layout is frozen at
+// kOracleTopicBytes, so a row past that needs a new gene type.
+//
+// BLORB_TOPIC(id, name, grounded, expectLocus)    improv rows name `always`, unused
+BLORB_TOPIC( 0, food,    1, expect_food)
+BLORB_TOPIC( 1, danger,  1, expect_danger)
+BLORB_TOPIC( 2, sky,     1, expect_sky)
+BLORB_TOPIC( 3, owner,   1, expect_owner)
+BLORB_TOPIC( 4, doom,    0, always)
+BLORB_TOPIC( 5, luck,    0, always)
+BLORB_TOPIC( 6, pond,    0, always)
+BLORB_TOPIC( 7, shaking, 1, expect_shaking)
+BLORB_TOPIC( 8, sleep,   1, expect_sleep)
+BLORB_TOPIC( 9, held,    1, expect_held)
+BLORB_TOPIC(10, play,    1, expect_play)

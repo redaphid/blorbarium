@@ -1,0 +1,20 @@
+// Gesture routes: what a raw body stimulus means in each mode. A row is a
+// remap. A (mode, stimulus) pair with no row passes through unchanged, and
+// `none` swallows it, because the wheel, a game or the clutch read the raw
+// press themselves. A running game also captures the stimuli in its games.def
+// mask. v2_registry.h refuses two routes for one pair, and any route for
+// button_hold: feeding means one thing wherever a creature lives.
+//
+// BLORB_ROUTE(mode, from, to)
+BLORB_ROUTE(Live,   button,        bell)          // BOOT is the bell: a cue with no food in it
+BLORB_ROUTE(Live,   button_double, wheel_opened)  // two presses open the game wheel
+BLORB_ROUTE(Wheel,  button,        none)          // starts the pointed game
+BLORB_ROUTE(Wheel,  button_double, none)          // closes the wheel
+BLORB_ROUTE(Wheel,  knock,         none)          // starts the pointed game (story 3)
+BLORB_ROUTE(Wheel,  double_knock,  none)
+BLORB_ROUTE(Game,   button,        none)          // the game's action: snap the tongue, hide the fly
+BLORB_ROUTE(Game,   button_double, none)          // ends the game
+BLORB_ROUTE(Clutch, button,        none)          // steps the marker
+BLORB_ROUTE(Clutch, button_double, none)
+BLORB_ROUTE(Egg,    button,        bell)          // he hears the bell in the shell
+BLORB_ROUTE(Egg,    button_double, none)
