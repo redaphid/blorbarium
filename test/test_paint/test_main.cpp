@@ -512,15 +512,19 @@ TEST(Placement, NeverClipsTheHoppingCreatureOrItsHaloAtTheRim) {
         body = find(*dark, kOlive).count;
         glowing = countChanged(*dark, *lit);
       };
-      int body0 = 0, glow0 = 0;
-      measure(0, 0, body0, glow0);
+      // At the rim he is one size all the way round (smaller than at home), so
+      // a clipped position lights fewer pixels than the most any position lights.
+      int body[64], glowing[64], body0 = 0, glow0 = 0;
+      for (int k = 0; k < 64; ++k) {
+        measure(std::cos(k * 2 * M_PI / 64), std::sin(k * 2 * M_PI / 64), body[k], glowing[k]);
+        body0 = std::max(body0, body[k]);
+        glow0 = std::max(glow0, glowing[k]);
+      }
       ASSERT_GT(body0, 0);
       ASSERT_GT(glow0, 0);
       for (int k = 0; k < 64; ++k) {
-        int body = 0, glowing = 0;
-        measure(std::cos(k * 2 * M_PI / 64), std::sin(k * 2 * M_PI / 64), body, glowing);
-        EXPECT_EQ(body, body0) << "rim position " << k << " phase " << phase;
-        EXPECT_EQ(glowing, glow0) << "rim position " << k << " phase " << phase;
+        EXPECT_EQ(body[k], body0) << "rim position " << k << " phase " << phase;
+        EXPECT_EQ(glowing[k], glow0) << "rim position " << k << " phase " << phase;
       }
     }
   }

@@ -170,9 +170,9 @@ TEST(GrungoPack, TheEggCracksPastSixTenths) {
   EXPECT_NE(pack.egg(Fx::one()).rle, pack.egg(Fx::ratio(60, 100)).rle);
 }
 
-TEST(GrungoPack, TheBodyIsOneHundredTwentyPixelsTallStandingOnItsFeet) {
+TEST(GrungoPack, TheBodyIsOneHundredSixtyEightPixelsTallStandingOnItsFeet) {
   FrameRef body = pack.body(pose::idle, Stage::Adult, 0);
-  EXPECT_EQ(body.h, 120);
+  EXPECT_EQ(body.h, 168);
   EXPECT_EQ(body.originY, body.h - 1);
   std::vector<uint8_t> px;
   ASSERT_EQ(decode(body, px), "");
