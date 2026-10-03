@@ -245,10 +245,13 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
   const Observed o{c, habitat, clock, heirlooms_, tick};
-  if (shook && !(now_ && now_->prophecy)) {
+  // Every shake foretells, and a new shake restarts the line rather than
+  // queueing behind it. With every row on cooldown he repeats one.
+  if (shook) {
     Rng rng = seededFor(life_, tick, kOracleSalt);
-    if (rng.below(255) < c.phenotype().oracle.chance)
-      if (std::optional<ThoughtPick> p = chooseProphecy(o, readyAt_, rng)) return start(c, *p, tick, rng);
+    std::optional<ThoughtPick> p = chooseProphecy(o, readyAt_, rng);
+    if (!p) p = chooseProphecy(o, nullptr, rng);
+    if (p) return start(c, *p, tick, rng);
   }
   if (now_) {
     if (tick - now_->since < now_->ticks) return;
