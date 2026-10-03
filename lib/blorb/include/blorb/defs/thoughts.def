@@ -1,0 +1,74 @@
+// Thoughts: what grungo says, scrolled once across the dish. A row is a line
+// and the condition under which he might say it. Two kinds share the table:
+//
+//   topic none   a thought. Now and then, between quiet gaps, the highest
+//                priority whose condition holds wins (ties: the seeded draw).
+//                kUrgentThought and up are in-the-moment and cut a gap short.
+//   topic <t>    a prophecy (topics.def). On a shake, with the chance his
+//                oracle gene gives, he foretells instead of hopping: a draw
+//                weighted by the gene's weight for the topic times
+//                (1 + priority), over the rows whose condition holds.
+//
+//   when       a predicate in thoughts.cpp (rows may share one). It may set a
+//              number, which the text shows in place of its '#'.
+//   cooldownS  seconds before the same row may show again.
+//   text       capitals, digits, space and . , ! ? - ' : (the renderer's
+//              font), at most kMaxThoughtText characters; thoughts.h checks.
+//              His voice (voices.def) frames it when it is said.
+//
+// Ids are stable: never renumber, never reuse.
+// BLORB_THOUGHT(id, name, topic, when, priority, cooldownS, text)
+BLORB_THOUGHT( 0, peckish,        none,   hungry,        3,  600, "PELLET? PELLET. PELLET!")
+BLORB_THOUGHT( 1, starving,       none,   starving,      6,  600, "I WOULD EAT THE MARBLE")
+BLORB_THOUGHT( 2, hoarding,       none,   hoarding,      2,  900, "THAT ONE IS FOR LATER.")
+BLORB_THOUGHT( 3, crunch,         none,   chewing,       4,  600, "BRRRUP. CRUNCH. CRONCH.")
+BLORB_THOUGHT( 4, fuzzy_bite,     none,   rotten_bite,   8,  300, "THAT ONE WAS FUZZY")
+BLORB_THOUGHT( 5, smells,         none,   rotten_near,   3,  900, "SOMETHING IN HERE SMELLS")
+BLORB_THOUGHT( 6, green,          none,   sick,          5,  600, "I FEEL GREEN. GREENER.")
+BLORB_THOUGHT( 7, ow,             none,   hurt,          5,  600, "OW. EVERYTHING. OW.")
+BLORB_THOUGHT( 8, heard_you,      none,   knocked,       7,  300, "I HEARD YOU THE FIRST TIME")
+BLORB_THOUGHT( 9, ground_lies,    none,   shaken,        8,  300, "EEP! THE GROUND IS A LIE")
+BLORB_THOUGHT(10, not_again,      none,   dreads_shake,  7,  600, "OH NO. NOT THE SHAKING.")
+BLORB_THOUGHT(11, hooded,         none,   scared,        4,  600, "I AM NOT HIDING. I AM HOODED.")
+BLORB_THOUGHT(12, ancestor_fear,  none,   ancestor_fear, 6, 1200, "GEN # WAS SCARED OF THIS TOO")
+BLORB_THOUGHT(13, inherited,      none,   heirloom,      1, 1800, "GEN # SAYS HI. FROM IN HERE.")
+BLORB_THOUGHT(14, counted,        none,   bored,         3,  900, "I HAVE COUNTED THE DISH: ONE")
+BLORB_THOUGHT(15, marble_knows,   none,   chasing,       2,  900, "THE MARBLE KNOWS WHAT IT DID")
+BLORB_THOUGHT(16, put_me_down,    none,   held,          5,  600, "PUT ME DOWN. NO, WAIT.")
+BLORB_THOUGHT(17, warm_hands,     none,   cradled,       5,  600, "WARM HANDS. ACCEPTABLE.")
+BLORB_THOUGHT(18, sky_down,       none,   upside_down,   7,  300, "WHY IS THE SKY DOWN THERE")
+BLORB_THOUGHT(19, heavy_eyes,     none,   drowsy,        3,  600, "EYES... HEAVY...")
+BLORB_THOUGHT(20, dream_pellets,  none,   dreaming,      2,  900, "ZZZ... PELLETS... ZZZ")
+BLORB_THOUGHT(21, see_pellet,     none,   sees_pellet,   9,  300, "I SEE... A PELLET")
+BLORB_THOUGHT(22, see_phone,      none,   sees_phone,    9,  300, "I SEE... A GLOWING RECTANGLE")
+BLORB_THOUGHT(23, see_nothing,    none,   sees_famine,   9,  300, "I SEE... NO PELLETS. NONE.")
+BLORB_THOUGHT(24, see_damp,       none,   foreseeing,    8,  300, "BRRRUP. I SEE... DAMP.")
+BLORB_THOUGHT(25, knees,          none,   elder,         2, 1200, "MY KNEES ARE MOSTLY RUMOUR")
+BLORB_THOUGHT(26, moon,           none,   night,         2, 1800, "THE MOON IS A BIG PELLET")
+BLORB_THOUGHT(27, anyone,         none,   lonely,        3,  900, "HELLO? IS THIS THING ON?")
+BLORB_THOUGHT(28, science,        none,   learned_food,  2, 1800, "PELLETS FIX HUNGER. SCIENCE.")
+BLORB_THOUGHT(29, no_hat,         none,   always,        0, 1800, "GEN #. STILL NO HAT.")
+BLORB_THOUGHT(30, p_snack,        food,   anytime,       1,  300, "ASK AGAIN AFTER SNACK.")
+BLORB_THOUGHT(31, p_feast,        food,   anytime,       1,  300, "FAT FLIES. IT IS WRITTEN.")
+BLORB_THOUGHT(32, p_pellet_soon,  food,   hungry,        3,  300, "A PELLET APPROACHES. MAYBE.")
+BLORB_THOUGHT(33, p_feed_me,      food,   starving,      3,  300, "YOU WILL FEED ME. NOW.")
+BLORB_THOUGHT(34, p_fuzzy,        food,   rotten_near,   3,  300, "THAT PELLET WILL GET FUZZY.")
+BLORB_THOUGHT(35, p_more_shaking, danger, dreads,        3,  300, "I SEE MORE SHAKING. RUDE.")
+BLORB_THOUGHT(36, p_mud,          danger, anytime,       1,  300, "SIGNS POINT TO MUD.")
+BLORB_THOUGHT(37, p_big_hand,     danger, anytime,       1,  300, "RUN. TELL THE SPORE WARDENS.")
+BLORB_THOUGHT(38, p_bedtime,      sky,    dark,          3,  300, "THE MOON SAYS: GO TO BED.")
+BLORB_THOUGHT(39, p_sun,          sky,    light,         2,  300, "THE SUN RETURNS. PROBABLY.")
+BLORB_THOUGHT(40, p_rain,         sky,    anytime,       1,  300, "RAIN. SOMEWHERE. ON SOMEONE.")
+BLORB_THOUGHT(41, p_watched,      owner,  phone_near,    3,  300, "THE GLOWING ONE IS WATCHING.")
+BLORB_THOUGHT(42, p_return,       owner,  missing_you,   3,  300, "BROTHER WILL RETURN. CROOOAK.")
+BLORB_THOUGHT(43, p_tap,          owner,  anytime,       1,  300, "YOU WILL TAP A PHONE. SOON.")
+BLORB_THOUGHT(44, p_no,           doom,   anytime,       1,  300, "CERTAINLY. PROBABLY. NO.")
+BLORB_THOUGHT(45, p_doom,         doom,   anytime,       1,  300, "ALL IS DOOM. EXCEPT SNACKS.")
+BLORB_THOUGHT(46, p_lunch,        doom,   old,           3,  300, "MY END IS NEAR. AS IS LUNCH.")
+BLORB_THOUGHT(47, p_outlook,      luck,   anytime,       1,  300, "OUTLOOK GOOD. FOR ME.")
+BLORB_THOUGHT(48, p_decidedly,    luck,   anytime,       1,  300, "IT IS DECIDEDLY SO. ISH.")
+BLORB_THOUGHT(49, p_lucky,        luck,   anytime,       1,  300, "LUCK IS A PELLET IN THE DARK")
+BLORB_THOUGHT(50, p_pond_no,      pond,   anytime,       1,  300, "THE POND SAYS... NO.")
+BLORB_THOUGHT(51, p_pond_yes,     pond,   anytime,       1,  300, "THE POND SAYS: YES. NO. YES.")
+BLORB_THOUGHT(52, p_ripples,      pond,   anytime,       1,  300, "RIPPLES. ASK AGAIN LATER.")
+BLORB_THOUGHT(53, p_ancestor,     pond,   foreseen,      3,  300, "GEN # FORESAW THIS TOO.")

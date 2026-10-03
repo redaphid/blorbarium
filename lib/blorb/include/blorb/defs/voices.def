@@ -1,0 +1,34 @@
+// Voices: the way he says things. The oracle gene picks one (its byte taken
+// modulo the rows), so siblings can talk differently and a lineage drifts.
+// Every thought and prophecy passes through its voice: `firstOnly` keeps just
+// the first sentence, then one of the voice's frames (BLORB_FRAME, drawn when
+// the line starts) wraps it. Frames use the renderer's font, as thoughts do.
+// Stable ids: never renumber, never reuse.
+// BLORB_VOICE(id, name, firstOnly)
+// BLORB_FRAME(voice, prefix, suffix)
+#ifdef BLORB_VOICE
+BLORB_VOICE(0, terse,         1)
+BLORB_VOICE(1, ominous,       0)
+BLORB_VOICE(2, rambling,      0)
+BLORB_VOICE(3, cheerful_doom, 0)
+BLORB_VOICE(4, hoarder,       0)
+BLORB_VOICE(5, mystic,        0)
+#endif
+#ifdef BLORB_FRAME
+BLORB_FRAME(terse,         "", "")
+BLORB_FRAME(ominous,       "", "... SOON.")
+BLORB_FRAME(ominous,       "HEED: ", "")
+BLORB_FRAME(ominous,       "", ". IT IS WRITTEN.")
+BLORB_FRAME(rambling,      "SO, UM, ", "")
+BLORB_FRAME(rambling,      "", ", OR SOMETHING")
+BLORB_FRAME(rambling,      "", ". ANYWAY. WHERE WAS I")
+BLORB_FRAME(cheerful_doom, "GOOD NEWS: ", "")
+BLORB_FRAME(cheerful_doom, "", ". HOORAY!")
+BLORB_FRAME(cheerful_doom, "", ". HOW FUN!")
+BLORB_FRAME(hoarder,       "", ". MINE.")
+BLORB_FRAME(hoarder,       "PSST. ", ". TELL NO ONE.")
+BLORB_FRAME(hoarder,       "", ". NOT SHARING.")
+BLORB_FRAME(mystic,        "THE REEDS SAY: ", "")
+BLORB_FRAME(mystic,        "", "... SO IT IS.")
+BLORB_FRAME(mystic,        "HMM. ", "...")
+#endif

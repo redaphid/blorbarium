@@ -1,0 +1,21 @@
+// Voiced lines: what a voice says for a row of thoughts.def, in its own words.
+// When a (thought, voice) pair has rows here, he says one of them (drawn when
+// the line starts) instead of the row's text in that voice's frame. A pair
+// with none falls back to the frame. This table is data only: the generator
+// on the dialogue branch (tools/dialogue/) may replace it wholesale, and
+// hybrid voices are new rows in voices.def.
+//
+//   thought  a row name in thoughts.def
+//   voice    a row name in voices.def
+//   text     as thoughts.def: the font's characters, at most one '#' (the
+//            row's number), at most kMaxVoicedText characters
+//
+// BLORB_LINE(thought, voice, text)
+BLORB_LINE(p_pond_no,      terse,         "NO.")
+BLORB_LINE(p_pond_no,      ominous,       "THE POND SAYS NO. IT ALWAYS DID.")
+BLORB_LINE(p_pond_no,      hoarder,       "THE POND SAYS NO. NO SHARING.")
+BLORB_LINE(p_more_shaking, rambling,      "MORE SHAKING, I SEE, WHICH IS RUDE")
+BLORB_LINE(p_more_shaking, cheerful_doom, "MORE SHAKING AHEAD! WONDERFUL.")
+BLORB_LINE(p_snack,        mystic,        "THE REEDS WHISPER: SNACK FIRST.")
+BLORB_LINE(starving,       hoarder,       "MY PANTRY. MY PELLETS. WHERE.")
+BLORB_LINE(no_hat,         ominous,       "GEN #. HATLESS. AS FORETOLD.")

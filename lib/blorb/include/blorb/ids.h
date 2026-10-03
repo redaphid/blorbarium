@@ -26,6 +26,9 @@ using ExprId   = Id<struct ExprTag>;
 using RegionId = Id<struct RegionTag>;
 using ReflexId = Id<struct ReflexTag>;
 using CareId   = Id<struct CareTag>;
+using ThoughtId = Id<struct ThoughtTag>;
+using TopicId   = Id<struct TopicTag>;
+using VoiceId   = Id<struct VoiceTag>;
 using GeneUid  = Id<struct GeneUidTag, uint16_t>;   // a gene's identity across generations; never reused in a lineage
 
 // Life stages. Each maps to stage art: Baby and Child draw the hatchling,

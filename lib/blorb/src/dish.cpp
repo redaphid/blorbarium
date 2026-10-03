@@ -133,6 +133,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
+    else if (wallKnown_) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake));
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -177,6 +178,11 @@ bool Dish::pick(uint8_t egg) {
 
 void Dish::fire(StimId s) { pending_.fire(s); }
 
+void Dish::think(ThoughtId id) {
+  if (const Creature* c = std::get_if<Creature>(&live_.occupant))
+    thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_);
+}
+
 bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
   Creature* c = std::get_if<Creature>(&live_.occupant);
   if (!c || !c->editGene(uid, offset, value)) return false;
@@ -204,6 +210,7 @@ void Dish::save() {
 Appearance Dish::appearance() const {
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   a.timeUnknown = !wallKnown_;
+  if (wallKnown_ && std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
 }
 
