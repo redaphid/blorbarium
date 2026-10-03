@@ -1,0 +1,14 @@
+// Detectors, in run order. Each is a struct in senses.h with sample() (50 Hz)
+// and/or tick() (10 Hz). A row here is the whole registration.
+//
+// BLORB_SENSE(member, Type)
+BLORB_SENSE(tilt,   TiltDetector)
+BLORB_SENSE(motion, MotionDetector)
+BLORB_SENSE(held,   HeldDetector)
+BLORB_SENSE(knock,  KnockDetector)
+BLORB_SENSE(button, ButtonDetector)
+BLORB_SENSE(lid,    LidDetector)
+BLORB_SENSE(warmth, WarmthDetector)
+BLORB_SENSE(touch,  TouchDetector)
+BLORB_SENSE(day,    DayDetector)
+BLORB_SENSE(owner,  OwnerDetector)

@@ -1,0 +1,14 @@
+// Faces. Rows follow grungo's ten registered face patches. Which face shows
+// for which drive mix is genetic (expression genes). A pack lacking one falls
+// back to neutral.
+// BLORB_EXPR(id, name)
+BLORB_EXPR(0, neutral)
+BLORB_EXPR(1, happy)
+BLORB_EXPR(2, alarmed)
+BLORB_EXPR(3, annoyed)
+BLORB_EXPR(4, croak)
+BLORB_EXPR(5, blep)
+BLORB_EXPR(6, foresee)
+BLORB_EXPR(7, sleepy)
+BLORB_EXPR(8, asleep)
+BLORB_EXPR(9, yawn)

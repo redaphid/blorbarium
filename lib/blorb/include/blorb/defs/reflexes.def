@@ -1,0 +1,6 @@
+// Reflexes: involuntary motions that override the current action for a few
+// ticks. One starts on the rising edge of its act locus past 0.5. Genes decide
+// how easily the locus rises (sensitivity) and how high (strength).
+// BLORB_REFLEX(id, name, actLocus, ticks, expr, pose)
+BLORB_REFLEX(0, hop,    startle, 12, alarmed, hop)   // ask 8: shake, adrenaline, startle: squash, leap, land
+BLORB_REFLEX(1, flinch, flinch,   6, alarmed, curl)  // a knock: hood up

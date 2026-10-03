@@ -1,0 +1,12 @@
+// Poses a sprite pack draws. A pack that lacks one falls back to idle.
+// BLORB_POSE(id, name)
+BLORB_POSE(0, idle)
+BLORB_POSE(1, walk)
+BLORB_POSE(2, eat)
+BLORB_POSE(3, sleep)
+BLORB_POSE(4, foresee)
+BLORB_POSE(5, call)
+BLORB_POSE(6, curl)
+BLORB_POSE(7, flee)
+BLORB_POSE(8, bounce)
+BLORB_POSE(9, hop)

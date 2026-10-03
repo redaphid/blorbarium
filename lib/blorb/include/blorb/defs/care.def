@@ -1,0 +1,9 @@
+// Care hints. When a drive is the most pressing unmet need, the presentation
+// names the body gesture that relieves it, so a friend with no manual learns
+// the toy from the toy. Derived each frame; never stored.
+// BLORB_CARE(id, name, drive, stim)
+BLORB_CARE(0, feed,    hunger,     button)
+BLORB_CARE(1, cuddle,  need_touch, cradle)
+BLORB_CARE(2, comfort, loneliness, cradle)
+BLORB_CARE(3, play,    boredom,    knock)
+BLORB_CARE(4, tuck_in, sleepiness, lid_down)

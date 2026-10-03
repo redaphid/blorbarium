@@ -1,0 +1,13 @@
+// Feats: milestones one life earns. The union a lineage has ever earned is its
+// meta-progression: it unlocks clutch size and wild mutation (unlocksFor), and
+// a gene whose featGate names a feat expresses only once the lineage has it.
+// Adding a feat = one row + one predicate feat_<name> in src/lineage.cpp.
+// Bits are stable.
+//
+// BLORB_FEAT(bit, name)
+BLORB_FEAT(0, reached_adult)
+BLORB_FEAT(1, reached_elder)
+BLORB_FEAT(2, lived_a_week)
+BLORB_FEAT(3, well_fed)
+BLORB_FEAT(4, dreamer)
+BLORB_FEAT(5, fifth_generation)

@@ -1,0 +1,23 @@
+// Gene kinds. Each row names a body struct in genes.h and expects
+// express_<name>, describe_<name> and rules_<name> in src/genes.cpp. That
+// trio is the single source for expression, mutation ranges, the phone's gene
+// editor (SCHEMA) and lineage descriptions. Unknown kinds in a genome are
+// carried, inherited and skipped. Class drives the per-egg variety guarantee.
+// Layouts are frozen: a changed layout is a new type byte.
+//
+// BLORB_GENE(type, name, Body, class)
+BLORB_GENE(0x01, chem,        ChemGene,           Body)
+BLORB_GENE(0x02, reaction,    ReactionGene,       Body)
+BLORB_GENE(0x03, emitter,     EmitterGene,        Body)
+BLORB_GENE(0x04, receptor,    ReceptorGene,       Body)
+BLORB_GENE(0x10, stimulus,    StimulusGene,       Mind)
+BLORB_GENE(0x11, instinct,    InstinctGene,       Mind)
+BLORB_GENE(0x12, expression,  ExpressionGene,     Mind)
+BLORB_GENE(0x13, temperament, TemperamentGene,    Mind)
+BLORB_GENE(0x20, palette,     PaletteGene,        Look)
+BLORB_GENE(0x21, size,        SizeGene,           Look)
+BLORB_GENE(0x22, mark,        MarkGene,           Look)
+BLORB_GENE(0x30, mutation,    MutationPolicyGene, Life)
+BLORB_GENE(0x31, egg,         EggGene,            Life)
+BLORB_GENE(0x32, metabolism,  MetabolismGene,     Life)
+BLORB_GENE(0x7F, note,        NoteGene,           Life)

@@ -1,0 +1,11 @@
+// Palette regions a pack tags its colours with. Palette genes tint a region;
+// the pack clamps each region to a band so he stays recognisable (the cloak
+// stays a cloak colour). The outline is never a region: it is invariant.
+// BLORB_REGION(id, name)
+BLORB_REGION(0, skin)
+BLORB_REGION(1, belly)
+BLORB_REGION(2, cloak)
+BLORB_REGION(3, eye)
+BLORB_REGION(4, mouth)
+BLORB_REGION(5, glow)
+BLORB_REGION(6, shell)

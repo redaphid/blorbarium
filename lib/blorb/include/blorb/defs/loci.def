@@ -1,0 +1,42 @@
+// Loci: the bus between code and genes, and the published API for genome
+// authors and the phone. Sense loci (0..63) are written by code and read by
+// emitter genes. 64..127 are the recent-stimulus loci, derived from stimuli.def
+// (64 + stim id), so they have no rows here. Act loci (128..191) are written by
+// receptor genes and read by code. 192..255 are free for gene-to-gene circuits.
+// situation = 1 puts the locus in the brain's feature vector.
+//
+// BLORB_LOCUS(id, name, dir, situation)
+BLORB_LOCUS(  0, always,       Sense, 0)  // 1 every tick: an emitter on it is tonic production
+BLORB_LOCUS(  1, tilt_x,       Sense, 0)  // 0.5 = level; the habitat rolls pellets and the marble with it
+BLORB_LOCUS(  2, tilt_y,       Sense, 0)
+BLORB_LOCUS(  3, motion,       Sense, 1)
+BLORB_LOCUS(  4, held,         Sense, 1)
+BLORB_LOCUS(  5, upside_down,  Sense, 1)
+BLORB_LOCUS(  6, light,        Sense, 1)  // 0 at pet night or while lidded (face down)
+BLORB_LOCUS(  7, day_sin,      Sense, 1)  // pet day phase, mapped to 0..1
+BLORB_LOCUS(  8, day_cos,      Sense, 1)
+BLORB_LOCUS(  9, owner_near,   Sense, 1)  // a phone is connected (an optional bonus)
+BLORB_LOCUS( 10, warmth,       Sense, 0)
+BLORB_LOCUS( 11, asleep,       Sense, 1)
+BLORB_LOCUS( 12, eating,       Sense, 0)
+BLORB_LOCUS( 13, age,          Sense, 1)
+BLORB_LOCUS( 14, food_near,    Sense, 1)
+BLORB_LOCUS( 15, food_rotten,  Sense, 0)
+BLORB_LOCUS( 16, marble_near,  Sense, 1)
+BLORB_LOCUS( 17, cradled,      Sense, 1)
+BLORB_LOCUS( 18, pantry,       Sense, 0)
+BLORB_LOCUS( 19, foreseeing,   Sense, 0)  // written by the Foresee action; emitters turn it into vision
+BLORB_LOCUS( 20, touch,        Sense, 0)  // 1.46 only; never written on the 1.28
+BLORB_LOCUS(128, become_child, Act,   0)
+BLORB_LOCUS(129, become_adult, Act,   0)
+BLORB_LOCUS(130, become_elder, Act,   0)
+BLORB_LOCUS(131, die,          Act,   0)
+BLORB_LOCUS(132, cause,        Act,   0)  // band of the value names the death cause
+BLORB_LOCUS(133, startle,      Act,   0)  // rising edge past 0.5 starts the hop reflex; level = hop height
+BLORB_LOCUS(134, flinch,       Act,   0)  // rising edge starts the flinch reflex
+BLORB_LOCUS(135, arousal,      Act,   0)  // exploration noise in the brain
+BLORB_LOCUS(136, glow,         Act,   0)  // foresee halo strength
+BLORB_LOCUS(137, size,         Act,   0)
+BLORB_LOCUS(138, hue_shift,    Act,   0)
+BLORB_LOCUS(139, sleep_gate,   Act,   0)  // keeps Sleep running while high
+BLORB_LOCUS(140, wobble,       Act,   0)

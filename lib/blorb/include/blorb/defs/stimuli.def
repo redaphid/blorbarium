@@ -1,0 +1,38 @@
+// Stimuli: numbered events. What one does to THIS creature is its stimulus
+// genes, not code. Ids are < 64; stim s owns recent locus 64 + s.
+//   Body  : an IMU or BOOT detector. No phone needed.
+//   World : the habitat, the pet clock, the link. No phone needed.
+//   Self  : fired by the creature's own action.
+//   Phone : the STIM verb may fire it. Extras only: no core loop needs one,
+//           and the host test body_only_full_life runs a life without any.
+//
+// BLORB_STIM(id, name, source, situation)
+BLORB_STIM( 0, knock,          Body,  1)
+BLORB_STIM( 1, double_knock,   Body,  0)
+BLORB_STIM( 2, shake,          Body,  1)
+BLORB_STIM( 3, picked_up,      Body,  1)
+BLORB_STIM( 4, put_down,       Body,  0)
+BLORB_STIM( 5, dropped,        Body,  0)
+BLORB_STIM( 6, flipped,        Body,  0)
+BLORB_STIM( 7, righted,        Body,  0)
+BLORB_STIM( 8, button,         Body,  0)  // short press: a pellet (alive), next egg (clutch)
+BLORB_STIM( 9, button_hold,    Body,  0)  // >= 1.2 s: tuck-in; grants an armed phone consent instead
+BLORB_STIM(10, cradle,         Body,  1)  // held still and upright for 3 s, then every 10 s
+BLORB_STIM(11, lid_down,       Body,  0)  // face down for 2 s
+BLORB_STIM(12, lid_up,         Body,  0)
+BLORB_STIM(13, touched,        Body,  0)  // 1.46 only
+BLORB_STIM(16, pellet_dropped, World, 0)
+BLORB_STIM(17, fed,            World, 1)  // the Eat action reached a pellet; never phone-fired
+BLORB_STIM(18, fed_bad,        World, 0)  // the pellet was rotten
+BLORB_STIM(19, marble_hit,     World, 1)
+BLORB_STIM(20, dusk,           World, 0)
+BLORB_STIM(21, dawn,           World, 0)
+BLORB_STIM(22, owner_arrived,  World, 1)
+BLORB_STIM(23, owner_left,     World, 0)
+BLORB_STIM(32, self_called,    Self,  0)
+BLORB_STIM(33, self_foresaw,   Self,  0)
+BLORB_STIM(34, woke,           Self,  0)
+BLORB_STIM(35, hatched,        Self,  0)
+BLORB_STIM(48, petted,         Phone, 1)
+BLORB_STIM(49, played,         Phone, 0)
+BLORB_STIM(50, spoken_to,      Phone, 0)

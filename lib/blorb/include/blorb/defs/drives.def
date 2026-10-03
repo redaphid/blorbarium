@@ -1,0 +1,13 @@
+// Drives are chemicals (the Creatures rule): drive d lives at chemical 1 + d.
+// Saved brain weights are keyed by drive id, so adding a row keeps every saved
+// brain loadable (the new column starts at zero; instincts teach it).
+//
+// BLORB_DRIVE(id, name)
+BLORB_DRIVE(0, hunger)
+BLORB_DRIVE(1, sleepiness)
+BLORB_DRIVE(2, boredom)
+BLORB_DRIVE(3, loneliness)
+BLORB_DRIVE(4, fear)
+BLORB_DRIVE(5, pain)
+BLORB_DRIVE(6, discomfort)
+BLORB_DRIVE(7, need_touch)   // lowered by cradling and petting, so affection is rewarding

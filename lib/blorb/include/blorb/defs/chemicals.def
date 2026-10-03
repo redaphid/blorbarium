@@ -1,0 +1,15 @@
+// Chemicals the phone names. All 256 slots exist at runtime and genes may use
+// any of them; a row only gives a slot a name and a colour. Drive chemicals
+// are 1..kDriveCount (drives.def) and are not listed here.
+// Stable ids: never renumber, never reuse.
+//
+// BLORB_CHEM(id, name, rgb565, showOnPhone)
+BLORB_CHEM(16, life,       0x07E0, 1)  // decays over the whole life; stage and death receptors read it
+BLORB_CHEM(17, injury,     0xF800, 1)  // a drop, rotten food; heals by its half-life
+BLORB_CHEM(18, energy,     0xFFE0, 1)  // food becomes energy; low energy emits hunger
+BLORB_CHEM(19, food,       0xAFE5, 1)  // what a bite adds
+BLORB_CHEM(20, adrenaline, 0xFBE0, 1)  // a shake raises it; receptors drive startle and arousal
+BLORB_CHEM(21, toxin,      0x4208, 1)  // rotten pellets; reacts into injury
+BLORB_CHEM(22, warmth,     0xFC10, 0)  // a hand's heat; speeds incubation
+BLORB_CHEM(23, melatonin,  0x4010, 0)  // emitted at pet night; reacts into sleepiness
+BLORB_CHEM(24, vision,     0x07FF, 1)  // rises while foreseeing; receptors drive the glow locus
