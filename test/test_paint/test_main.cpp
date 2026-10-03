@@ -565,6 +565,80 @@ TEST(Marquee, RunsTheDishAboveHisHeadAndNeverCoversHisFace) {
   EXPECT_GT(countChanged(*now, *render(empty, pack)), 0) << "the marquee does not scroll";
 }
 
+Appearance thinking(Appearance a, const char* line, double phase) {
+  a.thinking = true;
+  std::snprintf(a.line, sizeof a.line, "%s", line);
+  a.thoughtPhase = fx(phase);
+  return a;
+}
+
+// Everywhere he can stand in the round dish, adult or hatchling, mid-hop or
+// not, a thought's band stays off every row his face can change.
+TEST(Thought, NeverCoversHisFaceAnywhereInTheDish) {
+  const auto& pack = paint::placeholderPack();
+  int lowBands = 0;
+  for (blorb::Stage stage : {blorb::Stage::Adult, blorb::Stage::Baby})
+    for (int gy = -4; gy <= 4; ++gy)
+      for (int gx = -4; gx <= 4; ++gx) {
+        const double x = gx / 4.0, y = gy / 4.0;
+        if (x * x + y * y > 1.0) continue;
+        Appearance a = adult(x, y);
+        a.stage = stage;
+        a.scalePct = stage == blorb::Stage::Adult ? 100 : 55;
+        a.intensity = Fx::one();
+        int faceTop = kSide, faceBottom = -1;
+        for (uint16_t t = 0; t < 4; ++t)   // a blink can hide the face on one tick
+        for (auto face : {blorb::expr::alarmed, blorb::expr::foresee, blorb::expr::happy}) {
+          Appearance base = a, other = a;
+          base.poseTick = other.poseTick = t;
+          other.expression = other.previous = face;
+          auto calm = render(base, pack), changed = render(other, pack);
+          for (int i = 0; i < kSide * kSide; ++i)
+            if (calm->px[i] != changed->px[i]) {
+              faceTop = std::min(faceTop, i / kSide);
+              faceBottom = std::max(faceBottom, i / kSide);
+            }
+        }
+        ASSERT_LE(faceTop, faceBottom) << "no face found at " << x << "," << y;
+        auto plain = render(a, pack), said = render(thinking(a, "I SEE... A PELLET", 0.5), pack);
+        int top = kSide, bottom = -1;
+        for (int i = 0; i < kSide * kSide; ++i)
+          if (plain->px[i] != said->px[i]) { top = std::min(top, i / kSide); bottom = std::max(bottom, i / kSide); }
+        ASSERT_LE(top, bottom) << "no line drawn at " << x << "," << y;
+        EXPECT_TRUE(faceTop > bottom || faceBottom < top)
+            << "the line (rows " << top << ".." << bottom << ") covers his face (rows " << faceTop << ".."
+            << faceBottom << ") at " << x << "," << y;
+        lowBands += top > kSide / 2;
+      }
+  EXPECT_GT(lowBands, 0) << "standing high in the dish, the line moves below him";
+}
+
+TEST(Thought, TimeUnknownOutranksIt) {
+  const auto& pack = paint::placeholderPack();
+  Appearance unknown = adult(0, 0);
+  unknown.timeUnknown = true;
+  auto alone = render(unknown, pack);
+  EXPECT_EQ(countChanged(*alone, *render(thinking(unknown, "I SEE... A PELLET", 0.5), pack)), 0);
+}
+
+TEST(Thought, ScrollsInFromTheRimOnceAndIsGone) {
+  const auto& pack = paint::placeholderPack();
+  const Appearance a = adult(0, 0);
+  auto rightmost = [&](double phase) {
+    auto band = render(thinking(a, "", phase), pack), cv = render(thinking(a, "SIGNS POINT TO MUD.", phase), pack);
+    int right = -1;
+    for (int i = 0; i < kSide * kSide; ++i)
+      if (cv->px[i] != band->px[i]) right = std::max(right, i % kSide);
+    return right;
+  };
+  const int early = rightmost(0.1), late = rightmost(0.6);
+  EXPECT_GT(early, late) << "it moves right to left";
+  EXPECT_EQ(countChanged(*render(thinking(a, "SIGNS POINT TO MUD.", 0.999), pack),
+                         *render(thinking(a, "", 0.999), pack)),
+            0)
+      << "past the left rim by the end of its pass";
+}
+
 // PAINT_DUMP=<dir> writes a PPM per state for review.
 void writePpm(const std::string& path, const Canvas240& cv) {
   FILE* f = std::fopen(path.c_str(), "wb");

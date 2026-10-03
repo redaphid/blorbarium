@@ -49,8 +49,10 @@ constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 // The user may reword this; the font covers A-Z, 0-9, space and . , ! ? - ' :
 constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";
 // The empty band above his head, under the pantry pips; the text runs the
-// disc's chord there and fades out over the last pixels toward the rim.
-constexpr int kBandTop = 34, kBandRows = 18;
+// disc's chord there and fades out over the last pixels toward the rim. When
+// his face reaches into it, the line runs in the low band instead, above the
+// care hint, so a line never covers his face.
+constexpr int kBandTop = 34, kLowBandTop = 184, kBandRows = 18;
 constexpr int kMarqueeFeather = 20;
 constexpr int kMarqueePxPerTick = 3, kMarqueeGap = 48;
 
@@ -563,7 +565,20 @@ void pelletInMouth(Canvas240& cv, const SpritePack& pack, const Appearance& a, c
   blit(cv, f, q, col, 256, nullptr);
 }
 
-void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
+// The canvas rows a figure's face can cover from where he stands: every face
+// patch and its eye halos, standing and at the top of a hop, so a line's band
+// does not jump mid-pass when he leaps or changes face.
+struct Rows { int top = kSide, bottom = -1; };
+Rows faceRows(const Outline& faces, const Place& p) {
+  Rows r;
+  visitOutline(faces, [&](Pt q, int reach) {
+    r.top = imin(r.top, p.y + floorDiv(q.y - reach, 16));
+    r.bottom = imax(r.bottom, p.y + ceilDiv(q.y + reach, 16));
+  });
+  return r;
+}
+
+Rows drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
   for (int i = 0; i < imin(a.markCount, 8); ++i)
@@ -592,6 +607,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   }
   const Disc d = envelope({bodies, 2, eyed, 2 + kFaces, variants, 2 + kReflexMotionCount}, (kBreathPx + 1) * 16);
   Place p = placeAt(a.at, d, base);
+  const Rows faceBand = faceRows({eyed + 2, kFaces, eyed + 2, kFaces, variants, 1}, p);
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   drawItems(a, pack, cv, d, col, p, foot, false);
@@ -612,6 +628,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   halo(cv, a, pack, now.eyeCount ? now : body, p);
   pelletInMouth(cv, pack, a, now, p, col);
   drawItems(a, pack, cv, d, col, p, foot, true);
+  return faceBand;
 }
 
 int eggShear(Fx wobble, uint16_t tick, int lean) {
@@ -778,38 +795,44 @@ const uint8_t* glyphFor(char c) {
   return kMissingGlyph;
 }
 
-// "Time unknown": a scrolling line across the dish above his head, on a dim
-// band that runs rim to rim, each row to its own chord, and fades out toward
-// the glass, so neither the band nor a letter ends on a straight edge.
+// A line scrolling across the dish on a dim band that runs rim to rim, each
+// row to its own chord, and fades out toward the glass, so neither the band
+// nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
-void marquee(Canvas240& cv, uint16_t tick) {
+int bandFor(const Rows& face) {
+  return face.top >= kBandTop + kBandRows || face.bottom < kBandTop ? kBandTop : kLowBandTop;
+}
+
+constexpr int kMarqueeScale = 2, kMarqueeAdvance = 6 * kMarqueeScale;
+int bandHalf(int band) { return imax(chordHalf(band), chordHalf(band + kBandRows - 1)); }
+
+// `start` is the first letter's left edge; `repeat` tiles copies `period` apart.
+void marquee(Canvas240& cv, const char* text, int band, int start, int period) {
   auto fade = [](int x, int y) {
     const int half = chordHalf(y), toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
     return imax(0, imin(256, toRim * 256 / kMarqueeFeather));
   };
-  for (int y = kBandTop; y < kBandTop + kBandRows; ++y)
+  for (int y = band; y < band + kBandRows; ++y)
     for (int x = 0; x < kSide; ++x) {
       uint16_t& px = cv.px[y * kSide + x];
       px = blend(px, 0, 140 * fade(x, y) / 256);
     }
-  constexpr int kScale = 2, kAdvance = 6 * kScale;
-  const int widest = chordHalf(kBandTop + kBandRows - 1), left = kSide / 2 - widest, right = kSide / 2 + widest;
-  const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kAdvance + kMarqueeGap;
-  const int start = right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
+  const int widest = bandHalf(band), left = kSide / 2 - widest, right = kSide / 2 + widest;
+  const int len = int(std::strlen(text));
   const uint16_t c = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
-  const int top = kBandTop + (kBandRows - 7 * kScale) / 2;
-  for (int copy = -1; copy <= 1; ++copy)
+  const int top = band + (kBandRows - 7 * kMarqueeScale) / 2;
+  for (int copy = period ? -1 : 0; copy <= (period ? 1 : 0); ++copy)
     for (int i = 0; i < len; ++i) {
-      int x0 = start + copy * period + i * kAdvance;
-      if (x0 + kAdvance <= left || x0 >= right) continue;
-      const uint8_t* rows = glyphFor(kTimeUnknownMarquee[i]);
+      int x0 = start + copy * period + i * kMarqueeAdvance;
+      if (x0 + kMarqueeAdvance <= left || x0 >= right) continue;
+      const uint8_t* rows = glyphFor(text[i]);
       for (int r = 0; r < 7; ++r)
         for (int b = 0; b < 5; ++b) {
           if (!(rows[r] & (0x10 >> b))) continue;
-          for (int dy = 0; dy < kScale; ++dy)
-            for (int dx = 0; dx < kScale; ++dx) {
-              int x = x0 + b * kScale + dx, y = top + r * kScale + dy;
+          for (int dy = 0; dy < kMarqueeScale; ++dy)
+            for (int dx = 0; dx < kMarqueeScale; ++dx) {
+              int x = x0 + b * kMarqueeScale + dx, y = top + r * kMarqueeScale + dy;
               if (x < 0 || x >= kSide) continue;
               uint16_t& px = cv.px[y * kSide + x];
               px = blend(px, c, fade(x, y));
@@ -818,19 +841,35 @@ void marquee(Canvas240& cv, uint16_t tick) {
     }
 }
 
+// "Time unknown" loops for as long as it holds; it outranks a thought.
+void timeUnknown(Canvas240& cv, uint16_t tick, int band) {
+  const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kMarqueeAdvance + kMarqueeGap;
+  const int right = kSide / 2 + bandHalf(band);
+  marquee(cv, kTimeUnknownMarquee, band, right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period)), period);
+}
+
+// A thought makes one pass: in at the right rim at phase 0, gone past the left at 1.
+void thought(Canvas240& cv, const Appearance& a, int band) {
+  const int half = bandHalf(band), travel = 2 * half + int(std::strlen(a.line)) * kMarqueeAdvance;
+  const int start = kSide / 2 + half - int((int64_t(blorb::clamp01(a.thoughtPhase).raw) * travel) >> Fx::kFrac);
+  marquee(cv, a.line, band, start, 0);
+}
+
 }  // namespace
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv) {
   background(cv, a.night);
+  Rows face;
   switch (a.kind) {
-    case Kind::Creature: drawCreature(a, pack, cv); break;
+    case Kind::Creature: face = drawCreature(a, pack, cv); break;
     case Kind::Egg: drawEgg(a, pack, cv); break;
     case Kind::Remains: drawRemains(a, pack, cv); break;
     case Kind::Clutch: drawClutch(a, pack, cv); break;
   }
   pips(cv, a.pantry);
   hint(cv, a);
-  if (a.timeUnknown) marquee(cv, a.poseTick);
+  if (a.timeUnknown) timeUnknown(cv, a.poseTick, bandFor(face));
+  else if (a.thinking) thought(cv, a, bandFor(face));
   mask(cv);
 }
 
