@@ -1,5 +1,6 @@
 #include <cstring>
 #include "blorb/registry.h"
+#include "paint/marquee.h"
 #include "paint/sprite_pack.h"
 
 namespace paint {
@@ -47,13 +48,12 @@ constexpr uint8_t kPipColour[3] = {214, 150, 70};
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-// The user may reword this; the font covers A-Z, 0-9, space and . , ! ? - ' :
-constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";
-// The empty band above his head, under the pantry pips; the text runs the
-// disc's chord there and fades out over the last pixels toward the rim.
-constexpr int kBandTop = 34, kBandRows = 18;
+constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";   // any printable ASCII
+// The empty band above his head, under the pantry pips: the sibling's label
+// strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
+// over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
-constexpr int kMarqueePxPerTick = 3, kMarqueeGap = 48;
+constexpr Marquee kTimeUnknownStrip = {-76, 0, 20, 38, kMarqueeFeather};
 
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
 constexpr int ceilDiv(int64_t a, int64_t b) { return -floorDiv(-a, b); }
@@ -94,10 +94,6 @@ struct Rgb { int r, g, b; };
 struct Hsv { int h, s, v; };   // h in 1/1536 turn, s and v 0..255
 
 uint16_t to565(Rgb c) { return uint16_t(((c.r >> 3) << 11) | ((c.g >> 2) << 5) | (c.b >> 3)); }
-Rgb from565(uint16_t p) {
-  int r = (p >> 11) & 31, g = (p >> 5) & 63, b = p & 31;
-  return {(r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)};
-}
 
 Hsv toHsv(Rgb c) {
   int mx = imax(c.r, imax(c.g, c.b)), mn = imin(c.r, imin(c.g, c.b)), d = mx - mn;
@@ -138,11 +134,6 @@ Rgb tinted(Rgb c, Tint t, int satScale) {
   h.s = imin(255, h.s * t.sat / 128 * satScale / 128);
   h.v = imin(255, h.v * t.val / 128);
   return toRgb(h);
-}
-
-uint16_t blend(uint16_t under, uint16_t over, int alpha) {
-  Rgb a = from565(under), b = from565(over);
-  return to565({a.r + (b.r - a.r) * alpha / 256, a.g + (b.g - a.g) * alpha / 256, a.b + (b.b - a.b) * alpha / 256});
 }
 
 // Additive light in the panel's own channel depths, so whether a pixel moves
@@ -772,88 +763,31 @@ void hint(Canvas240& cv, const Appearance& a) {
   }
 }
 
-// 5x7 capitals, digits and a little punctuation.
-struct Glyph5 { char c; uint8_t rows[7]; };
-constexpr Glyph5 kFont[] = {
-    {' ', {0, 0, 0, 0, 0, 0, 0}},
-    {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}}, {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
-    {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}}, {'D', {0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C}},
-    {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}}, {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
-    {'G', {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F}}, {'H', {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-    {'I', {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E}}, {'J', {0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C}},
-    {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}}, {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
-    {'M', {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}}, {'N', {0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11}},
-    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}}, {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
-    {'Q', {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}}, {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
-    {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}}, {'T', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
-    {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}}, {'V', {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}},
-    {'W', {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A}}, {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
-    {'Y', {0x11, 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04}}, {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
-    {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}}, {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-    {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}}, {'3', {0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E}},
-    {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}}, {'5', {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E}},
-    {'6', {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}}, {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
-    {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}}, {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C}},
-    {'.', {0, 0, 0, 0, 0, 0x0C, 0x0C}},                {',', {0, 0, 0, 0, 0x0C, 0x04, 0x08}},
-    {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0, 0x04}},    {'?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0, 0x04}},
-    {'-', {0, 0, 0, 0x1F, 0, 0, 0}},                   {'\'', {0x0C, 0x04, 0x08, 0, 0, 0, 0}},
-    {':', {0, 0x0C, 0x0C, 0, 0x0C, 0x0C, 0}},
-};
-constexpr uint8_t kMissingGlyph[7] = {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1F};   // a reworded text shows its gaps
-
-const uint8_t* glyphFor(char c) {
-  if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
-  for (const Glyph5& g : kFont)
-    if (g.c == c) return g.rows;
-  return kMissingGlyph;
-}
-
-// "Time unknown": a scrolling line across the dish clear of his face (across
-// the top while he stands in the lower half, home included, across the bottom
-// while he is up in the upper half), on a dim band that runs rim to rim, each
-// row to its own chord, and fades out toward the glass, so neither the band
-// nor a letter ends on a straight edge.
+// "Time unknown": a scrolling line across the dish above his head, on a dim
+// band that runs rim to rim, each row to its own chord, and fades out toward
+// the glass, so neither the band nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
 
-void marquee(Canvas240& cv, uint16_t tick, bool low) {
-  const int bandTop = low ? kSide - kBandTop - kBandRows : kBandTop;
-  auto fade = [](int x, int y) {
-    const int half = chordHalf(y), toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
-    return imax(0, imin(256, toRim * 256 / kMarqueeFeather));
-  };
-  for (int y = bandTop; y < bandTop + kBandRows; ++y)
-    for (int x = 0; x < kSide; ++x) {
+// Low when he stands high in the dish, so the line never crosses his face.
+void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
+  Marquee strip = kTimeUnknownStrip;
+  if (low) strip.dy = -strip.dy;
+  const int top = kSide / 2 + strip.dy - strip.clipH / 2;
+  for (int y = top; y < top + strip.clipH; ++y) {
+    const int half = chordHalf(y);
+    for (int x = kSide / 2 - half; x < kSide / 2 + half; ++x) {
+      const int toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
       uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, 0, 140 * fade(x, y) / 256);
+      px = blend(px, 0, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
     }
-  constexpr int kScale = 2, kAdvance = 6 * kScale;
-  const int widest = chordHalf(kBandTop + kBandRows - 1), left = kSide / 2 - widest, right = kSide / 2 + widest;
-  const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kAdvance + kMarqueeGap;
-  const int start = right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
-  const uint16_t c = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
-  const int top = bandTop + (kBandRows - 7 * kScale) / 2;
-  for (int copy = -1; copy <= 1; ++copy)
-    for (int i = 0; i < len; ++i) {
-      int x0 = start + copy * period + i * kAdvance;
-      if (x0 + kAdvance <= left || x0 >= right) continue;
-      const uint8_t* rows = glyphFor(kTimeUnknownMarquee[i]);
-      for (int r = 0; r < 7; ++r)
-        for (int b = 0; b < 5; ++b) {
-          if (!(rows[r] & (0x10 >> b))) continue;
-          for (int dy = 0; dy < kScale; ++dy)
-            for (int dx = 0; dx < kScale; ++dx) {
-              int x = x0 + b * kScale + dx, y = top + r * kScale + dy;
-              if (x < 0 || x >= kSide) continue;
-              uint16_t& px = cv.px[y * kSide + x];
-              px = blend(px, c, fade(x, y));
-            }
-        }
-    }
+  }
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, kTimeUnknownMarquee,
+                to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
 }  // namespace
 
-void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv) {
+void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   background(cv, a.night);
   switch (a.kind) {
     case Kind::Creature: drawCreature(a, pack, cv); break;
@@ -863,7 +797,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv) {
   }
   pips(cv, a.pantry);
   hint(cv, a);
-  if (a.timeUnknown) marquee(cv, a.poseTick, a.at.y < Fx::zero());
+  if (a.timeUnknown) timeUnknown(cv, nowMs, a.at.y < Fx::zero());
   mask(cv);
 }
 

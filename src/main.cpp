@@ -253,7 +253,7 @@ void loop() {
 #endif
   step(now);
   if (now - lastFrame >= kFrameMs) {
-    paint::draw(shown(), grungoPack(), canvas);
+    paint::draw(shown(), grungoPack(), canvas, now);
     boardPresent(display, canvas);
     lastFrame = now;
   }

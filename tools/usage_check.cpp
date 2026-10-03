@@ -37,7 +37,7 @@ void firmwareLoop(Dish& dish, Link& nus, paint::Canvas240& canvas, uint32_t& las
   if (now - lastSample >= kSampleMs) { dish.sample(readImu(), now); lastSample = now; }   // 50 Hz
   dish.tick(now, nus);                                                                  // 10 Hz inside
   if (now - lastFrame >= 33) {
-    paint::draw(dish.appearance(), grungoPack(), canvas);
+    paint::draw(dish.appearance(), grungoPack(), canvas, now);
     pushToPanel(canvas);
     lastFrame = now;
   }
