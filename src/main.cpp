@@ -241,9 +241,30 @@ static void warp(uint32_t ticks) {
   }
 }
 
+// Set by `DEBUG bletest`, so its report prints whatever its size.
+static bool bleTestPending = false;
+
+// Queues `bytes` of a known pattern straight to the BLE link: lines of 'a' to
+// 'z' repeating, each byte at stream offset i being 'a' + i % 26, '\n' included.
+static void bleTest(const char* a) {
+  const long n = std::strtol(a, nullptr, 10);
+  if (n <= 0 || n > 65536) return (void)Serial.printf("[hw] debug bletest: bad size '%s'\n", a);
+  if (!ble.connected()) return (void)Serial.printf("[hw] debug bletest: no central connected\n");
+  char line[161];
+  for (long at = 0; at < n;) {
+    const long len = std::min<long>(160, n - at - 1);
+    for (long i = 0; i < len; ++i) line[i] = char('a' + (at + i) % 26);
+    ble.writeLine(std::string_view(line, size_t(len < 0 ? 0 : len)));
+    at += (len < 0 ? 0 : len) + 1;
+  }
+  bleTestPending = true;
+  Serial.printf("[hw] debug bletest: queued %ld bytes\n", n);
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
+  if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: DEBUG stage adult)\n", verb);
     return;
@@ -277,5 +298,11 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
+  if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
+    if (d->bytes > 512 || bleTestPending) {
+      bleTestPending = false;
+      Serial.printf("[hw] ble tx chunks=%u retries=%u bytes=%u\n", unsigned(d->chunks), unsigned(d->retries),
+                    unsigned(d->bytes));
+    }
 #endif
 }
