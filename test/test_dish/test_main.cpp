@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 #include <pthread.h>
 #include <cstdio>
+#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <variant>
@@ -286,9 +289,79 @@ TEST(Lifecycle, body_only_full_life) {
   EXPECT_EQ(births, 1);
 }
 
-// ---- the loop task's stack ---------------------------------------------------------------
+// ---- the loop task's stack and the engine's heap ------------------------------------------
+
+namespace budget {
+
+// Heap the engine holds, counted only on the thread under measure. Storage
+// and the phone link stand in for flash and radio, so what they allocate is
+// not the engine's and is not counted.
+thread_local bool counting = false;
+thread_local bool offBudget = false;
+std::atomic<size_t> live{0}, peak{0};
+
+struct OffBudget {
+  bool was = offBudget;
+  OffBudget() { offBudget = true; }
+  ~OffBudget() { offBudget = was; }
+};
+
+}  // namespace budget
+
+void* operator new(size_t n) {
+  size_t* p = static_cast<size_t*>(std::malloc(n + 2 * sizeof(size_t)));
+  if (!p) throw std::bad_alloc();
+  p[0] = n;
+  p[1] = budget::counting && !budget::offBudget;
+  if (p[1]) {
+    const size_t now = budget::live += n;
+    size_t was = budget::peak;
+    while (now > was && !budget::peak.compare_exchange_weak(was, now)) {}
+  }
+  return p + 2;
+}
+void operator delete(void* q) noexcept {
+  if (!q) return;
+  size_t* p = static_cast<size_t*>(q) - 2;
+  if (p[1]) budget::live -= p[0];
+  std::free(p);
+}
+void* operator new[](size_t n) { return operator new(n); }
+void operator delete[](void* q) noexcept { operator delete(q); }
+void operator delete(void* q, size_t) noexcept { operator delete(q); }
+void operator delete[](void* q, size_t) noexcept { operator delete(q); }
 
 namespace {
+
+struct FlashStorage : MemStorage {
+  std::optional<size_t> read(const char* n, size_t at, uint8_t* b, size_t cap) override {
+    budget::OffBudget off;
+    return MemStorage::read(n, at, b, cap);
+  }
+  bool writeAtomic(const char* n, const uint8_t* d, size_t len) override {
+    budget::OffBudget off;
+    return MemStorage::writeAtomic(n, d, len);
+  }
+  bool append(const char* n, const uint8_t* d, size_t len) override {
+    budget::OffBudget off;
+    return MemStorage::append(n, d, len);
+  }
+  bool rename(const char* from, const char* to) override {
+    budget::OffBudget off;
+    return MemStorage::rename(from, to);
+  }
+};
+
+struct RadioLink : ScriptedLink {
+  std::optional<std::string_view> readLine() override {
+    budget::OffBudget off;
+    return ScriptedLink::readLine();
+  }
+  void writeLine(std::string_view line) override {
+    budget::OffBudget off;
+    ScriptedLink::writeLine(line);
+  }
+};
 
 // How deep `body` reaches into a thread stack painted with a known byte, past
 // what an empty thread uses (glibc keeps its thread block at the stack's top).
@@ -312,41 +385,52 @@ size_t stackReach(void* (*body)(void*)) {
 }
 
 // What setup() and loop() ask of the engine: a founding boot, a whole life to
-// the next hatch with every save, then a boot that decodes that creature and
-// answers the phone's reads. The Dish lives on the heap, as main.cpp's is static.
+// the next hatch with every save and the clutch's dry runs, then a boot that
+// decodes that creature and answers the phone's reads. The Dish is static, as
+// main.cpp's is.
 void* lifeAndReboot(void*) {
-  MemStorage store;
+  static std::optional<Dish> dish;
+  FlashStorage store;
   NullLink quiet;
   ScriptedOwner owner;
-  Genome founder = shortLived();
-  auto dish = std::make_unique<Dish>(store, 7, 1, DishOptions{nullptr, &founder});
+  RadioLink phone;
+  const Genome founder = shortLived();
+  phone.inbound = {"#1 SNAPSHOT", "#2 HASH", "#3 LINEAGE", "#4 ANCESTOR 1", "#5 DIFF 1", "#6 PORTRAIT 0",
+                   "#7 STATE", "#8 GENOME", "#9 BRAIN", "#10 CHEM", "#11 SCHEMA", "#12 CLUTCH"};
+  budget::live = 0;
+  budget::peak = 0;
+  budget::counting = true;
+  dish.emplace(store, 7, 1, DishOptions{nullptr, &founder});
   for (uint32_t ms = 0; ms < 16 * 3600 * 1000u; ms += kSampleMs) {
     dish->sample(owner.next(ms, *dish), ms);
     dish->tick(ms, quiet);
     const Creature* c = std::get_if<Creature>(&dish->occupant());
     if (c && c->generation() == 1) break;
   }
-  ScriptedLink phone;
-  phone.inbound = {"#1 SNAPSHOT", "#2 HASH", "#3 LINEAGE", "#4 ANCESTOR 1", "#5 DIFF 1", "#6 PORTRAIT 0",
-                   "#7 STATE", "#8 GENOME", "#9 BRAIN", "#10 CHEM", "#11 SCHEMA"};
-  dish = std::make_unique<Dish>(store, 7, 1, DishOptions{nullptr, &founder});
+  dish.emplace(store, 7, 1, DishOptions{nullptr, &founder});
   dish->tick(1000, phone);
+  dish.reset();
+  budget::counting = false;
   return nullptr;
 }
 
 }  // namespace
 
 // The firmware runs these calls on the Arduino loop task, whose stack is
-// 8,192 B. x86-64 frames stand in for the ESP32-S3's here (tools/stack_check.sh
-// measures those one function at a time), so the bar keeps a quarter spare.
-// Unit 20 reads the real high-water mark on the board.
-TEST(Stack, ALifeAndARebootFitTheLoopTask) {
+// 8,192 B, in 327,680 B of internal RAM with no PSRAM (DESIGN.md section 8).
+// x86-64 frames stand in for the ESP32-S3's here (tools/stack_check.sh
+// measures those one function at a time), so the stack bar keeps a quarter
+// spare. The heap bar is the engine's line in DESIGN.md section 8. Unit 20
+// reads both on the board.
+TEST(Budget, ALifeAndARebootFitTheLoopTaskAndTheEngineHeapLine) {
 #if defined(__SANITIZE_ADDRESS__)
   GTEST_SKIP() << "ASan's redzones inflate every frame";
 #endif
-  size_t used = stackReach(lifeAndReboot);
-  std::printf("engine stack high-water: %zu B\n", used);
-  EXPECT_LT(used, 6144u);
+  size_t stack = stackReach(lifeAndReboot);
+  std::printf("engine stack high-water: %zu B, engine heap peak: %zu B\n", stack, size_t(budget::peak));
+  EXPECT_LT(stack, 6144u);
+  EXPECT_LT(size_t(budget::peak), 20u * 1024);
+  EXPECT_EQ(size_t(budget::live), 0u) << "the engine frees what it holds";
 }
 
 // ---- wall time and the unpowered catch-up (DEVIATIONS.md 3) ---------------------------------

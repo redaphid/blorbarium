@@ -22,15 +22,27 @@ enum class Kind : uint8_t { Egg = 0, Creature = 1, Clutch = 2 };
 
 // The keepsake's own byte codec. It is deliberately not shared with the
 // lineage log: the two formats evolve on their own schedules.
+// With no buffer it only counts, so encode sizes the blob, reserves it once
+// and writes it once: a creature's blob is about 9.5 KB.
 struct Out {
-  std::vector<uint8_t> b;
-  void u8(uint8_t v) { b.push_back(v); }
+  std::vector<uint8_t>* b = nullptr;
+  size_t n = 0;
+  void u8(uint8_t v) {
+    if (b) b->push_back(v);
+    ++n;
+  }
   void u16(uint16_t v) { u8(uint8_t(v)), u8(uint8_t(v >> 8)); }
   void u32(uint32_t v) { u16(uint16_t(v)), u16(uint16_t(v >> 16)); }
   void u64(uint64_t v) { u32(uint32_t(v)), u32(uint32_t(v >> 32)); }
   void fx(Fx v) { u32(uint32_t(v.raw)); }
-  void raw(const void* p, size_t n) { b.insert(b.end(), static_cast<const uint8_t*>(p), static_cast<const uint8_t*>(p) + n); }
+  void raw(const void* p, size_t len) {
+    if (b) b->insert(b->end(), static_cast<const uint8_t*>(p), static_cast<const uint8_t*>(p) + len);
+    n += len;
+  }
   void blob(const std::vector<uint8_t>& v) { u16(uint16_t(v.size())), raw(v.data(), v.size()); }
+  void patch(size_t at, uint32_t v, int bytes) {
+    for (int i = 0; b && i < bytes; ++i) (*b)[at + size_t(i)] = uint8_t(v >> (8 * i));
+  }
 };
 
 // Reads past the end yield zeros and clear `ok`, so a short chunk is one
@@ -66,17 +78,23 @@ uint32_t getLE32(const uint8_t* at) {
   return uint32_t(at[0]) | uint32_t(at[1]) << 8 | uint32_t(at[2]) << 16 | uint32_t(at[3]) << 24;
 }
 
-// CRC over the whole blob with its own field zeroed, so the seq is covered too.
+// CRC over the whole blob with its own field read as zero, so the seq is covered too.
 uint32_t blobCrc(const uint8_t* data, size_t len) {
   if (len < kHeaderLen) return 0;
-  std::vector<uint8_t> copy(data, data + len);
-  putLE32(&copy[kCrcAt], 0);
-  return crc32(copy.data(), copy.size());
+  const uint8_t zero[4] = {};
+  uint32_t c = crc32(data, kCrcAt);
+  c = crc32(zero, sizeof zero, c);
+  return crc32(data + kCrcAt + sizeof zero, len - kCrcAt - sizeof zero, c);
 }
 
-void chunk(Out& o, Chunk tag, const Out& body) {
-  o.u8(uint8_t(tag)), o.u8(kChunkVersion), o.u16(uint16_t(body.b.size()));
-  o.raw(body.b.data(), body.b.size());
+// A chunk header, then whatever `body` writes, then its length patched in.
+template <class Body>
+void chunk(Out& o, Chunk tag, Body&& body) {
+  o.u8(uint8_t(tag)), o.u8(kChunkVersion);
+  const size_t lenAt = o.n;
+  o.u16(0);
+  body();
+  o.patch(lenAt, uint32_t(o.n - lenAt - 2), 2);
 }
 
 // ---- pieces with public fields ----------------------------------------------------
@@ -282,8 +300,9 @@ uint32_t clutchHash(const Clutch& k) {
 // ---- private state of the occupant ------------------------------------------------------
 
 struct Keepsake::Codec {
-  struct Chunks {   // the known chunks of one blob, by tag
-    std::optional<std::vector<uint8_t>> bytes[16];
+  struct Chunks {   // the known chunks of one blob, by tag, as views into it
+    struct View { const uint8_t* p; size_t n; };
+    std::optional<View> bytes[16];
     std::vector<RawChunk> unknown;
   };
 
@@ -359,33 +378,41 @@ struct Keepsake::Codec {
     for (uint16_t i = 0, n = in.u16(); i < n && in.ok; ++i) b.instinctQueue_.push_back(getInstinct(in));
   }
 
-  static void putOccupant(Out& o, Out& genome, Out& chemistry, Out& brain, Out& body, Out& stats,
-                          const Occupant& occ) {
+  // The Occupant and Genome chunks, then a creature's Chemistry, Brain, Body and Stats.
+  static void putOccupant(Out& o, const Occupant& occ) {
     if (const Egg* e = std::get_if<Egg>(&occ)) {
-      o.u8(uint8_t(Kind::Egg)), o.u16(e->generation_), o.u32(e->laidTick_), o.u32(e->incubated_);
-      putDiff(o, e->child_.diff);
-      genome.raw(e->genome().bytes().data(), e->genome().bytes().size());
+      chunk(o, Chunk::Occupant, [&] {
+        o.u8(uint8_t(Kind::Egg)), o.u16(e->generation_), o.u32(e->laidTick_), o.u32(e->incubated_);
+        putDiff(o, e->child_.diff);
+      });
+      chunk(o, Chunk::Genome, [&] { o.raw(e->genome().bytes().data(), e->genome().bytes().size()); });
     } else if (const Creature* c = std::get_if<Creature>(&occ)) {
-      o.u8(uint8_t(Kind::Creature)), o.u16(c->generation_), o.u32(c->legacyFeats_), o.u8(uint8_t(c->stage_));
-      o.u8(c->action_.v), o.u32(c->actionStart_), o.u8(c->actionDone_);
-      o.u8(c->forced_.has_value()), o.u8(c->forced_.value_or(ActionId{}).v);
-      o.u8(c->face_.current.v), o.u8(c->face_.previous.v), o.fx(c->face_.intensity), o.u32(c->face_.sinceTick);
-      putSenseOut(o, c->pendingSelf_);
-      putRng(o, c->rng_);
-      genome.raw(c->genome_.bytes().data(), c->genome_.bytes().size());
-      for (Fx v : c->chem_.chem) chemistry.fx(v);
-      for (Fx v : c->chem_.locus) chemistry.fx(v);
-      putBrain(brain, c->brain_);
-      putBody(body, c->body_);
-      putStats(stats, c->stats_);
+      chunk(o, Chunk::Occupant, [&] {
+        o.u8(uint8_t(Kind::Creature)), o.u16(c->generation_), o.u32(c->legacyFeats_), o.u8(uint8_t(c->stage_));
+        o.u8(c->action_.v), o.u32(c->actionStart_), o.u8(c->actionDone_);
+        o.u8(c->forced_.has_value()), o.u8(c->forced_.value_or(ActionId{}).v);
+        o.u8(c->face_.current.v), o.u8(c->face_.previous.v), o.fx(c->face_.intensity), o.u32(c->face_.sinceTick);
+        putSenseOut(o, c->pendingSelf_);
+        putRng(o, c->rng_);
+      });
+      chunk(o, Chunk::Genome, [&] { o.raw(c->genome_.bytes().data(), c->genome_.bytes().size()); });
+      chunk(o, Chunk::Chemistry, [&] {
+        for (Fx v : c->chem_.chem) o.fx(v);
+        for (Fx v : c->chem_.locus) o.fx(v);
+      });
+      chunk(o, Chunk::Brain, [&] { putBrain(o, c->brain_); });
+      chunk(o, Chunk::Body, [&] { putBody(o, c->body_); });
+      chunk(o, Chunk::Stats, [&] { putStats(o, c->stats_); });
     } else {
       const Clutch& k = std::get<Clutch>(occ);
-      o.u8(uint8_t(Kind::Clutch)), o.u16(k.generation), o.fx(k.wildBonus);
-      for (uint64_t s : k.seeds) o.u64(s);
-      o.u8(k.count), o.u8(k.cursor), o.u32(k.sinceDeath), o.u8(uint8_t(k.cause)), o.u8(uint8_t(k.reached));
-      o.u8(uint8_t(k.heirlooms.size()));
-      for (const Belief& b : k.heirlooms) putBelief(o, b);
-      genome.raw(k.parent.bytes().data(), k.parent.bytes().size());
+      chunk(o, Chunk::Occupant, [&] {
+        o.u8(uint8_t(Kind::Clutch)), o.u16(k.generation), o.fx(k.wildBonus);
+        for (uint64_t s : k.seeds) o.u64(s);
+        o.u8(k.count), o.u8(k.cursor), o.u32(k.sinceDeath), o.u8(uint8_t(k.cause)), o.u8(uint8_t(k.reached));
+        o.u8(uint8_t(k.heirlooms.size()));
+        for (const Belief& b : k.heirlooms) putBelief(o, b);
+      });
+      chunk(o, Chunk::Genome, [&] { o.raw(k.parent.bytes().data(), k.parent.bytes().size()); });
     }
   }
 
@@ -394,7 +421,7 @@ struct Keepsake::Codec {
     auto view = [&](Chunk tag) -> std::optional<In> {
       const auto& b = c.bytes[uint8_t(tag)];
       if (!b) return std::nullopt;
-      return In{b->data(), b->size()};
+      return In{b->p, b->n};
     };
     std::optional<In> occ = view(Chunk::Occupant), gen = view(Chunk::Genome);
     if (!occ || !gen) return false;
@@ -461,39 +488,32 @@ struct Keepsake::Codec {
     return false;
   }
 
-  static std::vector<uint8_t> encode(const Snapshot& s, uint32_t seq) {
-    Out occ, genome, chemistry, brain, body, stats, clock, habitat, rng, settings, wall;
-    putOccupant(occ, genome, chemistry, brain, body, stats, s.occupant);
-    putClock(clock, s.clock);
-    putHabitat(habitat, s.habitat);
-    putRng(rng, s.rng);
-    putSettings(settings, s.settings);
-    Out payload;
-    chunk(payload, Chunk::Clock, clock);
-    chunk(payload, Chunk::Occupant, occ);
-    chunk(payload, Chunk::Genome, genome);
-    if (std::holds_alternative<Creature>(s.occupant)) {
-      chunk(payload, Chunk::Chemistry, chemistry);
-      chunk(payload, Chunk::Brain, brain);
-      chunk(payload, Chunk::Body, body);
-      chunk(payload, Chunk::Stats, stats);
-    }
-    chunk(payload, Chunk::Habitat, habitat);
-    chunk(payload, Chunk::Rng, rng);
-    chunk(payload, Chunk::Settings, settings);
-    if (s.wall) {
-      wall.u32(s.wall->wallSeconds), wall.u32(s.wall->tick);
-      chunk(payload, Chunk::Wall, wall);
-    }
+  static void put(Out& o, const Snapshot& s, uint32_t seq) {
+    o.raw(kMagic, sizeof kMagic), o.u16(kFormatVersion), o.u32(seq);
+    const size_t payloadLenAt = o.n;
+    o.u32(0), o.u32(0);   // payload length and crc, patched once known
+    chunk(o, Chunk::Clock, [&] { putClock(o, s.clock); });
+    putOccupant(o, s.occupant);
+    chunk(o, Chunk::Habitat, [&] { putHabitat(o, s.habitat); });
+    chunk(o, Chunk::Rng, [&] { putRng(o, s.rng); });
+    chunk(o, Chunk::Settings, [&] { putSettings(o, s.settings); });
+    if (s.wall) chunk(o, Chunk::Wall, [&] { o.u32(s.wall->wallSeconds), o.u32(s.wall->tick); });
     for (const RawChunk& r : s.unknown) {
-      payload.u8(r.tag), payload.u8(r.ver), payload.u16(uint16_t(r.bytes.size()));
-      payload.raw(r.bytes.data(), r.bytes.size());
+      o.u8(r.tag), o.u8(r.ver), o.u16(uint16_t(r.bytes.size()));
+      o.raw(r.bytes.data(), r.bytes.size());
     }
-    Out o;
-    o.raw(kMagic, sizeof kMagic), o.u16(kFormatVersion), o.u32(seq), o.u32(uint32_t(payload.b.size())), o.u32(0);
-    o.raw(payload.b.data(), payload.b.size());
-    putLE32(&o.b[kCrcAt], blobCrc(o.b.data(), o.b.size()));
-    return std::move(o.b);
+    o.patch(payloadLenAt, uint32_t(o.n - kHeaderLen), 4);
+  }
+
+  static std::vector<uint8_t> encode(const Snapshot& s, uint32_t seq) {
+    Out size;
+    put(size, s, seq);
+    std::vector<uint8_t> blob;
+    blob.reserve(size.n);
+    Out o{&blob};
+    put(o, s, seq);
+    putLE32(&blob[kCrcAt], blobCrc(blob.data(), blob.size()));
+    return blob;
   }
 
   // The occupant goes last, so a blob that fails before it leaves `into` whole.
@@ -510,15 +530,14 @@ struct Keepsake::Codec {
       size_t n = size_t(data[at + 2]) | size_t(data[at + 3]) << 8;
       at += kChunkHeaderLen;
       if (len - at < n) return false;
-      std::vector<uint8_t> bytes(data + at, data + at + n);
-      at += n;
       bool known = tag >= uint8_t(Chunk::Clock) && tag <= uint8_t(Chunk::Wall);
-      if (known) c.bytes[tag] = std::move(bytes);
-      else c.unknown.push_back(RawChunk{tag, ver, std::move(bytes)});
+      if (known) c.bytes[tag] = Chunks::View{data + at, n};
+      else c.unknown.push_back(RawChunk{tag, ver, std::vector<uint8_t>(data + at, data + at + n)});
+      at += n;
     }
     for (Chunk required : {Chunk::Clock, Chunk::Habitat, Chunk::Rng, Chunk::Settings})
       if (!c.bytes[uint8_t(required)]) return false;
-    auto in = [&](Chunk tag) { return In{c.bytes[uint8_t(tag)]->data(), c.bytes[uint8_t(tag)]->size()}; };
+    auto in = [&](Chunk tag) { return In{c.bytes[uint8_t(tag)]->p, c.bytes[uint8_t(tag)]->n}; };
     In clockIn = in(Chunk::Clock), habitatIn = in(Chunk::Habitat), rngIn = in(Chunk::Rng), settingsIn = in(Chunk::Settings);
     const PetClock clock = getClock(clockIn);
     const Habitat habitat = getHabitat(habitatIn);
@@ -577,37 +596,41 @@ bool Keepsake::decode(const uint8_t* data, size_t len, Snapshot& into) {
 bool Keepsake::migrate(std::vector<uint8_t>&, uint16_t fromVersion) { return fromVersion == kFormatVersion; }
 
 SlotState Keepsake::load(Snapshot& into) {
-  struct Slot { bool present = false, newer = false, valid = false; std::vector<uint8_t> blob; };
+  // Headers first, then one whole slot in RAM at a time: a creature's is about 9.5 KB.
+  struct Slot { bool present = false, newer = false, valid = false; uint32_t seq = 0; };
   Slot slots[2];
   for (int i = 0; i < 2; ++i) {
-    uint8_t probe;
-    if (!store_.read(kSlots[i], 0, &probe, 0)) continue;
-    Slot& s = slots[i];
-    s.present = true;
-    s.blob.resize(store_.size(kSlots[i]));
-    std::optional<size_t> n = store_.read(kSlots[i], 0, s.blob.data(), s.blob.size());
-    s.blob.resize(n ? std::min(*n, s.blob.size()) : 0);
-    bool magic = s.blob.size() >= kHeaderLen && std::memcmp(s.blob.data(), kMagic, sizeof kMagic) == 0;
-    uint16_t format = magic ? uint16_t(s.blob[4] | s.blob[5] << 8) : 0;
-    s.newer = magic && format > kFormatVersion;
-    if (magic && format < kFormatVersion && !migrate(s.blob, format)) s.blob.clear();
+    uint8_t head[kHeaderLen];
+    std::optional<size_t> n = store_.read(kSlots[i], 0, head, sizeof head);
+    if (!n) continue;
+    bool magic = *n == sizeof head && std::memcmp(head, kMagic, sizeof kMagic) == 0;
+    slots[i] = Slot{true, magic && uint16_t(head[4] | head[5] << 8) > kFormatVersion, false, magic ? getLE32(head + 6) : 0};
   }
   // A newer firmware's keepsake is left exactly as it is, both slots.
   for (const Slot& s : slots)
     if (s.newer) return SlotState::NewerFormat;
 
-  // Decoded one at a time into `into`, the preferred slot last (the higher
+  std::vector<uint8_t> blob;
+  auto decodeSlot = [&](int i) {
+    blob.resize(store_.size(kSlots[i]));
+    std::optional<size_t> n = store_.read(kSlots[i], 0, blob.data(), blob.size());
+    blob.resize(n ? std::min(*n, blob.size()) : 0);
+    uint16_t format = blob.size() >= kHeaderLen ? uint16_t(blob[4] | blob[5] << 8) : 0;
+    if (format < kFormatVersion && !migrate(blob, format)) return false;
+    return decode(blob.data(), blob.size(), into);
+  };
+  // Decoded into `into` one at a time, the preferred slot last (the higher
   // header seq, slot a on a tie), so when it is valid it is the one left there.
-  auto seqOf = [](const Slot& s) { return s.blob.size() >= kHeaderLen ? getLE32(s.blob.data() + 6) : 0u; };
-  const int last = seqOf(slots[1]) > seqOf(slots[0]) ? 1 : 0;
+  const int last = slots[1].seq > slots[0].seq ? 1 : 0;
   int best = -1;
   for (int i : {1 - last, last}) {
     if (!slots[i].present) continue;
-    slots[i].valid = decode(slots[i].blob.data(), slots[i].blob.size(), into);
+    slots[i].valid = decodeSlot(i);
     if (slots[i].valid) best = i;
   }
   // The preferred slot failed after the other decoded: `into` holds its debris.
-  if (best >= 0 && best != last && slots[last].present) decode(slots[best].blob.data(), slots[best].blob.size(), into);
+  if (best >= 0 && best != last && slots[last].present) decodeSlot(best);
+  blob = std::vector<uint8_t>();
 
   bool anyCorrupt = false;
   for (int i = 0; i < 2; ++i) {

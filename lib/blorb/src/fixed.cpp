@@ -101,9 +101,9 @@ uint32_t fnv1a(const void* data, size_t len, uint32_t seed) {
   return h;
 }
 
-uint32_t crc32(const void* data, size_t len) {
+uint32_t crc32(const void* data, size_t len, uint32_t prev) {
   const uint8_t* p = static_cast<const uint8_t*>(data);
-  uint32_t c = 0xFFFFFFFFu;
+  uint32_t c = ~prev;
   for (size_t i = 0; i < len; ++i) {
     c ^= p[i];
     for (int k = 0; k < 8; ++k) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));

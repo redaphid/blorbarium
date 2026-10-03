@@ -254,26 +254,28 @@ Each later idea and the exact files it touches. "Starter genome" is `lib/blorb/s
 
 ## 8. Memory and compute budgets (ESP32-S3, 1.28 board, PSRAM assumed absent)
 
-Labels: **measured** (where), **arithmetic**, or **estimate**.
+Labels: **measured** (where), **arithmetic**, or **estimate**. Revised after the engine verification (DEVIATIONS.md 9): the first table left out every stack and guessed the save transient.
 
 | Item | Size | Label |
 |---|---|---|
 | Internal DRAM the linker reports | 327,680 B | measured (PIO build of claude-notification-screen's badge env) |
 | Static RAM of that sibling firmware with BLE | 49,112 B | measured (same build); blorbarium's will differ |
 | Canvas 240x240 RGB565 | 115,200 B | arithmetic; `sizeof(Canvas240)` measured |
-| `Dish` object (holds Creature, Brain, Chemistry, Habitat, detectors) | 10,960 B | measured, `sizeof` on x86-64; LX7 within a few percent (fixed-width members) |
-| of which `Brain` / `Chemistry` / `ChemRules` arrays | 5,576 / 2,048 / 2,120 B | measured, x86-64 |
-| Heap: genome (cap 8 KB, starter about 3 KB) | up to 8 KB | estimate |
-| Heap: phenotype rule vectors (about 60 reactions, 120 emitters and receptors) | about 9 KB | estimate |
-| Transient at death: one child genome and diff, plus the dry run's rules | about 20 KB, one egg per tick | estimate |
-| Snapshot encode buffer | 10 to 16 KB, during a save | estimate |
+| `Dish` object, static (holds the live `Snapshot`: Creature, Brain, Chemistry, Habitat, detectors) | 10,872 B | measured, `sizeof` with the ESP32-S3 compiler |
+| of which `Brain` / `Chemistry` / `ChemRules` arrays | 5,560 / 2,048 / 2,096 B | measured, ESP32-S3 compiler |
+| Engine heap at its peak: genome, phenotype rule vectors, one save's blob, one lineage frame, the clutch's dry runs, the phone's replies | 16,879 B | measured on x86-64 through a whole life, a reboot and eleven phone reads (`test_dish` `Budget.*`, held under 20 KB); 32-bit pointers make the ESP32's smaller (inferred) |
+| of which a creature's keepsake blob, during a save or `SNAPSHOT` | about 9.5 KB, written once at its exact size | measured |
+| Loop task stack | 8,192 B | arduino-esp32's default; the engine reaches 4,816 B of it (measured on x86-64, same test); no frame is over 2,560 B on the ESP32-S3 (`tools/stack_check.sh`) |
+| Other task stacks (BLE host, idle, timer, IPC) | about 15 KB | estimate |
 | NimBLE host heap | 40 to 70 KB | estimate |
 | LittleFS caches | about 10 KB | estimate |
-| Lineage in RAM | under 100 B | by design |
-| **Peak internal use** | **about 290 KB of 327 KB** | estimate; to be measured in build unit 20 |
+| Lineage in RAM | 40 B, plus one frame (under 2 KB) while a read walks the log | measured (`sizeof`, `test_lifecycle` largest read) |
+| **Peak internal use** | **about 265 to 295 KB of 327 KB, so 32 to 62 KB free** | arithmetic over the rows above; to be measured in build unit 20 |
 | Sprite art (grungo body plus ten face patches, 8 bpp, RLE) | under 70 KB of flash, no RAM | estimate from grungo.md |
 
-The margin is thin. Build unit 20 logs the minimum free heap across a boot, a save, a death and a clutch pick, and fails under 24 KB. The lever if it is short is to draw the canvas in 48-row bands (23 KB instead of 115 KB). The 1.46 board puts the canvas in its 8 MB PSRAM.
+This budget holds with no PSRAM. Build unit 20 logs the minimum free heap across a boot, a save, a death and a clutch pick, and fails under 24 KB, and logs the loop task's stack high-water mark. If the heap is short (a NimBLE host larger than estimated), the lever is to draw the canvas in 48-row bands (23 KB instead of 115 KB). The 1.46 board puts the canvas in its 8 MB PSRAM.
+
+**PSRAM on the 1.28 is unverified.** `platformio.ini`'s `badge128` env sets `-DBOARD_HAS_PSRAM` and `memory_type = qio_qspi` (quad PSRAM), while this section assumes none. Nobody has read a board yet, and the flag came from the sibling project's env. Unit 20 must print `ESP.getPsramSize()` on the board's first boot and then correct whichever is wrong: this section, or the env. Until then nothing depends on PSRAM, so either answer is safe. If the board has it, the canvas moves there and the margin grows by 115 KB.
 
 Compute, all **estimates** at 240 MHz: chemistry about 300 rules per tick at 10 Hz is about 0.12 M cycles/s; the brain about 4k multiply-adds per think at 5 Hz is about 0.2 M cycles/s; detectors at 50 Hz about 0.1 M cycles/s. Under 0.3 percent of one core. A viability dry run (576 coarse steps) is about 30 ms, one per tick during the vigil. Drawing is the cost: compositing about 15 cycles a pixel at 25 fps is about 9 percent of a core, and the SPI push at the board's 40 MHz is 23 ms a frame (arithmetic), so the bus is busy about 58 percent of the time at 25 fps. That is why the target is 25 fps, not 30.
 
@@ -339,7 +341,7 @@ Each unit is small, names its files and ends in a check that can be run. Do not 
 | 17 | Simulator | `sim/*`, `src/main.cpp` (sim build) | two headless runs of one feed give identical sha256 |
 | 18 | Frame goldens | `tests/film.py`, `tests/feeds/*.txt`, `test/golden/*.png`, `tools/sim_film.sh` | `sim_film.sh` green on the nine states |
 | 19 | Grungo pack converter | `tools/sprite_pack.py`, `pets/grungo/grungo_pack.h` | converter output is byte-stable across runs; every eye anchor falls inside the eye mask; goldens re-blessed once, reviewed as PNGs |
-| 20 | Firmware on the 1.28 | `src/hw/*.h` (including `storage_nvs_fs.h`: snapshot slots `save_a`/`save_b` as keys in the labelled `pet` NVS partition, `lineage.log` on the `petfs` LittleFS, both behind the `Storage` seam), `src/main.cpp`, `tools/partitions_16mb.csv` (the layout in `explore-ota.md` section 5: nvs, otadata, two 4 MB OTA slots, `pet`, `petfs`, coredump), `pick_port.py` | `pio run -e badge128` on Windows; on the board: minimum free heap at least 24 KB through a save, a death and a pick; `HASH` after a scripted serial feed equals the host hash |
+| 20 | Firmware on the 1.28 | `src/hw/*.h` (including `storage_nvs_fs.h`: snapshot slots `save_a`/`save_b` as keys in the labelled `pet` NVS partition, `lineage.log` on the `petfs` LittleFS, both behind the `Storage` seam), `src/main.cpp`, `tools/partitions_16mb.csv` (the layout in `explore-ota.md` section 5: nvs, otadata, two 4 MB OTA slots, `pet`, `petfs`, coredump), `pick_port.py` | `pio run -e badge128` on Windows; on the board: `ESP.getPsramSize()` printed at first boot and section 8 or the `badge128` env corrected to match; minimum free heap at least 24 KB and the loop task's `uxTaskGetStackHighWaterMark` logged through a save, a death and a pick; `HASH` after a scripted serial feed equals the host hash |
 | 21 (future) | Phone-side foresight: on a visit, the website runs this engine compiled to WebAssembly. It reads the creature's `SNAPSHOT` over BLE, simulates many futures, and sends back twist ops (a `prophecy` brain update, a chosen mutation) that the board applies to its live state (DEVIATIONS.md 4) | an Emscripten build of `lib/blorb`; `Keepsake::encode`/`decode` as the one self-contained blob pair; rows in `defs/twists.def` | the WASM build and the host replay the same snapshot and script to the same `Dish` hash; a malformed twist is refused without disturbing the board |
 | 22 (future, hardware) | BLE OTA: the website sends a firmware image over BLE (no Wi-Fi) into the inactive app slot, verifies it, and switches slots with bootloader rollback. Built from the survey in the design scratchpad's `explore-ota.md` (section 5: what to copy from the old badge's `ble_ota.h`, the trial logic, the web sender) | `src/hw/ble_ota.h`, OTA verbs in `defs/commands.def`, the web sender | an update over BLE boots the new firmware with the `pet` partition untouched; a corrupted image is refused and the old slot keeps running; a keepsake written by the old firmware loads in the new one through `Keepsake::migrate` (a committed fixture per format version); while a new image is on trial it writes no save in a newer format, so a rollback never meets a save it cannot read |
 

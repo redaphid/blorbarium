@@ -131,9 +131,9 @@ Each was reported by the unit that made it and reviewed at integration.
   and Lanczos filters blurred the ink. The happy, alarmed, annoyed, croak and
   sleepy irises are shifted to neutral's red-brown before quantising. The egg
   is the user's pick (`egg-nest-s1007`, ground stripped).
-- **Known gap for unit 20.** `Storage` has no offset read, so `Lineage` reads
-  the whole log into RAM (up to 192 KB). The flash implementation must add a
-  ranged read before the log grows.
+- **Closed (DEVIATIONS 9).** `Storage` had no offset read, so `Lineage` read
+  the whole log into RAM. `Storage::read` now takes an offset, and the log is
+  walked one frame at a time.
 
 ## 7. The grungo pack landed before the simulator
 
@@ -178,3 +178,33 @@ changed the design in these ways:
 
 Known and left: a rotten bite draws the fresh fly, because `present()` does
 not say which kind he bit.
+
+## 9. Memory gaps the engine verification found
+
+An independent verification of `engine` (stack frames measured with the
+ESP32-S3 compiler, heap counted on the host) found that DESIGN section 8's
+budget left out every stack and guessed the save transient. Fixed in the
+fix-up series:
+
+- **Stack.** `Snapshot` (10,424 B) and `Creature` (10,196 B) were held by
+  value, so `Keepsake::load` took 52,432 B of stack and the Dish constructor,
+  save, hash, hatch and `SNAPSHOT` about 10.4 KB each, against the loop
+  task's 8,192 B. The Dish now owns one `Snapshot` that the keepsake encodes,
+  hashes and decodes in place, and occupants are built in the variant.
+  `tools/stack_check.sh` fails any frame over 2,560 B and runs before the
+  native suite.
+- **Lineage.** The log was read whole on every boot, death and phone read,
+  and compaction had no caller. It now streams one frame at a time through a
+  ranged `Storage::read`. The append that passes 192 KB compacts it, keeping
+  the newest Checkpoint and Rename of each generation.
+- **Save transient.** A creature's keepsake is about 9.5 KB, not the 1.8 KB
+  an egg's is, and encoding it held about 53 KB of heap (eleven chunk
+  buffers, a doubling payload and two whole copies for the header and the
+  CRC). Encode now sizes the blob in a counting pass and writes it once, the
+  CRC runs over it in place, decode reads chunks as views, and load holds one
+  slot at a time. The engine's heap peak through a life, a reboot and the
+  phone's reads went from 53,737 B to 16,879 B (measured on x86-64).
+- **PSRAM, still open.** The `badge128` env sets `-DBOARD_HAS_PSRAM` and quad
+  PSRAM, while DESIGN section 8 assumes none. The budget now holds without
+  it. Unit 20 reads `ESP.getPsramSize()` off a real board and corrects
+  whichever side is wrong.

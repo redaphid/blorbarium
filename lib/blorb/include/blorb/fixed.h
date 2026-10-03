@@ -77,6 +77,6 @@ struct Rng {
 };
 
 uint32_t fnv1a(const void* data, size_t len, uint32_t seed = 0x811c9dc5u);
-uint32_t crc32(const void* data, size_t len);
+uint32_t crc32(const void* data, size_t len, uint32_t prev = 0);   // prev: the crc of the bytes before, to go on from
 
 }  // namespace blorb
