@@ -1,0 +1,3 @@
+# Grungo's art sources
+
+These files are copied unchanged from `characters/grungo/` in the sprite-expressions repository at commit `7bc9ad9407390754027febd2f47494621b6a91a1` (branch `blorbarium-art`, "regions.py: prototype colour-region labels for on-device recolouring"). `frames/<name>.png` is `raw/<name>/frame-00.png`, a person's pick of one 1024x1024 RGBA frame per expression, all registered on the same anchor. `masks/eyes.png` and `masks/mouth.png` are the inpaint masks, and `eyes.json` holds the per-frame eye centres measured by `eyes.py`. `tools/sprite_pack.py` reads only this folder and writes `../grungo_pack.h`. When a new frame is picked, copy it here from a named sprite-expressions commit, update this paragraph, and rerun the converter.
