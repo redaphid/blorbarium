@@ -34,10 +34,9 @@ struct Phenotype {
   struct Face { ExprId face; Fx weight; DriveId drive[3]; Fx amount[3]; };
   struct StimResponse { StimId stim; bool whenAsleep, wakes; ChemId chem[3]; Fx amount[3]; };
   struct Size { uint8_t base, growth, squash; };
-  // The seer (thoughts.h): how often a shake brings a prophecy instead of a
-  // hop (of 255), the voice he speaks in, and how much he leans to each topic.
-  // Grungo's species default.
-  struct Oracle { uint8_t chance = 64; VoiceId voice = voice::mystic; uint8_t topics[kTopicCount]{128, 128, 128, 128, 128, 128, 128}; };
+  // The seer (thoughts.h): the voice he speaks in and how much he leans to
+  // each topic. Grungo's species default.
+  struct Oracle { VoiceId voice = voice::mystic; uint8_t topics[kTopicCount]{128, 128, 128, 128, 128, 128, 128}; };
   // A duplicated palette or mark gene appends here: a second spot, a brighter glow.
   std::vector<Paint> palette;
   std::vector<Mark> marks;

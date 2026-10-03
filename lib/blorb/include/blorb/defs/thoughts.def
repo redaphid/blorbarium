@@ -4,9 +4,8 @@
 //   topic none   a thought. Now and then, between quiet gaps, the highest
 //                priority whose condition holds wins (ties: the seeded draw).
 //                kUrgentThought and up are in-the-moment and cut a gap short.
-//   topic <t>    a prophecy (topics.def). On a shake, with the chance his
-//                oracle gene gives, he foretells instead of hopping: a draw
-//                weighted by the gene's weight for the topic times
+//   topic <t>    a prophecy (topics.def). Every shake, he foretells instead
+//                of hopping: a draw weighted by the oracle's weight for the topic times
 //                (1 + priority), over the rows whose condition holds.
 //
 //   when       a predicate in thoughts.cpp (rows may share one). It may set a

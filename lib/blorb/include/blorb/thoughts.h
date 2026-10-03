@@ -3,9 +3,9 @@
 // scrolls it once across the dish (defs/thoughts.def). The Thinker picks
 // which, from what anyone could see of him (drives, the action or reflex,
 // stage, sickness, foresee, what his brain learned, the heirlooms in his
-// genome, the pet clock) plus a draw seeded by his genome and the tick. A
-// shake may bring a prophecy instead of a hop, by his oracle gene, which also
-// weights its topics and picks the voice (voices.def) every line is said in.
+// genome, the pet clock) plus a draw seeded by his genome and the tick. Every
+// shake brings a prophecy instead of a hop. His oracle weights its topics and
+// picks the voice (voices.def) every line is said in.
 //
 // Presentation, not life: no line changes him, and the Thinker is not saved
 // or hashed. A reboot starts it afresh, so a replay of the creature stays

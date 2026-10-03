@@ -45,15 +45,35 @@ struct Rig {
       dish.checkWall();
     }
   }
+  void observe() {
+    Appearance a = dish.appearance();
+    if (a.thinking && (!wasThinking || a.thoughtPhase < lastPhase))
+      said.push_back({dish.tickCount(), a.thought, a.line, a.prophecy});
+    wasThinking = a.thinking;
+    lastPhase = a.thoughtPhase;
+  }
   void run(uint32_t forMs) {
     for (uint32_t end = ms + forMs; ms < end;) {
       runFor(dish, link, ms, 100);
-      Appearance a = dish.appearance();
-      if (a.thinking && (!wasThinking || a.thoughtPhase < lastPhase))
-        said.push_back({dish.tickCount(), a.thought, a.line, a.prophecy});
-      wasThinking = a.thinking;
-      lastPhase = a.thoughtPhase;
+      observe();
     }
+  }
+  // A real shake through the IMU: `jolts` alternating jolts, one every 80 ms.
+  void shake(int jolts) {
+    for (int i = 0; i < jolts; ++i) {
+      BodySample j = still();
+      j.az = i % 2 == 0 ? 2000 : 400;
+      for (uint32_t t = 0; t < 80; t += kSampleMs, ms += kSampleMs) {
+        dish.sample(t == 0 ? j : still(), ms);
+        dish.tick(ms, link);
+      }
+      observe();
+    }
+  }
+  int prophecies() const {
+    int n = 0;
+    for (const Line& l : said) n += l.prophecy;
+    return n;
   }
   void hatch() {
     for (int s = 0; !std::holds_alternative<Creature>(dish.occupant()); ++s) {
@@ -203,28 +223,53 @@ TEST(Say, ThePhonesLineCrossesOnceInTheCroakFaceThenHisThoughtsComeBack) {
   EXPECT_TRUE(thought) << "his own lines resume";
 }
 
-TEST(Prophecy, AShakeSometimesForetellsInsteadOfAHopWearingTheForeseeFace) {
+TEST(Prophecy, EveryShakeForetellsWearingTheForeseeFace) {
   Rig r;
   r.pastWarmUp();
-  const int prophecies = r.shakes(40, 20 * kSecond);
-  EXPECT_GT(prophecies, 2) << "grungo foretells about one shake in four";
-  EXPECT_LT(prophecies, 25);
-  for (int i = 0; i < 40; ++i) {
-    r.dish.fire(stim::shake);
+  constexpr int kShakes = 20;   // more than the rows a cooldown leaves ready
+  for (int i = 0; i < kShakes; ++i) {
+    const int before = r.prophecies();
+    r.shake(6);
     r.run(400);
     Appearance a = r.dish.appearance();
-    if (!(a.thinking && a.prophecy && a.thoughtPhase < Fx::ratio(1, 10))) {
-      r.run(20 * kSecond);
-      continue;
-    }
-    EXPECT_FALSE(a.reflexActive) << "the hop does not show while he foretells";
+    ASSERT_EQ(r.prophecies(), before + 1) << "shake " << i << " foretold once";
+    ASSERT_TRUE(a.thinking && a.prophecy) << "shake " << i;
+    EXPECT_STRNE(a.line, "");
+    EXPECT_FALSE(a.reflexActive && a.reflex == reflex::hop) << "the hop does not show while he foretells";
     EXPECT_EQ(a.expression, expr::foresee);
     EXPECT_TRUE(a.foreseeing);
     EXPECT_GE(a.glow, kForeseeGlowFloor);
     EXPECT_TRUE(thoughtInfo(a.thought)->prophecy());
-    return;
+    r.run(2 * kSecond);
   }
-  ADD_FAILURE() << "forty shakes and no fresh prophecy";
+  EXPECT_EQ(r.prophecies(), kShakes);
+}
+
+TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
+  Rig r;
+  r.pastWarmUp();
+  r.shake(6);
+  r.run(1500);
+  const Appearance first = r.dish.appearance();
+  ASSERT_TRUE(first.thinking && first.prophecy);
+  ASSERT_GT(first.thoughtPhase, Fx::ratio(1, 10)) << "the first line is partway across";
+  r.shake(6);
+  r.run(100);
+  const Appearance second = r.dish.appearance();
+  EXPECT_TRUE(second.thinking && second.prophecy);
+  EXPECT_LT(second.thoughtPhase, first.thoughtPhase) << "the new line starts from the beginning";
+  EXPECT_EQ(r.prophecies(), 2);
+  while (r.dish.appearance().thinking && r.dish.appearance().prophecy) r.run(100);
+  r.run(30 * kSecond);
+  EXPECT_EQ(r.prophecies(), 2) << "the cut-off line does not come back after the new one";
+}
+
+TEST(Prophecy, OneLongShakeIsOneProphecy) {
+  Rig r;
+  r.pastWarmUp();
+  r.shake(40);
+  r.run(kSecond);
+  EXPECT_EQ(r.prophecies(), 1);
 }
 
 TEST(Prophecy, TheVoiceChangesHowTheSameLineIsSaid) {
