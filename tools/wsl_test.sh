@@ -10,6 +10,6 @@ dst="$HOME/.cache/blorbarium-build/$(printf '%s' "$src" | md5sum | cut -c1-12)"
 mkdir -p "$dst"
 rsync -a --delete --exclude .pio --exclude .git "$src/" "$dst/"
 cd "$dst"
-args=(test -e native)
+args=(test -e "${PIO_ENV:-native}")
 if [ $# -gt 0 ]; then args+=(-f "$1"); shift; fi
 exec ~/.platformio/penv/bin/pio "${args[@]}" "$@"
