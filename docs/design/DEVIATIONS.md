@@ -31,8 +31,8 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
   sources exist now.
 - With no source, he resumes as if no time passed, and catches up once a
   source appears. While time is unknown, `Appearance::timeUnknown` is set
-  and the renderer scrolls a marquee asking for a phone visit. Its text is
-  one constant, `kTimeUnknownMarquee` in `lib/paint/src/draw.cpp`.
+  and the renderer scrolls a marquee reading "TAP ME WITH YOUR PHONE". The
+  text is one constant, `kTimeUnknownMarquee` in `lib/paint/src/draw.cpp`.
 - The keepsake persists a wall anchor: the last known wall time and the pet
   tick it was read at. When wall time arrives, the unpowered gap is
   `wallNow - anchorWall - poweredSecondsSinceAnchor`. The Dish fast-forwards
