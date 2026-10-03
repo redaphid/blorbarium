@@ -225,11 +225,14 @@ class Link {
     if (line.startsWith("!")) return this.onEvent(line.slice(1).trim());
     const m = /^#([0-9a-fA-F]+) (\+|OK|ERR)(?: (.*))?$/.exec(line);
     if (!m) return;
-    const p = this.pending.get(parseInt(m[1], 16));
+    // "#0 ERR" answers a line whose id the board couldn't parse; only one request is ever in flight.
+    let id = parseInt(m[1], 16);
+    if (id === 0 && m[2] === "ERR") id = this.pending.keys().next().value;
+    const p = this.pending.get(id);
     if (!p) return;
     const body = m[3] || "";
     if (m[2] === "+") return void p.lines.push(body);
-    this.pending.delete(parseInt(m[1], 16));
+    this.pending.delete(id);
     clearTimeout(p.timer);
     if (m[2] === "OK") p.resolve({ lines: p.lines, ok: body });
     else p.reject(Object.assign(new Error(body), { code: parseInt(body, 10) }));
@@ -238,10 +241,12 @@ class Link {
   send(cmd, timeoutMs = 8000) {
     const run = () => new Promise((resolve, reject) => {
       const id = this.nextId;
+      const line = `#${id.toString(16)} ${cmd}`;
+      if (line.length > 200) return reject(new Error("TOO_LONG"));
       this.nextId = this.nextId >= 0xffffff ? 1 : this.nextId + 1;
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("TIMEOUT " + cmd)); }, timeoutMs);
       this.pending.set(id, { lines: [], resolve, reject, timer });
-      this.transport.write(`#${id.toString(16)} ${cmd}\n`).catch((e) => { this.pending.delete(id); clearTimeout(timer); reject(e); });
+      this.transport.write(line + "\n").catch((e) => { this.pending.delete(id); clearTimeout(timer); reject(e); });
     });
     const result = this.chain.then(run, run);
     this.chain = result.catch(() => {});
@@ -253,12 +258,26 @@ class Link {
   }
 }
 
+// The board sends each line as MTU-3 byte notifications and then "\n" on its own.
+function lineReader(onLine) {
+  let buf = "";
+  return (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).replace(/\r/g, "");
+      buf = buf.slice(nl + 1);
+      if (line) onLine(line);
+    }
+  };
+}
+
 // Nordic UART over Web Bluetooth. Notifications can split a line, so buffer to "\n".
 class BleTransport {
-  constructor(onDrop) { this.onDrop = onDrop; this.buf = ""; this.device = null; this.rx = null; this.onLine = () => {}; }
+  constructor(onDrop) { this.onDrop = onDrop; this.device = null; this.rx = null; this.onLine = () => {}; }
   async pick() {
     const want = params.get("d");
-    const filters = want ? [{ name: want }] : [{ services: [NUS] }, { namePrefix: "blorb-" }];
+    const filters = want ? [{ name: want }] : [{ services: [NUS] }];
     this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS] });
     this.device.addEventListener("gattserverdisconnected", () => this.onDrop());
   }
@@ -267,25 +286,19 @@ class BleTransport {
     const svc = await server.getPrimaryService(NUS);
     this.rx = await svc.getCharacteristic(RX);
     const tx = await svc.getCharacteristic(TX);
-    this.buf = "";
-    tx.addEventListener("characteristicvaluechanged", (e) => {
-      this.buf += new TextDecoder().decode(e.target.value);
-      let nl;
-      while ((nl = this.buf.indexOf("\n")) >= 0) {
-        const line = this.buf.slice(0, nl).replace(/\r$/, "");
-        this.buf = this.buf.slice(nl + 1);
-        if (line) this.onLine(line);
-      }
-    });
+    const feed = lineReader((line) => this.onLine(line));
+    tx.addEventListener("characteristicvaluechanged", (e) => feed(new TextDecoder().decode(e.target.value)));
     await tx.startNotifications();
   }
+  // The board asks for MTU 247, so a whole request usually fits one write. If the
+  // write is refused (MTU stuck at 23), fall back to 20-byte chunks for this link.
   async write(text) {
     const bytes = new TextEncoder().encode(text);
-    for (let i = 0; i < bytes.length; i += 20) {
-      const part = bytes.slice(i, i + 20);
-      if (this.rx.writeValueWithResponse) await this.rx.writeValueWithResponse(part);
-      else await this.rx.writeValue(part);
+    const put = (part) => this.rx.writeValueWithResponse ? this.rx.writeValueWithResponse(part) : this.rx.writeValue(part);
+    if (!this.smallWrites) {
+      try { return await put(bytes); } catch (e) { console.warn("whole-line write refused, chunking", e); this.smallWrites = true; }
     }
+    for (let i = 0; i < bytes.length; i += 20) await put(bytes.slice(i, i + 20));
   }
   get name() { return this.device ? this.device.name : ""; }
 }
@@ -323,7 +336,14 @@ class MockTransport {
     else if (verb === "SUB") lines.push("OK events=0x03");
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else lines.push("ERR 404 UNKNOWN_VERB");
-    lines.forEach((l, i) => setTimeout(() => this.onLine(`#${id} ${l}`), 40 + i * 25));
+    const feed = lineReader((line) => this.onLine(line));
+    const chunks = [];
+    for (const l of lines) {
+      const full = `#${id} ${l}`;
+      for (let i = 0; i < full.length; i += 20) chunks.push(full.slice(i, i + 20));
+      chunks.push("\n");
+    }
+    chunks.forEach((c, i) => setTimeout(() => feed(c), 30 + i * 5));
   }
 }
 
@@ -445,7 +465,12 @@ async function session() {
   ui.show("connect", false);
   ui.show("reconnect", false);
   ui.show("nameBox", true);
-  await loadGenome().catch((e) => console.warn("genome", e));
+  await loadGenome().catch((e) => {
+    console.warn("genome", e);
+    $("genomeHash").textContent = e.code === 404 ? "not on this firmware" : "couldn't read";
+    $("geneCount").textContent = "…";
+    ui.show("genomeBox", true);
+  });
   link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   link.send("SUB state stage hatched died").catch(() => {});
   clearInterval(poll);
