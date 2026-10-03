@@ -46,34 +46,30 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
 This folds into units 12 (the anchor in the snapshot), 13 (`TIME` feeds the
 phone source) and 14 (the seam, the catch-up and its tests).
 
-## 4. User-directed: one writer at a time, through a lease
+## 4. User-directed: the phone adds twists; the board stays the one writer
 
-The user (2026-10-02): "the phone can mutate the state, once it gets the
-current board from the device. This isn't a security thing. It's a
-consistency thing. Same keepsake = same world." So the state has exactly
-one writer at a time, handed over by a lease. (An earlier same-day reading,
-with proposals capped by the board, was superseded and never built.)
+The user (2026-10-02, final after two superseded same-day readings, neither
+of which was built): the board simulates at all times, and he is played with
+on the device itself most of the time. The phone is an add-on for twists
+that only it can offer, because it is more powerful, online or has sensors.
 
-1. On connect the board pushes nothing. The phone sends `LEASE`. The board
-   replies with the whole snapshot (`Keepsake::encode`, as base64 `+` lines)
-   and `OK lease=<id> <len> <crc32>`, and pauses its own simulation while the
-   lease is held.
-2. The phone may change anything (run the engine as WebAssembly, edit genes,
-   apply stimuli). There are no caps and no per-field checks.
-3. `RETURN <id> <len> <crc32>` with the blob as `+` lines writes the whole
-   state back. The board accepts it only if the lease is current and the blob
-   is well formed (it decodes, the CRC matches, the format version is known).
-   It then resumes simulating from exactly that state and saves at once. If
-   the genome changed, it appends a lineage checkpoint so every ancestor still
-   replays. `RELEASE <id>` hands the lease back with no write.
-4. If the link drops, or the phone sends nothing for `kLeaseTimeoutTicks`, the
-   lease expires and the board resumes from its own paused state. A later
-   `RETURN` with that id is refused. A malformed blob is refused and leaves
-   the board untouched, paused under the same lease.
+1. On connect the board pushes nothing. The phone requests the state: `STATE`
+   for the summary, `SNAPSHOT` for the whole `Keepsake::encode` blob as
+   base64 `+` lines. `SUB` subscribes to live events.
+2. The phone sends twist operations, `TWIST <kind> <args>`. The board applies
+   each to its live state when it arrives, between ticks, and keeps
+   simulating. The board is the only writer, so there is one world.
+3. The board checks only that an op is well formed: it parses, the kind is
+   known, and every id is in range. There are no caps.
+4. Twist kinds are a registry, `defs/twists.def`: one row plus a handler
+   `twist_<name>` in `src/twists.cpp` adds a kind. The first rows are
+   `stimulus` (fire a stimulus), `gene_edit` (set one gene body byte by uid,
+   recorded in the lineage), `rename`, `pick` (choose a clutch egg) and
+   `prophecy` (a brain-weight update). Later rows (a weather stimulus, a
+   camera colour) need no protocol change.
 
-What this removes from DESIGN.md section 6: the state-writing verbs `EDIT`,
-`NAME`, `STIM`, `PICK`, `BACKUP` and `RESTORE`, and with them the
-button-hold consent. The phone does all of those by editing the leased
-state. The read verbs stay, `SUB` events stay, and `TIME` stays, because it
-is an input to the time source (entry 3), not a state write. The body keeps
-every care loop, so the toy is still complete with no phone.
+What this changes in DESIGN.md section 6: `EDIT`, `NAME`, `STIM`, `PICK`,
+`BACKUP` and `RESTORE`, and the button-hold consent, are gone. Their jobs
+are twist kinds (`gene_edit`, `rename`, `stimulus`, `pick`) or the
+`SNAPSHOT` read. No verb replaces the whole state. `TIME` stays as the input
+to the phone time source (entry 3).
