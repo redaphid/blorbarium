@@ -49,7 +49,7 @@ constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 // The user may reword this; the font covers A-Z, 0-9, space and . , ! ? - ' :
 constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";
 // The empty band above his head, under the pantry pips; the text runs the
-// disc's chord there and fades out over the last pixels at each end.
+// disc's chord there and fades out over the last pixels toward the rim.
 constexpr int kBandTop = 34, kBandRows = 18;
 constexpr int kMarqueeFeather = 20;
 constexpr int kMarqueePxPerTick = 3, kMarqueeGap = 48;
@@ -777,17 +777,22 @@ const uint8_t* glyphFor(char c) {
 }
 
 // "Time unknown": a scrolling line across the dish above his head, on a dim
-// band that fades out toward the rim rather than ending in a box edge.
+// band that runs rim to rim, each row to its own chord, and fades out toward
+// the glass, so neither the band nor a letter ends on a straight edge.
+int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
+
 void marquee(Canvas240& cv, uint16_t tick) {
-  const int half = int(isqrt(uint64_t(kSide * kSide / 4 - (kSide / 2 - kBandTop) * (kSide / 2 - kBandTop))));
-  const int left = kSide / 2 - half, right = kSide / 2 + half;   // the chord at the band's narrower, top row
-  auto fade = [&](int x) { return imax(0, imin(256, imin(x - left, right - 1 - x) * 256 / kMarqueeFeather)); };
+  auto fade = [](int x, int y) {
+    const int half = chordHalf(y), toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
+    return imax(0, imin(256, toRim * 256 / kMarqueeFeather));
+  };
   for (int y = kBandTop; y < kBandTop + kBandRows; ++y)
-    for (int x = left; x < right; ++x) {
+    for (int x = 0; x < kSide; ++x) {
       uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, 0, 140 * fade(x) / 256);
+      px = blend(px, 0, 140 * fade(x, y) / 256);
     }
   constexpr int kScale = 2, kAdvance = 6 * kScale;
+  const int widest = chordHalf(kBandTop + kBandRows - 1), left = kSide / 2 - widest, right = kSide / 2 + widest;
   const int len = int(sizeof(kTimeUnknownMarquee)) - 1, period = len * kAdvance + kMarqueeGap;
   const int start = right - int(uint32_t(tick) * kMarqueePxPerTick % uint32_t(period));
   const uint16_t c = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
@@ -803,9 +808,9 @@ void marquee(Canvas240& cv, uint16_t tick) {
           for (int dy = 0; dy < kScale; ++dy)
             for (int dx = 0; dx < kScale; ++dx) {
               int x = x0 + b * kScale + dx, y = top + r * kScale + dy;
-              if (x < left || x >= right) continue;
+              if (x < 0 || x >= kSide) continue;
               uint16_t& px = cv.px[y * kSide + x];
-              px = blend(px, c, fade(x));
+              px = blend(px, c, fade(x, y));
             }
         }
     }
