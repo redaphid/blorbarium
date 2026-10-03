@@ -40,6 +40,10 @@ CASES = {
     "time_unknown": 6000,
 }
 
+# A case that must not look like another: a hop that drew as idle once passed
+# its golden because the golden was idle too. Share of the disc that must differ.
+UNLIKE = {"shake_hop": ("idle", 0.02)}
+
 # A pixel has moved when a channel is further off than this; the panel is
 # RGB565, so neighbouring colours are 4 to 8 counts apart.
 CHANNEL_TOL = 24
@@ -103,6 +107,19 @@ def check(case, got):
     return "%.2f%% of the disc is off by more than %d (allowed %.2f%%)" % (share * 100, CHANNEL_TOL, SHARE_TOL * 100)
 
 
+def unlike(case, got, shots):
+    """None unless the case looks too much like the one it must not be (UNLIKE)."""
+    if case not in UNLIKE:
+        return None
+    other, least = UNLIKE[case]
+    if other not in shots:
+        shots[other], _ = shoot(other, CASES[other])
+    _, share = moved(got, shots[other])
+    if share >= least:
+        return None
+    return "only %.2f%% of the disc differs from %s (needs %.0f%%)" % (share * 100, other, least * 100)
+
+
 def main(names):
     unknown = [n for n in names if n not in CASES]
     if unknown:
@@ -111,6 +128,7 @@ def main(names):
     os.makedirs(FRAMES, exist_ok=True)
     os.makedirs(MISSES, exist_ok=True)
     failed = 0
+    shots = {}
     for case in names or CASES:
         for stale in (case + ".actual.png", case + ".diff.png"):
             if os.path.exists(os.path.join(MISSES, stale)):
@@ -121,9 +139,10 @@ def main(names):
             print("FAIL %-13s %s" % (case, e))
             failed += 1
             continue
+        shots[case] = got
         got.resize((got.width * 2, got.height * 2), Image.NEAREST).save(os.path.join(FRAMES, case + ".png"))
-        why = check(case, got)
-        verdict = "blessed" if os.environ.get("UPDATE_GOLDEN") else ("ok" if why is None else "FAIL " + why)
+        why = unlike(case, got, shots) or check(case, got)
+        verdict = ("FAIL " + why) if why else ("blessed" if os.environ.get("UPDATE_GOLDEN") else "ok")
         print("%-13s sha256 %s x2  %s" % (case, digest, verdict))
         failed += why is not None
     print("%d of %d frames %s" % (len(names or CASES) - failed, len(names or CASES),

@@ -383,6 +383,23 @@ TEST(Hop, LiftsTheSpriteByStrengthTimesTheMax) {
   EXPECT_LT(squash.x0, down.x0);
 }
 
+// A still frame of a leap only reads as one if something stays on the floor.
+TEST(Hop, LeavesADarkShadowOnTheFloorUnderHim) {
+  BlockPack pack;
+  Appearance rest = adult();
+  Box down = find(*render(rest, pack), kOlive);
+  auto up = render(hopping(rest, fx(0.45), Fx::one()), pack);
+  ASSERT_LT(find(*up, kOlive).y1, down.y1 - 20) << "he is in the air";
+  auto away = render(adult(-0.8, 0), pack);
+  auto luma = [&](const Canvas240& cv, int x, int y) {
+    uint16_t p = cv.px[y * kSide + x];
+    return ((p >> 11) & 31) * 2 + ((p >> 5) & 63) + (p & 31) * 2;
+  };
+  int cx = (down.x0 + down.x1) / 2;
+  ASSERT_NE(away->px[down.y1 * kSide + cx], kOlive) << "the reference frame shows bare floor there";
+  EXPECT_LE(luma(*up, cx, down.y1) * 5, luma(*away, cx, down.y1) * 4) << "the floor under his feet is a fifth darker";
+}
+
 TEST(Placement, NeverClipsTheHoppingCreatureOrItsHaloAtTheRim) {
   BlockPack pack;
   for (blorb::Stage stage : {blorb::Stage::Adult, blorb::Stage::Baby}) {
