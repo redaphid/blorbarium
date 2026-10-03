@@ -502,6 +502,54 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
     }
 }
 
+// The marble is shaded per pixel, not taken from the pack: glass needs a
+// smooth shade, a soft edge and a hot glint, more colours than the pack's full
+// palette has left. Cobalt glass sits outside his greens and browns, so it
+// cannot be read as an egg or a pellet. Lit from the upper left like him.
+constexpr int kMarbleRQ4 = 104;                   // 13 px across, standing on its stand point
+constexpr Rgb kGlassDeep{22, 64, 156}, kGlassLight{100, 200, 255}, kGlassRim{6, 14, 40};
+constexpr Rgb kGlassSwirl{168, 240, 232}, kGlassGlint{255, 255, 255};
+
+Rgb mixRgb(const Rgb& a, const Rgb& b, int t) {   // t 0..256
+  return {a.r + (b.r - a.r) * t / 256, a.g + (b.g - a.g) * t / 256, a.b + (b.b - a.b) * t / 256};
+}
+
+void glassMarble(Canvas240& cv, const Place& q) {
+  const int R = kMarbleRQ4, cx = q.x * 16 + 8, cy = (q.y + 1) * 16 - R;
+  for (int y = (cy + R) / 16 - 1; y <= (cy + R) / 16 + 1; ++y)   // contact shadow
+    for (int x = floorDiv(cx - R, 16); x <= (cx + R) / 16; ++x) {
+      if (x < 0 || y < 0 || x >= kSide || y >= kSide) continue;
+      const int dx = x * 16 + 8 - cx, dy = (y * 16 + 8 - (cy + R)) * 4;
+      const int d = int(isqrt(uint64_t(dx * dx + dy * dy)));
+      if (d < R) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], 0, 110 * (R - d) / R);
+    }
+  const int swirlX = cx + R / 3, swirlY = cy - R / 3, swirlR = R * 3 / 4;
+  for (int y = imax(0, floorDiv(cy - R, 16)); y <= imin(kSide - 1, (cy + R) / 16); ++y)
+    for (int x = imax(0, floorDiv(cx - R, 16)); x <= imin(kSide - 1, (cx + R) / 16); ++x) {
+      const int dx = x * 16 + 8 - cx, dy = y * 16 + 8 - cy;
+      const int d = int(isqrt(uint64_t(dx * dx + dy * dy)));
+      if (d >= R + 8) continue;
+      // Dark at the rim, bright where light gathers low on the far side.
+      int light = imax(0, imin(256, 150 + (dx + dy) * 96 / R - d * 64 / R));
+      Rgb c = mixRgb(kGlassDeep, kGlassLight, light);
+      const int sx = x * 16 + 8 - swirlX, sy = y * 16 + 8 - swirlY;
+      const int band = iabs(int(isqrt(uint64_t(sx * sx + sy * sy))) - swirlR);
+      if (band < 14 && dx + dy > -R / 4 && d < R - 16) c = mixRgb(c, kGlassSwirl, 160 * (14 - band) / 14);
+      if (d > R - 22) c = mixRgb(c, kGlassRim, imin(256, (d - (R - 22)) * 256 / 22));
+      const int alpha = imin(256, (R + 8 - d) * 16);
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, to565(c), alpha);
+    }
+  const int gx = floorDiv(cx - R * 2 / 5, 16), gy = floorDiv(cy - R * 2 / 5, 16);   // the glint
+  for (int y = gy - 1; y <= gy + 1; ++y)
+    for (int x = gx - 1; x <= gx + 1; ++x) {
+      if (x < 0 || y < 0 || x >= kSide || y >= kSide) continue;
+      const int ring = iabs(x - gx) + iabs(y - gy);
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, to565(kGlassGlint), ring == 0 ? 256 : (ring == 1 ? 150 : 50));
+    }
+}
+
 // Depth by the floor: an item standing higher in the dish than his feet is
 // behind him, one level with them or lower is in front. One standing on his
 // footprint (the floor his body covers, out to his shadow's front edge) is
@@ -513,7 +561,8 @@ void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const
     bool inFront = q.y >= him.y;
     if (inFront != front) continue;
     if (iabs(q.x - him.x) <= foot && q.y - him.y >= -foot && q.y - him.y <= foot / 4) continue;
-    blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
+    if (a.items[i].what == Appearance::Item::What::Marble) glassMarble(cv, q);
+    else blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
   }
 }
 

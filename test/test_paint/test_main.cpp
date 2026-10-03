@@ -416,7 +416,7 @@ TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
   const uint16_t kChip = rgb565(200, 40, 40);
   for (double dy : {0.14, -0.08}) {
     Appearance a = adult();
-    a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(dy)}};
+    a.items[0] = {Appearance::Item::What::Pellet, {fx(0), fx(dy)}};
     a.itemCount = 1;
     int shown = find(*render(a, pack), kChip).count;
     if (dy > 0) EXPECT_EQ(shown, BlockPack::kItem * BlockPack::kItem) << "below his feet: in front, whole";
@@ -428,13 +428,40 @@ TEST(Items, OneUnderHimDoesNotShowBetweenHisLegs) {
   LegsPack pack;
   const uint16_t kChip = rgb565(200, 40, 40);
   Appearance a = adult();
-  a.items[0] = {Appearance::Item::What::Marble, {fx(0), fx(-0.06)}};
+  a.items[0] = {Appearance::Item::What::Pellet, {fx(0), fx(-0.06)}};
   a.itemCount = 1;
   EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, behind his legs";
   a.items[0].at.y = fx(0.02);
   EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, at his toes";
   a.items[0].at.y = fx(0.14);
   EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
+}
+
+// The pack's marble read as an egg he laid; it is drawn as cobalt glass
+// whatever the pack holds.
+TEST(Items, TheMarbleIsRoundBlueGlassNotThePacksArt) {
+  BlockPack pack;
+  Appearance a = adult();
+  a.items[0] = {Appearance::Item::What::Marble, {fx(0.5), fx(0.5)}};
+  a.itemCount = 1;
+  auto cv = render(a, pack);
+  a.itemCount = 0;
+  auto bare = render(a, pack);
+  EXPECT_EQ(find(*cv, rgb565(200, 40, 40)).count, 0) << "not the pack's chip";
+  int x0 = kSide, x1 = -1, y0 = kSide, y1 = -1, glass = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      uint16_t p = cv->px[y * kSide + x];
+      if (p == bare->px[y * kSide + x]) continue;
+      int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, b = (p & 31) << 3;
+      if (b < r + 60 || b < g) continue;
+      ++glass;
+      x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
+    }
+  EXPECT_GE(x1 - x0 + 1, 12) << "wide";
+  EXPECT_LE(x1 - x0 + 1, 14);
+  EXPECT_EQ(x1 - x0, y1 - y0) << "round";
+  EXPECT_GE(glass, 100) << "blue pixels in a 13 px disc";
 }
 
 // The pellet he bites leaves the dish; while he eats it is drawn at his
