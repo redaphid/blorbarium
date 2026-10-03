@@ -116,11 +116,11 @@ inline bool read(blorb::BodySample& s) {
   if (Wire.requestFrom(addr, uint8_t(8)) != 8) return false;
   uint8_t b[8];
   for (uint8_t& v : b) v = uint8_t(Wire.read());
-  auto word = [&](int i) { return int32_t(int16_t(uint16_t(b[i] | uint16_t(b[i + 1]) << 8))); };
-  s.tempCx10 = int16_t(word(0) * 10 / 256);   // 1/256 C per LSB
-  s.ax = int16_t(word(2) * 1000 / kLsbPerG);
-  s.ay = int16_t(word(4) * 1000 / kLsbPerG);
-  s.az = int16_t(word(6) * 1000 / kLsbPerG);
+  auto le16 = [&](int i) { return int32_t(int16_t(uint16_t(b[i] | uint16_t(b[i + 1]) << 8))); };
+  s.tempCx10 = int16_t(le16(0) * 10 / 256);   // 1/256 C per LSB
+  s.ax = int16_t(le16(2) * 1000 / kLsbPerG);
+  s.ay = int16_t(le16(4) * 1000 / kLsbPerG);
+  s.az = int16_t(le16(6) * 1000 / kLsbPerG);
   // STATUS1.bit1 says a tap was reported; TAP_STATUS[1:0] says which kind.
   s.tapCode = (probe(addr, kStatus1) & 0x02) ? uint8_t(probe(addr, kTapStatus) & 0x03) : 0;
   return true;
