@@ -20,6 +20,9 @@ static constexpr int PIN_LCD_BL = 40;   // not 2: that is the touch SKU
 static constexpr int PIN_BOOT_BUTTON = 0;
 static constexpr int PIN_IMU_SDA = 6;
 static constexpr int PIN_IMU_SCL = 7;
+// How the IMU sits relative to the panel's own up (src/hw/orient.h). Only the
+// board can settle this: if the screen lands a quarter turn off, add 1 (mod 4).
+static constexpr int ORIENT_R0 = 1;
 
 class BoardDisplay : public lgfx::LGFX_Device {
   lgfx::Panel_GC9A01 panel_;
