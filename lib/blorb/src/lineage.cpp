@@ -332,6 +332,10 @@ void Lineage::rename(const char* name) {
   if (appendWhole(*store_, encode(r))) copyName(name_, r.name);
 }
 
+void Lineage::recordEdit(uint16_t generation, const Genome& g) {
+  appendWhole(*store_, encode(Checkpoint{generation, g}));
+}
+
 void Lineage::visit(void (*f)(const LineageEntry&, void*), void* ctx) const {
   entries(*store_, [&](const LineageEntry& e) { f(e, ctx); });
 }

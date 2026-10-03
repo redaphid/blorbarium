@@ -1,6 +1,6 @@
 // Phone verbs. A row plus a handler cmd_<name> in src/protocol.cpp is the
-// whole change. Flags: kMutating marks the keepsake dirty; kConsent needs a
-// physical button hold on the device inside a 20 s window.
+// whole change. kMutating marks the keepsake dirty when the verb succeeds.
+// The phone changes live state only through TWIST (defs/twists.def).
 //
 // BLORB_CMD(VERB, name, flags)
 BLORB_CMD(HELLO,    hello,    0)
@@ -9,18 +9,13 @@ BLORB_CMD(STATE,    state,    0)
 BLORB_CMD(CHEM,     chem,     0)
 BLORB_CMD(GENOME,   genome,   0)
 BLORB_CMD(GENE,     gene,     0)
-BLORB_CMD(EDIT,     edit,     kMutating)
-BLORB_CMD(NAME,     name,     kMutating)
-BLORB_CMD(STIM,     stim,     kMutating)
 BLORB_CMD(BRAIN,    brain,    0)
 BLORB_CMD(LINEAGE,  lineage,  0)
 BLORB_CMD(ANCESTOR, ancestor, 0)
 BLORB_CMD(DIFF,     diff,     0)
-BLORB_CMD(PORTRAIT, portrait, 0)
 BLORB_CMD(CLUTCH,   clutch,   0)
-BLORB_CMD(PICK,     pick,     kMutating)
-BLORB_CMD(TIME,     time,     kMutating)
+BLORB_CMD(SNAPSHOT, snapshot, 0)          // the whole Keepsake::encode blob
+BLORB_CMD(TWIST,    twist,    kMutating)  // TWIST <kind> <args>
+BLORB_CMD(TIME,     time,     kMutating)  // TIME <unixSeconds> [tzMinutes]: the phone time source
 BLORB_CMD(SUB,      sub,      0)
-BLORB_CMD(BACKUP,   backup,   0)
-BLORB_CMD(RESTORE,  restore,  kMutating | kConsent)
 BLORB_CMD(HASH,     hash,     0)

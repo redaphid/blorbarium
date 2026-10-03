@@ -52,6 +52,8 @@ class Brain {
   struct Axes { std::vector<LocusId> features; std::vector<ActionId> actions; std::vector<DriveId> drives; };
   static Axes currentAxes();
   void loadWeights(const Axes& saved, const Q15* w);
+  // One weight by stable ids (the prophecy twist). False if an id is on no axis.
+  bool setWeight(LocusId feature, ActionId, DriveId, Fx effect);
 
   uint32_t hash() const;
 
