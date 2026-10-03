@@ -59,7 +59,8 @@ struct Appearance {
   Mark marks[8]{};
   uint8_t markCount = 0;
 
-  bool asleep = false, dreaming = false, calling = false, eating = false;
+  bool asleep = false, dreaming = false, calling = false;
+  Mouthful mouth = Mouthful::Nothing;   // drawn at his mouth, as the dish item it was
   Fx injury{}, wobble{};
   Fx night{};                       // 0..1 background tint from the pet clock
 

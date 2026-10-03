@@ -95,6 +95,59 @@ std::vector<uint8_t> unchunk(const Lines& lines, const std::string& id) {
 
 bool isFinal(const std::string& l) { return l.find(" OK") != std::string::npos || l.find(" ERR ") != std::string::npos; }
 
+constexpr uint64_t kLineageId = 0x9f31c2d04a7bull;
+
+Lines ask(Dish& dish, ScriptedLink& link, const std::string& line) {
+  link.sent.clear();
+  link.inbound.push_back(line);
+  dish.tick(0, link);
+  return link.sent;
+}
+
+Creature deadOf(const Genome& g, uint16_t generation) {
+  Creature c(Egg(Offspring{g, {}}, generation, 0), 0, 0);
+  Habitat h;
+  Behaviours b;
+  c.inject(chem::life, Fx::ratio(5, 100));
+  c.tick(SenseOut{}, h, b, 1);
+  return c;
+}
+
+// Nine lives on the log: each dies a baby and its only egg is picked, and the
+// last is renamed. Generation 8 carries a checkpoint.
+struct Family {
+  MemStorage store;
+  std::vector<Genome> genomes;
+  Family() {
+    Genome g = starterGenome(7);
+    genomes.push_back(g);
+    Lineage l = Lineage::open(store, g, kLineageId, 0);
+    for (uint16_t gen = 1; gen <= 9; ++gen) {
+      Creature dead = deadOf(g, uint16_t(gen - 1));
+      EXPECT_TRUE(dead.dead());
+      l.recordDeath(dead, "Grungo", gen * 100u);
+      Clutch k;
+      k.parent = g;
+      k.generation = gen;
+      k.seeds[0] = 1000 + gen;
+      Egg egg(k.child(0), gen, gen * 100u + 1);
+      l.recordBirth(egg, k, 0, gen * 100u + 1);
+      g = egg.genome();
+      genomes.push_back(g);
+    }
+    l.rename("Blorbo");
+  }
+};
+
+// The rig grown to an elder and dead, so the clutch holds three eggs.
+void elderDies(Rig& r) {
+  const Fx life[] = {Fx::ratio(85, 100), Fx::ratio(60, 100), Fx::ratio(15, 100), Fx::ratio(5, 100)};
+  for (Fx l : life) {
+    std::get<Creature>(r.dish.occupant()).inject(chem::life, l);
+    r.run(500);
+  }
+}
+
 }  // namespace
 
 TEST(Framing, FuzzedLinesNeverCrashAndAlwaysEndInOneFinalLine) {
@@ -364,6 +417,181 @@ TEST(Golden, Twist) {
       "#50 ERR 409 NOT_NOW", "#51 ERR 416 OUT_OF_RANGE", "#52 OK prophecy",
   };
   EXPECT_EQ(got, want);
+}
+
+// One op of every kind but a point, so the phone's text for each is pinned.
+TEST(Golden, DiffOfEveryOpKind) {
+  const Genome starter = starterGenome(7);
+  uint16_t cloak = 0, bluerCloak = 0, eye = 0, stalks = 0, lastInstinct = 0;
+  uint8_t weight = 0;
+  starter.forEach([&](const GeneView& v) {
+    const bool palette = v.header.type == GeneKindOf<PaletteGene>::value;
+    if (palette && v.body[0] == region::cloak.v) (v.header.flags & GeneFlags::Dormant ? bluerCloak : cloak) = v.header.uid.v;
+    if (palette && v.body[0] == region::eye.v) eye = v.header.uid.v;
+    if (v.header.type == GeneKindOf<MarkGene>::value && v.body[0] == 1) stalks = v.header.uid.v;
+    if (v.header.type == GeneKindOf<InstinctGene>::value) lastInstinct = v.header.uid.v, weight = v.header.mutWeight;
+  });
+  const GeneUid copy = starter.nextUid(), learned{uint16_t(copy.v + 1)};
+  const InstinctGene instinct{{locus::cradled.v, 255, 255}, action::curl.v, drive::fear.v, 70, 200};
+  std::vector<uint8_t> gene = {GeneKindOf<InstinctGene>::value, uint8_t(sizeof instinct),
+                               uint8_t(GeneFlags::Mutable | GeneFlags::Heirloom), uint8_t(Stage::Baby), 0, weight,
+                               uint8_t(learned.v), uint8_t(learned.v >> 8)};
+  const uint8_t* raw = reinterpret_cast<const uint8_t*>(&instinct);
+  gene.insert(gene.end(), raw, raw + sizeof instinct);
+  const MutationDiff diff{{MutDup{GeneUid{cloak}, copy}, MutDel{GeneUid{stalks}}, MutWake{GeneUid{bluerCloak}},
+                           MutSleep{GeneUid{eye}}, MutHeirloom{GeneUid{lastInstinct}, gene}}};
+  std::optional<Genome> child = apply(starter, diff);
+  ASSERT_TRUE(child.has_value());
+  MemStorage store;
+  {
+    Lineage l = Lineage::open(store, starter, kLineageId, 0);
+    Clutch k;
+    k.parent = starter;
+    k.generation = 1;
+    l.recordBirth(Egg(Offspring{*child, diff}, 1, 100), k, 0, 100);
+  }
+  ScriptedLink link;
+  Dish dish(store, 7, kLineageId);
+  ASSERT_EQ(dish.boot(), Boot::FromLineage);
+  Lines want = {
+      "#5f + dup=93",        "#5f + kind=palette", "#5f + del=99",        "#5f + kind=mark",
+      "#5f + wake=96",       "#5f + kind=palette", "#5f + sleep=94",      "#5f + kind=palette",
+      "#5f + heirloom=80",   "#5f + kind=instinct", "#5f + cue0=cradled", "#5f + cue1=255",
+      "#5f + cue2=255",      "#5f + action=curl",  "#5f + drive=fear",    "#5f + level=70",
+      "#5f + strength=200",  "#5f OK 5",
+  };
+  EXPECT_EQ(ask(dish, link, "#5f DIFF 1"), want);
+}
+
+TEST(Golden, Genome) {
+  Rig r;
+  r.hatch();
+  Lines out = r.send("#60 GENOME");
+  EXPECT_EQ(unchunk(out, "#60"), std::get<Creature>(r.dish.occupant()).genome().bytes());
+  EXPECT_EQ(out.size(), 14u);
+  EXPECT_EQ(out.back(), "#60 OK 1528 c2e84bf2") << "length and CRC of the quick-egg starter";
+}
+
+TEST(Golden, Chem) {
+  Rig egg;
+  EXPECT_EQ(egg.send("#61 CHEM"), (Lines{"#61 ERR 409 NO_CREATURE"}));
+  Rig r;
+  r.hatch();
+  r.run(30000);
+  Lines want = {
+      "#62 + chem=1 name=hunger level=301",      "#62 + chem=2 name=sleepiness level=0",
+      "#62 + chem=3 name=boredom level=2",       "#62 + chem=4 name=loneliness level=1",
+      "#62 + chem=5 name=fear level=8",          "#62 + chem=6 name=pain level=1",
+      "#62 + chem=7 name=discomfort level=3",    "#62 + chem=8 name=need_touch level=1",
+      "#62 + chem=16 name=life level=1000",      "#62 + chem=18 name=energy level=800",
+      "#62 + chem=23 name=melatonin level=3",    "#62 + chem=24 name=vision level=88",
+      "#62 + locus=0 name=always level=1000",    "#62 + locus=1 name=tilt_x level=500",
+      "#62 + locus=2 name=tilt_y level=500",     "#62 + locus=7 name=day_sin level=503",
+      "#62 + locus=8 name=day_cos level=1000",   "#62 + locus=9 name=owner_near level=1000",
+      "#62 + locus=16 name=marble_near level=780", "#62 + locus=18 name=pantry level=1000",
+      "#62 + locus=136 name=glow level=436",     "#62 OK 21",
+  };
+  EXPECT_EQ(r.send("#62 CHEM"), want);
+}
+
+TEST(Golden, LineageOverNineGenerations) {
+  Family f;
+  ScriptedLink link;
+  Dish dish(f.store, 7, kLineageId);
+  ASSERT_EQ(dish.boot(), Boot::FromLineage);
+  Lines want = {
+      "#63 + founding id=9f31c2d04a7b species=Grungo",
+      "#63 + death gen=0 cause=old_age age=0 feats=0x00 name=Grungo",
+      "#63 + birth gen=1 chosen=0 of=1 ops=6",
+      "#63 + death gen=1 cause=old_age age=0 feats=0x00 name=Grungo",
+      "#63 + birth gen=2 chosen=0 of=1 ops=5",
+      "#63 + death gen=2 cause=old_age age=0 feats=0x00 name=Grungo",
+      "#63 + birth gen=3 chosen=0 of=1 ops=7",
+      "#63 + death gen=3 cause=old_age age=0 feats=0x00 name=Grungo",
+      "#63 + birth gen=4 chosen=0 of=1 ops=8",
+      "#63 + death gen=4 cause=old_age age=0 feats=0x00 name=Grungo",
+      "#63 + birth gen=5 chosen=0 of=1 ops=7",
+      "#63 + death gen=5 cause=old_age age=0 feats=0x20 name=Grungo",
+      "#63 + birth gen=6 chosen=0 of=1 ops=8",
+      "#63 + death gen=6 cause=old_age age=0 feats=0x20 name=Grungo",
+      "#63 + birth gen=7 chosen=0 of=1 ops=7",
+      "#63 + death gen=7 cause=old_age age=0 feats=0x20 name=Grungo",
+      "#63 + birth gen=8 chosen=0 of=1 ops=9",
+      "#63 + checkpoint gen=8",
+      "#63 + death gen=8 cause=old_age age=0 feats=0x20 name=Grungo",
+      "#63 + birth gen=9 chosen=0 of=1 ops=4",
+      "#63 + rename gen=9 name=Blorbo",
+      "#63 OK 21",
+  };
+  EXPECT_EQ(ask(dish, link, "#63 LINEAGE"), want);
+}
+
+TEST(Golden, AncestorRebuildsEveryGenerationOfTheLog) {
+  Family f;
+  ScriptedLink link;
+  Dish dish(f.store, 7, kLineageId);
+  ASSERT_EQ(dish.boot(), Boot::FromLineage);
+  for (uint16_t gen = 0; gen <= 9; ++gen)
+    EXPECT_EQ(unchunk(ask(dish, link, "#64 ANCESTOR " + std::to_string(gen)), "#64"), f.genomes[gen].bytes())
+        << "generation " << gen;
+  EXPECT_NE(f.genomes[9].bytes(), f.genomes[0].bytes());
+  EXPECT_EQ(ask(dish, link, "#65 ANCESTOR 10"), (Lines{"#65 ERR 404 NO_GENOME"}));
+  EXPECT_EQ(ask(dish, link, "#66 ANCESTOR"), (Lines{"#66 ERR 400 BAD_ARGS"}));
+}
+
+TEST(Golden, Portrait) {
+  Family f;
+  ScriptedLink link;
+  Dish dish(f.store, 7, kLineageId);
+  ASSERT_EQ(dish.boot(), Boot::FromLineage);
+  Lines got = ask(dish, link, "#67 PORTRAIT 0 0");
+  Lines nine = ask(dish, link, "#68 PORTRAIT 9");
+  got.insert(got.end(), nine.begin(), nine.end());
+  Lines want = {
+      "#67 + stage=baby scale=55 seed=d414320c marks=1",
+      "#67 + region=skin hue=11 sat=128 val=128",
+      "#67 + region=belly hue=0 sat=128 val=137",
+      "#67 + region=cloak hue=0 sat=128 val=118",
+      "#67 + region=eye hue=0 sat=128 val=128",
+      "#67 + region=mouth hue=0 sat=128 val=128",
+      "#67 + region=glow hue=0 sat=140 val=160",
+      "#67 + region=shell hue=11 sat=128 val=128",
+      "#67 + mark layer=0 variant=4 hue=0",
+      "#67 OK",
+      "#68 + stage=adult scale=103 seed=e0415e2f marks=1",
+      "#68 + region=skin hue=13 sat=128 val=158",
+      "#68 + region=belly hue=0 sat=128 val=137",
+      "#68 + region=cloak hue=-90 sat=110 val=120",
+      "#68 + region=eye hue=0 sat=128 val=128",
+      "#68 + region=mouth hue=0 sat=128 val=128",
+      "#68 + region=glow hue=0 sat=140 val=160",
+      "#68 + region=shell hue=13 sat=128 val=158",
+      "#68 + mark layer=0 variant=4 hue=0",
+      "#68 OK",
+  };
+  EXPECT_EQ(got, want);
+  EXPECT_EQ(ask(dish, link, "#69 PORTRAIT 10"), (Lines{"#69 ERR 404 NO_GENOME"}));
+  EXPECT_EQ(ask(dish, link, "#6a PORTRAIT 9 4"), (Lines{"#6a ERR 400 BAD_ARGS"}));
+}
+
+TEST(Golden, Clutch) {
+  Rig r;
+  r.hatch();
+  EXPECT_EQ(r.send("#6b CLUTCH"), (Lines{"#6b ERR 409 NO_CLUTCH"}));
+  const std::vector<uint8_t> parent = std::get<Creature>(r.dish.occupant()).genome().bytes();
+  elderDies(r);
+  ASSERT_TRUE(std::holds_alternative<Clutch>(r.dish.occupant()));
+  r.run(Clutch::kVigilTicks * kTickMs);
+  EXPECT_EQ(r.send("#6c TWIST stimulus button"), (Lines{"#6c OK stimulus"}));
+  r.run(200);
+  Lines want = {
+      "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=5",
+      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=4 mind=8",
+      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=4",
+      "#6d OK eggs=3 cursor=1 previewed=3",
+  };
+  EXPECT_EQ(r.send("#6d CLUTCH"), want);
+  EXPECT_EQ(unchunk(r.send("#6e GENOME"), "#6e"), parent) << "a clutch answers with its parent's genome";
 }
 
 int main(int argc, char** argv) {

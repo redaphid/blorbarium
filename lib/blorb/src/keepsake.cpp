@@ -180,6 +180,8 @@ void putBody(Out& o, const Body& b) {
   o.u8(b.reflex.has_value());
   ActiveReflex r = b.reflex.value_or(ActiveReflex{});
   o.u8(r.kind.v), o.u16(r.tick), o.u16(r.ticks), o.fx(r.strength);
+  // Only while he holds a bite, so every body format 1 could hold encodes as it always has.
+  if (b.mouth != Mouthful::Nothing) o.u8(uint8_t(b.mouth));
 }
 Body getBody(In& in) {
   Body b;
@@ -195,6 +197,8 @@ Body getBody(In& in) {
   r.ticks = in.u16();
   r.strength = in.fx();
   if (reflex) b.reflex = r;
+  uint8_t mouth = in.at < in.n ? in.u8() : 0;
+  b.mouth = mouth <= uint8_t(Mouthful::RottenPellet) ? Mouthful(mouth) : Mouthful::Nothing;
   return b;
 }
 

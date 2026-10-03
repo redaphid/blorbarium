@@ -19,6 +19,10 @@ struct ActiveReflex {
   Fx strength;         // the trigger locus level at the edge: hop height
 };
 
+// The pellet he bit, held from the bite until the chew ends or the eat pose
+// is left. A rotten one is drawn rotten, so the owner sees him eat rot.
+enum class Mouthful : uint8_t { Nothing, Pellet, RottenPellet };
+
 // Where the creature is and how it holds itself now. Written by behaviours
 // and reflexes, read by the presentation.
 struct Body {
@@ -28,6 +32,7 @@ struct Body {
   uint16_t poseTick = 0;
   bool asleep = false, dreaming = false;
   std::optional<ActiveReflex> reflex;
+  Mouthful mouth = Mouthful::Nothing;
 };
 
 struct ActionCtx {
@@ -38,7 +43,6 @@ struct ActionCtx {
   Rng& rng;
   SenseOut& out;          // self-stimuli and loci (asleep, eating, foreseeing), applied by the creature next tick
   Fx foodEaten{};
-  bool ateRotten = false;
 };
 
 enum class Status : uint8_t { Running, Done };

@@ -132,7 +132,10 @@ void Eat::start(Body& b, ActionCtx&) {
 // is timed by the eat pose's poseTick, so the behaviour keeps no state.
 Status Eat::step(Body& b, ActionCtx& c) {
   if (b.pose == pose::eat) {
-    if (b.poseTick + 1u >= kChewTicks) return Status::Done;
+    if (b.poseTick + 1u >= kChewTicks) {
+      b.mouth = Mouthful::Nothing;
+      return Status::Done;
+    }
     c.out.set(locus::eating, Fx::one());
     return Status::Running;
   }
@@ -143,8 +146,8 @@ Status Eat::step(Body& b, ActionCtx& c) {
   std::optional<Habitat::Bite> bite = c.habitat.bite(c.rules, b.at, c.tick);
   if (!bite) return Status::Running;
   b.pose = pose::eat;
+  b.mouth = bite->rotten ? Mouthful::RottenPellet : Mouthful::Pellet;
   c.foodEaten += bite->food;
-  c.ateRotten = c.ateRotten || bite->rotten;
   c.out.fire(stim::fed);   // a rotten pellet still fills him, so he stops at one
   if (bite->rotten) c.out.fire(stim::fed_bad);
   c.out.set(locus::eating, Fx::one());

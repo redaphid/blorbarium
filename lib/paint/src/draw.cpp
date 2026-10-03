@@ -546,15 +546,17 @@ bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, 
   return true;
 }
 
-// While he eats, the pellet he bit is in his mouth, in front of him. The bite
-// took it out of the dish, so it is drawn here rather than among the items.
+// While he eats, the pellet he bit is in his mouth, in front of him, fresh or
+// rotten as it lay. The bite took it out of the dish, so it is drawn here
+// rather than among the items.
 void pelletInMouth(Canvas240& cv, const SpritePack& pack, const Appearance& a, const FrameRef& face, const Place& p,
                    const Colours& col) {
   Pt m{};
-  if (!a.eating || !mouthOf(pack, face, a.stage, m)) return;
+  if (a.mouth == blorb::Mouthful::Nothing || !mouthOf(pack, face, a.stage, m)) return;
   const FrameRef origin{};
   Pt c = project(p.xf, origin, m.x, m.y);
-  const FrameRef f = pack.item(Appearance::Item::What::Pellet);
+  const FrameRef f = pack.item(a.mouth == blorb::Mouthful::RottenPellet ? Appearance::Item::What::RottenPellet
+                                                                        : Appearance::Item::What::Pellet);
   Place q;
   q.x = p.x + floorDiv(c.x + 8, 16) + f.originX - f.w / 2;
   q.y = p.y + floorDiv(c.y + 8, 16) + f.originY - f.h / 2;

@@ -91,12 +91,19 @@ struct LegsPack : BlockPack {
 };
 
 // The block with a mouth: its neutral patch tags a 6x4 block centred at frame (30, 52).
+// A rotten pellet is a brown chip; every other item is the red one.
 struct MouthPack : BlockPack {
   std::vector<uint8_t> mouth = encode(kW, kH, [](int x, int y) { return uint8_t(x >= 27 && x < 33 && y >= 50 && y < 54 ? 3 : 0); });
-  PaletteEntry withMouth[4] = {{0, 0, 0, 255}, {96, 128, 48, 255}, {200, 40, 40, 255}, {250, 250, 0, blorb::region::mouth.v}};
-  const PaletteEntry* palette(uint16_t& n) const override { n = 4; return withMouth; }
+  std::vector<uint8_t> rot = encode(kItem, kItem, [](int, int) { return uint8_t(4); });
+  PaletteEntry withMouth[5] = {{0, 0, 0, 255}, {96, 128, 48, 255}, {200, 40, 40, 255}, {250, 250, 0, blorb::region::mouth.v},
+                               {120, 88, 32, 255}};
+  const PaletteEntry* palette(uint16_t& n) const override { n = 5; return withMouth; }
   FrameRef face(blorb::ExprId e, blorb::Stage) const override {
     return e == blorb::expr::neutral ? frame(mouth, kBodyEyes) : FrameRef{};
+  }
+  FrameRef item(Appearance::Item::What w) const override {
+    if (w != Appearance::Item::What::RottenPellet) return BlockPack::item(w);
+    return FrameRef{rot.data(), kItem, kItem, kItem / 2, kItem - 1, {}, 0};
   }
 };
 
@@ -437,7 +444,7 @@ TEST(Eating, ThePelletHeBitIsInFrontOfHimAtHisMouth) {
   const uint16_t kChip = rgb565(200, 40, 40);
   Appearance a = adult();
   EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "not eating: nothing at his mouth";
-  a.eating = true;
+  a.mouth = blorb::Mouthful::Pellet;
   Box body = find(*render(a, pack), kOlive);
   Box chip = find(*render(a, pack), kChip);
   ASSERT_EQ(chip.count, BlockPack::kItem * BlockPack::kItem) << "whole, in front of him";
@@ -446,6 +453,22 @@ TEST(Eating, ThePelletHeBitIsInFrontOfHimAtHisMouth) {
   EXPECT_NEAR((chip.y0 + chip.y1) / 2.0, body.y0 + 52 * sy, 1.5);
   Box up = find(*render(hopping(a, fx(0.45), Fx::one()), pack), kChip);
   EXPECT_EQ(chip.y0 - up.y0, kHopMaxPx) << "it leaps with him";
+}
+
+// It used to be the fresh pellet whatever he bit, so the owner never saw him eat rot.
+TEST(Eating, ARottenBiteIsTheRottenPelletAtHisMouth) {
+  MouthPack pack;
+  const uint16_t kFresh = rgb565(200, 40, 40), kRotten = rgb565(120, 88, 32);
+  Appearance a = adult();
+  a.mouth = blorb::Mouthful::Pellet;
+  const Box fresh = find(*render(a, pack), kFresh);
+  a.mouth = blorb::Mouthful::RottenPellet;
+  auto cv = render(a, pack);
+  const Box rotten = find(*cv, kRotten);
+  EXPECT_EQ(find(*cv, kFresh).count, 0) << "no fresh pellet anywhere";
+  ASSERT_EQ(rotten.count, BlockPack::kItem * BlockPack::kItem) << "the rotten one, whole, in front of him";
+  EXPECT_EQ(rotten.x0, fresh.x0) << "where the fresh one would be";
+  EXPECT_EQ(rotten.y0, fresh.y0);
 }
 
 // A still frame of a leap only reads as one if something stays on the floor.

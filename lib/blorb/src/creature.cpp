@@ -214,6 +214,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   }
   chem_.add(chem::food, ctx.foodEaten);
   body_.poseTick = body_.pose == pose ? uint16_t(body_.poseTick + 1) : 0;
+  if (body_.pose != pose::eat) body_.mouth = Mouthful::Nothing;   // a reflex or another action ended the chew
 
   // 7 face, stats, recent loci
   if (body_.reflex) {
@@ -286,7 +287,8 @@ uint32_t Creature::hash() const {
   mix(uint32_t(body_.facing.raw));
   mix(body_.pose.v);
   mix(body_.poseTick);
-  mix(uint32_t(body_.asleep) | uint32_t(body_.dreaming) << 1 | uint32_t(body_.reflex.has_value()) << 2);
+  mix(uint32_t(body_.asleep) | uint32_t(body_.dreaming) << 1 | uint32_t(body_.reflex.has_value()) << 2 |
+      uint32_t(body_.mouth) << 3);
   if (body_.reflex) {
     mix(body_.reflex->kind.v);
     mix(body_.reflex->tick);

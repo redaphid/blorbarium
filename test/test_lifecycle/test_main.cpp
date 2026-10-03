@@ -159,7 +159,7 @@ TEST(Egg, WarmthHatchesFaster) {
     SenseOut s;
     if (warm) s.set(locus::held, Fx::one());
     uint32_t n = 1;
-    while (!egg.tick(s)) ++n;
+    while (!egg.tick(s) && n <= 60 * kTicksPerMinute) ++n;
     return n;
   };
   uint32_t cold = ticksToHatch(false), warm = ticksToHatch(true);
@@ -171,15 +171,38 @@ TEST(Clutch, TheTimeoutPicksTheCursorEgg) {
   Clutch k = clutchOf(starterGenome(7), 1, 5);
   k.count = 3;
   SenseOut quiet;
+  constexpr uint32_t kTimeout = Clutch::kVigilTicks + Clutch::kPickTimeoutTicks;
   std::optional<uint8_t> pick;
   uint32_t ticks = 0;
-  while (!pick) pick = k.tick(quiet), ++ticks;
-  EXPECT_EQ(ticks, Clutch::kVigilTicks + Clutch::kPickTimeoutTicks);
+  while (!pick && ticks <= kTimeout) pick = k.tick(quiet), ++ticks;
+  ASSERT_TRUE(pick.has_value()) << "nothing picked " << ticks << " ticks after the death";
+  EXPECT_EQ(ticks, kTimeout);
   EXPECT_EQ(*pick, 0);
   for (uint8_t i = 0; i < 3; ++i) k.derivePreviewStep();
   k.derivePreviewStep();
   EXPECT_EQ(k.previewed, 3);
   EXPECT_GE(k.previews[0].mindChanges, 1);
+}
+
+// The timeout picks the cursor egg too, so only the moment of the pick shows
+// that the gesture made it: the owner steers to the last egg and picks it the
+// tick his hand lands, half an hour before the timeout could.
+TEST(Clutch, HoldOrDoubleKnockPicksTheCursorEggThatTick) {
+  for (StimId gesture : {stim::button_hold, stim::double_knock}) {
+    Clutch k = clutchOf(starterGenome(7), 1, 5);
+    k.count = 3;
+    SenseOut press, pick;
+    press.fire(stim::button);
+    pick.fire(gesture);
+    for (uint32_t t = 1; t < Clutch::kVigilTicks; ++t) ASSERT_FALSE(k.tick(pick).has_value()) << "vigil tick " << t;
+    EXPECT_FALSE(k.tick(press).has_value());
+    EXPECT_FALSE(k.tick(press).has_value());
+    EXPECT_EQ(k.cursor, 2);
+    std::optional<uint8_t> chosen = k.tick(pick);
+    ASSERT_TRUE(chosen.has_value()) << "stim " << int(gesture.v) << " picked nothing";
+    EXPECT_EQ(*chosen, 2) << "stim " << int(gesture.v);
+    EXPECT_EQ(k.sinceDeath, Clutch::kVigilTicks + 2);
+  }
 }
 
 int main(int argc, char** argv) {

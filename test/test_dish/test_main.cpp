@@ -235,6 +235,10 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   EXPECT_EQ(h, kCommitted) << std::hex << h;
   EXPECT_TRUE(std::holds_alternative<Creature>(first.occupant()));
   EXPECT_GE(std::get<Creature>(first.occupant()).stats().fed, 1u);
+  ScriptedLink phone;
+  phone.inbound.push_back("#7 HASH");
+  first.tick(24 * 3600 * 1000u - kSampleMs, phone);
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=79bce0d7 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
@@ -273,17 +277,23 @@ TEST(Lifecycle, body_only_full_life) {
   EXPECT_EQ(owner.counts().cursorMoves, 1u);
   EXPECT_EQ(dish.lineage().currentGeneration(), 1);
   EXPECT_NE(dish.lineage().legacyFeats() & feat::reached_elder, 0u);
+  EXPECT_EQ(owner.counts().picks, 1u);
   int births = 0;
+  uint32_t diedAt = 0, bornAt = 0;
   dish.lineage().forEach([&](const LineageEntry& e) {
     if (auto* d = std::get_if<Death>(&e)) {
       EXPECT_GE(d->stats.fed, 1u) << "the button fed him";
+      diedAt = d->at;
     } else if (auto* b = std::get_if<Birth>(&e)) {
       ++births;
       EXPECT_EQ(b->chosen, 1) << "the owner moved the cursor once, then held";
       EXPECT_EQ(b->clutchSize, 3);
+      bornAt = b->at;
     }
   });
   EXPECT_EQ(births, 1);
+  // The timeout would pick the same cursor egg, but only at this many ticks after the death.
+  EXPECT_LT(bornAt - diedAt, Clutch::kVigilTicks + Clutch::kPickTimeoutTicks) << "the hold picked, not the timeout";
 }
 
 // ---- the loop task's stack ---------------------------------------------------------------
