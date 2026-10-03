@@ -12,7 +12,7 @@ using namespace blorb;
 // ---- test doubles (test/support/ in the repo) ----------------------------------
 struct MemStorage : Storage {
   std::map<std::string, std::vector<uint8_t>> files;
-  std::optional<size_t> read(const char* name, uint8_t* buf, size_t cap) override;
+  std::optional<size_t> read(const char* name, size_t offset, uint8_t* buf, size_t cap) override;
   bool writeAtomic(const char* name, const uint8_t* data, size_t len) override;
   bool append(const char* name, const uint8_t* data, size_t len) override;
   bool rename(const char* from, const char* to) override;

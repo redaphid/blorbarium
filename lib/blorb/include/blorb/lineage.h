@@ -8,7 +8,8 @@
 // diffs from the parent with a full checkpoint at the founding and every
 // kCheckpointEvery generations, so any ancestor is at most kCheckpointEvery
 // replays away. Death summaries are kept forever; diffs older than
-// kKeepDetailGenerations are compacted away when the log passes its cap.
+// kKeepDetailGenerations are compacted away by the append that takes the log
+// past its cap.
 #include <cstdint>
 #include <optional>
 #include <type_traits>
@@ -38,9 +39,9 @@ class Storage;     // seams.h
 struct Describe;   // protocol.h
 
 // RAM holds only the current generation, name and feats. Entries are read
-// from lineage.log on demand (phone requests and boot recovery only; a scan
-// of the 192 KB cap is tens of milliseconds), so a long lineage costs flash,
-// not RAM.
+// from lineage.log on demand, one frame at a time (the largest is a genome,
+// under 2 KB), so a long lineage costs flash, not RAM. Boot, deaths and the
+// phone's reads scan it; a scan of the 192 KB cap is tens of milliseconds.
 class Lineage {
  public:
   // Scan once, truncating a torn tail. An empty log founds a lineage from `starter`.
@@ -62,9 +63,10 @@ class Lineage {
   template <class F> void forEach(F&& f) const;
   std::optional<Genome> genomeOf(uint16_t generation) const;        // nullopt once compacted
   std::optional<MutationDiff> diffOf(uint16_t generation) const;
-  void compactIfNeeded();                                           // idempotent
 
  private:
+  bool append(const std::vector<uint8_t>& frames);   // all or nothing, then compactIfNeeded
+  void compactIfNeeded();                             // idempotent
   void visit(void (*f)(const LineageEntry&, void*), void* ctx) const;   // forEach without the template
   Storage* store_ = nullptr;
   uint64_t id_ = 0;

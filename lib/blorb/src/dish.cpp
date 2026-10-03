@@ -39,7 +39,7 @@ DishPos marbleStart(Rng& rng, DishPos him) {
 // A newer firmware's keepsake must not be written, so the throwaway life it
 // runs keeps its lineage nowhere.
 struct NullStorage : Storage {
-  std::optional<size_t> read(const char*, uint8_t*, size_t) override { return std::nullopt; }
+  std::optional<size_t> read(const char*, size_t, uint8_t*, size_t) override { return std::nullopt; }
   bool writeAtomic(const char*, const uint8_t*, size_t) override { return false; }
   bool append(const char*, const uint8_t*, size_t) override { return false; }
   bool rename(const char*, const char*) override { return false; }

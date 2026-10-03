@@ -1,4 +1,7 @@
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <optional>
+#include <string>
 #include <variant>
 #include "blorb/lineage.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "mem_storage.h"
@@ -151,6 +154,69 @@ TEST(Lineage, ATornTailIsTruncatedAtEveryByte) {
     live.recordDeath(dead, "Grungo", 2);
     EXPECT_EQ(s.files[kLog], full);
   }
+}
+
+// An owner recolour: the hue byte of the first palette gene.
+Genome recoloured(const Genome& g, uint8_t hue) {
+  GenomeBuilder b = GenomeBuilder::from(g);
+  bool done = false;
+  g.forEach([&](const GeneView& v) {
+    if (!done && v.header.type == GeneKindOf<PaletteGene>::value) b.setByte(v.header.uid, 1, hue), done = true;
+  });
+  return *b.build();
+}
+
+// Growth measured on this log: a generation's Birth and Death add 138 B, and a
+// Checkpoint (every 8th generation, and every owner edit) about 1,539 B.
+// Seventy-two generations with three recolours each append about 350 KB:
+// past any heap block the 1.28 has without PSRAM, and past the 192 KB cap.
+TEST(Lineage, AGrowingLogIsReadAFrameAtATimeAndCompactedUnderItsCap) {
+  constexpr uint16_t kGenerations = 72;
+  MemStorage store;
+  std::optional<MemStorage> large;   // the log once it passed 128 KB, before any compaction
+  Genome g = starterGenome(7);
+  std::vector<uint32_t> hashes = {g.hash()};
+  size_t longest = 0;
+  Lineage l = Lineage::open(store, g, 3, 0);
+  for (uint16_t gen = 1; gen <= kGenerations; ++gen) {
+    l.recordDeath(deadCreature(uint16_t(gen - 1)), "Grungo", gen);
+    Clutch k = clutchOf(g, gen, 1000 + gen);
+    Egg egg(k.child(0), gen, gen);
+    l.recordBirth(egg, k, 0, gen);
+    g = egg.genome();
+    for (uint8_t edit = 1; edit <= 3; ++edit) {
+      g = recoloured(g, uint8_t(gen * 3 + edit));
+      l.recordEdit(gen, g);
+      if (!large && store.size(kLog) > 128 * 1024) large = store;
+      longest = std::max(longest, store.size(kLog));
+    }
+    l.rename(("Gen" + std::to_string(gen)).c_str());
+    hashes.push_back(g.hash());
+  }
+  EXPECT_LE(longest, kLineageByteCap) << "the append that passes the cap compacts";
+  EXPECT_LE(store.largestRead, 2048u) << "one frame at a time, never the log";
+
+  ASSERT_TRUE(large.has_value());
+  large->largestRead = 0;
+  Lineage big = Lineage::open(*large, starterGenome(99), 3, 0);
+  EXPECT_GT(big.currentGeneration(), 0);
+  EXPECT_TRUE(big.genomeOf(big.currentGeneration()).has_value());
+  EXPECT_LE(large->largestRead, 2048u) << "opening a 128 KB log reads one frame at a time";
+
+  store.largestRead = 0;
+  Lineage reopened = Lineage::open(store, starterGenome(99), 3, 0);
+  EXPECT_EQ(reopened.currentGeneration(), kGenerations);
+  EXPECT_STREQ(reopened.currentName(), "Gen72");
+  Census c = census(reopened);
+  EXPECT_EQ(c.foundings, 1);
+  EXPECT_EQ(c.deaths, kGenerations) << "every death is kept forever";
+  EXPECT_LT(c.births, kGenerations) << "the oldest births were compacted away";
+  for (uint16_t gen = kGenerations - kKeepDetailGenerations; gen <= kGenerations; ++gen) {
+    std::optional<Genome> rebuilt = reopened.genomeOf(gen);
+    ASSERT_TRUE(rebuilt.has_value()) << "generation " << gen;
+    EXPECT_EQ(rebuilt->hash(), hashes[gen]) << "generation " << gen << " rebuilds with its last recolour";
+  }
+  EXPECT_LE(store.largestRead, 2048u);
 }
 
 TEST(Egg, WarmthHatchesFaster) {

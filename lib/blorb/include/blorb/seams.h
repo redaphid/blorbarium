@@ -13,10 +13,13 @@ namespace blorb {
 class Storage {
  public:
   virtual ~Storage() = default;
-  virtual std::optional<size_t> read(const char* name, uint8_t* buf, size_t cap) = 0;
+  // Up to `cap` bytes from `offset`: the count read, or nullopt when there is no such file.
+  virtual std::optional<size_t> read(const char* name, size_t offset, uint8_t* buf, size_t cap) = 0;
   virtual bool writeAtomic(const char* name, const uint8_t* data, size_t len) = 0;   // temp + rename
   virtual bool append(const char* name, const uint8_t* data, size_t len) = 0;
-  virtual bool rename(const char* from, const char* to) = 0;                        // quarantine, never delete
+  // Replaces `to` if it exists, atomically (LittleFS's rename does). Used to
+  // quarantine and to swap a rewritten file in; nothing is ever deleted.
+  virtual bool rename(const char* from, const char* to) = 0;
   virtual size_t size(const char* name) = 0;
 };
 

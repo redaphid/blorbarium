@@ -581,11 +581,11 @@ SlotState Keepsake::load(Snapshot& into) {
   Slot slots[2];
   for (int i = 0; i < 2; ++i) {
     uint8_t probe;
-    if (!store_.read(kSlots[i], &probe, 0)) continue;
+    if (!store_.read(kSlots[i], 0, &probe, 0)) continue;
     Slot& s = slots[i];
     s.present = true;
     s.blob.resize(store_.size(kSlots[i]));
-    std::optional<size_t> n = store_.read(kSlots[i], s.blob.data(), s.blob.size());
+    std::optional<size_t> n = store_.read(kSlots[i], 0, s.blob.data(), s.blob.size());
     s.blob.resize(n ? std::min(*n, s.blob.size()) : 0);
     bool magic = s.blob.size() >= kHeaderLen && std::memcmp(s.blob.data(), kMagic, sizeof kMagic) == 0;
     uint16_t format = magic ? uint16_t(s.blob[4] | s.blob[5] << 8) : 0;
@@ -617,7 +617,7 @@ SlotState Keepsake::load(Snapshot& into) {
     uint8_t probe;
     for (unsigned k = 0;; ++k) {
       std::snprintf(to, sizeof to, "rescue/%s.%u", kSlots[i], k);
-      if (!store_.read(to, &probe, 0)) break;
+      if (!store_.read(to, 0, &probe, 0)) break;
     }
     store_.rename(kSlots[i], to);
   }

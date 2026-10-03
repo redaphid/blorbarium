@@ -1,6 +1,7 @@
 #include "blorb/lineage.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include "blorb/genes.h"
 #include "blorb/protocol.h"
@@ -10,6 +11,7 @@ namespace blorb {
 namespace {
 
 constexpr const char* kLog = "lineage.log";
+constexpr const char* kTmp = "lineage.tmp";   // a rewrite in progress; renamed over kLog when whole
 constexpr const char kSpecies[16] = "Grungo";
 constexpr uint32_t kDay = 24 * kTicksPerHour;
 constexpr uint32_t kWellFedMealsPerDay = 4;
@@ -219,52 +221,58 @@ std::optional<LineageEntry> decode(Kind k, In in) {
   return std::nullopt;
 }
 
-std::vector<uint8_t> readLog(Storage& s) {
-  std::vector<uint8_t> buf(s.size(kLog));
-  std::optional<size_t> n = s.read(kLog, buf.data(), buf.size());
-  buf.resize(n ? std::min(*n, buf.size()) : 0);
-  return buf;
-}
-
-// Walks whole, CRC-valid frames; returns the length of that valid prefix.
+// Walks whole, CRC-valid frames in the first `limit` bytes of the log. Each
+// frame is read from flash on its own, so RAM holds one entry and never the
+// log. f(kind, payload, frame bytes, offset). Returns the valid prefix length.
 template <class F>
-size_t walk(const std::vector<uint8_t>& log, F&& f) {
+size_t walk(Storage& s, size_t limit, F&& f) {
+  const size_t size = std::min(limit, s.size(kLog));
+  std::vector<uint8_t> frame;
   size_t at = 0;
-  while (log.size() - at >= kFrame) {
-    size_t len = size_t(log[at + 1]) | size_t(log[at + 2]) << 8;
-    if (log.size() - at - kFrame < len) break;
-    const uint8_t* crcAt = &log[at + 3 + len];
+  while (size - at >= kFrame) {
+    uint8_t head[3];
+    if (s.read(kLog, at, head, sizeof head) != sizeof head) break;
+    const size_t len = size_t(head[1]) | size_t(head[2]) << 8;
+    if (size - at - kFrame < len) break;
+    frame.resize(kFrame + len);
+    if (s.read(kLog, at, frame.data(), frame.size()) != frame.size()) break;
+    const uint8_t* crcAt = &frame[3 + len];
     uint32_t crc = uint32_t(crcAt[0]) | uint32_t(crcAt[1]) << 8 | uint32_t(crcAt[2]) << 16 | uint32_t(crcAt[3]) << 24;
-    if (crc32(&log[at], 3 + len) != crc) break;
-    f(Kind(log[at]), In{&log[at + 3], len}, at, kFrame + len);
-    at += kFrame + len;
+    if (crc32(frame.data(), 3 + len) != crc) break;
+    f(Kind(frame[0]), In{&frame[3], len}, frame, at);
+    at += frame.size();
   }
   return at;
 }
 
 template <class F>
 void entries(Storage& s, F&& f) {
-  std::vector<uint8_t> log = readLog(s);
-  walk(log, [&](Kind k, In in, size_t, size_t) {
+  walk(s, SIZE_MAX, [&](Kind k, In in, const std::vector<uint8_t>&, size_t) {
     if (std::optional<LineageEntry> e = decode(k, in)) f(*e);
   });
 }
 
-uint16_t generationOf(const LineageEntry& e) {
-  return std::visit([](const auto& x) -> uint16_t {
-    if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Founding>) return 0;
-    else return x.generation;
-  }, e);
+// Rewrites the log as the valid frames in its first `limit` bytes that
+// keep(kind, payload, offset) accepts. They stream into lineage.tmp, which is
+// renamed over the log once whole, so a power cut leaves the old log as it was.
+template <class Keep>
+bool rewrite(Storage& s, size_t limit, Keep&& keep) {
+  if (!s.writeAtomic(kTmp, nullptr, 0)) return false;
+  bool ok = true;
+  walk(s, limit, [&](Kind k, In in, const std::vector<uint8_t>& frame, size_t at) {
+    if (ok && keep(k, in, at)) ok = s.append(kTmp, frame.data(), frame.size());
+  });
+  return ok && s.rename(kTmp, kLog);
 }
+
+bool keepAll(Kind, In, size_t) { return true; }
 
 // All of `bytes` lands, or the log is put back as it was: a torn append left
 // in place would hide every later entry behind it.
 bool appendWhole(Storage& s, const std::vector<uint8_t>& bytes) {
   size_t before = s.size(kLog);
   if (s.append(kLog, bytes.data(), bytes.size())) return true;
-  std::vector<uint8_t> log = readLog(s);
-  log.resize(std::min(before, log.size()));
-  s.writeAtomic(kLog, log.data(), log.size());
+  rewrite(s, before, keepAll);
   return false;
 }
 
@@ -283,8 +291,7 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
   l.store_ = &store;
   l.id_ = lineageId;
   copyName(l.name_, kSpecies);
-  std::vector<uint8_t> log = readLog(store);
-  size_t valid = walk(log, [&](Kind k, In in, size_t, size_t) {
+  size_t valid = walk(store, SIZE_MAX, [&](Kind k, In in, const std::vector<uint8_t>&, size_t) {
     std::optional<LineageEntry> e = decode(k, in);
     if (!e) return;
     if (auto* f = std::get_if<Founding>(&*e)) l.id_ = f->lineageId, copyName(l.name_, f->species);
@@ -292,7 +299,7 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
     if (auto* d = std::get_if<Death>(&*e)) l.legacyFeats_ |= d->feats;
     if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name);
   });
-  if (valid < log.size()) store.writeAtomic(kLog, log.data(), valid);
+  if (valid < store.size(kLog)) rewrite(store, valid, keepAll);
   if (valid == 0) {
     Founding f{lineageId, at, starter, {}};
     copyName(f.species, kSpecies);
@@ -311,7 +318,7 @@ void Lineage::recordBirth(const Egg& egg, const Clutch& clutch, uint8_t chosen, 
     std::vector<uint8_t> cp = encode(Checkpoint{gen, egg.genome()});
     bytes.insert(bytes.end(), cp.begin(), cp.end());
   }
-  if (appendWhole(*store_, bytes)) generation_ = gen;
+  if (append(bytes)) generation_ = gen;
 }
 
 void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at) {
@@ -322,46 +329,49 @@ void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at) {
   if (recorded) return;
   Death d{c.generation(), at, c.cause(), c.stats(), featsOf(c.stats(), c.generation()), {}};
   copyName(d.name, name);
-  if (appendWhole(*store_, encode(d))) legacyFeats_ |= d.feats;
+  if (append(encode(d))) legacyFeats_ |= d.feats;
 }
 
 void Lineage::rename(const char* name) {
   Rename r{generation_, {}};
   copyName(r.name, name);
   if (std::strcmp(r.name, name_) == 0) return;
-  if (appendWhole(*store_, encode(r))) copyName(name_, r.name);
+  if (append(encode(r))) copyName(name_, r.name);
 }
 
-void Lineage::recordEdit(uint16_t generation, const Genome& g) {
-  appendWhole(*store_, encode(Checkpoint{generation, g}));
+void Lineage::recordEdit(uint16_t generation, const Genome& g) { append(encode(Checkpoint{generation, g})); }
+
+bool Lineage::append(const std::vector<uint8_t>& bytes) {
+  if (!appendWhole(*store_, bytes)) return false;
+  compactIfNeeded();
+  return true;
 }
 
 void Lineage::visit(void (*f)(const LineageEntry&, void*), void* ctx) const {
   entries(*store_, [&](const LineageEntry& e) { f(e, ctx); });
 }
 
+// One pass, holding one genome: the newest Checkpoint at or before
+// `generation` (the last of a generation wins: an owner edit), then each Birth
+// after it replayed as it streams past. Births follow their parent's
+// Checkpoint in the log, so a later Checkpoint only ever moves the base forward.
 std::optional<Genome> Lineage::genomeOf(uint16_t generation) const {
-  std::optional<Genome> base;
-  uint16_t baseGen = 0;
-  std::vector<std::pair<uint16_t, MutationDiff>> births;
+  std::optional<Genome> g;
+  uint16_t at = 0;   // the generation g holds
+  bool broken = false;
   entries(*store_, [&](const LineageEntry& e) {
     if (auto* f = std::get_if<Founding>(&e)) {
-      if (!base) base = f->genome, baseGen = 0;
+      if (!g) g = f->genome, at = 0;
     } else if (auto* c = std::get_if<Checkpoint>(&e)) {
-      if (c->generation <= generation && (!base || c->generation >= baseGen)) base = c->genome, baseGen = c->generation;
+      if (c->generation <= generation && (!g || c->generation >= at)) g = c->genome, at = c->generation, broken = false;
     } else if (auto* b = std::get_if<Birth>(&e)) {
-      if (b->generation <= generation) births.emplace_back(b->generation, b->diff);
+      if (!g || broken || b->generation != at + 1 || b->generation > generation) return;
+      std::optional<Genome> next = apply(*g, b->diff);
+      if (next) g = std::move(*next), at = b->generation;
+      else broken = true;
     }
   });
-  if (!base) return std::nullopt;
-  Genome g = std::move(*base);
-  for (uint16_t gen = uint16_t(baseGen + 1); gen <= generation && gen > baseGen; ++gen) {
-    auto it = std::find_if(births.begin(), births.end(), [&](const auto& b) { return b.first == gen; });
-    if (it == births.end()) return std::nullopt;
-    std::optional<Genome> next = apply(g, it->second);
-    if (!next) return std::nullopt;
-    g = std::move(*next);
-  }
+  if (!g || broken || at != generation) return std::nullopt;
   return g;
 }
 
@@ -373,26 +383,39 @@ std::optional<MutationDiff> Lineage::diffOf(uint16_t generation) const {
   return out;
 }
 
-// Keeps the founding, every Death and Rename, and enough Births and
-// Checkpoints to rebuild the last kKeepDetailGenerations generations.
+// Keeps the founding, every Death, the newest Rename of each generation, and
+// what rebuilds the last kKeepDetailGenerations generations: the newest
+// Checkpoint at or before the cutoff, the newest Checkpoint of each generation
+// after it (an owner edit supersedes the ones before it), and every Birth
+// after it. Two streaming passes; RAM holds one frame and a short index.
 void Lineage::compactIfNeeded() {
   if (store_->size(kLog) <= kLineageByteCap) return;
-  uint16_t cutoff = generation_ > kKeepDetailGenerations ? uint16_t(generation_ - kKeepDetailGenerations) : 0;
+  const uint16_t cutoff = generation_ > kKeepDetailGenerations ? uint16_t(generation_ - kKeepDetailGenerations) : 0;
   uint16_t base = 0;
-  entries(*store_, [&](const LineageEntry& e) {
-    if (auto* c = std::get_if<Checkpoint>(&e)) if (c->generation <= cutoff) base = std::max(base, c->generation);
+  struct Newest { Kind kind; uint16_t generation; size_t at; };
+  std::vector<Newest> newest;
+  walk(*store_, SIZE_MAX, [&](Kind k, In in, const std::vector<uint8_t>&, size_t at) {
+    if (k != Kind::Checkpoint && k != Kind::Rename) return;
+    const uint16_t gen = in.u16();
+    if (k == Kind::Checkpoint && gen <= cutoff) base = std::max(base, gen);
+    auto it = std::find_if(newest.begin(), newest.end(), [&](const Newest& n) { return n.kind == k && n.generation == gen; });
+    if (it == newest.end()) newest.push_back(Newest{k, gen, at});
+    else it->at = at;
   });
-  std::vector<uint8_t> log = readLog(*store_), kept;
-  walk(log, [&](Kind k, In in, size_t at, size_t len) {
-    bool keep = true;
-    if (k == Kind::Birth || k == Kind::Checkpoint) {
-      std::optional<LineageEntry> e = decode(k, in);
-      uint16_t gen = e ? generationOf(*e) : 0;
-      keep = k == Kind::Birth ? gen > base : gen >= base;
+  auto isNewest = [&](Kind k, uint16_t gen, size_t at) {
+    return std::any_of(newest.begin(), newest.end(), [&](const Newest& n) { return n.kind == k && n.generation == gen && n.at == at; });
+  };
+  rewrite(*store_, SIZE_MAX, [&](Kind k, In in, size_t at) {
+    switch (k) {
+      case Kind::Birth: return in.u16() > base;
+      case Kind::Checkpoint: {
+        const uint16_t gen = in.u16();
+        return gen >= base && isNewest(k, gen, at);
+      }
+      case Kind::Rename: return isNewest(k, in.u16(), at);
+      default: return true;
     }
-    if (keep) kept.insert(kept.end(), log.begin() + std::ptrdiff_t(at), log.begin() + std::ptrdiff_t(at + len));
   });
-  store_->writeAtomic(kLog, kept.data(), kept.size());
 }
 
 // ---- feats and unlocks ----------------------------------------------------------------
