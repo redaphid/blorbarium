@@ -26,6 +26,9 @@ owner token.
 - The board asks for an MTU of 247 and splits each reply line into
   notifications of MTU - 3 bytes, then a separate `\n`. Reassemble by
   buffering notifications until `\n`; never treat one notification as a line.
+- When the radio's queue is full, the board holds the next notification and
+  resends it a few ms later. A slow connection interval delays a long reply
+  such as GENOME but never drops its bytes.
 - A request line is at most 200 bytes. A longer one is answered
   `#0 ERR 413 TOO_LONG` (or `#<id> ERR 413 TOO_LONG` when its id parsed).
 - The board asks for a 30 to 50 ms connection interval and a 6 s supervision

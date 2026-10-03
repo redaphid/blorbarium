@@ -10,6 +10,7 @@
 #include <optional>
 #include <string_view>
 
+#include "blorb/notify_queue.h"
 #include "blorb/seams.h"
 
 namespace hw {
@@ -46,6 +47,7 @@ class NusLink : public blorb::Link {
   bool connected() override { return up_; }
 
   std::optional<std::string_view> readLine() override {
+    pump();
     poll();
     while (tail_ != head_) {
       const char c = rx_[tail_];
@@ -62,9 +64,27 @@ class NusLink : public blorb::Link {
     return std::nullopt;
   }
 
+  // Queued, sent by pump(). A line too big for what is left waits here while
+  // the queue drains, so a genome past the queue's size still goes out whole.
   void writeLine(std::string_view s) override {
-    notify(s.data(), s.size());
-    notify("\n", 1);
+    const uint32_t since = millis();
+    while (!tx_q_.push(s)) {
+      if (!pump() && millis() - since > kStallMs) return;   // a stalled phone: give up this line
+      delay(2);
+    }
+  }
+
+  // The reply that just finished going out, once, so the firmware can report it.
+  struct Drained {
+    size_t bytes;
+    uint32_t chunks, retries;
+  };
+  std::optional<Drained> takeDrained() {
+    if (!reported_ && tx_q_.empty() && tx_q_.burst()) {
+      reported_ = true;
+      return Drained{tx_q_.burst(), tx_q_.chunks(), tx_q_.retries()};
+    }
+    return std::nullopt;
   }
 
  private:
@@ -72,16 +92,28 @@ class NusLink : public blorb::Link {
   // 30 to 50 ms interval and a 6 s supervision timeout (docs/bluetooth-link.md in the sibling).
   static constexpr uint16_t kConnMin = 24, kConnMax = 40, kTimeout10ms = 600;
   static constexpr uint32_t kParamsAfterMs = 2000;
+  static constexpr uint32_t kRetryMs = 4, kStallMs = 3000;
+  // Holds a whole GENOME of today's size (about 1.5 KB) without blocking the loop.
+  static constexpr size_t kTxMax = 2048;
 
-  void notify(const char* s, size_t n) {
-    if (!up_ || !tx_) return;
-    const size_t chunk = mtu_ > 3 ? mtu_ - 3 : 20;
-    while (n) {
-      const size_t len = n < chunk ? n : chunk;
-      tx_->notify(reinterpret_cast<const uint8_t*>(s), len);
-      s += len;
-      n -= len;
+  // notify() is false when NimBLE refuses the chunk (BLE_HS_ENOMEM, EBUSY):
+  // it stays queued and is tried again kRetryMs later. onStatus is no help
+  // here, since for a notification it fires inside notify() with the same rc.
+  // A new connection drops whatever the last one left unsent.
+  bool pump() {
+    if (gen_ != sentGen_ || !up_) {
+      sentGen_ = gen_;
+      tx_q_.clear();
+      return false;
     }
+    if (tx_q_.empty()) return true;
+    reported_ = false;
+    const uint32_t now = millis();
+    if (int32_t(now - retryAt_) < 0) return false;
+    const size_t payload = mtu_ > 3 ? mtu_ - 3 : 20;
+    const bool done = tx_q_.drain(payload, [this](const uint8_t* p, size_t n) { return tx_->notify(p, n); });
+    if (!done) retryAt_ = now + kRetryMs;
+    return done;
   }
 
   // Advertising restarts if it ever stops, and the interval is asked for once per connection.
@@ -126,6 +158,7 @@ class NusLink : public blorb::Link {
       link->itvl_ = info.getConnInterval();
       link->timeout_ = info.getConnTimeout();
       link->paramsAsked_ = false;
+      link->gen_ = link->gen_ + 1;
       link->up_ = true;
     }
     void onConnParamsUpdate(NimBLEConnInfo& info) override {
@@ -151,6 +184,10 @@ class NusLink : public blorb::Link {
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;
   uint32_t lastPoll_ = 0;
+  blorb::NotifyQueue<kTxMax> tx_q_;
+  volatile uint32_t gen_ = 0;   // bumped by the BLE task per connection
+  uint32_t sentGen_ = 0, retryAt_ = 0;
+  bool reported_ = true;
 };
 
 // The Dish takes one Link. This one reads the cable first, then the air, and
