@@ -94,6 +94,7 @@ Unlocks unlocksFor(uint32_t legacyFeats);
 
 // "gen 4 -> 5: palette #12 (cloak) hue +31, teal -> blue; instinct #41 added:
 // cradled + curl lowers fear (learned by gen 4); stimulus #9 woke up".
-void describeDiff(const Genome& parent, const MutationDiff&, Describe&);
+// An heirloom ends with learned=<parentGeneration>, the life whose brain learned it.
+void describeDiff(const Genome& parent, uint16_t parentGeneration, const MutationDiff&, Describe&);
 
 }  // namespace blorb

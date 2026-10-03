@@ -447,7 +447,7 @@ void cmd_diff(Dish& dish, const Request& req, Reply& r) {
   std::optional<MutationDiff> diff = dish.lineage().diffOf(uint16_t(*gen));
   if (!parent || !diff) return r.err(404, "NO_DIFF");
   Describe d{r};
-  describeDiff(*parent, *diff, d);
+  describeDiff(*parent, uint16_t(*gen - 1), *diff, d);
   r.ok("%u", unsigned(diff->ops.size()));
 }
 

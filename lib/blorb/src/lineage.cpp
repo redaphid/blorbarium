@@ -445,7 +445,7 @@ Unlocks unlocksFor(uint32_t legacyFeats) {
 
 // ---- describing a diff ----------------------------------------------------------------
 
-void describeDiff(const Genome& parent, const MutationDiff& diff, Describe& d) {
+void describeDiff(const Genome& parent, uint16_t parentGeneration, const MutationDiff& diff, Describe& d) {
   static const char* const kOps[] = {"point", "dup", "del", "wake", "sleep", "heirloom"};
   Genome g = parent;
   for (const MutationOp& op : diff.ops) {
@@ -466,6 +466,7 @@ void describeDiff(const Genome& parent, const MutationDiff& diff, Describe& d) {
     if (auto* h = std::get_if<MutHeirloom>(&op)) {
       if (std::optional<Genome> one = Genome::parse(h->gene.data(), h->gene.size()); one && one->geneCount() == 1)
         if (const GeneTypeInfo* hi = geneType(one->gene(0).header.type)) hi->describe(one->gene(0), d);
+      d.field("learned", parentGeneration);
     }
     std::optional<Genome> next = apply(g, MutationDiff{{op}});
     if (!next) return;

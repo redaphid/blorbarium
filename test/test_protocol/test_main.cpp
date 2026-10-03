@@ -494,7 +494,7 @@ TEST(Golden, DiffOfEveryOpKind) {
       "#5f + wake=96",       "#5f + kind=palette", "#5f + sleep=94",      "#5f + kind=palette",
       "#5f + heirloom=80",   "#5f + kind=instinct", "#5f + cue0=cradled", "#5f + cue1=255",
       "#5f + cue2=255",      "#5f + action=curl",  "#5f + drive=fear",    "#5f + level=70",
-      "#5f + strength=200",  "#5f OK 5",
+      "#5f + strength=200",  "#5f + learned=0",    "#5f OK 5",
   };
   EXPECT_EQ(ask(dish, link, "#5f DIFF 1"), want);
 }
