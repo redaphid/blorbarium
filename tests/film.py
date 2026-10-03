@@ -28,16 +28,17 @@ MISSES = os.path.join(ROOT, "outputs", "misses")
 # Each case's feed is tests/feeds/<case>.txt; the number is when, on the
 # script's clock, the frame is shot.
 CASES = {
-    "idle": 1600,
+    "idle": 17600,          # the resting cases rest home first, to 16400
     "eating": 8800,         # he bites near 8000 and chews to 9600
-    "foresee_glow": 2400,
-    "shake_hop": 1600,      # the shake fires near 1200; at 1600 he is in the air
-    "sleep": 3000,
+    "foresee_glow": 18400,
+    "shake_hop": 17600,     # the shake fires near 17200; at 17600 he is in the air
+    "sleep": 19000,
     "egg": 3000,
     "hatch": 2000,
     "clutch": 3000,
     "remains": 3000,
-    "time_unknown": 6000,
+    "time_unknown": 17600,
+    "elder": 17600,
 }
 
 # A case that must not look like another: a hop that drew as idle once passed

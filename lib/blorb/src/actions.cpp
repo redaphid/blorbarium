@@ -106,12 +106,16 @@ Status walkWithTilt(Body& b, ActionCtx& c, bool uphill, PoseId moving) {
   return Status::Running;
 }
 
+// Home is the middle of the dish, where he does what he does in place
+// (resting, foreseeing). True once there.
+bool walkHome(Body& b) { return walkTo(b, DishPos{}, kAmble); }
+
 }  // namespace
 
 namespace behave {
 
 Status Rest::step(Body& b, ActionCtx&) {
-  b.pose = pose::idle;
+  b.pose = walkHome(b) ? pose::idle : pose::walk;
   return Status::Running;
 }
 
@@ -171,6 +175,7 @@ void Sleep::stop(Body& b, ActionCtx& c) {
 
 void Foresee::start(Body& b, ActionCtx&) { b.pose = pose::foresee; }
 Status Foresee::step(Body& b, ActionCtx& c) {
+  walkHome(b);   // the vision draws him home; he keeps its pose on the way
   b.pose = pose::foresee;
   c.out.set(locus::foreseeing, Fx::one());
   return Status::Running;

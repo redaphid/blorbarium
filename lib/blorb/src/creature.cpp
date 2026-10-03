@@ -243,6 +243,7 @@ void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick)
   chem_.stepCoarse(pheno_.chem, ticks, tick);
   growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
   stats_.ageTicks += ticks;
+  body_.at = DishPos{};   // a stretch with nobody there is lived at rest, so he is home when it ends
   // Recent loci halve every tick, so a coarse step leaves nothing of them.
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx::zero();
 }
