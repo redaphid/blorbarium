@@ -8,8 +8,10 @@ namespace {
 using blorb::Appearance;
 using blorb::ExprId;
 using blorb::Fx;
+using blorb::Rgb;
 using blorb::Stage;
 using blorb::Tint;
+using blorb::tinted;
 using Kind = Appearance::Kind;
 namespace expr = blorb::expr;
 
@@ -89,37 +91,10 @@ int sin64(int i) {
 
 int unit256(Fx f) { return blorb::clamp01(f).raw >> 16; }   // 0..256
 
-struct Rgb { int r, g, b; };
-struct Hsv { int h, s, v; };   // h in 1/1536 turn, s and v 0..255
-
 uint16_t to565(Rgb c) { return uint16_t(((c.r >> 3) << 11) | ((c.g >> 2) << 5) | (c.b >> 3)); }
 Rgb from565(uint16_t p) {
   int r = (p >> 11) & 31, g = (p >> 5) & 63, b = p & 31;
   return {(r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)};
-}
-
-Hsv toHsv(Rgb c) {
-  int mx = imax(c.r, imax(c.g, c.b)), mn = imin(c.r, imin(c.g, c.b)), d = mx - mn;
-  Hsv o{0, mx == 0 ? 0 : d * 255 / mx, mx};
-  if (d == 0) return o;
-  int h = mx == c.r ? (c.g - c.b) * 256 / d : (mx == c.g ? 512 + (c.b - c.r) * 256 / d : 1024 + (c.r - c.g) * 256 / d);
-  o.h = (h + 1536) % 1536;
-  return o;
-}
-
-Rgb toRgb(Hsv c) {
-  int sector = c.h / 256, f = c.h % 256;
-  int p = c.v * (255 - c.s) / 255;
-  int q = c.v * (255 - c.s * f / 256) / 255;
-  int t = c.v * (255 - c.s * (256 - f) / 256) / 255;
-  switch (sector) {
-    case 0: return {c.v, t, p};
-    case 1: return {q, c.v, p};
-    case 2: return {p, c.v, t};
-    case 3: return {p, q, c.v};
-    case 4: return {t, p, c.v};
-    default: return {c.v, p, q};
-  }
 }
 
 Tint clampTint(Tint t, RegionBand b) {
@@ -127,16 +102,6 @@ Tint clampTint(Tint t, RegionBand b) {
   t.sat = uint8_t(imax(b.satMin, imin(b.satMax, t.sat)));
   t.val = uint8_t(imax(b.valMin, imin(b.valMax, t.val)));
   return t;
-}
-
-// The tint moves the authored colour in HSV, so shading ramps keep their steps.
-Rgb tinted(Rgb c, Tint t, int satScale) {
-  if (t.hue == 0 && t.sat == 128 && t.val == 128 && satScale == 128) return c;
-  Hsv h = toHsv(c);
-  h.h = (h.h + t.hue * 6 + 1536) % 1536;
-  h.s = imin(255, h.s * t.sat / 128 * satScale / 128);
-  h.v = imin(255, h.v * t.val / 128);
-  return toRgb(h);
 }
 
 uint16_t blend(uint16_t under, uint16_t over, int alpha) {

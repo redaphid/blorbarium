@@ -167,6 +167,16 @@ changed the design in these ways:
   at least 1957 rendered pixels over 16 parents, and every child differs
   from its parent. The founder's skin hue moved about 11 degrees cooler to
   centre it in its band.
+- **Visible for any parent.** A byte step is not a visible one: a value step
+  of 25 on a dark skin, or a hue step from a parent near the band edge,
+  rendered 300 to 399 pixels, and a parent whose skin sat outside the band
+  could get a step the band swallowed whole. The forced change now starts
+  from the skin the parent shows (clamped to the band), and is measured with
+  the renderer's own `tinted` on a 16-colour sample of grungo's hatchling
+  skin. A step that moves fewer than 9 of the 16 past test_look's tolerance
+  goes further its own way, then adds a sat step, and only then turns round
+  or changes channel. `test_look` checks it over 200 parents: descendants of
+  the founder and the founder with palette bytes set anywhere.
 - **Eating reads.** Eat chews for 15 ticks after the bite instead of ending on
   it, and the renderer draws the bitten fly at his mouth.
 - **Items and his body.** The founder places the marble away from him, he

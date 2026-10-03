@@ -12,7 +12,8 @@
 //    unchanged with an empty diff (a phone EDIT can leave a non-viable parent);
 //  * apart from that unchanged fallback, at least one Look-class change of at
 //    least minVisibleDelta and at least one Mind-class change per egg, so every
-//    egg looks and acts different;
+//    egg looks and acts different; where the genome has a free skin gene, the
+//    change is measured on the skin the hatchling shows, for any parent;
 //  * apply(parent, diff) == child, byte for byte;
 //  * the same (parent, policy, heirlooms, seed) always gives the same child.
 #include <cstdint>
