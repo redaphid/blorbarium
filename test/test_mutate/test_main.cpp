@@ -107,7 +107,7 @@ TEST(Heredity, RetriesStillReturnAViableChild) {
     ASSERT_TRUE(v.ok) << "seed " << seed << ": " << v.reason;
     ASSERT_GE(lookChanges(parent(), o, wild.minVisibleDelta), 1);
     ASSERT_GE(mindChanges(parent(), o), 1);
-    fallbacks += o.diff.ops.size() == 2;
+    fallbacks += o.diff.ops.size() <= 3;   // the forced changes alone: Look one or two ops, Mind one
   }
   EXPECT_GT(fallbacks, 0) << "the wild policy never exhausted its retries";
 }

@@ -434,7 +434,8 @@ TEST(Golden, Diff) {
       "#3c + point=56",  "#3c + kind=stimulus",   "#3c + byte=6", "#3c + from=115", "#3c + to=123",
       "#3c + point=90",  "#3c + kind=expression", "#3c + byte=1", "#3c + from=0",   "#3c + to=6",
       "#3c + point=91",  "#3c + kind=palette",    "#3c + byte=1", "#3c + from=139", "#3c + to=168",
-      "#3c OK 4",
+      "#3c + point=91",  "#3c + kind=palette",    "#3c + byte=2", "#3c + from=128", "#3c + to=176",
+      "#3c OK 5",
   };
   EXPECT_EQ(link.sent, want);
 }
@@ -538,7 +539,7 @@ TEST(Golden, LineageOverNineGenerations) {
   Lines want = {
       "#63 + founding id=9f31c2d04a7b species=Grungo",
       "#63 + death gen=0 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=1 chosen=0 of=1 ops=6",
+      "#63 + birth gen=1 chosen=0 of=1 ops=7",
       "#63 + death gen=1 cause=old_age age=0 feats=0x00 name=Grungo",
       "#63 + birth gen=2 chosen=0 of=1 ops=5",
       "#63 + death gen=2 cause=old_age age=0 feats=0x00 name=Grungo",
@@ -555,7 +556,7 @@ TEST(Golden, LineageOverNineGenerations) {
       "#63 + birth gen=8 chosen=0 of=1 ops=9",
       "#63 + checkpoint gen=8",
       "#63 + death gen=8 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=9 chosen=0 of=1 ops=4",
+      "#63 + birth gen=9 chosen=0 of=1 ops=5",
       "#63 + rename gen=9 name=Blorbo",
       "#63 OK 21",
   };
@@ -594,14 +595,14 @@ TEST(Golden, Portrait) {
       "#67 + region=shell hue=11 sat=128 val=128",
       "#67 + mark layer=0 variant=4 hue=0",
       "#67 OK",
-      "#68 + stage=adult scale=103 seed=e0415e2f marks=1",
-      "#68 + region=skin hue=13 sat=128 val=158",
+      "#68 + stage=adult scale=103 seed=0a6e2f70 marks=1",
+      "#68 + region=skin hue=-24 sat=112 val=158",
       "#68 + region=belly hue=0 sat=128 val=137",
       "#68 + region=cloak hue=-90 sat=110 val=120",
       "#68 + region=eye hue=0 sat=128 val=128",
       "#68 + region=mouth hue=0 sat=128 val=128",
       "#68 + region=glow hue=0 sat=140 val=160",
-      "#68 + region=shell hue=13 sat=128 val=158",
+      "#68 + region=shell hue=-24 sat=112 val=158",
       "#68 + mark layer=0 variant=4 hue=0",
       "#68 OK",
   };
