@@ -59,6 +59,11 @@ void count(LifeStats& s, StimId id) {
   }
 }
 
+StimSource sourceOf(StimId s) {
+  const StimInfo* row = rowOf(STIMULI, s);
+  return row ? row->source : StimSource::Body;
+}
+
 Fx driveLevel(const Chemistry& c, DriveId d) { return d.v < kDriveCount ? c.drive(d) : Fx::zero(); }
 
 Fx faceScore(const Phenotype::Face& f, const Chemistry& c) {
@@ -155,9 +160,11 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
       StimId s = in->stimuli[i];
       chem_.set(locus::recent(s), Fx::one());
       count(stats_, s);
+      const bool duel = sourceOf(s) == StimSource::Duel;
       for (const Phenotype::StimResponse& r : pheno_.stimuli) {
         if (r.stim != s || (body_.asleep && !r.whenAsleep)) continue;
-        for (int k = 0; k < 3; ++k) chem_.add(r.chem[k], r.amount[k]);
+        for (int k = 0; k < 3; ++k)
+          chem_.add(r.chem[k], duel ? duelFilter(duelStakes_, r.chem[k], r.amount[k]) : r.amount[k]);
         woken = woken || r.wakes;
       }
     }
@@ -272,6 +279,33 @@ bool Creature::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
   return true;
 }
 
+Fx Creature::wound(Fx injury) {
+  const Fx added = fxMin(fxMax(injury, Fx::zero()), woundRoom(*this));
+  chem_.add(chem::injury, added);
+  return added;
+}
+
+bool Creature::addScar(Scar scar) {
+  if (scars_.count < kMaxScars) {
+    scars_.mark[scars_.count++] = scar;
+    return true;
+  }
+  Scar* faintest = &scars_.mark[0];
+  for (Scar& m : scars_.mark) if (m.fade < faintest->fade) faintest = &m;
+  if (scar.fade < faintest->fade) return false;
+  *faintest = scar;
+  return true;
+}
+
+// Both loci are receptor-owned and cleared at each chemistry step, but a dead
+// creature never steps again, so the Dish's next tick reads them and runs
+// onDeath once.
+void Creature::fall() {
+  if (dead()) return;
+  chem_.set(locus::die, Fx::one());
+  chem_.set(locus::cause, Fx::ratio(1 << uint8_t(DeathCause::Injured), 16));
+}
+
 bool Creature::prophesy(LocusId feature, ActionId a, DriveId d, Fx effect) {
   return brain_.setWeight(feature, a, d, effect);
 }
@@ -295,6 +329,11 @@ uint32_t Creature::hash() const {
     mix(body_.reflex->tick);
     mix(body_.reflex->ticks);
     mix(uint32_t(body_.reflex->strength.raw));
+  }
+  // Only once he has one, so every hash from before scars stands.
+  for (uint8_t i = 0; i < scars_.count; ++i) {
+    const Scar& m = scars_.mark[i];
+    mix(uint32_t(m.kind) | uint32_t(m.x) << 8 | uint32_t(m.y) << 16 | uint32_t(m.fade) << 24);
   }
   mix(uint32_t(stage_));
   mix(generation_);

@@ -13,7 +13,6 @@ namespace blorb {
 namespace {
 
 constexpr size_t kMaxLine = 200;
-constexpr const char* kFirmware = "0.3.0";
 constexpr size_t kChunkBytes = 120;          // 160 base64 characters: a "+ <offset> <b64>" line fits the cap
 constexpr uint32_t kStateEventTicks = 20;    // ! STATE every 2 s
 constexpr size_t kDefaultBeliefs = 8, kMaxBeliefs = 32;
@@ -22,7 +21,14 @@ const char* const kPhases[] = {"egg", "creature", "clutch"};
 const char* const kStages[] = {"baby", "child", "adult", "elder"};
 const char* const kCauses[] = {"old_age", "starved", "injured", "poisoned", "unknown"};
 const char* const kDirs[] = {"sense", "act", "free"};
-const char* const kSources[] = {"body", "world", "self", "phone"};
+constexpr const char* kSources[] = {"body", "world", "self", "phone", "duel"};   // StimSource order
+// SCHEMA indexes it by each stimulus row's source, so a new source must bring its name.
+constexpr bool everySourceNamed() {
+  for (const StimInfo& s : STIMULI)
+    if (size_t(s.source) >= countOf(kSources)) return false;
+  return true;
+}
+static_assert(everySourceNamed(), "kSources needs a name for every StimSource a stimulus row uses");
 const char* const kClasses[] = {"body", "mind", "look", "life"};
 const char kRules[] = {'A', 'N', 'F', 'X'};   // MutRule: Any, Nudge, Flag, Fixed
 
@@ -281,7 +287,7 @@ void Protocol::disconnected() { subMask_ = 0; }
 
 void cmd_hello(Dish& dish, const Request&, Reply& r) {
   const Occupant& o = dish.occupant();
-  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x", kFirmware, unsigned(kFormatVersion),
+  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x", kFirmwareVersion, unsigned(kFormatVersion),
        (unsigned long long)(dish.settings().lineageId & 0xFFFFFFFFFFFFull), unsigned(generationOf(o)),
        dish.settings().name, kPhases[o.index()], unsigned(dish.lineage().legacyFeats()));
 }

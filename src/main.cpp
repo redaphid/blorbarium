@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <esp_mac.h>
 
+#include <array>
 #include <optional>
 #include <string_view>
 
@@ -23,6 +24,11 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
 #include "hw/link_nus.h"
+#include "hw/ota_esp.h"
+#include "hw/ota_pubkey.h"
+#include "ota/held_storage.h"
+#include "ota/screen.h"
+#include "ota/trial_guard.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
 
@@ -77,12 +83,41 @@ class SerialLink : public blorb::Link {
 static constexpr uint32_t kFrameMs = 40;   // 25 fps: the SPI push is 23 ms of every frame
 
 static PetStorage store;
+#if defined(BADGE_BOARD_SIM)
+static PetStorage& dishStore = store;
+#else
+static ota::HeldStorage dishStore(store);   // writes nothing while this image is on trial
+#endif
 static SerialLink phone;
 #if defined(BADGE_BOARD_SIM)
 static blorb::Link& host = phone;
 #else
 static hw::NusLink ble;
-static hw::TwoLinks host(phone, ble);   // DEBUG lines stay on the cable: only SerialLink holds them back
+// Updates over the air (docs/ota.md). The session answers OTA lines before
+// the Dish sees them; what it needs from the pet is DishOtaHost, below.
+struct DishOtaHost : ota::Host {
+  bool busy() override;
+  bool save() override;
+  uint16_t chunk() override { return ble.mtu() > 7 ? ble.mtu() - 7 : 16; }   // ATT header and the offset
+  bool onTrial() override;
+  bool handOver(ota::Version to, const ota::Token& token) override;
+  void forgetHandover() override;
+  ota::Confirm confirmTrial(const ota::Token& token) override;
+  std::optional<ota::Version> rolledBack() override;
+};
+static DishOtaHost otaHost;
+static hw::EspSlot otaSlot;
+static hw::PacketRing otaPackets;
+static hw::OtaData otaData(otaPackets, ble);
+static ota::Session updater(otaSlot, otaHost, ble,
+                            ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
+static hw::OtaLink otaLink(ble, updater);
+static ota::Trial trial;
+static hw::EspTrialPort trialPort;
+static hw::TrialWatchdog trialWatchdog;
+static hw::TwoLinks links(phone, otaLink);   // DEBUG lines stay on the cable: only SerialLink holds them back
+// On trial nothing he does is written, so the twists that write his lineage wait.
+static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 static BoardDisplay display;
@@ -123,6 +158,16 @@ static blorb::BodySample readBody(uint32_t now) {
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
   s.buttonDown = boardButtonDown() || now - pressAt < pressMs;
+#if !defined(BADGE_BOARD_SIM)
+  // While the dish asks about an update, the button answers it, and the pet
+  // feels neither that press nor the rest of that hold. A cable's DEBUG press
+  // answers too: the cable is a hand on the dish.
+  static bool wasDown = false, otaOwns = false;
+  if (updater.asking() && s.buttonDown && !wasDown) updater.press(millis());
+  otaOwns = updater.asking() || (otaOwns && s.buttonDown);
+  wasDown = s.buttonDown;
+  if (otaOwns) s.buttonDown = false;
+#endif
   return s;
 }
 
@@ -171,13 +216,75 @@ static OccupantSummary summarize(const blorb::Occupant& o) {
   return std::visit(Visit{}, o);
 }
 
+static ota::PetMark petMark() {
+  const OccupantSummary o = summarize(dish->occupant());
+  return {o.gen, o.genome};
+}
+
+bool DishOtaHost::busy() {
+  // A clutch is chosen with the button, which the update's question would take.
+  if (std::holds_alternative<blorb::Clutch>(dish->occupant())) return true;
+  // Anything else he must finish first (a battle, one day) refuses here too.
+  // A board that cannot save is refused by the save before the transfer; a
+  // sealed one may update, since a newer firmware is how a sealed pet wakes.
+  return false;
+}
+bool DishOtaHost::save() { return dish->flush(); }
+bool DishOtaHost::onTrial() { return trial.onTrial(); }
+bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
+  // A sealed or newer-format keepsake was never read: the Dish's egg is a stand-in, not the pet.
+  const bool readThePet = dish->boot() != blorb::Boot::Sealed && dish->boot() != blorb::Boot::ReadOnlyNewer;
+  return hw::EspTrialPort::write(
+      ota::Handover{readThePet ? std::optional<ota::PetMark>(petMark()) : std::nullopt, to, token});
+}
+void DishOtaHost::forgetHandover() { trialPort.forgetHandover(); }
+ota::Confirm DishOtaHost::confirmTrial(const ota::Token& token) { return trial.confirm(token); }
+std::optional<ota::Version> DishOtaHost::rolledBack() { return trialPort.rolledBack(); }
+
+// The update is verified and set to boot. The session saves him and says
+// which pet the new image must find; a save that will not land keeps the old
+// image instead.
+static void restartIntoUpdate() {
+  if (!updater.prepareRestart()) {
+    Serial.println("[hw] ota: save FAILED twice, update discarded");
+    return;
+  }
+  Serial.println("[hw] ota: restarting into the update, save ok");
+  Serial.flush();
+  ESP.restart();
+}
+
+// What tools/ota_release.py reads back out of firmware.bin, so a release can
+// only be signed as the version, board and save format the image really is.
+// reportBoot() prints from it, which keeps the linker from dropping it.
+template <size_t N>
+constexpr std::array<char, N> stampField(const char* s) {
+  std::array<char, N> a{};
+  for (size_t i = 0; i + 1 < N && s[i]; ++i) a[i] = s[i];
+  return a;
+}
+struct ReleaseStamp {
+  std::array<char, 12> magic;
+  std::array<char, 16> fw, board;
+  uint16_t fmt;
+  std::array<char, 24> commit;   // git describe --always --dirty, as fw_stamp.py saw it
+};
+extern const ReleaseStamp kReleaseStamp = {stampField<12>("blorbstamp1"), stampField<16>(blorb::kFirmwareVersion),
+                                           stampField<16>(BOARD_NAME), blorb::kFormatVersion,
+                                           stampField<24>(BLORB_FW)};
+
 static void reportBoot() {
-  Serial.printf("[hw] blorbarium %s lcd128\n", BLORB_FW);
+  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", BLORB_FW, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
+                kReleaseStamp.board.data());
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
-  if (blorb::leftAlone(storageState))
+  for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
+    if (r->opened == blorb::Opened::HeldForTrial)
+      Serial.println("[hw] !!! on trial, this image would format a partition: held, so its trial rolls it back");
+  if (blorb::leftAlone(storageState) && storageState.slots.opened != blorb::Opened::HeldForTrial &&
+      storageState.files.opened != blorb::Opened::HeldForTrial)
     Serial.println("[hw] !!! SEALED: a pet is on the flash and would not open; nothing reads or writes it. "
                    "Dump 0x810000+0x40000 and 0xA50000+0x5A0000 read-only for repair");
   for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
@@ -222,18 +329,37 @@ void setup() {
   for (uint8_t b : mac) lineage = lineage << 8 | b;
   blorb::DishOptions options;
 #if !defined(BADGE_BOARD_SIM)
-  storageState = store.begin();
+  // An image on trial opens the pet read-only and formats nothing: until it
+  // keeps itself, the flash is the old image's (docs/ota.md "The trial").
+  const bool onTrial = trialPort.pending();
+  storageState = store.begin(onTrial);
+  dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
 #else
   options.sealed = simSealed;
 #endif
-  dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
-  display.init();
+  dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
+  [[maybe_unused]] bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
   reportBoot();
-  const char* name = ble.begin(mac);
+#if defined(BLORB_OTA_FAIL_TRIAL)
+  // For the hardware proof only (docs/ota.md): an image that reports its panel
+  // down, so its trial must roll it back.
+  panelUp = false;
+#endif
+  const bool resumed = dish->boot() == blorb::Boot::Resumed;
+  trial.begin(trialPort, panelUp, resumed, petMark());
+  if (trial.onTrial()) {
+    const std::optional<ota::Handover> h = trialPort.handover();
+    Serial.printf("[hw] ota trial: on trial, panel=%d resumed=%d handover=%s\n", panelUp, resumed,
+                  !h ? "none" : !h->pet ? "any pet" : *h->pet == petMark() ? "same pet" : "ANOTHER PET");
+    trialWatchdog.start();
+  }
+  otaPackets.begin();
+  ble.keepWhile([] { return updater.active(); });
+  const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
 #endif
@@ -341,6 +467,9 @@ void loop() {
   if (!holdFrame && now - lastFrame >= kFrameMs) {
     const blorb::Appearance a = shown();
     paint::draw(a, paint::packFor(a.species), canvas, now);
+#if !defined(BADGE_BOARD_SIM)
+    if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
+#endif
     boardPresent(display, canvas);
     lastFrame = now;
   }
@@ -349,6 +478,16 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
+  otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
+  updater.tick(millis());
+  if (updater.rebootDue(millis())) restartIntoUpdate();
+  trialWatchdog.beat(millis());
+  if (trial.poll(millis()) != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
+    trialWatchdog.stop();
+    store.releaseHold();
+    dishStore.hold(false);
+    dish->flush();
+  }
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

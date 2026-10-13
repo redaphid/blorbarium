@@ -3,6 +3,8 @@
 //   Body  : an IMU or BOOT detector. No phone needed.
 //   World : the habitat, the pet clock, the link. No phone needed.
 //   Self  : fired by the creature's own action.
+//   Duel  : a duel's outcome (stakes.h). Every delta passes duelFilter at
+//           the agreed stakes; never fired by the phone.
 //   Phone : the STIM verb may fire it. Extras only: no core loop needs one,
 //           and the host test body_only_full_life runs a life without any.
 //
@@ -21,6 +23,7 @@ BLORB_STIM(10, cradle,         Body,  1)  // held still and upright for 3 s, the
 BLORB_STIM(11, lid_down,       Body,  0)  // face down for 2 s
 BLORB_STIM(12, lid_up,         Body,  0)
 BLORB_STIM(13, touched,        Body,  0)  // 1.46 only
+BLORB_STIM(14, button_double,  Body,  0)  // a second press soon after the first: opens a duel (v2: the wheel)
 BLORB_STIM(16, pellet_dropped, World, 0)
 BLORB_STIM(17, fed,            World, 1)  // the Eat action reached a pellet; never phone-fired
 BLORB_STIM(18, fed_bad,        World, 0)  // the pellet was rotten
@@ -33,6 +36,14 @@ BLORB_STIM(32, self_called,    Self,  0)
 BLORB_STIM(33, self_foresaw,   Self,  0)
 BLORB_STIM(34, woke,           Self,  0)
 BLORB_STIM(35, hatched,        Self,  0)
+BLORB_STIM(40, duel_mourned,    Duel, 0)  // a pet I knew fell (heard from the book at the next duel)
+BLORB_STIM(41, duel_slew,       Duel, 0)  // I finished a friend's pet: pride or remorse, by his genes
+BLORB_STIM(42, duel_spared,     Duel, 0)  // downed, and spared: relief, a debt
+BLORB_STIM(43, duel_bonked,     Duel, 0)  // I lost a heart this turn
+BLORB_STIM(44, duel_landed,     Duel, 0)  // I bonked them
+BLORB_STIM(45, duel_won,        Duel, 0)
+BLORB_STIM(46, duel_fainted,    Duel, 0)  // the swoon (any tier): daze floods, he naps
+BLORB_STIM(47, duel_befriended, Duel, 0)  // the duel is over and they know each other (both sides, always)
 BLORB_STIM(48, petted,         Phone, 1)
 BLORB_STIM(49, played,         Phone, 0)
 BLORB_STIM(50, spoken_to,      Phone, 0)

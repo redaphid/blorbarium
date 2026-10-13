@@ -149,6 +149,19 @@ TEST(Saving, AFailedEventSaveStaysUrgentAndRetries) {
   EXPECT_EQ(newest(box.store)->seq, seq + 1) << "the next tick() retries, not the five-minute save";
 }
 
+// An update refuses to start on a save that did not land (docs/ota.md).
+TEST(Saving, FlushSaysWhetherTheSaveLanded) {
+  Box box;
+  box.boot();
+  box.run(1000);
+  const uint32_t seq = newest(box.store)->seq;
+  box.store.tearAt(0);
+  EXPECT_FALSE(box.dish->flush());
+  EXPECT_EQ(newest(box.store)->seq, seq);
+  EXPECT_TRUE(box.dish->flush());
+  EXPECT_EQ(newest(box.store)->seq, seq + 1);
+}
+
 TEST(Saving, ADisconnectSaves) {
   Box box;
   box.boot();

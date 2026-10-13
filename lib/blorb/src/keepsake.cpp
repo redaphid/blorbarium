@@ -655,6 +655,7 @@ SlotState Keepsake::load(Snapshot& into) {
 }
 
 bool Keepsake::save(const Snapshot& s) {
+  if (!store_.writable()) return false;   // held (an image on trial): no 9 KB encode to throw away every tick
   uint32_t seq = lastSeq_ + 1;
   std::vector<uint8_t> blob = Codec::encode(s, seq);
   if (!store_.writeAtomic(nextIsA_ ? kSlots[0] : kSlots[1], blob.data(), blob.size())) return false;

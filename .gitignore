@@ -6,3 +6,6 @@ outputs/
 web/.wrangler/
 pets/*/pack-refs.png
 pets/*/regions-map.png
+web/node_modules/
+*signing-key*
+web/public/fw/**/*.bin

@@ -31,10 +31,11 @@ bool mayHoldPet(Holds h) { return h == Holds::Pet || h == Holds::Unreadable; }
 
 // The second half of boot's decision, once both partitions are judged. A
 // sealed board writes nothing, so nothing is formatted or opened for writing.
-void act(Volume& v, bool up, bool sealed, VolumeReport& r) {
+void act(Volume& v, bool up, bool sealed, bool hold, VolumeReport& r) {
   if (r.opened == Opened::LeftAlone) return;
-  if (up) r.opened = sealed || v.writable() ? Opened::Ok : Opened::ReadOnly;
+  if (up) r.opened = sealed || hold || v.writable() ? Opened::Ok : Opened::ReadOnly;
   else if (sealed) r.opened = Opened::LeftAlone;
+  else if (hold) r.opened = Opened::HeldForTrial;
   else r.opened = v.format() ? Opened::Formatted : Opened::FormatFailed;
 }
 
@@ -59,7 +60,7 @@ Holds filesHold(Volume& v, uint32_t blockSize) {
   return *scan(v, [](const uint8_t*, size_t) { return false; });
 }
 
-Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize) {
+Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize, bool hold) {
   Provisioned p;
   const bool slotsUp = slots.open(), filesUp = files.open();
   if (!slotsUp) {
@@ -74,8 +75,8 @@ Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize) {
     if (mayHoldPet(*p.files.held) || besidePet) p.files.opened = Opened::LeftAlone;
   }
   const bool sealed = leftAlone(p);
-  act(slots, slotsUp, sealed, p.slots);
-  act(files, filesUp, sealed, p.files);
+  act(slots, slotsUp, sealed, hold, p.slots);
+  act(files, filesUp, sealed, hold, p.files);
   return p;
 }
 
@@ -92,6 +93,7 @@ const char* describe(const VolumeReport& r) {
                                         : "LEFT ALONE: it would not read; nothing saves";
     case Opened::FormatFailed: return "FAILED: it would not format; nothing saves";
     case Opened::ReadOnly: return "FAILED: it opened but not for writing; nothing saves";
+    case Opened::HeldForTrial: return "HELD: it would be formatted, but this image is on trial; its rollback decides";
   }
   return "?";
 }
