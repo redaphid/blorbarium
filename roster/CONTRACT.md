@@ -129,7 +129,11 @@ unchanged and his header byte-identical. The differences:
   the `region_paint` shapes in pack.json) and overrules the converter on the body.
   Puffkin (rim and face), Mudge (body, belly, and his fins and head tuft as cloak: a fish
   has no cloak), Mothwick (wings and body), Fizz (wings and body) and Gilly (body, cream
-  belly, and her gill crown as cloak) have one. Inside the eye mask, a colour far from every body
+  belly, and her gill crown as cloak) have one. Mossby's belly is his pale foot,
+  Fizz's belly is her head (a beetle has no belly) and Puffkin's cloak is his feet (he
+  has no second part). Hushwing's egg is a white owl in a white egg, so pack.json's
+  `egg_baby` ellipse says where the chick is and the rest is shell.
+  `tools/region_counts.py` prints each pack's pixels per region over every frame. Inside the eye mask, a colour far from every body
   prototype is always eye, and nothing outside the mask is, so a blush or the fur round
   Tinker's eyes stays body. Mouth references are what the open-mouthed faces repaint.
 - Remains are derived from the asleep face exactly as Grungo's are, with the pool
