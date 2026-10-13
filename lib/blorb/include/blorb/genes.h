@@ -9,6 +9,7 @@
 #include "blorb/fixed.h"
 #include "blorb/genome.h"
 #include "blorb/registry.h"
+#include "blorb/species.h"
 
 namespace blorb {
 
@@ -85,6 +86,53 @@ GenomeBuilder& GenomeBuilder::append(const Body& body, uint8_t flags, Stage stag
                GeneUid{uint16_t(top + 1)}};
   return append(h, reinterpret_cast<const uint8_t*>(&body));
 }
+
+// Appends a known kind at a uid the caller fixes. Crossing matches genes by
+// uid, so a starter gene must sit at the same uid on every device whatever
+// the build; GenomeBuilder::append's "largest + 1" would shift with it.
+template <class Body>
+GenomeBuilder& appendAt(GenomeBuilder& b, GeneUid uid, const Body& body, uint8_t flags, Stage stage = Stage::Baby,
+                        uint8_t featGate = 0, uint8_t mutWeight = 64) {
+  GeneHeader h{GeneKindOf<Body>::value, uint8_t(sizeof(Body)), flags, stage, featGate, mutWeight, uid};
+  return b.append(h, reinterpret_cast<const uint8_t*>(&body));
+}
+
+// A knack ranks the three stances 2 (best) to 0, as one of six orders over
+// (Pounce, Guard, Trick). Ties go to the earlier stance, so every three bytes
+// rank to exactly one order.
+inline constexpr uint8_t kKnackOrders[6][kCycle] = {{2, 1, 0}, {2, 0, 1}, {1, 2, 0}, {0, 2, 1}, {1, 0, 2}, {0, 1, 2}};
+constexpr uint8_t knackOrderOf(const KnackGene& k) {
+  const uint8_t v[kCycle] = {k.pounce, k.guard, k.trick};
+  uint8_t rank[kCycle] = {};
+  for (uint8_t s = 0; s < kCycle; ++s)
+    for (uint8_t t = 0; t < kCycle; ++t)
+      if (t != s && (v[t] < v[s] || (v[t] == v[s] && t > s))) ++rank[s];
+  for (uint8_t i = 0; i < 6; ++i)
+    if (kKnackOrders[i][0] == rank[0] && kKnackOrders[i][1] == rank[1] && kKnackOrders[i][2] == rank[2]) return i;
+  return 0;
+}
+// A species' own knack: its style first, then the stance its style beats.
+// The starter carries it as a gene, and a genome without one ranks the same.
+constexpr KnackGene knackFor(Stance style) {
+  uint8_t v[kCycle] = {};
+  v[uint8_t(style)] = 192;
+  v[(uint8_t(style) + 2) % kCycle] = 128;
+  v[(uint8_t(style) + 1) % kCycle] = 64;
+  return KnackGene{v[0], v[1], v[2]};
+}
+static_assert(kKnackOrders[knackOrderOf(knackFor(Stance::Pounce))][0] == 2 &&
+                  kKnackOrders[knackOrderOf(knackFor(Stance::Guard))][1] == 2 &&
+                  kKnackOrders[knackOrderOf(knackFor(Stance::Trick))][2] == 2,
+              "a species' knack ranks its style first");
+static_assert(knackOrderOf(KnackGene{9, 9, 9}) == 0, "a three-way tie ranks in stance order");
+
+// Grungo's recipe with one species row's bytes written in (src/starter_genome.cpp).
+// Line n of the recipe owns uid n whether or not this build writes it, so a
+// block left out (the starvation genes, with neglectCanKill false) leaves its
+// uids empty rather than shifting the rest. With grungo's row it writes
+// exactly the genome starterGenome() always has.
+inline constexpr bool kNeglectCanKill = true;   // decided by the user: sustained neglect can end the life
+void authorStarter(GenomeBuilder&, const SpeciesStarter&, uint32_t speciesSeed, bool neglectCanKill = kNeglectCanKill);
 
 // O(1) by type byte. nullptr for an unknown type: carried and skipped.
 const GeneTypeInfo* geneType(uint8_t type);

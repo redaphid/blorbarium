@@ -378,6 +378,13 @@ Viability viability(const Genome& g) {
     looks = looks || (info && info->cls == GeneClass::Look && expressedAt(v.header, Stage::Baby, 0));
   });
   if (!looks) return {false, "no Look gene expressed"};
+  // Every pet can die of old age (the owner: no immortals). Judged on what
+  // expressed, after genes.cpp's die-locus guard, so the old-age receptor
+  // mutated to read another chemical is refused here as it was before the
+  // guard, when it fired at once and died in the dry run.
+  if (std::none_of(p.chem.receptors.begin(), p.chem.receptors.end(),
+                   [](const Receptor& r) { return r.chem == chem::life && r.locus == locus::die; }))
+    return {false, "no old-age death"};
 
   // 48 pet-hours, a pellet's worth of food each refill, and nothing else.
   constexpr struct { Stage from; LocusId trigger; Stage to; } kStages[] = {

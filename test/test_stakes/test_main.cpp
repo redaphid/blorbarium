@@ -162,7 +162,6 @@ TEST(Guards, DazeAndPainNeverReachTheDieLocus) {
 }
 
 TEST(Guards, PlantedDazeAndPainToDieReceptorsAreInert) {
-  GTEST_SKIP() << "unit D3 applies receptorExpresses in genes.cpp's expression; un-skip it there";
   for (ChemId reads : {chem::daze, driveChem(drive::pain)}) {
     const Genome g = withReceptor(duelStarter(), ReceptorGene{reads.v, locus::die.v, 0, 255, 128, 1});
     Rig r(g);
