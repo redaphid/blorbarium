@@ -1,8 +1,8 @@
 // The Storage seam on the 1.28's flash (DEVIATIONS.md 5). The snapshot slots
 // are blobs in the labelled `pet` NVS partition; everything else is a file on
-// the `petfs` LittleFS. One that will not open is formatted only when neither
-// holds a blorbarium pet (blorb/provision.h); otherwise it stays shut and its
-// writes fail.
+// the `petfs` LittleFS. One that will not open is formatted only when it holds
+// no blorbarium pet of its own (blorb/provision.h); otherwise it stays shut and
+// its writes fail.
 #pragma once
 
 #include <LittleFS.h>
@@ -71,6 +71,9 @@ class NvsFsStorage : public blorb::Storage {
         : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "pet")),
           prefs_(prefs) {}
     bool open() override { return prefs_.begin("blorb", false, "pet"); }
+    // Safe after a half-open NVS (init succeeded, nvs_open did not): IDF's
+    // nvs_flash_erase_partition deinits an initialised partition before it
+    // erases (nvs_api.cpp).
     bool format() override { return nvs_flash_erase_partition("pet") == ESP_OK && open(); }
    private:
     Preferences& prefs_;

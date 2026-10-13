@@ -1,5 +1,10 @@
 // Boot's decision about pet partitions that will not open (issue #1). The
 // flash fixtures are the real formats, made by tools/storage_fixtures.sh.
+//
+// A MemVolume's `mounts` is what the real stack does with those bytes: IDF's
+// NVS opens over blank or random bytes (it counts pages it cannot read as
+// free) and refuses a newer format or a partition with no free page; LittleFS
+// mounts only its own superblock and needs blank flash formatted first.
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -46,7 +51,7 @@ std::vector<uint8_t> foreign(size_t size) {
 
 struct MemVolume : Volume {
   std::vector<uint8_t> bytes;
-  bool mounts = false;   // whether these bytes mount as they stand
+  bool mounts = false;   // whether these bytes open as they stand
   bool readable = true;
   bool up = false;
   int formats = 0;
@@ -109,10 +114,14 @@ void expectFreshThenResumed(Board& b) {
   EXPECT_EQ(b.petfs.formats, petfsFormats);
 }
 
+std::vector<uint8_t> currentBlob() { return readFile("test/fixtures/keepsake_v1.bin"); }
+
 }  // namespace
 
-TEST(Foreign, InBothRegionsBootsFreshFormatsSavesAndResumes) {
-  Board b({foreign(kPetSize), false}, {foreign(kPetfsSize), false});
+// ---- a new board: nothing of ours, so whatever will not open is formatted ----
+
+TEST(NewBoard, AFactoryNvsInANewerFormatAndJunkPetfsAreFormattedAndThePetResumes) {
+  Board b({fixture("nvs_foreign_newer.bin", kPetSize), false}, {foreign(kPetfsSize), false});
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Formatted);
   EXPECT_EQ(p.slots.held, Holds::Foreign);
@@ -122,46 +131,78 @@ TEST(Foreign, InBothRegionsBootsFreshFormatsSavesAndResumes) {
   expectFreshThenResumed(b);
 }
 
-TEST(Foreign, InPetAloneFormatsPetAndLeavesPetfs) {
-  Board b({foreign(kPetSize), false}, {blank(kPetfsSize), true});
+TEST(NewBoard, AFactoryNvsWithNoFreePageIsFormatted) {
+  Board b({fixture("nvs_foreign_full.bin", kPetSize), false}, {blank(kPetfsSize), false});
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Formatted);
-  EXPECT_EQ(p.files.opened, Opened::Ok);
-  EXPECT_EQ(b.petfs.formats, 0);
+  EXPECT_EQ(p.slots.held, Holds::Foreign);
+  EXPECT_EQ(p.files.held, Holds::Blank);
   expectFreshThenResumed(b);
 }
 
-// NVS may well open over foreign bytes (it counts pages it cannot read as free)
-// while LittleFS will not mount them: then only petfs is formatted.
-TEST(Foreign, InPetfsAloneFormatsPetfsAndLeavesPet) {
+TEST(NewBoard, RandomBytesInPetOpenSoOnlyPetfsIsFormatted) {
   const std::vector<uint8_t> petBytes = foreign(kPetSize);
   Board b({petBytes, true}, {foreign(kPetfsSize), false});
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Ok);
-  EXPECT_EQ(p.slots.held, Holds::Foreign);
+  EXPECT_FALSE(p.slots.held) << "a partition that opened is not scanned";
   EXPECT_EQ(p.files.opened, Opened::Formatted);
   EXPECT_EQ(b.pet.bytes, petBytes) << "a partition that opened is never formatted";
   expectFreshThenResumed(b);
 }
 
-TEST(Foreign, AnotherFirmwaresNvsAndLittleFsAreForeign) {
-  MemVolume nvs(fixture("nvs_foreign.bin", kPetSize), false);
-  EXPECT_EQ(slotsHold(nvs), Holds::Foreign);
-  std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
-  fs[28] = fs[kBlock + 28] = 0x00;   // block_count 0x5A0 -> 0x500: someone else's partition size
-  MemVolume other(fs, false);
-  EXPECT_EQ(filesHold(other, kBlock), Holds::Foreign);
-}
-
-TEST(Blank, BothRegionsBootFreshAsToday) {
-  Board b({blank(kPetSize), false}, {blank(kPetfsSize), false});
+TEST(NewBoard, ABlankBoardBootsFreshAsToday) {
+  Board b({blank(kPetSize), true}, {blank(kPetfsSize), false});
   Provisioned p = b.power();
-  EXPECT_EQ(p.slots.held, Holds::Blank);
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
   EXPECT_EQ(p.files.held, Holds::Blank);
   EXPECT_EQ(p.files.opened, Opened::Formatted);
   EXPECT_STREQ(describe(p.files), "formatted: it was blank");
   expectFreshThenResumed(b);
 }
+
+TEST(NewBoard, AnotherFirmwaresNvsAndLittleFsAreForeign) {
+  MemVolume nvs(fixture("nvs_foreign.bin", kPetSize), false);
+  EXPECT_EQ(slotsHold(nvs), Holds::Foreign);
+  std::vector<uint8_t> count = fixture("petfs_head.bin", kPetfsSize);
+  count[28] = count[kBlock + 28] = 0x00;   // block_count 0x5A0 -> 0x500: someone else's partition size
+  MemVolume otherCount(count, false);
+  EXPECT_EQ(filesHold(otherCount, kBlock), Holds::Foreign);
+  std::vector<uint8_t> size = fixture("petfs_head.bin", kPetfsSize);
+  size[25] = size[kBlock + 25] = 0x02;   // block_size 4096 -> 512, count unchanged
+  MemVolume otherSize(size, false);
+  EXPECT_EQ(filesHold(otherSize, kBlock), Holds::Foreign);
+}
+
+// ---- one partition ours, the other not: each is judged by its own bytes ----
+
+// Found in review: a board that ran an older build once has a petfs that build
+// blank-formatted, beside the factory's NVS. Its pet must still save.
+TEST(Mixed, AFactoryNvsBesideAPetfsAnOlderBuildFormattedIsFormatted) {
+  Board b({fixture("nvs_foreign_newer.bin", kPetSize), false}, {fixture("petfs_head.bin", kPetfsSize), true});
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.held, Holds::Foreign);
+  EXPECT_EQ(p.slots.opened, Opened::Formatted);
+  EXPECT_EQ(p.files.opened, Opened::Ok);
+  expectFreshThenResumed(b);
+}
+
+// Found in review: a real pet beside a blank petfs that will not mount. The
+// older code formatted that petfs, and so must this, or no lineage is kept.
+TEST(Mixed, ARealPetBesideABlankPetfsKeepsThePetAndGetsItsLineage) {
+  const std::vector<uint8_t> petBytes = fixture("nvs_pet_v1.bin", kPetSize);
+  Board b({petBytes, true}, {blank(kPetfsSize), false});
+  b.kept.files["snap.a"] = currentBlob();
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.files.held, Holds::Blank);
+  EXPECT_EQ(p.files.opened, Opened::Formatted);
+  EXPECT_EQ(bootDish(b), Boot::Resumed);
+  EXPECT_TRUE(b.kept.files.count("lineage.log")) << "the lineage saves";
+  EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+// ---- a keepsake: recognised by bytes every save already has ----
 
 // The gift device's save, in the format it is in today: NVS entries written by
 // ESP-IDF's own generator around keepsake_v1.bin, and mklittlefs's superblock.
@@ -172,11 +213,36 @@ TEST(Keepsake, TheCurrentFormatIsRecognisedWithNoNewMarker) {
   EXPECT_EQ(filesHold(petfs, kBlock), Holds::Pet);
 }
 
+TEST(Keepsake, TheSecondSlotAloneIsAPet) {
+  MemVolume pet(fixture("nvs_pet_snapb.bin", kPetSize), false);
+  EXPECT_EQ(slotsHold(pet), Holds::Pet);
+}
+
+// NVS entries are 32 bytes; a scan on a coarser stride misses a blob that
+// starts on an odd entry, as snap.b's does in this fixture.
+TEST(Keepsake, AMagicOnAnOddNvsEntryIsSeen) {
+  std::vector<uint8_t> bytes = fixture("nvs_pet_v1.bin", kPetSize);
+  ASSERT_EQ(std::memcmp(bytes.data() + 0x80, "BLRB", 4), 0);
+  ASSERT_EQ(std::memcmp(bytes.data() + 0x26A0, "BLRB", 4), 0);
+  static_assert(0x26A0 % 64 == 32, "snap.b's data starts on an odd entry");
+  bytes[0x80] = 0x00;   // snap.a's magic gone: only snap.b's is left
+  MemVolume pet(bytes, false);
+  EXPECT_EQ(slotsHold(pet), Holds::Pet);
+}
+
+// LittleFS writes its superblock pair alternately: either block may be the good one.
+TEST(Keepsake, ASuperblockInBlockOneAloneIsAPet) {
+  std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
+  std::fill(fs.begin(), fs.begin() + 32, 0x00);
+  MemVolume petfs(fs, false);
+  EXPECT_EQ(filesHold(petfs, kBlock), Holds::Pet);
+}
+
 TEST(Keepsake, AValidSaveResumesUntouched) {
   const std::vector<uint8_t> petBytes = fixture("nvs_pet_v1.bin", kPetSize);
   const std::vector<uint8_t> fsBytes = fixture("petfs_head.bin", kPetfsSize);
   Board b({petBytes, true}, {fsBytes, true});
-  const std::vector<uint8_t> blob = readFile("test/fixtures/keepsake_v1.bin");
+  const std::vector<uint8_t> blob = currentBlob();
   b.kept.files["snap.a"] = blob;
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Ok);
@@ -191,9 +257,9 @@ TEST(Keepsake, AValidSaveResumesUntouched) {
   EXPECT_EQ(b.petfs.bytes, fsBytes);
 }
 
-TEST(Keepsake, ADamagedPetPartitionIsLeftAloneAndSaysSo) {
-  std::vector<uint8_t> petBytes = fixture("nvs_pet_v1.bin", kPetSize);
-  for (size_t page = 0; page < 0x6000; page += kBlock) petBytes[page + 8] ^= 0x5A;   // every page header's CRC fails
+// A pet's NVS that IDF will not open (written by a newer IDF, then downgraded).
+TEST(Keepsake, APetNvsThatWillNotOpenIsLeftAloneAndSaysSo) {
+  const std::vector<uint8_t> petBytes = fixture("nvs_pet_newer.bin", kPetSize);
   Board b({petBytes, false}, {fixture("petfs_head.bin", kPetfsSize), true});
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.held, Holds::Pet);
@@ -206,7 +272,7 @@ TEST(Keepsake, ADamagedPetPartitionIsLeftAloneAndSaysSo) {
 }
 
 TEST(Keepsake, ADamagedPetfsIsLeftAlone) {
-  std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
+  const std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
   Board b({blank(kPetSize), true}, {fs, false});
   Provisioned p = b.power();
   EXPECT_EQ(p.files.held, Holds::Pet);
@@ -215,27 +281,25 @@ TEST(Keepsake, ADamagedPetfsIsLeftAlone) {
   EXPECT_EQ(b.petfs.bytes, fs);
 }
 
-// The pet is the pair: a petfs that holds only junk on a board whose slots
-// hold a pet is a keepsake's damaged half, not a new board.
-TEST(Keepsake, APetInEitherPartitionKeepsTheOtherFromFormatting) {
-  std::vector<uint8_t> junk = foreign(kPetfsSize);
-  Board b({fixture("nvs_pet_v1.bin", kPetSize), true}, {junk, false});
+TEST(Keepsake, AnUnreadablePetIsLeftAlone) {
+  Board b({foreign(kPetSize), false}, {fixture("petfs_head.bin", kPetfsSize), true});
+  b.pet.readable = false;
   Provisioned p = b.power();
-  EXPECT_EQ(p.files.held, Holds::Foreign);
-  EXPECT_EQ(p.files.opened, Opened::LeftAlone);
-  EXPECT_STREQ(describe(p.files), "LEFT ALONE: the other partition holds, or may hold, a blorbarium pet; nothing saves");
-  EXPECT_EQ(b.petfs.bytes, junk);
-}
-
-TEST(Keepsake, AnUnreadablePartitionIsLeftAlone) {
-  MemVolume pet(foreign(kPetSize), false);
-  pet.readable = false;
-  MemVolume petfs(foreign(kPetfsSize), false);
-  Provisioned p = provision(pet, petfs, kBlock);
   EXPECT_EQ(p.slots.held, Holds::Unreadable);
   EXPECT_EQ(p.slots.opened, Opened::LeftAlone);
+  EXPECT_STREQ(describe(p.slots), "LEFT ALONE: it would not read; nothing saves");
+  EXPECT_EQ(p.files.opened, Opened::Ok);
+  EXPECT_EQ(b.pet.formats, 0);
+}
+
+TEST(Keepsake, AnUnreadablePetfsIsLeftAlone) {
+  Board b({blank(kPetSize), true}, {foreign(kPetfsSize), false});
+  b.petfs.readable = false;
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.files.held, Holds::Unreadable);
   EXPECT_EQ(p.files.opened, Opened::LeftAlone);
-  EXPECT_EQ(pet.formats + petfs.formats, 0);
+  EXPECT_EQ(b.petfs.formats, 0);
 }
 
 int main(int argc, char** argv) {

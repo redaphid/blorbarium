@@ -3,11 +3,13 @@
 //
 // A board keeps its pet in two partitions: the snapshot slots (NVS `pet`) and
 // the files (LittleFS `petfs`, where lineage.log lives). A partition that will
-// not open is formatted only when neither of the two shows a blorbarium pet:
-// it is then blank, or bytes another firmware left (a new board still carries
-// its factory demo), and formatting loses nothing. Once either shows a pet the
-// pair is a keepsake, and a damaged half is left alone for a person to rescue,
-// never formatted by boot.
+// not open is judged by its own bytes. With no blorbarium mark in it, it is
+// blank or another firmware's (a new board still carries its factory demo),
+// and formatting it cannot lose a pet. With one, it is a damaged keepsake and
+// is left alone for a person to rescue, never formatted by boot. The other
+// partition is not consulted: judging the pair together once kept a board
+// unsavable forever (a factory `pet` beside a `petfs` an older build had
+// formatted) and left a real pet's blank `petfs` unformatted.
 //
 // The marks are bytes every save already carries, so a board saved before
 // this rule existed is recognised with no new marker:
@@ -35,7 +37,7 @@ class Volume {
 enum class Holds : uint8_t { Blank, Foreign, Pet, Unreadable };
 enum class Opened : uint8_t { Ok, Formatted, LeftAlone, FormatFailed };
 
-// `held` is read only when a partition would not open, and then for both.
+// `held` is read only when that partition would not open.
 struct VolumeReport { Opened opened = Opened::Ok; std::optional<Holds> held; };
 struct Provisioned { VolumeReport slots, files; };
 
