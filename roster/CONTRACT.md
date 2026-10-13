@@ -132,3 +132,29 @@ unchanged and his header byte-identical. The differences:
 
 Nothing in `src/` loads a roster pack yet: `main.cpp` draws `grungoPack()`. Choosing a
 pack per device is engine work, left for whoever wires battles and species.
+
+## Battle art (BATTLES.md ART1 to ART3)
+
+`python3 tools/sprite_pack.py --duel` draws `tools/duel_art.py` and writes
+`pets/duel/duel_art.h`: one palette, 43 frames, about 15 KB, the same bytes every run.
+Everything is drawn in code at device scale, not generated. Indexes follow the battle
+sketch's enums:
+
+| array | index | frames |
+|---|---|---|
+| `kScars[5][3]` | `Scar::Kind` (claw, scorch, notch, ripple, ring) x small, medium, large (12, 18, 26 px) | ART1 |
+| `kTrophies[9]` | `SpeciesId`: hood, shell, spore cap, gill frond, wing scale, fin, lamp, feather, gear, each on a token disc so it never reads as a power | ART2, 24 px |
+| `kStances[3]` | `Stance`: paw, leaf shield, swirl | ART3, 24 px |
+| `kPowers[9]` | `PowerGlyph`: eye, shell dome, spore cloud, leaf with a plus, lantern, water lines, bolt, feather, cog with a question mark | ART3, 24 px |
+| `kTiers[3]` | spar (feather), scrap (plaster), mortal (full skull) | ART3, 24 px |
+| `kSkullEmpty`, `kDebt`, `kVendetta`, `kWounded` | the skull to fill, a heart tied with string, a glaring eye under a heavy brow, a small plaster | ART3 |
+
+Every frame's origin is its centre. A scar has no colour: its palette entries are tagged
+skin and hold a grey g, meaning "multiply the body pixel underneath by g / 128" (a dark
+crease inside a lighter ridge), so it is the pet's own skin whatever its genes did. Fade
+moves g toward 128. A scar placed by the hit's luck can land on clear pixels or a pale
+wing (Fizz); snapping it to the nearest skin-region pixel keeps it visible. The mortal
+tier glyph and `kSkullEmpty` share every pixel's place: fill by drawing the full skull
+over the empty one from the bottom row up. The owner's sheets are `roster/battle-art/`:
+every scar on all nine bodies, the trophies on a rim at 1:1, the glyphs, each in colour
+and in grey.
