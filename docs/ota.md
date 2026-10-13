@@ -62,9 +62,17 @@ REBOOT it, or CONFIRM the new image after the restart. Any other token gets
 the connection that last presented the token, so a stranger's writes never
 reach the slot.
 
-The dish serves one phone at a time (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1`,
-asserted in `src/hw/link_nus.h`). Each line carries the connection it
-arrived on, tagged as its bytes come in, and a new connection drops the last
+The dish serves one phone at a time. `NusLink`'s `onConnect` drops a second
+phone, counting live connections in NimBLE's own host table. NimBLE's
+connection limit stays at the library's 3, and `src/hw/link_nus.h` asserts
+it. A limit of 1 was tried on the board and broke Bluetooth: NimBLE's host
+indexes per-connection arrays by the controller's raw handle with no bounds
+check (`ble_gap.c` `slave_conn[MAX + 1]`), a dropped link left a stale peer,
+and the dish stopped advertising until a power cycle. `NusLink::poll()` now
+also advertises whenever no connection is live by the host's table, and logs
+`[hw] ble conn h=`, `[hw] ble drop h= reason=`, `[hw] ble adv on|off` and
+`[hw] ble: a stale peer, advertising again`. Each line carries the connection
+it arrived on, tagged as its bytes come in, and a new connection drops the last
 one's unread bytes and half line (`lib/blorb/include/blorb/rx_lines.h`).
 
 ### OTA BEGIN
@@ -769,8 +777,8 @@ Proven without a board:
 - `OTA CONFIRM` from a real phone (and from a reopened page), the storage
   hold on the board, the `writes=` count staying flat through a trial, and
   `rolledback` after a real rollback.
-- One central at a time on the board: the build asserts the setting, but no
-  second phone has tried to connect.
+- One central at a time on the board, and the stale-peer recovery: no second
+  phone has tried to connect, and no stale peer has been seen since the fix.
 
 Proven on the test board by a cable flash of a949710 (2026-10-13, no update
 sent):
