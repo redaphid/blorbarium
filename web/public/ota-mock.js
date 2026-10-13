@@ -21,8 +21,8 @@
   // lostAck (swallow one at= event), corrupt (flip a byte on the way in),
   // rollback (the new image does not keep itself).
   class MockDish {
-    constructor({ board = "lcd128", fw = "0.3.0", confirmMs = 30000, bootMs = 1200, faults = {}, emit = () => {}, onDrop = () => {} } = {}) {
-      Object.assign(this, { board, fw, confirmMs, bootMs, faults, emit, onDrop });
+    constructor({ board = "lcd128", fw = "0.3.0", confirmMs = 30000, bootMs = 1200, trialMs = 3000, faults = {}, emit = () => {}, onDrop = () => {} } = {}) {
+      Object.assign(this, { board, fw, confirmMs, bootMs, trialMs, faults, emit, onDrop });
       this.state = "idle";
       this.last = "none";
       this.s = null;
@@ -45,7 +45,7 @@
       this.say(state === "idle" ? `OTA state=idle last=${last}` : state === "receiving" ? `OTA state=receiving at=${this.s.at}` : `OTA state=${state}`);
     }
     where() {
-      if (this.state === "idle") return `state=idle board=${this.board} fw=${this.fw} chunk=${CHUNK} last=${this.last}`;
+      if (this.state === "idle") return `state=idle board=${this.board} fw=${this.fw} chunk=${CHUNK} trial=${this.trial ? 1 : 0} last=${this.last}`;
       return `state=${this.state} at=${this.s.at} size=${this.s.size} id=${this.s.id} chunk=${CHUNK}`;
     }
 
@@ -132,14 +132,23 @@
       this.onDrop();
     }
 
+    // Into the new image, on trial. With the rollback fault its trial fails and
+    // it restarts into the old one, as the bootloader would.
     restart() {
-      const version = this.s.version;
-      this.stats.reboots++;
+      const version = this.s.version, old = this.fw;
       for (const name in this.timers) this.timer(name);
+      this.boot(version, true, () => this.timer("trial", this.trialMs, () => {
+        if (this.faults.rollback) this.boot(old, false);
+        else this.trial = false;
+      }));
+    }
+
+    boot(fw, trial, then = () => {}) {
+      this.stats.reboots++;
       this.drop();
       this.booting = new Promise((resolve) => setTimeout(() => {
-        if (!this.faults.rollback) this.fw = version;
-        this.state = "idle"; this.last = "none"; this.s = null; this.booting = null;
+        Object.assign(this, { fw, trial, state: "idle", last: "none", s: null, booting: null });
+        then();
         resolve();
       }, this.bootMs));
     }

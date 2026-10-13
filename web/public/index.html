@@ -645,6 +645,7 @@ const UPDATE_STEP = {
   finishing: "Restarting the dish…",
   rebooting: "Restarting the dish…",
   verifying: "Saying hello to the dish…",
+  trial: "Checking that the new version works…",
 };
 
 // Why an update stopped, by the dish's last= or ERR text. Nothing here changes the pet.
@@ -713,7 +714,7 @@ async function offerUpdate() {
 
 function showUpdateStep({ state, at, size }) {
   ui.show("mockPress", params.has("mock") && state === "confirm");
-  ui.show("updateBar", ["sending", "resuming", "finishing", "rebooting", "verifying"].includes(state));
+  ui.show("updateBar", ["sending", "resuming", "finishing", "rebooting", "verifying", "trial"].includes(state));
   if (state === "sending") return updateSay(`${UPDATE_STEP.sending} ${updateProgress(at / size)}%`);
   if (state === "finishing") updateProgress(1);
   if (UPDATE_STEP[state]) updateSay(UPDATE_STEP[state]);

@@ -5,6 +5,8 @@
   const WINDOW = 6144;          // bytes in flight past the last at= heard
   const STALL_MS = 2000;        // no progress for this long: ask STATUS
   const REBOOT_WAIT_MS = 15000; // how long to wait for the restart's drop
+  const TRIAL_WAIT_MS = 90000;  // the dish's trial is 30 s; past this, believe the version
+  const TRIAL_POLL_MS = 2000;
 
   function kv(text) {
     const out = {};
@@ -85,7 +87,7 @@
   // resumed with the same BEGIN; a drop after REBOOT is the restart itself.
   const ON_DROP = {
     begin: "resuming", confirm: "resuming", sending: "resuming",
-    finishing: "rebooting", rebooting: "rebooting", verifying: "rebooting",
+    finishing: "rebooting", rebooting: "rebooting", verifying: "rebooting", trial: "rebooting",
   };
 
   // port: { send(cmd, timeoutMs) -> {ok, lines} | rejects {code, message},
@@ -256,11 +258,24 @@
 
     async verifying() {
       const fw = kv((await this.port.send("HELLO")).ok).fw;
-      if (fw === this.m.version) return this.finish("updated", fw);
+      if (fw === this.m.version) return "trial";
       // Still waiting to restart (busy, or the drop was not the restart): ask again.
       await this.status();
       if (this.dish.state === "ready") return "finishing";
       return this.finish("rolled_back", fw);
+    }
+
+    // The new image keeps itself only after its own checks (docs/ota.md "The
+    // trial"); until then it can still restart into the old one, which the
+    // drop table turns into another hello.
+    async trial() {
+      const until = Date.now() + TRIAL_WAIT_MS;
+      for (;;) {
+        const k = await this.status();
+        if (k.trial !== "1" || Date.now() > until) return this.finish("updated", k.fw || this.m.version);
+        await this.sleep(TRIAL_POLL_MS);
+        if (this.lost) throw new Error("dropped");
+      }
     }
 
     async resuming() {

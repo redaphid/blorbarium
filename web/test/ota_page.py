@@ -82,7 +82,8 @@ def main():
             assert s["reboots"] == 1, f"reboots {s['reboots']}"
             assert s["flashed"] == s["sha"], "the dish hashed what it wrote to the release's SHA-256"
             assert s["fw"] == "0.4.0"
-            for text in ("Press the button on the dish to say yes.", "Moved out of reach, keep the phone close.", "Restarting the dish…"):
+            for text in ("Press the button on the dish to say yes.", "Moved out of reach, keep the phone close.", "Restarting the dish…",
+                         "Checking that the new version works…"):
                 assert text in seen, f"never said {text!r}"
             assert any(t.startswith("Sending the update… ") and t.endswith("%") for t in seen), "no progress shown"
 
@@ -93,7 +94,7 @@ def main():
             return check
 
         def rolled_back(s, seen):
-            assert s["reboots"] == 1 and s["flashed"] == s["sha"], s
+            assert s["reboots"] == 2 and s["flashed"] == s["sha"], "into the new image, then back"
 
         case("update with a drop, lost writes and a lost at=", "mock=1", True,
              "Updated to 0.4.0. Grungo is fine.", faults_survived)

@@ -15,7 +15,7 @@ async function update({ press = true, faults = {}, confirmMs = 30000 } = {}) {
   const release = await mockRelease();
   let updater;
   const dish = new MockDish({
-    confirmMs, bootMs: 200, faults,
+    confirmMs, bootMs: 200, trialMs: 300, faults,
     emit: (t) => setTimeout(() => updater.event(t), 5),
     onDrop: () => updater.dropped(),
   });
@@ -56,7 +56,7 @@ test("an update survives a drop, lost writes and a lost at=, then restarts into 
   assert.equal(dish.stats.polls, 1, "only the lost at= needed a STATUS poll; each gap was answered at once");
   assert.equal(dish.stats.reboots, 1);
   assert.ok(states.includes("resuming"), `resumed after the drop: ${states}`);
-  assert.deepEqual(states.slice(-4), ["finishing", "rebooting", "verifying", "done"]);
+  assert.deepEqual(states.slice(-5), ["finishing", "rebooting", "verifying", "trial", "done"]);
 });
 
 test("nobody presses the button", { timeout: 60000 }, async () => {
@@ -75,6 +75,7 @@ test("a byte corrupted on the way in ends in bad_hash and no restart", { timeout
 });
 
 test("a new image that does not keep itself reports the rollback", { timeout: 60000 }, async () => {
-  const { outcome } = await update({ faults: { rollback: true } });
+  const { outcome, dish } = await update({ faults: { rollback: true } });
   assert.deepEqual(outcome, { ok: true, kind: "rolled_back", fw: "0.3.0" });
+  assert.equal(dish.stats.reboots, 2, "into the new image on trial, then back to the old one");
 });
