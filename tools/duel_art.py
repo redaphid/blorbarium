@@ -161,10 +161,17 @@ def feather_shape(k, colour, bars, s=1.0):
 
 
 def feather(k):
-    """Hush: a soft feather with motion lines (silent wings)."""
-    feather_shape(k, (190, 215, 255), 3)
-    for y in (15, 18.5):
-        stroke(k, [(19, y), (23.5, y)], 1.1, LIGHT)
+    """Hush: an owl with her eyes shut, keeping quiet (the lone feather is Spar's)."""
+    blob(k, [("ellipse", 2.5, 4, 19.5, 22.5), ("polygon", [(3, 8), (2.5, 1), (8, 5)]), ("polygon", [(19, 8), (19.5, 1), (14, 5)])],
+         (150, 175, 220))
+    for cx in (7, 15):
+        disc_ = k.mask("ellipse", cx - 4.2, 6, cx + 4.2, 14.4)
+        k.fill(disc_, (235, 240, 250), INVARIANT)
+        k.outline(disc_, 0.8)
+        stroke(k, arc(cx, 9.6, 2.4, 2.2, 25, 155, 10), 1.1, INK)
+    blob(k, [("polygon", [(9.3, 13), (12.7, 13), (11, 18)])], (240, 160, 60), ink=0.7)
+    for y in (9, 13):
+        stroke(k, [(20.5, y), (23.5, y - 1)], 1.0, LIGHT)
 
 
 def gear_shape(k, colour, teeth=8, hole=True):
@@ -251,6 +258,35 @@ def vendetta(k):
 def wounded(k):
     """Wounded: the small plaster he wears."""
     plaster(k, 16)
+
+
+# ---- elements (Element order: splash, sprout, spark), so kids see who beats whom ----
+
+def e_splash(k):
+    """Splash: a water drop."""
+    blob(k, [("polygon", [(12, 1.5)] + arc(12, 15, 7, 7, 200, -20, 24))], (70, 150, 230))
+    k.fill(k.mask("ellipse", 8.5, 13, 11, 17), (220, 240, 255), INVARIANT)
+
+
+def e_sprout(k):
+    """Sprout: a seedling, a stem with two round leaves."""
+    stroke(k, [(12, 22), (12, 9)], 1.6, (90, 170, 80), ink=0.8)
+    blob(k, [("ellipse", 2.5, 4, 12, 11.5)], (120, 205, 100))
+    blob(k, [("ellipse", 12, 2, 21.5, 9.5)], (120, 205, 100))
+    blob(k, [("polygon", [(5, 22.5), (19, 22.5), (17, 19.5), (7, 19.5)])], (150, 100, 60))
+
+
+def e_spark(k):
+    """Spark: a four-point sparkle (the bolt is Static Spark's)."""
+    pts = []
+    for i in range(8):
+        a = math.radians(i * 45 - 90)
+        r = 11 if i % 2 == 0 else 3.2
+        pts.append((12 + r * math.cos(a), 12 + r * math.sin(a)))
+    blob(k, [("polygon", pts)], (255, 215, 60))
+
+
+ELEMENTS = [("splash", e_splash), ("sprout", e_sprout), ("spark", e_spark)]
 
 
 TIERS = [("spar", spar), ("scrap", scrap), ("mortal", lambda k: skull(k, True))]
@@ -408,6 +444,8 @@ def frames():
         out[f"Power{name.capitalize()}"] = glyph(draw)
     for name, draw in TIERS:
         out[f"Tier{name.capitalize()}"] = glyph(draw)
+    for name, draw in ELEMENTS:
+        out[f"Element{name.capitalize()}"] = glyph(draw)
     out["SkullEmpty"] = glyph(lambda k: skull(k, False))
     out["Debt"] = glyph(debt)
     out["Vendetta"] = glyph(vendetta)

@@ -1032,6 +1032,8 @@ def emit_duel(entries, frames, idx):
           "inline constexpr paint::FrameRef kPowers[9] = {" + ", ".join(f"kPower{cap(n)}" for n, _ in duel_art.POWERS) + "};",
           "// By stakes tier: spar (a feather), scrap (a plaster), mortal (the full skull).",
           "inline constexpr paint::FrameRef kTiers[3] = {" + ", ".join(f"kTier{cap(n)}" for n, _ in duel_art.TIERS) + "};",
+          "// By Element (species.h): splash (a drop), sprout (a seedling), spark (a sparkle).",
+          "inline constexpr paint::FrameRef kElements[3] = {" + ", ".join(f"kElement{cap(n)}" for n, _ in duel_art.ELEMENTS) + "};",
           "",
           "}  // namespace duel_art",
           ""]
@@ -1127,8 +1129,9 @@ def duel_sheets(text, outdir):
     tro = [f"Trophy{n.capitalize()}" for n, _ in duel_art.TROPHIES]
     strip(tro, [c["name"] for c in roster], "ART2 trophies, by species: colour, then grey", outdir / "art2-trophies.png", rim=tro)
     names = ([f"Stance{n.capitalize()}" for n, _ in duel_art.STANCES] + [f"Power{n.capitalize()}" for n, _ in duel_art.POWERS]
-             + [f"Tier{n.capitalize()}" for n, _ in duel_art.TIERS] + ["SkullEmpty", "Debt", "Vendetta", "Wounded"])
-    labs = [n.replace("Stance", "").replace("Power", "").replace("Tier", "") for n in names]
+             + [f"Tier{n.capitalize()}" for n, _ in duel_art.TIERS] + ["SkullEmpty", "Debt", "Vendetta", "Wounded"]
+             + [f"Element{n.capitalize()}" for n, _ in duel_art.ELEMENTS])
+    labs = [n.replace("Stance", "").replace("Power", "").replace("Tier", "").replace("Element", "el ") for n in names]
     strip(names, labs, "ART3 glyphs: stances, powers, tiers, the empty skull, debt, vendetta, wounded; colour, then grey",
           outdir / "art3-glyphs.png", rim=names[:3] + names[12:15])
     for n in ("art1-scars.png", "art2-trophies.png", "art3-glyphs.png"):
