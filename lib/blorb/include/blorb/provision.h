@@ -45,6 +45,11 @@ Holds slotsHold(Volume&);
 Holds filesHold(Volume&, uint32_t blockSize);
 Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize);
 
+// A keepsake is on the flash that this boot could not open: the Dish runs sealed.
+inline bool leftAlone(const Provisioned& p) {
+  return p.slots.opened == Opened::LeftAlone || p.files.opened == Opened::LeftAlone;
+}
+
 // One line for the boot log: what the partition held and what boot did about it.
 const char* describe(const VolumeReport&);
 

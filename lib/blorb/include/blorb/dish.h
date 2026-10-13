@@ -24,6 +24,7 @@ enum class Boot : uint8_t {
   FromLineage,     // no readable snapshot: an egg of the latest genome, rebuilt from lineage.log
   Fresh,           // nothing stored: a founding egg from starterGenome(speciesSeed)
   ReadOnlyNewer,   // a newer firmware's keepsake: runs a throwaway egg, writes nothing
+  Sealed,          // a keepsake boot could not open (DishOptions::sealed): holds still, writes nothing
 };
 
 // The wall time a phone's TIME carried. A visit is one reading, so it is read
@@ -46,6 +47,10 @@ struct CatchUp { uint32_t ticks = 0, clampedTicks = 0; };
 struct DishOptions {
   TimeSource* rtc = nullptr;           // first in priority: a clock that kept counting while unpowered
   const Genome* founder = nullptr;     // a fresh lineage's first genome; default starterGenome(speciesSeed)
+  // The flash holds a pet that would not open and was left alone (provision.h).
+  // The Dish reads nothing, writes nothing and runs no life, so a reset
+  // finds the keepsake exactly as it was; the screen shows it sealed.
+  bool sealed = false;
 };
 
 class Dish {

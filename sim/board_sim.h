@@ -12,6 +12,7 @@ static constexpr int PIN_BOOT_BUTTON = 0;
 static constexpr int PIN_IMU_SDA = 6;
 static constexpr int PIN_IMU_SCL = 7;
 static constexpr int ORIENT_R0 = 1;   // sim/Wire.h's hand reads in the panel's own axes
+static bool simSealed = false;        // --sealed: a board whose keepsake boot left alone (Boot::Sealed)
 
 #ifndef SIM_SCALE
 #define SIM_SCALE 2   // 240 px of dish is a postage stamp on a desktop display

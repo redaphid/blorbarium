@@ -862,10 +862,42 @@ void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
                 to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
+// Boot::Sealed: a keepsake is on the flash and this boot could not open it.
+// The pet sleeps in a drop of amber, safe and whole, and the line under him is
+// for whoever can plug him into a computer. Warm and still on purpose: nothing
+// here may read as the vigil, or as a new egg that replaced him.
+constexpr uint8_t kAmber[3] = {255, 150, 20};
+constexpr int kAmberAlpha = 120;
+constexpr char kSealedMarquee[] = "SAFE BUT STUCK - ASK A GROWN-UP";
+
+void sealedInAmber(Canvas240& cv, uint32_t nowMs) {
+  const uint16_t amber = to565({kAmber[0], kAmber[1], kAmber[2]});
+  const uint16_t light = to565({255, 236, 180});
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      if (!inDish(x, y)) continue;
+      uint16_t& px = cv.px[y * kSide + x];
+      px = blend(px, amber, kAmberAlpha);
+      // Two glints across the upper left, where light would catch a polished drop.
+      const int diag = x + y, across = x - y;
+      if (iabs(across) < 70 && ((diag > 92 && diag < 104) || (diag > 112 && diag < 117))) px = blend(px, light, 70);
+    }
+  Marquee strip = kTimeUnknownStrip;
+  strip.dy = -strip.dy;
+  dimBand(cv, strip);
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, kSealedMarquee, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
+                nowMs);
+}
+
 }  // namespace
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   background(cv, a.night);
+  if (a.sealed) {
+    drawCreature(a, pack, cv);
+    sealedInAmber(cv, nowMs);
+    return mask(cv);
+  }
   switch (a.kind) {
     case Kind::Creature: drawCreature(a, pack, cv); break;
     case Kind::Egg: drawEgg(a, pack, cv); break;

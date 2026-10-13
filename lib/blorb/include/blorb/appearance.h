@@ -85,6 +85,9 @@ struct Appearance {
   StimId lastStim{};                // acknowledges a gesture even when the brain ignores it
   uint16_t ticksSinceStim = 0;
   bool timeUnknown = false;   // no wall-time source yet: the renderer asks for a phone visit
+  // Boot::Sealed: a keepsake is on the flash and could not be opened. Drawn as
+  // the pet asleep in amber with a line for a grown-up, never as a new life.
+  bool sealed = false;
 
   // A line scrolling once across the dish (thoughts.h): the row, the line as
   // his voice says it, and how far through its pass (0..1). The time-unknown

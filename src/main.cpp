@@ -150,7 +150,7 @@ static hw::SystemClock systemClock;
 static uint32_t lastStatus = 0;
 
 static const char* bootName(blorb::Boot b) {
-  constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer"};
+  constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer", "Sealed"};
   return kNames[size_t(b)];
 }
 
@@ -173,8 +173,11 @@ static void reportBoot() {
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
+  if (blorb::leftAlone(storageState))
+    Serial.println("[hw] !!! SEALED: a pet is on the flash and would not open; nothing reads or writes it. "
+                   "Dump 0x810000+0x40000 and 0xA50000+0x5A0000 read-only for repair");
   for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
-    if (r->opened == blorb::Opened::LeftAlone || r->opened == blorb::Opened::FormatFailed)
+    if (r->opened == blorb::Opened::FormatFailed)
       Serial.println("[hw] !!! the pet is not being saved: a reset loses this boot's pet");
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");
@@ -214,6 +217,9 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   storageState = store.begin();
   options.rtc = &systemClock;
+  options.sealed = blorb::leftAlone(storageState);
+#else
+  options.sealed = simSealed;
 #endif
   dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   display.init();

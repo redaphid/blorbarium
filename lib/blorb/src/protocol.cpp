@@ -118,6 +118,7 @@ void stateLine(Line& l, const Dish& dish) {
     l.add(" eggs=%u cursor=%u vigil=%u cause=%s", unsigned(k.count), unsigned(k.cursor), unsigned(k.sinceDeath),
           causeName(k.cause));
   }
+  if (dish.boot() == Boot::Sealed) l.add(" sealed=1");   // the occupant is a placeholder: the pet is on the flash
 }
 
 int hexValue(char c) {
