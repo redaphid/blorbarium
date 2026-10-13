@@ -11,6 +11,7 @@ here was run on the test board on 2026-10-13.
 | Board | Port | USB serial | MAC | May be flashed |
 |---|---|---|---|---|
 | Test board, Waveshare ESP32-S3-LCD-1.28 | COM11 | `5C94095006` | `d4:05:92:77:1b:34` | Yes |
+| Second test board, the same model, arrived with the factory demo | COM12 | `5C94094999` | `d4:05:92:77:1b:44` | Yes |
 | The gift device, `blorb-237c` (grungo, genome `d30f00d1`) | usually COM10 | | | **No.** It holds a pet someone chose. |
 
 Both use a CH343 bridge with the same USB id, `1A86:55D3`, and a COM number
@@ -77,8 +78,22 @@ and `petfs` partitions, so a cable flash keeps the pet. A flat `.bin` fills
 the gaps with 0xFF and erases it.
 
 esptool resets the board when it finishes. That first boot is the one that
-founds a pet on a blank board (`boot=Fresh`). The log in step 4 starts
-later, so it shows the next boot, `boot=Resumed`.
+founds a pet on a blank board (`boot=Fresh`), and it is over before any log
+can open, so a log started afterwards shows only the next boot,
+`boot=Resumed`.
+
+To capture a first boot, flash with `--no-reset` and let the logger boot the
+board:
+
+    tools/flash_board.sh --no-reset COM12 5C94094999 d4:05:92:77:1b:44 .pio/build/badge128/merged.hex
+    uv run tools/serial_log.py --port COM12 --seconds 40 --reset > first-boot.log
+
+`--no-reset` passes `--after no_reset` to esptool, so the board stays in
+download mode ("Staying in bootloader.") and prints nothing until the
+logger's RTS pulse. On a new board, the log then starts with
+`storage pet: formatted: it was blank`, `storage petfs: formatted: it was
+blank` and `boot=Fresh`. The serial and MAC checks are the same as without
+it.
 
 ## 4. Read the log
 
