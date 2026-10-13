@@ -2,9 +2,9 @@
  "board": "lcd128",
  "version": "0.4.0",
  "flags": 0,
- "size": 991552,
- "sha256": "R-un-D-fze4_vFBarVEIUG6QHtWtJMfTr2qy-O41O2w",
- "sig": "rZnXagB0QF2YDrokF4e_lVuou7kmI9ikHTidh_kbY3eHZvlXPfwijCEMEJQha_8j0Snac45HB2m9AZfHBlvYHw",
+ "size": 993088,
+ "sha256": "hrrz8NzGMCoglDjrF3pYx9WBXT44sS3PFwvV2SKQVAw",
+ "sig": "mCNSgouw3F1kDIj8xD8Ripg4G8nL5Fh7GKZsmUX-Jb0EcI5bRCwZdfLkgsf2rfxdXgHbbzXRb9KgxMXYTwHZmQ",
  "image": "blorbarium-lcd128-0.4.0.bin",
  "fmt": 1
 }
