@@ -167,10 +167,10 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/gilly/gilly_pack.h",
-        "palette": 242,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 92658,
-        "region_map": false
+        "flash_bytes": 95560,
+        "region_map": true
       }
     },
     {
@@ -247,9 +247,9 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/mudge/mudge_pack.h",
-        "palette": 222,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 91428,
+        "flash_bytes": 92432,
         "region_map": true
       }
     },

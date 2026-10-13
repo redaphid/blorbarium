@@ -127,8 +127,9 @@ unchanged and his header byte-identical. The differences:
   Where the art has no outline between two parts, `masks/regions.png` draws one: it is
   drafted by `tools/region_map.py` (nearest prototype per pixel, a majority vote, then
   the `region_paint` shapes in pack.json) and overrules the converter on the body.
-  Puffkin (rim and face), Mudge (body and belly), Mothwick (wings and body) and Fizz
-  (wings and body) have one. Inside the eye mask, a colour far from every body
+  Puffkin (rim and face), Mudge (body, belly, and his fins and head tuft as cloak: a fish
+  has no cloak), Mothwick (wings and body), Fizz (wings and body) and Gilly (body, cream
+  belly, and her gill crown as cloak) have one. Inside the eye mask, a colour far from every body
   prototype is always eye, and nothing outside the mask is, so a blush or the fur round
   Tinker's eyes stays body. Mouth references are what the open-mouthed faces repaint.
 - Remains are derived from the asleep face exactly as Grungo's are, with the pool
