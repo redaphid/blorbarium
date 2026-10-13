@@ -1,15 +1,20 @@
 #pragma once
 // A kid at a duel, for films: BOOT twice to open, then each turn a think, a
-// tilt toward one of the three rim stances and a knock to lock it in, with
-// now and then a shake (the pet foretells), a double knock (a cheer) or BOOT
-// (the power). Seeded and on the script's clock, so a film replays.
+// tilt toward one of the three rim stances, and a lock: mostly a knock, now
+// and then BOOT for a quick special or a 1.2 s hold for a heavy one, after
+// which the pet braces through its wind-up turns and the kid waits. Now and
+// then a shake (the pet foretells) or a double knock (a cheer). Seeded and on
+// the script's clock, so a film replays.
 //
 // It plays blind on a fixed turn length, because nothing yet says when a turn
-// opens. Once the Dish has a duel view, the bot should wait for the turn to
-// open and lock before its deadline instead (see docs/hardware-testing.md).
+// opens or that the friend is bracing. Once the Dish has a duel view, the sim
+// should set friendBracing from it, and the bot should wait for each turn to
+// open (a side must not lock turn t+1 before turn t resolves) instead of
+// keeping time (sim/README.md, "The kid").
 #include <cstdint>
 #include <cstdio>
 #include <deque>
+#include <iterator>
 #include <string>
 
 namespace duelbot {
@@ -35,6 +40,9 @@ class KidBot {
     plan_.push_back({startMs + 300, "!button", "BOOT again"});
   }
 
+  // The friend's pet is winding up a special: a Trick now staggers it.
+  bool friendBracing = false;
+
   // The next move due by `now`, or false.
   bool next(uint32_t now, Move& out) {
     if (plan_.empty()) planTurn();
@@ -52,23 +60,45 @@ class KidBot {
     return rng_ % n;
   }
 
+  void put(uint32_t at, std::string line, const char* why) {
+    auto it = plan_.end();
+    while (it != plan_.begin() && std::prev(it)->at > at) --it;
+    plan_.insert(it, Move{at, std::move(line), why});
+  }
+
   void planTurn() {
     const uint32_t t = turnAt_;
     turnAt_ += turnMs_;
+    if (windup_) {
+      windup_--;
+      put(t + turnMs_ / 4, "", "waits: the special winds up");
+      return;
+    }
     const uint32_t think = turnMs_ / 7 + roll(turnMs_ * 3 / 7);   // a kid takes a moment, and never the whole turn
-    const StanceTilt& s = kStances[roll(3)];
-    if (roll(100) < 15) plan_.push_back({t + think / 2, "!shake 900", "shakes: what will they do?"});
-    if (roll(100) < 20) plan_.push_back({t + think - 400, "!button", "BOOT: power!"});
+    const bool punish = friendBracing && roll(100) < 70;
+    const StanceTilt& s = kStances[punish ? 2 : roll(3)];
+    if (roll(100) < 15) put(t + think / 2, "!shake 900", "shakes: what will they do?");
     char tilt[32];
     snprintf(tilt, sizeof(tilt), "!tilt %d %d", s.x, s.y);
-    plan_.push_back({t + think, tilt, s.name});
-    plan_.push_back({t + think + 400 + roll(600), "!knock", "knock: locked"});
-    plan_.push_back({t + think + 1600, "!tilt 0 0", ""});
-    if (roll(100) < 15) plan_.push_back({t + turnMs_ - 1200, "!dtap", "double knock: cheer"});
+    put(t + think, tilt, punish ? "trick: stagger it!" : s.name);
+    const uint32_t lock = t + think + 400 + roll(600);
+    const uint32_t how = roll(100);
+    if (how < 20) {
+      put(lock, "!button", "BOOT: quick special");
+      windup_ = 1;
+    } else if (how < 32) {
+      put(lock, "!button 1300", "BOOT held: heavy special");
+      windup_ = 2;
+    } else {
+      put(lock, "!knock", "knock: locked");
+    }
+    put(lock + 1500, "!tilt 0 0", "");
+    if (roll(100) < 15) put(t + turnMs_ - 600, "!dtap", "double knock: cheer");
   }
 
   uint32_t rng_;
   uint32_t turnAt_, turnMs_;
+  uint32_t windup_ = 0;   // turns still bracing after a special
   std::deque<Move> plan_;
 };
 

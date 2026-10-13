@@ -311,7 +311,7 @@ static int run(bool* running) {
     while (scriptNext < script.size() && script[scriptNext].at <= since) Serial.arrive(script[scriptNext++].text.c_str());
     for (duelbot::Move m; kid && kid->next(since, m);) {
       if (*m.why) fprintf(stderr, "kid %u %s\n", since, m.why);
-      simPending.push_back(m.line);
+      if (!m.line.empty()) simPending.push_back(m.line);
     }
     std::vector<std::string> due;
     due.swap(simPending);   // a warp reads stdin and may queue more; those wait a frame
@@ -384,8 +384,8 @@ int main(int argc, char** argv) {
     }
     else if (!strcmp(a, "--kid") && i + 1 < argc) {
       unsigned seed = 0, from = 1000, turn = 10000;
-      if (sscanf(argv[++i], "%u:%u:%u", &seed, &from, &turn) < 1 || turn < 3000) {
-        fprintf(stderr, "sim: --kid <seed>[:<from ms>[:<turn ms, at least 3000>]], not %s\n", argv[i]);
+      if (sscanf(argv[++i], "%u:%u:%u", &seed, &from, &turn) < 1 || turn < 5000) {
+        fprintf(stderr, "sim: --kid <seed>[:<from ms>[:<turn ms, at least 5000>]], not %s\n", argv[i]);
         return 2;
       }
       kid.emplace(seed, from, turn);
