@@ -65,6 +65,11 @@ the link its request came from, so serial traffic never reaches the phone.
 Levels are thousandths (1000 is full). `time=unknown` turns `known` once a
 `TIME` has been accepted this boot.
 
+A board whose keepsake would not open at boot (see HANDOFF, issue #2) ends the
+first line with ` sealed=1`. Its occupant is then a placeholder egg that never
+changes: the real pet is on the flash, untouched, and nothing on the board
+reads or writes it until a grown-up repairs it. Any other board omits the field.
+
 ### TIME
 
 ```

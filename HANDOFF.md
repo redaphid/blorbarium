@@ -225,8 +225,11 @@ All paths below are in that repo.
   before this rule (the gift device) is recognised with no new marker. The
   boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
   blank`, `formatted: it held another firmware's bytes and never a pet`.
-  Known gaps. The screen says nothing when a keepsake is left alone, and the
-  child sees a new egg that will not save. And IDF itself decides most of
+  A board with a partition LEFT ALONE boots `Boot::Sealed` (issue #2): the
+  Dish reads and writes nothing and runs no life, the screen shows the pet
+  asleep in amber with `SAFE BUT STUCK - ASK A GROWN-UP` (golden
+  `test/golden/sealed.png`, sim `--sealed`), `STATE` ends ` sealed=1`, and
+  serial says `!!! SEALED` with the ranges to dump. Known gap: IDF itself decides most of
   what "will not open" means for `pet`. It opens NVS over random bytes (seen
   on the test board, 2026-10-13, so a new board's foreign case is a petfs case) or
   pages whose header CRC fails: it counts those pages as free and erases

@@ -867,21 +867,32 @@ void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
 // for whoever can plug him into a computer. Warm and still on purpose: nothing
 // here may read as the vigil, or as a new egg that replaced him.
 constexpr uint8_t kAmber[3] = {255, 150, 20};
-constexpr int kAmberAlpha = 120;
+constexpr int kAmberBehind = 150, kAmberOver = 60;   // the drop deep behind him, a light tint over him
 constexpr char kSealedMarquee[] = "SAFE BUT STUCK - ASK A GROWN-UP";
 
+void amber(Canvas240& cv, int alpha) {
+  const uint16_t c = to565({kAmber[0], kAmber[1], kAmber[2]});
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x)
+      if (inDish(x, y)) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], c, alpha);
+}
+
+// Over him: the tint, two glints where light would catch a polished drop, the
+// z's a six-year-old reads as sleeping before any word, and the line.
 void sealedInAmber(Canvas240& cv, uint32_t nowMs) {
-  const uint16_t amber = to565({kAmber[0], kAmber[1], kAmber[2]});
-  const uint16_t light = to565({255, 236, 180});
+  amber(cv, kAmberOver);
+  const Rgb cream{255, 236, 180};
+  const uint16_t light = to565(cream);
   for (int y = 0; y < kSide; ++y)
     for (int x = 0; x < kSide; ++x) {
-      if (!inDish(x, y)) continue;
-      uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, amber, kAmberAlpha);
-      // Two glints across the upper left, where light would catch a polished drop.
       const int diag = x + y, across = x - y;
-      if (iabs(across) < 70 && ((diag > 92 && diag < 104) || (diag > 112 && diag < 117))) px = blend(px, light, 70);
+      if (inDish(x, y) && iabs(across) < 70 && ((diag > 92 && diag < 104) || (diag > 112 && diag < 117)))
+        cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], light, 70);
     }
+  const int rise = int(nowMs / 250 % 6);
+  const Clip all{0, 0, kSide, kSide, 0};
+  drawString(cv, kFreeSans9pt7b, "z", 158, 60 - rise, light, all);
+  drawString(cv, kFreeSans9pt7b, "Z", 172, 42 - rise, light, all);
   Marquee strip = kTimeUnknownStrip;
   strip.dy = -strip.dy;
   dimBand(cv, strip);
@@ -894,6 +905,7 @@ void sealedInAmber(Canvas240& cv, uint32_t nowMs) {
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   background(cv, a.night);
   if (a.sealed) {
+    amber(cv, kAmberBehind);
     drawCreature(a, pack, cv);
     sealedInAmber(cv, nowMs);
     return mask(cv);
