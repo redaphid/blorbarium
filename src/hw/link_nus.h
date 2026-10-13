@@ -14,9 +14,13 @@
 #include "blorb/rx_lines.h"
 #include "blorb/seams.h"
 
-// One phone at a time: the link, its queues and an update's session all
-// assume it (platformio.ini sets it; onConnect drops any second one too).
-static_assert(CONFIG_BT_NIMBLE_MAX_CONNECTIONS == 1, "NusLink serves one central");
+// One phone at a time, enforced in onConnect, never by shrinking NimBLE: its
+// host indexes per-connection arrays by the controller's raw handle with no
+// bounds check (ble_gap.c slave_conn[MAX + 1]), and on the S3 the setting also
+// sizes the controller's activities. At 1, a handle of 2 wrote past them, the
+// host lost track of which connections it had announced, and a dropped link
+// left a stale peer that stopped advertising until a power cycle.
+static_assert(CONFIG_BT_NIMBLE_MAX_CONNECTIONS >= 3, "NimBLE's per-handle arrays need the default 3");
 
 namespace hw {
 
@@ -126,16 +130,38 @@ class NusLink : public blorb::Link {
     lastPoll_ = now;
     NimBLEServer* server = NimBLEDevice::getServer();
     if (!server) return;
-    if (!server->getConnectedCount()) {
-      up_ = false;
-      if (!NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->start();
-      return;
+    if (lastConn_ != loggedConn_) Serial.printf("[hw] ble conn h=%u\n", unsigned(loggedConn_ = lastConn_));
+    if (lastDrop_ != loggedDrop_) {
+      loggedDrop_ = lastDrop_;
+      Serial.printf("[hw] ble drop h=%u reason=0x%x\n", unsigned(loggedDrop_ >> 16), unsigned(loggedDrop_ & 0xffff));
     }
+    // Live by the host's own table, not NimBLE-Arduino's peer list: a peer the
+    // host dropped without a DISCONNECT event must not keep the dish invisible.
+    const bool live = liveConnections(server) > 0;
+    if (!live) {
+      up_ = false;
+      if (!NimBLEDevice::getAdvertising()->isAdvertising()) {
+        if (server->getConnectedCount()) Serial.println("[hw] ble: a stale peer, advertising again");
+        NimBLEDevice::getAdvertising()->start();
+      }
+    }
+    // A board that goes silent says so.
+    const bool advertising = NimBLEDevice::getAdvertising()->isAdvertising();
+    if (advertising != advLogged_) Serial.printf("[hw] ble adv %s\n", (advLogged_ = advertising) ? "on" : "off");
+    if (!live) return;
     if (up_ && !paramsAsked_ && now - connAt_ > kParamsAfterMs) {
       paramsAsked_ = true;
       if (itvl_ < kConnMin || itvl_ > kConnMax || timeout_ < kTimeout10ms)
         server->updateConnParams(conn_, kConnMin, kConnMax, 0, kTimeout10ms);
     }
+  }
+
+  static size_t liveConnections(NimBLEServer* server) {
+    size_t n = 0;
+    ble_gap_conn_desc desc;
+    for (uint16_t h : server->getPeerDevices())
+      if (ble_gap_conn_find(h, &desc) == 0) ++n;
+    return n;
   }
 
   struct RxCb : NimBLECharacteristicCallbacks {
@@ -150,7 +176,8 @@ class NusLink : public blorb::Link {
     NusLink* link;
     explicit ServerCb(NusLink* l) : link(l) {}
     void onConnect(NimBLEServer* server, NimBLEConnInfo& info) override {
-      if (server->getConnectedCount() > 1) {   // never with max connections 1; if it ever is, the first phone keeps the dish
+      link->lastConn_ = info.getConnHandle();
+      if (liveConnections(server) > 1) {   // a second phone: the first keeps the dish
         server->disconnect(info.getConnHandle());
         return;
       }
@@ -169,7 +196,8 @@ class NusLink : public blorb::Link {
       link->timeout_ = info.getConnTimeout();
     }
     void onMTUChange(uint16_t mtu, NimBLEConnInfo&) override { link->mtu_ = mtu; }
-    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override {
+    void onDisconnect(NimBLEServer*, NimBLEConnInfo& info, int reason) override {
+      link->lastDrop_ = uint32_t(info.getConnHandle()) << 16 | uint16_t(reason);
       link->up_ = false;
       link->mtu_ = 23;
     }
@@ -181,6 +209,9 @@ class NusLink : public blorb::Link {
   ServerCb serverCb_{this};
   blorb::RxLines<kRxMax> rx_;   // written by the BLE task, read by the loop
   uint32_t lineConnection_ = 0;
+  volatile uint32_t lastConn_ = 0xffff, lastDrop_ = 0;   // written by the BLE task, logged by poll()
+  uint32_t loggedConn_ = 0xffff, loggedDrop_ = 0;
+  bool advLogged_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;
