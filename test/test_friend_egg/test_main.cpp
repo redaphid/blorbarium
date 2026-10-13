@@ -492,9 +492,6 @@ TEST(Keepsake, AFriendEggRoundTripsAndABadSlotIsNoFriendEgg) {
   EXPECT_EQ(k.friendSeed, kFixtureCrossSeed);
   EXPECT_EQ(back.hash(), s.hash());
   EXPECT_EQ(Keepsake::encode(back), blob);
-  Snapshot plain = friendEggV1();
-  std::get<Clutch>(plain.occupant).friendSlot = 0;
-  EXPECT_NE(plain.hash(), s.hash()) << "the snapshot hash covers the friend egg";
 
   const Tlv occ = *findChunk(chunksOf(blob), Chunk::Occupant);
   for (uint8_t slot : {0, 1, 4, 255}) {
@@ -507,6 +504,14 @@ TEST(Keepsake, AFriendEggRoundTripsAndABadSlotIsNoFriendEgg) {
   }
   std::vector<uint8_t> shortTail = cutTail(blob, Chunk::Occupant, occ.n - 2);
   EXPECT_EQ(std::get<Clutch>(decoded(shortTail).occupant).friendSlot, 0) << "a torn tail is no friend egg";
+}
+
+TEST(Keepsake, TheSnapshotHashCoversTheFriendEgg) {
+  Snapshot s = friendEggV1(), plain = friendEggV1(), reseeded = friendEggV1();
+  std::get<Clutch>(plain.occupant).friendSlot = 0;
+  std::get<Clutch>(reseeded.occupant).friendSeed ^= 1;
+  EXPECT_NE(plain.hash(), s.hash());
+  EXPECT_NE(reseeded.hash(), s.hash());
 }
 
 // ---- the committed fixtures -------------------------------------------------------------------

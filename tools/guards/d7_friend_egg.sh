@@ -56,7 +56,7 @@ mutant "a slot past the clutch read as a friend egg" $K 's/slot >= 2 \&\& slot <
 mutant "the friend egg is not read back" $K 's/k.friendSlot = slot, k.friendSeed = seed;/(void)seed;/' \
   "Keepsake.AFriendEggRoundTripsAndABadSlotIsNoFriendEgg"
 mutant "the snapshot hash ignores the friend egg" $K 's/if (k.friendSlot) mix(k.friendSlot), mix(k.friendSeed);//' \
-  "the snapshot hash covers the friend egg"
+  "Keepsake.TheSnapshotHashCoversTheFriendEgg"
 mutant "the timeout picks the friend egg" $C 's/return friendSlot \&\& cursor == friendSlot - 1 ? uint8_t(0) : cursor;/return cursor;/' \
   "Clutch.TheTimeoutNeverPicksTheFriendEggButAKidMay"
 mutant "a friend egg grows a full clutch" $F 's/k.friendSlot == 0 \&\& k.count < kMaxClutch/k.friendSlot == 0/' \
