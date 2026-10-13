@@ -100,6 +100,7 @@ class Session {
   void press(uint32_t now);                 // the dish's button
   void tick(uint32_t now);                  // lapses: the question, a silent page
   bool asking() const { return std::holds_alternative<Asking>(state_); }
+  bool active() const { return !std::holds_alternative<Idle>(state_); }   // anything else that wants the radio waits
   std::optional<View> view(uint32_t now) const;
   bool rebootDue(uint32_t now);             // ready, asked or lapsed, and not busy
 

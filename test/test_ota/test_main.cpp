@@ -548,7 +548,9 @@ TEST(OtaSession, TheViewFollowsThePhase) {
   Rig rig;
   Release r;
   EXPECT_FALSE(rig.session.view(rig.now));
+  EXPECT_FALSE(rig.session.active());
   rig.send(r.begin(rig.signer));
+  EXPECT_TRUE(rig.session.active());
   std::optional<View> v = rig.session.view(rig.now + 10000);
   ASSERT_TRUE(v);
   EXPECT_EQ(v->phase, View::Phase::Asking);

@@ -152,6 +152,15 @@ can go back to `at` at once. It sends `state=` on each change of state. An
 event can be lost, so the page polls `OTA STATUS` whenever it has heard
 nothing for 2 s.
 
+### Other users of the radio
+
+`Session::active()` is true from BEGIN until the session ends. Anything else
+that wants the radio (a duel over ESP-NOW, one day) waits while it is true, and
+also while `hw::Trial::onTrial()` is true. In the other direction, an update
+refuses to start while `DishOtaHost::busy()` is true, so a duel in progress
+belongs there. The session, the trial and the busy check all run on the loop
+task, so these plain reads need no lock.
+
 ### OTA ABORT and OTA REBOOT
 
 ```
@@ -366,6 +375,135 @@ Each of these deliberate breaks made the named number of tests fail:
 The page's tests run the whole flow against the mock dish. The cases are a
 drop at about 40%, three lost writes, a lost `at=`, no press, a corrupted byte,
 and a new image that rolls back during its trial.
+
+## Proving it on the test board
+
+This procedure proves an update end to end on the test board. It covers one
+update that keeps itself and one that must roll back. Only the test board may
+be flashed (COM11, USB serial `5C94095006`, MAC `d4:05:92:77:1b:34`; see
+`docs/hardware-testing.md`). The sender is the real one: the page on the
+owner's Android phone. The desk PC has no Bluetooth adapter. The page is
+served from this PC with `wrangler dev`, and the phone reaches it over USB
+through `adb reverse`. Chrome treats `http://localhost` as a secure context,
+so Web Bluetooth works there. The production site is not deployed.
+
+Only one program can hold COM11 at a time. Run `serial_log.py` and `shot.py`
+one after the other, never together.
+
+### What the owner does
+
+1. Plug the Android phone into this PC by USB, with USB debugging on. Accept
+   the "Allow USB debugging" prompt once.
+2. When the agent says so: on the phone, open Chrome at
+   `http://localhost:8787/?d=blorb-1b34&debug=1`, tap **Connect**, pick
+   `blorb-1b34` in the chooser, and tap **Update**. Keep the phone within a
+   metre of the board until the page gives a result. This happens twice,
+   once in step 5 and once in step 8.
+
+Nothing else needs a hand. The agent presses the board's button with
+`DEBUG press`.
+
+### What the agent does
+
+All commands run from the root of a checkout of `ota` (or of the branch it
+merged into) on this PC. `E` and the daemon hold come from
+`docs/hardware-testing.md` sections 1 and 2.
+
+1. **Hold off the badge daemon** (hardware-testing section 1). Check that a
+   full-flash backup of the test board exists (section 2).
+
+2. **Cable-flash the updater, 0.4.0.**
+
+       ~/.platformio/penv/Scripts/pio.exe run -e badge128
+       tools/flash_board.sh COM11 5C94095006 d4:05:92:77:1b:34 .pio/build/badge128/merged.hex
+       uv run tools/serial_log.py --port COM11 --seconds 20 --reset --send "#1 HELLO" --send "#2 OTA STATUS" > ota-0-boot.log
+
+   Expect `[hw] blorbarium ... fw=0.4.0`, `[hw] ble name=blorb-1b34`,
+   `#1 OK fw=0.4.0 ...` and
+   `#2 ERR 404 UNKNOWN_VERB`: updates are refused on the cable. There is no
+   `ota trial` line, because a cable flash is not on trial. Note the
+   `boot=... genome=<hash>` line. That is the pet the update must keep.
+
+3. **Make release 0.4.1.** Set `kFirmwareVersion` to `"0.4.1"` in
+   `lib/blorb/include/blorb/protocol.h`. Do not commit it. Then run:
+
+       uv run --with cryptography python tools/ota_release.py release
+
+   This needs the signing key, `~/.config/blorbarium/ota-signing-key.pem`. It
+   ends with `ok: lcd128 0.4.1 verifies against src/hw/ota_pubkey.h`.
+
+4. **Serve the page and bridge it to the phone.**
+
+       (cd web && npx -y wrangler@4.149.0 dev --port 8787 --ip 127.0.0.1) &
+       adb reverse tcp:8787 tcp:8787
+       curl -s http://127.0.0.1:8787/fw/lcd128/manifest.json
+
+   The manifest must say `0.4.1`.
+
+5. **Update to 0.4.1.** Ask the owner for owner step 2. When the phone says
+   "Press the button on the dish to say yes", take a picture of the question,
+   then press the button and log everything that follows:
+
+       uv run tools/shot.py --port COM11 --out ota-1-asking.png --scale 2
+       uv run tools/serial_log.py --port COM11 --seconds 600 --send "DEBUG press" > ota-1-run.log
+
+   The question lasts 30 s. If the shot takes too long, skip it and press
+   first. A lapsed question shows on the phone as "Nobody pressed the button";
+   tap Update again.
+
+   Expect these lines in `ota-1-run.log`:
+   - `[hw] up=... heap=...` lines through the transfer. These are the heap
+     during an update.
+   - `[hw] ota: restarting into the update, save ok`.
+   - The new boot: `boot=Resumed ... genome=<the same hash as step 2>`.
+   - `[hw] ota trial: on trial, panel=1 resumed=1 handover=same pet`.
+   - About 30 s later: `[hw] ota trial: kept`.
+
+   The phone ends with "Updated to 0.4.1. Grungo is fine." The debug log on the
+   phone timestamps the first data write and `state=ready`. The difference is
+   the transfer time for the size in the manifest.
+
+6. **Verify.**
+
+       uv run tools/serial_log.py --port COM11 --seconds 5 --send "#3 HELLO"
+       uv run tools/shot.py --port COM11 --out ota-1-after.png --scale 2
+
+   Expect `fw=0.4.1` and the same pet on screen.
+
+7. **Make release 0.4.2, which must roll back.** Set `kFirmwareVersion` to
+   `"0.4.2"`, then run:
+
+       PLATFORMIO_BUILD_FLAGS=-DBLORB_OTA_FAIL_TRIAL uv run --with cryptography python tools/ota_release.py release
+
+   `BLORB_OTA_FAIL_TRIAL` makes the image report its panel down, so its trial
+   rolls it back. It exists only for this test.
+
+8. **Update to 0.4.2.** Repeat step 5, logging to `ota-2-run.log`. Expect:
+   - `[hw] ota: restarting into the update, save ok`.
+   - The 0.4.2 boot: `[hw] ota trial: on trial, panel=0 ...`, then
+     `[hw] ota trial: FAILED, rolling back`.
+   - Another boot, `[hw] blorbarium ... fw=0.4.1`, with `boot=Resumed`, the
+     same genome, and no `ota trial` line.
+
+   The phone ends with "The update didn't take, so the dish went back to
+   0.4.1. Grungo is fine." Step 6's HELLO says `fw=0.4.1`.
+
+9. **Clean up.**
+
+       adb reverse --remove tcp:8787
+       git checkout -- lib/blorb/include/blorb/protocol.h web/public/fw
+
+   Stop `wrangler dev`. It leaves a `workerd.exe` behind, so stop the node
+   process tree that runs `wrangler ... dev --port 8787`. Then end the daemon
+   hold. The board stays on 0.4.1. A cable flash of any build puts it back.
+
+Keep the logs and the PNGs, and note the transfer time and the heap during
+the transfer. Those are the numbers this page still marks unproven.
+
+This procedure does not cover a crash or a hang during the trial. Those
+restart while the image is still pending, which the bootloader rolls back the
+same way. A bad signature, the wrong board, and a corrupted image are proven
+natively and are not repeated on the board.
 
 ## What is proven, and what is not
 

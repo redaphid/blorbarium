@@ -230,7 +230,7 @@ static void restartIntoUpdate() {
 }
 
 static void reportBoot() {
-  Serial.printf("[hw] blorbarium %s lcd128\n", BLORB_FW);
+  Serial.printf("[hw] blorbarium %s fw=%s lcd128\n", BLORB_FW, blorb::kFirmwareVersion);
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   const bool filesFailed = storageState.files == hw::StorageState::Files::Failed;
@@ -281,7 +281,13 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
   reportBoot();
+#if defined(BLORB_OTA_FAIL_TRIAL)
+  // For the hardware proof only (docs/ota.md): an image that reports its panel
+  // down, so its trial must roll it back.
+  trial.begin(false, dish->boot() == blorb::Boot::Resumed, petMark());
+#else
   trial.begin(panelUp, dish->boot() == blorb::Boot::Resumed, petMark());
+#endif
   otaPackets.begin();
   const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
