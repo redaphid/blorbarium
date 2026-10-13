@@ -27,10 +27,12 @@ std::optional<Holds> scan(Volume& v, F&& seen) {
   return blank ? Holds::Blank : Holds::Foreign;
 }
 
-// A partition that would not open, judged by its own bytes alone: the other
-// one's evidence says nothing about whether formatting this one loses a pet.
-VolumeReport settle(Volume& v, Holds held) {
-  if (held == Holds::Pet || held == Holds::Unreadable) return {Opened::LeftAlone, held};
+bool mayHoldPet(Holds h) { return h == Holds::Pet || h == Holds::Unreadable; }
+
+// A partition that would not open: never formatted over a mark of ours, nor
+// when `keep` gives another reason it may hold part of a pet.
+VolumeReport settle(Volume& v, Holds held, bool keep) {
+  if (keep || mayHoldPet(held)) return {Opened::LeftAlone, held};
   return {v.format() ? Opened::Formatted : Opened::FormatFailed, held};
 }
 
@@ -57,8 +59,14 @@ Holds filesHold(Volume& v, uint32_t blockSize) {
 
 Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize) {
   Provisioned p;
-  if (!slots.open()) p.slots = settle(slots, slotsHold(slots));
-  if (!files.open()) p.files = settle(files, filesHold(files, fsBlockSize));
+  if (!slots.open()) p.slots = settle(slots, slotsHold(slots), false);
+  if (!files.open()) {
+    const Holds held = filesHold(files, fsBlockSize);
+    // Junk in petfs beside a pet is a half-damaged keepsake whose lineage may
+    // be in it. `pet` was read before any format, or is read now if it opened.
+    const bool besidePet = held == Holds::Foreign && mayHoldPet(p.slots.held ? *p.slots.held : slotsHold(slots));
+    p.files = settle(files, held, besidePet);
+  }
   return p;
 }
 
@@ -69,8 +77,9 @@ const char* describe(const VolumeReport& r) {
       return r.held == Holds::Blank ? "formatted: it was blank"
                                     : "formatted: it held another firmware's bytes and never a pet";
     case Opened::LeftAlone:
-      return r.held == Holds::Pet ? "LEFT ALONE: it holds a damaged blorbarium pet; nothing saves"
-                                  : "LEFT ALONE: it would not read; nothing saves";
+      return r.held == Holds::Pet       ? "LEFT ALONE: it holds a damaged blorbarium pet; nothing saves"
+             : r.held == Holds::Foreign ? "LEFT ALONE: unknown bytes beside a blorbarium pet; nothing saves"
+                                        : "LEFT ALONE: it would not read; nothing saves";
     case Opened::FormatFailed: return "FAILED: it would not format; nothing saves";
   }
   return "?";

@@ -210,16 +210,17 @@ All paths below are in that repo.
 - Which board blorbarium uses is not decided.
 - **A board's first boot formats what never held a pet** (issue #1,
   `lib/blorb/include/blorb/provision.h`). When `pet` or `petfs` will not
-  open, boot reads that partition raw and judges it by its own bytes. With
-  no blorbarium mark it is blank or a factory demo's, and it is formatted.
-  With one it is a damaged keepsake: it is left alone, the pet does not
-  save, and the log says `LEFT ALONE` with `!!! the pet is not being saved`.
-  Rescue that board by hand from a read-only dump. The other partition is
-  not consulted, because formatting a partition with no mark of ours cannot
-  lose a pet. A first version judged the pair together, and review found it
-  kept a factory NVS beside a petfs an older build had formatted unsavable
-  forever, and left a real pet's blank petfs unformatted, so no lineage
-  saved. The pet marks are bytes every save already
+  open, boot reads it raw. One that holds a blorbarium mark is a damaged
+  keepsake: it is left alone, the pet does not save, and the log says
+  `LEFT ALONE`. Rescue that board by hand from a read-only dump. Without a
+  mark, `pet` is formatted, judged by its own bytes alone. `petfs` is
+  formatted when it is blank, or when it is foreign and `pet` holds no pet;
+  foreign bytes beside a pet are left alone, because on the test board
+  (round 2) junk over both heads left the pet resuming from NVS and
+  formatting petfs threw his lineage away. Judging the pair wholly together
+  was tried first and review found it wrong both ways: a factory NVS beside
+  a petfs an older build had formatted stayed unsavable forever, and a real
+  pet's blank petfs was never formatted. The pet marks are bytes every save already
   has: `BLRB` at a 32-byte NVS entry, and a LittleFS superblock of petfs's
   own geometry (4096 x 1440) at offset 8 of block 0 or 1. So a board saved
   before this rule (the gift device) is recognised with no new marker. The
