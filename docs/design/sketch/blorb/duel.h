@@ -207,13 +207,14 @@ static_assert(Assist::hearts(128, 140) == 0 && Assist::hearts(100, 140) == 1 && 
 //     dazzles the friend; hush sets hushTurns)
 //   3 clash: beats(), or a head bonk on equal stances, which a side with
 //     bonkTurns > 0 wins (both or neither: still a bonk)
-//   4 damage: 1 heart to the clash loser unless it is hushing, or the winner
-//     is dazzled and its luck misses; OnDamage handlers (zap, shell)
-//   5 AfterDamage handlers (mend, spores); then sparks: +1 to each side not
+//   4 damage: 1 heart to the clash loser; OnDamage handlers only ADD hits (zap)
+//   5 Block handlers only TAKE hits away (shell, hush, a dazzled winner's
+//     luck missing), reading the hits both OnDamage passes left
+//   6 AfterDamage handlers (mend, spores); then sparks: +1 to each side not
 //     dozing, +1 more to the clash loser (the rally), capped at kMeterMax;
 //     the turn counters tick down. Nothing rewards the winner: the probe
 //     measured every winner reward snowballing.
-//   6 a side at 0 hearts faints: the battle ends (both at 0: a draw)
+//   7 a side at 0 hearts faints: the battle ends (both at 0: a draw)
 // A powered move whose meter is short plays as an unpowered move.
 Outcome resolve(const BattleCard& a, const BattleCard& b, uint32_t seed, const MoveLog& movesA,
                 const MoveLog& movesB);
@@ -230,7 +231,9 @@ struct PowerCtx {
   uint8_t (&hit)[2];
   bool (&blocked)[2];
   SideState (&side)[2];
-  uint32_t luck;                 // fnv(seed, turn, mine.lineageId): this side's own luck
+  uint32_t luck;                 // fnv(seed, turn, mine.lineageId): this side's own luck;
+                                 // each use draws fnv(luck, purpose), so gadget's pick and a
+                                 // dazzle miss in one turn are independent
 };
 #define BLORB_POWER(id, name, cost, glyph) void power_##name(PowerPhase, PowerCtx&);
 #include "blorb/defs/powers.def"

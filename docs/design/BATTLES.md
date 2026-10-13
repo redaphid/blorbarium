@@ -15,14 +15,14 @@ Labels used throughout: **measured** (a command run on 2026-10-13, or a number f
 5. **A turn:** tilt to Pounce, Guard or Trick, then knock to lock. BOOT fires the power when the meter is full, a shake makes the pet foretell the friend's move, and a double knock sends a cheer. After 10 s the pet picks.
 6. **Resolution** is one pure function, `resolve(cardA, cardB, seed, movesA, movesB)`. It is integer and mirror-symmetric, and it replays from turn 0 every time.
 7. **Each device writes only its own move log.** Every packet carries the whole log, and the receiver keeps the longest consistent prefix. Loss, duplicates and reordering only delay a turn; they never change it.
-8. **The wheel** is two rock-paper-scissors cycles. Stances: Pounce > Trick > Guard. Elements: Splash > Spark > Sprout. Nine powers are tuned by one cost column. Measured: every species wins 0.450 to 0.546 of its battles.
+8. **The wheel** is two rock-paper-scissors cycles. Stances: Pounce > Trick > Guard. Elements: Splash > Spark > Sprout. Nine powers are tuned by one cost column. Measured in a model where powers fire as soon as the meter is full: every species wins 0.450 to 0.546.
 9. **Fairness** is skill-based. The kid who has been playing worse gets up to two extra hearts and a brighter "whisper" of what the pet has read about the friend. Level, age and breeding add no strength.
 10. **Feelings:** five duel stimuli go through the pet's own genes, behind a code allowlist (`kidSafe`) that refuses injury, life, toxin and pain. A faint is a nap.
 11. **Both sides gain** XP, a friend-book entry, the befriended stimulus and the chance of a friend egg. A pet that is not up for it declines with a picture.
 12. **Learning:** the pet's duel Skill table learns which stance works against which kind of friend. It drives the 10 s autopilot and the lean, and v2's lore can make it heritable.
 13. **Radio:** ESP-NOW v1 on fixed channel 1 at 10 dBm, with Wi-Fi up only while a duel is open. Packets are 76 to 223 B, under the 250 B frame (measured). BLE stays up through IDF software coexistence.
 14. **OTA:** one atomic `RadioLease` keeps duels and OTA apart, and no duel runs on an image still on trial.
-15. **Save formats:** two Clutch-chunk trailing bytes, three new gene kinds, and two new petfs files. `lineage.log` and `kFormatVersion` are unchanged.
+15. **Save formats:** 5 trailing bytes on the saved clutch, three new gene kinds, and four new petfs files. `lineage.log` and `kFormatVersion` are unchanged.
 
 ## Usage
 
@@ -64,7 +64,7 @@ Outcome o = resolve(cardA, cardB, duelSeed(nonceA, nonceB, rematch), movesA, mov
 
 ### Consent and discovery
 
-1. **Ready.** A kid presses BOOT twice. That is v2's game-wheel gesture. Once v2's games registry lands, the duel becomes a wheel row: `BLORB_GAME(6, duel, Duel, captures(knock, double_knock, button), 300, 0, 12, 3, duel)`. `DishDuel` checks `readiness()`, makes a `LocalConsent` (the only place one is made), and opens the session. Opening turns Wi-Fi on and starts a beacon every 300 ms. **That press is the consent on that device.** A device whose owner did not press has its radio off: it hears nothing and sends nothing.
+1. **Ready.** A kid presses BOOT twice. That is v2's game-wheel gesture. Once v2's games registry lands, the duel becomes a wheel row: `BLORB_GAME(6, duel, Duel, captures(knock, double_knock, button), 300, 0, 12, 3, duel)`. `DishDuel` checks `readiness()`, makes a `LocalConsent` (the only place one is made), and opens the session. Opening turns Wi-Fi on and starts a beacon every 300 ms. **That press is the consent on that device.** A device whose owner did not press has its radio off: it hears nothing and sends nothing. The press must come from the detector. `Dish::fire`, which the phone's `TWIST stimulus` uses, marks what it fires as remote, and the duel ignores remote stimuli for opening and for every in-duel gesture. `TWIST stimulus` also refuses the double-press and every Duel-source stimulus outright.
 2. **Declines.** A pet that is asleep, very sleepy, very hungry, resting after a duel, or wanting a cuddle after three losses in a row does not open, and shows why as a picture (zzz, an empty bowl, a hug). A pet that declines while a friend is near shows its picture on the friend's rim too. That is empathy, not an error.
 3. **The lobby.** Ready friends appear as their species' faces on the rim, up to four. Only friends heard at -62 dBm or louder count (about arm's length, an estimate that unit D12 sets on a desk). A different roster greys the friend out ("they speak another frog").
 4. **Matching needs both kids, and each device decides alone.** Either each kid tilts toward the other's face and knocks, so each beacon's `wants` names the other. Or the kids **clink**: they knock the two devices together, both knocks land within 300 ms, and each is the other's only coincident knocker. Both devices apply the same rule to the same beacons, so no "accept" message exists.
@@ -91,9 +91,9 @@ The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill a
 
 - A side at 0 hearts faints: spiral eyes, then a nap. After 15 turns, more hearts wins, and equal hearts is a draw.
 - The friends screen shows both pets side by side under a heart. Each side records the Meeting in its duel book (idempotent by battle id).
-- **Rematch:** both kids knock. The rematch number goes into both the seed and the battle id, so a late packet from the last bout never feeds the next one. Candidate A kept one id across rematches; the cross-judge found that a late State could then seed the new bout's empty log.
+- **Rematch:** both kids knock. The rematch number goes into both the seed and the battle id, so a late packet from the last bout never feeds the next one. Candidate A kept one id across rematches; the cross-judge found that a late State could then seed the new bout's empty log. A State from my peer that names the next battle id counts as their knock, so if one device moves on before the other hears its rematch flag, the other follows instead of waiting.
 - **Friend egg:** "hug your pet". Each kid cradles their own pet for 3 s within 10 s. When both State packets say `hugged`, the devices swap genomes (below) and each stores a friend egg for its next clutch. `SPECIES.md` has the genetics.
-- The lid, a drop, 20 s of silence ("wandered off") or a log conflict ends the duel as a draw for both.
+- The lid, a drop, 20 s of silence ("wandered off") or a log conflict ends the duel as a draw for both. A drop during a duel still reaches the pet as a startle, but its injury passes through `kidSafe()`, so a duel's tilting never costs a pet health (open question 10).
 
 ## Resolution and convergence
 
@@ -102,11 +102,12 @@ The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill a
 1. A dozing side (Spore Puff) has no stance this turn. It loses the clash and deals nothing.
 2. **Powers.** A move that asks for its power, with a meter holding the cost, spends it. Gadget draws the power it becomes from Tinker's own luck. BeforeClash handlers read both original stances. Foresee turns Grungo's stance into the counter. Dash and Lantern win head bonks. Lantern dazzles. Hush starts.
 3. **Clash.** `beats()` decides. Equal stances are a head bonk, which a side with bonk turns left wins.
-4. **Damage.** One heart goes to the clash loser, unless it is hushing, or the winner is dazzled and its luck misses. Then OnDamage handlers run (Zap, Shell).
-5. **After.** AfterDamage handlers run (Mend, Spores). Then sparks: +1 to each side that is not dozing, +1 more to the clash loser (the rally), capped at 6. The turn counters tick down. Nothing rewards the winner, because every winner reward snowballed in the probe.
-6. **End.** A side at 0 hearts faints, and the battle ends. Both at 0 is a draw.
+4. **Damage.** One heart goes to the clash loser. OnDamage handlers only add hits (Zap).
+5. **Block.** Block handlers only take hits away: Shell absorbs one, Hush cancels a lost clash, and a dazzled winner's hit misses on its luck. Splitting adding from taking away keeps both sides' handlers in one phase from reading what the other just wrote, which the mirror property needs (Zap against Shell).
+6. **After.** AfterDamage handlers run (Mend, Spores). Then sparks: +1 to each side that is not dozing, +1 more to the clash loser (the rally), capped at 6. The turn counters tick down. Nothing rewards the winner, because every winner reward snowballed in the probe.
+7. **End.** A side at 0 hearts faints, and the battle ends. Both at 0 is a draw.
 
-**Mirror symmetry.** Luck is `fnv(seed, turn, side.lineageId)` per side, the seed is symmetric in the nonces, and both handlers in one phase read the same inputs. So which device is side A (the lower MAC) changes only drawing order. A test asserts that `resolve(B, A, s, mB, mA)` mirrors `resolve(A, B, s, mA, mB)` over 10,000 random battles.
+**Mirror symmetry.** Luck is `fnv(seed, turn, side.lineageId)` per side, and each use draws `fnv(luck, purpose)`, so Gadget's pick and a dazzle miss in one turn are independent. Also, the seed is symmetric in the nonces, and both handlers in one phase read the same inputs. So which device is side A (the lower MAC) changes only drawing order. A test asserts that `resolve(B, A, s, mB, mA)` mirrors `resolve(A, B, s, mA, mB)` over 10,000 random battles.
 
 **Convergence.** Each device writes only its own `MoveLog`. The friend's log grows only by `adopt()` from a packet. Every State packet carries the sender's whole log (up to 15 moves of one byte each), so any one packet that arrives is enough.
 
@@ -127,7 +128,7 @@ Senders send at 5 Hz while the friend lacks something and at 1 Hz otherwise. A t
 
 `SPECIES.md` has the nine and their powers. An element advantage gives one head-start pip on the spark meter and a "SUPER!" flash. The probe measured a damage bonus for elements swinging pairs to 0.965 (candidate A's run), while a head-start pip barely moves them. A loved stance gives no number at all. It is the pet's lean, which the friend can learn to read: a mind game for a parent, and a habit a kid learns about their own pet.
 
-**Measured balance** (`sketch/tools/roster_probe.py 1500`, the synthesized rules with the roster's nine powers, Random vs Random, 81 pairs x 1,500 battles):
+**Measured balance** (`sketch/tools/roster_probe.py 1500`, the synthesized rules with the roster's nine powers, Random vs Random, 81 pairs x 1,500 battles). One modelling difference from the spec: the probe fires a power the moment the meter holds its cost, while a kid must press BOOT, so these numbers describe kids who always fire. D4's C++ tournament measures the armed version too.
 
 | Species | Grungo | Mossby | Puffkin | Gilly | Mothwick | Mudge | Fizz | Hushwing | Tinker |
 |---|---|---|---|---|---|---|---|---|---|
@@ -137,14 +138,14 @@ The worst single pair is Hushwing over Mudge at 0.672, and the median battle is 
 
 ## Fairness: a 6-year-old against a parent
 
-The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time.
+The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time. The probe models the whisper as a perfect frequency reader. The real lean is `petChoice` over a Skill table that starts each life at zero, so the lean-follower row is an upper bound until D4 measures `petChoice` itself.
 
 | Parent's win rate | no help | 1 heart | 2 hearts | 3 hearts |
 |---|---|---|---|---|
 | against a habit kid | 0.923 | 0.872 | 0.801 | 0.705 |
 | against a kid who follows the lean half the time | 0.491 | 0.311 | 0.172 | 0.092 |
 
-All measured. The lesson is that hearts alone barely rescue a habit-bound kid, while the pet's whisper turns a 0.92 rout into a coin flip. The design uses both, in this order:
+All measured in the probe, with the caveat above. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. How good `petChoice` gets is D4's measurement. The design uses both, in this order:
 
 1. **The pet whispers.** The pet's lean is its Skill reading of the friend, and it always shows as a soft glow on one glyph. Its brightness rises with the assist, so a young kid is shown the reading the pet has made. Following your pet is how a 6-year-old beats a parent, and it is what the toy wants kids to learn anyway.
 2. **Assist hearts, by skill and not by level** (graft from candidate C). The card carries the kid's **prowess**, a running mean (1/8 step) of how well that kid has picked: the share of turns the kid chose (not the pet) that won or bonked. Inside a 24-point dead band nobody gets help. Past it, the weaker side gets one heart per 32 points, at most two. The stronger side loses nothing. A kid who starts following the lean plays better, their prowess rises, and the help backs off by itself, so the 0.311 and 0.172 cells do not persist.
@@ -176,9 +177,9 @@ Duel outcomes reach the creature only as stimuli, through his own stimulus genes
 
 `daze` is the faint. It ends in a nap of about 3 to 4 minutes (arithmetic from its 90 s half-life and a receptor threshold). `pluck` is the battle high, and it reacts boredom away. The loser's swoon is calming (fear falls), and winner and loser both get `duel_befriended`. Its small sleepiness rise means that after about five duels in an hour (an estimate from the gene amounts) the pets yawn, and at 0.8 sleepiness they decline ("too sleepy"). That is a session limit parents will like, made of chemistry rather than a timer.
 
-**`kidSafe()` is an allowlist in code, not a gene** (`sketch/blorb/kid_safe.h`). Genes mutate, and every body byte is legal, so a descendant could carry a gene that makes `duel_bonked` raise injury. The creature's stimulus step passes every Duel-sourced delta through `kidSafe()`. Drives may fall freely and rise by at most 0.3. Pain may not rise. Adrenaline, daze and pluck may move. Everything else is zero, including any chemical added next year, until someone decides it is safe. Seven `static_assert`s hold the rule. Candidates B and C used denylists, which miss a private chemical a mutation wires to the die locus.
+**`kidSafe()` is an allowlist in code, not a gene** (`sketch/blorb/kid_safe.h`). Genes mutate, and every body byte is legal, so a descendant could carry a gene that makes `duel_bonked` raise injury. The creature's stimulus step passes every Duel-sourced delta through `kidSafe()`. Drives may fall freely and rise by at most 0.3. Pain may not rise. Adrenaline, daze and pluck may move. Everything else is zero, including any chemical added next year, until someone decides it is safe. Eight `static_assert`s hold the rule. Adrenaline may rise only by the same cap as a drive. The second step is guarded too: daze and pluck exist only for duels, so at expression any receptor or reaction that reads them is inert unless it targets `sleep_gate` (`kDuelChemTargets`). A mutation therefore cannot wire a faint onward to injury or the die locus. D2's tests plant both a `duel_bonked -> injury` stimulus gene and a `daze -> die` receptor. Candidates B and C used denylists, which miss a private chemical a mutation wires to the die locus.
 
-**Lineages from before duels.** A genome founded before this design has no duel feeling genes, so its pet would feel nothing. On the first duel open (never at boot, and never for a pet that never duels), `graftDuelGenes` appends the missing genes once, idempotently by uid, and records a lineage Checkpoint, the path `TWIST gene_edit` already uses. That edits a living keepsake genome, so it is open question 6. Without it, the pet still faints and recovers in the scene, but its chemistry does not react.
+**Lineages from before duels.** A genome founded before this design has no duel feeling genes, so its pet would feel nothing. On the first duel open (never at boot, and never for a pet that never duels), `graftDuelGenes` appends the missing genes once at `nextUid()` (no uid is ever reused, DEVIATIONS 6), idempotently by gene kind and stimulus id, and records a lineage Checkpoint, the path `TWIST gene_edit` already uses. Grafted genes never cross. That edits a living keepsake genome, so it is open question 6. Without it, the pet still faints and recovers in the scene, but its chemistry does not react.
 
 ## What each kid sees
 
@@ -195,15 +196,15 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 
 | Rule (owner, binding) | Where it is enforced |
 |---|---|
-| Never kills, injures, poisons or hurts | `kidSafe()` allowlist on every Duel-sourced delta (`static_assert`s); `test_two_dishes` compares injury, toxin and life against a control twin with no duel, over starters and mutated descendants |
+| Never kills, injures, poisons or hurts | `kidSafe()` allowlist on every Duel-sourced delta (`static_assert`s); daze and pluck readers inert at expression unless they target `sleep_gate`; a drop's injury passes `kidSafe()` while a duel is open; the friend egg crosses only looks, temperament, faces, knack, species and power; `test_two_dishes` compares injury, toxin and life against a control twin with no duel, over starters and mutated descendants |
 | Never permanently weakens | the card has no stat a loss lowers; XP only grows (a loss earns 2); Skill changes choices, not numbers |
 | The loser faints and recovers | `duel_fainted` raises daze, and daze feeds `sleep_gate` (a nap); nothing reads daze into the die or cause loci |
 | Both sides gain | XP, `duel_befriended`, a friend-book entry and a friend-egg chance for both |
 | A 6-year-old against a parent is fun | the whisper, prowess assist hearts, no stats, the autopilot, the shake's reading |
-| No battle without consent on that device | the `LocalConsent` type; the Air is closed by default; no verb, twist or packet path to `open`; the `closedDeviceIsDeaf` test |
+| No battle without consent on that device | the `LocalConsent` type; the Air is closed by default; only detector-fired stimuli open a duel or lock a move (`SenseOut::remote`); `TWIST stimulus` refuses the double-press and Duel stimuli; the `closedDeviceIsDeaf` test and a test that fires every stimulus name over the phone |
 | No cross without consent on both devices | each kid's own hug, carried as a flag in their own State |
 | Never during an OTA | `RadioLease`, plus refusal while the image is on trial |
-| No stranger contact | no names or text on the air (species, tints, stage only); picture cheers; a match needs mutual choice or a clink; 10 dBm and a -62 dBm gate make the range a room |
+| No stranger contact | no names or text on the air (species, tints, stage only); a beacon carries no permanent id (the lineage id goes only in the unicast State after a match); picture cheers; a match needs mutual choice or a clink; 10 dBm and a -62 dBm gate make the range a room |
 
 ## Radio
 
@@ -214,7 +215,7 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 - **BLE coexistence.** IDF software coexistence is compiled in for this board's variant (measured: `CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE 1` in `esp32s3/qio_qspi/include/sdkconfig.h`). BLE keeps advertising during a duel, so a parent's phone can watch through `SUB` events. Turns are human-paced, so coexistence time-slicing costs nothing visible. Loss under coexistence is unmeasured, and the protocol tolerates any loss short of silence. The lever, if coexistence is bad on the board, is to pause BLE advertising while a duel holds the lease (candidate C's choice).
 - **Wi-Fi exists only while a duel is open.** `open()` runs `WiFi.mode(STA)`, sets the channel and power and calls `esp_now_init`. `close()` deinits and runs `WiFi.mode(OFF)`, which returns the heap. A pet that never duels never pays for Wi-Fi.
 - **The OTA interlock is one lease.** `hw::RadioLease` (`sketch/hw/radio.h`) is an atomic compare-and-swap from Idle to Duel or Ota (graft from candidate B, because the OTA receiver may ask from the BLE host task). The OTA's BEGIN replies `OTA err busy:duel` while a duel holds it, and `Air::open()` fails while the OTA holds it, so the pet shakes his head. A duel is also refused while the running image is still on trial (`ESP_OTA_IMG_PENDING_VERIFY`), so a trial image never writes a duel book entry or a friend egg that a rollback would meet. The `ota` sibling has been sent this proposal.
-- **The friend egg's genome swap** uses Genome packets: a 64-bit bitmap of the friend's chunks I hold, plus one 200 B chunk of mine they lack, round-robin. It is state-based, so loss and duplicates are harmless. Grungo's 1,528 B genome is 8 chunks (arithmetic), and the 8 KB cap is 41. If the swap does not finish in 10 s, the egg fizzles into sparkles and nothing is stored.
+- **The friend egg's genome swap** uses Genome packets: a 64-bit bitmap of the friend's chunks I hold, plus one 200 B chunk of mine they lack, round-robin, four packets per send at 5 Hz. It is state-based, so loss and duplicates are harmless. Grungo's 1,528 B genome is 8 chunks, and the 8 KB cap is 41 chunks, about 2 s without loss (arithmetic). The friends screen stays open while a swap runs. If it does not finish in 15 s, the egg fizzles into sparkles and nothing is stored.
 
 ## Budgets
 
@@ -233,7 +234,7 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 | Drawing a second pet | one more sprite composite a frame, inside the 40 ms frame (23 ms SPI push, measured) | estimate |
 | Nine species packs | about 630 KB of the 2 MiB `art` partition | estimate (70 KB each, grungo.md) |
 | Wi-Fi and ESP-NOW code | 300 to 500 KB of the 4 MB app slot (about 3.35 MB free) | estimate; the free figure is measured (sprite-space.md) |
-| `duels.log` on petfs | under 64 KB, compacted to one summary per friend | arithmetic (about 120 B a duel) |
+| `duels.log` on petfs | under 64 KB, compacted to one summary per friend | arithmetic (about 160 B a duel with framing: the 64 B card and the 74 B Skill dominate) |
 | `friend.egg` on petfs | 24 B record plus the friend's genome (8 KB at most) | measured `sizeof`; cap from `kMaxGenomeBytes` |
 
 **The first hardware gate** (unit D12) is a soak: open, duel and close three times with a phone connected, then a friend-egg swap. It logs `minheap` and the largest internal block, and fails if `minheap` drops under 40 KB.
@@ -247,17 +248,17 @@ All in `pio test -e native` in WSL `survivor`, except the sim film.
 3. **`test_duel_wire`** (D6): round trips; the size asserts; a fuzz of 1,000,000 random buffers (decode never crashes; a bad CRC is refused); a newer version refused.
 4. **`test_duel_session`** (D6): two sessions on one `Ether` with seeded weather (30 percent drop, 10 percent doubles, 20 percent reorder, up to 0.8 s late). Over 1,000 seeds both Meetings exist, name the same `BattleId` and `outcomeHash`, and mirror `me`. Silence fizzles both within 20 s. A lid on one side ends both. A late packet from bout n never reaches bout n+1. A peer under -62 dBm is never matched, and a declining one is never matched. Only the coincident pair of three devices matches on a clink. `closedDeviceIsDeaf` holds. A refused `Air::open` (OTA) leaves the session closed. The genome swap completes at 30 percent loss and fizzles cleanly when cut off.
 5. **`test_two_dishes`** (D9): two whole `Dish`es, each with `MemStorage` and a `FakeAir`, driven by scripted 50 Hz BodySamples (tilt, knock, shake, cradle). A full duel runs. The loser's daze rises, he naps and wakes. Both get `duel_befriended`. Both books hold the meeting. Injury, toxin and life equal a control twin's. A shake mid-duel hops him and judges the prophecy. Both hugs give each side a `friend.egg`. `body_only_full_life` still passes.
-6. **`test_friend_egg`** (D8): the `SPECIES.md` list (replay without the friend's genome, viability fallback, hybrid rate, the timeout never picks it, an old reader loads the Clutch chunk).
+6. **`test_friend_egg`** (D7): the `SPECIES.md` list (replay without the friend's genome, both viability checks, the allowlist, the hybrid rate, a clutch of 3 giving up its last slot, the timeout never picks it, a reboot during the pick keeps the friend's genome, an old reader loads the clutch record).
 7. **`tools/duel_balance`** (D4): the 9 x 9 tournament through the real `resolve()`, gated on the bounds above.
 8. **The sim film** (D13; WSL, SDL headless): `sim --duel-bot` gives the simulator a FakeAir whose other end is an in-process `DuelSession` with a scripted kid, on the fixed clock, so two runs are byte-identical. The goldens are the lobby with a friend, VS, choosing with the lean, locked with the friend's tick, a reveal, SUPER!, each of the nine powers, a prophecy bubble, the faint, the friends photo, the hug and the friend egg rolling in, and the founding nest. Each is looked at before it is blessed.
 9. **What needs hardware** (D12): the Wi-Fi heap; coexistence loss with a phone connected; whether a device-to-device clink registers on both QMI8658 tap engines; the RSSI hook and the -62 dBm distance; range in a house; OTA refused mid-duel.
 
 ## Save-format changes (the pet is a keepsake)
 
-- **Keepsake `snap.a/b`:** the Clutch chunk gains trailing bytes for the friend egg (index and cross seed). Older readers ignore trailing bytes, as the Body chunk's mouth byte already relies on. `kFormatVersion` stays 1. A committed fixture proves it. No other chunk changes.
+- **Keepsake `snap.a/b`:** the clutch record inside `Chunk::Occupant` (`Kind::Clutch`) gains 5 trailing bytes, the friend egg's slot and its cross seed. Its decoder stops after the heirlooms and never checks for leftover bytes (`keepsake.cpp`), so older readers ignore them. `kFormatVersion` stays 1, and a committed fixture proves it. A friend egg lives within `kMaxClutch` (3): a clutch of 1 or 2 grows by one, and a full clutch gives its last slot to the friend egg, so the saved count and lineage's three seeds keep their shape. No other chunk changes.
 - **`lineage.log`: none.** A friend egg's cross is MutPoint ops in an ordinary Birth. The one-time duel-gene graft is a Checkpoint, an entry kind that exists today.
 - **New gene kinds** 0x24, 0x25 and 0x1A. Older firmware carries them unexpressed.
-- **New petfs files** `duels.log` and `friend.egg`. Older firmware never opens them.
+- **New petfs files** `duels.log`, `friend.egg`, `found.pin` (an owner's species pin, read only at a fresh founding) and `duel.cfg` (`TWIST duels off`). Older firmware never opens them.
 - **Living pets' genomes are untouched**, except by the one-time graft (open question 6).
 - **While an image is on trial, no duel runs**, so nothing new is written that a rollback could meet.
 
@@ -300,6 +301,8 @@ The design came from the pstack architect skill: Phase A grounding, then three r
 
 There were no dropouts.
 
+**Adversarial review** (opus, read-only, after synthesis). It traced every desync path (rematch ids, late packets, a dozing side's auto-move, the two-turn counters, prefix adopt) and found none. It found 19 other defects, all fixed in this revision. The three that would have blocked a build were all in the friend egg: a fourth egg would have overflowed `kMaxClutch` and both save formats; kids' and owner builds numbered their genes differently, so crosses would have copied the wrong genes; and `mutate()`'s last fallback returns its input unchecked, so a lethal cross could hatch. The other majors were these. A friend's chemistry and stimulus genes could cross. Daze and pluck receptors were unguarded. The phone could fire the stimulus that opens a duel. A rematch could deadlock. And the balance probe's model differed from the spec, which the doc now says.
+
 ## Alternatives considered
 
 - **An autobattler** (candidate B). The pet is fully alive in the fight, which suits an alife toy, but kids become spectators with a late remote control, and a 12-year-old finds it passive. This design keeps the pet's mind in the lean, the autopilot, the mood and the prophecy, so the alife core still shows.
@@ -329,19 +332,19 @@ Every file has one owner. "C" is created and "E" is edited. Engine paths are und
 | Unit | Owns | Acceptance | Depends |
 |---|---|---|---|
 | **D1 Species registry** | C `species.h`, `defs/species.def`, `defs/powers.def`, `tools/species_neg_check.sh` | the wheel and power `static_assert`s; the three planted rows from `sketch/check.sh` each fail with their own message; `rosterHash` stable across builds | none |
-| **D2 Feelings and the safety rule** | C `kid_safe.h`, `starter_duel.h`, `src/starter_duel.cpp`, `test/test_kid_safe/`; E `defs/stimuli.def`, `defs/chemicals.def`, `registry.h` (`StimSource::Duel`), `src/creature.cpp` (kidSafe in the stimulus step) | the `static_assert`s; a creature fed every duel stimulus 1,000 times keeps injury, toxin and life equal to a twin's; a planted gene routing `duel_bonked` to injury changes nothing; daze gives a nap and a wake | D1 |
-| **D3 Species genes and starters** | C `src/species_starter.cpp`, `test/test_species/`; E `defs/gene_kinds.def`, `genes.h`, `src/genes.cpp`, `src/starter_genome.cpp`, `creature.h` (`SpeciesTraits` in Phenotype; the Clutch's friend-egg fields) | `test_species` (testing section, item 1); 10,000 mutations never move a species or power byte | D1, D2 |
+| **D2 Feelings and the safety rule** | C `kid_safe.h`, `starter_duel.h`, `src/starter_duel.cpp`, `test/test_kid_safe/`; E `defs/stimuli.def` (the duel rows and `button_double`), `defs/chemicals.def`, `registry.h` (`StimSource::Duel`), `src/creature.cpp` (kidSafe in the stimulus step; a drop's injury through kidSafe while a duel is open) | the `static_assert`s; a creature fed every duel stimulus 1,000 times keeps injury, toxin and life equal to a twin's; planted `duel_bonked -> injury` and `daze -> die` genes change nothing; daze gives a nap and a wake | D1 |
+| **D3 Species genes and starters** | C `src/species_starter.cpp`, `test/test_species/`; E `defs/gene_kinds.def`, `genes.h`, `src/genes.cpp` (express rules, and daze or pluck readers inert outside `kDuelChemTargets`), `src/starter_genome.cpp` (a fixed uid per recipe line), `creature.h` (`SpeciesTraits` in Phenotype; the Clutch's friend-egg fields) | `test_species` (testing section, item 1); 10,000 mutations never move a species or power byte; an owner-built and a kids'-built starter share every recipe uid | D1, D2 |
 | **D4 Duel rules and balance** | C `duel.h`, `src/duel_resolve.cpp`, `src/duel_powers.cpp`, `src/duel_mind.cpp` (petChoice, learnTurn, foretell), `tools/duel_balance.cpp`, `test/test_duel_resolve/` | testing item 2; the balance gate (species 430 to 570 permille, pairs 300 to 700, reader over habit at least 700); the C++ tournament reproduces `roster_probe.py` within 0.03 per species | D1 |
 | **D5 Card and readiness** | C `duel_card.h`, `src/duel_card.cpp`, `test/test_duel_card/` | a card from each starter; mood bytes follow chemistry; each `Decline` reason from a crafted occupant; three losses then a cradle clears `WantsACuddle` | D3, D4 |
 | **D6 Book** | C `duel_book.h`, `src/duel_book.cpp`, `test/test_duel_book/` | the fold gives XP, level, prowess and Skill; `record` is idempotent by `BattleId`; a torn tail truncates; compaction keeps one summary per friend; prowess moves by 1/8 and not at all for a pet-only battle | D4 |
 | **D7 Friend egg** | C `friend_egg.h`, `src/friend_egg.cpp`, `test/test_friend_egg/`; E `src/clutch.cpp`, `src/keepsake.cpp` (Clutch trailing bytes), `test/fixtures/keepsake_v1_friend_egg.bin` | testing item 6 | D3 |
 | **D8 Wire, air and session** | C `air.h`, `duel_wire.h`, `duel_session.h`, `src/duel_wire.cpp`, `src/duel_session.cpp`, `test/support/fake_air.h`, `test/test_duel_wire/`, `test/test_duel_session/` | testing items 3 and 4 | D4, D5, D6, D7 |
-| **D9 Dish integration** | C `dish_duel.h`, `src/dish_duel.cpp`, `test/test_two_dishes/`; E `dish.h`, `src/dish.cpp`, `src/senses.cpp` (a minimal double-press detector until v2 U3) | testing item 5; captured knocks never reach the creature and a shake always does; a Meeting or a friend egg saves at once; `graftDuelGenes` is idempotent and recorded as one Checkpoint | D2, D8 |
-| **D10 Founding** | C `founding.h`, `src/founding.cpp`, `test/test_founding/`; E `src/lineage.cpp` (`Founding.species` from the pick) | the nest's gestures pick the lit egg; the timeout keeps the first; `needsFounding` is false with any keepsake or lineage; a pinned species wins before the first hatch only | D3 |
+| **D9 Dish integration** | C `dish_duel.h`, `src/dish_duel.cpp`, `test/test_two_dishes/`; E `dish.h` (`DishOptions::air`), `src/dish.cpp` (`fire` marks `remote`), `senses.h` (`SenseOut::remote`), `defs/senses.def`, `src/senses.cpp` (a minimal double-press detector until v2 U3) | testing item 5; captured knocks never reach the creature and a shake always does; a Meeting or a friend egg saves at once; `graftDuelGenes` is idempotent and recorded as one Checkpoint | D2, D8 |
+| **D10 Founding** | C `founding.h`, `src/founding.cpp`, `test/test_founding/`; E `src/lineage.cpp` (`Founding.species` from the pick), `src/debug_verbs.h` (`DEBUG found <id>` writes `found.pin`) | the nest's gestures pick the lit egg; the timeout keeps the first; `needsFounding` is false with any keepsake or lineage; a `found.pin` makes the nest a single egg at a fresh founding and is ignored otherwise | D3 |
 | **D11 Presentation** | C `lib/paint/include/paint/duel.h`, `lib/paint/src/duel_scene.cpp`, `lib/paint/src/species_packs.cpp` (`packFor`), `test/test_present_duel/`; E `appearance.h`, `src/appearance.cpp` | struct goldens of DuelView-driven Appearance per phase; `packFor` falls back to grungo, tinted; no state is colour-only (a lint) | D9; the roster art |
 | **D12 Firmware radio** (hardware, owner's go-ahead) | C `src/hw/radio_lease.h`, `src/hw/radio_espnow.h`; E `src/main.cpp` (the nest at first boot, the Air, the lease, `drawDuel`) | `pio run -e badge128` builds. On two boards, only with the owner's go-ahead to flash: the heap soak (`minheap` at least 40 KB); a duel and a friend egg; BLE connected throughout; OTA BEGIN refused mid-duel; a duel refused on a trial image; RSSI at 30 cm and 2 m sets `kNearRssi` | D9, D10, D11; DESIGN unit 22 adopts the lease |
 | **D13 Sim film** | C `sim/duel_bot.h`, `tests/feeds/duel_*.txt`, `test/golden/duel_*.png`; E `sim/sim.cpp`, `tools/sim_film.sh` | testing item 8; each golden looked at before blessing | D11 |
-| **D14 Phone window** | E `defs/commands.def` (`FRIENDS`), `src/protocol.cpp` (`! DUEL` events, FRIENDS streaming), `defs/twists.def` (`found`, `duels`), `src/twists.cpp`, `docs/ble.md` | golden transcripts; FRIENDS lists the book with no MAC or id; no verb or twist opens a duel (a test walks COMMANDS and TWISTS); `found` is refused after the first hatch; `TWIST duels off` keeps BOOT x2 from opening | D6, D9 |
+| **D14 Phone window** | E `defs/commands.def` (`FRIENDS`), `src/protocol.cpp` (`! DUEL` events, FRIENDS streaming), `defs/twists.def` (`duels`), `src/twists.cpp` (`twist_duels` writes `duel.cfg`; `twist_stimulus` refuses `button_double` and Duel-source stimuli), `docs/ble.md` | golden transcripts; FRIENDS lists the book with no MAC or id; no verb or twist opens a duel or locks a move (a test fires every stimulus name and walks COMMANDS and TWISTS); `TWIST duels off` keeps BOOT x2 from opening and survives a reboot | D6, D9 |
 
 No file appears in two rows. **Order:** D1. Then D2, D3 and D4 in parallel. Then D5, D6, D7 and D10 in parallel. Then D8. Then D9. Then D11 and D14. Then D12 and D13. D4 goes first among equals, because its numbers decide whether a duel is fun, and the C++ harness should confirm the probe before any radio code exists.
 
@@ -351,7 +354,7 @@ No file appears in two rows. **Order:** D1. Then D2, D3 and D4 in parallel. Then
 
 Only product calls. Each has the default this design ships.
 
-1. **Who decides each device's species?** Default: each kid picks from a nest of three (one per element), rolled from the MAC. The alternative is that you pin one species per device before you hand them out (`TWIST found` or `DEBUG found`), so the family covers all nine and no two cousins share one.
+1. **Who decides each device's species?** Default: each kid picks from a nest of three (one per element), rolled from the MAC. The alternative is that you pin one species per device over the cable before you hand them out (`DEBUG found <id>`), so the family covers all nine and no two cousins share one.
 2. **Should duels be allowed between any two family devices, parent against child included?** Default: yes, with the prowess assist.
 3. **Friend eggs: yes?** Default: yes, after both kids hug, one waiting at a time, and never picked by the clutch timeout. "No" drops unit D7 and the hug. Duels still work.
 4. **Hybrids (a body of one species with another's power):** fine? Default: yes. Battles are then how powers spread through a family.
@@ -360,6 +363,7 @@ Only product calls. Each has the default this design ships.
 7. **Should neglect be able to kill on the children's devices?** DEVIATIONS 2 made it lethal for the adult owner. Battles never kill either way. Default for the kids' devices: off (`kNeglectCanKill = false`).
 8. **Is 10 s per turn right for a 6-year-old?** Default: 10 s, after which the pet picks.
 9. **A parent switch?** Default: `TWIST duels off` from the website, on by default.
+10. **A drop during a duel:** should it still injure? A drop is the kid's, not the battle's, but tilt play makes drops likelier. Default: while a duel is open, a drop startles the pet but its injury passes through `kidSafe()`, so it does nothing.
 
 ## Risks
 

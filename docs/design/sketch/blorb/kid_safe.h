@@ -12,9 +12,17 @@
 // until someone decides it is safe.
 //
 // Allowed: drives may fall freely and rise a little (a flinch of fear, a
-// sleepy swoon); adrenaline, daze and pluck may move. Refused: life, injury,
-// toxin, pain rising, every private chemical a mutation might wire to the die
-// locus. The faint is daze -> sleep_gate: a nap, nothing more.
+// sleepy swoon); adrenaline may rise a little; daze and pluck may move.
+// Refused: life, injury, toxin, pain rising, every private chemical a
+// mutation might wire to the die locus. The faint is daze -> sleep_gate: a
+// nap, nothing more.
+//
+// The second step is guarded too. daze and pluck exist only for duels, and
+// a mutated receptor or reaction could wire them onward to injury or the die
+// locus. express_receptor and express_reaction (genes.cpp, unit D3) make any
+// gene that reads daze or pluck inert unless it targets kDuelChemTargets.
+// Adrenaline predates duels and its receptors stay free, so a duel may raise
+// it only by the drive cap: no bigger a fright than a flinch.
 #include "blorb/fixed.h"
 #include "blorb/ids.h"
 #include "blorb/registry.h"
@@ -41,11 +49,15 @@ inline constexpr ChemId daze{25}, pluck{26};
 // The largest rise a duel stimulus may give a drive: a flinch, not a fright.
 inline constexpr Fx kDuelDriveRiseCap = Fx::ratio(3, 10);
 
+// Where a gene reading daze or pluck may write. Anything else is inert at expression.
+inline constexpr LocusId kDuelChemTargets[] = {locus::sleep_gate};
+
 constexpr bool isDriveChem(ChemId c) { return c.v >= kDriveBase && c.v < kDriveBase + kDriveCount; }
 
 // The whole rule. Pure, so it is unit-tested directly and static_asserted.
 constexpr Fx kidSafe(ChemId c, Fx delta) {
-  if (c == duelchem::daze || c == duelchem::pluck || c == chem::adrenaline) return delta;
+  if (c == duelchem::daze || c == duelchem::pluck) return delta;
+  if (c == chem::adrenaline) return delta <= Fx::zero() ? delta : fxMin(delta, kDuelDriveRiseCap);
   if (isDriveChem(c)) {
     if (delta <= Fx::zero()) return delta;
     if (c == driveChem(drive::pain)) return Fx::zero();
@@ -61,5 +73,6 @@ static_assert(kidSafe(driveChem(drive::pain), Fx::one()) == Fx::zero(), "a duel 
 static_assert(kidSafe(ChemId{200}, Fx::one()) == Fx::zero(), "an unnamed chemical is refused, not trusted");
 static_assert(kidSafe(driveChem(drive::loneliness), -Fx::one()) == -Fx::one(), "a duel may comfort freely");
 static_assert(kidSafe(driveChem(drive::fear), Fx::one()) == kDuelDriveRiseCap, "a fright is capped to a flinch");
+static_assert(kidSafe(chem::adrenaline, Fx::one()) == kDuelDriveRiseCap, "a duel startles, never terrifies");
 
 }  // namespace blorb

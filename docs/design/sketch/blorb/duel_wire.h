@@ -35,7 +35,8 @@ struct BeaconPacket {
   PeerAddr wants{};              // whom my owner pointed at and knocked (none: nobody yet)
   uint8_t knockAgoTicks = 255;   // ticks since my last knock, 255 = none: the clink
   Decline decline = Decline::None;   // shown on the friend's screen as a picture; never matched while set
-  BattleCard card{};
+  BattleCard card{};             // encode() writes lineageId as 0 in a beacon: no permanent id is broadcast;
+                                 // the matched friend learns it from the unicast State
 };
 
 struct StatePacket {

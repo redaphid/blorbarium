@@ -20,9 +20,12 @@ namespace blorb {
 // Graft from candidate B, narrowed: a lineage founded before duels has no
 // duel feeling genes, so its pet would not feel a battle. On the first duel
 // open (never at boot, never for a pet that never duels) the missing genes
-// are appended once, idempotently (keyed by their uids), and recorded as a
-// lineage Checkpoint, the path TWIST gene_edit already uses. This edits a
-// living keepsake genome and is called out in BATTLES.md (open question 6).
+// are appended once at nextUid() (DEVIATIONS 6: no uid is ever reused),
+// idempotently by (gene kind, stimulus id), and recorded as a lineage
+// Checkpoint, the path TWIST gene_edit already uses. Grafted genes sit off the
+// fixed uids, so they never cross; they are not a crossable kind anyway. This
+// edits a living keepsake genome and is called out in BATTLES.md (open
+// question 6).
 bool graftDuelGenes(Creature&, Lineage&);
 
 class DishDuel {
@@ -30,12 +33,15 @@ class DishDuel {
   explicit DishDuel(Storage&);   // opens duels.log
 
   // One tick, between the detectors and the occupant:
-  //  1 open: a raw body `button_double` (v2: the wheel's duel row) while no
+  //  1 open: a body-detected `button_double` (v2: the wheel's duel row) while no
   //    duel runs and readiness() says None. A LocalConsent is made here and
   //    nowhere else. A refused open shows the decline's picture, or the pet
   //    shaking his head when the radio is leased (OTA, trial image).
   //    First open in a lineage that predates duels: graftDuelGenes (below).
-  //  2 session.tick(air, DuelInput::from(raw, tiltX, tiltY), tick)
+  //  2 session.tick(air, DuelInput::from(raw, tiltX, tiltY), tick). Both read
+  //    only stimuli a detector fired: Dish::fire (the twists' path) marks what
+  //    it fires in SenseOut::remote, and DuelInput::from and the open gesture
+  //    ignore those bits, so a phone can neither open a duel nor lock a move.
   //  3 removes `captured` from raw; appends the duel stimuli to raw (they
   //    reach the creature as StimSource::Duel, through kidSafe)
   //  4 on a Meeting: book.record (idempotent by BattleId)

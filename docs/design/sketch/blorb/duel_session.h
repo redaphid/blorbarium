@@ -83,7 +83,9 @@ struct DuelTimings {
   static constexpr uint16_t kSilentTicks = 200;     // 20 s with no packet: they wandered off
   static constexpr uint8_t kClinkWindowTicks = 3;   // two knocks within 300 ms are a clink
   static constexpr uint8_t kBeaconEvery = 3, kHurryEvery = 2, kIdleEvery = 10;
-  static constexpr uint16_t kGenomeTicks = 100;     // 10 s to swap genomes after both hugs, else the egg fizzles
+  static constexpr uint16_t kGenomeTicks = 150;     // 15 s to swap genomes after both hugs, else the egg fizzles;
+                                                    // Friends stays open while a swap runs
+  static constexpr uint8_t kChunksPerSend = 4;      // Genome packets per send at 5 Hz: 41 chunks in about 2 s without loss
   // Graft from candidate C: a friend must be close. Below this a beacon is
   // ignored (not drawn, never matched). An estimate for ESP-NOW at 10 dBm, about
   // arm's length; unit D12 sets it on a desk at 30 cm and 2 m.
@@ -197,7 +199,13 @@ class DuelSession {
   // I take friend P when we chose each other (P.wants == me && my wants == P),
   // or when our knocks landed within kClinkWindowTicks and P is the only
   // ready friend whose knock did. A peer under kNearRssi, or one that declines,
-  // is never matched. Greeting ends only on P's State for the
+  // is never matched. Greeting keeps beaconing with `wants` set, so a friend
+  // whose first State was lost still sees the match.
+  //
+  // Rematch liveness: a State from my matched peer naming BattleId{duelSeed(
+  // nonces, n + 1), n + 1} counts as their rematch ask, so if their kid knocked
+  // and they moved on before my `rematch` flag reached them, I follow instead
+  // of waiting in Friends. Greeting ends only on P's State for the
   // same battle id, so a one-sided match times back to the lobby in 2 s.
   static std::optional<uint8_t> match(const Lobby&, PeerAddr self, uint32_t tick);
 };

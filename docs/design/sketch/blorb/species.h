@@ -39,7 +39,9 @@ constexpr Stance counterOf(Stance s) { return Stance((uint8_t(s) + 1) % kCycle);
 static_assert(beats(counterOf(Stance::Trick), Stance::Trick), "counterOf names the winner");
 
 // The phases of one turn a power handler is called in (duel.h has the order).
-enum class PowerPhase : uint8_t { BeforeClash, OnDamage, AfterDamage };
+// OnDamage only adds hits and Block only takes them away, so two handlers in
+// one phase never read what the other just wrote (zap against shell).
+enum class PowerPhase : uint8_t { BeforeClash, OnDamage, Block, AfterDamage };
 
 // The glyph the duel scene draws when a power fires; the art may restyle it.
 enum class PowerGlyph : uint8_t { eye, shell, spore, leaf, lamp, wave, spark, feather, gear };
@@ -194,6 +196,14 @@ static_assert(speciesInfo(foundingNest(0).eggs[0]).element == Element::Splash &&
 // (kid_safe.h names the stimuli). starterGenome(seed) stays grungo's base
 // recipe, and starterGenomeOf(kGrungo, seed) differs from it only by the
 // appended genes. A pet already alive keeps its genome.
+//
+// Crossing needs every recipe gene at the same uid on every device, whatever
+// the build. So each recipe line owns a fixed uid: a block the build leaves
+// out (kNeglectCanKill's four starvation genes on a kids' build) skips its
+// uids rather than shifting the rest, and the appended genes take the fixed
+// uids below, past any recipe uid. Unit D3's test crosses an owner-built
+// genome with a kids'-built one.
+inline constexpr GeneUid kSpeciesGeneUid{0x0F00}, kPowerGeneUid{0x0F40}, kKnackGeneUid{0x0F41};
 Genome starterGenomeOf(SpeciesId, uint32_t speciesSeed);
 
 }  // namespace blorb

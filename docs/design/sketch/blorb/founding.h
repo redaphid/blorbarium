@@ -10,8 +10,10 @@
 // glint, a double knock or a BOOT hold keeps the lit egg, and the Dish is
 // founded from starterGenomeOf(pick). Nobody choosing for 60 s keeps the
 // first egg, so a board that boots alone on a shelf still founds. The owner
-// can pin a species before the first hatch instead: `TWIST found <id>` from
-// the website, or `DEBUG found <id>` on the serial line (open question 1).
+// can pin a species over the cable first: `DEBUG found <id>` writes
+// `found.pin` on petfs, and the next fresh founding's nest is that one egg
+// (open question 1). The website cannot: the nest runs before the Dish and
+// its Bluetooth exist.
 // Every later egg inherits its species; a species changes only in a friend
 // egg (friend_egg.h).
 //
