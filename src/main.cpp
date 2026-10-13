@@ -9,6 +9,7 @@
 
 #include "blorb/dish.h"
 #include "grungo_pack.h"
+#include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
 #if defined(BADGE_BOARD_SIM)
@@ -107,13 +108,17 @@ static blorb::Appearance shown() {
   return a;
 }
 
-static blorb::BodySample readBody() {
+// `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
+// that waits on the button can be answered over the cable. 0 is no press.
+static uint32_t pressAt = 0, pressMs = 0;
+
+static blorb::BodySample readBody(uint32_t now) {
   blorb::BodySample s;
   if (!imuOk || !imu::read(s)) {
     s = blorb::BodySample{};
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
-  s.buttonDown = boardButtonDown();
+  s.buttonDown = boardButtonDown() || now - pressAt < pressMs;
   return s;
 }
 
@@ -121,7 +126,7 @@ static blorb::BodySample readBody() {
 // ticks are due. The simulator's warp calls this with no frames between.
 static void step(uint32_t now) {
   if (now - lastSample >= blorb::kSampleMs) {
-    lastBody = readBody();
+    lastBody = readBody(now);
     // The panel and the engine turn together, so downhill is down on the glass.
     const uint8_t rot = up.sample(lastBody, now);
     if (rot != display.getRotation()) display.setRotation(rot);
@@ -261,12 +266,36 @@ static void bleTest(const char* a) {
   Serial.printf("[hw] debug bletest: queued %ld bytes\n", n);
 }
 
+// Set by `DEBUG shot`: the canvas goes out a line a loop (paint/shot.h) and is
+// not repainted until the last line has, so the picture is one whole frame.
+// The Dish keeps sampling and ticking meanwhile; only the glass holds still.
+// Serial only, like every DEBUG line: the BLE link never carries it.
+static std::optional<paint::ShotEncoder> shot;
+
+// True while a shot is going out.
+static bool sendShotLine() {
+  if (!shot) return false;
+  if (const char* line = shot->next()) Serial.printf("%s\n", line);
+  else shot.reset();
+  return bool(shot);
+}
+
+static void press(const char* a) {
+  const long ms = *a ? std::strtol(a, nullptr, 10) : 150;   // the sim's !button
+  if (ms <= 0 || ms > 10000) return (void)Serial.printf("[hw] debug press: bad ms '%s'\n", a);
+  pressAt = millis() + warpMs;
+  pressMs = uint32_t(ms);
+  Serial.printf("[hw] debug press %ld ms\n", ms);
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
+  if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
+  if (std::strcmp(verb, "press") == 0) return press(a);
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: DEBUG stage adult)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, shot, press [ms], bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -284,11 +313,13 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
   if (const char* line = phone.takeDebug()) runDebug(line);
   const uint32_t now = millis() + warpMs;
+  const bool holdFrame = sendShotLine();
 #else
   const uint32_t now = millis();
+  constexpr bool holdFrame = false;
 #endif
   step(now);
-  if (now - lastFrame >= kFrameMs) {
+  if (!holdFrame && now - lastFrame >= kFrameMs) {
     paint::draw(shown(), grungoPack(), canvas, now);
     boardPresent(display, canvas);
     lastFrame = now;
