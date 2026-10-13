@@ -319,6 +319,36 @@ TEST(Guard, ViabilityIgnoresThemSoTheyNeverKillAnEmbryo) {
   EXPECT_FALSE(viability(plus(starterGenome(7), toDie(chem::life))).ok) << "a vital reader still kills";
 }
 
+// ---- no immortals --------------------------------------------------------------------------
+
+namespace {
+
+// The starter with its old-age receptor (life -> die) rewired to read `reads`.
+Genome oldAgeReads(const Genome& g, ChemId reads) {
+  std::optional<GeneUid> oldAge;
+  g.forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<ReceptorGene>::value && v.body[0] == chem::life.v && v.body[1] == locus::die.v)
+      oldAge = v.header.uid;
+  });
+  return *GenomeBuilder::from(g).setByte(*oldAge, 0, reads.v).build();
+}
+
+}  // namespace
+
+TEST(NoImmortals, AnOldAgeReceptorRewiredOffLifeIsNotViable) {
+  for (ChemId reads : {ChemId{99}, driveChem(drive::pain), chem::daze, chem::injury}) {
+    Viability v = viability(oldAgeReads(starterGenome(7), reads));
+    EXPECT_FALSE(v.ok) << "chem " << int(reads.v);
+    EXPECT_STREQ(v.reason, "no old-age death") << "chem " << int(reads.v);
+  }
+}
+
+TEST(NoImmortals, TheGiftAndEveryStarterStayViable) {
+  EXPECT_TRUE(viability(starterGenome(kGiftSeed)).ok);
+  EXPECT_EQ(lifePrint(starterGenome(kGiftSeed), 0), kGiftLifePrint);
+  for (const SpeciesInfo& row : SPECIES) EXPECT_TRUE(viability(starterGenomeOf(row.id, kGiftSeed)).ok) << row.name;
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
