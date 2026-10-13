@@ -22,7 +22,7 @@ const char* const kPhases[] = {"egg", "creature", "clutch"};
 const char* const kStages[] = {"baby", "child", "adult", "elder"};
 const char* const kCauses[] = {"old_age", "starved", "injured", "poisoned", "unknown"};
 const char* const kDirs[] = {"sense", "act", "free"};
-const char* const kSources[] = {"body", "world", "self", "phone"};
+const char* const kSources[] = {"body", "world", "self", "phone", "duel"};   // StimSource order
 const char* const kClasses[] = {"body", "mind", "look", "life"};
 const char kRules[] = {'A', 'N', 'F', 'X'};   // MutRule: Any, Nudge, Flag, Fixed
 
