@@ -3,12 +3,13 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <type_traits>
 
 namespace ota {
 namespace {
 
-constexpr const char* kLastNames[] = {"none",    "no_confirm", "busy",    "save_failed", "aborted",
-                                      "timeout", "overflow",   "bad_hash", "bad_image",  "flash_error"};
+constexpr const char* kLastNames[] = {"none",     "no_confirm", "busy",      "save_failed", "aborted", "timeout",
+                                      "overflow", "bad_hash",   "bad_image", "flash_error", "on_trial"};
 
 int b64urlValue(char c) {
   if (c >= 'A' && c <= 'Z') return c - 'A';
@@ -113,7 +114,7 @@ bool Image::operator==(const Image& o) const {
 Session::Session(Slot& slot, Host& host, blorb::Link& link, Config config)
     : slot_(slot), host_(host), link_(link), config_(config) {}
 
-bool Session::handle(std::string_view line, uint32_t now) {
+bool Session::handle(std::string_view line, uint32_t now, Peer peer) {
   if (line.size() > 200) return false;   // the protocol answers 413
   std::string_view rest = line;
   const std::optional<uint32_t> id = hexId(rest);
@@ -124,9 +125,15 @@ bool Session::handle(std::string_view line, uint32_t now) {
   blorb::Reply reply(link_, *id);
   const std::optional<std::string_view> sub = args.word();
   if (sub == std::optional<std::string_view>("BEGIN")) {
-    begin(args, reply, now);
+    begin(args, reply, now, peer);
   } else if (sub == std::optional<std::string_view>("STATUS")) {
     status(reply);
+  } else if (sub == std::optional<std::string_view>("CONFIRM")) {
+    // The page reached this image over Bluetooth: the half of the trial a dish cannot check alone.
+    if (host_.onTrial()) host_.confirmTrial();
+    reply.ok("trial=%d", host_.onTrial() ? 1 : 0);
+  } else if (othersSession(peer)) {
+    reply.err(403, "NOT_YOURS");   // ABORT and REBOOT belong to the page that started it, while it is here
   } else if (sub == std::optional<std::string_view>("ABORT")) {
     if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) slot_.discard();
     if (!std::holds_alternative<Idle>(state_)) fail(Last::Aborted);
@@ -144,7 +151,7 @@ bool Session::handle(std::string_view line, uint32_t now) {
   return true;
 }
 
-void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now) {
+void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now, Peer peer) {
   Image im;
   const std::optional<std::string_view> board = args.word(), version = args.word();
   const std::optional<uint32_t> flags = args.number(0xffff), size = args.number(0xffffffffu);
@@ -158,21 +165,31 @@ void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now) {
   im.flags = *flags;
   im.size = *size;
 
-  // A session is open: its own BEGIN is the resume, anything else waits for ABORT.
+  // A session is open: its own BEGIN is the resume, and moves it to the page
+  // that sent it. Anything else waits for ABORT.
   if (const Image* open = current()) {
     if (!(*open == im)) return reply.err(409, "OTA_ACTIVE");
+    std::visit([&](auto& st) {
+      if constexpr (!std::is_same_v<std::decay_t<decltype(st)>, Idle>) st.owner = peer;
+    }, state_);
     return status(reply);
   }
 
+  // The cheap refusals first: the verify below stalls the loop for a moment.
+  if (std::strcmp(im.board, config_.board) != 0) return reply.err(403, "WRONG_BOARD");
+  if (!(config_.firmware < im.version) && !(im.flags & kAllowOlder)) return reply.err(409, "NOT_NEWER");
+  if (im.size == 0 || im.size > slot_.capacity()) return reply.err(413, "TOO_BIG");
+  // An update on trial would overwrite the only slot known to boot: there
+  // is no factory image, so a failed trial after that has nowhere to go.
+  if (host_.onTrial()) return reply.err(409, "TRIAL");
+  if (host_.busy()) return reply.err(409, "BUSY");
+  if (lastVerify_ && now - *lastVerify_ < kVerifyEveryMs) return reply.err(429, "TOO_SOON");
+  lastVerify_ = now;
   char text[128];
   const size_t n = signedText(im, text, sizeof text);
   if (!n || !verifyP256(config_.publicKey, reinterpret_cast<const uint8_t*>(text), n, im.sig))
     return reply.err(403, "BAD_SIGNATURE");
-  if (std::strcmp(im.board, config_.board) != 0) return reply.err(403, "WRONG_BOARD");
-  if (!(config_.firmware < im.version) && !(im.flags & kAllowOlder)) return reply.err(409, "NOT_NEWER");
-  if (im.size == 0 || im.size > slot_.capacity()) return reply.err(413, "TOO_BIG");
-  if (host_.busy()) return reply.err(409, "BUSY");
-  state_ = Asking{im, now};
+  state_ = Asking{im, peer, now};
   status(reply);
 }
 
@@ -192,18 +209,20 @@ void Session::status(blorb::Reply& reply) {
 
 void Session::press(uint32_t now) {
   Asking* a = std::get_if<Asking>(&state_);
-  if (!a) return;
+  if (!a || now - a->since < kMinAskMs) return;
   const Image im = a->image;
+  const Peer owner = a->owner;
+  if (host_.onTrial()) return fail(Last::OnTrial);
   if (host_.busy()) return fail(Last::Busy);
   if (!host_.save()) return fail(Last::SaveFailed);
   if (!slot_.open(im.size)) return fail(Last::FlashError);
-  state_ = Receiving{im, 0, now, now - kGapEveryMs, Sha256{}};
+  state_ = Receiving{im, owner, 0, now, now - kGapEveryMs, Sha256{}};
   event("state=receiving at=0");
 }
 
-void Session::data(const uint8_t* packet, size_t len, uint32_t now) {
+void Session::data(const uint8_t* packet, size_t len, uint32_t now, Peer peer) {
   Receiving* r = std::get_if<Receiving>(&state_);
-  if (!r || len < 5) return;
+  if (!r || len < 5 || peer != r->owner) return;   // bytes from any other phone never reach the slot
   const uint32_t offset = uint32_t(packet[0]) | uint32_t(packet[1]) << 8 | uint32_t(packet[2]) << 16 |
                           uint32_t(packet[3]) << 24;
   const uint8_t* bytes = packet + 4;
@@ -238,12 +257,15 @@ void Session::finish(Receiving& r, uint32_t now) {
   Last why = Last::None;
   if (std::memcmp(got, r.image.sha256, sizeof got) != 0) why = Last::BadHash;
   else if (!slot_.close()) why = Last::BadImage;
+  // Before the switch: a power cut from here on boots the new image, which
+  // must find this record to know which pet it was handed.
+  else if (!host_.handOver()) why = Last::FlashError;
   else if (!slot_.activate()) why = Last::FlashError;
   if (why != Last::None) {
     slot_.discard();
     return fail(why);
   }
-  state_ = Ready{r.image, now, std::nullopt};
+  state_ = Ready{r.image, r.owner, now, std::nullopt};
   event("at=%u", unsigned(std::get<Ready>(state_).image.size));
   event("state=ready");
 }
@@ -266,6 +288,16 @@ bool Session::rebootDue(uint32_t now) {
   return due && !host_.busy();
 }
 
+bool Session::prepareRestart() {
+  if (host_.save() || host_.save()) {
+    host_.handOver();   // again: the pet may have moved on since ready, and a stale record only rolls back
+    return true;
+  }
+  slot_.discard();
+  fail(Last::SaveFailed);
+  return false;
+}
+
 std::optional<View> Session::view(uint32_t now) const {
   if (const Asking* a = std::get_if<Asking>(&state_)) {
     const uint32_t gone = now - a->since;
@@ -279,6 +311,18 @@ std::optional<View> Session::view(uint32_t now) const {
 void Session::fail(Last why) {
   state_ = Idle{why};
   event("state=idle last=%s", lastName(why));
+}
+
+std::optional<Peer> Session::owner() const {
+  if (const Asking* a = std::get_if<Asking>(&state_)) return a->owner;
+  if (const Receiving* r = std::get_if<Receiving>(&state_)) return r->owner;
+  if (const Ready* r = std::get_if<Ready>(&state_)) return r->owner;
+  return std::nullopt;
+}
+
+bool Session::othersSession(Peer peer) {
+  const std::optional<Peer> o = owner();
+  return o && *o != peer && host_.connected(*o);
 }
 
 const Image* Session::current() const {

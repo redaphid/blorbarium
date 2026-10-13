@@ -17,23 +17,27 @@ struct PetMark {
 
 struct TrialFacts {
   bool pending;                       // ESP_OTA_IMG_PENDING_VERIFY
-  bool panelUp;
+  bool panelUp;                       // the panel driver's init said yes; it cannot see a dead screen
   bool resumed;                       // the keepsake loaded as Boot::Resumed
-  std::optional<PetMark> handedOver;  // written by the old image just before the restart
+  std::optional<PetMark> handedOver;  // written by the old image before it switched slots
   PetMark now;
   uint32_t ranMs;                     // loop time since boot
+  bool confirmed;                     // a page reached this image over Bluetooth (OTA CONFIRM)
 };
 
 enum class Verdict : uint8_t { NotOnTrial, Wait, Keep, RollBack };
 
-constexpr uint32_t kTrialMs = 30000;
+constexpr uint32_t kTrialMs = 30000;            // the least an image runs before it keeps itself
+constexpr uint32_t kConfirmWithinMs = 300000;   // no page by then: roll back, the safe way
 
 inline Verdict judge(const TrialFacts& f) {
   if (!f.pending) return Verdict::NotOnTrial;
-  if (!f.panelUp) return Verdict::RollBack;
-  if (f.handedOver && (!f.resumed || !(f.now == *f.handedOver))) return Verdict::RollBack;
-  if (f.ranMs < kTrialMs) return Verdict::Wait;
-  return Verdict::Keep;
+  // Every update writes the record before it switches, so a pending image
+  // without one, or with another pet, is not the update that was sent.
+  if (!f.panelUp || !f.resumed || !f.handedOver || !(f.now == *f.handedOver)) return Verdict::RollBack;
+  if (f.confirmed && f.ranMs >= kTrialMs) return Verdict::Keep;
+  if (!f.confirmed && f.ranMs >= kConfirmWithinMs) return Verdict::RollBack;
+  return Verdict::Wait;
 }
 
 }  // namespace ota

@@ -111,6 +111,7 @@ struct Release {
 struct MemSlot : Slot {
   Bytes written;
   bool opened = false, closeOk = true, failOpen = false, failWrite = false, activated = false, discarded = false;
+  int activations = 0;   // never reset, so a discard cannot hide an activate
   uint32_t cap = 65536;
   std::vector<std::string>* order = nullptr;
   uint32_t capacity() override { return cap; }
@@ -127,22 +128,35 @@ struct MemSlot : Slot {
     return true;
   }
   bool close() override { return closeOk; }
-  bool activate() override { return activated = true; }
+  bool activate() override {
+    if (order) order->push_back("activate");
+    ++activations;
+    return activated = true;
+  }
   void discard() override { discarded = true; activated = false; }
 };
 
 struct FakeHost : Host {
-  bool isBusy = false, saveOk = true, trial = false;
-  int saves = 0;
+  bool isBusy = false, saveOk = true, trial = false, handOverOk = true, confirmed = false;
+  int saves = 0, handOvers = 0, saveFailures = 0;   // saveFailures: that many saves fail before saveOk applies
+  Peer here = 1;                                    // the connection that is up
   std::vector<std::string>* order = nullptr;
   bool busy() override { return isBusy; }
   bool save() override {
     if (order) order->push_back("save");
     ++saves;
+    if (saveFailures > 0) return --saveFailures, false;
     return saveOk;
   }
   uint16_t chunk() override { return 240; }
   bool onTrial() override { return trial; }
+  bool connected(Peer p) override { return p == here; }
+  bool handOver() override {
+    if (order) order->push_back("handover");
+    ++handOvers;
+    return handOverOk;
+  }
+  void confirmTrial() override { confirmed = true; }
 };
 
 struct Rig {
@@ -152,19 +166,29 @@ struct Rig {
   ScriptedLink link;
   Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, signer.pub}};
   uint32_t now = 1000;
+  Peer peer = 1;
 
+  // Each BEGIN a test sends comes after the verify rate limit; TooSoon holds the limit itself.
   Lines send(const std::string& line) {
+    if (line.find(" OTA BEGIN ") != std::string::npos) now += Session::kVerifyEveryMs;
+    return sendNow(line);
+  }
+  Lines sendNow(const std::string& line, std::optional<Peer> from = std::nullopt) {
     link.sent.clear();
-    EXPECT_TRUE(session.handle(line, now)) << line;
+    EXPECT_TRUE(session.handle(line, now, from.value_or(peer))) << line;
     return link.sent;
   }
   std::string last() { return link.sent.empty() ? "" : link.sent.back(); }
-  Lines packet(const Bytes& b, uint32_t offset, size_t n) {
+  Lines packet(const Bytes& b, uint32_t offset, size_t n, std::optional<Peer> from = std::nullopt) {
     Bytes p{uint8_t(offset), uint8_t(offset >> 8), uint8_t(offset >> 16), uint8_t(offset >> 24)};
     p.insert(p.end(), b.begin() + offset, b.begin() + offset + n);
     link.sent.clear();
-    session.data(p.data(), p.size(), now);
+    session.data(p.data(), p.size(), now, from.value_or(peer));
     return link.sent;
+  }
+  void pressWhenAllowed() {
+    now += Session::kMinAskMs;
+    session.press(now);
   }
   // Sends [from, to) in 240-byte writes, as the page does.
   void stream(const Bytes& b, uint32_t from, uint32_t to) {
@@ -175,7 +199,7 @@ struct Rig {
   }
   void confirm(const Release& r) {
     ASSERT_EQ(send(r.begin(signer)).at(0).substr(0, 18), "#1 OK state=confir");
-    session.press(now);
+    pressWhenAllowed();
   }
 };
 
@@ -192,7 +216,7 @@ TEST(OtaSession, SignedImageAsksThenReceivesThenIsReady) {
   EXPECT_FALSE(rig.slot.opened) << "nothing is written before the button";
 
   rig.link.sent.clear();
-  rig.session.press(rig.now);
+  rig.pressWhenAllowed();
   EXPECT_EQ(rig.link.sent, (Lines{"! OTA state=receiving at=0"}));
   EXPECT_TRUE(rig.slot.opened);
 
@@ -355,7 +379,7 @@ TEST(OtaSession, BusyAtThePressEndsIt) {
   Rig rig;
   rig.send(Release{}.begin(rig.signer));
   rig.host.isBusy = true;
-  rig.session.press(rig.now);
+  rig.pressWhenAllowed();
   EXPECT_FALSE(rig.slot.opened);
   EXPECT_EQ(rig.host.saves, 0);
   EXPECT_EQ(rig.last(), "! OTA state=idle last=busy");
@@ -382,7 +406,8 @@ TEST(OtaSession, ACorruptedImageIsNeverActivated) {
   Bytes bad = r.bytes;
   bad[5000] ^= 1;
   rig.stream(bad, 0, 10000);
-  EXPECT_FALSE(rig.slot.activated);
+  EXPECT_EQ(rig.slot.activations, 0) << "never switched to, not even for a moment";
+  EXPECT_EQ(rig.host.handOvers, 0);
   EXPECT_TRUE(rig.slot.discarded);
   EXPECT_EQ(rig.last(), "! OTA state=idle last=bad_hash");
 }
@@ -406,6 +431,7 @@ TEST(OtaSession, MoreBytesThanSignedIsAnOverflow) {
   longer.resize(10240, 0);
   rig.packet(longer, 9840, 400);
   EXPECT_FALSE(rig.slot.activated);
+  EXPECT_TRUE(rig.slot.discarded) << "the half-written slot is let go";
   EXPECT_EQ(rig.last(), "! OTA state=idle last=overflow");
 }
 
@@ -555,7 +581,7 @@ TEST(OtaSession, TheViewFollowsThePhase) {
   ASSERT_TRUE(v);
   EXPECT_EQ(v->phase, View::Phase::Asking);
   EXPECT_EQ(v->msLeft, 20000u);
-  rig.session.press(rig.now);
+  rig.pressWhenAllowed();
   rig.stream(r.bytes, 0, 2400);
   v = rig.session.view(rig.now);
   EXPECT_EQ(v->phase, View::Phase::Receiving);
@@ -572,36 +598,49 @@ TEST(OtaVersion, ParsesOnlyThreeNumbers) {
   EXPECT_TRUE((Version{0, 4, 0}) < (Version{0, 10, 0}));
 }
 
-// ---- the trial -----------------------------------------------------------------------
+// ---- the trial ----------------------------------------------------------------------
 
-TEST(OtaTrial, KeepsAnImageThatResumedTheSamePetAfterThirtySeconds) {
-  const PetMark pet{3, 0xd30f00d1};
-  TrialFacts f{true, true, true, pet, pet, kTrialMs - 1};
-  EXPECT_EQ(judge(f), Verdict::Wait);
-  f.ranMs = kTrialMs;
-  EXPECT_EQ(judge(f), Verdict::Keep);
+namespace {
+const PetMark kPet{3, 0xd30f00d1};
+TrialFacts healthy(uint32_t ranMs, bool confirmed) { return {true, true, true, kPet, kPet, ranMs, confirmed}; }
+}  // namespace
+
+TEST(OtaTrial, KeepsAnImageAPageReachedThatResumedTheSamePetAfterThirtySeconds) {
+  EXPECT_EQ(judge(healthy(kTrialMs - 1, true)), Verdict::Wait);
+  EXPECT_EQ(judge(healthy(kTrialMs, true)), Verdict::Keep);
+}
+
+TEST(OtaTrial, WaitsForAPageThenRollsBackWithoutOne) {
+  EXPECT_EQ(judge(healthy(kTrialMs, false)), Verdict::Wait) << "the dish cannot prove Bluetooth alone";
+  EXPECT_EQ(judge(healthy(kConfirmWithinMs - 1, false)), Verdict::Wait);
+  EXPECT_EQ(judge(healthy(kConfirmWithinMs, false)), Verdict::RollBack);
 }
 
 TEST(OtaTrial, RollsBackAnImageThatLostThePet) {
-  const PetMark pet{3, 0xd30f00d1};
-  EXPECT_EQ(judge({true, true, true, pet, PetMark{0, 0x12345678}, 0}), Verdict::RollBack) << "a fresh founder";
-  EXPECT_EQ(judge({true, true, true, pet, PetMark{4, 0xd30f00d1}, 0}), Verdict::RollBack) << "another generation";
-  EXPECT_EQ(judge({true, true, false, pet, pet, kTrialMs}), Verdict::RollBack) << "fell back or read-only";
+  TrialFacts f = healthy(kTrialMs, true);
+  f.now = PetMark{0, 0x12345678};
+  EXPECT_EQ(judge(f), Verdict::RollBack) << "a fresh founder";
+  f.now = PetMark{4, 0xd30f00d1};
+  EXPECT_EQ(judge(f), Verdict::RollBack) << "another generation";
+  f = healthy(kTrialMs, true);
+  f.resumed = false;
+  EXPECT_EQ(judge(f), Verdict::RollBack) << "fell back, from the lineage, or read-only";
 }
 
-TEST(OtaTrial, RollsBackAnImageWithNoPanel) {
-  const PetMark pet{3, 0xd30f00d1};
-  EXPECT_EQ(judge({true, false, true, pet, pet, kTrialMs}), Verdict::RollBack);
+TEST(OtaTrial, APendingImageWithNoHandoverRecordRollsBack) {
+  TrialFacts f = healthy(kTrialMs, true);
+  f.handedOver.reset();   // a power cut can not lose it: the record is written before the switch
+  EXPECT_EQ(judge(f), Verdict::RollBack);
+}
+
+TEST(OtaTrial, RollsBackAnImageWhosePanelDriverFailed) {
+  TrialFacts f = healthy(kTrialMs, true);
+  f.panelUp = false;
+  EXPECT_EQ(judge(f), Verdict::RollBack);
 }
 
 TEST(OtaTrial, AnImageNotOnTrialIsLeftAlone) {
-  const PetMark pet{3, 0xd30f00d1};
-  EXPECT_EQ(judge({false, false, false, pet, PetMark{0, 0}, 0}), Verdict::NotOnTrial);
-}
-
-TEST(OtaTrial, WithNoHandoverRecordOnlyThePanelAndTimeCount) {
-  TrialFacts f{true, true, false, std::nullopt, PetMark{0, 1}, kTrialMs};
-  EXPECT_EQ(judge(f), Verdict::Keep);
+  EXPECT_EQ(judge({false, false, false, std::nullopt, PetMark{0, 0}, 0, false}), Verdict::NotOnTrial);
 }
 
 // ---- the release tool's output -------------------------------------------------------
@@ -611,16 +650,16 @@ TEST(OtaRelease, TheDishAcceptsWhatToolsOtaReleasePySigned) {
   FakeHost host;
   ScriptedLink link;
   Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, otafixture::kPublicKey}};
-  ASSERT_TRUE(session.handle(std::string("#1 ") + otafixture::kBegin, 0));
+  ASSERT_TRUE(session.handle(std::string("#1 ") + otafixture::kBegin, 0, 1));
   ASSERT_EQ(link.sent.size(), 1u);
   EXPECT_EQ(link.sent[0].substr(0, 35), "#1 OK state=confirm at=0 size=1000 ");
-  session.press(0);
+  session.press(Session::kMinAskMs);
   Bytes image(otafixture::kImageSize);
   for (uint32_t i = 0; i < image.size(); ++i) image[i] = otafixture::imageByte(i);
   for (uint32_t at = 0; at < image.size(); at += 200) {
     Bytes p{uint8_t(at), uint8_t(at >> 8), 0, 0};
     p.insert(p.end(), image.begin() + at, image.begin() + std::min<size_t>(at + 200, image.size()));
-    session.data(p.data(), p.size(), 0);
+    session.data(p.data(), p.size(), Session::kMinAskMs, 1);
   }
   EXPECT_TRUE(slot.activated) << "the tool's sha256 matches the dish's";
 }
@@ -631,7 +670,7 @@ TEST(OtaRelease, ToolSignaturesFailUnderAnotherKey) {
   FakeHost host;
   ScriptedLink link;
   Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, other.pub}};
-  session.handle(std::string("#1 ") + otafixture::kBegin, 0);
+  session.handle(std::string("#1 ") + otafixture::kBegin, 0, 1);
   EXPECT_EQ(link.sent, (Lines{"#1 ERR 403 BAD_SIGNATURE"}));
 }
 
@@ -666,6 +705,137 @@ TEST(OtaScreen, TheRingFollowsProgress) {
       for (uint16_t p : cv->px) f << char((p >> 11) << 3) << char(((p >> 5) & 63) << 2) << char((p & 31) << 3);
     }
   }
+}
+
+// ---- on trial, ownership, the restart --------------------------------------------------------------
+
+TEST(OtaSession, RefusesAnUpdateWhileThisImageIsOnTrial) {
+  Rig rig;
+  rig.host.trial = true;
+  EXPECT_EQ(rig.send(Release{}.begin(rig.signer)), (Lines{"#1 ERR 409 TRIAL"}))
+      << "it would overwrite the only slot known to boot";
+}
+
+TEST(OtaSession, APressWhileOnTrialStartsNothing) {
+  Rig rig;
+  rig.send(Release{}.begin(rig.signer));
+  rig.host.trial = true;
+  rig.pressWhenAllowed();
+  EXPECT_FALSE(rig.slot.opened);
+  EXPECT_EQ(rig.last(), "! OTA state=idle last=on_trial");
+}
+
+TEST(OtaSession, HandsOverThePetBeforeSwitchingSlots) {
+  Rig rig;
+  Release r;
+  std::vector<std::string> order;
+  rig.slot.order = rig.host.order = &order;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 10000);
+  EXPECT_EQ(order, (std::vector<std::string>{"save", "open", "handover", "activate"}));
+}
+
+TEST(OtaSession, AHandoverThatFailsNeverSwitches) {
+  Rig rig;
+  Release r;
+  rig.host.handOverOk = false;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 10000);
+  EXPECT_EQ(rig.slot.activations, 0);
+  EXPECT_EQ(rig.last(), "! OTA state=idle last=flash_error");
+}
+
+TEST(OtaSession, ConfirmTellsTheTrialAPageGotThrough) {
+  Rig rig;
+  EXPECT_EQ(rig.send("#9 OTA CONFIRM"), (Lines{"#9 OK trial=0"}));
+  EXPECT_FALSE(rig.host.confirmed) << "nothing to confirm off trial";
+  rig.host.trial = true;
+  EXPECT_EQ(rig.send("#9 OTA CONFIRM"), (Lines{"#9 OK trial=1"}));
+  EXPECT_TRUE(rig.host.confirmed);
+}
+
+TEST(OtaSession, APressInTheFirstMomentsIsNotAYes) {
+  Rig rig;
+  rig.send(Release{}.begin(rig.signer));
+  rig.session.press(rig.now + Session::kMinAskMs - 1);
+  EXPECT_TRUE(rig.session.asking()) << "a child mid-press when the question appeared";
+  EXPECT_FALSE(rig.slot.opened);
+  rig.session.press(rig.now + Session::kMinAskMs);
+  EXPECT_TRUE(rig.slot.opened);
+}
+
+TEST(OtaSession, AnotherPhoneCannotWriteAbortOrRebootWhileTheOwnerIsHere) {
+  Rig rig;
+  Release r;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 2400);
+  rig.packet(r.bytes, 2400, 240, Peer{2});
+  EXPECT_EQ(rig.slot.written.size(), 2400u) << "a stranger's bytes never reach the slot";
+  EXPECT_EQ(rig.sendNow("#5 OTA ABORT", Peer{2}), (Lines{"#5 ERR 403 NOT_YOURS"}));
+  EXPECT_EQ(rig.sendNow("#6 OTA REBOOT", Peer{2}), (Lines{"#6 ERR 403 NOT_YOURS"}));
+  EXPECT_EQ(rig.sendNow("#7 OTA STATUS", Peer{2}).at(0).substr(0, 30), "#7 OK state=receiving at=2400 ");
+  rig.stream(r.bytes, 2400, 10000);
+  EXPECT_TRUE(rig.slot.activated);
+}
+
+TEST(OtaSession, AfterADropOnlyTheSameBeginMovesTheSessionToTheNewConnection) {
+  Rig rig;
+  Release r;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 2400);
+  rig.host.here = 2;   // peer 1 dropped; the page came back as peer 2
+  rig.packet(r.bytes, 2400, 240, Peer{2});
+  EXPECT_EQ(rig.slot.written.size(), 2400u) << "not bound yet";
+  rig.peer = 2;
+  EXPECT_EQ(rig.send(r.begin(rig.signer)).at(0).substr(0, 30), "#1 OK state=receiving at=2400 ");
+  rig.packet(r.bytes, 2400, 240, Peer{1});
+  EXPECT_EQ(rig.slot.written.size(), 2400u) << "the old connection is no longer the owner";
+  rig.stream(r.bytes, 2400, 10000);
+  EXPECT_TRUE(rig.slot.activated);
+}
+
+TEST(OtaSession, CheapRefusalsComeBeforeTheSignatureCheck) {
+  Rig rig;
+  Release r;
+  r.board = "lcd146";
+  std::string line = r.begin(rig.signer);
+  line.back() = line.back() == 'A' ? 'Q' : 'A';
+  EXPECT_EQ(rig.send(line), (Lines{"#1 ERR 403 WRONG_BOARD"}));
+}
+
+TEST(OtaSession, AtMostOneSignatureCheckEveryTwoSeconds) {
+  Rig rig;
+  Signer stranger;
+  const std::string forged = Release{}.begin(stranger);
+  EXPECT_EQ(rig.sendNow(forged), (Lines{"#1 ERR 403 BAD_SIGNATURE"}));
+  rig.now += Session::kVerifyEveryMs - 1;
+  EXPECT_EQ(rig.sendNow(forged), (Lines{"#1 ERR 429 TOO_SOON"})) << "a flood cannot stall the pet";
+  rig.now += 1;
+  EXPECT_EQ(rig.sendNow(forged), (Lines{"#1 ERR 403 BAD_SIGNATURE"}));
+}
+
+TEST(OtaSession, TheRestartSavesTwiceThenHandsOver) {
+  Rig rig;
+  Release r;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 10000);
+  const int before = rig.host.handOvers;
+  rig.host.saveFailures = 1;
+  EXPECT_TRUE(rig.session.prepareRestart());
+  EXPECT_EQ(rig.host.handOvers, before + 1) << "the record names the pet as he is now";
+}
+
+TEST(OtaSession, ARestartWhoseSaveFailsTwiceKeepsTheOldImage) {
+  Rig rig;
+  Release r;
+  rig.confirm(r);
+  rig.stream(r.bytes, 0, 10000);
+  rig.host.saveFailures = 2;
+  EXPECT_FALSE(rig.session.prepareRestart());
+  EXPECT_TRUE(rig.slot.discarded);
+  EXPECT_FALSE(rig.slot.activated) << "the running image boots next time";
+  EXPECT_EQ(rig.last(), "! OTA state=idle last=save_failed");
+  EXPECT_FALSE(rig.session.rebootDue(rig.now + 60000));
 }
 
 int main(int argc, char** argv) {

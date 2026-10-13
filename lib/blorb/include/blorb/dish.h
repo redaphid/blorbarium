@@ -46,6 +46,9 @@ struct CatchUp { uint32_t ticks = 0, clampedTicks = 0; };
 struct DishOptions {
   TimeSource* rtc = nullptr;           // first in priority: a clock that kept counting while unpowered
   const Genome* founder = nullptr;     // a fresh lineage's first genome; default starterGenome(speciesSeed)
+  // Write no keepsake until releaseSaves(). A firmware on trial must not
+  // overwrite the save the image before it can read (docs/ota.md "The trial").
+  bool holdSaves = false;
 };
 
 class Dish {
@@ -64,6 +67,7 @@ class Dish {
 
   Appearance appearance() const;
   bool flush();                    // explicit save (an update, a phone request): false when it did not land
+  void releaseSaves();             // end DishOptions::holdSaves; a newer firmware's keepsake stays read-only
 
   // For the command and twist handlers (protocol.cpp, twists.cpp).
   Occupant& occupant() { return live_.occupant; }

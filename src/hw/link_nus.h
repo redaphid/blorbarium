@@ -49,6 +49,7 @@ class NusLink : public blorb::Link {
 
   bool connected() override { return up_; }
   uint16_t mtu() const { return mtu_; }
+  uint32_t generation() const { return gen_; }   // which connection: a reconnect is a new number
 
   std::optional<std::string_view> readLine() override {
     pump();

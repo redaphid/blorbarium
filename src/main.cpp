@@ -93,11 +93,14 @@ struct DishOtaHost : ota::Host {
   bool save() override;
   uint16_t chunk() override { return ble.mtu() > 7 ? ble.mtu() - 7 : 16; }   // ATT header and the offset
   bool onTrial() override;
+  bool connected(ota::Peer peer) override { return ble.connected() && ble.generation() == peer; }
+  bool handOver() override;
+  void confirmTrial() override;
 };
 static DishOtaHost otaHost;
 static hw::EspSlot otaSlot;
 static hw::PacketRing otaPackets;
-static hw::OtaData otaData(otaPackets);
+static hw::OtaData otaData(otaPackets, ble);
 static ota::Session updater(otaSlot, otaHost, ble,
                             ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
 static hw::OtaLink otaLink(ble, updater);
@@ -218,13 +221,18 @@ bool DishOtaHost::busy() {
 }
 bool DishOtaHost::save() { return dish->flush(); }
 bool DishOtaHost::onTrial() { return trial.onTrial(); }
+bool DishOtaHost::handOver() { return hw::Trial::handOver(petMark()); }
+void DishOtaHost::confirmTrial() { trial.confirm(); }
 
-// The update is verified and set to boot: save him, say which pet the new
-// image must find, and go.
+// The update is verified and set to boot. The session saves him and says
+// which pet the new image must find; a save that will not land keeps the old
+// image instead.
 static void restartIntoUpdate() {
-  hw::Trial::handOver(petMark());
-  const bool saved = dish->flush();
-  Serial.printf("[hw] ota: restarting into the update, save %s\n", saved ? "ok" : "FAILED");
+  if (!updater.prepareRestart()) {
+    Serial.println("[hw] ota: save FAILED twice, update discarded");
+    return;
+  }
+  Serial.println("[hw] ota: restarting into the update, save ok");
   Serial.flush();
   ESP.restart();
 }
@@ -275,6 +283,7 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   storageState = store.begin();
   options.rtc = &systemClock;
+  options.holdSaves = hw::Trial::pending();
 #endif
   dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   [[maybe_unused]] const bool panelUp = display.init();
@@ -393,10 +402,13 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
-  otaPackets.drain([](const uint8_t* p, size_t n) { updater.data(p, n, millis()); });
+  otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();
-  trial.poll(millis());
+  if (trial.poll(millis())) {
+    dish->releaseSaves();
+    dish->flush();
+  }
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

@@ -73,10 +73,11 @@ class PacketRing {
     slots_ = static_cast<Packet*>(heap_caps_malloc(sizeof(Packet) * kSlots, MALLOC_CAP_SPIRAM));
     if (!slots_) slots_ = static_cast<Packet*>(malloc(sizeof(Packet) * kSlots));
   }
-  void push(const uint8_t* p, size_t n) {
+  void push(const uint8_t* p, size_t n, ota::Peer peer) {
     const size_t head = head_.load(std::memory_order_relaxed), next = (head + 1) % kSlots;
     if (!slots_ || n > kMax || next == tail_.load(std::memory_order_acquire)) return;
     slots_[head].len = uint16_t(n);
+    slots_[head].peer = peer;
     std::memcpy(slots_[head].bytes, p, n);
     head_.store(next, std::memory_order_release);
   }
@@ -84,24 +85,25 @@ class PacketRing {
   void drain(F&& f) {
     size_t tail = tail_.load(std::memory_order_relaxed);
     while (tail != head_.load(std::memory_order_acquire)) {
-      f(slots_[tail].bytes, slots_[tail].len);
+      f(slots_[tail].bytes, slots_[tail].len, slots_[tail].peer);
       tail = (tail + 1) % kSlots;
       tail_.store(tail, std::memory_order_release);
     }
   }
 
  private:
-  struct Packet { uint16_t len; uint8_t bytes[kMax]; };
+  struct Packet { uint16_t len; ota::Peer peer; uint8_t bytes[kMax]; };
   Packet* slots_ = nullptr;
   std::atomic<size_t> head_{0}, tail_{0};
 };
 
 struct OtaData : NimBLECharacteristicCallbacks {
   PacketRing& ring;
-  explicit OtaData(PacketRing& r) : ring(r) {}
+  NusLink& ble;
+  OtaData(PacketRing& r, NusLink& b) : ring(r), ble(b) {}
   void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
     const NimBLEAttValue v = c->getValue();
-    ring.push(v.data(), v.size());
+    ring.push(v.data(), v.size(), ble.generation());
   }
 };
 
@@ -114,7 +116,7 @@ class OtaLink : public blorb::Link {
   bool connected() override { return ble_.connected(); }
   std::optional<std::string_view> readLine() override {
     while (std::optional<std::string_view> line = ble_.readLine())
-      if (!session_.handle(*line, millis())) return line;
+      if (!session_.handle(*line, millis(), ble_.generation())) return line;
     return std::nullopt;
   }
   void writeLine(std::string_view s) override { ble_.writeLine(s); }
@@ -126,22 +128,28 @@ class OtaLink : public blorb::Link {
 
 // The trial (docs/ota.md "The trial"). The old image hands over which pet it
 // saved, in the default nvs partition, never `pet`; the new one keeps itself
-// only once it has the same pet back, a panel and 30 s of running.
+// only once it has the same pet back, a page has reached it over Bluetooth,
+// and it has run 30 s.
 class Trial {
  public:
-  static void handOver(const ota::PetMark& m) {
+  static bool handOver(const ota::PetMark& m) {
     Preferences p;
-    if (!p.begin(kNamespace, false)) return;
-    p.putUShort("gen", m.generation);
-    p.putUInt("genome", m.genome);
+    if (!p.begin(kNamespace, false)) return false;
+    const bool ok = p.putUShort("gen", m.generation) && p.putUInt("genome", m.genome);
     p.end();
+    return ok;
+  }
+
+  // Before the Dish is built: an image on trial holds its saves.
+  static bool pending() {
+    esp_ota_img_states_t state;
+    return esp_ota_get_state_partition(esp_ota_get_running_partition(), &state) == ESP_OK &&
+           state == ESP_OTA_IMG_PENDING_VERIFY;
   }
 
   void begin(bool panelUp, bool resumed, const ota::PetMark& now) {
-    esp_ota_img_states_t state;
-    const bool pending = esp_ota_get_state_partition(esp_ota_get_running_partition(), &state) == ESP_OK &&
-                         state == ESP_OTA_IMG_PENDING_VERIFY;
-    facts_ = ota::TrialFacts{pending, panelUp, resumed, handedOver(), now, 0};
+    const bool pending = Trial::pending();
+    facts_ = ota::TrialFacts{pending, panelUp, resumed, handedOver(), now, 0, false};
     if (!pending) {
       if (facts_.handedOver) forget();   // a session that ended in a rollback
       return;
@@ -154,8 +162,14 @@ class Trial {
     if (esp_timer_create(&args, &watchdog_) == ESP_OK) esp_timer_start_periodic(watchdog_, 1000 * 1000);
   }
 
-  void poll(uint32_t ms) {
-    if (!facts_.pending) return;
+  void confirm() {
+    if (facts_.pending && !facts_.confirmed) Serial.println("[hw] ota trial: a page reached it over Bluetooth");
+    facts_.confirmed = true;
+  }
+
+  // True once, when the image keeps itself: the Dish may save again.
+  bool poll(uint32_t ms) {
+    if (!facts_.pending) return false;
     beat_ = ms;
     facts_.ranMs = ms;
     switch (ota::judge(facts_)) {
@@ -165,14 +179,14 @@ class Trial {
         esp_timer_stop(watchdog_);
         facts_.pending = false;
         Serial.println("[hw] ota trial: kept");
-        break;
+        return true;
       case ota::Verdict::RollBack:
-        Serial.println("[hw] ota trial: FAILED, rolling back");
+        Serial.printf("[hw] ota trial: FAILED (%s), rolling back\n", facts_.confirmed ? "checks" : "checks or no page");
         Serial.flush();
         esp_ota_mark_app_invalid_rollback_and_reboot();
-        break;
+        return false;
       default:
-        break;
+        return false;
     }
   }
 

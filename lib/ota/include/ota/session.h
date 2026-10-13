@@ -19,6 +19,9 @@
 
 namespace ota {
 
+// One Bluetooth connection, numbered so a reconnect is a different peer.
+using Peer = uint32_t;
+
 // The app slot that is not running. Firmware: esp_ota_*. Tests: memory.
 class Slot {
  public:
@@ -35,10 +38,13 @@ class Slot {
 class Host {
  public:
   virtual ~Host() = default;
-  virtual bool busy() = 0;        // the pet is doing something an update must not interrupt
-  virtual bool save() = 0;        // write the pet now; false when it did not land
-  virtual uint16_t chunk() = 0;   // image bytes one data write can carry on this link
-  virtual bool onTrial() = 0;     // this image has not yet kept itself (docs/ota.md "The trial")
+  virtual bool busy() = 0;                // the pet is doing something an update must not interrupt
+  virtual bool save() = 0;                // write the pet now; false when it did not land
+  virtual uint16_t chunk() = 0;           // image bytes one data write can carry on this link
+  virtual bool onTrial() = 0;             // this image has not yet kept itself (docs/ota.md "The trial")
+  virtual bool connected(Peer) = 0;       // that connection is still up
+  virtual bool handOver() = 0;            // record which pet the new image must find
+  virtual void confirmTrial() = 0;        // a page reached this image over Bluetooth
 };
 
 struct Version {
@@ -64,7 +70,9 @@ struct Image {
 constexpr uint32_t kAllowOlder = 1;
 
 // How the last session ended, as STATUS's `last=` says it.
-enum class Last : uint8_t { None, NoConfirm, Busy, SaveFailed, Aborted, Timeout, Overflow, BadHash, BadImage, FlashError };
+enum class Last : uint8_t {
+  None, NoConfirm, Busy, SaveFailed, Aborted, Timeout, Overflow, BadHash, BadImage, FlashError, OnTrial
+};
 const char* lastName(Last);
 
 struct Config {
@@ -83,39 +91,46 @@ struct View {
 class Session {
  public:
   static constexpr uint32_t kConfirmMs = 30000;      // the button question
+  static constexpr uint32_t kMinAskMs = 1500;        // a press sooner than this was already under way: not a yes
   static constexpr uint32_t kSilenceMs = 300000;     // a receiving session waits this long for the page to come back
   static constexpr uint32_t kReadyMs = 20000;        // restart by itself if REBOOT never comes
   static constexpr uint32_t kRebootDelayMs = 300;    // so the REBOOT reply leaves before the radio goes
   static constexpr uint32_t kAckBytes = 4096;
   static constexpr uint32_t kGapEveryMs = 200;
+  static constexpr uint32_t kVerifyEveryMs = 2000;   // a P-256 verify stalls the loop; a flood must not
 
   // Replies and events go out on `link`: the Bluetooth link the page is on.
   Session(Slot&, Host&, blorb::Link& link, Config);
 
-  // An `#<id> OTA ...` line is handled and true; any other line is false and
-  // left for the protocol.
-  bool handle(std::string_view line, uint32_t now);
+  // An `#<id> OTA ...` line from `peer` is handled and true; any other line
+  // is false and left for the protocol.
+  bool handle(std::string_view line, uint32_t now, Peer peer);
   // One data write: a 4-byte little-endian offset, then image bytes.
-  void data(const uint8_t* packet, size_t len, uint32_t now);
+  void data(const uint8_t* packet, size_t len, uint32_t now, Peer peer);
   void press(uint32_t now);                 // the dish's button
   void tick(uint32_t now);                  // lapses: the question, a silent page
   bool asking() const { return std::holds_alternative<Asking>(state_); }
   bool active() const { return !std::holds_alternative<Idle>(state_); }   // anything else that wants the radio waits
   std::optional<View> view(uint32_t now) const;
   bool rebootDue(uint32_t now);             // ready, asked or lapsed, and not busy
+  // Just before the restart: save (twice if need be) and hand over. False,
+  // with the update discarded, when the pet could not be saved.
+  bool prepareRestart();
 
  private:
   struct Idle { Last last = Last::None; };
-  struct Asking { Image image; uint32_t since; };
-  struct Receiving { Image image; uint32_t at, heard, gapSaid; Sha256 hash; };
-  struct Ready { Image image; uint32_t since; std::optional<uint32_t> rebootAt; };
+  struct Asking { Image image; Peer owner; uint32_t since; };
+  struct Receiving { Image image; Peer owner; uint32_t at, heard, gapSaid; Sha256 hash; };
+  struct Ready { Image image; Peer owner; uint32_t since; std::optional<uint32_t> rebootAt; };
   using State = std::variant<Idle, Asking, Receiving, Ready>;
 
-  void begin(blorb::Args&, blorb::Reply&, uint32_t now);
+  void begin(blorb::Args&, blorb::Reply&, uint32_t now, Peer peer);
   void status(blorb::Reply&);
   void finish(Receiving&, uint32_t now);
   void fail(Last);
   const Image* current() const;
+  std::optional<Peer> owner() const;
+  bool othersSession(Peer peer);            // another peer's session, and that peer is still here
   void event(const char* fmt, ...);
 
   Slot& slot_;
@@ -123,6 +138,7 @@ class Session {
   blorb::Link& link_;
   Config config_;
   State state_;
+  std::optional<uint32_t> lastVerify_;
 };
 
 }  // namespace ota
