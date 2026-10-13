@@ -269,7 +269,7 @@
     }
   }
 
-  const api = { Updater, fetchRelease, parseManifest, checkImage, isNewer, sha256, b64url, imageId, kv, WINDOW };
+  const api = { Updater, fetchRelease, isNewer, sha256, imageId };
   globalThis.BlorbOta = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

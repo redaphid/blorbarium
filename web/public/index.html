@@ -126,6 +126,11 @@ input {
 .hint { margin: 0; font-size: 0.88rem; color: var(--muted); }
 .hint[data-tone="ok"] { color: var(--teal); }
 .hint[data-tone="err"] { color: var(--warn); }
+.update-text { margin: 0; font-size: 1.05rem; }
+.update-text[data-tone="ok"] { color: var(--teal); }
+.update-text[data-tone="err"] { color: var(--warn); }
+#updateBar { height: 14px; border-radius: 7px; }
+#updateBar > i { background: var(--teal); }
 #sayInput { text-transform: uppercase; }
 .debug { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
 .debug ol { list-style: none; margin: 10px 0 0; padding: 0; font: 0.72rem/1.45 var(--font-mono); max-height: 60vh; overflow: auto; }
@@ -196,6 +201,16 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <p class="hint" id="sayHint">Up to 56 characters. He shows it on his screen.</p>
   </section>
 
+  <section id="updateBox" hidden>
+    <h2>Update</h2>
+    <p class="update-text" id="updateText" role="status" aria-live="polite">Checking for updates…</p>
+    <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
+    <div class="actions">
+      <button id="updateGo" type="button" hidden>Update</button>
+      <button id="mockPress" type="button" class="ghost" hidden>Press the dish's button (pretend)</button>
+    </div>
+  </section>
+
   <details id="debugBox" class="debug" hidden>
     <summary>Debug log</summary>
     <ol id="debugLog"></ol>
@@ -204,11 +219,13 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <footer id="footer">Made for grungo's keeper.</footer>
 </main>
 
+<script src="ota.js"></script>
 <script>
 "use strict";
 const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 const TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const OTA_DATA = "6e400004-b5a3-f393-e0a9-e50e24dcca9e";
 const DRIVES = ["hunger", "sleepiness", "boredom", "loneliness", "fear", "pain", "discomfort", "need_touch"];
 const DRIVE_LABEL = { need_touch: "need touch" };
 const GENE_KINDS = {
@@ -327,7 +344,11 @@ function lineReader(onLine) {
 
 // Nordic UART over Web Bluetooth. Notifications can split a line, so buffer to "\n".
 class BleTransport {
-  constructor(onDrop) { this.onDrop = onDrop; this.device = null; this.rx = null; this.onLine = () => {}; }
+  constructor(onDrop) {
+    this.onDrop = onDrop; this.device = null; this.rx = null; this.data = null; this.onLine = () => {};
+    // One handler for the life of the device, so a reconnect never feeds a line twice.
+    this.notify = (e) => this.feed(new TextDecoder().decode(e.target.value));
+  }
   async pick() {
     const want = params.get("d");
     const filters = want ? [{ name: want }] : [{ services: [NUS] }];
@@ -338,10 +359,25 @@ class BleTransport {
     const server = await this.device.gatt.connect();
     const svc = await server.getPrimaryService(NUS);
     this.rx = await svc.getCharacteristic(RX);
+    this.data = await svc.getCharacteristic(OTA_DATA).catch(() => null);
     const tx = await svc.getCharacteristic(TX);
-    const feed = lineReader((line) => this.onLine(line));
-    tx.addEventListener("characteristicvaluechanged", (e) => feed(new TextDecoder().decode(e.target.value)));
+    this.feed = lineReader((line) => this.onLine(line));
+    tx.addEventListener("characteristicvaluechanged", this.notify);
     await tx.startNotifications();
+  }
+  // Back to the same device after a drop, with no chooser, for about two minutes.
+  async reopen(ms = 120000) {
+    const until = Date.now() + ms;
+    for (let wait = 500; ; wait = Math.min(wait * 2, 5000)) {
+      try { return await this.open(); } catch (e) {
+        if (Date.now() + wait > until) throw e;
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  }
+  async writeData(bytes) {
+    if (!this.data) throw new Error("no OTA data characteristic");
+    await this.data.writeValueWithoutResponse(bytes);
   }
   // The board asks for MTU 247, so a whole request usually fits one write. If the
   // write is refused (MTU stuck at 23), fall back to 20-byte chunks for this link.
@@ -358,8 +394,18 @@ class BleTransport {
 
 // ?mock=1: a fake board with a canned grungo, so the page can be checked without the badge.
 class MockTransport {
-  constructor() {
+  constructor(onDrop) {
     this.onLine = () => {};
+    this.onDrop = onDrop;
+    this.epoch = 0;
+    const faults = (params.get("faults") ?? "drop,gaps,lostAck").split(",");
+    this.dish = new BlorbOtaMock.MockDish({
+      board: "lcd128", fw: "0.3.0",
+      confirmMs: Number(params.get("confirm_ms")) || 30000,
+      faults: Object.fromEntries(faults.map((k) => [k, true])),
+      emit: (text) => this.deliver([`! ${text}`]),
+      onDrop: () => { this.epoch++; this.onDrop(); },
+    });
     this.name = "blorb-7a3f";
     this.petName = "grungo";
     const genes = [[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
@@ -372,11 +418,12 @@ class MockTransport {
     this.genome = new Uint8Array(bytes);
   }
   async write(text) {
+    if (!this.dish.connected) throw new Error("disconnected");
     const m = /^#([0-9a-f]+) (\S+) ?(.*)\n$/.exec(text);
     const id = m[1], verb = m[2], args = m[3];
     const lines = [];
     if (verb === "TIME") lines.push("OK caught_up=0");
-    else if (verb === "HELLO") lines.push(`OK fw=0.3.0 fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
+    else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
     else if (verb === "STATE") lines.push(
       "+ phase=creature gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0",
       "+ drives hunger=412 sleepiness=180 boredom=655 loneliness=290 fear=40 pain=0 discomfort=120 need_touch=520",
@@ -391,16 +438,37 @@ class MockTransport {
     else if (verb === "SUB") lines.push("OK events=0x03");
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
+    else if (verb === "OTA") lines.push(this.dish.command(args));
     else lines.push("ERR 404 UNKNOWN_VERB");
+    this.deliver(lines.map((l) => `#${id} ${l}`));
+  }
+  // Lines come back as 20-byte notifications; a drop loses whatever is still on the way.
+  deliver(lines) {
     const feed = lineReader((line) => this.onLine(line));
     const chunks = [];
-    for (const l of lines) {
-      const full = `#${id} ${l}`;
+    for (const full of lines) {
       for (let i = 0; i < full.length; i += 20) chunks.push(full.slice(i, i + 20));
       chunks.push("\n");
     }
-    chunks.forEach((c, i) => setTimeout(() => feed(c), 30 + i * 5));
+    const epoch = this.epoch;
+    chunks.forEach((c, i) => setTimeout(() => { if (epoch === this.epoch) feed(c); }, 30 + i * 5));
   }
+  async writeData(bytes) {
+    if (!this.dish.connected) throw new Error("disconnected");
+    await new Promise((r) => setTimeout(r, 1));
+    if (!this.dish.connected) throw new Error("disconnected");
+    this.dish.data(bytes);
+  }
+  async reopen() { await this.dish.reconnect(); this.epoch++; }
+  open() { return this.reopen(); }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.append(s);
+  });
 }
 
 const ui = {
@@ -539,7 +607,7 @@ function genomeUnavailable(text) {
   ui.show("genomeBox", true);
 }
 
-async function session() {
+async function session({ offer = true } = {}) {
   ui.status("connecting", "Saying hello…");
   const now = Math.floor(Date.now() / 1000);
   const tz = -new Date().getTimezoneOffset();
@@ -559,24 +627,149 @@ async function session() {
   link.send("SUB state stage hatched died").catch(() => {});
   clearInterval(poll);
   poll = setInterval(() => refreshState().catch(() => {}), 10000);
+  if (offer) await offerUpdate();
+}
+
+// --- Update over Bluetooth (docs/ota.md; the protocol is ota.js's) ---
+
+let updater = null, release = null, mockRelease = null;
+
+const petName = () => { const n = $("name").textContent || "grungo"; return n[0].toUpperCase() + n.slice(1); };
+
+const UPDATE_STEP = {
+  checking: "Getting the update ready…",
+  begin: "Asking the dish…",
+  confirm: "Press the button on the dish to say yes.",
+  sending: "Sending the update…",
+  resuming: "Moved out of reach, keep the phone close.",
+  finishing: "Restarting the dish…",
+  rebooting: "Restarting the dish…",
+  verifying: "Saying hello to the dish…",
+};
+
+// Why an update stopped, by the dish's last= or ERR text. Nothing here changes the pet.
+const UPDATE_FAILED = {
+  no_confirm: "Nobody pressed the button on the dish, so nothing changed.",
+  download: "Couldn't download the update, so nothing changed.",
+  unreachable: "Couldn't reach the dish again. Bring the phone close and connect.",
+  BUSY: () => `${petName()} is busy right now, so nothing changed. Try again in a minute.`,
+  BAD_SIGNATURE: "The dish didn't trust this update, so nothing changed.",
+  WRONG_BOARD: "This update is for a different dish, so nothing changed.",
+};
+
+function updateSay(text, tone = "") {
+  const el = $("updateText");
+  el.textContent = text;
+  el.dataset.tone = tone;
+}
+
+function updateProgress(fraction) {
+  const pct = Math.floor(fraction * 100);
+  const bar = $("updateBar");
+  bar.firstChild.style.width = `${pct}%`;
+  bar.setAttribute("aria-valuenow", pct);
+  return pct;
+}
+
+const updatePort = {
+  send: (cmd, ms) => link.send(cmd, ms),
+  writeData: (bytes) => transport.writeData(bytes),
+  async reconnect() {
+    await transport.reopen();
+    link = new Link(transport, onEvent);
+    ui.status("connected", "Connected");
+  },
+};
+
+async function getRelease(board) {
+  if (!params.has("mock")) return BlorbOta.fetchRelease(board, location.href);
+  mockRelease ||= await BlorbOtaMock.mockRelease({ board });
+  return mockRelease;
+}
+
+// Ask the dish what it runs and the site what it has, and offer the difference.
+async function offerUpdate() {
+  ui.show("updateBox", true);
+  ui.show("updateGo", false);
+  ui.show("updateBar", false);
+  updateSay("Checking for updates…");
+  let st;
+  try { st = kv((await link.send("OTA STATUS")).ok); } catch (e) {
+    return updateSay(e.code === 404
+      ? "This dish needs one update over a cable first. After that it can update by Bluetooth."
+      : "Couldn't ask the dish about updates.");
+  }
+  try { release = await getRelease(st.board); } catch (e) {
+    debugLog("err", `release: ${e.message}`);
+    return updateSay("Couldn't check for updates right now.");
+  }
+  const v = release.manifest.version;
+  const halfway = st.state !== "idle" && st.id === BlorbOta.imageId(release.manifest.sha256);
+  if (!halfway && !BlorbOta.isNewer(v, st.fw)) return updateSay(`Up to date (${st.fw}).`, "ok");
+  updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.` : `Version ${v} is ready for the dish.`);
+  $("updateGo").textContent = halfway ? `Finish updating to ${v}` : `Update to ${v}`;
+  ui.show("updateGo", true);
+}
+
+function showUpdateStep({ state, at, size }) {
+  ui.show("mockPress", params.has("mock") && state === "confirm");
+  ui.show("updateBar", ["sending", "resuming", "finishing", "rebooting", "verifying"].includes(state));
+  if (state === "sending") return updateSay(`${UPDATE_STEP.sending} ${updateProgress(at / size)}%`);
+  if (state === "finishing") updateProgress(1);
+  if (UPDATE_STEP[state]) updateSay(UPDATE_STEP[state]);
+}
+
+function showUpdateOutcome(o) {
+  const fine = `${petName()} is fine.`;
+  if (o.ok && o.kind === "updated") return updateSay(`Updated to ${o.fw}. ${fine}`, "ok");
+  if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the dish went back to ${o.fw}. ${fine}`, "err");
+  if (o.ok) return updateSay(`The dish is already up to date. ${fine}`, "ok");
+  const why = UPDATE_FAILED[o.reason] || "The update didn't finish, so nothing changed.";
+  updateSay(`${typeof why === "function" ? why() : why} ${fine}`, "err");
+}
+
+async function runUpdate() {
+  ui.show("updateGo", false);
+  clearInterval(poll);
+  updater = new BlorbOta.Updater({ port: updatePort, release, onChange: showUpdateStep });
+  const outcome = await updater.run();
+  updater = null;
+  ui.show("mockPress", false);
+  ui.show("updateBar", false);
+  if (outcome.reason === "unreachable") {
+    ui.status("lost", "Lost connection");
+    ui.show("reconnect", true);
+  } else {
+    await session({ offer: false }).catch((e) => debugLog("err", `after update: ${e.message}`));
+    if (!outcome.ok) {
+      $("updateGo").textContent = "Try again";
+      ui.show("updateGo", true);
+    }
+  }
+  showUpdateOutcome(outcome);
 }
 
 function onEvent(text) {
+  if (text.startsWith("OTA")) { if (updater) updater.event(text); return; }
   if (text.startsWith("STATE ")) renderState(kv(text));
   else if (/^(STAGE|HATCHED|DIED|PICKED|CLUTCH)/.test(text)) refreshState().catch(() => {});
 }
 
 function onDrop() {
   clearInterval(poll);
+  // The updater hears first, so the requests failing next read as a drop and not an error.
+  if (updater) updater.dropped();
   if (link) link.failAll("disconnected");
   ui.status("lost", "Lost connection");
-  ui.show("reconnect", true);
+  // An update reconnects by itself.
+  ui.show("reconnect", !updater);
 }
 
 async function connect() {
   try {
     if (params.has("mock")) {
-      transport = new MockTransport();
+      if (!globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
+      transport = new MockTransport(onDrop);
     } else {
       transport = new BleTransport(onDrop);
       ui.status("connecting", "Choose the dish…");
@@ -648,6 +841,12 @@ $("sayForm").addEventListener("submit", async (e) => {
 $("connect").addEventListener("click", connect);
 if (DEBUG) ui.show("debugBox", true);
 $("reconnect").addEventListener("click", reconnect);
+$("updateGo").addEventListener("click", () => runUpdate().catch((e) => {
+  console.error(e);
+  updater = null;
+  updateSay(`Something went wrong (${e.message}). ${petName()} is fine.`, "err");
+}));
+$("mockPress").addEventListener("click", () => transport.dish.press());
 
 if (params.has("mock")) {
   $("footer").textContent = "Mock mode: a pretend dish, nothing is sent over Bluetooth.";

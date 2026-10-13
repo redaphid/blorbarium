@@ -175,6 +175,12 @@ became ready. Either way, it waits while it is busy.
 A dropped connection at any step means reconnecting (the same device, so no
 chooser) and sending the same BEGIN. The dish answers with where it is.
 
+Open question from the page (`web/public/ota.js`). Step 7 reads HELLO as soon
+as the dish is back, but the new image is on trial for 30 s after that. If it
+rolls back later, the page has already said "Updated". The page reports what
+HELLO says. A `trial=1` in HELLO or in STATUS would let the page wait for the
+verdict.
+
 ## Release layout
 
 ```
