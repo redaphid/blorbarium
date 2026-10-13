@@ -67,8 +67,8 @@ TurnWound woundFor(Stakes s, const TurnHit* hits, uint8_t turn, Fx roomNow) {
   return w;
 }
 
-// The per-duel cap stands in for "every heart lost": it is at least what five
-// hearts cost at either tier, so the forecast errs toward the bigger skull.
+// woundFor never adds more than the tier's cap in one duel, so the cap is
+// "every heart lost" without knowing how many hearts he will have (duel.h).
 Danger forecast(const Creature& c, Stakes s) {
   const Fx now = c.chemistry().chem[chem::injury.v];
   const Fx room = woundRoom(c);

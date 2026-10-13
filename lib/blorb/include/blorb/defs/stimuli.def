@@ -43,7 +43,7 @@ BLORB_STIM(43, duel_bonked,     Duel, 0)  // I lost a heart this turn
 BLORB_STIM(44, duel_landed,     Duel, 0)  // I bonked them
 BLORB_STIM(45, duel_won,        Duel, 0)
 BLORB_STIM(46, duel_fainted,    Duel, 0)  // the swoon (any tier): daze floods, he naps
-BLORB_STIM(47, duel_befriended, Duel, 1)  // the duel is over and they know each other (both sides, always)
+BLORB_STIM(47, duel_befriended, Duel, 0)  // the duel is over and they know each other (both sides, always)
 BLORB_STIM(48, petted,         Phone, 1)
 BLORB_STIM(49, played,         Phone, 0)
 BLORB_STIM(50, spoken_to,      Phone, 0)
