@@ -115,6 +115,10 @@ crc against the decoded pixels and tries again, up to `--tries` times, when
 a log line lands inside the shot. `--from <log>` decodes a shot from a
 captured log instead.
 
+An adult in the dish encodes to about 74 KB in 770 lines and takes about
+9 s at 115200 baud (measured 2026-10-13: 73,605 bytes, 9.1 s). A flat
+screen takes a fraction of a second.
+
 What a shot shows, and what it does not change:
 
 - It is the canvas, the frame as drawn, upright for whoever holds the board.
@@ -122,7 +126,11 @@ What a shot shows, and what it does not change:
 - It saves nothing and changes no pet state. The Dish keeps sampling and
   ticking while the shot goes out. Only the glass holds its last frame until
   the last line is sent.
-- It goes over the cable only, so a connected phone does not see it.
+- It goes over the cable only, so a connected phone does not see it. This
+  desk has no Bluetooth adapter, so a shot with a phone connected has not
+  been tried on the board yet.
+- On 2026-10-13 a `[hw] up=` line landed inside a shot. The shot still
+  decoded, and `writes=` did not change across it.
 
 The encoder and the decoder are tested against each other. `test/test_shot` holds the
 encoder to `test/fixtures/shot_v1.txt` byte for byte. `tests/test_shot.py`
