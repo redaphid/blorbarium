@@ -14,16 +14,23 @@
 //   sim --record dir/ --fps 20 --for 8000   every frame to dir/, then quit
 //   sim --sealed                         boot as a board whose keepsake would not open
 //   sim --species <slug|id>              draw the pet as that species (DEBUG species does it live)
+//   sim --air-fd <n> [--air-weather loss=30,dup=10,reorder=20,late=800,latency=3,rssi=-45,seed=1]
+//                                        the duel radio over a socket another sim holds the far end of
+//                                        (sim/serial_air.h; tools/duel_film.py joins two)
+//   sim --kid <seed>[:<from ms>[:<turn ms>]]   a kid playing a duel on the hand (sim/duel_bot.h)
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
 //
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !care <ms>  !shot <path>
+//   !air open  !air close  !air ping <word>   (the far sim answers a ping with `pong <word>`)
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
+#include "duel_bot.h"
+#include "serial_air.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -124,6 +131,45 @@ static void release() {
 
 static uint32_t argMs(const char* arg, uint32_t fallback) { return arg && *arg ? uint32_t(atoi(arg)) : fallback; }
 
+// ---- the radio ---------------------------------------------------------------
+// Every frame that crosses is one stderr line, which is what a film reads:
+//   air <ms> sent|received|lost|deaf <seq> <the other mac> <len> <text, or hex>
+static std::optional<simair::SerialAir> air;
+
+static void logAir(const simair::Event& e) {
+  static const char* const kWhat[] = {"sent", "received", "lost", "deaf"};
+  char text[2 * blorb::kDatagramMax + 1];
+  bool printable = true;
+  for (size_t i = 0; i < e.len; i++) printable &= e.bytes[i] >= ' ' && e.bytes[i] < 127;
+  if (printable) snprintf(text, sizeof(text), "%.*s", int(e.len), (const char*)e.bytes);
+  else for (size_t i = 0; i < e.len; i++) snprintf(text + 2 * i, 3, "%02x", e.bytes[i]);
+  const uint8_t* m = e.peer.mac;
+  fprintf(stderr, "air %u %s %u %02x%02x%02x%02x%02x%02x %u %s\n", e.at, kWhat[int(e.what)], e.seq, m[0], m[1], m[2],
+          m[3], m[4], m[5], unsigned(e.len), text);
+}
+
+// Until the Dish takes the radio (D9's DishOptions::air), the sim reads it
+// itself and answers pings, so two linked sims can be seen talking.
+static void airLine(const char* verb, const char* word) {
+  if (!air) { fprintf(stderr, "sim: !air %s needs --air-fd\n", verb); return; }
+  if (!strcmp(verb, "open")) air->open();
+  else if (!strcmp(verb, "close")) air->close();
+  else if (!strcmp(verb, "ping")) {
+    const std::string s = std::string("ping ") + word;
+    air->broadcast((const uint8_t*)s.data(), s.size());
+  } else fprintf(stderr, "sim: !air open|close|ping <word>, not %s\n", verb);
+}
+
+static void answerPings() {
+  while (auto d = air->receive()) {
+    if (d->len < 5 || memcmp(d->bytes, "ping ", 5)) continue;
+    d->bytes[1] = 'o';
+    air->send(d->from, d->bytes, d->len);
+  }
+}
+
+static std::optional<duelbot::KidBot> kid;
+
 // ---- the caretaker -------------------------------------------------------------
 // `!care <ms>`: for that long, warps included, an owner glances at the glass
 // every 30 s and makes the gesture the care hint names (care.def), then rests,
@@ -171,6 +217,7 @@ static void hand(const char* word, const char* a, const char* b) {
   else if (!strcmp(word, "button")) press(PIN_BOOT_BUTTON, argMs(a, 150));
   else if (!strcmp(word, "care")) { careUntil = now + argMs(a, 0); careNextLook = now; }
   else if (!strcmp(word, "shot")) shoot(a);
+  else if (!strcmp(word, "air")) airLine(a, b);
   else fprintf(stderr, "sim: unknown hand line !%s\n", word);
 }
 
@@ -260,13 +307,19 @@ static int run(bool* running) {
   while (*running) {
     const uint32_t frame = millis();
     const uint32_t since = frame - started - simWarpMs;   // the script's clock
+    if (air) air->begin(since);
     while (scriptNext < script.size() && script[scriptNext].at <= since) Serial.arrive(script[scriptNext++].text.c_str());
+    for (duelbot::Move m; kid && kid->next(since, m);) {
+      if (*m.why) fprintf(stderr, "kid %u %s\n", since, m.why);
+      simPending.push_back(m.line);
+    }
     std::vector<std::string> due;
     due.swap(simPending);   // a warp reads stdin and may queue more; those wait a frame
     for (const std::string& line : due) simLine(line);
     release();
     care();
     loop();
+    if (air) answerPings();
     const uint32_t after = millis() - started - simWarpMs;
     if (shotPath && after >= shotAfterMs) {
       shoot(shotPath);
@@ -290,6 +343,8 @@ static int run(bool* running) {
 }
 
 int main(int argc, char** argv) {
+  int airFd = -1;
+  simair::Weather weather;
   for (int i = 1; i < argc; i++) {
     const char* a = argv[i];
     if (!strcmp(a, "--shot") && i + 1 < argc) shotPath = argv[++i];
@@ -320,7 +375,28 @@ int main(int argc, char** argv) {
       if (!scriptLoad(argv[++i])) return 2;
       simClockFixed = true;
     }
+    else if (!strcmp(a, "--air-fd") && i + 1 < argc) airFd = atoi(argv[++i]);
+    else if (!strcmp(a, "--air-weather") && i + 1 < argc) {
+      if (const char* why = simair::parseWeather(argv[++i], weather)) {
+        fprintf(stderr, "sim: --air-weather %s: %s\n", argv[i], why);
+        return 2;
+      }
+    }
+    else if (!strcmp(a, "--kid") && i + 1 < argc) {
+      unsigned seed = 0, from = 1000, turn = 10000;
+      if (sscanf(argv[++i], "%u:%u:%u", &seed, &from, &turn) < 1 || turn < 3000) {
+        fprintf(stderr, "sim: --kid <seed>[:<from ms>[:<turn ms, at least 3000>]], not %s\n", argv[i]);
+        return 2;
+      }
+      kid.emplace(seed, from, turn);
+    }
     else { fprintf(stderr, "sim: unknown argument %s\n", a); return 2; }
+  }
+  if (airFd >= 0) {
+    blorb::PeerAddr self;
+    esp_read_mac(self.mac, ESP_MAC_WIFI_STA);
+    air.emplace(airFd, self, weather);
+    air->onEvent = logAir;
   }
 
   fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);

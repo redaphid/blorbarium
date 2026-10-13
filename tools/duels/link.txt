@@ -1,0 +1,68 @@
+# Two species on two simulators, their radios joined by sim/serial_air.h, in
+# bad weather. No duel engine yet (D8, D9, D11): this proves the link and the
+# camera. Mossby eats; Tinker's kid plays the duel gestures blind, so his BOOT
+# presses drop pellets for now.
+#> title Two dishes, one fake radio
+#> length 22000
+#> side A mossby 02:b1:0b:00:00:01
+#> side B tinker 3c:84:27:aa:10:5e kid=7:11000:5000
+#> weather loss=25,dup=10,reorder=20,late=600,seed=4
+#> caption 0 Mossby and Tinker | each on their own simulator
+#> caption 3500 Their radios are joined | by fake ESP-NOW over a socket
+#> caption 7000 A ping crosses, | a pong comes back
+#> caption 10500 A quarter of the frames | are lost on purpose
+#> caption 14500 A kid plays Tinker: | BOOT twice, tilt, knock
+#> caption 19000 Same frames every run: | the two clocks step in lockstep
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@200 DEBUG inject life 0.5
+@300 DEBUG warp 600
+@400 !air open
+@400 DEBUG inject vision 0
+A: @1500 !button
+A: @1900 DEBUG inject hunger 1
+A: @1900 DEBUG force eat
+A: @3400 DEBUG force eat
+A: @4900 DEBUG force eat
+A: @6400 DEBUG force eat
+A: @7900 DEBUG force eat
+A: @9400 DEBUG force eat
+A: @10900 DEBUG force eat
+B: @400 DEBUG force rest
+B: @2400 DEBUG force rest
+B: @4400 DEBUG force rest
+B: @6400 DEBUG force rest
+B: @8400 DEBUG force rest
+A: @3600 !air ping m1
+A: @4500 !air ping m2
+A: @5400 !air ping m3
+A: @6300 !air ping m4
+A: @7200 !air ping m5
+A: @8100 !air ping m6
+A: @9000 !air ping m7
+A: @9900 !air ping m8
+A: @10800 !air ping m9
+A: @11700 !air ping m10
+A: @12600 !air ping m11
+A: @13500 !air ping m12
+A: @14400 !air ping m13
+A: @15300 !air ping m14
+A: @16200 !air ping m15
+A: @17100 !air ping m16
+A: @18000 !air ping m17
+A: @18900 !air ping m18
+A: @19800 !air ping m19
+A: @20700 !air ping m20
+B: @4100 !air ping t1
+B: @5400 !air ping t2
+B: @6700 !air ping t3
+B: @8000 !air ping t4
+B: @9300 !air ping t5
+B: @10600 !air ping t6
+B: @11900 !air ping t7
+B: @13200 !air ping t8
+B: @14500 !air ping t9
+B: @15800 !air ping t10
+B: @17100 !air ping t11
+B: @18400 !air ping t12
+B: @19700 !air ping t13
