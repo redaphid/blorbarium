@@ -1,0 +1,9 @@
+{
+ "board": "lcd128",
+ "version": "0.4.0",
+ "flags": 0,
+ "size": 988144,
+ "sha256": "QYC5zphyrqt684AhqC8Dbej_S3DSuaQKjl2_KHE9Rrg",
+ "sig": "a57mZishJjbZudpUNFKYdfvrLeWCr7fobdLeHZkX_GM55ca9kfZwQSzsvYOgV6aUUgofJWutD6mithpHAR-uzg",
+ "image": "blorbarium-lcd128-0.4.0.bin"
+}
