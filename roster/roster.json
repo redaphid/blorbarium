@@ -30,6 +30,26 @@
         "dominant": "#6E9A48",
         "secondary": "#5A3E2B",
         "glow": "#50F0DC"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/grungo/grungo_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 107210
       }
     },
     {
@@ -49,6 +69,26 @@
         "dominant": "#E8892B",
         "secondary": "#F2E3C4",
         "glow": "#FFD36A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mossby/mossby_pack.h",
+        "palette": 232,
+        "frames": 18,
+        "flash_bytes": 101846
       }
     },
     {
@@ -68,6 +108,26 @@
         "dominant": "#E8806A",
         "secondary": "#F4E6D0",
         "glow": "#FF8FD0"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/puffkin/puffkin_pack.h",
+        "palette": 252,
+        "frames": 18,
+        "flash_bytes": 100936
       }
     },
     {
@@ -87,6 +147,26 @@
         "dominant": "#F59AC0",
         "secondary": "#C2367A",
         "glow": "#9CFFB0"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/gilly/gilly_pack.h",
+        "palette": 241,
+        "frames": 18,
+        "flash_bytes": 92730
       }
     },
     {
@@ -106,6 +186,26 @@
         "dominant": "#8E6AD8",
         "secondary": "#F1E9D2",
         "glow": "#FFE27A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mothwick/mothwick_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 86212
       }
     },
     {
@@ -125,6 +225,26 @@
         "dominant": "#4A90D9",
         "secondary": "#E9D3A6",
         "glow": "#7CF2FF"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mudge/mudge_pack.h",
+        "palette": 245,
+        "frames": 18,
+        "flash_bytes": 92302
       }
     },
     {
@@ -144,6 +264,26 @@
         "dominant": "#F2C53D",
         "secondary": "#7A4A26",
         "glow": "#D8FF5A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/fizz/fizz_pack.h",
+        "palette": 243,
+        "frames": 18,
+        "flash_bytes": 80834
       }
     },
     {
@@ -163,6 +303,26 @@
         "dominant": "#F2EFE6",
         "secondary": "#9AA0A8",
         "glow": "#B8D4FF"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/hushwing/hushwing_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 102620
       }
     },
     {
@@ -182,6 +342,26 @@
         "dominant": "#7A8796",
         "secondary": "#2E3138",
         "glow": "#FFB347"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/tinker/tinker_pack.h",
+        "palette": 232,
+        "frames": 18,
+        "flash_bytes": 77682
       }
     }
   ]

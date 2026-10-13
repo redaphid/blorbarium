@@ -109,5 +109,26 @@ and the packed `pets/<slug>/<slug>_pack.h`. In sprite-expressions, branch `roste
 `characters/<slug>/`: `hero.png`, `character.json`, `expressions.json`, `anchor.png`,
 `masks/`, `raw/<expr>/frame-00.png`, `eyes.json`.
 
-Flash cost: Grungo's pack is 107 KB (256 palette entries, 18 frames). Nine packs at
-that size are about 1 MB, inside a 4 MB app slot.
+Flash cost: Grungo's pack is 107 KB (256 palette entries, 18 frames). All nine packs
+together are 842 KB (`art` in roster.json lists each), inside a 4 MB app slot.
+
+## How a roster pet differs from Grungo when packed
+
+`tools/sprite_pack.py --pet <slug>` packs a pet other than Grungo; Grungo's own run is
+unchanged and his header byte-identical. The differences:
+
+- `eyes.json` holds only the egg's eyes (`egg_eyes.py` in sprite-expressions). The
+  converter measures every face's eye anchors itself, from the eye pixels its
+  labelling finds, so no per-frame iris detector is needed.
+- `pack.json` (drafted by `tools/pack_refs.py`, reviewable in its `pack-refs.png`)
+  gives the body bbox, the eyeballs, three body prototypes (`skin`, `cloak`, `belly`)
+  and reference colours per region. Each patch of the body walled by linework takes
+  the prototype nearest its mean colour; eyes, mouth and glow keep per-pixel labels.
+  Where the art has no outline between two parts (Puffkin's rim and face, Mudge's body
+  and belly, Mothwick's upper wings and body) they share one region, so a gene tint
+  moves them together.
+- Remains are derived from the asleep face exactly as Grungo's are, with the pool
+  scaled to the pet's body. That is the contract's only death art.
+
+Nothing in `src/` loads a roster pack yet: `main.cpp` draws `grungoPack()`. Choosing a
+pack per device is engine work, left for whoever wires battles and species.
