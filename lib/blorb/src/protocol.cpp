@@ -118,7 +118,8 @@ void stateLine(Line& l, const Dish& dish) {
     l.add(" eggs=%u cursor=%u vigil=%u cause=%s", unsigned(k.count), unsigned(k.cursor), unsigned(k.sinceDeath),
           causeName(k.cause));
   }
-  if (dish.boot() == Boot::Sealed) l.add(" sealed=1");   // the occupant is a placeholder: the pet is on the flash
+  // The occupant is a placeholder: the pet is on the flash. newer: a newer firmware's save, kept for it.
+  if (dish.sealed()) l.add(" sealed=%s", dish.boot() == Boot::ReadOnlyNewer ? "newer" : "1");
 }
 
 int hexValue(char c) {

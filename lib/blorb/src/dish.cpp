@@ -120,7 +120,7 @@ void Dish::tick(uint32_t nowMs, Link& link) {
 void Dish::runOneTick(Link& link) {
   SenseOut out = pending_;
   pending_.clear();
-  if (boot_ == Boot::Sealed) {   // no life to run: the pet is the one on the flash
+  if (sealed()) {   // no life to run: the pet is the one on the flash
     ++tick_;
     return;
   }
@@ -219,7 +219,7 @@ void Dish::save() {
 }
 
 Appearance Dish::appearance() const {
-  if (boot_ == Boot::Sealed) {
+  if (sealed()) {
     // The founder asleep: the keepsake's own genome is on the flash, unread.
     Appearance a = portrait(std::get<Egg>(live_.occupant).genome(), Stage::Adult, 0, 0);
     a.sealed = a.asleep = true;
@@ -268,7 +268,7 @@ void Dish::checkWall() {
 // takes the normal path. An egg incubates and hatches; a clutch's vigil runs
 // to its end and the choice waits for the owner.
 void Dish::catchUp(uint32_t ticks) {
-  if (boot_ == Boot::Sealed) return;
+  if (sealed()) return;
   const uint64_t cap = uint64_t(kMaxCatchUpSteps) * kCatchUpStride;
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {

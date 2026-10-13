@@ -23,7 +23,7 @@ enum class Boot : uint8_t {
   FellBack,        // newest slot torn; the older one loaded
   FromLineage,     // no readable snapshot: an egg of the latest genome, rebuilt from lineage.log
   Fresh,           // nothing stored: a founding egg from starterGenome(speciesSeed)
-  ReadOnlyNewer,   // a newer firmware's keepsake: runs a throwaway egg, writes nothing
+  ReadOnlyNewer,   // a newer firmware's keepsake: sealed (below) until the firmware catches up
   Sealed,          // a keepsake boot could not open (DishOptions::sealed): holds still, writes nothing
 };
 
@@ -58,6 +58,9 @@ class Dish {
   // Loads the keepsake, or recovers from the lineage, or founds one. Never formats.
   Dish(Storage&, uint32_t speciesSeed, uint64_t lineageId, DishOptions = {});
   Boot boot() const { return boot_; }
+  // The pet is on the flash and this firmware will not touch it: no life runs,
+  // nothing is written, and the screen shows him asleep in amber.
+  bool sealed() const { return boot_ == Boot::Sealed || boot_ == Boot::ReadOnlyNewer; }
 
   // Every IMU read, at 50 Hz. Runs the detectors only; effects land at the next tick.
   void sample(const BodySample&, uint32_t nowMs);

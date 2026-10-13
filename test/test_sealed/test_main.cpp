@@ -2,12 +2,17 @@
 // board shows the pet asleep in amber and touches nothing it holds.
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "blorb/dish.h"
+#include "blorb/keepsake.h"
+#include "grungo_pack.h"
+#include "paint/sprite_pack.h"
 #include "links.h"
 #include "mem_storage.h"
 
@@ -131,6 +136,47 @@ TEST(Sealed, StateTellsTheSite) {
   ASSERT_FALSE(phaseLine(other).empty());
   EXPECT_EQ(phaseLine(other).find("sealed"), std::string::npos) << "an ordinary board says nothing of it";
   EXPECT_FALSE(open.appearance().sealed);
+}
+
+// A rolled-back image meeting a newer firmware's save: the same harm, the same screen.
+Counting newerKeepsake() {
+  Counting s = keepsake();
+  s.files["snap.b"] = s.files["snap.a"];
+  for (const char* slot : {"snap.a", "snap.b"}) s.files[slot][4] = uint8_t(kFormatVersion + 1);
+  return s;
+}
+
+TEST(Newer, ANewerSaveIsSealedWritesNothingAndHoldsStill) {
+  Counting store = newerKeepsake();
+  const auto before = store.files;
+  Dish dish(store, 7, kLineage);
+  EXPECT_EQ(dish.boot(), Boot::ReadOnlyNewer);
+  EXPECT_TRUE(dish.sealed());
+  liveThrough(dish);
+  EXPECT_EQ(store.writes, 0);
+  EXPECT_EQ(store.files, before);
+  EXPECT_TRUE(dish.appearance().sealed);
+  ASSERT_TRUE(std::holds_alternative<Egg>(dish.occupant())) << "no throwaway life ran";
+  EXPECT_EQ(std::get<Egg>(dish.occupant()).progress(), Fx::zero());
+}
+
+TEST(Newer, StateTellsTheSiteWhichSeal) {
+  Counting store = newerKeepsake();
+  Dish dish(store, 7, kLineage);
+  blorbtest::ScriptedLink phone;
+  phone.inbound.emplace_back("#1 STATE");
+  dish.tick(0, phone);
+  EXPECT_NE(phaseLine(phone).find(" sealed=newer"), std::string::npos) << phaseLine(phone);
+}
+
+// So the sealed golden stands for both: the two boots draw the same pixels.
+TEST(Newer, DrawsTheSameFrameAsASealedBoard) {
+  Counting newer = newerKeepsake(), stuck = keepsake();
+  Dish a(newer, 7, kLineage), b(stuck, 7, kLineage, sealed());
+  auto ca = std::make_unique<paint::Canvas240>(), cb = std::make_unique<paint::Canvas240>();
+  paint::draw(a.appearance(), grungoPack(), *ca, 3000);
+  paint::draw(b.appearance(), grungoPack(), *cb, 3000);
+  EXPECT_EQ(std::memcmp(ca->px, cb->px, sizeof ca->px), 0);
 }
 
 int main(int argc, char** argv) {

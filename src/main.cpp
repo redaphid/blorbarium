@@ -183,6 +183,9 @@ static void reportBoot() {
   else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
   const OccupantSummary o = summarize(dish->occupant());
+  if (dish->boot() == blorb::Boot::ReadOnlyNewer)
+    Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
+                   "Update the firmware to wake him");
   Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
                 unsigned(o.gen), unsigned(o.genome), unsigned(o.age));
 }
