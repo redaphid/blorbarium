@@ -277,6 +277,40 @@ def label_refs(rgb, alpha, eye_zone, mouth_zone, power):
     return lab
 
 
+def patches(mask):
+    """Label the 4-connected patches of mask 1..n. Only the --pet path needs scipy."""
+    from scipy import ndimage
+    return ndimage.label(mask)
+
+
+def by_patch(lab, rgb, alpha, eye_zone, mouth_zone):
+    """Give each patch walled by linework one body region, the prototype (pack.json
+    "prototypes") nearest its mean colour: a shell's highlight and its shading are one
+    patch, so a tint moves the whole shell, where per pixel the highlight would match a
+    pale face. A patch mostly labelled eye, mouth or glow keeps its labels (a tongue
+    hanging past the mouth zone), and one mostly in the eye zone is eye (an iris the
+    colour of shell shading)."""
+    h, s, v = to_hsv(rgb)
+    comp, n = patches((alpha > 0) & (v >= CFG.get("edge", 0.45)))   # brown linework walls a patch too
+    flat = comp.ravel()
+    tally = lambda m: np.bincount(flat, weights=m.ravel().astype(float), minlength=n + 1)
+    count = np.bincount(flat, minlength=n + 1).astype(float)
+    special = tally(np.isin(lab, (REGION["eye"], REGION["mouth"], REGION["glow"])))
+    in_eye, in_mouth = tally(eye_zone), tally(mouth_zone & ~eye_zone)
+    mean = np.stack([tally(rgb[..., c]) for c in range(3)], -1) / np.maximum(count, 1)[:, None]
+    protos = [(np.array(c, float), REGION[r]) for r, c in CFG["prototypes"].items()]
+    d = np.stack([((mean - c) ** 2).sum(-1) for c, _ in protos], -1)
+    table = np.array([r for _, r in protos], np.uint8)[d.argmin(-1)]
+    table[in_eye * 2 > count] = REGION["eye"]
+    real = np.arange(n + 1) > 0
+    vote = real & (special * 2 <= count) & ~((in_mouth * 2 > count) & (in_eye * 2 <= count))
+    body = np.isin(lab, (REGION["skin"], REGION["belly"], REGION["cloak"]))
+    out = lab.copy()
+    m = vote[comp] & body
+    out[m] = table[comp][m]
+    return out
+
+
 def refs_eye_zone(eye_mask):
     zone = eye_mask.copy()
     for x, y in EYEBALLS:
@@ -441,7 +475,12 @@ def label_egg_refs(rgb, alpha, eyes):
     refs = [(r["rgb"], REGION[r["region"]]) for r in CFG["egg_refs"]]
     zone = ref_zone(eye_zone, np.zeros(alpha.shape, bool), True)
     lab = nearest_region(rgb, refs, [zone.get(reg, np.ones(alpha.shape, bool)) for _, reg in refs])
-    lab[(v < CFG.get("ink", 0.16)) & ~eye_zone] = INVARIANT
+    dark = v < CFG.get("ink", 0.16)
+    lab[dark & ~eye_zone] = INVARIANT
+    for x, y, er in eyes:
+        # the baby's eyes see whatever colour they were drawn: ink is eye, the rest glow
+        m = disc(alpha.shape, x, y, er)
+        lab[m] = np.where(dark[m], REGION["eye"], REGION["glow"])
     lab[alpha == 0] = CLEAR
     return lab
 
@@ -658,7 +697,8 @@ def build():
     frames, alpha, eyes, eye_mask, mouth_zone = load_art()
     if CFG:
         fixed, zone = {}, refs_eye_zone(eye_mask)
-        labels = {n: label_refs(rgb, alpha, zone, mouth_zone, n == "foresee") for n, rgb in frames.items()}
+        labels = {n: by_patch(label_refs(rgb, alpha, zone, mouth_zone, n == "foresee"), rgb, alpha, zone, mouth_zone)
+                  for n, rgb in frames.items()}
         eyes = {**eyes, **measure_eyes(labels)}
         moved = tuple(n for n in frames if n != "neutral" and eyes[n]["eyes"])
     else:
@@ -697,6 +737,8 @@ def build():
     frames_out = {"Body": body}
     frames_out.update({f"Face_{e}": faces[e] for _, e in EXPRESSIONS})
     whole = egg_art()
+    if CFG:
+        snap_eyes(whole)
     frames_out.update({f"Egg{i}": egg(whole, cracks) for i, cracks in enumerate((0, 1, 3))})
     frames_out["Remains"] = remains(frames["sleep"], labels["sleep"], feet)
     frames_out["ItemPellet"] = fly((46, 48, 56), (84, 86, 98), (206, 226, 236), (170, 40, 32))
