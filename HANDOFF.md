@@ -210,18 +210,29 @@ All paths below are in that repo.
 - Which board blorbarium uses is not decided.
 - **A board's first boot formats what never held a pet** (issue #1,
   `lib/blorb/include/blorb/provision.h`). When `pet` or `petfs` will not
-  open, boot reads both raw. If neither shows a blorbarium pet, the failing
-  one is formatted: it was blank, or a factory demo's bytes. If either shows
-  one, nothing is formatted, the pet does not save, and the log says
-  `LEFT ALONE` with `!!! the pet is not being saved`. Rescue that board by
-  hand from a read-only dump. The pet marks are bytes every save already
+  open, boot reads that partition raw and judges it by its own bytes. With
+  no blorbarium mark it is blank or a factory demo's, and it is formatted.
+  With one it is a damaged keepsake: it is left alone, the pet does not
+  save, and the log says `LEFT ALONE` with `!!! the pet is not being saved`.
+  Rescue that board by hand from a read-only dump. The other partition is
+  not consulted, because formatting a partition with no mark of ours cannot
+  lose a pet. A first version judged the pair together, and review found it
+  kept a factory NVS beside a petfs an older build had formatted unsavable
+  forever, and left a real pet's blank petfs unformatted, so no lineage
+  saved. The pet marks are bytes every save already
   has: `BLRB` at a 32-byte NVS entry, and a LittleFS superblock of petfs's
   own geometry (4096 x 1440) at offset 8 of block 0 or 1. So a board saved
   before this rule (the gift device) is recognised with no new marker. The
   boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
   blank`, `formatted: it held another firmware's bytes and never a pet`.
-  Known gap: the screen says nothing when a keepsake is left alone, and the
-  child sees a new egg that will not save.
+  Known gaps. The screen says nothing when a keepsake is left alone, and the
+  child sees a new egg that will not save. And IDF itself decides most of
+  what "will not open" means for `pet`. It opens NVS over random bytes or
+  pages whose header CRC fails: it counts those pages as free and erases
+  them when it needs room (`PageManager::load`). So a damaged NVS may be
+  reclaimed by IDF before provision ever sees it. That predates provision,
+  which only meets the NVS that IDF refuses: a newer NVS format, or no
+  free page.
 
 ## Things to check before they bite
 
