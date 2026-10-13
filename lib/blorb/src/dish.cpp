@@ -208,14 +208,14 @@ void Dish::rename(const char* name) {
   eventDirty_ = true;
 }
 
-void Dish::flush() {
-  if (!readOnly_) save();
-}
+// Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
+bool Dish::flush() { return readOnly_ || save(); }
 
-void Dish::save() {
-  if (!keep_.save(live_)) return;   // an event save stays urgent and retries on the next tick() call
+bool Dish::save() {
+  if (!keep_.save(live_)) return false;   // an event save stays urgent and retries on the next tick() call
   lastSaveTick_ = tick_;
   eventDirty_ = false;
+  return true;
 }
 
 Appearance Dish::appearance() const {
