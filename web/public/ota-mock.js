@@ -20,8 +20,10 @@
   // faults: drop (lose the link once near 40%), gaps (lose three data writes),
   // lostAck (swallow one at= event), corrupt (flip a byte on the way in),
   // rollback (the new image does not keep itself).
+  // onTrial: { from, token } starts the dish already on trial with fw, as a page
+  // that comes back after the restart finds it.
   class MockDish {
-    constructor({ board = "lcd128", fw = "0.3.0", confirmMs = 30000, bootMs = 1200, trialMs = 3000, faults = {}, emit = () => {}, onDrop = () => {} } = {}) {
+    constructor({ board = "lcd128", fw = "0.3.0", confirmMs = 30000, bootMs = 1200, trialMs = 3000, faults = {}, onTrial = null, emit = () => {}, onDrop = () => {} } = {}) {
       Object.assign(this, { board, fw, confirmMs, bootMs, trialMs, faults, emit, onDrop });
       this.state = "idle";
       this.last = "none";
@@ -37,6 +39,7 @@
       this.loseAckAt = faults.lostAck ? 0.7 : Infinity;
       this.corruptAt = faults.corrupt ? 0.5 : Infinity;
       this.stats = { drops: 0, lostWrites: 0, gaps: 0, lostAcks: 0, polls: 0, reboots: 0, confirms: 0, refusedConfirms: 0, ignored: 0, flashed: null };
+      if (onTrial) { this.trial = true; this.startTrial(onTrial.from, onTrial.token); }
     }
 
     say(text) { if (this.connected) this.emit(text); }
@@ -152,18 +155,22 @@
       this.onDrop();
     }
 
-    // Into the new image, on trial. It keeps itself once a page has sent
-    // CONFIRM; with no CONFIRM, or with the rollback fault, its trial fails and
-    // it restarts into the old one, as the bootloader would.
     restart() {
-      const version = this.s.version, old = this.fw;
+      const old = this.fw, token = this.s.token;
       for (const name in this.timers) this.timer(name);
+      this.boot(this.s.version, true, () => this.startTrial(old, token));
+    }
+
+    // On trial in the running image. It keeps itself once the page holding the
+    // token that switched it in has sent CONFIRM; with no CONFIRM, or with the
+    // rollback fault, its trial fails and it restarts into `old`, as the bootloader would.
+    startTrial(old, token) {
       this.confirmed = false;
-      this.trialToken = this.s.token;
-      this.boot(version, true, () => this.timer("trial", this.trialMs, () => {
-        if (this.faults.rollback || !this.confirmed) { this.rolledback = version; this.boot(old, false); }
+      this.trialToken = token;
+      this.timer("trial", this.trialMs, () => {
+        if (this.faults.rollback || !this.confirmed) { this.rolledback = this.fw; this.boot(old, false); }
         else this.trial = false;
-      }));
+      });
     }
 
     // A lineage-writing twist (rename) waits for the trial: a rollback would undo it.
