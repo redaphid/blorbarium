@@ -58,6 +58,11 @@ class SpritePack {
 // then the round mask.
 void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 
+// The species' sprite pack (species.def's rows; every device holds all nine).
+// An id this firmware has no row for draws grungo, recoloured by the pet's own
+// genes like any pack, so a gap in the art is a frog in its colours, never a blank.
+const SpritePack& packFor(blorb::SpeciesId);
+
 // A procedural stand-in (circles, a ring, two eyes with anchors) used by the
 // sim and tests until the grungo converter exists.
 const SpritePack& placeholderPack();

@@ -1,0 +1,377 @@
+{
+  "about": "The blorbarium roster: nine creatures of the sinking swamp colony (sporefall-station's world). id is stable; the battle code may key on it. power.kind is a hint for battle design, not a rule. faces lists the expressions.def faces that have picked art; stage art is procedural for every creature (roster/CONTRACT.md).",
+  "faces_required": [
+    "neutral",
+    "happy",
+    "alarmed",
+    "annoyed",
+    "croak",
+    "blep",
+    "foresee",
+    "sleepy",
+    "asleep",
+    "yawn"
+  ],
+  "creatures": [
+    {
+      "id": 0,
+      "name": "Grungo",
+      "slug": "grungo",
+      "species": "frog",
+      "look": "a stocky olive-green frog in a brown hooded cloak and scarf, eye-stalk antennae poking through the hood",
+      "personality": "A skittish oracle who announces small, damp prophecies with total gravity, and was never wrong.",
+      "habitat": "the reed banks round the colony's flooded kettle room",
+      "power": {
+        "name": "Foresee",
+        "kind": "insight",
+        "effect": "His eyes glow teal and he sees the next move coming."
+      },
+      "colours": {
+        "dominant": "#6E9A48",
+        "secondary": "#5A3E2B",
+        "glow": "#50F0DC"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/grungo/grungo_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 107210,
+        "region_map": false
+      }
+    },
+    {
+      "id": 1,
+      "name": "Mossby",
+      "slug": "mossby",
+      "species": "snail",
+      "look": "a plump peach snail whose face peeks out from under a big amber-orange ribbed shell, two bobbly antennae on top",
+      "personality": "Slow, cosy and unbothered; reminds everyone there is no rush.",
+      "habitat": "the warm pipes of the drowned greenhouse",
+      "power": {
+        "name": "Shell Up",
+        "kind": "defend",
+        "effect": "Tucks into his glowing shell and the next hit just bonks off."
+      },
+      "colours": {
+        "dominant": "#E8892B",
+        "secondary": "#F2E3C4",
+        "glow": "#FFD36A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mossby/mossby_pack.h",
+        "palette": 232,
+        "frames": 18,
+        "flash_bytes": 104638,
+        "region_map": false
+      }
+    },
+    {
+      "id": 2,
+      "name": "Puffkin",
+      "slug": "puffkin",
+      "species": "puffball mushroom",
+      "look": "a round, bumpy coral-pink puffball with a big cream face, rosy cheeks and stubby feet",
+      "personality": "Bouncy and giggly, and sneezes clouds of sparkles when excited.",
+      "habitat": "the spore beds on the rotting hull plates",
+      "power": {
+        "name": "Spore Puff",
+        "kind": "status",
+        "effect": "Puffs a cloud of drowsy glowing spores; the other side nods off for a turn."
+      },
+      "colours": {
+        "dominant": "#E8806A",
+        "secondary": "#F4E6D0",
+        "glow": "#FF8FD0"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/puffkin/puffkin_pack.h",
+        "palette": 212,
+        "frames": 18,
+        "flash_bytes": 87602,
+        "region_map": true
+      }
+    },
+    {
+      "id": 3,
+      "name": "Gilly",
+      "slug": "gilly",
+      "species": "axolotl",
+      "look": "a pink axolotl with a crown of feathery magenta gills, a cream belly and a calm little smile",
+      "personality": "A sunny optimist who never stays down for long.",
+      "habitat": "the cooling pond under the old reactor",
+      "power": {
+        "name": "Mend",
+        "kind": "heal",
+        "effect": "Her gills glow and she grows back good as new."
+      },
+      "colours": {
+        "dominant": "#F59AC0",
+        "secondary": "#C2367A",
+        "glow": "#9CFFB0"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/gilly/gilly_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 95560,
+        "region_map": true
+      }
+    },
+    {
+      "id": 4,
+      "name": "Mothwick",
+      "slug": "mothwick",
+      "species": "glow-moth",
+      "look": "a fluffy lilac moth with a white fur collar and wide lavender-and-yellow wings",
+      "personality": "A dreamy night-flier drawn to every light, who hums to himself.",
+      "habitat": "the station's broken floodlights",
+      "power": {
+        "name": "Lantern Flash",
+        "kind": "trick",
+        "effect": "His wings flash bright as a lamp; the other side is dazzled and misses."
+      },
+      "colours": {
+        "dominant": "#8E6AD8",
+        "secondary": "#F1E9D2",
+        "glow": "#FFE27A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mothwick/mothwick_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 91898,
+        "region_map": true
+      }
+    },
+    {
+      "id": 5,
+      "name": "Mudge",
+      "slug": "mudge",
+      "species": "mudskipper",
+      "look": "a round sky-blue mudskipper fish with a cream scaled belly, wing-like fins spread wide and a little tail-fin tuft on his head",
+      "personality": "A show-off speedster who races everything, including his own reflection.",
+      "habitat": "the mudflats round the old landing pad",
+      "power": {
+        "name": "Splash Dash",
+        "kind": "speed",
+        "effect": "Zips across the water in a blink and always moves first."
+      },
+      "colours": {
+        "dominant": "#4A90D9",
+        "secondary": "#E9D3A6",
+        "glow": "#7CF2FF"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/mudge/mudge_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 92432,
+        "region_map": true
+      }
+    },
+    {
+      "id": 6,
+      "name": "Fizz",
+      "slug": "fizz",
+      "species": "firefly beetle",
+      "look": "a round sunny-yellow firefly beetle with a shiny shell, wide pale see-through wings and two bobbly antennae",
+      "personality": "A curious little tinkerer who lives in the wiring and crackles when excited.",
+      "habitat": "the humming old generator room",
+      "power": {
+        "name": "Static Spark",
+        "kind": "attack",
+        "effect": "Her tail crackles and gives a tickly zap that makes the other side jump."
+      },
+      "colours": {
+        "dominant": "#F2C53D",
+        "secondary": "#7A4A26",
+        "glow": "#D8FF5A"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/fizz/fizz_pack.h",
+        "palette": 243,
+        "frames": 18,
+        "flash_bytes": 80194,
+        "region_map": true
+      }
+    },
+    {
+      "id": 7,
+      "name": "Hushwing",
+      "slug": "hushwing",
+      "species": "marsh owl",
+      "look": "a chubby snow-white owl with grey wings, ear tufts, big orange eyes and an orange beak",
+      "personality": "Quiet and kind; says little and notices everything.",
+      "habitat": "the top of the comms mast, above the mist",
+      "power": {
+        "name": "Hush",
+        "kind": "dodge",
+        "effect": "Silent wings: she slips out of the way of the next move."
+      },
+      "colours": {
+        "dominant": "#F2EFE6",
+        "secondary": "#9AA0A8",
+        "glow": "#B8D4FF"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/hushwing/hushwing_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 102672,
+        "region_map": false
+      }
+    },
+    {
+      "id": 8,
+      "name": "Tinker",
+      "slug": "tinker",
+      "species": "raccoon",
+      "look": "a slate-grey raccoon with a dark eye mask, a striped cap with copper goggles, brown braces and a striped tail",
+      "personality": "A scrappy fixer who collects shiny scrap and always has a plan.",
+      "habitat": "the junk heaps of the old cargo bay",
+      "power": {
+        "name": "Gadget",
+        "kind": "wild",
+        "effect": "Pulls a surprise gadget out of his scrap pile: a different trick every time."
+      },
+      "colours": {
+        "dominant": "#7A8796",
+        "secondary": "#2E3138",
+        "glow": "#FFB347"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/tinker/tinker_pack.h",
+        "palette": 232,
+        "frames": 18,
+        "flash_bytes": 79352,
+        "region_map": false
+      }
+    }
+  ]
+}

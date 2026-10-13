@@ -6,11 +6,13 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <variant>
 
 #include "blorb/dish.h"
 #include "blorb/registry.h"
+#include "blorb/species.h"
 
 namespace debugverbs {
 
@@ -35,6 +37,18 @@ inline bool chemByName(const char* name, blorb::ChemId& out) {
   for (const auto& d : blorb::DRIVES)
     if (!std::strcmp(d.name, name)) { out = blorb::driveChem(d.id); return true; }
   return false;
+}
+
+// A species by its species.def slug or its number. Any byte is accepted, so
+// the fallback for an id this firmware has no row for can be looked at too.
+inline bool speciesByName(const char* s, blorb::SpeciesId& out) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES)
+    if (!std::strcmp(r.name, s)) { out = r.id; return true; }
+  char* end = nullptr;
+  const long n = std::strtol(s, &end, 10);
+  if (end == s || *end || n < 0 || n > 255) return false;
+  out = blorb::SpeciesId{uint8_t(n)};
+  return true;
 }
 
 struct StageName { const char* name; blorb::Stage stage; };

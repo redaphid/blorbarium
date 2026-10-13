@@ -13,7 +13,7 @@ set -euo pipefail
 budget=${STACK_BUDGET:-2560}
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 xt=~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-g++
-inc=(-I"$repo/lib/blorb/include" -I"$repo/lib/paint/include")
+inc=(-I"$repo/lib/blorb/include" -I"$repo/lib/paint/include" -I"$repo/pets")
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 pids=()
