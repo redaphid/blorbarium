@@ -1,0 +1,12 @@
+#> from 400
+#> length 8000
+#> caption 0 Updates arrive by Bluetooth
+#> caption 1000 He asks first
+#> caption 3600 Press: it updates | (sped up)
+#> caption 6200 He is saved | before it restarts
+#> reel 600 7800
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 !care 0

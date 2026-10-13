@@ -1,0 +1,8 @@
+#> length 5000
+#> caption 0 If his save ever won't open, | he sleeps safe in amber
+#> caption 2500 Shaking won't wake him. | Nothing gets erased.
+#> reel 300 4600
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@2500 !shake 400
+@3500 !button

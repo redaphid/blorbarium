@@ -1,0 +1,18 @@
+#> from 400
+#> length 13400
+#> caption 400 Day nine. | Very old.
+#> caption 3500 And one day...
+#> caption 5500 ...he dies. | Pets really die here.
+#> reel 400 1400
+#> reel 3400 9400
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 DEBUG warp 6400000
+@1500 DEBUG warp 36000
+@2500 DEBUG warp 36000
+@3500 DEBUG warp 2400
+@4500 DEBUG warp 2400
+@5500 DEBUG warp 2400
+@6500 DEBUG warp 2400

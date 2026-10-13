@@ -1,0 +1,18 @@
+#> from 400
+#> length 18000
+#> caption 400 But he leaves eggs
+#> caption 1500 Press to look | hold to pick one
+#> caption 8000 The next generation
+#> reel 400 3800
+#> reel 8000 11400
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 DEBUG warp 6400000
+@350 DEBUG warp 100800
+@1500 !button
+@2500 !button
+@3500 !button 1500
+@5600 !hold 2500
+@8600 DEBUG warp 17880

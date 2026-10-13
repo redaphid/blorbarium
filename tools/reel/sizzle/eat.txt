@@ -1,0 +1,14 @@
+#> from 400
+#> length 15400
+#> caption 600 Hungry?
+#> caption 1500 Press the button | a pellet drops in
+#> caption 3000 He checks the future first
+#> caption 9000 Then: CRONCH
+#> reel 1000 3600
+#> reel 9600 12600
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 222000
+@300 !care 0
+@1500 !button

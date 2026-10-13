@@ -146,16 +146,18 @@ def compose(panel, clip, ms):
     return img
 
 
-def record(clip, tmp):
-    """Every frame of the clip as BMPs in tmp/<clip>/, in order."""
-    out = os.path.join(tmp, clip.name)
+def record(clip, tmp, mac=None, sealed=False, tag=""):
+    """Every frame of the clip as BMPs in tmp/<clip><tag>/, in order. `mac` is
+    the board's (another genome); `sealed` boots it as a keepsake that would not open."""
+    out = os.path.join(tmp, clip.name + tag)
     os.makedirs(out)
-    script = os.path.join(tmp, clip.name + ".txt")
+    script = out + ".txt"
     with open(script, "w") as f: f.write("\n".join(clip.script) + "\n")
+    env = {k: v for k, v in os.environ.items() if k != "BLORB_SIM_MAC"}
+    if mac: env["BLORB_SIM_MAC"] = mac
     r = subprocess.run([PROGRAM, "--headless", "--script", script, "--record", out,
-                        "--fps", str(FPS), "--for", str(clip.length)],
-                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                       env={k: v for k, v in os.environ.items() if k != "BLORB_SIM_MAC"})
+                        "--fps", str(FPS), "--for", str(clip.length)] + (["--sealed"] if sealed else []),
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env)
     if r.returncode != 0:
         raise SystemExit("%s: the simulator exited %d: %s" % (clip.name, r.returncode, r.stderr[-800:]))
     return sorted(glob.glob(os.path.join(out, "*.bmp")))
