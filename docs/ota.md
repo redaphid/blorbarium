@@ -53,30 +53,41 @@ ready --the save fails twice--> idle  last=save_failed (the old image stays)
 A disconnect changes nothing. The session waits for the page to come back,
 which is how a transfer resumes.
 
-A session belongs to the connection that sent its BEGIN. While that
-connection is up, data writes from any other connection are dropped, and
-another connection's ABORT or REBOOT is `ERR 403 NOT_YOURS`. After it drops,
-only a BEGIN for the same image moves the session to the new connection: the
-page coming back.
+A session belongs to the page's token: 16 random bytes that the page makes
+once for each dish and version and keeps (in `localStorage`), so a reload or a
+second tab of the same phone still owns its update. The image is public, so
+anyone can send its BEGIN, but only the token's page can resume it, ABORT it,
+REBOOT it, or CONFIRM the new image after the restart. Any other token gets
+`ERR 403 NOT_YOURS` for as long as the session is open. Data writes also need
+the connection that last presented the token, so a stranger's writes never
+reach the slot.
+
+The dish serves one phone at a time (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1`,
+asserted in `src/hw/link_nus.h`). Each line carries the connection it
+arrived on, tagged as its bytes come in, and a new connection drops the last
+one's unread bytes and half line (`lib/blorb/include/blorb/rx_lines.h`).
 
 ### OTA BEGIN
 
 ```
-#5 OTA BEGIN lcd128 0.4.0 0 1180416 <sha256> <sig>
+#5 OTA BEGIN lcd128 0.4.0 0 1 1180416 <sha256> <sig> <token>
 #5 OK state=confirm at=0 size=1180416 id=8c1f00a2 chunk=240
 ```
 
 The arguments are the board, the version (`major.minor.patch`), the flags,
-the image size in bytes, the image's SHA-256 and the signature. The hash and
-the signature are base64url without padding (43 and 86 characters). The
-release tool writes all six into the manifest, so the page copies them.
+the save format (`fmt`), the image size in bytes, the image's SHA-256, the
+signature and the page's token. The hash, the signature and the token are
+base64url without padding (43, 86 and 22 characters). The release tool writes
+the first seven into the manifest, so the page copies them and adds its
+token. The whole line stays under the 200-byte cap (about 195 bytes with a
+three-digit id).
 
 `id` is the first four bytes of the hash in hex. It names the image in every
 later reply. `chunk` is the most image bytes one data write may carry: the
 link's MTU, less 3 for ATT and 4 for the offset.
 
-While a session is open, a BEGIN for its own image is not an error. The dish
-answers with where that session stands (`state=confirm`, `state=receiving
+While a session is open, a BEGIN for its own image with its own token is not
+an error. The dish answers with where that session stands (`state=confirm`, `state=receiving
 at=<n>` or `state=ready`). This is the resume: after a dropped connection the
 page sends its BEGIN again and carries on from `at`. Any other BEGIN while a
 session is open is `ERR 409 OTA_ACTIVE` (send `OTA ABORT` first).
@@ -124,14 +135,16 @@ After 30 s with no press, the session ends with `last=no_confirm`.
 #6 OTA STATUS
 #6 OK state=receiving at=40960 size=1180416 id=8c1f00a2 chunk=240
 #7 OTA STATUS
-#7 OK state=idle board=lcd128 fw=0.4.0 chunk=240 trial=0 last=none
+#7 OK state=idle board=lcd128 fw=0.4.0 chunk=240 trial=0 last=none rolledback=none
 ```
 
 STATUS answers in every state and changes nothing, so it is safe to repeat.
 It is the truth about a transfer. Events (below) are only hints that save the
 page a poll. In `idle`, `board` and `fw` say what an update would need,
-`trial=1` says that this image is still on trial (it may yet roll back), and
-`last` says how the last session ended:
+`trial=1` says that this image is still on trial (it may yet roll back),
+`rolledback` names the last update that switched slots and then rolled back
+(`none` once a later update keeps itself), and `last` says how the last
+session ended:
 
 | `last` | Meaning |
 |---|---|
@@ -184,27 +197,30 @@ task, so these plain reads need no lock.
 ### OTA CONFIRM
 
 ```
-#a OTA CONFIRM
+#a OTA CONFIRM <token>
 #a OK trial=1
 ```
 
-The page sends CONFIRM when it reaches the new image after the restart. It is
-the half of the trial that the dish cannot check by itself: that Bluetooth
-works from end to end. The reply says whether the image is still on trial. Off
-trial it changes nothing.
+CONFIRM is the half of the trial that the dish cannot check by itself: that
+Bluetooth works from end to end. On trial, the token must be the one the old
+image recorded when it switched (`ERR 403 NOT_YOURS` otherwise). Off trial it
+answers `OK trial=0` and changes nothing. It is safe to repeat, and the page
+sends it whenever it sees `trial=1`: after its own restart, when BEGIN answers
+`ERR 409 TRIAL`, and whenever it connects (a reload, a phone that was locked,
+a family that comes back at minute 3).
 
 ### OTA ABORT and OTA REBOOT
 
 ```
-#8 OTA ABORT
+#8 OTA ABORT <token>
 #8 OK state=idle
-#9 OTA REBOOT
+#9 OTA REBOOT <token>
 #9 OK rebooting
 ```
 
-ABORT ends any session and is safe to repeat. REBOOT works only in `ready`
-(`ERR 409 NOT_READY` otherwise). Both belong to the session's own connection
-while it is up. About 300 ms after REBOOT, the dish writes a save, records
+ABORT ends any session and is safe to repeat; with no session open it answers
+`OK state=idle` whatever the token. REBOOT works only in `ready`
+(`ERR 409 NOT_READY` otherwise). Both need the session's token. About 300 ms after REBOOT, the dish writes a save, records
 which pet it is handing over, and restarts. If the save fails, it tries once
 more. If that fails too, it discards the update, keeps the old image as the
 one that boots, and ends with `last=save_failed`. If no REBOOT comes, the dish
@@ -226,8 +242,10 @@ is busy.
 6. On `state=ready` (or a STATUS that says so), send `OTA REBOOT`.
 7. Reconnect, and read HELLO's `fw`. If it is the old version, the new image
    rolled back and the pet is as it was.
-8. If it is the new version, send `OTA CONFIRM`, then poll STATUS every 2 s
-   until `trial=0`: the new image has kept itself. A drop during the trial is
+8. If it is the new version, send `OTA CONFIRM <token>`, then poll STATUS
+   every 2 s until `trial=0`: the new image has kept itself. The page never
+   says "Updated" while `trial=1`; if its wait runs out first, it says that
+   the new version is still checking itself. A drop during the trial is
    a rollback restart, so the page reconnects and reads HELLO again.
 
 A dropped connection before the restart means reconnecting (the same device,
@@ -264,7 +282,7 @@ the same tree.
 The signature is ECDSA P-256 with SHA-256 over this exact ASCII line:
 
 ```
-blorbota1 <board> <version> <flags> <size> <sha256 base64url>
+blorbota2 <board> <version> <flags> <fmt> <size> <sha256 base64url>
 ```
 
 It is sent as raw `r || s` (64 bytes). The hash binds the image, so the dish
@@ -309,7 +327,12 @@ pet, the record or the resume is wrong, and after 5 minutes with no CONFIRM.
 A hang longer than 20 s during the trial restarts the dish, which also rolls
 it back.
 
-While the image is on trial, the Dish runs on `ota::HeldStorage`
+While the image is on trial, `rename`, `gene_edit` and `pick` twists answer
+`ERR 409 TRIAL` (`ota::TrialGuard`), because nothing they change could be
+written; the page waits for `trial=0` before it offers a rename. `say`
+writes nothing and stays allowed.
+
+The Dish runs on `ota::HeldStorage`
 (`lib/ota/include/ota/held_storage.h`). It reads the real storage and refuses
 every write, so the keepsake and `lineage.log` stay exactly as the old image
 left them. A rollback therefore always finds the save that the old image can
@@ -321,8 +344,20 @@ image, the hold ends and the Dish saves at once. Two costs come with this:
 - A lineage entry made during the trial (a death, a birth, a rename) is
   dropped, because the lineage log takes no late appends.
 
+A held store reports itself not `writable()`, so `Keepsake::save` returns
+before it encodes the 9.5 KB snapshot. An urgent save waiting for the hold
+costs nothing each tick.
+
 This implements the last clause of unit 22 in `docs/design/DESIGN.md`. The Dish
 itself is unchanged.
+
+When the old image boots and finds a handover record but no trial, the
+update it switched to never kept itself. It records that version as
+`rolledback` (nvs key `rb`), clears the record, and logs
+`[hw] ota: the last update rolled back`. If `esp_ota` cannot roll back (no
+other slot to boot), the trial logs `rollback FAILED, keeping this image`
+once, releases the hold and lets the pet carry on, rather than retry every
+loop.
 
 The verdict is `ota::judge` in `lib/ota/include/ota/trial.h`, a pure function
 that the native suite tests case by case. `hw::Trial` in `src/hw/ota_esp.h`
@@ -361,13 +396,17 @@ so a cable flash always takes priority over an update.
    commit's. It builds `badge128` and checks the following:
    - `src/hw/ota_pubkey.h` holds this key's public half.
    - The image's own stamp (`kReleaseStamp` in `src/main.cpp`: version,
-     board, save format) agrees with `protocol.h` and the board.
-   - The save format matches the last manifest's (see "Save formats").
+     board, save format and commit) agrees with `protocol.h`, the board and
+     `git describe --always --dirty`. An image built from another commit is
+     refused, `--no-build` included.
+   - The save format matches the `fmt` of the last manifest as committed
+     (`git show HEAD:...`), not whatever the working tree holds (see "Save
+     formats").
 
-   Then it signs the image, writes `web/public/fw/lcd128/manifest.json` and
-   the image, and verifies the result. `--no-build` signs the `firmware.bin`
-   that is already built. `--allow-older` signs flag 1, for a deliberate
-   downgrade.
+   Then it signs the image, with the save format inside the signed text,
+   writes `web/public/fw/lcd128/manifest.json` and the image, and verifies the
+   result. `--no-build` signs the `firmware.bin` that is already built.
+   `--allow-older` signs flag 1, for a deliberate downgrade.
 3. Commit the manifest, and deploy the site from the same tree. Deploys are
    the owner's call. The image is not committed.
 
@@ -410,6 +449,9 @@ as the user's home directory.
 | SHA-256 and P-256 verify (mbedtls on the dish, OpenSSL natively) | `lib/ota/src/crypto.cpp` |
 | The trial verdict | `lib/ota/include/ota/trial.h` |
 | The storage hold while on trial | `lib/ota/include/ota/held_storage.h` |
+| Lineage twists refused while on trial | `lib/ota/include/ota/trial_guard.h`, `lib/ota/src/trial_guard.cpp` |
+| The trial's esp_ota and nvs half, and its watchdog | `src/hw/ota_esp.h` (`EspTrialPort`, `TrialWatchdog`) |
+| Lines tagged by connection | `lib/blorb/include/blorb/rx_lines.h` |
 | The screen | `lib/ota/src/screen.cpp` |
 | The slot, packet ring, data characteristic and trial glue | `src/hw/ota_esp.h` |
 | Wiring: busy, save, handover, button, screen, restart, release stamp | `src/main.cpp` (`DishOtaHost`, `readBody`, `restartIntoUpdate`, `kReleaseStamp`) |
@@ -480,6 +522,22 @@ From the review's fixes:
 - A single save at restart (1).
 - A restart after a failed save (1).
 - Writes through the hold (2), and appends through it (2).
+
+From the second review:
+- A resume, an ABORT or a REBOOT by any token (1 each).
+- Data from any connection (2), and a resume that keeps the old connection (1).
+- A CONFIRM by any token (1).
+- A rollback not recorded (1), `rolledback` kept after a later update keeps itself (1), and STATUS hiding it (1).
+- A rollback that cannot happen, retried every loop (1).
+- The trial guard switched off for `rename` (1).
+- A keepsake encode while held (1), and a rename through the hold (1).
+- A reconnect that keeps the last connection's bytes (1), or its half line (1); these are in `test_rx_lines`.
+- `fmt` left out of the signed text (1).
+
+The page's own breaks are in its tests' history: CONFIRM without the stored
+token, no CONFIRM on connect, BEGIN `TRIAL` treated as a failure, "Updated"
+at the end of the wait while `trial=1`, `rolledback` ignored, and rename left
+enabled during a trial. Each failed a test.
 
 The page's tests run the whole flow against the mock dish. The cases are a
 drop at about 40%, three lost writes, a lost `at=`, no press, a corrupted byte,
@@ -571,14 +629,18 @@ merged into) on this PC. `E` and the daemon hold come from
    - `[hw] ota: restarting into the update, save ok`.
    - The new boot: `boot=Resumed ... genome=<the same hash as step 2>`.
    - `[hw] ota trial: on trial, panel=1 resumed=1 handover=same pet`.
+     **If this line is missing, stop.** The new image is not on trial, so
+     nothing that follows proves the trial: the rollback hook did not hold, or
+     the image never switched.
    - `[hw] ota trial: a page reached it over Bluetooth`, when the phone
-     reconnects and sends `OTA CONFIRM`.
+     reconnects and sends `OTA CONFIRM <token>`.
    - `[hw] ota trial: kept`, once the image has run 30 s and the page has
      confirmed. Nothing is written to `pet` or `petfs` before this line, and
      the `writes=` count in the `[hw] up=` lines stays flat until it.
 
-   The phone shows "Checking that the new version works…" and ends with
-   "Updated to 0.4.1. Grungo is fine." The debug log on the phone timestamps
+   The phone shows "Checking that the new version works…" (the rename form
+   stays disabled meanwhile) and ends with "Updated to 0.4.1. Grungo is
+   fine." The debug log on the phone timestamps
    the first data write and `state=ready`. The difference is the transfer
    time for the size in the manifest.
 
@@ -605,16 +667,23 @@ merged into) on this PC. `E` and the daemon hold come from
    - The 0.4.2 boot: `[hw] ota trial: on trial, panel=0 ...`, then
      `[hw] ota trial: FAILED (checks or no page), rolling back`.
    - Another boot, `[hw] blorbarium ... fw=0.4.1`, with `boot=Resumed`, the
-     same genome, and no `ota trial` line.
+     same genome, `[hw] ota: the last update rolled back`, and no `ota trial`
+     line.
 
    The phone ends with "The update didn't take, so the dish went back to
-   0.4.1. Grungo is fine." Step 6's HELLO says `fw=0.4.1`.
+   0.4.1. Grungo is fine." Step 6's HELLO says `fw=0.4.1`. When the page
+   connects again, the Update section says "Last time, 0.4.2 didn't work on
+   this dish, so it went back to 0.4.1" and offers "Try again" rather than a
+   plain update.
 
-9. **Optional: a page that never comes back.** Release a 0.4.3 the same way
-   as 0.4.1 (no flag). Ask the owner to tap Update, and to close the tab as
-   soon as the phone says "Restarting the dish". Expect `on trial`, no `a page
-   reached it`, and about 5 minutes later `FAILED (checks or no page)` and a
-   boot back to `fw=0.4.1`.
+9. **Optional: a page that comes back late, and one that never does.** Release
+   a 0.4.3 the same way as 0.4.1 (no flag). Ask the owner to tap Update and to
+   close the tab as soon as the phone says "Restarting the dish", then to open
+   the page again about 3 minutes later. Expect `on trial`, then `a page
+   reached it` when the page reopens, then `kept`. Repeat with a 0.4.4, and
+   this time the owner does not reopen it. Expect `on trial`, no `a page
+   reached it`, about 5 minutes later `FAILED (checks or no page)`, and a boot
+   back to `fw=0.4.3` with `the last update rolled back`.
 
 10. **Clean up.**
 
@@ -672,8 +741,11 @@ Proven without a board:
   correctly, but no rollback has yet been seen on this board.
 - The button question on the real panel, and the loop's frame rate while flash
   sectors erase.
-- `OTA CONFIRM` from a real phone, the storage hold on the board, and the
-  `writes=` count staying flat through a trial.
+- `OTA CONFIRM` from a real phone (and from a reopened page), the storage
+  hold on the board, the `writes=` count staying flat through a trial, and
+  `rolledback` after a real rollback.
+- One central at a time on the board: the build asserts the setting, but no
+  second phone has tried to connect.
 
 Proven on the test board by a cable flash of a949710 (2026-10-13, no update
 sent):
