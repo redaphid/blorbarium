@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Grungo's sprite pack: the picked 1024 px frames in pets/grungo/art/ become
-pets/grungo/grungo_pack.h, one region-tagged palette plus run-length frames.
+"""A pet's sprite pack: the picked 1024 px frames in pets/<pet>/art/ become
+pets/<pet>/<pet>_pack.h, one region-tagged palette plus run-length frames.
 
-    python3 tools/sprite_pack.py                  # write the header, print its sha256
+    python3 tools/sprite_pack.py                  # grungo: write the header, print its sha256
+    python3 tools/sprite_pack.py --pet mossby     # another pet, configured by its art/pack.json
     python3 tools/sprite_pack.py --preview DIR    # also decode the header into preview PNGs
+
+Grungo is the module's defaults and his own labeller, tuned by hue to green skin and a
+brown cloak. Any other pet names its framing and a few reference colours per region in
+pets/<pet>/art/pack.json; its pixels take the region of the nearest reference colour,
+and its eye anchors are measured from the eye pixels that labelling finds.
 
 Needs Pillow and numpy. Deterministic: no random numbers, stable sorts only, so two
 runs write the same bytes.
@@ -26,10 +32,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
+PET = "grungo"
 ART = ROOT / "pets/grungo/art"
 OUT = ROOT / "pets/grungo/grungo_pack.h"
 DEFS = ROOT / "lib/blorb/include/blorb/defs"
 COMMAND = "python3 tools/sprite_pack.py"
+CFG = {}                      # pets/<pet>/art/pack.json; empty for grungo, who is the defaults below
 
 CELL = 5                      # the 840 px body bbox is 168 px on device, so he fills the round panel
 GRID = (227, 80)              # the body bbox's top-left in the art; cells align to it
@@ -69,6 +77,22 @@ def read_def(name, macro):
 REGION = {n: i for i, n in read_def("regions.def", "BLORB_REGION")}
 EXPRESSIONS = read_def("expressions.def", "BLORB_EXPR")
 REGION_ORDER = [INVARIANT] + [REGION[n] for n in sorted(REGION, key=REGION.get)]
+
+
+def configure(pet):
+    """Point the converter at pets/<pet>/. Runs once, before build(), and replaces the
+    grungo constants above with the pet's own from its pack.json."""
+    global PET, ART, OUT, COMMAND, CFG, GRID, BODY_CELLS, EYEBALLS, EYEBALL_R, BANDS
+    PET, ART, OUT = pet, ROOT / f"pets/{pet}/art", ROOT / f"pets/{pet}/{pet}_pack.h"
+    if pet == "grungo":
+        return
+    COMMAND = f"python3 tools/sprite_pack.py --pet {pet}"
+    CFG = json.loads((ART / "pack.json").read_text())
+    GRID = tuple(CFG["grid"])
+    BODY_CELLS = (-(-CFG["body"][0] // CELL), CFG["body"][1] // CELL)
+    EYEBALLS = [tuple(e) for e in CFG["eyeballs"]]
+    EYEBALL_R = CFG["eyeball_r"]
+    BANDS = {**BANDS, **{k: tuple(v) for k, v in CFG.get("bands", {}).items()}}
 
 
 @dataclass
@@ -214,6 +238,87 @@ def label(rgb, alpha, eye_zone, sclera_zone, mouth_zone):
     return lab
 
 
+def nearest_region(rgb, refs, allowed):
+    """Each pixel takes the region of its nearest reference colour among the refs
+    allowed there; refs are (rgb, region) pairs, allowed one mask per ref."""
+    c = rgb.astype(np.int32)
+    best = np.full(rgb.shape[:2], np.inf)
+    lab = np.full(rgb.shape[:2], CLEAR, np.uint8)
+    for (colour, reg), ok in zip(refs, allowed):
+        d = ((c - np.array(colour, np.int32)) ** 2).sum(-1).astype(float)
+        d[~ok] = np.inf
+        win = d < best
+        best[win], lab[win] = d[win], reg
+    return lab
+
+
+def ref_zone(eye_zone, mouth_zone, power):
+    """Where each region's reference colours may claim a pixel: eye colours only round
+    the eyes, mouth colours only round the mouth, and the glow only in the power face's
+    eyes, so a pink body is never mistaken for a tongue or a yellow one for the glow."""
+    everywhere = np.ones(eye_zone.shape, bool)
+    return {REGION["eye"]: eye_zone, REGION["mouth"]: mouth_zone,
+            REGION["glow"]: eye_zone if power else ~everywhere}
+
+
+def label_refs(rgb, alpha, eye_zone, mouth_zone, power):
+    """A pet other than grungo: ink is the outline (or the eye, inside the eye zone),
+    everything else the region of its nearest reference colour in pack.json. The
+    keyed-white fringe on the silhouette counts as clear, as in label()."""
+    h, s, v = to_hsv(rgb)
+    refs = [(r["rgb"], REGION[r["region"]]) for r in CFG["refs"]]
+    zone = ref_zone(eye_zone, mouth_zone, power)
+    lab = nearest_region(rgb, refs, [zone.get(reg, np.ones(alpha.shape, bool)) for _, reg in refs])
+    dark = v < CFG.get("ink", 0.16)
+    lab[dark] = np.where(eye_zone[dark], REGION["eye"], INVARIANT)
+    opaque = alpha > 0
+    opaque &= ~(opaque & ~erode(opaque, 4) & (s < 0.2) & (v > 0.75))
+    lab[~opaque] = CLEAR
+    return lab
+
+
+def refs_eye_zone(eye_mask):
+    zone = eye_mask.copy()
+    for x, y in EYEBALLS:
+        zone |= disc(zone.shape, x, y, 1.3 * EYEBALL_R)
+    return zone
+
+
+def measure_eyes(labels):
+    """Eye anchors for a pet with no iris detector: per frame, the centroid of the eye and
+    glow pixels near each eyeball. A frame with under a third of neutral's eye pixels
+    there (shut, squeezed into arcs) has none and keeps the body's anchors."""
+    def seen(lab, x, y):
+        return np.isin(lab, (REGION["eye"], REGION["glow"])) & disc(lab.shape, x, y, 1.6 * EYEBALL_R)
+    base = [seen(labels["neutral"], x, y).sum() for x, y in EYEBALLS]
+    out = {}
+    for n, lab in labels.items():
+        eyes = []
+        for (x, y), b in zip(EYEBALLS, base):
+            m = seen(lab, x, y)
+            if m.sum() * 3 < b:
+                eyes = []
+                break
+            ys, xs = np.nonzero(m)
+            eyes.append({"x": float(xs.mean()), "y": float(ys.mean()), "r": EYEBALL_R / IRIS_TO_EYEBALL})
+        out[n] = {"eyes": eyes}
+    return out
+
+
+def snap_eyes(s):
+    """Move each anchor onto its nearest eye or glow cell: a centroid of a ringed iris, or a
+    cell the downscaler's vote gave the outline, would otherwise miss the eye."""
+    seeing = np.isin(s.region, (REGION["eye"], REGION["glow"]))
+    ys, xs = np.nonzero(seeing)
+    out = []
+    for x, y, r in s.eyes:
+        if not seeing[y, x] and len(xs):
+            i = int(np.argmin((xs - x) ** 2 + (ys - y) ** 2))
+            x, y = int(xs[i]), int(ys[i])
+        out.append((x, y, r))
+    s.eyes = out
+
+
 def eye_zones(name, eyes, eye_mask):
     shape = eye_mask.shape
     if name not in MOVED_EYES:
@@ -326,6 +431,21 @@ def label_egg(rgb, alpha, eyes, froglet):
     return lab
 
 
+def label_egg_refs(rgb, alpha, eyes):
+    """A pet's egg from pack.json's egg_refs: the baby inside takes skin or cloak, so a
+    clutch shows each child's genes; the jelly is shell; glow only at the baby's eyes."""
+    h, s, v = to_hsv(rgb)
+    eye_zone = np.zeros(alpha.shape, bool)
+    for x, y, er in eyes:
+        eye_zone |= disc(alpha.shape, x, y, 1.6 * er)
+    refs = [(r["rgb"], REGION[r["region"]]) for r in CFG["egg_refs"]]
+    zone = ref_zone(eye_zone, np.zeros(alpha.shape, bool), True)
+    lab = nearest_region(rgb, refs, [zone.get(reg, np.ones(alpha.shape, bool)) for _, reg in refs])
+    lab[(v < CFG.get("ink", 0.16)) & ~eye_zone] = INVARIANT
+    lab[alpha == 0] = CLEAR
+    return lab
+
+
 def egg_art():
     """The picked egg (sprite-expressions raw/egg, `egg` in eyes.json) at device scale,
     EGG_ROWS tall. It is scaled first so the shared downscaler's CELL lands on that height."""
@@ -335,8 +455,12 @@ def egg_art():
     im = im.convert("RGBa").resize((round(im.width * k), round(im.height * k)), Image.LANCZOS).convert("RGBA")
     a = np.asarray(im)
     rgb, alpha = a[..., :3].copy(), a[..., 3]
-    (fx, fy), (frx, fry) = EGG_FROGLET
-    lab = label_egg(rgb, alpha, [(e["x"] * k, e["y"] * k, e["r"] * k) for e in eyes], ((fx * k, fy * k), (frx * k, fry * k)))
+    scaled = [(e["x"] * k, e["y"] * k, e["r"] * k) for e in eyes]
+    if CFG:
+        lab = label_egg_refs(rgb, alpha, scaled)
+    else:
+        (fx, fy), (frx, fry) = EGG_FROGLET
+        lab = label_egg(rgb, alpha, scaled, ((fx * k, fy * k), (frx * k, fry * k)))
     ys, xs = np.nonzero(alpha)
     cols = -(-(int(xs.max()) + 1 - int(xs.min())) // CELL)
     gx = (int(xs.min()) + int(xs.max()) + 1) // 2 - cols * CELL // 2
@@ -393,24 +517,33 @@ def bubble():
 def remains(sleep_rgb, sleep_lab, feet):
     """The asleep frame settled into the bog to his chest: a pool behind him, a soft
     waterline across him, a few spore glints. Cosy, like a warm bath."""
-    grid = (GRID[0] - 49, GRID[1])              # 49 art pixels of pool beyond the body each side
-    cols, rows = -(-(569 + 98) // CELL), -(-574 // CELL)   # down to the pool, 574 art pixels
+    # Grungo's pool, in his art's pixels: 49 px beyond his 569 px body each side, centred
+    # on x 511, its waterline at y 600. Another pet's pool scales with its body bbox.
+    bw, margin, cx, water_y, rx, glints = 569, 49, 511, 600, 330, ((300, 628), (690, 622), (430, 640))
+    if CFG:
+        bw, bh = CFG["body"]
+        margin, cx, water_y, rx = round(49 * bw / 569), feet[0], GRID[1] + round(bh * 520 / 840), round(bw * 330 / 569)
+        glints = tuple((cx + round(dx * bw / 569), water_y + dy) for dx, dy in ((-211, 28), (179, 22), (-81, 40)))
+    grid = (GRID[0] - margin, GRID[1])
+    cols, rows = -(-(bw + 2 * margin) // CELL), -(-(water_y + 54 - GRID[1]) // CELL)   # down to the pool's rim
     H, W = rows * CELL, cols * CELL
     k = Sketch(cols, rows)
     yy, xx = np.mgrid[0:H, 0:W]
-    pool = disc((H, W), 511 - grid[0], 606 - grid[1], 330, 46)
+    pool = disc((H, W), cx - grid[0], water_y + 6 - grid[1], rx, 46)
     k.fill(pool, (50, 64, 42), INVARIANT)
-    k.fill(pool & ~disc((H, W), 511 - grid[0], 600 - grid[1], 300, 34), (70, 92, 58), INVARIANT)
+    k.fill(pool & ~disc((H, W), cx - grid[0], water_y - grid[1], rx - 30, 34), (70, 92, 58), INVARIANT)
     k.outline(pool, 1.0)
-    src = (slice(grid[1], grid[1] + H), slice(grid[0], grid[0] + W))
-    body_rgb, body_lab = sleep_rgb[src], sleep_lab[src]
-    water = 600 - grid[1] + 5 * np.sin((xx + grid[0]) * 2 * math.pi / 130)
+    pad = 256                                   # a wide pet's pool may run off the art
+    src = (slice(grid[1] + pad, grid[1] + pad + H), slice(grid[0] + pad, grid[0] + pad + W))
+    body_rgb = np.pad(sleep_rgb, ((pad, pad), (pad, pad), (0, 0)))[src]
+    body_lab = np.pad(sleep_lab, pad, constant_values=CLEAR)[src]
+    water = water_y - grid[1] + 5 * np.sin((xx + grid[0]) * 2 * math.pi / 130)
     above = (body_lab != CLEAR) & (yy <= water)
     k.fill(above, body_rgb[above], 0)
     k.lab[above] = body_lab[above]
-    near = (np.abs(yy - water) <= 5) & (np.abs(xx + grid[0] - 511) <= 300)
+    near = (np.abs(yy - water) <= 5) & (np.abs(xx + grid[0] - cx) <= rx - 30)
     k.fill(near & (pool | above), (112, 146, 104), INVARIANT)
-    for gx, gy in ((300, 628), (690, 622), (430, 640)):
+    for gx, gy in glints:
         k.fill(disc((H, W), gx - grid[0], gy - grid[1], 6), (110, 214, 190), INVARIANT)
     return k.sprite(to_cell(*feet, grid))
 
@@ -523,8 +656,15 @@ def load_art():
 
 def build():
     frames, alpha, eyes, eye_mask, mouth_zone = load_art()
-    fixed = fix_iris(frames, eyes)
-    labels = {n: label(rgb, alpha, *eye_zones(n, eyes[n]["eyes"], eye_mask), mouth_zone) for n, rgb in frames.items()}
+    if CFG:
+        fixed, zone = {}, refs_eye_zone(eye_mask)
+        labels = {n: label_refs(rgb, alpha, zone, mouth_zone, n == "foresee") for n, rgb in frames.items()}
+        eyes = {**eyes, **measure_eyes(labels)}
+        moved = tuple(n for n in frames if n != "neutral" and eyes[n]["eyes"])
+    else:
+        fixed = fix_iris(frames, eyes)
+        labels = {n: label(rgb, alpha, *eye_zones(n, eyes[n]["eyes"], eye_mask), mouth_zone) for n, rgb in frames.items()}
+        moved = MOVED_EYES
     ys, xs = np.nonzero(alpha)
     bottom = xs[ys == ys.max()]
     feet = ((int(bottom.min()) + int(bottom.max())) // 2, int(ys.max()))
@@ -548,8 +688,11 @@ def build():
         art = ART_NAME.get(expr, expr)
         own = [(*to_cell(e["x"], e["y"], GRID), round(e["r"] * IRIS_TO_EYEBALL / CELL)) for e in eyes[art]["eyes"]]
         faces[expr] = Sprite(s.rgb[y0:y1, x0:x1], s.region[y0:y1, x0:x1], (body.origin[0] - x0, body.origin[1] - y0),
-                             [(x - x0, y - y0, r) for x, y, r in own] if art in MOVED_EYES else [])
+                             [(x - x0, y - y0, r) for x, y, r in own] if art in moved else [])
     patch_box = (x0, y0, x1, y1)
+    if CFG:
+        for s in [body, *faces.values()]:
+            snap_eyes(s)
 
     frames_out = {"Body": body}
     frames_out.update({f"Face_{e}": faces[e] for _, e in EXPRESSIONS})
@@ -562,14 +705,16 @@ def build():
 
     entries, by_region = build_palette(list(frames_out.values()))
     idx = {n: index(s, by_region) for n, s in frames_out.items()}
-    check_anchors(frames_out, idx, entries, body, faces)
+    # Another pet's faces without anchors of their own are the shut ones (measure_eyes),
+    # so the body's anchors are not expected on an eye there.
+    check_anchors(frames_out, idx, entries, body, faces, () if CFG else OPEN_EYED)
     return dict(entries=entries, frames=frames_out, idx=idx, patch_box=patch_box, fixed=fixed)
 
 
 OPEN_EYED = ("neutral", "happy", "alarmed", "annoyed", "croak", "blep", "foresee")
 
 
-def check_anchors(frames, idx, entries, body, faces):
+def check_anchors(frames, idx, entries, body, faces, open_eyed):
     """Every anchor sits on an eye or glow pixel of its own frame, and the body's
     anchors still do through every open-eyed patch that does not override them."""
     seeing = {REGION["eye"], REGION["glow"]}
@@ -582,7 +727,7 @@ def check_anchors(frames, idx, entries, body, faces):
     for name, s in frames.items():
         for x, y, _ in s.eyes:
             on_eye(name, x, y)
-    for expr in OPEN_EYED:
+    for expr in open_eyed:
         if not faces[expr].eyes:
             ox, oy = body.origin[0] - faces[expr].origin[0], body.origin[1] - faces[expr].origin[1]
             for x, y, _ in body.eyes:
@@ -599,13 +744,13 @@ def emit(p):
     flash = sum(map(len, blobs.values())) + 4 * len(entries)
     region_names = {i: n for n, i in REGION.items()}
     L = [
-        f"// GENERATED by `{COMMAND}` from pets/grungo/art/. Do not edit; rerun it.",
+        f"// GENERATED by `{COMMAND}` from pets/{PET}/art/. Do not edit; rerun it.",
         f"// {len(entries)} palette entries, {len(frames)} frames, {flash} bytes of flash, no RAM.",
         "#pragma once",
         "#include <cstdint>",
         '#include "paint/sprite_pack.h"',
         "",
-        "namespace grungo_pack {",
+        f"namespace {PET}_pack {{",
         "",
         "inline constexpr paint::PaletteEntry kPalette[] = {",
     ]
@@ -655,10 +800,10 @@ def emit(p):
           "  }",
           "};",
           "",
-          "}  // namespace grungo_pack",
+          f"}}  // namespace {PET}_pack",
           "",
-          "inline const paint::SpritePack& grungoPack() {",
-          "  static const grungo_pack::Pack pack;",
+          f"inline const paint::SpritePack& {PET}Pack() {{",
+          f"  static const {PET}_pack::Pack pack;",
           "  return pack;",
           "}",
           ""]
@@ -763,8 +908,10 @@ def preview(text, outdir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--pet", default="grungo", help="the pet under pets/ to pack (default grungo)")
     ap.add_argument("--preview", type=Path, help="decode the written header into preview PNGs here")
     a = ap.parse_args()
+    configure(a.pet)
     p = build()
     text = emit(p)
     OUT.write_text(text, newline="\n")
