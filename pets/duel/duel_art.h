@@ -1677,9 +1677,10 @@ inline constexpr paint::FrameRef kTiers[3] = {kTierSpar, kTierScrap, kTierMortal
 // By Element (species.h): splash (a drop), sprout (a seedling), spark (a sparkle).
 inline constexpr paint::FrameRef kElements[3] = {kElementSplash, kElementSprout, kElementSpark};
 
-// ART4, by BootGlyph (boot.h). An empty FrameRef is a slot ART4 does not draw: None, Swords
-// (unused by kBoot, and no weapons on the toy), and Tier, Skull and the specials, which
-// are kTiers and kPowers. The greyed twin says "not now"; D11 draws the pips beside it.
+// ART4, by BootGlyph (boot.h). An empty FrameRef is a slot ART4 does not draw: None; 3, which
+// was Swords (dropped: no weapons on the toy; kept empty so the ids after it never shift);
+// and Tier, Skull and the specials, which are kTiers and kPowers. The greyed twin says
+// "not now"; D11 draws the pips beside it.
 inline constexpr paint::FrameRef kBootGlyphs[] = {paint::FrameRef{}, kBootPellet, kBootMoon, paint::FrameRef{}, kBootPeek, kBootFlower, kBootArrow, kBootCheck, kBootLock, kBootDownload, kBootFriend, kBootDoor, paint::FrameRef{}, paint::FrameRef{}, paint::FrameRef{}, paint::FrameRef{}, kBootOpenHand, kBootPlead, kBootCandle, kBootRematch, kBootHeart, kBootCountdown};
 inline constexpr paint::FrameRef kBootGlyphsGrey[] = {paint::FrameRef{}, kBootPelletGrey, kBootMoonGrey, paint::FrameRef{}, kBootPeekGrey, kBootFlowerGrey, kBootArrowGrey, kBootCheckGrey, kBootLockGrey, kBootDownloadGrey, kBootFriendGrey, kBootDoorGrey, paint::FrameRef{}, paint::FrameRef{}, paint::FrameRef{}, paint::FrameRef{}, kBootOpenHandGrey, kBootPleadGrey, kBootCandleGrey, kBootRematchGrey, kBootHeartGrey, kBootCountdownGrey};
 // The hold ring, 22 px round a 16 px glyph: step = holdFill * 8 / 255, rounded.

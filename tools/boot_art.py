@@ -144,10 +144,10 @@ def countdown(k):
     k.fill(k.mask("polygon", [(8, 11), (11.5, 13.5), (4.5, 13.5)]), (240, 200, 90), INVARIANT)
 
 
-# In BootGlyph order. None: a slot ART4 does not draw. None itself is nothing; Swords is
-# unused by kBoot and not drawn (no weapons on the toy); Tier, Skull and the specials
-# are ART3's tier and power glyphs, which D11 picks.
-NAMES = ["None", "Pellet", "Moon", "Swords", "Peek", "Flower", "Arrow", "Check", "Lock", "Download", "Friend", "Door",
+# In BootGlyph order. None: a slot ART4 does not draw. None itself is nothing; slot 3 was
+# Swords, dropped by the coordinator (no weapons on the toy) and kept empty so the ids
+# after it never shift; Tier, Skull and the specials are ART3's, which D11 picks.
+NAMES = ["None", "Pellet", "Moon", "Retired", "Peek", "Flower", "Arrow", "Check", "Lock", "Download", "Friend", "Door",
          "Tier", "Skull", "SpecialQuick", "SpecialHeavy", "OpenHand", "Plead", "Candle", "Rematch", "Heart", "Countdown"]
 DRAW = [None, pellet, moon, None, peek, flower, next_arrow, check, lock, download, friend, door,
         None, None, None, None, open_hand, plead, candle, rematch, heart, countdown]

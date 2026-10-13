@@ -1045,9 +1045,10 @@ def emit_duel(entries, frames, idx):
           ""]
     import boot_art
     ref = lambda n, grey: f"kBoot{n}{'Grey' if grey else ''}" if f"Boot{n}" in frames else "paint::FrameRef{}"
-    L += ["// ART4, by BootGlyph (boot.h). An empty FrameRef is a slot ART4 does not draw: None, Swords",
-          "// (unused by kBoot, and no weapons on the toy), and Tier, Skull and the specials, which",
-          "// are kTiers and kPowers. The greyed twin says \"not now\"; D11 draws the pips beside it.",
+    L += ["// ART4, by BootGlyph (boot.h). An empty FrameRef is a slot ART4 does not draw: None; 3, which",
+          "// was Swords (dropped: no weapons on the toy; kept empty so the ids after it never shift);",
+          "// and Tier, Skull and the specials, which are kTiers and kPowers. The greyed twin says",
+          "// \"not now\"; D11 draws the pips beside it.",
           "inline constexpr paint::FrameRef kBootGlyphs[] = {" + ", ".join(ref(n, False) for n in boot_art.NAMES) + "};",
           "inline constexpr paint::FrameRef kBootGlyphsGrey[] = {" + ", ".join(ref(n, True) for n in boot_art.NAMES) + "};",
           f"// The hold ring, 22 px round a 16 px glyph: step = holdFill * {boot_art.HOLD_STEPS} / 255, rounded.",

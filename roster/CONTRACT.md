@@ -164,7 +164,7 @@ same header, 16 px:
 
 | array | index | frames |
 |---|---|---|
-| `kBootGlyphs[22]` | `BootGlyph`: pellet (a food bowl), moon, peek (an egg with a "?"), flower, arrow, check, lock, download, friend (two people), door, open hand, plead (palms together), candle, rematch (two arrows chasing), heart, countdown (an hourglass; D11 draws the turns left) | empty for None, Swords (unused by `kBoot`, and not drawn: no weapons), Tier, Skull and the specials, which are `kTiers` and `kPowers` |
+| `kBootGlyphs[22]` | `BootGlyph`: pellet (a food bowl), moon, peek (an egg with a "?"), flower, arrow, check, lock, download, friend (two people), door, open hand, plead (palms together), candle, rematch (two arrows chasing), heart, countdown (an hourglass; D11 draws the turns left) | empty for None; for 3, which was Swords and is dropped (no weapons on the toy), kept as an empty slot so every id after it stays put: if the enum removes `Swords`, keep its value as a retired `_` member rather than renumbering; and for Tier, Skull and the specials, which are `kTiers` and `kPowers` |
 | `kBootGlyphsGrey[22]` | the same, greyed: "not now"; D11 draws the pips beside it | |
 | `kHoldRing[9]` | the 22 px ring round a glyph, filling clockwise from the top: step = holdFill * 8 / 255 | |
 | `kDoublePress` | two short bars under the glyph (bars, not dots) | |
