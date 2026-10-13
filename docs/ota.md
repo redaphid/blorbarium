@@ -7,7 +7,8 @@ design rests on four promises:
 1. **The pet survives every outcome.** The pet lives in the `pet` NVS
    partition and on `petfs`. An update writes only the inactive app slot.
    A save is written before the transfer starts and again just before the
-   restart.
+   restart, and the dish does not restart without it. A new image on trial
+   writes nothing to `pet` or `petfs` until it keeps itself.
 2. **Only the project owner can make an image the dish accepts.** Every image
    is signed. The dish refuses an image whose signature, board or version is
    wrong before it writes a byte.
@@ -15,9 +16,11 @@ design rests on four promises:
    button is pressed while the screen asks. A stranger's phone in range can
    make the dish ask, and nothing more.
 4. **A bad image undoes itself.** A new image runs on trial. It keeps itself
-   only after it has shown that it resumes the same pet with the screen
-   working. If it crashes, hangs or loses the pet, the bootloader goes back
-   to the old image.
+   only after it has resumed the same pet and a page has reached it over
+   Bluetooth. If it crashes, hangs, loses the pet or hears from no page
+   within 5 minutes, the bootloader goes back to the old image. No second
+   update starts while an image is on trial: the old slot is the only one
+   known to boot, and there is no factory image behind it.
 
 ## The protocol
 
@@ -37,17 +40,24 @@ updated over the air.
 ### States
 
 ```
-idle --BEGIN (signed, right board, newer, not busy)--> confirm
-confirm --button pressed (not busy, save written)--> receiving
+idle --BEGIN (right board, newer, fits, not on trial, not busy, signed)--> confirm
+confirm --button pressed after 1.5 s (not on trial, not busy, save written)--> receiving
 confirm --30 s with no press--> idle  last=no_confirm
 receiving --last byte, hash and image check pass--> ready
 receiving --5 min with no byte--> idle  last=timeout
 receiving --ABORT, bad hash, bad image, flash error--> idle  last=<why>
-ready --REBOOT, or 20 s--> restart into the new image (on trial)
+ready --REBOOT, or 20 s; save written--> restart into the new image (on trial)
+ready --the save fails twice--> idle  last=save_failed (the old image stays)
 ```
 
 A disconnect changes nothing. The session waits for the page to come back,
 which is how a transfer resumes.
+
+A session belongs to the connection that sent its BEGIN. While that
+connection is up, data writes from any other connection are dropped, and
+another connection's ABORT or REBOOT is `ERR 403 NOT_YOURS`. After it drops,
+only a BEGIN for the same image moves the session to the new connection: the
+page coming back.
 
 ### OTA BEGIN
 
@@ -72,16 +82,23 @@ page sends its BEGIN again and carries on from `at`. Any other BEGIN while a
 session is open is `ERR 409 OTA_ACTIVE` (send `OTA ABORT` first).
 
 With no session open, the dish checks, in this order, and answers the first
-that fails:
+that fails. The cheap checks come first, because the signature check stalls
+the loop for a moment:
 
 | Reply | When |
 |---|---|
 | `ERR 400 BAD_ARGS` | a field is missing or malformed |
-| `ERR 403 BAD_SIGNATURE` | the signature does not verify against the key built into the dish |
 | `ERR 403 WRONG_BOARD` | the image is for another board |
 | `ERR 409 NOT_NEWER` | the version is not newer than the dish's, and flag 1 (allow older) is not set |
 | `ERR 413 TOO_BIG` | the image is empty or bigger than the app slot |
+| `ERR 409 TRIAL` | the running image is still on trial |
 | `ERR 409 BUSY` | the pet is doing something that must not be interrupted |
+| `ERR 429 TOO_SOON` | a signature was checked less than 2 s ago |
+| `ERR 403 BAD_SIGNATURE` | the signature does not verify against the key built into the dish |
+
+The limit of one signature check every 2 s means that a flood of BEGINs
+cannot stall the pet or starve the trial's watchdog. The page waits 2 s and
+tries once more.
 
 Busy today means a clutch is on the dish (its eggs are chosen with the same
 button) or the `pet` partition will not open (no save could be written).
@@ -91,8 +108,10 @@ else he must finish, refuses too.
 ### Confirming
 
 While the state is `confirm`, the screen asks for the button. The button
-press goes to the update and not to the pet. On the press, the dish checks
-that it is still not busy, writes a save, opens the inactive slot and moves to
+press goes to the update and not to the pet. A press in the first 1.5 s of
+the question does not count, so a child already pressing when the question
+appears has not said yes. On a later press, the dish checks that it is still
+not on trial and not busy, writes a save, opens the inactive slot and moves to
 `receiving`. Busy at the press is `idle last=busy`, and a failed save is
 `idle last=save_failed`. A `DEBUG press` over the serial cable answers too: the
 cable is a hand on the dish.
@@ -125,7 +144,8 @@ page a poll. In `idle`, `board` and `fw` say what an update would need,
 | `overflow` | more bytes arrived than the size said |
 | `bad_hash` | the bytes do not hash to the signed SHA-256 |
 | `bad_image` | the bytes hash correctly but are not a bootable image |
-| `flash_error` | the slot refused to open, write or switch |
+| `flash_error` | the slot refused to open, write or switch, or the handover record would not write |
+| `on_trial` | the running image went on trial before the press (a safeguard; BEGIN already refuses) |
 
 ### Data writes
 
@@ -161,6 +181,18 @@ refuses to start while `DishOtaHost::busy()` is true, so a duel in progress
 belongs there. The session, the trial and the busy check all run on the loop
 task, so these plain reads need no lock.
 
+### OTA CONFIRM
+
+```
+#a OTA CONFIRM
+#a OK trial=1
+```
+
+The page sends CONFIRM when it reaches the new image after the restart. It is
+the half of the trial that the dish cannot check by itself: that Bluetooth
+works from end to end. The reply says whether the image is still on trial. Off
+trial it changes nothing.
+
 ### OTA ABORT and OTA REBOOT
 
 ```
@@ -171,9 +203,13 @@ task, so these plain reads need no lock.
 ```
 
 ABORT ends any session and is safe to repeat. REBOOT works only in `ready`
-(`ERR 409 NOT_READY` otherwise). The dish writes a save and restarts about
-300 ms later. If no REBOOT comes, the dish restarts by itself 20 s after it
-became ready. Either way, it waits while it is busy.
+(`ERR 409 NOT_READY` otherwise). Both belong to the session's own connection
+while it is up. About 300 ms after REBOOT, the dish writes a save, records
+which pet it is handing over, and restarts. If the save fails, it tries once
+more. If that fails too, it discards the update, keeps the old image as the
+one that boots, and ends with `last=save_failed`. If no REBOOT comes, the dish
+restarts by itself 20 s after it became ready. Either way, it waits while it
+is busy.
 
 ### The page's side
 
@@ -190,9 +226,9 @@ became ready. Either way, it waits while it is busy.
 6. On `state=ready` (or a STATUS that says so), send `OTA REBOOT`.
 7. Reconnect, and read HELLO's `fw`. If it is the old version, the new image
    rolled back and the pet is as it was.
-8. If it is the new version, poll STATUS every 2 s until `trial=0`: the new
-   image has kept itself. A drop during the trial is a rollback restart, so
-   the page reconnects and reads HELLO again.
+8. If it is the new version, send `OTA CONFIRM`, then poll STATUS every 2 s
+   until `trial=0`: the new image has kept itself. A drop during the trial is
+   a rollback restart, so the page reconnects and reads HELLO again.
 
 A dropped connection before the restart means reconnecting (the same device,
 so no chooser) and sending the same BEGIN. The dish answers with where it is.
@@ -207,14 +243,21 @@ web/public/fw/<board>/blorbarium-<board>-<version>.bin
 ```
 
 ```json
-{"board":"lcd128","version":"0.4.0","flags":0,"size":1180416,
+{"board":"lcd128","version":"0.4.0","flags":0,"size":989184,
  "sha256":"<base64url>","sig":"<base64url>",
- "image":"blorbarium-lcd128-0.4.0.bin"}
+ "image":"blorbarium-lcd128-0.4.0.bin","fmt":1}
 ```
 
 The manifest is published with the site. The image is the app image
 (`firmware.bin`), not the merged `.hex`, because it goes into an app slot.
-The page fetches `image` relative to the manifest.
+The page fetches `image` relative to the manifest. `fmt` is the save format
+the image writes. It is not signed and the dish ignores it: the release tool
+reads it to catch a format change.
+
+The manifest is committed, as the record of the last release. The image is
+not committed (`.gitignore` refuses `web/public/fw/**/*.bin`).
+`tools/ota_release.py release` writes it, so a deploy follows a release from
+the same tree.
 
 ## Signing
 
@@ -242,30 +285,59 @@ ELF shows it as a strong `T verifyRollbackLater`. The core's bootloader is built
 `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`. If an image is still pending when the
 dish next resets, the bootloader marks it aborted and boots the old slot.
 
-Before the restart, the old image saves the pet and records which pet it
-handed over (generation and genome hash) in the default `nvs` partition, under
-namespace `ota`. It does not record the occupant kind, because the boot's
-catch-up can hatch the egg that was handed over, and that is still the same
-pet. The new image keeps itself
-(`esp_ota_mark_app_valid_cancel_rollback`) only when all of these hold:
+The old image records which pet it is handing over (generation and genome
+hash) in the default `nvs` partition, under namespace `ota`. It writes the
+record once when the image is verified, before it switches slots, so a power
+cut after the switch still leaves a record. It writes it again just before the
+restart, after the last save, because the pet may have moved on in between. A
+stale record can only cause a rollback, never a wrong keep. The record holds
+no occupant kind, because the boot's catch-up can hatch the egg that was
+handed over, and that is still the same pet.
 
-- The panel came up.
-- The keepsake loaded as `Resumed`, and the pet matches the record.
+The new image keeps itself (`esp_ota_mark_app_valid_cancel_rollback`) only
+when all of these hold:
+
+- The keepsake loaded as `Resumed`, the record exists, and the pet matches it.
+- A page sent `OTA CONFIRM` over Bluetooth.
 - The loop has run for 30 s.
+- The panel driver's `init()` returned true. This does not show that the
+  screen is lit: the 1.28's panel cannot be read back. It only catches a
+  driver that failed outright.
 
-If the pet does not match, the new image calls
-`esp_ota_mark_app_invalid_rollback_and_reboot`. A hang longer than 20 s
-during the trial restarts the dish, which also rolls it back.
+It rolls back (`esp_ota_mark_app_invalid_rollback_and_reboot`) at once when the
+pet, the record or the resume is wrong, and after 5 minutes with no CONFIRM.
+A hang longer than 20 s during the trial restarts the dish, which also rolls
+it back.
+
+While the image is on trial, the Dish runs on `ota::HeldStorage`
+(`lib/ota/include/ota/held_storage.h`). It reads the real storage and refuses
+every write, so the keepsake and `lineage.log` stay exactly as the old image
+left them. A rollback therefore always finds the save that the old image can
+read, whatever format the new one would write, and an image that boots Fresh
+or from the lineage writes no new egg over the pet. When the trial keeps the
+image, the hold ends and the Dish saves at once. Two costs come with this:
+- Anything the pet does during the trial (at most about 5 minutes) is saved
+  only when the image keeps itself.
+- A lineage entry made during the trial (a death, a birth, a rename) is
+  dropped, because the lineage log takes no late appends.
+
+This implements the last clause of unit 22 in `docs/design/DESIGN.md`. The Dish
+itself is unchanged.
 
 The verdict is `ota::judge` in `lib/ota/include/ota/trial.h`, a pure function
 that the native suite tests case by case. `hw::Trial` in `src/hw/ota_esp.h`
 gathers the facts and acts on the verdict.
 
-Unit 22 of `docs/design/DESIGN.md` also asks that an image on trial never
-write a save in a newer format, so that a rollback never meets a save it cannot
-read. This work changes no format (`fmt=1` before and after), so nothing
-enforces that rule yet. The first format change must make the Dish read-only
-for newer formats while `hw::Trial::onTrial()` is true.
+## Save formats
+
+An image on trial writes nothing, so the old image never meets a save it
+cannot read. Once a new image keeps itself it writes its own format, and
+there is no going back by update: an older image signed with `--allow-older`
+finds a newer keepsake, boots `ReadOnlyNewer`, is not `Resumed`, and rolls
+back. `tools/ota_release.py release` refuses an image whose save format
+differs from the last manifest's `fmt`, so that a format change is made on
+purpose. Pass `--format-change` once the new format's `Keepsake::migrate` path
+and its fixture are in place.
 
 ## The first update is a cable flash
 
@@ -285,12 +357,23 @@ so a cable flash always takes priority over an update.
    uv run --with cryptography python tools/ota_release.py release
    ```
 
-   The tool builds `badge128`. It checks that `src/hw/ota_pubkey.h` holds this
-   key's public half, signs the image, writes
-   `web/public/fw/lcd128/manifest.json` and the image, and verifies the result.
-   `--no-build` signs the `firmware.bin` that is already built.
-   `--allow-older` signs flag 1, for a deliberate downgrade.
-3. Commit the manifest and the image, and deploy the site as usual.
+   The tool refuses a tree with uncommitted changes, so the image is a
+   commit's. It builds `badge128` and checks the following:
+   - `src/hw/ota_pubkey.h` holds this key's public half.
+   - The image's own stamp (`kReleaseStamp` in `src/main.cpp`: version,
+     board, save format) agrees with `protocol.h` and the board.
+   - The save format matches the last manifest's (see "Save formats").
+
+   Then it signs the image, writes `web/public/fw/lcd128/manifest.json` and
+   the image, and verifies the result. `--no-build` signs the `firmware.bin`
+   that is already built. `--allow-older` signs flag 1, for a deliberate
+   downgrade.
+3. Commit the manifest, and deploy the site from the same tree. Deploys are
+   the owner's call. The image is not committed.
+
+The build maps the build machine's paths out of the image
+(`tools/strip_paths.py`, `-ffile-prefix-map`), so a public image names no
+user's home directory.
 
 To verify a published release against the key built into the tree, run
 `tools/ota_release.py check web/public/fw/lcd128/manifest.json`.
@@ -326,11 +409,13 @@ as the user's home directory.
 | The session (states, checks, resume) | `lib/ota/include/ota/session.h`, `lib/ota/src/session.cpp` |
 | SHA-256 and P-256 verify (mbedtls on the dish, OpenSSL natively) | `lib/ota/src/crypto.cpp` |
 | The trial verdict | `lib/ota/include/ota/trial.h` |
+| The storage hold while on trial | `lib/ota/include/ota/held_storage.h` |
 | The screen | `lib/ota/src/screen.cpp` |
 | The slot, packet ring, data characteristic and trial glue | `src/hw/ota_esp.h` |
-| Wiring: busy, save, button, screen, restart | `src/main.cpp` (`DishOtaHost`, `readBody`, `restartIntoUpdate`) |
+| Wiring: busy, save, handover, button, screen, restart, release stamp | `src/main.cpp` (`DishOtaHost`, `readBody`, `restartIntoUpdate`, `kReleaseStamp`) |
 | The public key | `src/hw/ota_pubkey.h` |
 | Signing and releasing | `tools/ota_release.py` |
+| Build paths kept out of the image | `tools/strip_paths.py` |
 | The page's sender | `web/public/ota.js` |
 | The mock dish for `?mock=1` | `web/public/ota-mock.js` |
 | Native tests | `test/test_ota` |
@@ -348,9 +433,16 @@ uv run --with playwright==1.63.0 python web/test/ota_page.py
 
 - Every BEGIN refusal: the wrong board, a bad signature, another key, changed
   signed fields, an image that is not newer, an image that is too big,
-  malformed arguments, and a busy pet.
-- The button: no press within 30 s, data before the press, the save before the
-  slot opens, a failed save, and a pet that becomes busy before the press.
+  malformed arguments, a busy pet, an image on trial, and a second signature
+  check within 2 s. The cheap refusals come before the signature check.
+- The button: no press within 30 s, a press in the first 1.5 s, data before
+  the press, the save before the slot opens, a failed save, and a pet that
+  becomes busy or an image that goes on trial before the press.
+- Ownership: another connection's data, ABORT and REBOOT while the owner is
+  up, and a resume that moves the session to the new connection.
+- The switch: the handover written before `activate()`, a failed handover,
+  `activate()` never called for a bad hash, and a restart whose save fails
+  once, or twice.
 - Bad bytes: a corrupted image, an image the slot rejects, an overflow, a
   truncated image that times out, and a flash write error.
 - Order and loss: repeated writes, writes after a missing one (with the `gap`
@@ -358,23 +450,42 @@ uv run --with playwright==1.63.0 python web/test/ota_page.py
 - Drops: a resume with the same BEGIN, a different image that waits for ABORT,
   a lost ready event that STATUS and BEGIN still answer, the restart by itself,
   and the restart that waits while the pet is busy.
-- The trial verdicts: keep, wait, and roll back for another pet, a fall-back
-  boot or no panel.
+- The trial verdicts: keep after CONFIRM and 30 s, wait for CONFIRM, roll
+  back with no CONFIRM in 5 minutes, and roll back for another pet, no
+  record, no resume or a failed panel driver. A real Dish on trial lives
+  6 minutes through TIME and a rename, and the disk stays byte-identical until
+  the hold ends. A Dish on trial that boots Fresh writes nothing.
 - The release tool's own signature (`test/support/ota_fixture.h`, written by
   `tools/ota_release.py fixture`).
 
-Each of these deliberate breaks made the named number of tests fail:
+Each of these deliberate breaks made tests fail (the count in brackets).
+From the first build:
+- Skipping the signature check (3).
+- Taking writes at any offset (2).
+- Skipping the hash check (1).
+- Ignoring busy at BEGIN (1).
+- Never letting the question lapse (1).
+- Asking again on a resume (2).
 
-- Skipping the signature check: 3 tests.
-- Taking writes at any offset: 2 tests.
-- Skipping the hash check: 1 test.
-- Ignoring busy at BEGIN: 1 test.
-- Never letting the question lapse: 1 test.
-- Asking again on a resume: 2 tests.
+From the review's fixes:
+- BEGIN on trial (1), and the press on trial (1).
+- Keeping with no handover record (1).
+- No handover before `activate()` (2).
+- Keeping without CONFIRM (1), and never rolling back without one (1).
+- Data from any connection (2).
+- ABORT from any connection (1).
+- A resume that does not rebind (1).
+- A press too soon (1).
+- No verify rate limit (1).
+- A single save at restart (1).
+- A restart after a failed save (1).
+- Writes through the hold (2), and appends through it (2).
 
 The page's tests run the whole flow against the mock dish. The cases are a
 drop at about 40%, three lost writes, a lost `at=`, no press, a corrupted byte,
-and a new image that rolls back during its trial.
+and a new image that rolls back during its trial. The mock rolls back an image
+that no page CONFIRMs, so a page that never sends CONFIRM fails the first
+case.
 
 ## Proving it on the test board
 
@@ -418,15 +529,18 @@ merged into) on this PC. `E` and the daemon hold come from
        tools/flash_board.sh COM11 5C94095006 d4:05:92:77:1b:34 .pio/build/badge128/merged.hex
        uv run tools/serial_log.py --port COM11 --seconds 20 --reset --send "#1 HELLO" --send "#2 OTA STATUS" > ota-0-boot.log
 
-   Expect `[hw] blorbarium ... fw=0.4.0`, `[hw] ble name=blorb-1b34`,
+   Expect `[hw] blorbarium ... fw=0.4.0 fmt=1 lcd128`, `[hw] ble name=blorb-1b34`,
    `#1 OK fw=0.4.0 ...` and
    `#2 ERR 404 UNKNOWN_VERB`: updates are refused on the cable. There is no
    `ota trial` line, because a cable flash is not on trial. Note the
    `boot=... genome=<hash>` line. That is the pet the update must keep.
 
-3. **Make release 0.4.1.** Set `kFirmwareVersion` to `"0.4.1"` in
-   `lib/blorb/include/blorb/protocol.h`. Do not commit it. Then run:
+3. **Make release 0.4.1.** The release tool takes only a clean tree, so the
+   test versions live on a throwaway branch. On it, set `kFirmwareVersion` to
+   `"0.4.1"` in `lib/blorb/include/blorb/protocol.h`, then commit and release:
 
+       git switch -c ota-proof
+       git commit -am "0.4.1, for the board proof only" && git push -u origin HEAD
        uv run --with cryptography python tools/ota_release.py release
 
    This needs the signing key, `~/.config/blorbarium/ota-signing-key.pem`. It
@@ -457,11 +571,16 @@ merged into) on this PC. `E` and the daemon hold come from
    - `[hw] ota: restarting into the update, save ok`.
    - The new boot: `boot=Resumed ... genome=<the same hash as step 2>`.
    - `[hw] ota trial: on trial, panel=1 resumed=1 handover=same pet`.
-   - About 30 s later: `[hw] ota trial: kept`.
+   - `[hw] ota trial: a page reached it over Bluetooth`, when the phone
+     reconnects and sends `OTA CONFIRM`.
+   - `[hw] ota trial: kept`, once the image has run 30 s and the page has
+     confirmed. Nothing is written to `pet` or `petfs` before this line, and
+     the `writes=` count in the `[hw] up=` lines stays flat until it.
 
-   The phone ends with "Updated to 0.4.1. Grungo is fine." The debug log on the
-   phone timestamps the first data write and `state=ready`. The difference is
-   the transfer time for the size in the manifest.
+   The phone shows "Checking that the new version works…" and ends with
+   "Updated to 0.4.1. Grungo is fine." The debug log on the phone timestamps
+   the first data write and `state=ready`. The difference is the transfer
+   time for the size in the manifest.
 
 6. **Verify.**
 
@@ -470,32 +589,44 @@ merged into) on this PC. `E` and the daemon hold come from
 
    Expect `fw=0.4.1` and the same pet on screen.
 
-7. **Make release 0.4.2, which must roll back.** Set `kFirmwareVersion` to
-   `"0.4.2"`, then run:
+7. **Make release 0.4.2, which must roll back.** On `ota-proof`, set
+   `kFirmwareVersion` to `"0.4.2"`, commit, and release a build that fails its
+   trial:
 
+       git commit -am "0.4.2, for the board proof only: built to roll back" && git push -u origin HEAD
        PLATFORMIO_BUILD_FLAGS=-DBLORB_OTA_FAIL_TRIAL uv run --with cryptography python tools/ota_release.py release
 
-   `BLORB_OTA_FAIL_TRIAL` makes the image report its panel down, so its trial
-   rolls it back. It exists only for this test.
+   `BLORB_OTA_FAIL_TRIAL` makes the image report its panel driver down, so its
+   trial rolls it back at once, before any page can confirm it. It exists only
+   for this test.
 
 8. **Update to 0.4.2.** Repeat step 5, logging to `ota-2-run.log`. Expect:
    - `[hw] ota: restarting into the update, save ok`.
    - The 0.4.2 boot: `[hw] ota trial: on trial, panel=0 ...`, then
-     `[hw] ota trial: FAILED, rolling back`.
+     `[hw] ota trial: FAILED (checks or no page), rolling back`.
    - Another boot, `[hw] blorbarium ... fw=0.4.1`, with `boot=Resumed`, the
      same genome, and no `ota trial` line.
 
    The phone ends with "The update didn't take, so the dish went back to
    0.4.1. Grungo is fine." Step 6's HELLO says `fw=0.4.1`.
 
-9. **Clean up.**
+9. **Optional: a page that never comes back.** Release a 0.4.3 the same way
+   as 0.4.1 (no flag). Ask the owner to tap Update, and to close the tab as
+   soon as the phone says "Restarting the dish". Expect `on trial`, no `a page
+   reached it`, and about 5 minutes later `FAILED (checks or no page)` and a
+   boot back to `fw=0.4.1`.
+
+10. **Clean up.**
 
        adb reverse --remove tcp:8787
-       git checkout -- lib/blorb/include/blorb/protocol.h web/public/fw
+       rm -f web/public/fw/lcd128/*.bin
+       git checkout -- web/public/fw
+       git switch -
 
    Stop `wrangler dev`. It leaves a `workerd.exe` behind, so stop the node
    process tree that runs `wrangler ... dev --port 8787`. Then end the daemon
    hold. The board stays on 0.4.1. A cable flash of any build puts it back.
+   The `ota-proof` branch is never merged.
 
 Keep the logs and the PNGs, and note the transfer time and the heap during
 the transfer. Those are the numbers this page still marks unproven.
@@ -518,6 +649,14 @@ Proven without a board:
 - The page's flow, including a drop and a resume, against the mock dish in a
   real browser.
 - The screen's three frames, rendered natively and checked by eye.
+- The review's fixes, natively, each with a test that fails without it (see
+  "Tests"), including a real Dish on trial that leaves the disk
+  byte-identical.
+- The release tool's refusals, each seen: a dirty tree, an image stamped
+  0.4.0 against `protocol.h` at 0.4.9, and a save format of 1 against a last
+  release of 2.
+- A built image contains no `C:/Users` or project path. The image before the
+  path fix carried 15 such strings.
 
 **Not proven until the owner allows a flash:**
 
@@ -533,6 +672,9 @@ Proven without a board:
   correctly, but no rollback has yet been seen on this board.
 - The button question on the real panel, and the loop's frame rate while flash
   sectors erase.
+- `OTA CONFIRM` from a real phone, the storage hold on the board, and the
+  `writes=` count staying flat through a trial.
+
 Proven on the test board by a cable flash of a949710 (2026-10-13, no update
 sent):
 
@@ -549,6 +691,7 @@ sent):
 | `flash3` + web, before this work | 163,232 B | 946,585 B |
 | With updates, before merging main | 163,568 B (+336) | 986,757 B (+40,172) |
 | With updates, main merged | 164,136 B | 987,777 B |
+| With the review's fixes (961e900) | 164,168 B | 988,825 B |
 
 Most of the added flash is the ECDSA and bignum code from mbedtls.
 

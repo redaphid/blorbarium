@@ -144,10 +144,10 @@ def cmd_release(args):
     previous = out / "manifest.json"
     if previous.exists():
         before = json.loads(previous.read_text()).get("fmt")
-        if before is not None and before != stamp["fmt"]:
-            sys.exit(f"this image saves format {stamp['fmt']}, the last release saved {before}. An image on trial "
-                     "must not write a format its predecessor cannot read: build the read-only-on-trial rule "
-                     "(docs/ota.md \"The trial\") before releasing a format change.")
+        if before is not None and before != stamp["fmt"] and not args.format_change:
+            sys.exit(f"this image saves format {stamp['fmt']}, the last release saved {before}. Read docs/ota.md "
+                     "\"Save formats\" (an image on trial writes nothing, a kept one writes the new format), "
+                     "then pass --format-change.")
     flags = 1 if args.allow_older else 0
     sha = hashlib.sha256(image).digest()
     sig = sign(key, signed_text(board, version, flags, len(image), sha))
@@ -211,6 +211,7 @@ def main():
     r.add_argument("--board", default="lcd128", choices=sorted(BOARDS))
     r.add_argument("--allow-older", action="store_true", help="sign flag 1: the dish takes it even if not newer")
     r.add_argument("--no-build", action="store_true", help="sign the firmware.bin already built")
+    r.add_argument("--format-change", action="store_true", help="release an image whose save format differs from the last")
     c = sub.add_parser("check")
     c.add_argument("manifest")
     sub.add_parser("fixture")
