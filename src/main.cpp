@@ -140,22 +140,13 @@ SET_LOOP_TASK_STACK_SIZE(kDishStackBytes);
 // Diagnostics. Every line starts "[hw] " so nobody takes it for the protocol,
 // whose lines start '#' or '!'.
 static constexpr uint32_t kStatusMs = 10000;
-static hw::StorageState storageState;
+static blorb::Provisioned storageState;
 static hw::SystemClock systemClock;
 static uint32_t lastStatus = 0;
 
 static const char* bootName(blorb::Boot b) {
   constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer"};
   return kNames[size_t(b)];
-}
-
-static const char* filesName(hw::StorageState::Files f) {
-  switch (f) {
-    case hw::StorageState::Files::Ok: return "ok";
-    case hw::StorageState::Files::FormattedBlank: return "formatted-blank";
-    case hw::StorageState::Files::Failed: return "FAILED: ";
-  }
-  return "?";
 }
 
 struct OccupantSummary { const char* kind; uint16_t gen; uint32_t genome, age; };
@@ -175,10 +166,11 @@ static void reportBoot() {
   Serial.printf("[hw] blorbarium %s lcd128\n", BLORB_FW);
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
-  const bool filesFailed = storageState.files == hw::StorageState::Files::Failed;
-  Serial.printf("[hw] storage slots=%s files=%s%s\n", storageState.slots ? "ok" : "FAILED",
-                filesName(storageState.files), filesFailed ? storageState.why : "");
-  if (!storageState.slots) Serial.println("[hw] !!! the pet partition will not open: no snapshot loads or saves");
+  Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
+  Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
+  for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
+    if (r->opened == blorb::Opened::LeftAlone || r->opened == blorb::Opened::FormatFailed)
+      Serial.println("[hw] !!! the pet is not being saved: a reset loses this boot's pet");
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");

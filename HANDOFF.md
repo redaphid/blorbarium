@@ -208,6 +208,20 @@ All paths below are in that repo.
   octal PSRAM, native USB (`303A:1001`), and it has touch. Its PWR button is
   also its power switch (see `board_lcd146.h`).
 - Which board blorbarium uses is not decided.
+- **A board's first boot formats what never held a pet** (issue #1,
+  `lib/blorb/include/blorb/provision.h`). When `pet` or `petfs` will not
+  open, boot reads both raw. If neither shows a blorbarium pet, the failing
+  one is formatted: it was blank, or a factory demo's bytes. If either shows
+  one, nothing is formatted, the pet does not save, and the log says
+  `LEFT ALONE` with `!!! the pet is not being saved`. Rescue that board by
+  hand from a read-only dump. The pet marks are bytes every save already
+  has: `BLRB` at a 32-byte NVS entry, and a LittleFS superblock of petfs's
+  own geometry (4096 x 1440) at offset 8 of block 0 or 1. So a board saved
+  before this rule (the gift device) is recognised with no new marker. The
+  boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
+  blank`, `formatted: it held another firmware's bytes and never a pet`.
+  Known gap: the screen says nothing when a keepsake is left alone, and the
+  child sees a new egg that will not save.
 
 ## Things to check before they bite
 

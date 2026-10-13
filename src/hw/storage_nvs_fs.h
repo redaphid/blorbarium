@@ -1,20 +1,22 @@
 // The Storage seam on the 1.28's flash (DEVIATIONS.md 5). The snapshot slots
 // are blobs in the labelled `pet` NVS partition; everything else is a file on
-// the `petfs` LittleFS. Neither is ever formatted over data: a partition that
-// will not open stays shut and its writes fail.
+// the `petfs` LittleFS. One that will not open is formatted only when neither
+// holds a blorbarium pet (blorb/provision.h); otherwise it stays shut and its
+// writes fail.
 #pragma once
 
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <esp_partition.h>
+#include <nvs_flash.h>
 #include <sys/stat.h>
 
 #include <cstdio>
 #include <cstring>
-#include <memory>
 #include <optional>
 #include <vector>
 
+#include "blorb/provision.h"
 #include "blorb/seams.h"
 
 namespace hw {
@@ -23,19 +25,15 @@ enum class Where { Slot, File };
 
 inline Where whereOf(const char* name) { return std::strncmp(name, "snap.", 5) == 0 ? Where::Slot : Where::File; }
 
-struct StorageState {
-  enum class Files { Ok, FormattedBlank, Failed };
-  bool slots = false;
-  Files files = Files::Failed;
-  const char* why = "not begun";   // when files == Failed
-};
-
 class NvsFsStorage : public blorb::Storage {
  public:
-  StorageState begin() {
-    state_.slots = prefs_.begin("blorb", false, "pet");
-    state_.files = mountFiles(state_.why);
-    return state_;
+  blorb::Provisioned begin() {
+    SlotsVolume slots(prefs_);
+    FilesVolume files;
+    const blorb::Provisioned p = blorb::provision(slots, files, kBlock);
+    slotsUp_ = isUp(p.slots.opened);
+    filesUp_ = isUp(p.files.opened);
+    return p;
   }
   uint32_t writes() const { return writes_; }
 
@@ -54,7 +52,37 @@ class NvsFsStorage : public blorb::Storage {
 
  private:
   static constexpr const char* kRoot = "/petfs";
-  static constexpr size_t kChunk = 4096;
+  static constexpr uint32_t kBlock = 4096;   // esp_littlefs's block, which its superblock records
+
+  // The partitions as provision() sees them: raw reads, and open or format.
+  class Partition : public blorb::Volume {
+   public:
+    explicit Partition(const esp_partition_t* p) : p_(p) {}
+    size_t size() override { return p_ ? p_->size : 0; }
+    bool readRaw(size_t at, uint8_t* buf, size_t n) override {
+      return p_ && esp_partition_read(p_, at, buf, n) == ESP_OK;
+    }
+   private:
+    const esp_partition_t* p_;
+  };
+  class SlotsVolume : public Partition {
+   public:
+    explicit SlotsVolume(Preferences& prefs)
+        : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "pet")),
+          prefs_(prefs) {}
+    bool open() override { return prefs_.begin("blorb", false, "pet"); }
+    bool format() override { return nvs_flash_erase_partition("pet") == ESP_OK && open(); }
+   private:
+    Preferences& prefs_;
+  };
+  class FilesVolume : public Partition {
+   public:
+    FilesVolume()
+        : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "petfs")) {}
+    bool open() override { return LittleFS.begin(false, kRoot, 4, "petfs"); }
+    bool format() override { return LittleFS.begin(true, kRoot, 4, "petfs"); }
+  };
+  static bool isUp(blorb::Opened o) { return o == blorb::Opened::Ok || o == blorb::Opened::Formatted; }
 
   struct Path {
     char s[80];
@@ -65,7 +93,7 @@ class NvsFsStorage : public blorb::Storage {
     if (ok) ++writes_;
     return ok;
   }
-  bool filesUp() const { return state_.files != StorageState::Files::Failed; }
+  bool filesUp() const { return filesUp_; }
 
   // ---- routing by name ----
   std::optional<size_t> lengthOf(const char* name) {
@@ -89,7 +117,7 @@ class NvsFsStorage : public blorb::Storage {
   // ---- slots: NVS blobs ----
   // isKey first: getBytesLength logs an error for every missing key.
   std::optional<size_t> slotLength(const char* name) {
-    if (!state_.slots || !prefs_.isKey(name)) return std::nullopt;
+    if (!slotsUp_ || !prefs_.isKey(name)) return std::nullopt;
     return prefs_.getBytesLength(name);
   }
   // getBytes wants a buffer the blob's whole size, so a partial range reads through a copy.
@@ -105,7 +133,7 @@ class NvsFsStorage : public blorb::Storage {
     return n;
   }
   bool putSlot(const char* name, const uint8_t* data, size_t len) {
-    return state_.slots && len > 0 && prefs_.putBytes(name, data, len) == len;   // NVS replaces a key atomically
+    return slotsUp_ && len > 0 && prefs_.putBytes(name, data, len) == len;   // NVS replaces a key atomically
   }
 
   // ---- files: POSIX stdio over the VFS (Arduino's File logs every missing-file probe) ----
@@ -148,34 +176,9 @@ class NvsFsStorage : public blorb::Storage {
     return std::rename(Path(from).s, Path(to).s) == 0;
   }
 
-  // The keepsake rule: only a partition that was never written is formatted.
-  StorageState::Files mountFiles(const char*& why) {
-    if (LittleFS.begin(false, kRoot, 4, "petfs")) return StorageState::Files::Ok;
-    const esp_partition_t* p =
-        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "petfs");
-    if (!p) {
-      why = "no petfs partition";
-      return StorageState::Files::Failed;
-    }
-    std::unique_ptr<uint8_t[]> chunk(new uint8_t[kChunk]);
-    for (size_t at = 0; at < p->size; at += kChunk) {
-      if (esp_partition_read(p, at, chunk.get(), kChunk) != ESP_OK) {
-        why = "mount failed and the partition would not read; left alone";
-        return StorageState::Files::Failed;
-      }
-      for (size_t i = 0; i < kChunk; ++i)
-        if (chunk[i] != 0xFF) {
-          why = "mount failed on a written partition; left alone";
-          return StorageState::Files::Failed;
-        }
-    }
-    if (LittleFS.begin(true, kRoot, 4, "petfs")) return StorageState::Files::FormattedBlank;
-    why = "blank partition would not format";
-    return StorageState::Files::Failed;
-  }
-
   Preferences prefs_;
-  StorageState state_;
+  bool slotsUp_ = false;
+  bool filesUp_ = false;
   uint32_t writes_ = 0;
 };
 
