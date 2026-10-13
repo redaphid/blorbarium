@@ -656,6 +656,8 @@ const UPDATE_FAILED = {
   BUSY: () => `${petName()} is busy right now, so nothing changed. Try again in a minute.`,
   BAD_SIGNATURE: "The dish didn't trust this update, so nothing changed.",
   WRONG_BOARD: "This update is for a different dish, so nothing changed.",
+  TRIAL: "The dish is still checking its last update. Try again in a few minutes.",
+  NOT_YOURS: "Another phone is updating this dish right now, so nothing changed.",
 };
 
 function updateSay(text, tone = "") {

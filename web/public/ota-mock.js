@@ -34,7 +34,7 @@
       this.loseWritesAt = faults.gaps ? [0.15, 0.55, 0.85] : [];
       this.loseAckAt = faults.lostAck ? 0.7 : Infinity;
       this.corruptAt = faults.corrupt ? 0.5 : Infinity;
-      this.stats = { drops: 0, lostWrites: 0, gaps: 0, lostAcks: 0, polls: 0, reboots: 0, ignored: 0, flashed: null };
+      this.stats = { drops: 0, lostWrites: 0, gaps: 0, lostAcks: 0, polls: 0, reboots: 0, confirms: 0, ignored: 0, flashed: null };
     }
 
     say(text) { if (this.connected) this.emit(text); }
@@ -59,6 +59,10 @@
         setTimeout(() => this.restart(), 300);
         return "OK rebooting";
       }
+      if (sub === "CONFIRM") {
+        if (this.trial) { this.confirmed = true; this.stats.confirms++; }
+        return `OK trial=${this.trial ? 1 : 0}`;
+      }
       if (sub === "BEGIN") return this.begin(a);
       return "ERR 400 BAD_ARGS";
     }
@@ -68,6 +72,7 @@
       if (a.length !== 6 || !/^\d+\.\d+\.\d+$/.test(version) || !/^\d+$/.test(flags) || !/^\d+$/.test(size) ||
           !/^[A-Za-z0-9_-]{43}$/.test(sha) || !/^[A-Za-z0-9_-]{86}$/.test(sig)) return "ERR 400 BAD_ARGS";
       if (board !== this.board) return "ERR 403 WRONG_BOARD";
+      if (this.trial && this.state === "idle") return "ERR 409 TRIAL";
       if (!(Number(flags) & 1) && !isNewer(version, this.fw)) return "ERR 409 NOT_NEWER";
       if (Number(size) === 0 || Number(size) > SLOT) return "ERR 413 TOO_BIG";
       const id = imageId(sha);
@@ -132,13 +137,15 @@
       this.onDrop();
     }
 
-    // Into the new image, on trial. With the rollback fault its trial fails and
+    // Into the new image, on trial. It keeps itself once a page has sent
+    // CONFIRM; with no CONFIRM, or with the rollback fault, its trial fails and
     // it restarts into the old one, as the bootloader would.
     restart() {
       const version = this.s.version, old = this.fw;
       for (const name in this.timers) this.timer(name);
+      this.confirmed = false;
       this.boot(version, true, () => this.timer("trial", this.trialMs, () => {
-        if (this.faults.rollback) this.boot(old, false);
+        if (this.faults.rollback || !this.confirmed) this.boot(old, false);
         else this.trial = false;
       }));
     }

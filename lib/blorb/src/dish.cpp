@@ -65,7 +65,6 @@ void copyName(char (&to)[16], const char* from) {
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
     : store_(store), keep_(store), rtc_(options.rtc) {
-  readOnly_ = options.holdSaves;
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -94,7 +93,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   boot_ = loaded == SlotState::Corrupt || history ? Boot::FromLineage : Boot::Fresh;
   copyName(live_.settings.name, lineage_.currentName());
   live_.occupant = latest ? Egg(Offspring{std::move(*latest), {}}, generation, 0) : Egg(Offspring{founder, {}}, 0, 0);
-  if (!readOnly_) save();
+  save();
 }
 
 void Dish::sample(const BodySample& s, uint32_t nowMs) { detectors_.sample(s, nowMs, pending_); }
@@ -206,10 +205,6 @@ void Dish::rename(const char* name) {
 
 // Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
 bool Dish::flush() { return readOnly_ || save(); }
-
-void Dish::releaseSaves() {
-  if (boot_ != Boot::ReadOnlyNewer) readOnly_ = false;
-}
 
 bool Dish::save() {
   if (!keep_.save(live_)) return false;   // an event save stays urgent and retries on the next tick() call

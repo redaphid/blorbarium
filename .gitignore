@@ -6,3 +6,4 @@ outputs/
 web/.wrangler/
 web/node_modules/
 *signing-key*
+web/public/fw/**/*.bin

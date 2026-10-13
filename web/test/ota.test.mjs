@@ -55,6 +55,7 @@ test("an update survives a drop, lost writes and a lost at=, then restarts into 
   assert.equal(dish.stats.lostAcks, 1);
   assert.equal(dish.stats.polls, 1, "only the lost at= needed a STATUS poll; each gap was answered at once");
   assert.equal(dish.stats.reboots, 1);
+  assert.equal(dish.stats.confirms, 1, "the page told the new image it got through");
   assert.ok(states.includes("resuming"), `resumed after the drop: ${states}`);
   assert.deepEqual(states.slice(-5), ["finishing", "rebooting", "verifying", "trial", "done"]);
 });

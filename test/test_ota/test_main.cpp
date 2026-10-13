@@ -10,7 +10,10 @@
 #include <string>
 #include <vector>
 
+#include "blorb/dish.h"
 #include "links.h"
+#include "mem_storage.h"
+#include "ota/held_storage.h"
 #include "ota_fixture.h"
 #include "ota/screen.h"
 #include "ota/session.h"
@@ -314,9 +317,9 @@ TEST(OtaSession, RefusesMalformedArguments) {
 
 TEST(OtaSession, LeavesOtherLinesToTheProtocol) {
   Rig rig;
-  EXPECT_FALSE(rig.session.handle("#1 HELLO", rig.now));
-  EXPECT_FALSE(rig.session.handle("OTA STATUS", rig.now)) << "no id: the protocol says BAD_ID";
-  EXPECT_FALSE(rig.session.handle("#zz OTA STATUS", rig.now));
+  EXPECT_FALSE(rig.session.handle("#1 HELLO", rig.now, rig.peer));
+  EXPECT_FALSE(rig.session.handle("OTA STATUS", rig.now, rig.peer)) << "no id: the protocol says BAD_ID";
+  EXPECT_FALSE(rig.session.handle("#zz OTA STATUS", rig.now, rig.peer));
   EXPECT_TRUE(rig.link.sent.empty());
 }
 
@@ -836,6 +839,49 @@ TEST(OtaSession, ARestartWhoseSaveFailsTwiceKeepsTheOldImage) {
   EXPECT_FALSE(rig.slot.activated) << "the running image boots next time";
   EXPECT_EQ(rig.last(), "! OTA state=idle last=save_failed");
   EXPECT_FALSE(rig.session.rebootDue(rig.now + 60000));
+}
+
+// ---- the pet while an image is on trial ----------------------------------------------
+
+namespace {
+void live(blorb::Dish& dish, blorb::Link& link, uint32_t& ms, uint32_t forMs) {
+  for (const uint32_t end = ms + forMs; ms < end; ms += 100) dish.tick(ms, link);
+}
+}  // namespace
+
+TEST(OtaTrial, AnImageOnTrialWritesNothingUntilItKeepsItself) {
+  blorbtest::MemStorage disk;
+  ScriptedLink phone;
+  uint32_t ms = 0;
+  {
+    blorb::Dish old(disk, 7, 0x9f31c2d04a7bull);
+    live(old, phone, ms, 60000);
+    ASSERT_TRUE(old.flush()) << "the save the old image hands over";
+  }
+  const auto handedOver = disk.files;
+
+  HeldStorage held(disk);
+  held.hold(true);
+  blorb::Dish onTrial(held, 7, 0x9f31c2d04a7bull);
+  EXPECT_EQ(onTrial.boot(), blorb::Boot::Resumed);
+  // What a page does on its way to CONFIRM: a clock, and a rename that writes the lineage.
+  phone.inbound = {"#1 TIME 1760000000 0", "#2 TWIST rename Trialist"};
+  live(onTrial, phone, ms, 6 * 60000);
+  EXPECT_FALSE(onTrial.flush());
+  EXPECT_TRUE(disk.files == handedOver) << "the keepsake and lineage.log are as the old image left them";
+
+  held.hold(false);
+  EXPECT_TRUE(onTrial.flush());
+  EXPECT_FALSE(disk.files == handedOver) << "kept: he is saved again";
+}
+
+TEST(OtaTrial, AnImageOnTrialThatCannotReadThePetFoundsNothingOnDisk) {
+  blorbtest::MemStorage disk;
+  HeldStorage held(disk);
+  held.hold(true);
+  blorb::Dish onTrial(held, 7, 0x9f31c2d04a7bull);
+  EXPECT_EQ(onTrial.boot(), blorb::Boot::Fresh);
+  EXPECT_TRUE(disk.files.empty()) << "a fresh egg is not written over anything";
 }
 
 int main(int argc, char** argv) {

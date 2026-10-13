@@ -6,9 +6,10 @@
     uv run --with cryptography python tools/ota_release.py fixture
 
 keygen makes the signing key, outside the repo, and writes its public half
-into the firmware (src/hw/ota_pubkey.h). release builds the 1.28's firmware,
-signs it, and places the manifest and image under web/public/fw/ for the site
-to publish. Every dish built with that public key accepts only what this key
+into the firmware (src/hw/ota_pubkey.h). release builds the 1.28's firmware
+from a clean tree, signs it, and places the manifest and image under
+web/public/fw/ for the site to publish. The image is not committed; the
+manifest is, as the record of the last release. Every dish built with that public key accepts only what this key
 signs, so losing the key means the next update goes over a cable.
 """
 import argparse
@@ -70,6 +71,22 @@ def embedded_point() -> bytes:
     return bytes(int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", text.split("{", 1)[1]))
 
 
+def image_stamp(image: bytes) -> dict:
+    """The ReleaseStamp main.cpp builds into the image: what it really is."""
+    at = image.find(b"blorbstamp1\0")
+    if at < 0:
+        sys.exit("firmware.bin carries no blorbstamp1: is this a blorbarium build?")
+    field = lambda off, n: image[at + off:at + off + n].split(b"\0", 1)[0].decode()
+    return {"fw": field(12, 16), "board": field(28, 16), "fmt": int.from_bytes(image[at + 44:at + 46], "little")}
+
+
+def clean_tree():
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True,
+                           check=True).stdout.strip()
+    if dirty:
+        sys.exit("the tree has uncommitted changes, so the image would not be any commit's:\n" + dirty)
+
+
 def firmware_version() -> str:
     m = re.search(r'kFirmwareVersion = "(\d+\.\d+\.\d+)"', VERSION_H.read_text())
     if not m:
@@ -113,21 +130,32 @@ def cmd_release(args):
         sys.exit(f"{PUBKEY_H.relative_to(ROOT)} holds another key's public half: a dish built from this tree "
                  "would refuse what this key signs. Run `keygen` with this key first.")
     board, env = args.board, BOARDS[args.board]
+    clean_tree()
     if not args.no_build:
         pio = Path.home() / ".platformio" / "penv" / ("Scripts/pio.exe" if os.name == "nt" else "bin/pio")
         subprocess.run([str(pio), "run", "-e", env], cwd=ROOT, check=True)
     image = (ROOT / ".pio" / "build" / env / "firmware.bin").read_bytes()
     if image[0] != 0xE9:
         sys.exit("firmware.bin does not start with an ESP image header")
-    version, flags = firmware_version(), 1 if args.allow_older else 0
+    stamp, version = image_stamp(image), firmware_version()
+    if stamp["fw"] != version or stamp["board"] != board:
+        sys.exit(f"firmware.bin is {stamp['board']} {stamp['fw']}, not {board} {version}: build it again")
+    out = ROOT / "web" / "public" / "fw" / board
+    previous = out / "manifest.json"
+    if previous.exists():
+        before = json.loads(previous.read_text()).get("fmt")
+        if before is not None and before != stamp["fmt"]:
+            sys.exit(f"this image saves format {stamp['fmt']}, the last release saved {before}. An image on trial "
+                     "must not write a format its predecessor cannot read: build the read-only-on-trial rule "
+                     "(docs/ota.md \"The trial\") before releasing a format change.")
+    flags = 1 if args.allow_older else 0
     sha = hashlib.sha256(image).digest()
     sig = sign(key, signed_text(board, version, flags, len(image), sha))
-    out = ROOT / "web" / "public" / "fw" / board
     out.mkdir(parents=True, exist_ok=True)
     name = f"blorbarium-{board}-{version}.bin"
     (out / name).write_bytes(image)
     manifest = {"board": board, "version": version, "flags": flags, "size": len(image),
-                "sha256": b64url(sha), "sig": b64url(sig), "image": name}
+                "sha256": b64url(sha), "sig": b64url(sig), "image": name, "fmt": stamp["fmt"]}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", newline="\n")
     print(f"released {board} {version} ({len(image)} bytes) to {out.relative_to(ROOT)}")
     check(out / "manifest.json", key.public_key())

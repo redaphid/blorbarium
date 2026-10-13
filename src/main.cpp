@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <esp_mac.h>
 
+#include <array>
 #include <optional>
 #include <string_view>
 
@@ -26,6 +27,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
+#include "ota/held_storage.h"
 #include "ota/screen.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
@@ -81,6 +83,11 @@ class SerialLink : public blorb::Link {
 static constexpr uint32_t kFrameMs = 40;   // 25 fps: the SPI push is 23 ms of every frame
 
 static PetStorage store;
+#if defined(BADGE_BOARD_SIM)
+static PetStorage& dishStore = store;
+#else
+static ota::HeldStorage dishStore(store);   // writes nothing while this image is on trial
+#endif
 static SerialLink phone;
 #if defined(BADGE_BOARD_SIM)
 static blorb::Link& host = phone;
@@ -237,8 +244,26 @@ static void restartIntoUpdate() {
   ESP.restart();
 }
 
+// What tools/ota_release.py reads back out of firmware.bin, so a release can
+// only be signed as the version, board and save format the image really is.
+// reportBoot() prints from it, which keeps the linker from dropping it.
+template <size_t N>
+constexpr std::array<char, N> stampField(const char* s) {
+  std::array<char, N> a{};
+  for (size_t i = 0; i + 1 < N && s[i]; ++i) a[i] = s[i];
+  return a;
+}
+struct ReleaseStamp {
+  std::array<char, 12> magic;
+  std::array<char, 16> fw, board;
+  uint16_t fmt;
+};
+extern const ReleaseStamp kReleaseStamp = {stampField<12>("blorbstamp1"), stampField<16>(blorb::kFirmwareVersion),
+                                           stampField<16>(BOARD_NAME), blorb::kFormatVersion};
+
 static void reportBoot() {
-  Serial.printf("[hw] blorbarium %s fw=%s lcd128\n", BLORB_FW, blorb::kFirmwareVersion);
+  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", BLORB_FW, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
+                kReleaseStamp.board.data());
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   const bool filesFailed = storageState.files == hw::StorageState::Files::Failed;
@@ -283,9 +308,9 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   storageState = store.begin();
   options.rtc = &systemClock;
-  options.holdSaves = hw::Trial::pending();
+  dishStore.hold(hw::Trial::pending());
 #endif
-  dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
+  dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   [[maybe_unused]] const bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
@@ -406,7 +431,7 @@ void loop() {
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();
   if (trial.poll(millis())) {
-    dish->releaseSaves();
+    dishStore.hold(false);
     dish->flush();
   }
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())

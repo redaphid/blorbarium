@@ -80,6 +80,7 @@ def main():
             assert s["lostAcks"] == 1, f"lostAcks {s['lostAcks']}"
             assert s["polls"] == 1, f"STATUS polls mid-transfer {s['polls']}"
             assert s["reboots"] == 1, f"reboots {s['reboots']}"
+            assert s["confirms"] == 1, f"CONFIRMs {s['confirms']}"
             assert s["flashed"] == s["sha"], "the dish hashed what it wrote to the release's SHA-256"
             assert s["fw"] == "0.4.0"
             for text in ("Press the button on the dish to say yes.", "Moved out of reach, keep the phone close.", "Restarting the dish…",

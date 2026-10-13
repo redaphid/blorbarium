@@ -186,6 +186,12 @@
           return "begin";
         }
         if (/NOT_NEWER/.test(e.message)) return this.finish("up_to_date", null);
+        // The dish checks at most one signature every 2 s.
+        if (/TOO_SOON/.test(e.message) && !this.waited) {
+          this.waited = true;
+          await this.sleep(2100);
+          return "begin";
+        }
         throw new Failure(e.message.replace(/^\d+ /, ""));
       }
       this.absorb(r.ok);
@@ -269,6 +275,9 @@
     // trial"); until then it can still restart into the old one, which the
     // drop table turns into another hello.
     async trial() {
+      // The dish keeps the new image only once a page reaches it over Bluetooth.
+      // A firmware without CONFIRM answers 400 and keeps itself anyway.
+      await this.port.send("OTA CONFIRM").catch((e) => { if (this.lost) throw e; });
       const until = Date.now() + TRIAL_WAIT_MS;
       for (;;) {
         const k = await this.status();
