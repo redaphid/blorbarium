@@ -1,6 +1,6 @@
 #> from 400
 #> length 13400
-#> caption 400 Night falls | the moon says bedtime
+#> caption 400 Night falls | time to tuck him in
 #> caption 1500 Hold the button | tucked in
 #> caption 3200 Eyes shut | till morning
 #> reel 400 7000

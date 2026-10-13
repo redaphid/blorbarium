@@ -17,6 +17,7 @@ look at before anyone else does.
 import argparse
 import concurrent.futures
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -93,7 +94,7 @@ REEL = [
     Still("shots/09-keepsake-sealed.png", "The same amber sleep, | on the real board", BOARD, 2.6),
     Sim("ota", ota=(1000, 3000, 2600, 1400)),
     Still("phone.png", "\"Updated to 0.4.1. | Grungo is fine.\"", PHONE, 3.2, crop=(0, 1720, 1224, 2520), disc=False),
-    Roster("Coming soon: | eight new friends to duel", 4.5),
+    Roster("Coming soon: Grungo and | eight new friends to duel", 4.5),
     Card("blorbarium", "\"GEN 0. STILL NO HAT.\" | - Grungo", 3.5),
 ]
 
@@ -301,6 +302,16 @@ def panel_sheet(shots, path, cols=8, rows=2):
     sheet.save(path)
 
 
+def add_music(path, seconds):
+    """tools/reel/chiptune.py under the video, the picture copied as is."""
+    wav, mixed = path + ".wav", path + ".mixed.mp4"
+    subprocess.run([sys.executable, os.path.join(HERE, "chiptune.py"), wav, "%.2f" % seconds], check=True)
+    subprocess.run([sv.ffmpeg(), "-y", "-loglevel", "error", "-i", path, "-i", wav, "-c:v", "copy", "-c:a", "aac",
+                    "-b:a", "128k", "-shortest", "-movflags", "+faststart", mixed], check=True)
+    os.replace(mixed, path)
+    os.remove(wav)
+
+
 def faded(img, i, n):
     k = min(i + 1, n - i, FADE + 1) / (FADE + 1)
     return img if k >= 1 else Image.blend(Image.new("RGB", img.size, BG), img, k)
@@ -310,12 +321,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--assets", required=True)
+    ap.add_argument("--silent", action="store_true", help="no chiptune")
     ap.add_argument("--only", nargs="*", help="beat names (feed or still file stem): a check run, no video")
     args = ap.parse_args()
     name = lambda b: b.feed if isinstance(b, Sim) else os.path.splitext(os.path.basename(b.path))[0] if isinstance(b, Still) else type(b).__name__.lower()
     reel = [b for b in REEL if not args.only or name(b) in args.only]
     check = os.path.join(args.out, "check")
-    os.makedirs(check, exist_ok=True)
+    shutil.rmtree(check, ignore_errors=True)   # a frame left from an older cut would be checked as this one
+    os.makedirs(check)
     sinks = {} if args.only else {k: Sink(os.path.join(args.out, "reel-%s.mp4" % k), l.w, l.h) for k, l in LAYOUTS.items()}
     total = 0
     with tempfile.TemporaryDirectory() as tmp:
@@ -340,6 +353,7 @@ def main():
             total += len(shots)
     for sink in sinks.values():
         sink.close()
+        if not args.silent: add_music(sink.path, total / FPS)
         print(sink.path)
     print("total %.1f s" % (total / FPS))
 

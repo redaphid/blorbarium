@@ -1,3 +1,4 @@
+#> from 200
 #> length 5000
 #> caption 0 If his save ever won't open, | he sleeps safe in amber
 #> caption 2500 Shaking won't wake him. | Nothing gets erased.
