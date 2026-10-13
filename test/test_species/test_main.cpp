@@ -323,24 +323,41 @@ TEST(Guard, ViabilityIgnoresThemSoTheyNeverKillAnEmbryo) {
 
 namespace {
 
-// The starter with its old-age receptor (life -> die) rewired to read `reads`.
-Genome oldAgeReads(const Genome& g, ChemId reads) {
-  std::optional<GeneUid> oldAge;
+// The starter with one byte of a gene set: the first gene of `type` whose first two bytes are `a, b`.
+Genome withByte(const Genome& g, uint8_t type, uint8_t a, uint8_t b, uint8_t offset, uint8_t value) {
+  std::optional<GeneUid> uid;
   g.forEach([&](const GeneView& v) {
-    if (v.header.type == GeneKindOf<ReceptorGene>::value && v.body[0] == chem::life.v && v.body[1] == locus::die.v)
-      oldAge = v.header.uid;
+    if (!uid && v.header.type == type && v.body[0] == a && (b == 255 || v.body[1] == b)) uid = v.header.uid;
   });
-  return *GenomeBuilder::from(g).setByte(*oldAge, 0, reads.v).build();
+  return *GenomeBuilder::from(g).setByte(*uid, offset, value).build();
+}
+Genome oldAge(uint8_t offset, uint8_t value) {
+  return withByte(starterGenome(7), GeneKindOf<ReceptorGene>::value, chem::life.v, locus::die.v, offset, value);
+}
+
+void expectImmortalRefused(const Genome& g, const char* what) {
+  Viability v = viability(g);
+  EXPECT_FALSE(v.ok) << what;
+  EXPECT_STREQ(v.reason, "no old-age death") << what;
 }
 
 }  // namespace
 
 TEST(NoImmortals, AnOldAgeReceptorRewiredOffLifeIsNotViable) {
-  for (ChemId reads : {ChemId{99}, driveChem(drive::pain), chem::daze, chem::injury}) {
-    Viability v = viability(oldAgeReads(starterGenome(7), reads));
-    EXPECT_FALSE(v.ok) << "chem " << int(reads.v);
-    EXPECT_STREQ(v.reason, "no old-age death") << "chem " << int(reads.v);
-  }
+  for (ChemId reads : {ChemId{99}, driveChem(drive::pain), chem::daze, chem::injury})
+    expectImmortalRefused(oldAge(0, reads.v), "reads another chemical");
+  expectImmortalRefused(oldAge(1, locus::startle.v), "writes another locus");
+}
+
+TEST(NoImmortals, AnOldAgeReceptorThatCanNeverFireIsNotViable) {
+  expectImmortalRefused(oldAge(2, 0), "threshold 0: life never falls below it");
+  expectImmortalRefused(oldAge(5, 1), "invert cleared: fires only above the threshold");
+  expectImmortalRefused(oldAge(3, 128), "nominal 0: fires, but writes nothing");
+}
+
+TEST(NoImmortals, ALifeThatNeverDecaysIsNotViable) {
+  expectImmortalRefused(withByte(starterGenome(7), GeneKindOf<ChemGene>::value, chem::life.v, 255, 1, 0),
+                        "life's half-life byte 0: never decays");
 }
 
 TEST(NoImmortals, TheGiftAndEveryStarterStayViable) {
