@@ -225,6 +225,10 @@ All paths below are in that repo.
   before this rule (the gift device) is recognised with no new marker. The
   boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
   blank`, `formatted: it held another firmware's bytes and never a pet`.
+  The slots go through IDF's `nvs_*` calls, never Arduino's Preferences:
+  Preferences prints an error's name from a table that stops at
+  INVALID_LENGTH, so NEW_VERSION_FOUND, NO_FREE_PAGES or a flash fault
+  printed through NULL and the test board panicked in a loop.
   A board with a partition LEFT ALONE boots `Boot::Sealed` (issue #2): the
   Dish reads and writes nothing and runs no life, the screen shows the pet
   asleep in amber with `SAFE BUT STUCK - ASK A GROWN-UP` (golden
