@@ -1,0 +1,3 @@
+# Mudge's art sources
+
+Copied unchanged by `export_blorb.py` from `characters/mudge/` in the sprite-expressions repository at commit `8b9819015add1530d4fd240dd55d3a872f7612c7` (branch `roster-mudge`). `frames/<face>.png` is `raw/<face>/frame-00.png`, one picked 1024x1024 RGBA frame per face, every face registered on the same anchor; `frames/egg.png` is the picked egg, a blank frame with its own alpha. `masks/` are the inpaint masks and `eyes.json` holds the egg's eye centres. `pack.json` is written by hand: the framing, eye positions and reference colours `tools/sprite_pack.py --pet mudge` labels regions with. To change a frame, pick it in sprite-expressions, commit, and rerun the export and the converter.
