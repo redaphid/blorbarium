@@ -151,7 +151,7 @@ sketch's enums:
 
 | array | index | frames |
 |---|---|---|
-| `kScars[5][3]` | `Scar::Kind` (claw, scorch, notch, ripple, ring) x small, medium, large (12, 18, 26 px) | ART1 |
+| `kScars[5][3]` | `Scar::Kind` (claw, scorch, notch, stitches, bite) x small, medium, large (12, 18, 26 px) | ART1 |
 | `kTrophies[9]` | `SpeciesId`: hood, shell, spore cap, gill frond, wing scale, fin, lamp, feather, gear, each on a token disc so it never reads as a power | ART2, 24 px |
 | `kStances[3]` | `Stance`: paw, leaf shield, swirl | ART3, 24 px |
 | `kPowers[9]` | `PowerGlyph`: eye, shell dome, spore cloud, leaf with a plus, lantern, water lines, bolt, an owl with her eyes shut (Hush; the lone feather is Spar's), cog with a question mark | ART3, 24 px |
@@ -159,7 +159,10 @@ sketch's enums:
 | `kElements[3]` | `Element`: splash (a drop), sprout (a seedling), spark (a sparkle), for showing who beats whom; optional | ART3, 24 px |
 | `kSkullEmpty`, `kDebt`, `kVendetta`, `kWounded` | the skull to fill, a heart tied with string, a glaring eye under a heavy brow, a small plaster | ART3 |
 
-Every frame's origin is its centre. A scar has no colour: its palette entries are tagged
+No piece of battle art has a ring, a stud or paired dots: the owner vetoed the ring and
+ripple scars because on a chest they read as piercings. Place scars on the head,
+shoulders, sides, wings, fins and limbs, never on the front of the chest or belly
+(`SHEET_SPOTS` in `tools/duel_art.py` is one such placement per species). Every frame's origin is its centre. A scar has no colour: its palette entries are tagged
 skin and hold a grey g, meaning "multiply the body pixel underneath by g / 128" (a dark
 crease inside a lighter ridge), so it is the pet's own skin whatever its genes did. Fade
 moves g toward 128. A scar placed by the hit's luck can land on clear pixels or a pale
