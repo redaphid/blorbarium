@@ -208,6 +208,49 @@ All paths below are in that repo.
   octal PSRAM, native USB (`303A:1001`), and it has touch. Its PWR button is
   also its power switch (see `board_lcd146.h`).
 - Which board blorbarium uses is not decided.
+- **A board's first boot formats what never held a pet** (issue #1,
+  `lib/blorb/include/blorb/provision.h`). When `pet` or `petfs` will not
+  open, boot reads it raw. One that holds a blorbarium mark is a damaged
+  keepsake: it is left alone, the pet does not save, and the log says
+  `LEFT ALONE`. Rescue that board by hand from a read-only dump. Without a
+  mark, `pet` is formatted, judged by its own bytes alone. `petfs` is
+  formatted when it is blank, or when it is foreign and `pet` holds no pet;
+  foreign bytes beside a pet are left alone, because on the test board
+  (round 2) junk over both heads left the pet resuming from NVS and
+  formatting petfs threw his lineage away. Judging the pair wholly together
+  was tried first and review found it wrong both ways: a factory NVS beside
+  a petfs an older build had formatted stayed unsavable forever, and a real
+  pet's blank petfs was never formatted. The pet marks are bytes every save already
+  has: `BLRB` at a 32-byte NVS entry, and a LittleFS superblock of petfs's
+  own geometry (4096 x 1440) at offset 8 of block 0 or 1. So a board saved
+  before this rule (the gift device) is recognised with no new marker. The
+  boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
+  blank`, `formatted: it held another firmware's bytes and never a pet`.
+  The slots go through IDF's `nvs_*` calls, never Arduino's Preferences:
+  Preferences prints an error's name from a table that stops at
+  INVALID_LENGTH, so NEW_VERSION_FOUND, NO_FREE_PAGES or a flash fault
+  printed through NULL and the test board panicked in a loop.
+  Nothing is written before boot has decided: `pet` opens read-only (a
+  read-write open creates a missing "blorb" namespace, which the test
+  board did to a pet it then sealed), a missing namespace counts as will
+  not open so the raw bytes are judged, and a board that leaves anything
+  alone formats nothing and opens nothing for writing. IDF's
+  nvs_flash_init_partition still runs first and can repair a damaged NVS on
+  its own (it erased nothing in the test board's 64 KB case).
+  A board with a partition LEFT ALONE boots `Boot::Sealed` (issue #2): the
+  Dish reads and writes nothing and runs no life, the screen shows the pet
+  asleep in amber with `SAFE BUT STUCK - ASK A GROWN-UP` (golden
+  `test/golden/sealed.png`, sim `--sealed`), `STATE` ends ` sealed=1`, and
+  serial says `!!! SEALED` with the ranges to dump. A newer firmware's save
+  (`Boot::ReadOnlyNewer`, an update rolled back) shows the same screen, says
+  `sealed=newer`, and serial says to update the firmware. Known gap: IDF itself decides most of
+  what "will not open" means for `pet`. It opens NVS over random bytes (seen
+  on the test board, 2026-10-13, so a new board's foreign case is a petfs case) or
+  pages whose header CRC fails: it counts those pages as free and erases
+  them when it needs room (`PageManager::load`). So a damaged NVS may be
+  reclaimed by IDF before provision ever sees it. That predates provision,
+  which only meets the NVS that IDF refuses: a newer NVS format, or no
+  free page.
 
 ## Things to check before they bite
 

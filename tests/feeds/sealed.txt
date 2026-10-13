@@ -1,0 +1,6 @@
+# Run with --sealed: a board whose keepsake would not open. Time, a warp
+# that would hatch an egg, a shake and a press all leave him asleep in amber.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@500 !shake 400
+@1500 !button

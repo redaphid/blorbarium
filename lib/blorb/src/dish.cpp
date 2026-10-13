@@ -70,9 +70,10 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   live_.settings.lineageId = lineageId;
   live_.settings.speciesSeed = speciesSeed;
   live_.settings.brightness = kDefaultBrightness;
-  const SlotState loaded = keep_.load(live_);
-  if (loaded == SlotState::NewerFormat) {
-    boot_ = Boot::ReadOnlyNewer;
+  // A sealed board does not even load: a load quarantines a torn slot, and that is a write.
+  const SlotState loaded = options.sealed ? SlotState::Empty : keep_.load(live_);
+  if (options.sealed || loaded == SlotState::NewerFormat) {
+    boot_ = options.sealed ? Boot::Sealed : Boot::ReadOnlyNewer;
     readOnly_ = true;
     lineage_ = Lineage::open(nowhere(), founder, lineageId, 0);
     copyName(live_.settings.name, lineage_.currentName());
@@ -119,6 +120,10 @@ void Dish::tick(uint32_t nowMs, Link& link) {
 void Dish::runOneTick(Link& link) {
   SenseOut out = pending_;
   pending_.clear();
+  if (sealed()) {   // no life to run: the pet is the one on the flash
+    ++tick_;
+    return;
+  }
   live_.clock.advance(detectors_.lid.lidded());
   detectors_.tick(TickContext{live_.clock, link.connected(), tick_}, out);
   for (uint8_t i = 0; i < out.lociCount; ++i) {
@@ -214,6 +219,15 @@ bool Dish::save() {
 }
 
 Appearance Dish::appearance() const {
+  if (sealed()) {
+    // The founder asleep: the keepsake's own genome is on the flash, unread.
+    Appearance a = portrait(std::get<Egg>(live_.occupant).genome(), Stage::Adult, 0, 0);
+    a.sealed = a.asleep = true;
+    a.pose = pose::sleep;
+    a.expression = a.previous = expr::asleep;
+    a.intensity = Fx::one();
+    return a;
+  }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   a.timeUnknown = !wallKnown_;
   if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_, wallKnown_);
@@ -254,6 +268,7 @@ void Dish::checkWall() {
 // takes the normal path. An egg incubates and hatches; a clutch's vigil runs
 // to its end and the choice waits for the owner.
 void Dish::catchUp(uint32_t ticks) {
+  if (sealed()) return;
   const uint64_t cap = uint64_t(kMaxCatchUpSteps) * kCatchUpStride;
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {

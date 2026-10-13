@@ -189,22 +189,13 @@ SET_LOOP_TASK_STACK_SIZE(kDishStackBytes);
 // Diagnostics. Every line starts "[hw] " so nobody takes it for the protocol,
 // whose lines start '#' or '!'.
 static constexpr uint32_t kStatusMs = 10000;
-static hw::StorageState storageState;
+static blorb::Provisioned storageState;
 static hw::SystemClock systemClock;
 static uint32_t lastStatus = 0;
 
 static const char* bootName(blorb::Boot b) {
-  constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer"};
+  constexpr const char* kNames[] = {"Resumed", "FellBack", "FromLineage", "Fresh", "ReadOnlyNewer", "Sealed"};
   return kNames[size_t(b)];
-}
-
-static const char* filesName(hw::StorageState::Files f) {
-  switch (f) {
-    case hw::StorageState::Files::Ok: return "ok";
-    case hw::StorageState::Files::FormattedBlank: return "formatted-blank";
-    case hw::StorageState::Files::Failed: return "FAILED: ";
-  }
-  return "?";
 }
 
 struct OccupantSummary { const char* kind; uint16_t gen; uint32_t genome, age; };
@@ -229,12 +220,17 @@ bool DishOtaHost::busy() {
   // A clutch is chosen with the button, which the update's question would take.
   if (std::holds_alternative<blorb::Clutch>(dish->occupant())) return true;
   // Anything else he must finish first (a battle, one day) refuses here too.
-  return !storageState.slots;   // no save could be written before the transfer
+  // A board that cannot save is refused by the save before the transfer; a
+  // sealed one may update, since a newer firmware is how a sealed pet wakes.
+  return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
 bool DishOtaHost::onTrial() { return trial.onTrial(); }
 bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
-  return hw::EspTrialPort::write(ota::Handover{petMark(), to, token});
+  // A sealed or newer-format keepsake was never read: the Dish's egg is a stand-in, not the pet.
+  const bool readThePet = dish->boot() != blorb::Boot::Sealed && dish->boot() != blorb::Boot::ReadOnlyNewer;
+  return hw::EspTrialPort::write(
+      ota::Handover{readThePet ? std::optional<ota::PetMark>(petMark()) : std::nullopt, to, token});
 }
 ota::Confirm DishOtaHost::confirmTrial(const ota::Token& token) { return trial.confirm(token); }
 std::optional<ota::Version> DishOtaHost::rolledBack() { return trialPort.rolledBack(); }
@@ -276,14 +272,25 @@ static void reportBoot() {
                 kReleaseStamp.board.data());
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
-  const bool filesFailed = storageState.files == hw::StorageState::Files::Failed;
-  Serial.printf("[hw] storage slots=%s files=%s%s\n", storageState.slots ? "ok" : "FAILED",
-                filesName(storageState.files), filesFailed ? storageState.why : "");
-  if (!storageState.slots) Serial.println("[hw] !!! the pet partition will not open: no snapshot loads or saves");
+  Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
+  Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
+  for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
+    if (r->opened == blorb::Opened::HeldForTrial)
+      Serial.println("[hw] !!! on trial, this image would format a partition: held, so its trial rolls it back");
+  if (blorb::leftAlone(storageState) && storageState.slots.opened != blorb::Opened::HeldForTrial &&
+      storageState.files.opened != blorb::Opened::HeldForTrial)
+    Serial.println("[hw] !!! SEALED: a pet is on the flash and would not open; nothing reads or writes it. "
+                   "Dump 0x810000+0x40000 and 0xA50000+0x5A0000 read-only for repair");
+  for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
+    if (r->opened == blorb::Opened::FormatFailed || r->opened == blorb::Opened::ReadOnly)
+      Serial.println("[hw] !!! the pet is not being saved: a reset loses this boot's pet");
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
   const OccupantSummary o = summarize(dish->occupant());
+  if (dish->boot() == blorb::Boot::ReadOnlyNewer)
+    Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
+                   "Update the firmware to wake him");
   Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
                 unsigned(o.gen), unsigned(o.genome), unsigned(o.age));
 }
@@ -316,9 +323,15 @@ void setup() {
   for (uint8_t b : mac) lineage = lineage << 8 | b;
   blorb::DishOptions options;
 #if !defined(BADGE_BOARD_SIM)
-  storageState = store.begin();
+  // An image on trial opens the pet read-only and formats nothing: until it
+  // keeps itself, the flash is the old image's (docs/ota.md "The trial").
+  const bool onTrial = trialPort.pending();
+  storageState = store.begin(onTrial);
+  dishStore.hold(onTrial);
   options.rtc = &systemClock;
-  dishStore.hold(trialPort.pending());
+  options.sealed = blorb::leftAlone(storageState);
+#else
+  options.sealed = simSealed;
 #endif
   dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
@@ -335,7 +348,7 @@ void setup() {
   if (trial.onTrial()) {
     const std::optional<ota::Handover> h = trialPort.handover();
     Serial.printf("[hw] ota trial: on trial, panel=%d resumed=%d handover=%s\n", panelUp, resumed,
-                  h ? (h->pet == petMark() ? "same pet" : "ANOTHER PET") : "none");
+                  !h ? "none" : !h->pet ? "any pet" : *h->pet == petMark() ? "same pet" : "ANOTHER PET");
     trialWatchdog.start();
   }
   otaPackets.begin();
@@ -449,6 +462,7 @@ void loop() {
   trialWatchdog.beat(millis());
   if (trial.poll(millis()) != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
     trialWatchdog.stop();
+    store.releaseHold();
     dishStore.hold(false);
     dish->flush();
   }

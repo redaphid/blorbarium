@@ -637,7 +637,7 @@ TEST(OtaVersion, ParsesOnlyThreeNumbers) {
 
 namespace {
 const PetMark kPet{3, 0xd30f00d1};
-TrialFacts healthy(uint32_t ranMs, bool confirmed) { return {true, true, true, kPet, kPet, ranMs, confirmed}; }
+TrialFacts healthy(uint32_t ranMs, bool confirmed) { return {true, true, true, true, kPet, kPet, ranMs, confirmed}; }
 }  // namespace
 
 TEST(OtaTrial, KeepsAnImageAPageReachedThatResumedTheSamePetAfterThirtySeconds) {
@@ -664,8 +664,19 @@ TEST(OtaTrial, RollsBackAnImageThatLostThePet) {
 
 TEST(OtaTrial, APendingImageWithNoHandoverRecordRollsBack) {
   TrialFacts f = healthy(kTrialMs, true);
-  f.handedOver.reset();   // a power cut can not lose it: the record is written before the switch
+  f.handedOver = false;   // a power cut can not lose it: the record is written before the switch
   EXPECT_EQ(judge(f), Verdict::RollBack);
+}
+
+// A sealed or newer-format keepsake was never read by the old image, so its
+// record names no pet: an update is how such a pet wakes.
+TEST(OtaTrial, ARecordThatNamesNoPetKeepsAnyPetTheNewImageResumes) {
+  TrialFacts f = healthy(kTrialMs, true);
+  f.pet.reset();
+  f.now = PetMark{6, 0xabcdef01};
+  EXPECT_EQ(judge(f), Verdict::Keep);
+  f.resumed = false;
+  EXPECT_EQ(judge(f), Verdict::RollBack) << "still sealed: back to the image that owns the flash";
 }
 
 TEST(OtaTrial, RollsBackAnImageWhosePanelDriverFailed) {
@@ -745,7 +756,7 @@ TEST(OtaTrialRun, ARollbackRestarts) {
 }
 
 TEST(OtaTrial, AnImageNotOnTrialIsLeftAlone) {
-  EXPECT_EQ(judge({false, false, false, std::nullopt, PetMark{0, 0}, 0, false}), Verdict::NotOnTrial);
+  EXPECT_EQ(judge({false, false, false, false, std::nullopt, PetMark{0, 0}, 0, false}), Verdict::NotOnTrial);
 }
 
 // ---- the release tool's output -------------------------------------------------------
@@ -1081,6 +1092,31 @@ TEST(OtaTrial, AHeldDishLeavesATornSlotWhereItIs) {
   blorb::Dish onTrial(held, 7, 0x9f31c2d04a7bull);
   EXPECT_NE(onTrial.boot(), blorb::Boot::Fresh);
   EXPECT_TRUE(disk.files == before) << "the torn slot is not moved to rescue/ while held";
+}
+
+TEST(OtaTrial, ASealedKeepsakeIsUntouchedAcrossATrial) {
+  blorbtest::MemStorage disk;
+  ScriptedLink phone;
+  uint32_t ms = 0;
+  {
+    blorb::Dish old(disk, 7, 0x9f31c2d04a7bull);
+    live(old, phone, ms, 1000);
+    ASSERT_TRUE(old.flush());
+  }
+  const auto keepsake = disk.files;
+  HeldStorage held(disk);
+  held.hold(true);
+  blorb::DishOptions sealed;
+  sealed.sealed = true;   // the new image cannot open the keepsake either
+  blorb::Dish onTrial(held, 7, 0x9f31c2d04a7bull, sealed);
+  EXPECT_EQ(onTrial.boot(), blorb::Boot::Sealed);
+  phone.inbound = {"#1 TIME 1760000000 0", "#2 TWIST rename Trialist"};
+  live(onTrial, phone, ms, 60000);
+  onTrial.flush();
+  held.hold(false);   // even were the trial kept, sealed writes nothing
+  onTrial.flush();
+  live(onTrial, phone, ms, 1000);
+  EXPECT_TRUE(disk.files == keepsake);
 }
 
 TEST(OtaTrialGuard, LineageTwistsWaitWhileOnTrial) {

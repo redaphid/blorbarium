@@ -144,8 +144,9 @@ class EspTrialPort : public ota::TrialPort {
     if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
     const uint8_t to[3 * 2] = {uint8_t(h.to.major), uint8_t(h.to.major >> 8), uint8_t(h.to.minor),
                                uint8_t(h.to.minor >> 8), uint8_t(h.to.patch), uint8_t(h.to.patch >> 8)};
-    const bool ok = nvs_set_u16(n, "gen", h.pet.generation) == ESP_OK && nvs_set_u32(n, "genome", h.pet.genome) == ESP_OK &&
-                    nvs_set_blob(n, "to", to, sizeof to) == ESP_OK &&
+    const ota::PetMark pet = h.pet.value_or(ota::PetMark{0, 0});
+    const bool ok = nvs_set_u8(n, "known", h.pet ? 1 : 0) == ESP_OK && nvs_set_u16(n, "gen", pet.generation) == ESP_OK &&
+                    nvs_set_u32(n, "genome", pet.genome) == ESP_OK && nvs_set_blob(n, "to", to, sizeof to) == ESP_OK &&
                     nvs_set_blob(n, "tok", h.token.b, sizeof h.token.b) == ESP_OK && nvs_commit(n) == ESP_OK;
     nvs_close(n);
     return ok;
@@ -155,13 +156,16 @@ class EspTrialPort : public ota::TrialPort {
     nvs_handle_t n;
     if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return std::nullopt;
     ota::Handover h{};
-    uint8_t to[6];
+    ota::PetMark pet{};
+    uint8_t to[6], known = 0;
     size_t toLen = sizeof to, tokLen = sizeof h.token.b;
-    const bool ok = nvs_get_u16(n, "gen", &h.pet.generation) == ESP_OK && nvs_get_u32(n, "genome", &h.pet.genome) == ESP_OK &&
+    const bool ok = nvs_get_u8(n, "known", &known) == ESP_OK && nvs_get_u16(n, "gen", &pet.generation) == ESP_OK &&
+                    nvs_get_u32(n, "genome", &pet.genome) == ESP_OK &&
                     nvs_get_blob(n, "to", to, &toLen) == ESP_OK && toLen == sizeof to &&
                     nvs_get_blob(n, "tok", h.token.b, &tokLen) == ESP_OK && tokLen == sizeof h.token.b;
     nvs_close(n);
     if (!ok) return std::nullopt;
+    if (known) h.pet = pet;
     h.to = ota::Version{uint16_t(to[0] | to[1] << 8), uint16_t(to[2] | to[3] << 8), uint16_t(to[4] | to[5] << 8)};
     return h;
   }
@@ -169,7 +173,7 @@ class EspTrialPort : public ota::TrialPort {
   void forgetHandover() override {
     nvs_handle_t n;
     if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return;
-    for (const char* k : {"gen", "genome", "to", "tok"}) nvs_erase_key(n, k);
+    for (const char* k : {"known", "gen", "genome", "to", "tok"}) nvs_erase_key(n, k);
     nvs_commit(n);
     nvs_close(n);
   }

@@ -220,7 +220,7 @@ TEST(Boot, BothTornBootsAnEggOfTheLatestGenomeFromTheLineage) {
   EXPECT_EQ(box.store.files.count("rescue/snap.a.0") + box.store.files.count("rescue/snap.b.0"), 2u);
 }
 
-TEST(Boot, ANewerFormatRunsReadOnlyAndWritesNothing) {
+TEST(Boot, ANewerFormatIsSealedAndWritesNothing) {
   Box box;
   box.boot();
   box.run(3000);
@@ -230,7 +230,9 @@ TEST(Boot, ANewerFormatRunsReadOnlyAndWritesNothing) {
   EXPECT_EQ(box.boot().boot(), Boot::ReadOnlyNewer);
   box.run(SavePolicy::kIntervalTicks * kTickMs + 70000);
   box.dish->flush();
-  EXPECT_TRUE(std::holds_alternative<Creature>(box.dish->occupant())) << "the throwaway egg hatched and lives";
+  EXPECT_TRUE(box.dish->sealed());
+  EXPECT_TRUE(box.dish->appearance().sealed) << "shown asleep in amber, not as a new egg";
+  EXPECT_TRUE(std::holds_alternative<Egg>(box.dish->occupant())) << "no throwaway life ran";
   EXPECT_EQ(box.store.files, before);
 }
 

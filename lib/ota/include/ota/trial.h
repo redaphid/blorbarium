@@ -18,7 +18,10 @@ struct PetMark {
 
 // What the old image records before it switches slots.
 struct Handover {
-  PetMark pet;
+  // Which pet, or none when the old image could not read one (a sealed or
+  // newer-format keepsake): then any pet the new image resumes is the one,
+  // which is how an update wakes a sealed pet.
+  std::optional<PetMark> pet;
   Version to;     // the version it switched to: named in STATUS if that one rolls back
   Token token;    // the page whose update it was: only it may CONFIRM
 };
@@ -27,7 +30,8 @@ struct TrialFacts {
   bool pending;                       // ESP_OTA_IMG_PENDING_VERIFY
   bool panelUp;                       // the panel driver's init said yes; it cannot see a dead screen
   bool resumed;                       // the keepsake loaded as Boot::Resumed
-  std::optional<PetMark> handedOver;  // written by the old image before it switched slots
+  bool handedOver;                    // the old image wrote its record before it switched slots
+  std::optional<PetMark> pet;         // the pet it names, if it could read one
   PetMark now;
   uint32_t ranMs;                     // loop time since boot
   bool confirmed;                     // the page reached this image over Bluetooth (OTA CONFIRM)
@@ -42,7 +46,7 @@ inline Verdict judge(const TrialFacts& f) {
   if (!f.pending) return Verdict::NotOnTrial;
   // Every update writes the record before it switches, so a pending image
   // without one, or with another pet, is not the update that was sent.
-  if (!f.panelUp || !f.resumed || !f.handedOver || !(f.now == *f.handedOver)) return Verdict::RollBack;
+  if (!f.panelUp || !f.resumed || !f.handedOver || (f.pet && !(f.now == *f.pet))) return Verdict::RollBack;
   if (f.confirmed && f.ranMs >= kTrialMs) return Verdict::Keep;
   if (!f.confirmed && f.ranMs >= kConfirmWithinMs) return Verdict::RollBack;
   return Verdict::Wait;
@@ -67,7 +71,7 @@ class Trial {
   void begin(TrialPort& port, bool panelUp, bool resumed, PetMark now) {
     port_ = &port;
     const std::optional<Handover> h = port.handover();
-    facts_ = TrialFacts{port.pending(), panelUp, resumed, h ? std::optional<PetMark>(h->pet) : std::nullopt, now, 0, false};
+    facts_ = TrialFacts{port.pending(), panelUp, resumed, h.has_value(), h ? h->pet : std::nullopt, now, 0, false};
     if (h) token_ = h->token;
     if (!facts_.pending && h) {
       // A record and no trial: the image it named never kept itself.

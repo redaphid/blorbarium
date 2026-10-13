@@ -344,6 +344,22 @@ image, the hold ends and the Dish saves at once. Two costs come with this:
 - A lineage entry made during the trial (a death, a birth, a rename) is
   dropped, because the lineage log takes no late appends.
 
+The hold starts before the Dish, at provisioning (`blorb::provision(...,
+hold)` in `lib/blorb/src/provision.cpp`, called by `NvsFsStorage::begin`). An
+image on trial opens `pet` and `petfs` read-only and calls neither
+`writable()` nor `format()`. A volume it would have formatted (blank, or
+another firmware's) is reported `HELD`, not formatted. The board then runs
+sealed, the image is not `Resumed`, and the trial rolls back to the image
+that owns the flash. When the trial keeps the image,
+`NvsFsStorage::releaseHold()` opens for writing what was opened read-only.
+
+A sealed board (a keepsake left alone, or one saved by newer firmware) may
+still be updated, through the same signed, confirmed path. A newer firmware is
+how a `sealed=newer` pet wakes. The old image never read that pet, so its
+handover names no pet, and the new image keeps itself if it resumes any pet.
+If it is sealed too, it is not `Resumed` and rolls back. The sealed keepsake is
+untouched either way: sealed writes nothing, and the hold refuses all writes.
+
 A held store reports itself not `writable()`, so `Keepsake::save` returns
 before it encodes the 9.5 KB snapshot. An urgent save waiting for the hold
 costs nothing each tick.
