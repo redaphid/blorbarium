@@ -8,6 +8,7 @@
 #include "blorb/mutate.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
+#include "blorb/starter_duel.h"
 #include "phenotype_print.h"
 
 using namespace blorb;
@@ -121,6 +122,19 @@ TEST(Starters, SpeciesGoesFirstAndPowerLastSoACrossCanSplitThem) {
     Genome g = starterGenomeOf(row.id, 3);
     EXPECT_EQ(g.gene(0).header.uid, kSpeciesGeneUid) << row.name;
     EXPECT_EQ(g.gene(uint16_t(g.geneCount() - 1)).header.uid, kPowerGeneUid) << row.name;
+  }
+}
+
+TEST(Starters, EachCarriesEveryDuelGeneAtItsFixedUid) {
+  for (const SpeciesInfo& row : SPECIES) {
+    Genome g = starterGenomeOf(row.id, 7);
+    for (size_t i = 0; i < kDuelGeneCount; ++i) {
+      const DuelGene& want = kDuelGenes[i];
+      std::optional<GeneView> got = g.find(want.header.uid);
+      ASSERT_TRUE(got) << row.name << " duel gene " << i;
+      EXPECT_EQ(got->header.type, want.header.type) << row.name << " duel gene " << i;
+      EXPECT_TRUE(std::equal(want.body, want.body + want.header.len, got->body)) << row.name << " duel gene " << i;
+    }
   }
 }
 

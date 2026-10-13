@@ -8,6 +8,7 @@
 // they match on every device whatever the build.
 #include "blorb/genes.h"
 #include "blorb/registry.h"
+#include "blorb/starter_duel.h"
 
 namespace blorb {
 namespace {
@@ -35,6 +36,7 @@ Genome starterGenomeOf(SpeciesId species, uint32_t speciesSeed) {
   appendAt(b, kSpeciesGeneUid, SpeciesGene{row.id.v, 0}, kFixed, Stage::Baby, 0, 0);
   authorStarter(b, row.starter, speciesSeed);
   appendAt(b, kKnackGeneUid, knackFor(row.style), GeneFlags::Mutable);
+  appendDuelGenes(b);
   appendAt(b, kWarPaintUid, MarkGene{kWarPaintLayer, 0, 128, 0}, GeneFlags::Mutable, Stage::Baby, gateOf(feat::slayer));
   appendAt(b, kPowerGeneUid, PowerGene{row.power.v, 0}, kFixed, Stage::Baby, 0, 0);
   return *b.build();
