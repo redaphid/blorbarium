@@ -86,7 +86,7 @@ struct DuelTimings {
   static constexpr uint16_t kGenomeTicks = 100;     // 10 s to swap genomes after both hugs, else the egg fizzles
   // Graft from candidate C: a friend must be close. Below this a beacon is
   // ignored (not drawn, never matched). An estimate for ESP-NOW at 10 dBm, about
-  // arm's length; unit D11 sets it on a desk at 30 cm and 2 m.
+  // arm's length; unit D12 sets it on a desk at 30 cm and 2 m.
   static constexpr int8_t kNearRssi = -62;
 };
 

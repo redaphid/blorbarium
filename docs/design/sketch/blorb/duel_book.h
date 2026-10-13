@@ -16,7 +16,6 @@
 #include <cstdint>
 #include <optional>
 #include "blorb/duel.h"
-#include "blorb/duel_wire.h"
 #include "blorb/seams.h"
 
 namespace blorb {

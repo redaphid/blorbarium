@@ -29,16 +29,6 @@ inline constexpr uint8_t kWireMagic0 = 'b', kWireMagic1 = 'D', kWireVersion = 1;
 // Cheers sent with a double knock: pictures only, all kind.
 enum class Emote : uint8_t { None, Heart, Star, Laugh, Wave };
 
-// The battle's name on the air: both nonces and the rematch number. A packet
-// from bout n never feeds bout n+1, because its id differs (candidate A's
-// rematch kept one id across bouts, so a late State could seed a fresh log).
-struct BattleId {
-  uint32_t seed = 0;     // duelSeed(nonceA, nonceB, rematch)
-  uint8_t rematch = 0;
-  friend bool operator==(BattleId a, BattleId b) { return a.seed == b.seed && a.rematch == b.rematch; }
-  friend bool operator!=(BattleId a, BattleId b) { return !(a == b); }
-};
-
 struct BeaconPacket {
   uint16_t roster = 0;           // rosterHash(): a mismatch greys the friend out
   uint32_t nonce = 0;            // fresh per open(); half the battle seed

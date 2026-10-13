@@ -69,8 +69,9 @@ class EspNowAir : public blorb::Air {
   // IDF 4.4's callback: (const uint8_t* mac, const uint8_t* data, int len),
   // on the Wi-Fi task; RSSI comes from a promiscuous-mode rx hook
   // (wifi_promiscuous_pkt_t rx_ctrl.rssi) matched by source MAC, because 4.4's
-  // ESP-NOW callback carries none (unit D11 confirms on the board). It copies into a fixed ring of 8 datagrams (2 KB) and
-  // drops when full; the state-based protocol makes a drop a delay.
+  // ESP-NOW callback carries none (unit D12 confirms on the board). It copies
+  // into a fixed ring of 8 datagrams (2 KB) and drops when full; the
+  // state-based protocol makes a drop a delay.
   static void onRecv(const uint8_t* mac, const uint8_t* data, int len);
   RadioLease& lease_;
   blorb::PeerAddr self_{};

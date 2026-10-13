@@ -164,6 +164,17 @@ struct Outcome {
 // late packet from the previous bout can never feed the next one.
 uint32_t duelSeed(uint32_t nonceA, uint32_t nonceB, uint8_t rematch);
 
+// The battle's name, in both books and on the air: both nonces and the
+// rematch number. A packet from bout n never feeds bout n+1, because its id
+// differs (candidate A kept one id across rematches, so a late State could
+// seed a fresh log).
+struct BattleId {
+  uint32_t seed = 0;     // duelSeed(nonceA, nonceB, rematch)
+  uint8_t rematch = 0;
+  friend bool operator==(BattleId a, BattleId b) { return a.seed == b.seed && a.rematch == b.rematch; }
+  friend bool operator!=(BattleId a, BattleId b) { return !(a == b); }
+};
+
 // The handicap (graft from candidate C): skill, not level. Each card carries
 // its kid's prowess, a running mean of how well that kid has been playing
 // (duel_book.h). Inside a dead band nobody gets help; past it the weaker side
