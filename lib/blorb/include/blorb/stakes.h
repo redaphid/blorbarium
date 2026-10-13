@@ -133,10 +133,10 @@ static_assert(receptorExpresses(chem::injury, locus::die), "injury still kills, 
 // ---- wounds and scars -----------------------------------------------------------------
 // A scar is for this life: drawn over the body, not inherited (the lineage
 // remembers it in words). Kind follows what hit him: a claw for a Pounce, a
-// scorch for Spark, a notch for Sprout, a ripple for Splash, a ring for a zap.
+// scorch for Spark, a notch for Sprout, stitches for Splash, a bite for a zap.
 struct Scar {
-  enum class Kind : uint8_t { Claw, Scorch, Notch, Ripple, Ring } kind = Kind::Claw;
-  uint8_t x = 0, y = 0;       // on the body frame, 0..255 of its bbox, chosen from the hit's luck
+  enum class Kind : uint8_t { Claw, Scorch, Notch, Stitches, Bite } kind = Kind::Claw;
+  uint8_t x = 0, y = 0;       // from the hit's luck; paint maps them onto a limb, shoulder, side or the head, never chest or belly
   uint8_t fade = 255;         // fades toward 96 over the life, never to nothing
 };
 inline constexpr uint8_t kMaxScars = 4;
