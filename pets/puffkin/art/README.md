@@ -1,0 +1,3 @@
+# Puffkin's art sources
+
+Copied unchanged by `export_blorb.py` from `characters/puffkin/` in the sprite-expressions repository at commit `20f101a256cbd54f380778d3c1cfd536ffb51d3c` (branch `roster-puffkin`). `frames/<face>.png` is `raw/<face>/frame-00.png`, one picked 1024x1024 RGBA frame per face, every face registered on the same anchor; `frames/egg.png` is the picked egg, a blank frame with its own alpha. `masks/` are the inpaint masks and `eyes.json` holds the egg's eye centres. `pack.json` is written by hand: the framing, eye positions and reference colours `tools/sprite_pack.py --pet puffkin` labels regions with. To change a frame, pick it in sprite-expressions, commit, and rerun the export and the converter.
