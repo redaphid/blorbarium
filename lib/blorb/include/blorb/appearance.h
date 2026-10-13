@@ -29,8 +29,8 @@ struct Appearance {
   uint16_t generation = 0;
   Stage stage = Stage::Baby;
   uint32_t lifeSeed = 0;            // genome hash: mottling layout, blink and bob jitter
-  // Whose art draws him (paint::packFor). Every pet reads as grungo until the
-  // species gene exists to express it.
+  // Whose art draws him (paint::packFor): the phenotype's body species, so
+  // grungo for a genome with no species gene.
   SpeciesId species = kGrungo;
 
   // Where and how

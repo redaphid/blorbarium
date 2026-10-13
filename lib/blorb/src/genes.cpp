@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <optional>
 #include "blorb/creature.h"
 #include "blorb/protocol.h"
+#include "blorb/stakes.h"
 
 namespace blorb {
 namespace {
@@ -84,6 +86,7 @@ void describe_chem(const GeneView& v, Describe& d) {
 const MutRule rules_reaction[] = {A, N, A, N, A, N, A, N, N};
 void express_reaction(const GeneView& v, Phenotype& p) {
   auto g = decode<ReactionGene>(v);
+  if (!reactionExpresses(ChemId{g.a}, ChemId{g.b})) return;   // stakes.h: a swoon feeds nothing
   p.chem.reactions.push_back(Reaction{ChemId{g.a}, ChemId{g.b}, ChemId{g.c}, ChemId{g.d}, g.qa, g.qb, g.qc, g.qd,
                                       perApplication(g.rate, 0)});
 }
@@ -119,6 +122,10 @@ void describe_emitter(const GeneView& v, Describe& d) {
 const MutRule rules_receptor[] = {A, A, N, N, N, F};
 void express_receptor(const GeneView& v, Phenotype& p) {
   auto g = decode<ReceptorGene>(v);
+  // stakes.h: only a vital chemical may kill, and a swoon may only hold him
+  // asleep. Here rather than in a caller, because every path that expresses
+  // a genome (hatch, stage, keepsake load, viability) comes through here.
+  if (!receptorExpresses(ChemId{g.chem}, LocusId{g.locus})) return;
   p.chem.receptors.push_back(Receptor{ChemId{g.chem}, LocusId{g.locus}, Fx::unitByte(g.threshold),
                                       Fx::signedByte(g.nominal), receptorGain(g.gain), (g.flags & 1) != 0,
                                       (g.flags & 2) != 0});
@@ -262,6 +269,35 @@ void describe_mark(const GeneView& v, Describe& d) {
   chemField(d, "chemBound", g.chemBound);
 }
 
+// ---- species, power, knack (read by speciesTraitsOf, at the end of expressStage) -----
+// "The first expressed SpeciesGene" needs to know whether one expressed
+// already, which the phenotype has no room to say, so these express nothing
+// gene by gene and expressStage reads them off the genome in one pass.
+const MutRule rules_species[] = {X, X};
+void express_species(const GeneView&, Phenotype&) {}
+void describe_species(const GeneView& v, Describe& d) {
+  auto g = decode<SpeciesGene>(v);
+  d.field("species", speciesInfo(SpeciesId{g.species}).name);
+  d.field("reserved", g.reserved);
+}
+
+const MutRule rules_power[] = {X, X};
+void express_power(const GeneView&, Phenotype&) {}
+void describe_power(const GeneView& v, Describe& d) {
+  auto g = decode<PowerGene>(v);
+  d.field("power", powerInfo(PowerId{g.power}).name);
+  d.field("reserved", g.reserved);
+}
+
+const MutRule rules_knack[] = {N, N, N};
+void express_knack(const GeneView&, Phenotype&) {}
+void describe_knack(const GeneView& v, Describe& d) {
+  auto g = decode<KnackGene>(v);
+  d.field("pounce", g.pounce);
+  d.field("guard", g.guard);
+  d.field("trick", g.trick);
+}
+
 // ---- mutation (read by policyOf, which reads the genome itself) -----------------
 const MutRule rules_mutation[] = {N, N, N, N, N, N, N, N};
 void express_mutation(const GeneView&, Phenotype&) {}
@@ -328,6 +364,32 @@ constexpr std::array<uint8_t, 256> buildKindIndex() {
 }
 constexpr std::array<uint8_t, 256> kKindIndex = buildKindIndex();
 static_assert(countOf(GENE_TYPES) < kNoKind, "the kind index stores row numbers in a byte");
+
+bool expressedSoFar(const GeneView& v, uint8_t stages, uint32_t legacyFeats) {
+  const GeneTypeInfo* info = geneType(v.header.type);
+  if (!info || v.header.len != info->bodyLen) return false;
+  for (uint8_t s = 0; s < kStageCount; ++s)
+    if ((stages >> s & 1) && expressedAt(v.header, Stage(s), legacyFeats)) return true;
+  return false;
+}
+
+// The first of each kind in genome order wins. No SpeciesGene is grungo, and
+// no PowerGene is the body's own power, so every genome from before species
+// reads as a pure-bred grungo who foresees. An unnamed byte reads as row 0.
+SpeciesTraits speciesTraitsOf(const Genome& g, uint8_t stages, uint32_t legacyFeats) {
+  std::optional<SpeciesGene> species;
+  std::optional<PowerGene> power;
+  std::optional<KnackGene> knack;
+  g.forEach([&](const GeneView& v) {
+    if (!expressedSoFar(v, stages, legacyFeats)) return;
+    if (v.header.type == GeneKindOf<SpeciesGene>::value && !species) species = decode<SpeciesGene>(v);
+    if (v.header.type == GeneKindOf<PowerGene>::value && !power) power = decode<PowerGene>(v);
+    if (v.header.type == GeneKindOf<KnackGene>::value && !knack) knack = decode<KnackGene>(v);
+  });
+  const SpeciesInfo& body = speciesInfo(SpeciesId{species ? species->species : kGrungo.v});
+  return SpeciesTraits{body.id, power ? powerInfo(PowerId{power->power}).id : body.power,
+                       knackOrderOf(knack ? *knack : knackFor(body.style))};
+}
 }  // namespace
 
 const GeneTypeInfo* geneType(uint8_t type) {
@@ -344,6 +406,8 @@ void expressStage(const Genome& genome, Stage stage, uint32_t legacyFeats, Pheno
     const GeneTypeInfo* info = geneType(v.header.type);
     if (info && v.header.len == info->bodyLen && expressedAt(v.header, stage, legacyFeats)) info->express(v, p);
   });
+  p.species = speciesTraitsOf(genome, p.expressedStages, legacyFeats);
+  p.oracle.voice = speciesInfo(p.species.body).starter.voice;
 }
 
 }  // namespace blorb
