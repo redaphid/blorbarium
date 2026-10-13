@@ -533,8 +533,14 @@ Proven without a board:
   correctly, but no rollback has yet been seen on this board.
 - The button question on the real panel, and the loop's frame rate while flash
   sectors erase.
-- The packet ring in PSRAM. If PSRAM does not allocate, the code falls back to
-  the internal heap.
+Proven on the test board by a cable flash of a949710 (2026-10-13, no update
+sent):
+
+- It boots `boot=Resumed` with the same pet, and HELLO says `fw=0.4.0`.
+- `OTA STATUS` over serial is `ERR 404 UNKNOWN_VERB`, as documented.
+- The `otadata` entries read `ota_state=0xFFFFFFFF` (undefined), so a
+  cable-flashed image is not on trial.
+- The packet ring is in PSRAM: PSRAM free dropped by 7,888 B.
 
 ## Sizes
 
@@ -544,13 +550,19 @@ Proven without a board:
 | With updates, before merging main | 163,568 B (+336) | 986,757 B (+40,172) |
 | With updates, main merged | 164,136 B | 987,777 B |
 
-Most of the added flash is the ECDSA and bignum code from mbedtls. The heap at
-runtime is an estimate, not a measurement:
+Most of the added flash is the ECDSA and bignum code from mbedtls.
 
-- The OTA objects add about 0.3 KB of static RAM.
-- The 7.9 KB packet ring is in PSRAM.
-- A running session adds a SHA-256 context and the OTA handle, well under 1 KB.
-- The verify at BEGIN takes a few KB of short-lived bignum heap.
+The heap at rest was measured on the test board, after a cable flash of
+a949710, from the `[hw] up=` lines, with the same creature as main:
 
-So the 136,244 B free that `HANDOFF.md` measured should stay above 135 KB at
-rest. The `[hw] up=... heap=` status line will show the real figure.
+| Measure | main e47f271 | a949710 (with updates) |
+|---|---|---|
+| Free heap at rest | 135,580 B | 134,852 B (about 730 B less) |
+| Lowest free heap (`minheap`, around a save) | | 130,648 B |
+| Loop stack high-water mark | | 12,260 B free, flat |
+| PSRAM free | | 7,888 B less: the packet ring |
+
+The heap during an update is not measured yet. It is an estimate: a running
+session adds a SHA-256 context and the OTA handle (well under 1 KB), and the
+verify at BEGIN takes a few KB of short-lived bignum heap. Step 5 of the board
+procedure records the real figure.
