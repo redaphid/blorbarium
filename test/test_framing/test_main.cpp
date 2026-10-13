@@ -8,11 +8,10 @@
 #include "blorb/appearance.h"
 #include "blorb/registry.h"
 #include "paint/sprite_pack.h"
-#include "grungo_pack.h"
 
-// Grungo as the panel shows him, measured on the drawn pixels: at home he is
-// in the middle of the round panel, whatever his stage, size, pose or face,
-// and the face shown fits what he is doing.
+// Each species as the panel shows it, measured on the drawn pixels: at home it
+// is in the middle of the round panel, whatever its stage, size, pose or face,
+// and the face shown fits what it is doing.
 using namespace blorb;
 using paint::Canvas240;
 
@@ -24,7 +23,7 @@ constexpr double kOffBy = 1.5;   // px his body's middle may sit from the panel'
 
 std::unique_ptr<Canvas240> render(const Appearance& a) {
   auto cv = std::make_unique<Canvas240>();
-  paint::draw(a, grungoPack(), *cv, 0);
+  paint::draw(a, paint::packFor(a.species), *cv, 0);
   return cv;
 }
 
@@ -59,8 +58,12 @@ Middle middleOf(const Appearance& a) {
   return {(x0 + x1 + 1) / 2.0, (y0 + y1 + 1) / 2.0, n, x1 - x0 + 1, y1 - y0 + 1};
 }
 
+// The species the Framing tests draw; the others draw grungo.
+SpeciesId shownSpecies = kGrungo;
+
 Appearance atHome(Stage stage, uint8_t scalePct) {
   Appearance a;
+  a.species = shownSpecies;
   a.kind = Appearance::Kind::Creature;
   a.stage = stage;
   a.scalePct = scalePct;
@@ -73,7 +76,8 @@ const char* stageName(Stage s) {
   return names[uint8_t(s)];
 }
 
-void expectInTheMiddle(const Appearance& a, const std::string& what) {
+void expectInTheMiddle(const Appearance& a, const std::string& stageEtc) {
+  const std::string what = std::string(speciesInfo(a.species).name) + " " + stageEtc;
   Middle m = middleOf(a);
   ASSERT_GT(m.pixels, 200) << what << ": he is not drawn";
   EXPECT_NEAR(m.x, kMiddle, kOffBy) << what << ": his middle is " << m.x - kMiddle << " px right of the panel's";
@@ -82,11 +86,17 @@ void expectInTheMiddle(const Appearance& a, const std::string& what) {
     std::printf("%-34s middle %+6.1f %+6.1f\n", what.c_str(), m.x - kMiddle, m.y - kMiddle);
 }
 
+class Framing : public ::testing::TestWithParam<uint8_t> {
+ protected:
+  void SetUp() override { shownSpecies = SpeciesId{GetParam()}; }
+  void TearDown() override { shownSpecies = kGrungo; }
+};
+
 }  // namespace
 
 // What he does in place (rest, sleep, foresee) he does in the middle; the
 // poses that go somewhere (walk, chase, curl at the rim) are free to leave it.
-TEST(Framing, AtHomeHeRestsInTheMiddleAtEveryStage) {
+TEST_P(Framing, AtHomeHeRestsInTheMiddleAtEveryStage) {
   struct InPlace { PoseId pose; const char* name; bool asleep, foreseeing; };
   const InPlace poses[] = {{blorb::pose::idle, "idle", false, false},
                            {blorb::pose::sleep, "asleep", true, false},
@@ -105,7 +115,7 @@ TEST(Framing, AtHomeHeRestsInTheMiddleAtEveryStage) {
         }
 }
 
-TEST(Framing, AtHomeEveryFaceLeavesHimInTheMiddle) {
+TEST_P(Framing, AtHomeEveryFaceLeavesHimInTheMiddle) {
   for (uint8_t s = 0; s < kStageCount; ++s)
     for (const ExprInfo& e : EXPRESSIONS) {
       Appearance a = atHome(Stage(s), 100);
@@ -116,7 +126,7 @@ TEST(Framing, AtHomeEveryFaceLeavesHimInTheMiddle) {
     }
 }
 
-TEST(Framing, HisTravelIsTheSameEveryWayFromHome) {
+TEST_P(Framing, HisTravelIsTheSameEveryWayFromHome) {
   for (uint8_t s = 0; s < kStageCount; ++s) {
     Appearance a = atHome(Stage(s), 103);
     const Fx out[4][2] = {{Fx::one(), Fx::zero()}, {-Fx::one(), Fx::zero()}, {Fx::zero(), Fx::one()}, {Fx::zero(), -Fx::one()}};
@@ -134,11 +144,11 @@ TEST(Framing, HisTravelIsTheSameEveryWayFromHome) {
 }
 
 // The round panel is small: at home he and the egg fill most of it.
-TEST(Framing, AtHomeHeAndTheEggFillThePanel) {
+TEST_P(Framing, AtHomeHeAndTheEggFillThePanel) {
   Middle adult = middleOf(atHome(Stage::Adult, 103));
   EXPECT_GE(adult.h, 150);
   EXPECT_LE(adult.h, 176);
-  Appearance egg;
+  Appearance egg = atHome(Stage::Adult, 100);
   egg.kind = Appearance::Kind::Egg;
   Middle e = middleOf(egg);
   EXPECT_GE(e.h, 140);
@@ -147,6 +157,11 @@ TEST(Framing, AtHomeHeAndTheEggFillThePanel) {
   EXPECT_NEAR(e.y, kMiddle, kOffBy);
   if (std::getenv("FRAMING_REPORT")) std::printf("adult %dx%d egg %dx%d\n", adult.w, adult.h, e.w, e.h);
 }
+
+INSTANTIATE_TEST_SUITE_P(Roster, Framing, ::testing::Range(uint8_t(0), uint8_t(kSpeciesCount)),
+                         [](const ::testing::TestParamInfo<uint8_t>& p) {
+                           return std::string(speciesInfo(SpeciesId{p.param}).name);
+                         });
 
 // The converter's glow rule, on the panel's colours.
 bool teal(uint16_t p) {

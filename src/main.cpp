@@ -101,7 +101,7 @@ static constexpr bool kAskForTime = true;
 static constexpr bool kAskForTime = false;
 #endif
 
-// `DEBUG species` and the sim's --species pin the species drawn, to look at
+// `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
 
@@ -294,6 +294,10 @@ static void press(const char* a) {
 }
 
 static void pinSpecies(const char* a) {
+  if (!std::strcmp(a, "off")) {
+    pinnedSpecies.reset();
+    return (void)Serial.printf("[hw] debug species off: drawn as the pet's own\n");
+  }
   blorb::SpeciesId s;
   if (!debugverbs::speciesByName(a, s))
     return (void)Serial.printf("[hw] debug species: '%s' is not a species.def name or 0..255\n", a);

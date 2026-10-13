@@ -25,8 +25,8 @@ GOLDEN = os.path.join(ROOT, "test", "golden")
 FRAMES = os.path.join(ROOT, "outputs", "frames")
 MISSES = os.path.join(ROOT, "outputs", "misses")
 
-# Each case's feed is tests/feeds/<case>.txt; the number is when, on the
-# script's clock, the frame is shot.
+# Each case's feed is tests/feeds/<case>.txt unless FEED_OF names another;
+# the number is when, on the script's clock, the frame is shot.
 CASES = {
     "idle": 17600,          # the resting cases rest home first, to 16400
     "eating": 7600,         # the pellet is at his mouth from about 7200 to 8000

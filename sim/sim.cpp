@@ -21,7 +21,7 @@
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
-//   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id>
+//   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
 
@@ -167,7 +167,8 @@ static void debug(const char* verb, const char* a, const char* b) {
   }
   if (!strcmp(verb, "species")) {
     blorb::SpeciesId s;
-    if (debugverbs::speciesByName(a, s)) pinnedSpecies = s;
+    if (!strcmp(a, "off")) pinnedSpecies.reset();
+    else if (debugverbs::speciesByName(a, s)) pinnedSpecies = s;
     else fprintf(stderr, "sim: DEBUG species: %s is not a species.def name or 0..255\n", a);
     return;
   }

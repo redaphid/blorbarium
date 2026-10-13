@@ -30,7 +30,7 @@ struct Appearance {
   Stage stage = Stage::Baby;
   uint32_t lifeSeed = 0;            // genome hash: mottling layout, blink and bob jitter
   // Whose art draws him (paint::packFor). Every pet reads as grungo until the
-  // species gene exists to express it; src/main.cpp can pin it for a look.
+  // species gene exists to express it.
   SpeciesId species = kGrungo;
 
   // Where and how
