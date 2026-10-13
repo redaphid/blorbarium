@@ -109,10 +109,9 @@ def spore(k):
     """Spore Puff: a flat-bottomed puff cloud, spores drifting up off it."""
     blob(k, [("ellipse", 2, 10, 11, 19), ("ellipse", 7, 5.5, 17, 15.5), ("ellipse", 13, 9, 22, 18),
              ("polygon", [(4, 14), (20, 14), (20, 19.5), (4, 19.5)])], (250, 150, 205))
-    for x, y in ((8, 12), (12.5, 10), (16, 13)):
-        k.fill(k.mask("ellipse", x - 0.9, y - 0.9, x + 0.9, y + 0.9), (150, 60, 110), INVARIANT)
-    for x, y in ((5, 2.5), (11, 1), (18, 2.5)):
-        blob(k, [("ellipse", x, y, x + 2.4, y + 2.4)], (250, 150, 205), ink=0.7)
+    for x, y in ((6, 3), (12, 1.5), (18, 3)):   # spores drifting up, drawn as glints
+        stroke(k, [(x - 1.3, y), (x + 1.3, y)], 0.9, LIGHT)
+        stroke(k, [(x, y - 1.3), (x, y + 1.3)], 0.9, LIGHT)
 
 
 def leaf(k):
@@ -213,10 +212,9 @@ def plaster(k, size, colour=(235, 200, 160)):
     rot = lambda pts: [(12 * s + (x - 12) * s * 0.707 - (y - 12) * s * 0.707, 12 * s + (x - 12) * s * 0.707 + (y - 12) * s * 0.707) for x, y in pts]
     blob(k, [("polygon", rot([(1.5, 8.5), (22.5, 8.5), (22.5, 15.5), (1.5, 15.5)]))], colour)
     blob(k, [("polygon", rot([(8.5, 9.5), (15.5, 9.5), (15.5, 14.5), (8.5, 14.5)]))], (250, 235, 215), ink=0.7)
-    for x in (4.5, 19.5):
-        for y in (10.8, 13.2):
-            px, py = rot([(x, y)])[0]
-            k.fill(k.mask("ellipse", px - 0.6 * s, py - 0.6 * s, px + 0.6 * s, py + 0.6 * s), INK, INVARIANT)
+    for x in (4.5, 19.5):   # the adhesive ends' texture: short lines, never paired dots
+        a, b = rot([(x, 10), (x, 14)])
+        k.fill(k.mask("line", [a, b], width=0.7 * s), INK, INVARIANT)
 
 
 def scrap(k):
@@ -322,8 +320,6 @@ def t_spore(k):
               12 + 6.5 * math.cos(a) + 2.4, 12.5 + 6.5 * math.sin(a) + 2.4) for a in [2 * math.pi * i / 10 for i in range(10)]]
     blob(k, [("ellipse", 5, 5.5, 19, 19.5)] + bumps, (232, 128, 106))
     k.fill(k.mask("ellipse", 8.5, 9, 15.5, 16), (246, 238, 208), INVARIANT)
-    for x, y in ((10.5, 12), (13.5, 12)):
-        k.fill(k.mask("ellipse", x - 0.8, y - 0.8, x + 0.8, y + 0.8), INK, INVARIANT)
 
 
 def t_gill(k):
@@ -402,32 +398,45 @@ def scar(kind, size):
         for dx in (-4, 0, 4):
             crease([(4 + dx, 3), (12 + dx, 14)])
     elif kind == "scorch":
-        pts = []
-        for i in range(16):
-            a = 2 * math.pi * i / 16
-            r = 7.5 if i % 2 else 4.2
-            pts.append((8.5 + r * math.cos(a), 8.5 + r * math.sin(a)))
-        burn = k.mask("polygon", P(pts))
-        k.fill(burn, RIDGE, skin)
-        k.fill(burn & sp.erode(burn, max(1, round(0.9 * u * sp.CELL))), CREASE, skin)
-        k.fill(k.mask("ellipse", *[c * u for c in (6, 6, 11, 11)]), DEEP, skin)
+        # a singe streak, long and jagged, so even at its smallest it is never a dot
+        spine = [(2, 13), (5, 10.5), (6.5, 12), (9, 8), (10.5, 9.5), (14.5, 4)]
+        crease(spine, max(1.6, 2.4 * u))
+        for (x, y), (dx, dy) in zip(spine[1:-1], ((-1, -2.5), (1.5, 2), (-1.5, -2.5), (1.8, 1.8))):
+            crease([(x, y), (x + dx, y + dy)], max(1.0, 1.1 * u))
     elif kind == "notch":
         crease(arc(8.5, 4, 6, 7, 20, 160, 16))
         crease([(5, 9), (8.5, 13), (12, 9)])
-    elif kind == "ripple":
-        for r in (3, 6, 8.5):
-            pts = [(8.5 + r * math.cos(math.radians(a)) + 0.6 * math.sin(math.radians(a * 4)),
-                    8.5 + r * math.sin(math.radians(a))) for a in range(200, 341, 10)]
-            crease(pts, max(1.0, 1.2 * u))
-    elif kind == "ring":
-        crease(arc(8.5, 8.5, 5, 5, 0, 360, 32))
-        for a in (45, 135, 225, 315):
-            c, s = math.cos(math.radians(a)), math.sin(math.radians(a))
-            crease([(8.5 + 6.2 * c, 8.5 + 6.2 * s), (8.5 + 8 * c, 8.5 + 8 * s)], max(1.0, 1.1 * u))
+    elif kind == "stitches":
+        crease([(2.5, 11.5), (14.5, 5.5)])
+        for i in range(4):
+            x, y = 4.5 + i * 3.2, 10.5 - i * 1.6
+            crease([(x - 1.2, y - 2.6), (x + 1.2, y + 2.6)], max(1.0, 1.2 * u))
+    elif kind == "bite":
+        # an arch of tooth nicks, opening downward so it never reads as a grin
+        crease(arc(8.5, 13.5, 7, 9, 205, 335, 16))
+        for a in (220, 245, 270, 295, 320):
+            c, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+            crease([(8.5 + 7 * c, 13.5 + 9 * s_), (8.5 + 4.6 * c, 13.5 + 6.4 * s_)], max(1.0, 1.2 * u))
     return k.sprite((size // 2, size // 2))
 
 
-SCARS = ["claw", "scorch", "notch", "ripple", "ring"]
+SCARS = ["claw", "scorch", "notch", "stitches", "bite"]
+
+# Where the owner's sheet shows each kind (SCARS order) on each pet, as fractions of its
+# body bbox: head, shoulders, sides, wings, fins and limbs, never the front of the chest
+# or belly, where a small round mark can read as a piercing (the owner vetoed ring and
+# ripple scars for that).
+SHEET_SPOTS = {
+    "grungo": [(0.10, 0.60), (0.90, 0.62), (0.76, 0.12), (0.82, 0.88), (0.18, 0.88)],
+    "mossby": [(0.15, 0.45), (0.88, 0.45), (0.50, 0.12), (0.25, 0.88), (0.75, 0.88)],
+    "puffkin": [(0.13, 0.35), (0.87, 0.32), (0.50, 0.07), (0.07, 0.60), (0.93, 0.60)],
+    "gilly": [(0.42, 0.24), (0.83, 0.68), (0.20, 0.42), (0.17, 0.68), (0.68, 0.90)],
+    "mothwick": [(0.15, 0.12), (0.85, 0.15), (0.38, 0.29), (0.15, 0.55), (0.85, 0.55)],
+    "mudge": [(0.45, 0.14), (0.90, 0.53), (0.24, 0.65), (0.10, 0.55), (0.77, 0.66)],
+    "fizz": [(0.42, 0.17), (0.88, 0.52), (0.12, 0.50), (0.24, 0.55), (0.76, 0.55)],
+    "hushwing": [(0.38, 0.08), (0.92, 0.55), (0.72, 0.20), (0.08, 0.60), (0.90, 0.75)],
+    "tinker": [(0.15, 0.58), (0.85, 0.60), (0.12, 0.33), (0.30, 0.90), (0.72, 0.90)],
+}
 
 
 def frames():

@@ -263,7 +263,7 @@ TEST(ExpressStage, FeatGatedGenesWaitForTheFeatAndDormantGenesNeverExpress) {
 }
 
 TEST(Starter, CarriesEveryGeneKindAndExpressesEachAtSomeStage) {
-  Genome starter = starterGenome(7);
+  Genome starter = starterGenomeOf(kGrungo, 7);
   std::set<uint8_t> kinds;
   starter.forEach([&](const GeneView& v) {
     ASSERT_NE(geneType(v.header.type), nullptr);

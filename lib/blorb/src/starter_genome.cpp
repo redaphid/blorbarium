@@ -1,16 +1,13 @@
-// Grungo, generation 0: skittish, curious, nocturnal, calm, a seer.
-// Every rate below is a time on the half-life scale (see timeByte), so the
-// genome reads as "Life halves in 3 days", not as bytes.
+// Grungo, generation 0: skittish, curious, nocturnal, calm, a seer. Every
+// species starts from this recipe with its own row's bytes written in
+// (species_starter.cpp). Every rate below is a time on the half-life scale
+// (see timeByte), so the genome reads as "Life halves in 3 days", not as bytes.
 #include <cstdint>
 #include "blorb/genes.h"
 #include "blorb/registry.h"
 
 namespace blorb {
 namespace {
-
-// Open question 1, decided by the user: sustained neglect is an illness that
-// can end the life (cause Starved). false = neglect only shortens it.
-constexpr bool kNeglectCanKill = true;
 
 constexpr uint32_t kSecond = 1000 / kTickMs;
 constexpr uint32_t kMinute = kTicksPerMinute;
@@ -71,35 +68,47 @@ constexpr uint8_t kCauseOldAge = sixteenths(1), kCauseStarved = sixteenths(2), k
 
 constexpr uint8_t d(DriveId id) { return driveChem(id).v; }
 
+// A species row's boldness as the startle receptor's gain: grungo's 128 is
+// his +1 hop, 0 never hops, 255 hops twice as high.
+constexpr uint8_t boldGain(uint8_t bold) { return uint8_t(128 + (uint32_t(bold) * 16 + 64) / 128); }
+static_assert(boldGain(128) == 128 + 16, "grungo's boldness is his startle gain");
+
 struct Author {
-  GenomeBuilder b;
+  GenomeBuilder& b;
   Rng look;
+  uint16_t line = 0;   // the uid of the last recipe line, written or not
+
+  template <class Body>
+  void put(const Body& body, uint8_t flags, Stage stage = Stage::Baby, uint8_t featGate = 0) {
+    appendAt(b, GeneUid{++line}, body, flags, stage, featGate);
+  }
+  void skip(uint16_t lines) { line = uint16_t(line + lines); }
 
   void chem(uint8_t c, uint32_t halfLife, uint8_t initial = 0, uint8_t flags = kGene) {
-    b.append(ChemGene{c, halfLife ? timeByte(halfLife) : uint8_t(0), initial}, flags);
+    put(ChemGene{c, halfLife ? timeByte(halfLife) : uint8_t(0), initial}, flags);
   }
   void react(uint8_t a, uint8_t qa, uint8_t b2, uint8_t qb, uint8_t c, uint8_t qc, uint32_t ticks,
              uint8_t flags = kGene) {
-    b.append(ReactionGene{a, qa, b2, qb, c, qc, kNone, 0, timeByte(ticks)}, flags);
+    put(ReactionGene{a, qa, b2, qb, c, qc, kNone, 0, timeByte(ticks)}, flags);
   }
   void emit(uint8_t locus, uint8_t c, uint8_t threshold, uint8_t gain, uint8_t flags, uint8_t geneFlags = kGene) {
-    b.append(EmitterGene{locus, c, threshold, gain, flags, 0}, geneFlags);
+    put(EmitterGene{locus, c, threshold, gain, flags, 0}, geneFlags);
   }
   void receive(uint8_t c, uint8_t locus, uint8_t threshold, uint8_t nominal, uint8_t gain, uint8_t flags,
                uint8_t geneFlags = kGene) {
-    b.append(ReceptorGene{c, locus, threshold, nominal, gain, flags}, geneFlags);
+    put(ReceptorGene{c, locus, threshold, nominal, gain, flags}, geneFlags);
   }
   void stimulus(StimId s, uint8_t flags, uint8_t c0, int a0, uint8_t c1 = kNone, int a1 = 0, uint8_t c2 = kNone,
                 int a2 = 0, uint8_t geneFlags = kGene) {
-    b.append(StimulusGene{s.v, flags, {c0, c1, c2}, {sgn(a0), sgn(a1), sgn(a2)}}, geneFlags);
+    put(StimulusGene{s.v, flags, {c0, c1, c2}, {sgn(a0), sgn(a1), sgn(a2)}}, geneFlags);
   }
   void instinct(LocusId c0, LocusId c1, ActionId a, DriveId dr, int level, uint32_t strength,
                 Stage stage = Stage::Baby, uint8_t featGate = 0) {
-    b.append(InstinctGene{{c0.v, c1.v, kNoCue}, a.v, dr.v, sgn(level), unit(strength)}, kGene, stage, featGate);
+    put(InstinctGene{{c0.v, c1.v, kNoCue}, a.v, dr.v, sgn(level), unit(strength)}, kGene, stage, featGate);
   }
   void face(ExprId f, uint32_t weight, DriveId d0 = DriveId{kNoDrive}, int a0 = 0, DriveId d1 = DriveId{kNoDrive},
             int a1 = 0, DriveId d2 = DriveId{kNoDrive}, int a2 = 0) {
-    b.append(ExpressionGene{f.v, unit(weight), {d0.v, d1.v, d2.v}, {sgn(a0), sgn(a1), sgn(a2)}}, kGene);
+    put(ExpressionGene{f.v, unit(weight), {d0.v, d1.v, d2.v}, {sgn(a0), sgn(a1), sgn(a2)}}, kGene);
   }
   // speciesSeed moves a Look byte by at most `spread` either way.
   uint8_t nudge(uint8_t v, uint8_t spread) { return uint8_t(int(v) - spread + int(look.below(2u * spread + 1))); }
@@ -109,8 +118,8 @@ constexpr LocusId kNoLocus{kNoCue};
 
 }  // namespace
 
-Genome starterGenome(uint32_t speciesSeed) {
-  Author g{GenomeBuilder{}, Rng::seeded(speciesSeed)};
+void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speciesSeed, bool neglectCanKill) {
+  Author g{out, Rng::seeded(speciesSeed)};
   const uint8_t hunger = d(drive::hunger), sleepiness = d(drive::sleepiness), boredom = d(drive::boredom),
                 loneliness = d(drive::loneliness), fear = d(drive::fear), pain = d(drive::pain),
                 discomfort = d(drive::discomfort), needTouch = d(drive::need_touch);
@@ -129,7 +138,7 @@ Genome starterGenome(uint32_t speciesSeed) {
   // ---- drives: each has a half-life and tonic production on `always` ----------
   struct Tonic { uint8_t chem; uint32_t halfLife; uint32_t permille; uint8_t initial; };
   const Tonic tonics[] = {
-      {hunger, 30 * kMinute, 150, unit(300)}, {sleepiness, 2 * kHour, 100, 0}, {boredom, 1 * kHour, 600, 0},
+      {hunger, 30 * kMinute, 150u * row.appetite / 1000, unit(300)}, {sleepiness, 2 * kHour, 100, 0}, {boredom, 1 * kHour, 600, 0},
       {loneliness, 3 * kHour, 500, 0},        {fear, 2 * kMinute, 50, 0},       {pain, 10 * kMinute, 20, 0},
       {discomfort, 5 * kMinute, 50, 0},       {needTouch, 3 * kHour, 500, 0},
   };
@@ -152,11 +161,13 @@ Genome starterGenome(uint32_t speciesSeed) {
   g.react(injury, 1, life, 1, injury, 1, 4 * kDay);   // injury catalyses ageing
   g.receive(injury, kHurting, unit(100), 128, 128 + 32, 0);
   g.emit(kHurting, pain, 0, timeByte(2 * kMinute), 0);
-  if (kNeglectCanKill) {
+  if (neglectCanKill) {
     g.chem(kStarvation, 1 * kDay);
     g.emit(kStarving, kStarvation, 0, timeByte(2 * kDay), kDigital);
     g.receive(kStarvation, locus::die.v, unit(600), 255, 128, kDigital, kVital);
     g.receive(kStarvation, locus::cause.v, unit(600), kCauseStarved, 128, kDigital, kVital);
+  } else {
+    g.skip(4);
   }
   // Only sustained severe injury kills; neglect alone plateaus far below it.
   g.receive(injury, locus::die.v, unit(900), 255, 128, kDigital, kVital);
@@ -164,15 +175,16 @@ Genome starterGenome(uint32_t speciesSeed) {
   g.chem(toxin, 1 * kHour);
   g.react(toxin, 1, kNone, 0, injury, 1, 10 * kMinute);
 
-  // ---- sleep: melatonin in the dark, late, so he is up for the first of the night
+  // ---- sleep: melatonin in the dark, late, so he is up for the first of the night.
+  // A species that sleeps by night grows sleepy within a quarter hour of dark.
   g.chem(melatonin, 1 * kHour);
-  g.emit(locus::light.v, melatonin, unit(300), timeByte(1 * kHour), kInvert);
+  g.emit(locus::light.v, melatonin, unit(300), timeByte(row.nocturnal ? 1 * kHour : 15 * kMinute), kInvert);
   g.react(melatonin, 1, kNone, 0, sleepiness, 1, 30 * kMinute);
   g.receive(sleepiness, locus::sleep_gate.v, unit(350), sgn(500), 128 + 32, 0);
 
   // ---- skittish: a shake floods adrenaline, which falls slowly, so he hops once
   g.chem(adrenaline, 20 * kSecond);
-  g.receive(adrenaline, locus::startle.v, unit(250), sgn(300), 128 + 16, 0);   // gain = hop height
+  g.receive(adrenaline, locus::startle.v, unit(250), sgn(300), boldGain(row.bold), 0);   // gain = hop height
   g.receive(adrenaline, locus::arousal.v, unit(100), 128, 128 + 16, 0);
   g.chem(kJolt, 1 * kSecond);
   g.receive(kJolt, locus::flinch.v, unit(200), 255, 128, kDigital);
@@ -230,30 +242,34 @@ Genome starterGenome(uint32_t speciesSeed) {
 
   // ---- look: olive skin, pale belly, brown cloak, red-brown eyes, teal glow ------
   // Skin hue starts mid-way in the forced change's reach (mutate.cpp), so a child steps either way.
-  g.b.append(PaletteGene{region::skin.v, g.nudge(136, 6), 128, 128, kNone, 0}, kLook);
-  g.b.append(PaletteGene{region::belly.v, 128, 128, g.nudge(140, 6), kNone, 0}, kLook);
-  g.b.append(PaletteGene{region::cloak.v, 128, 128, g.nudge(128, 10), kNone, 0}, kLook);
-  g.b.append(PaletteGene{region::eye.v, 128, 128, 128, kNone, 0}, kLook);
-  g.b.append(PaletteGene{region::glow.v, 128, 140, 160, vision, 255}, kLook);
-  g.b.append(PaletteGene{region::cloak.v, 38, 110, 120, kNone, 0}, kLook | kDormant);   // a bluer cloak
-  g.b.append(PaletteGene{region::glow.v, 128, 170, 235, vision, 255}, kLook | kDormant); // a brighter seer glow
-  g.b.append(MarkGene{0, g.nudge(3, 1), 128, kNone}, kLook);                              // mottling density
-  g.b.append(MarkGene{1, 2, 128, kNone}, kLook, Stage::Adult, /*featGate=*/2);           // longer stalks, after an elder
-  g.b.append(SizeGene{128, 140, 140}, kGene);
-  g.b.append(SizeGene{136, 128, 128}, kGene, Stage::Adult);
+  g.put(PaletteGene{region::skin.v, g.nudge(136, 6), 128, 128, kNone, 0}, kLook);
+  g.put(PaletteGene{region::belly.v, 128, 128, g.nudge(140, 6), kNone, 0}, kLook);
+  g.put(PaletteGene{region::cloak.v, 128, 128, g.nudge(128, 10), kNone, 0}, kLook);
+  g.put(PaletteGene{region::eye.v, 128, 128, 128, kNone, 0}, kLook);
+  g.put(PaletteGene{region::glow.v, 128, 140, 160, vision, 255}, kLook);
+  g.put(PaletteGene{region::cloak.v, 38, 110, 120, kNone, 0}, kLook | kDormant);   // a bluer cloak
+  g.put(PaletteGene{region::glow.v, 128, 170, 235, vision, 255}, kLook | kDormant); // a brighter seer glow
+  g.put(MarkGene{0, g.nudge(3, 1), 128, kNone}, kLook);                              // mottling density
+  g.put(MarkGene{1, 2, 128, kNone}, kLook, Stage::Adult, /*featGate=*/2);           // longer stalks, after an elder
+  g.put(SizeGene{128, 140, 140}, kGene);
+  g.put(SizeGene{136, 128, 128}, kGene, Stage::Adult);
 
   // ---- mind and life ----------------------------------------------------------------
-  g.b.append(TemperamentGene{140, 16, 170, 110, 8, 3, 20}, kGene);   // calm learner, curious
-  g.b.append(TemperamentGene{90, 24, 110, 140, 6, 4, 24}, kGene, Stage::Elder);
-  g.b.append(MutationPolicyGene{40, 6, 4, 20, 6, 10, 3, 140}, kVital);
-  g.b.append(EggGene{30, 128, 12}, kVital);                               // a 30-minute egg
-  g.b.append(MetabolismGene{4, 8, 90, unit(300)}, kVital);                // 4 pellets, one back every 2 h
+  g.put(TemperamentGene{140, 16, 170, 110, 8, 3, 20}, kGene);   // calm learner, curious
+  g.put(TemperamentGene{90, 24, 110, 140, 6, 4, 24}, kGene, Stage::Elder);
+  g.put(MutationPolicyGene{40, 6, 4, 20, 6, 10, 3, 140}, kVital);
+  g.put(EggGene{30, 128, 12}, kVital);                               // a 30-minute egg
+  g.put(MetabolismGene{4, 8, 90, unit(300)}, kVital);                // 4 pellets, one back every 2 h
   NoteGene note{};
   const char motto[] = "it is WRITTEN";
   for (size_t i = 0; i + 1 < sizeof motto; ++i) note.text[i] = uint8_t(motto[i]);
-  g.b.append(note, GeneFlags::OwnerEditable);
+  g.put(note, GeneFlags::OwnerEditable);
+}
 
-  return *g.b.build();
+Genome starterGenome(uint32_t speciesSeed) {
+  GenomeBuilder b;
+  authorStarter(b, speciesInfo(kGrungo).starter, speciesSeed);
+  return *b.build();
 }
 
 }  // namespace blorb
