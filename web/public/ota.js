@@ -5,7 +5,7 @@
   const WINDOW = 6144;          // bytes in flight past the last at= heard
   const STALL_MS = 2000;        // no progress for this long: ask STATUS
   const REBOOT_WAIT_MS = 15000; // how long to wait for the restart's drop
-  const TRIAL_WAIT_MS = 90000;  // the dish's trial is 30 s; past this, believe the version
+  const TRIAL_WAIT_MS = 90000;  // the dish keeps itself 30 s after CONFIRM; past this, it is unconfirmed
   const TRIAL_POLL_MS = 2000;
 
   function kv(text) {
@@ -41,14 +41,49 @@
     return hex;
   }
 
+  // A session belongs to whoever holds its token. One per (dish, version), kept
+  // across reloads and shared by tabs, so a page that comes back still owns its
+  // update and can CONFIRM it. Without storage, a token lasts as long as the store.
+  function tokenStore(device, storage) {
+    const heldTokens = new Map();
+    const store = () => { try { return storage || globalThis.localStorage || null; } catch { return null; } };
+    return (version) => {
+      const key = `blorb-ota-token:${device}:${version}`;
+      let token = heldTokens.get(key);
+      try { token = store()?.getItem(key) || token; } catch {}
+      if (!token) token = b64url(crypto.getRandomValues(new Uint8Array(16)));
+      heldTokens.set(key, token);
+      try { store()?.setItem(key, token); } catch {}
+      return token;
+    };
+  }
+
+  // What the dish says about itself, having told it this page arrived if it is
+  // on trial with an update this page made. confirm: "confirmed", "not_yours" or null.
+  async function confirmTrial(port, tokens, status) {
+    if (status.trial !== "1") return null;
+    try {
+      await port.send(`OTA CONFIRM ${tokens(status.fw)}`);
+      return "confirmed";
+    } catch (e) {
+      if (e.code === 403) return "not_yours";
+      throw e;
+    }
+  }
+  async function checkTrial(port, tokens) {
+    const status = kv((await port.send("OTA STATUS")).ok);
+    return { status, confirm: await confirmTrial(port, tokens, status) };
+  }
+
   // The manifest comes off the network, so it is checked here and trusted after.
   function parseManifest(json, board) {
     const m = json || {};
     const ok = m.board === board && semver(m.version) && Number.isInteger(m.flags) && m.flags >= 0 &&
+      Number.isInteger(m.fmt) && m.fmt >= 0 &&
       Number.isInteger(m.size) && m.size > 0 && /^[A-Za-z0-9_-]{43}$/.test(m.sha256 || "") &&
       /^[A-Za-z0-9_-]{86}$/.test(m.sig || "") && typeof m.image === "string" && m.image.length > 0;
     if (!ok) throw new Error("bad manifest");
-    return { board: m.board, version: m.version, flags: m.flags, size: m.size, sha256: m.sha256, sig: m.sig, image: m.image };
+    return { board: m.board, version: m.version, flags: m.flags, fmt: m.fmt, size: m.size, sha256: m.sha256, sig: m.sig, image: m.image };
   }
 
   // A release on the site: fw/<board>/manifest.json, the image beside it.
@@ -92,13 +127,18 @@
 
   // port: { send(cmd, timeoutMs) -> {ok, lines} | rejects {code, message},
   //         writeData(Uint8Array), reconnect() }  (reconnect gives up after ~2 min)
+  // tokens: version -> this page's token for it on this dish (tokenStore).
   // The owner forwards "OTA ..." events to event() and a lost link to dropped().
   class Updater {
-    constructor({ port, release, onChange = () => {} }) {
+    constructor({ port, release, tokens, onChange = () => {}, trialWaitMs = TRIAL_WAIT_MS }) {
       this.port = port;
       this.release = release;
       this.m = release.manifest;
+      this.tokens = tokens;
+      this.token = tokens(this.m.version);
       this.onChange = onChange;
+      this.trialWaitMs = trialWaitMs;
+      this.detour = false;
       this.state = "idle";
       this.lost = false;
       this.dish = { state: "idle", at: 0, last: "none" };
@@ -176,16 +216,22 @@
       const m = this.m;
       let r;
       try {
-        r = await this.port.send(`OTA BEGIN ${m.board} ${m.version} ${m.flags} ${m.size} ${m.sha256} ${m.sig}`);
+        r = await this.port.send(`OTA BEGIN ${m.board} ${m.version} ${m.flags} ${m.fmt} ${m.size} ${m.sha256} ${m.sig} ${this.token}`);
       } catch (e) {
         if (this.lost || !e.code) throw e;
-        // A different, stale image holds the session. The button still guards the new one.
+        // A different image holds the session. If it is this page's own (an older
+        // manifest of this version), end it; the button still guards the new one.
         if (/OTA_ACTIVE/.test(e.message) && !this.aborted) {
           this.aborted = true;
-          await this.port.send("OTA ABORT");
+          await this.port.send(`OTA ABORT ${this.token}`);
           return "begin";
         }
         if (/NOT_NEWER/.test(e.message)) return this.finish("up_to_date", null);
+        // An earlier update is still on trial: confirm it if it is this page's, wait it out, then begin.
+        if (/TRIAL/.test(e.message) && !this.detour) {
+          this.detour = true;
+          return "trial";
+        }
         // The dish checks at most one signature every 2 s.
         if (/TOO_SOON/.test(e.message) && !this.waited) {
           this.waited = true;
@@ -194,6 +240,7 @@
         }
         throw new Failure(e.message.replace(/^\d+ /, ""));
       }
+      this.detour = false;
       this.absorb(r.ok);
       return this.next() || "confirm";
     }
@@ -246,7 +293,7 @@
 
     async finishing() {
       try {
-        await this.port.send("OTA REBOOT");
+        await this.port.send(`OTA REBOOT ${this.token}`);
       } catch (e) {
         if (this.lost || e.code !== 409) throw e;
         await this.status();
@@ -265,23 +312,31 @@
     async verifying() {
       const fw = kv((await this.port.send("HELLO")).ok).fw;
       if (fw === this.m.version) return "trial";
+      if (this.detour) return "begin";
       // Still waiting to restart (busy, or the drop was not the restart): ask again.
       await this.status();
       if (this.dish.state === "ready") return "finishing";
       return this.finish("rolled_back", fw);
     }
 
-    // The new image keeps itself only after its own checks (docs/ota.md "The
-    // trial"); until then it can still restart into the old one, which the
-    // drop table turns into another hello.
+    // The new image keeps itself only after its own checks and a CONFIRM from
+    // the page that switched it in (docs/ota.md "The trial"); until then it can
+    // still restart into the old one, which the drop table turns into another
+    // hello. Also the detour for an earlier update found on trial at BEGIN.
     async trial() {
-      // The dish keeps the new image only once a page reaches it over Bluetooth.
-      // A firmware without CONFIRM answers 400 and keeps itself anyway.
-      await this.port.send("OTA CONFIRM").catch((e) => { if (this.lost) throw e; });
-      const until = Date.now() + TRIAL_WAIT_MS;
+      const until = Date.now() + this.trialWaitMs;
+      let asked = false;
       for (;;) {
         const k = await this.status();
-        if (k.trial !== "1" || Date.now() > until) return this.finish("updated", k.fw || this.m.version);
+        if (k.trial === "1" && !asked) {
+          asked = true;
+          if (await confirmTrial(this.port, this.tokens, k) === "not_yours") throw new Failure("TRIAL");
+        }
+        if (k.trial !== "1") {
+          if (k.fw === this.m.version) return this.finish("updated", k.fw);
+          return this.detour ? "begin" : "verifying";
+        }
+        if (Date.now() > until) return this.finish("unconfirmed", k.fw);
         await this.sleep(TRIAL_POLL_MS);
         if (this.lost) throw new Error("dropped");
       }
@@ -293,7 +348,7 @@
     }
   }
 
-  const api = { Updater, fetchRelease, isNewer, sha256, imageId };
+  const api = { Updater, fetchRelease, tokenStore, checkTrial, isNewer, sha256, imageId };
   globalThis.BlorbOta = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

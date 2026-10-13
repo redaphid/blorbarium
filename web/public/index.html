@@ -400,8 +400,10 @@ class MockTransport {
     this.epoch = 0;
     const faults = (params.get("faults") ?? "drop,gaps,lostAck").split(",");
     this.dish = new BlorbOtaMock.MockDish({
-      board: "lcd128", fw: "0.3.0",
+      board: "lcd128", fw: params.get("fw") || "0.3.0",
+      onTrial: params.has("trial_from") ? { from: params.get("trial_from"), token: params.get("trial_token") } : null,
       confirmMs: Number(params.get("confirm_ms")) || 30000,
+      trialMs: Number(params.get("trial_ms")) || 3000,
       faults: Object.fromEntries(faults.map((k) => [k, true])),
       emit: (text) => this.deliver([`! ${text}`]),
       onDrop: () => { this.epoch++; this.onDrop(); },
@@ -436,6 +438,7 @@ class MockTransport {
       lines.push(`OK ${this.genome.length} ${crc32(this.genome)}`);
     } else if (verb === "HASH") lines.push("OK hash=5e2a91d0 tick=1987460");
     else if (verb === "SUB") lines.push("OK events=0x03");
+    else if (verb === "TWIST" && this.dish.twist(args)) lines.push(this.dish.twist(args));
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
     else if (verb === "OTA") lines.push(this.dish.command(args));
@@ -633,8 +636,19 @@ async function session({ offer = true } = {}) {
 // --- Update over Bluetooth (docs/ota.md; the protocol is ota.js's) ---
 
 let updater = null, release = null, mockRelease = null;
+// awaitingTrial: the version this page saw on trial and confirmed, until it keeps or goes back.
+let trialTimer = null, awaitingTrial = null;
+const TRIAL_POLL_MS = 2000;
 
 const petName = () => { const n = $("name").textContent || "grungo"; return n[0].toUpperCase() + n.slice(1); };
+
+// This page's update tokens, one store per dish for as long as the page is open.
+const tokenStores = new Map();
+function pageTokens() {
+  const name = transport.name || "badge";
+  if (!tokenStores.has(name)) tokenStores.set(name, BlorbOta.tokenStore(name));
+  return tokenStores.get(name);
+}
 
 const UPDATE_STEP = {
   checking: "Getting the update ready…",
@@ -690,18 +704,62 @@ async function getRelease(board) {
   return mockRelease;
 }
 
+// A rollback would undo a rename, so the dish refuses one while it is on trial. Say so first.
+function lockRename(on) {
+  const hint = $("nameHint");
+  $("nameInput").disabled = on;
+  $("nameForm").querySelector("button").disabled = on;
+  if (on) {
+    hint.dataset.tone = "";
+    hint.dataset.trial = "1";
+    hint.textContent = `You can rename ${petName()} once the new version has finished checking itself.`;
+  } else if (hint.dataset.trial) {
+    delete hint.dataset.trial;
+    hint.textContent = "Up to 15 letters, numbers, - or _.";
+  }
+}
+
+// STATUS, with the CONFIRM a trial needs from the page whose update it is: a
+// reload, a phone that slept, a return at minute 3. Asked again until the trial ends.
+async function readOtaStatus() {
+  const r = await BlorbOta.checkTrial(updatePort, pageTokens());
+  lockRename(r.status.trial === "1");
+  clearTimeout(trialTimer);
+  if (r.status.trial === "1") trialTimer = setTimeout(watchTrial, TRIAL_POLL_MS);
+  return r;
+}
+
+function sayOnTrial(st, confirm) {
+  if (confirm === "not_yours") return updateSay(UPDATE_FAILED.TRIAL);
+  awaitingTrial = st.fw;
+  updateSay(`The new version ${st.fw} is still checking itself. ${petName()} is fine. Keep this page open, or come back within five minutes.`);
+}
+
+async function watchTrial() {
+  if (updater || !link) return;
+  try {
+    const { status, confirm } = await readOtaStatus();
+    if (status.trial === "1") sayOnTrial(status, confirm);
+    else await offerUpdate();
+  } catch (e) { debugLog("err", `trial: ${e.message}`); }
+}
+
 // Ask the dish what it runs and the site what it has, and offer the difference.
 async function offerUpdate() {
   ui.show("updateBox", true);
   ui.show("updateGo", false);
   ui.show("updateBar", false);
   updateSay("Checking for updates…");
-  let st;
-  try { st = kv((await link.send("OTA STATUS")).ok); } catch (e) {
+  let st, confirm;
+  try { ({ status: st, confirm } = await readOtaStatus()); } catch (e) {
     return updateSay(e.code === 404
       ? "This dish needs one update over a cable first. After that it can update by Bluetooth."
       : "Couldn't ask the dish about updates.");
   }
+  if (st.trial === "1") return sayOnTrial(st, confirm);
+  const kept = awaitingTrial && awaitingTrial === st.fw;
+  awaitingTrial = null;
+  if (kept) return updateSay(`Updated to ${st.fw}. ${petName()} is fine.`, "ok");
   try { release = await getRelease(st.board); } catch (e) {
     debugLog("err", `release: ${e.message}`);
     return updateSay("Couldn't check for updates right now.");
@@ -709,8 +767,12 @@ async function offerUpdate() {
   const v = release.manifest.version;
   const halfway = st.state !== "idle" && st.id === BlorbOta.imageId(release.manifest.sha256);
   if (!halfway && !BlorbOta.isNewer(v, st.fw)) return updateSay(`Up to date (${st.fw}).`, "ok");
-  updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.` : `Version ${v} is ready for the dish.`);
-  $("updateGo").textContent = halfway ? `Finish updating to ${v}` : `Update to ${v}`;
+  // A version that went back is offered by name, so it is never retried in a silent loop.
+  const failedBefore = !halfway && st.rolledback === v;
+  updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.`
+    : failedBefore ? `Last time, ${v} didn't work on this dish, so it went back to ${st.fw}. ${petName()} is fine.`
+    : `Version ${v} is ready for the dish.`);
+  $("updateGo").textContent = halfway ? `Finish updating to ${v}` : failedBefore ? "Try again" : `Update to ${v}`;
   ui.show("updateGo", true);
 }
 
@@ -719,12 +781,14 @@ function showUpdateStep({ state, at, size }) {
   ui.show("updateBar", ["sending", "resuming", "finishing", "rebooting", "verifying", "trial"].includes(state));
   if (state === "sending") return updateSay(`${UPDATE_STEP.sending} ${updateProgress(at / size)}%`);
   if (state === "finishing") updateProgress(1);
+  if (state === "trial") lockRename(true);
   if (UPDATE_STEP[state]) updateSay(UPDATE_STEP[state]);
 }
 
 function showUpdateOutcome(o) {
   const fine = `${petName()} is fine.`;
   if (o.ok && o.kind === "updated") return updateSay(`Updated to ${o.fw}. ${fine}`, "ok");
+  if (o.ok && o.kind === "unconfirmed") return updateSay(`The new version ${o.fw} is still checking itself. ${fine} Keep this page open, or come back within five minutes.`);
   if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the dish went back to ${o.fw}. ${fine}`, "err");
   if (o.ok) return updateSay(`The dish is already up to date. ${fine}`, "ok");
   const why = UPDATE_FAILED[o.reason] || "The update didn't finish, so nothing changed.";
@@ -734,7 +798,8 @@ function showUpdateOutcome(o) {
 async function runUpdate() {
   ui.show("updateGo", false);
   clearInterval(poll);
-  updater = new BlorbOta.Updater({ port: updatePort, release, onChange: showUpdateStep });
+  const trialWaitMs = (params.has("mock") && Number(params.get("trial_wait_ms"))) || undefined;
+  updater = new BlorbOta.Updater({ port: updatePort, release, tokens: pageTokens(), trialWaitMs, onChange: showUpdateStep });
   const outcome = await updater.run();
   updater = null;
   ui.show("mockPress", false);
@@ -744,6 +809,8 @@ async function runUpdate() {
     ui.show("reconnect", true);
   } else {
     await session({ offer: false }).catch((e) => debugLog("err", `after update: ${e.message}`));
+    if (outcome.kind === "unconfirmed") awaitingTrial = outcome.fw;
+    await readOtaStatus().catch((e) => debugLog("err", `after update: ${e.message}`));
     if (!outcome.ok) {
       $("updateGo").textContent = "Try again";
       ui.show("updateGo", true);
@@ -760,6 +827,7 @@ function onEvent(text) {
 
 function onDrop() {
   clearInterval(poll);
+  clearTimeout(trialTimer);
   // The updater hears first, so the requests failing next read as a drop and not an error.
   if (updater) updater.dropped();
   if (link) link.failAll("disconnected");
@@ -814,6 +882,10 @@ $("nameForm").addEventListener("submit", async (e) => {
     hint.textContent = h.name === name ? `He answers to ${name} now.` : `The dish replied with ${h.name}.`;
     $("nameInput").value = "";
   } catch (err) {
+    if (err.code === 409 && /TRIAL/.test(err.message)) {
+      lockRename(true);
+      return readOtaStatus().catch(() => {});
+    }
     hint.dataset.tone = "err";
     hint.textContent = `The dish said no (${err.message}).`;
   }
