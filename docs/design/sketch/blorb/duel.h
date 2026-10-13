@@ -50,17 +50,43 @@ constexpr Side other(Side s) { return s == Side::A ? Side::B : Side::A; }
 // t + 1 (== Outcome::resolved) whose `verdict` is Spare or Finish; its stance
 // is ignored, and resolve() reads a verdict only from the winner's log at that
 // index. kLogSlots leaves room for it after a downing on the last turn.
+// The queued special (BATTLES.md, "The queued special"). A power is never
+// instant: BOOT commits it on turn t with a wind-up of 1 (Quick) or 2 (Heavy)
+// turns, and the commit appends every entry it needs at once: turn t carries
+// `windup` (its stance is written as Pounce and ignored, so it leaks nothing),
+// a Heavy's turn t+1 is a placeholder, and turn t + windup carries the hidden
+// landing stance with `power` set. resolve() reads the wind-up from turn t's
+// entry, so the queue lives in the logs both devices already exchange, and
+// the landing stance is unreadable until that turn resolves (both logs reach
+// it), like any locked move.
+enum class Windup : uint8_t { None = 0, Quick = 1, Heavy = 2 };
 struct Move {
   Stance stance = Stance::Pounce;
   bool power = false;
   bool byPet = false;
   Verdict verdict = Verdict::None;
+  Windup windup = Windup::None;
   constexpr uint8_t pack() const {
-    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4));
+    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4) |
+                   (uint8_t(windup) << 6));
   }
   static constexpr Move unpack(uint8_t b) {
-    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3)};
+    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3),
+                Windup(((b >> 6) & 3) % 3)};
   }
+};
+static_assert(Move::unpack(Move{Stance::Trick, true, false, Verdict::None, Windup::Heavy}.pack()).windup == Windup::Heavy,
+              "the wind-up survives the wire");
+
+// The special's numbers, from sketch/tools/special_probe.py (measured 2026-10-13).
+struct SpecialRules {
+  static constexpr uint8_t kQuickExtra = 1;   // hearts on top of the clash's 1 when a quick special lands
+  static constexpr uint8_t kHeavyExtra = 2;   // ... when a heavy one lands
+  // Riposted (the friend's stance beats the landing): the owner takes 1 + extra
+  // instead, and the power does not fire. A countered Foresee landing whiffs
+  // (no hearts either way): he saw the counter coming. A hushing friend dodges:
+  // a whiff. A Trick that lands on a bracing pet staggers it: a Quick special is
+  // lost and its landing entry plays as a plain stance; a Heavy drops to Quick strength.
 };
 
 // One side's moves: append-only, and the only state either device writes
@@ -74,6 +100,10 @@ class MoveLog {
   Move at(uint8_t turn) const { return Move::unpack(packed_[turn]); }
   const uint8_t* packed() const { return packed_; }
   bool append(Move);                 // false once kLogSlots are in
+  // The commit: turn t's wind-up entry, a Heavy's placeholder, and the landing
+  // entry, appended together. False (and nothing appended) when the landing
+  // would fall past kMaxTurns: the hint glyph greys out near the end.
+  bool appendSpecial(Windup, Stance landing);
 
   enum class Merge : uint8_t { Same, Grew, Stale, Conflict };
   // Conflict: the heard prefix disagrees with what is held. Only a bug or a
@@ -146,6 +176,8 @@ struct TurnReport {
   bool powered[2]{};
   bool blocked[2]{};       // a shell, a hush or a dazzle turned a hit away (the "bonk off" sparkle)
   bool super[2]{};         // display only: the clash winner's element beats the loser's ("SUPER!")
+  bool bracing[2]{};       // winding up this turn (the telegraph: both screens show the wind-up and its countdown)
+  enum class Special : uint8_t { None, Landed, Riposted, Whiffed, Staggered } special[2]{};
   bool zone[2]{};          // display only: won with its knack's best stance (a sparkle)
 };
 
@@ -160,6 +192,8 @@ struct SideState {
   uint8_t bonkTurns = 0;            // turns left winning head bonks (dash, lantern)
   uint8_t dazzledTurns = 0;         // turns left in which MY winning hits miss half the time (lantern)
   uint8_t hushTurns = 0;            // turns left in which a lost clash costs me nothing (hush)
+  Windup queued = Windup::None;     // a special in flight (strength; a stagger drops Heavy to Quick)
+  uint8_t landsOn = 0;              // the turn it lands, valid while queued
 };
 
 enum class Ending : uint8_t { Ongoing, AWon, BWon, Draw };
