@@ -59,10 +59,13 @@ inline constexpr uint64_t kDuelCaptures =
 static_assert((kDuelCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::button_hold) |
                                 duelStimBit(stim::dropped) | duelStimBit(stim::lid_down))) == 0,
               "a duel may not swallow a shake, a hold, a drop or the lid");
-// The one exception, in Staking and Mercy only: the BOOT hold IS the confirm
-// or the Finish there, so it is taken for those 20 s windows, and a confirm
-// or a Finish does not also tuck the pet in or grant a phone consent.
+// While a duel is open, BOOT belongs to the duel in every phase (boot.h:
+// the special, the confirm, the Finish, the hug), so the hold is taken too:
+// a heavy special does not also tuck the pet in. Shake, drop and the lid never.
 inline constexpr uint64_t kHoldPhaseCaptures = kDuelCaptures | duelStimBit(stim::button_hold);
+static_assert((kHoldPhaseCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::dropped) |
+                                     duelStimBit(stim::lid_down))) == 0,
+              "BOOT is the duel's; a shake, a drop and the lid are always the pet's");
 
 enum class DuelPhase : uint8_t {
   Closed,     // radio off

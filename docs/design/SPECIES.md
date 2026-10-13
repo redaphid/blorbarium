@@ -12,11 +12,13 @@ The roster is bound from `roster/roster.json` on `origin/roster-art` (d98055e), 
 | 1 | Mossby | snail | Sprout | Guard | Shell Up (5) | A glowing shell. The next hit that would land just bonks off. |
 | 2 | Puffkin | puffball | Sprout | Pounce | Spore Puff (6) | Drowsy spores. The friend's pet nods off for the next turn. |
 | 3 | Gilly | axolotl | Splash | Guard | Mend (6) | Her gills glow and one heart grows back. |
-| 4 | Mothwick | glow-moth | Spark | Trick | Lantern Flash (4) | Dazzle. She wins a head bonk this turn, and for two turns the friend's hits miss half the time. |
+| 4 | Mothwick | glow-moth | Spark | Trick | Lantern Flash (3) | Dazzle. She wins a head bonk this turn, and for two turns the friend's hits miss half the time. |
 | 5 | Mudge | mudskipper | Splash | Pounce | Splash Dash (3) | Always first. For two turns a head bonk goes his way. |
 | 6 | Fizz | firefly beetle | Spark | Pounce | Static Spark (6) | A tickly zap. The friend loses one heart whatever the clash. |
 | 7 | Hushwing | marsh owl | Sprout | Trick | Hush (5) | Silent wings. For two turns a clash she loses costs her nothing. |
 | 8 | Tinker | raccoon | Spark | Guard | Gadget (5) | A surprise gadget: one of the other eight powers, drawn from his own luck. |
+
+Every power is used as a queued special: BOOT commits it with a hidden landing stance, it winds up for one turn (quick) or two (heavy), and it fires only if it lands (`BATTLES.md`, "The queued special"). Lantern's cost is 3 for that reason. A countered Foresee landing whiffs instead of backfiring.
 
 The elements form a cycle: Splash douses Spark, Spark singes Sprout, and Sprout drinks Splash. The stances form a second cycle: Pounce beats Trick, Trick beats Guard, and Guard beats Pounce. Each (element, loved stance) pair holds exactly one species, so the table is a 3x3 Latin square. `species.h` refuses any table that breaks it. Every species therefore has three good, three bad and three even element matchups. The roster's own habitats grouped them: the water-side three are Splash, the moss and spore three are Sprout, and the lamp and wiring three are Spark. Hushwing is the stretch, a marsh owl in the reeds.
 
