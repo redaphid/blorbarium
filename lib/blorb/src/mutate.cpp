@@ -378,13 +378,20 @@ Viability viability(const Genome& g) {
     looks = looks || (info && info->cls == GeneClass::Look && expressedAt(v.header, Stage::Baby, 0));
   });
   if (!looks) return {false, "no Look gene expressed"};
-  // Every pet can die of old age (the owner: no immortals). Judged on what
-  // expressed, after genes.cpp's die-locus guard, so the old-age receptor
-  // mutated to read another chemical is refused here as it was before the
-  // guard, when it fired at once and died in the dry run.
-  if (std::none_of(p.chem.receptors.begin(), p.chem.receptors.end(),
-                   [](const Receptor& r) { return r.chem == chem::life && r.locus == locus::die; }))
-    return {false, "no old-age death"};
+  // Every pet can die of old age (the owner: no immortals): life really
+  // decays, and some expressed receptor writes die once life has fallen far
+  // enough. It reads only what expressed, after genes.cpp's die-locus guard,
+  // so an old-age receptor mutated to read another chemical is refused, as
+  // the dry run refused it before the guard. A mutated locus, threshold,
+  // invert flag, nominal or gain, or a life that never decays, is refused
+  // too: the dry run is 48 hours, far too short to see old age not come.
+  const bool lifeDecays = p.chem.decay[chem::life.v].keep != Decay{}.keep;
+  const bool oldAgeKills = std::any_of(p.chem.receptors.begin(), p.chem.receptors.end(), [](const Receptor& r) {
+    // Inverted, it fires while life is under the threshold; at life 0 it is past it by the whole threshold.
+    return r.chem == chem::life && r.locus == locus::die && r.invert && r.threshold > Fx::zero() &&
+           r.nominal + (r.digital ? r.gain : r.gain * r.threshold) >= kHalf;
+  });
+  if (!lifeDecays || !oldAgeKills) return {false, "no old-age death"};
 
   // 48 pet-hours, a pellet's worth of food each refill, and nothing else.
   constexpr struct { Stage from; LocusId trigger; Stage to; } kStages[] = {
