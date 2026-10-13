@@ -65,6 +65,34 @@ Outcome o = resolve(cardA, cardB, duelSeed(nonceA, nonceB, rematch, stakes), sta
 if (o.awaitingVerdict()) { /* Mercy: the skull waits for the winner's thumb */ }
 ```
 
+
+## BOOT, everywhere
+
+Owner (2026-10-13): "People should be able to push the 'boot' button to do contextual things." BOOT is the toy's one button, so it means something in every state, and a small **hint glyph** on the rim beside the physical button always shows what a press will do now. When a hold means something else, a thin ring around the glyph fills while the button is held. When a double press means something, two dots sit under the glyph. A greyed glyph means "not now", and its pips say why (the meter short of a cost, an empty pantry). A kid never has to guess.
+
+The table is data, `sketch/blorb/boot.h` (`kBoot`), one row per state in precedence order. The Dish routes the button by it, and `Appearance::boot` carries the hint from it, so the glyph cannot drift from what the button does. Compile-time checks hold three rules: every state has a row, every state shows a hint, and no press can ever finish a pet or agree to a mortal duel (only a 3 s hold can). Rows marked "today" are what the firmware already does on `origin/battles`.
+
+| State (first match wins) | Press | Hold | Double press | Hint glyph |
+|---|---|---|---|---|
+| OTA question (`ota::Session` asking) | yes, update (today: `Session::press`, after 1.5 s) | the same | the same | download |
+| Sealed keepsake | nothing (today) | nothing | nothing | lock |
+| Duel: staking | confirm the tier under the tilt (Spar or Scrap) | 3 s: confirm Mortal, the skull filling | nothing | the tier's glyph |
+| Duel: my turn | lock the aimed stance as a quick special | 1.2 s: as a heavy special | nothing | the species' power glyph, one pip (quick) or two (heavy) |
+| Duel: my special winding up | nothing: the stance is committed | nothing | nothing | the power glyph with its countdown |
+| Duel: mercy, I won | spare | 3 s: finish, the skull filling | nothing | open hand, skull ring |
+| Duel: mercy, I am down | plead (a cheer floats up on the winner's screen) | the same | nothing | pleading hands |
+| Duel: a pet fell | nothing | nothing | nothing | candle |
+| Duel: the friends screen | ask a rematch | 3 s: hug, yes to a friend egg (a cradle still works) | leave | rematch arrows, heart ring |
+| Duel: lobby | pick the aimed friend | nothing | close the lobby | friend |
+| Founding nest | next egg | 1.2 s: keep this egg | nothing | arrow, check ring |
+| Clutch pick | next egg (today) | 1.2 s: keep this egg (today) | nothing | arrow, check ring |
+| Vigil (his remains) | lay a flower (presentation only) | nothing | nothing | flower |
+| Egg | peek: who is inside, for 3 s (presentation only) | nothing | nothing | peek |
+| Asleep | a pellet drops quietly, and may rot by morning (today) | 1.2 s: keep him tucked in (today's tuck-in gene) | nothing (a duel declines: zzz) | pellet, moon ring |
+| Awake, eating or playing | a pellet drops (today) | 1.2 s: tuck in (today) | open the duel lobby (D9's double-press detector) | pellet, moon ring, two dots |
+
+While a duel is open, BOOT is the duel's in every phase, the hold included (`kHoldPhaseCaptures`). So a heavy special never also tucks the pet in, and no pellets drop mid-duel. A shake, a drop and the lid always reach the pet. The double press is the one new gesture. D9 adds its detector (two presses within 400 ms), and v2's game wheel later takes the same gesture as a wheel with a duel row.
+
 ## Battle flow
 
 ### Consent and discovery
@@ -82,7 +110,8 @@ if (o.awaitingVerdict()) { /* Mercy: the skull waits for the winner's thumb */ }
 |---|---|---|
 | Tilt left / right / toward you | aims Pounce / Guard / Trick (the rotation already follows "up", so left is left) | |
 | Knock | locks the aimed stance | yes |
-| BOOT press | arms the power, if the meter holds its cost (otherwise the meter flashes "not yet") | yes |
+| BOOT press | instead of the knock: locks the aimed stance as a **quick special** ("The queued special"), if the meter holds the power's cost; otherwise the hint glyph is greyed with the pips still needed | yes |
+| BOOT hold 1.2 s | instead of the knock: locks the aimed stance as a **heavy special** | yes |
 | Double knock | sends a cheer (a heart, star, laugh or wave) | yes |
 | Shake | the pet foretells the friend's next stance (ask 25: a shake always tells the future) | never |
 | BOOT hold | outside Staking and Mercy, what it always means (today a tuck-in; under v2 a pellet). In Staking it is the Mortal confirm and in Mercy the Finish, and only there is it captured | Staking and Mercy only |
@@ -102,6 +131,46 @@ The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill a
 - **Friend egg:** "hug your pet". Each kid cradles their own pet for 3 s within 10 s. When both State packets say `hugged`, the devices swap genomes (below) and each stores a friend egg for its next clutch. `SPECIES.md` has the genetics.
 - The lid, face down, a drop or 20 s of silence ends the duel. In a Spar it is a draw. In a Scrap or a Mortal duel, the side that left while behind **fled**: it forfeits and keeps every wound already applied. Wounds land turn by turn and are saved at once, so pulling the cable undoes nothing. The tick a Mortal duel downs a pet, its device writes a "downed, pending" entry to `duels.log`. If the kid pulls the cable before the verdict, the pet lives, and the next boot folds the entry into "fled" forever. If instead the winner's side leaves during Mercy, the downed pet lives, the book says "the victor left", and nobody is marked fled. A log conflict is a draw for both. A drop during a duel reaches the pet as the real drop it is, and the wound clamp leaves room for it ("Stakes").
 
+
+
+## The queued special
+
+Owner (2026-10-13): "Maybe have a dark souls esque queued special move." A power is never instant. It is a committed, telegraphed, punishable special.
+
+**Committing.** On a duel turn, tilt aims as usual. A knock locks a plain stance. **BOOT instead locks the aimed stance as the special's hidden landing stance**, and spends the power's cost from the meter. A press is a **quick** special: one wind-up turn, then it lands. A 1.2 s hold is a **heavy** special: two wind-up turns. A special that would land past turn 15 is refused, and the hint greys.
+
+**Winding up.** On wind-up turns the pet **braces**, and the kid cannot change stance. The commit has already written every turn up to the landing into the move log. Both screens telegraph it: the pet glows in its power's colour, and the power glyph with a countdown (one pip or two) sits over it on the friend's screen too. What the friend cannot see is the landing stance. A braced pet:
+
+- bonks a Pounce off (nothing happens either way);
+- does nothing against a Guard;
+- **is caught by a Trick.** He loses a heart and is **staggered**. A quick special is lost (its landing turn plays as a plain stance, no power). A heavy one drops to quick strength.
+
+**Landing.** On the landing turn the hidden stance meets the friend's stance:
+
+- **It lands.** If the landing stance beats the friend's or ties it, the friend loses 1 heart plus the extra (quick +1, heavy +2), and the power fires.
+- **Riposted.** If the friend's stance beats the landing stance, the special is turned against its owner: he takes 1 + the extra, and the power does not fire.
+- **It whiffs.** A friend under Hush dodges it. And a countered Foresee whiffs instead of backfiring, because Grungo saw the counter coming.
+
+**Reading it.** The telegraph tells the friend when, never what. The friend's shake foretells the landing from the owner's habit, and Grungo's own landing turns into the counter only when the read is right. The friend's pet whispers the read: on a wind-up turn its lean glows on Trick ("stagger it!"), and on the landing turn it glows on the counter of the stance it expects. Learning when to stagger and when to guess the landing is the skill a 12-year-old masters and a 6-year-old is shown.
+
+**Determinism.** The queue lives in the move logs the devices already exchange, so `resolve()` stays pure, integer and mirror-symmetric. `MoveLog::appendSpecial()` appends the commit turn's entry (marked `Windup::Quick` or `Heavy`, with its stance written as Pounce and ignored, so it leaks nothing), a heavy's placeholder, and the landing entry carrying the hidden stance with `power` set. `resolve()` reads the wind-up from the commit entry. The landing stance is unreadable until that turn resolves, because `Outcome` holds only turns both logs reach, as for any locked move. A stagger only changes how `resolve()` reads the already-written landing entry, so both devices agree on it.
+
+**Measured** (`sketch/tools/special_probe.py 800`, Random vs Random, 81 pairs x 800 battles, with the roster's powers):
+
+- every species wins 0.482 to 0.530; the worst pair is 0.605, tighter than instant powers' 0.672;
+- specials land 0.593 of the time, are riposted 0.188, staggered 0.194, and whiff 0.036;
+- the median battle shortens from 12 turns to 7.
+
+Two other Foresee rules were measured and rejected: an always-counter landing (Grungo 0.667) and a plain landing (0.429). Lantern's cost moves from 4 to 3 (it measured 0.450 at 4). Other extras were also measured: quick +0 and heavy +1 left Grungo at 0.667 or 0.429 under the other Foresee rules, and quick +1 and heavy +1 gave no reason to choose a heavy.
+
+**How it meets the rest of the design.**
+
+- **Stances.** A special is a stance with stakes on it. It still loses to its counter, and that is the riposte.
+- **The element wheel.** Unchanged: a head-start pip and "SUPER!" stay display and tempo, never damage. A special's extra hearts do not depend on elements, so the wheel cannot snowball through them.
+- **Assist hearts.** Unchanged in number. Measured with specials, a reading parent beats a habit-bound kid 0.838 with no help and 0.761 with two hearts (0.923 and 0.801 without specials), because the telegraph gives the weaker kid something to read. Against a kid who follows the pet's whisper half the time, the parent wins 0.534 and 0.367. The whisper now also glows the stagger and the expected landing for the assisted side, brighter as the assist rises.
+- **Stakes and Mortal.** A special's hearts are hearts: in a Scrap or Mortal duel each one wounds, clamped by `woundRoom()` as always. A heavy landing or a riposte can down a pet, and the verdict is still the winner's 3 s hold. Battles are shorter, so the per-duel wound caps matter less often.
+- **The balance gate.** Unchanged bounds (species 430 to 570 permille, pairs 300 to 700). D4 re-measures with specials through the real `resolve()`, adding a **Queuer** player (queues whenever it can, heavy half the time, staggers a bracing friend) to the Random, Habit, Reader and Pet players. That includes the autopilot: `petChoice` decides whether the pet queues on a timed-out turn, from its Skill and its mood (high pluck or mettle queues heavy).
+- **The prowess fold.** A kid-picked special counts as a picked turn. A landed special counts as a won turn, a riposted one as a lost turn.
 
 ## Stakes
 
@@ -126,7 +195,7 @@ All numbers are starting values in `stakes.h` (`kStakes`), one row per tier, for
 
 **Wounds are the engine's, not the genes'.** The amounts come from the tier table, applied from the agreed Outcome by `woundFor()` turn by turn. Stimulus genes still decide what a duel feels like, but `duelFilter()` refuses any stimulus write to injury, life, toxin or an unnamed chemical at every tier. Two expression-time guards (unit D3) cover the second step. A gene reading daze or pluck may write only `sleep_gate`. And a receptor writing the die or cause locus is inert unless it reads a vital chemical (life, injury, toxin, starvation). The second guard is a rule for every pet, duel or not. It closes a mutation that wires pain, adrenaline, a drive, mettle or dread to `die`, which would otherwise fire mid-Scrap. So a duel ends a life in exactly two ways: a Finish someone chose, and the pet's own ordinary chemistry over the following days if he is badly hurt and neglected. The second is how wounds work, and the engine already has it.
 
-**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, a ripple for Splash, a ring for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap or Mortal duel. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
+**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, stitches for Splash, a bite for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap or Mortal duel. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
 
 ### How lethal by default (recommendation, and the alternatives)
 
@@ -184,7 +253,7 @@ What his line keeps:
 `resolve()` is the contract both devices share. It reads two cards, one seed and two move logs, replays every turn both logs reach from turn 0, and returns an `Outcome`. The turn order is in `duel.h`:
 
 1. A dozing side (Spore Puff) has no stance this turn. It loses the clash and deals nothing.
-2. **Powers.** A move that asks for its power, with a meter holding the cost, spends it. Gadget draws the power it becomes from Tinker's own luck. BeforeClash handlers read both original stances. Foresee turns Grungo's stance into the counter. Dash and Lantern win head bonks. Lantern dazzles. Hush starts.
+2. **Specials** ("The queued special"). A side bracing on a wind-up turn plays Brace. A side whose special lands this turn plays its hidden landing stance, and its power fires only if the special lands. Gadget draws the power it becomes from Tinker's own luck. BeforeClash handlers read both original stances. A landing Foresee turns into the counter of the friend's stance, and if it is countered anyway it whiffs. Dash and Lantern win head bonks. Lantern dazzles. Hush starts.
 3. **Clash.** `beats()` decides. Equal stances are a head bonk, which a side with bonk turns left wins.
 4. **Damage.** One heart goes to the clash loser. OnDamage handlers only add hits (Zap).
 5. **Block.** Block handlers only take hits away: Shell absorbs one, Hush cancels a lost clash, and a dazzled winner's hit misses on its luck. Splitting adding from taking away keeps both sides' handlers in one phase from reading what the other just wrote, which the mirror property needs (Zap against Shell).
@@ -220,16 +289,29 @@ Senders send at 5 Hz while the friend lacks something and at 1 Hz otherwise. A t
 
 The worst single pair is Hushwing over Mudge at 0.672, and the median battle is 12 turns. The first pass, with flat costs and one-turn Hush and Lantern, had Hushwing at 0.328 and Mossby at 0.620. Three changes moved it: Hush and Lantern last two turns, Shell no longer refunds a spark, and each power got its own cost. Then a cost sweep settled Dash at 3 and Spores at 6. Each sweep step is in the probe's history and reruns in about 30 s. The C++ gate (`tools/duel_balance.cpp`, unit D4) re-measures through the real `resolve()`: species within 430 to 570 permille, pairs within 300 to 700.
 
+**Measured through `resolve()`** (unit D4, `tools/duel_balance.cpp 1500`, 2026-10-13; the same numbers gate `test_duel_resolve`). Same players, 81 pairs x 1,500 battles, no cost changed:
+
+| Variant | Grungo | Mossby | Puffkin | Gilly | Mothwick | Mudge | Fizz | Hushwing | Tinker | Worst pair | Median turns |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Random, always fire (the probe's model) | 0.496 | 0.543 | 0.452 | 0.493 | 0.514 | 0.509 | 0.495 | 0.499 | 0.500 | Hushwing over Mudge 0.699 | 12 |
+| Random, BOOT on a random half of turns (armed) | 0.523 | 0.527 | 0.479 | 0.476 | 0.508 | 0.509 | 0.492 | 0.482 | 0.504 | Fizz over Hushwing 0.590 | 11 |
+| Both pets on autopilot (`petChoice`, 300 a pair) | 0.486 | 0.601 | 0.455 | 0.513 | 0.472 | 0.489 | 0.494 | 0.459 | 0.532 | Mossby over Puffkin 0.702 | 12 |
+
+Every species lands within 0.004 of the probe. The worst pair is 0.699 at 1,500 a pair and 0.693 at 6,000 (measured), so it sits just inside the 700 bound. A one-pip sweep of every cost found no single change that moves it without pushing another pair or species out of bounds (Hush 6 drops Hushwing to 0.418, Dash 2 puts Mudge over Fizz at 0.718; measured), so the costs stand. Arming only half the time narrows the wheel, because a power that fires later matters less. The autopilot row is the demo case. With less noise in the pet's pick (one knack rank instead of four), two autopilots replayed the same battle every time, and Grungo lost to Puffkin 300 times in 300 (measured).
+
 ## Fairness: a 6-year-old against a parent
 
-The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time. The probe models the whisper as a perfect frequency reader. The real lean is `petChoice` over a Skill table that starts each life at zero, so the lean-follower row is an upper bound until D4 measures `petChoice` itself.
+The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time. The probe models the whisper as a perfect frequency reader. D4 measured the real one: `petChoice` over a Skill table that starts each battle at zero and learns after every turn.
 
 | Parent's win rate | no help | 1 heart | 2 hearts | 3 hearts |
 |---|---|---|---|---|
 | against a habit kid | 0.923 | 0.872 | 0.801 | 0.705 |
 | against a kid who follows the lean half the time | 0.491 | 0.311 | 0.172 | 0.092 |
+| the same, through `resolve()` and the real `petChoice` (D4) | 0.478 | 0.291 | 0.160 | (max 2) |
+| against a pet on autopilot every turn (D4) | 0.156 | 0.049 | 0.012 | (max 2) |
+| against a habit kid, through `resolve()` (D4) | 0.924 | 0.876 | 0.803 | (max 2) |
 
-All measured in the probe, with the caveat above. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. How good `petChoice` gets is D4's measurement. The design uses both, in this order:
+The first two rows are measured in the probe, with the caveat above; the D4 rows are measured through `resolve()` at 300 battles a pair. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. The real `petChoice` is as good as the probe assumed. A pet left on autopilot beats this scripted parent 0.844 of the time, because the parent counters a habit and the pet's Skill learns the counter to the counter. A real parent adapts, so read that row as "the autopilot is no pushover", not as a ranking. The design uses both, in this order:
 
 1. **The pet whispers.** The pet's lean is its Skill reading of the friend, and it always shows as a soft glow on one glyph. Its brightness rises with the assist, so a young kid is shown the reading the pet has made. Following your pet is how a 6-year-old beats a parent, and it is what the toy wants kids to learn anyway.
 2. **Assist hearts, by skill and not by level** (graft from candidate C). The card carries the kid's **prowess**, a running mean (1/8 step) of how well that kid has picked: the share of turns the kid chose (not the pet) that won or bonked. Inside a 24-point dead band nobody gets help. Past it, the weaker side gets one heart per 32 points, at most two. The stronger side loses nothing. A kid who starts following the lean plays better, their prowess rises, and the help backs off by itself, so the 0.311 and 0.172 cells do not persist.
@@ -281,6 +363,7 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 - **Assist hearts** look like the pet cheering, never like a label.
 - **Stakes and fate:** the three tier glyphs (a feather for Spar, a bandage for Scrap, a skull for Mortal) with both pets' skulls; in Mercy, the downed pet, the skull filling under the winner's thumb, and the plea cheers floating up; after, the new scars drawn on, and the fallen pet's remains in the friend's dish.
 - **At home:** scars on the pet for the rest of his life, trophies and debt and vendetta marks on the rim.
+- **Where a scar goes:** on a limb, a shoulder, a side or the head, never on the front of the chest or the belly. A scar's x and y come from the hit's luck, so D11 maps them into those regions of each body rather than anywhere in its bounding box. No battle mark (scar, war paint, trophy or vendetta mark) may read as a piercing or a body ornament. The owner vetoed the ripple and ring scars for exactly that, which is why the kinds are claw, scorch, notch, stitches and bite.
 - **No reading needed.** Text appears only as the pet's voice line on the existing marquee. Everything a 6-year-old needs is a picture, and no state is shown by colour alone.
 
 ## Consent, stakes and fairness
@@ -421,7 +504,7 @@ There were no dropouts.
 - We accept that a friend's unrevealed move sits in RAM, readable by a modified firmware, in exchange for one packet kind per turn and no cryptography.
 - We accept that a battle one device never finished is a fizzle there and a result on the other side, in exchange for no agreement protocol beyond the logs. Rewards are nearly equal either way.
 - We accept that genes shape style and not strength, in exchange for no line ever becoming a bully.
-- We accept per-pair matchups up to 0.672 (measured), in exchange for nine distinct powers. The C++ harness can tighten them.
+- We accept per-pair matchups up to 0.699 (measured through `resolve()`, Hushwing over Mudge), in exchange for nine distinct powers. No one-pip cost change tightens it without breaking another bound.
 - We accept every device carrying all nine packs (about 630 KB, estimate), in exchange for drawing any friend and any hybrid.
 - We accept Wi-Fi start-up latency (a guess of under a second) at each duel, in exchange for an untouched heap the rest of the time.
 - We accept that only shared-locus genes cross, in exchange for no lineage format change.
@@ -455,13 +538,28 @@ Every file has one owner. "C" is created and "E" is edited. Engine paths are und
 
 | Unit | Delivers | Acceptance | Needed by |
 |---|---|---|---|
-| **ART1 Scar overlays** | 5 kinds (claw, scorch, notch, ripple, ring) x 3 sizes, generic across species, recoloured from the skin region at draw time | byte-stable conversion; each reads on all nine bodies at 240 px (a contact sheet the owner looks at) | D11 |
+| **ART1 Scar overlays** | 5 kinds (claw, scorch, notch, stitches, bite) x 3 sizes, generic across species, recoloured from the skin region at draw time | byte-stable conversion; each reads on all nine bodies at 240 px (a contact sheet the owner looks at) | D11 |
 | **ART2 Trophy tokens** | 9 tokens at 24 x 24, one per species (shell, spore cap, gill frond, wing scale, fin, hood, lamp, feather, gear) | byte-stable; legible on the rim at 24 px | D11 |
 | **ART3 Duel glyphs** | stance glyphs (3), power glyphs (9), tier glyphs (feather, bandage, skull) with a skull fill, the debt and vendetta marks, the bandage for `Wounded` | byte-stable; each distinguishable without colour | D11 |
 
 The downed pet, the fallen remains and the battle stances need no new art. Remains are the converter's settled sleeping frame. The downed pose and the lunge, curl and sidestep are the renderer's procedural motion on the one body. The power uses each species' face 6.
 
 No file appears in two rows. **Order:** D1, then D2, then D3 and D4 in parallel, then D5, D6 and D7, then D10 and D8, then D9, then D11 and D14 (with ART1 to ART3 in parallel from the start), then D12 and D13. D4 goes first among equals after D2, because its numbers decide whether a duel is fun, and the C++ harness should confirm the probe before any radio code exists.
+
+
+### Amendment: BOOT everywhere and the queued special (branch `design-boot`)
+
+What changes for units already building. Files keep their owners.
+
+| Unit | Change |
+|---|---|
+| **D4** rules, powers and mind | `Move::windup` (bits 6 and 7), `MoveLog::appendSpecial`, and Brace, stagger, landing, riposte and whiff in `resolve()` (`TurnReport::bracing` and `special`, `SideState::queued` and `landsOn`), with `SpecialRules` numbers. Power handlers fire only on a landing. Foresee: a countered landing whiffs. `defs/powers.def`: lantern cost 4 to 3. `petChoice` decides queuing on the autopilot. The tournament adds the Queuer player and records the special stats. Acceptance: the mirror property with specials; prefix monotonicity across a commit; a staggered quick's landing plays as a plain stance; reproduces `special_probe.py` within 0.03 per species; bounds unchanged. |
+| **D5** card | none (power cost read from `powers.def` as before) |
+| **D8** wire and session | nothing new on the wire (`Move` already travels as one byte; the decode cap stays `kLogSlots`). The session appends the commit's entries in one go and treats them as locked turns for "they locked". The BOOT routing for Staking, Mercy, Friends and Lobby follows `boot.h`. `kHoldPhaseCaptures` covers every duel phase. |
+| **D9** Dish input routing | `boot.h` becomes the routing table: `bootContext()` picks the row, the Dish fires the row's stimuli or duel input, and `Appearance::boot` carries the `BootHint`. The double-press detector (two presses within 400 ms) opens the lobby from Awake. Egg peek and vigil flower are presentation only. Acceptance: one test per `kBoot` row drives the button and checks the act and the hint; a press never finishes or confirms Mortal. |
+| **D11** duel screen | the wind-up telegraph on both screens (power colour glow, glyph, countdown pips), the landing, riposte, stagger and whiff beats, and the rim hint glyph in every state (`BootHint`: glyph, greyed pips, hold ring, double-press dots). Goldens: a quick wind-up, a heavy wind-up, a landing, a riposte, a stagger, and the hint in each `kBoot` state. |
+| **D13** sim film | the duel bot queues specials (quick and heavy) and sometimes staggers one, so the film shows a telegraph, a landing, a riposte and a stagger. |
+| **ART4** BOOT hint glyphs (new art unit) | 16 x 16 glyphs, distinguishable without colour: pellet, moon, download, lock, friend, door, arrow, check, flower, peek, open hand, pleading hands, candle, rematch arrows, heart, countdown pips. The tier, stance and power glyphs come from ART3. Acceptance: byte-stable conversion, and each glyph legible on the rim at 16 px (a contact sheet the owner looks at). |
 
 ## Open questions for the owner
 
@@ -482,13 +580,16 @@ Only product calls. Each has the default this design ships. Your ruling that pet
 13. **Parent controls:** default all tiers allowed. `TWIST stakes spar|scrap|mortal` lowers a device's ceiling, and `TWIST duels off` turns duels off.
 14. **Only vital chemicals may write the die locus, for every pet:** yes? Default: yes. It changes no starter. It stops a mutated line from dying of, say, pain or dread wired straight to `die`. Without it, that wiring could fire mid-duel, in a Scrap that promised no death.
 15. **A drop during a duel:** does it injure? Recommended: yes, at every tier, as a drop always does, because the body is real. In a Scrap or a Mortal duel it also counts as fleeing (a forfeit). The wound clamp keeps room for one drop, so a fumble never turns a duel into a death. The alternative is that a drop during a Spar does not injure, which makes the friendly tier fully safe for the youngest.
+16. **Specials replace instant powers entirely?** Default: yes. Every power is a queued special. The alternative keeps an instant version at a higher cost.
+17. **Wind-up numbers:** quick 1 turn (+1 heart), heavy 2 turns (+2). Default: as measured. Longer wind-ups were not measured.
+18. **The double press opens the duel lobby from the ordinary pet screen.** Default: yes (today the double press means nothing, and the knock is taken).
 
 ## Risks
 
 - **The Wi-Fi heap is an estimate.** D12 measures it first. The levers, in order: Wi-Fi buffers in PSRAM (already allowed), fewer static RX buffers, then pausing BLE advertising during a duel.
 - **A clink may not trip both tap engines.** Pointing and knocking always works.
 - **RSSI in IDF 4.4 needs a promiscuous hook.** If it misbehaves beside ESP-NOW, the gate becomes "matched by clink or mutual choice only", which is still consent on both sides.
-- **The pair spread** (worst 0.672) may feel unfair within one family, and with Mortal it matters more. D4 can tighten it with costs.
+- **The pair spread** (worst 0.699, Hushwing over Mudge) may feel unfair within one family, and with Mortal it matters more. Costs alone did not tighten it (D4's sweep); a rule change to Hush or the element head start would.
 - **A child's pet killed by a cousin** is the point of the ruling, and it will still land hard some days. The mitigations are design, not refusal: consent with the skull shown, the fairness gate, mercy by default, and a death that leaves a clutch and a vendetta rather than nothing.
 - **The forecast is coarse.** A Scrap it allows can still contribute to a later death if the pet is then neglected. That is intended ("wounds work"), and the stakes screen says so with the bandage.
 - **v2's double-press detector does not exist yet.** D9 adds a minimal one, and v2 U3 replaces it.
