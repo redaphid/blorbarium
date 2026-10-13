@@ -41,11 +41,16 @@ CASES = {
     "elder": 17600,
     "thought": 9000,        # a thought, partway through its one pass
     "prophecy": 9000,       # a prophecy after a shake: foresee face, no hop
+    "sealed": 3000,         # a keepsake that would not open: asleep in amber, whatever the feed does
 }
+
+# Cases that boot a different board, as the sim's own flags.
+FLAGS = {"sealed": ["--sealed"]}
 
 # A case that must not look like another: a hop that drew as idle once passed
 # its golden because the golden was idle too. Share of the disc that must differ.
-UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01)}
+UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01),
+          "sealed": ("sleep", 0.2)}
 
 # A pixel has moved when a channel is further off than this; the panel is
 # RGB565, so neighbouring colours are 4 to 8 counts apart.
@@ -62,7 +67,7 @@ def shoot(case, after_ms):
         for run in range(2):
             bmp = os.path.join(tmp, "%d.bmp" % run)
             r = subprocess.run([PROGRAM, "--headless", "--clock", "fixed", "--script", feed,
-                                "--shot", bmp, "--after", str(after_ms)],
+                                "--shot", bmp, "--after", str(after_ms)] + FLAGS.get(case, []),
                                stdin=subprocess.DEVNULL, capture_output=True, text=True,
                                env={k: v for k, v in os.environ.items() if k != "BLORB_SIM_MAC"})
             if r.returncode != 0 or not os.path.exists(bmp):

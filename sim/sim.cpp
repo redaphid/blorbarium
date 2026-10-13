@@ -12,6 +12,7 @@
 //   sim --script feed.txt                lines stamped `@<ms>`; brings the fixed clock
 //   sim --shot out.bmp --after 3000      one frame, then quit
 //   sim --record dir/ --fps 20 --for 8000   every frame to dir/, then quit
+//   sim --sealed                         boot as a board whose keepsake would not open
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
@@ -254,6 +255,7 @@ int main(int argc, char** argv) {
     // SDL's dummy video driver: the panel still draws into its framebuffer, so
     // a shot is the same frame, but nothing asks for a display.
     else if (!strcmp(a, "--headless")) setenv("SDL_VIDEODRIVER", "dummy", 1);
+    else if (!strcmp(a, "--sealed")) simSealed = true;
     else if (!strcmp(a, "--clock") && i + 1 < argc) {
       const char* c = argv[++i];
       if (strcmp(c, "fixed") && strcmp(c, "wall")) { fprintf(stderr, "sim: --clock fixed|wall, not %s\n", c); return 2; }
