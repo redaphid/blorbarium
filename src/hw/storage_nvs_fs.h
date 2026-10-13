@@ -27,18 +27,31 @@ inline Where whereOf(const char* name) { return std::strncmp(name, "snap.", 5) =
 
 class NvsFsStorage : public blorb::Storage {
  public:
-  blorb::Provisioned begin() {
+  // `hold`: this image is on trial (docs/ota.md): open read-only, format
+  // nothing, write nothing until releaseHold().
+  blorb::Provisioned begin(bool hold = false) {
     SlotsVolume slots(nvs_);
     FilesVolume files;
-    const blorb::Provisioned p = blorb::provision(slots, files, kBlock);
+    const blorb::Provisioned p = blorb::provision(slots, files, kBlock, hold);
     slotsUp_ = isUp(p.slots.opened);
     filesUp_ = isUp(p.files.opened);
     // A board with a keepsake left alone is sealed: whatever opened is read, never written.
-    slotsWrite_ = slotsUp_ && p.slots.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
-    filesWrite_ = filesUp_ && p.files.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
+    slotsWrite_ = !hold && slotsUp_ && p.slots.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
+    filesWrite_ = !hold && filesUp_ && p.files.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
+    held_ = hold && !blorb::leftAlone(p);
     return p;
   }
+  // The trial kept this image: open for writing what begin() opened read-only.
+  void releaseHold() {
+    if (!held_) return;
+    held_ = false;
+    SlotsVolume slots(nvs_);
+    FilesVolume files;
+    slotsWrite_ = slotsUp_ && slots.writable();
+    filesWrite_ = filesUp_ && files.writable();
+  }
   uint32_t writes() const { return writes_; }
+  bool writable() override { return slotsWrite_ || filesWrite_; }
 
   std::optional<size_t> read(const char* name, size_t offset, uint8_t* buf, size_t cap) override {
     return whereOf(name) == Where::Slot ? readSlot(name, offset, buf, cap) : readFile(name, offset, buf, cap);
@@ -208,6 +221,7 @@ class NvsFsStorage : public blorb::Storage {
 
   nvs_handle_t nvs_ = 0;
   bool slotsUp_ = false, slotsWrite_ = false;
+  bool held_ = false;
   bool filesUp_ = false, filesWrite_ = false;
   uint32_t writes_ = 0;
 };

@@ -45,8 +45,10 @@ class Volume {
 };
 
 enum class Holds : uint8_t { Blank, Foreign, Pet, Unreadable };
-// ReadOnly: it opened, but not for writing.
-enum class Opened : uint8_t { Ok, Formatted, LeftAlone, FormatFailed, ReadOnly };
+// ReadOnly: it opened, but not for writing. HeldForTrial: it would have been
+// formatted, but this image is on trial (docs/ota.md) and formats nothing; the
+// board runs sealed, so the trial rolls back to the image that owns the flash.
+enum class Opened : uint8_t { Ok, Formatted, LeftAlone, FormatFailed, ReadOnly, HeldForTrial };
 
 // `held` is read only when that partition would not open.
 struct VolumeReport { Opened opened = Opened::Ok; std::optional<Holds> held; };
@@ -54,11 +56,15 @@ struct Provisioned { VolumeReport slots, files; };
 
 Holds slotsHold(Volume&);
 Holds filesHold(Volume&, uint32_t blockSize);
-Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize);
+// `hold`: an image on trial. It opens read-only and calls neither writable()
+// nor format(); the caller opens for writing once the trial keeps the image.
+Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize, bool hold = false);
 
 // A keepsake is on the flash that this boot could not open: the Dish runs sealed.
 inline bool leftAlone(const Provisioned& p) {
-  return p.slots.opened == Opened::LeftAlone || p.files.opened == Opened::LeftAlone;
+  for (Opened o : {p.slots.opened, p.files.opened})
+    if (o == Opened::LeftAlone || o == Opened::HeldForTrial) return true;
+  return false;
 }
 
 // One line for the boot log: what the partition held and what boot did about it.

@@ -21,6 +21,8 @@ class Storage {
   // quarantine and to swap a rewritten file in; nothing is ever deleted.
   virtual bool rename(const char* from, const char* to) = 0;
   virtual size_t size(const char* name) = 0;
+  // False when every write would be refused, so a caller can skip building one.
+  virtual bool writable() { return true; }
 };
 
 // Wall time in seconds since 1970, or nullopt when this source has none now.

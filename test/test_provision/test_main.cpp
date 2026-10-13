@@ -402,6 +402,35 @@ TEST(Writing, OneThatWillNotOpenForWritingSaysSo) {
   EXPECT_EQ(p.files.opened, Opened::Ok);
 }
 
+// ---- an image on trial (docs/ota.md "The trial"): the flash is still the old image's ----
+
+TEST(OnTrial, AnImageOnTrialFormatsNothingAndRunsSealed) {
+  Board b({foreign(kPetSize), false}, {fixture("petfs_head.bin", kPetfsSize), true});   // `pet` would be formatted
+  const std::vector<uint8_t> petBytes = b.pet.bytes;
+  const Provisioned p = provision(b.pet, b.petfs, kBlock, true);
+  EXPECT_EQ(p.slots.opened, Opened::HeldForTrial);
+  EXPECT_TRUE(leftAlone(p)) << "it runs sealed, is not Resumed, and its trial rolls it back";
+  EXPECT_EQ(b.pet.formats + b.petfs.formats + b.pet.rwOpens + b.petfs.rwOpens, 0);
+  EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+TEST(OnTrial, ABlankBoardOnTrialFormatsNothing) {
+  Board b({blank(kPetSize), false}, {blank(kPetfsSize), false});
+  const Provisioned p = provision(b.pet, b.petfs, kBlock, true);
+  EXPECT_EQ(p.slots.opened, Opened::HeldForTrial);
+  EXPECT_EQ(p.files.opened, Opened::HeldForTrial);
+  EXPECT_EQ(b.pet.formats + b.petfs.formats, 0);
+}
+
+TEST(OnTrial, AnImageOnTrialOpensNothingForWriting) {
+  Board b({fixture("nvs_pet_v1.bin", kPetSize), true}, {fixture("petfs_head.bin", kPetfsSize), true});
+  const Provisioned p = provision(b.pet, b.petfs, kBlock, true);
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.files.opened, Opened::Ok);
+  EXPECT_FALSE(leftAlone(p)) << "it reads the pet it was handed";
+  EXPECT_EQ(b.pet.rwOpens + b.petfs.rwOpens, 0) << "a read-write NVS open can write";
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
