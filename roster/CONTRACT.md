@@ -145,7 +145,7 @@ pack per device is engine work, left for whoever wires battles and species.
 ## Battle art (BATTLES.md ART1 to ART3)
 
 `python3 tools/sprite_pack.py --duel` draws `tools/duel_art.py` and writes
-`pets/duel/duel_art.h`: one palette, 46 frames, about 19 KB, the same bytes every run.
+`pets/duel/duel_art.h`: one palette, 88 frames, about 27 KB, the same bytes every run.
 Everything is drawn in code at device scale, not generated. Indexes follow the battle
 sketch's enums:
 
@@ -158,6 +158,16 @@ sketch's enums:
 | `kTiers[3]` | spar (feather), scrap (plaster), mortal (full skull) | ART3, 24 px |
 | `kElements[3]` | `Element`: splash (a drop), sprout (a seedling), spark (a sparkle), for showing who beats whom; optional | ART3, 24 px |
 | `kSkullEmpty`, `kDebt`, `kVendetta`, `kWounded` | the skull to fill, a heart tied with string, a glaring eye under a heavy brow, a small plaster | ART3 |
+
+ART4, the BOOT hints (`tools/boot_art.py`, BATTLES.md "Amendment", `boot.h`), are in the
+same header, 16 px:
+
+| array | index | frames |
+|---|---|---|
+| `kBootGlyphs[22]` | `BootGlyph`: pellet (a food bowl), moon, peek (an egg with a "?"), flower, arrow, check, lock, download, friend (two people), door, open hand, plead (palms together), candle, rematch (two arrows chasing), heart, countdown (an hourglass; D11 draws the turns left) | empty for None, Swords (unused by `kBoot`, and not drawn: no weapons), Tier, Skull and the specials, which are `kTiers` and `kPowers` |
+| `kBootGlyphsGrey[22]` | the same, greyed: "not now"; D11 draws the pips beside it | |
+| `kHoldRing[9]` | the 22 px ring round a glyph, filling clockwise from the top: step = holdFill * 8 / 255 | |
+| `kDoublePress` | two short bars under the glyph (bars, not dots) | |
 
 No piece of battle art has a ring, a stud or paired dots: the owner vetoed the ring and
 ripple scars because on a chest they read as piercings. Place scars on the head,

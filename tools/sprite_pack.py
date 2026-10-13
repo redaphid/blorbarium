@@ -977,10 +977,11 @@ DUEL_BUDGET = {"skin": 40, INVARIANT: 215}   # scars are skin shades; everything
 
 
 def build_duel():
+    import boot_art
     import duel_art
     global BUDGET
     BUDGET = {**BUDGET, **DUEL_BUDGET}
-    frames = duel_art.frames()
+    frames = {**duel_art.frames(), **boot_art.frames()}
     entries, by_region = build_palette(list(frames.values()))
     return entries, frames, {n: index(s, by_region) for n, s in frames.items()}
 
@@ -1041,6 +1042,16 @@ def emit_duel(entries, frames, idx):
           "inline constexpr paint::FrameRef kTiers[3] = {" + ", ".join(f"kTier{cap(n)}" for n, _ in duel_art.TIERS) + "};",
           "// By Element (species.h): splash (a drop), sprout (a seedling), spark (a sparkle).",
           "inline constexpr paint::FrameRef kElements[3] = {" + ", ".join(f"kElement{cap(n)}" for n, _ in duel_art.ELEMENTS) + "};",
+          ""]
+    import boot_art
+    ref = lambda n, grey: f"kBoot{n}{'Grey' if grey else ''}" if f"Boot{n}" in frames else "paint::FrameRef{}"
+    L += ["// ART4, by BootGlyph (boot.h). An empty FrameRef is a slot ART4 does not draw: None, Swords",
+          "// (unused by kBoot, and no weapons on the toy), and Tier, Skull and the specials, which",
+          "// are kTiers and kPowers. The greyed twin says \"not now\"; D11 draws the pips beside it.",
+          "inline constexpr paint::FrameRef kBootGlyphs[] = {" + ", ".join(ref(n, False) for n in boot_art.NAMES) + "};",
+          "inline constexpr paint::FrameRef kBootGlyphsGrey[] = {" + ", ".join(ref(n, True) for n in boot_art.NAMES) + "};",
+          f"// The hold ring, 22 px round a 16 px glyph: step = holdFill * {boot_art.HOLD_STEPS} / 255, rounded.",
+          "inline constexpr paint::FrameRef kHoldRing[] = {" + ", ".join(f"kHoldRing{i}" for i in range(boot_art.HOLD_STEPS + 1)) + "};",
           "",
           "}  // namespace duel_art",
           ""]
@@ -1140,7 +1151,32 @@ def duel_sheets(text, outdir):
     labs = [n.replace("Stance", "").replace("Power", "").replace("Tier", "").replace("Element", "el ") for n in names]
     strip(names, labs, "ART3 glyphs: stances, powers, tiers, the empty skull, debt, vendetta, wounded; colour, then grey",
           outdir / "art3-glyphs.png", rim=names[:3] + names[12:15])
-    for n in ("art1-scars.png", "art2-trophies.png", "art3-glyphs.png"):
+    import boot_art
+    drawn = [n for n in boot_art.NAMES if f"Boot{n}" in frames]
+    big = 6
+    cw = 16 * big + 24
+    sheet = Image.new("RGB", (20 + cw * len(drawn), 40 + 3 * (16 * big + 28) + 120), BG)
+    d = ImageDraw.Draw(sheet)
+    label(d, (8, 8), "ART4 BOOT hints: colour, grey, greyed (not now); below, at 1:1 on the rim with the hold ring filling and the double-press bars")
+    for j, n in enumerate(drawn):
+        for row, (name, grey) in enumerate(((f"Boot{n}", False), (f"Boot{n}", True), (f"Boot{n}Grey", False))):
+            im = rgba(name, grey)
+            im = im.resize((im.width * big, im.height * big), Image.NEAREST)
+            y0 = 40 + row * (16 * big + 28)
+            sheet.paste(im, (10 + j * cw + (cw - im.width) // 2, y0), im)
+            label(d, (10 + j * cw + 4, y0 + 16 * big + 4), n)
+    y0 = sheet.height - 110
+    for j, n in enumerate(drawn):
+        cx, cy = 30 + j * 44, y0 + 30
+        ring = rgba(f"HoldRing{j % (boot_art.HOLD_STEPS + 1)}")
+        sheet.paste(ring, (cx - 11, cy - 11), ring)
+        g = rgba(f"Boot{n}")
+        sheet.paste(g, (cx - 8, cy - 8), g)
+        if j % 3 == 0:
+            dm = rgba("DoublePress")
+            sheet.paste(dm, (cx - 6, cy + 14), dm)
+    sheet.save(outdir / "art4-boot.png")
+    for n in ("art1-scars.png", "art2-trophies.png", "art3-glyphs.png", "art4-boot.png"):
         print("sheet", outdir / n)
 
 
