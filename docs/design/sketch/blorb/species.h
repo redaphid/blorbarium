@@ -193,16 +193,16 @@ static_assert(speciesInfo(foundingNest(0).eggs[0]).element == Element::Splash &&
 
 // Grungo's recipe with the row's bytes, plus a SpeciesGene, a PowerGene and a
 // KnackGene ranked toward the row's style, plus the duel feeling genes
-// (kid_safe.h names the stimuli). starterGenome(seed) stays grungo's base
+// (stakes.h names the stimuli). starterGenome(seed) stays grungo's base
 // recipe, and starterGenomeOf(kGrungo, seed) differs from it only by the
 // appended genes. A pet already alive keeps its genome.
 //
 // Crossing needs every recipe gene at the same uid on every device, whatever
 // the build. So each recipe line owns a fixed uid: a block the build leaves
-// out (kNeglectCanKill's four starvation genes on a kids' build) skips its
+// out (kNeglectCanKill's four starvation genes, were it ever turned off) skips its
 // uids rather than shifting the rest, and the appended genes take the fixed
-// uids below, past any recipe uid. Unit D3's test crosses an owner-built
-// genome with a kids'-built one.
+// uids below, past any recipe uid. Unit D3's test crosses genomes built
+// with and without that block.
 inline constexpr GeneUid kSpeciesGeneUid{0x0F00}, kPowerGeneUid{0x0F40}, kKnackGeneUid{0x0F41};
 Genome starterGenomeOf(SpeciesId, uint32_t speciesSeed);
 

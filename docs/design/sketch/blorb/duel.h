@@ -15,14 +15,17 @@
 // and powers in one phase read the same inputs. test_duel_resolve checks
 // resolve(B, A, s, mB, mA) is the mirror of resolve(A, B, s, mA, mB).
 //
-// Kid safety lives in the rules: hearts exist only inside a battle, the loser
-// faints and nothing else, and no number in here is written back into a
-// creature except as a stimulus (kid_safe.h decides what those may do).
+// Stakes (stakes.h) are agreed before turn 0 and are an input like the cards:
+// resolve() knows whether a side at 0 hearts faints (Spar, Scrap) or is
+// downed and waits for a verdict (Mortal). Nothing in here touches a
+// creature: each device applies its OWN pet's wound, scars and fate from the
+// shared Outcome (dish_duel.h), so both screens agree on what happened.
 #include <cstddef>
 #include <cstdint>
 #include "blorb/fixed.h"
 #include "blorb/genes.h"
 #include "blorb/species.h"
+#include "blorb/stakes.h"
 
 namespace blorb {
 
@@ -31,23 +34,32 @@ struct DuelRules {
   static constexpr uint8_t kMaxAssistHearts = 2;
   static constexpr uint8_t kElementHeadStart = 1;   // SUPER: the side whose element wins starts with a pip lit
   static constexpr uint8_t kMaxTurns = 15;          // then whoever has more hearts wins; equal is a draw
+  static constexpr uint8_t kLogSlots = kMaxTurns + 1;   // one more for the winner's verdict on a downed pet
   static constexpr uint8_t kMaxLevel = 12;          // display only: level never changes a number in resolve()
   static constexpr uint8_t kCardVersion = 1;
 };
 
-enum class Side : uint8_t { A = 0, B = 1 };
+enum class Side : uint8_t { A = 0, B = 1 };   // also declared in stakes.h
 constexpr Side other(Side s) { return s == Side::A ? Side::B : Side::A; }
 
 // One locked choice. `byPet` marks a turn the kid let run out, or a turn the
 // pet slept through under spores: the pet chose (its Skill), which the screen
 // celebrates rather than scolds. A dozing side's move is appended at once by
 // the session, so the logs keep marching; resolve() ignores its stance.
+// After a Mortal downing, the winner appends one more Move whose `verdict` is
+// Spare or Finish (its stance is ignored); that slot is the only one past
+// kMaxTurns, and only the winner may fill it.
 struct Move {
   Stance stance = Stance::Pounce;
   bool power = false;
   bool byPet = false;
-  constexpr uint8_t pack() const { return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0)); }
-  static constexpr Move unpack(uint8_t b) { return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0}; }
+  Verdict verdict = Verdict::None;
+  constexpr uint8_t pack() const {
+    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4));
+  }
+  static constexpr Move unpack(uint8_t b) {
+    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3)};
+  }
 };
 
 // One side's moves: append-only, and the only state either device writes
@@ -60,7 +72,7 @@ class MoveLog {
   uint8_t count() const { return count_; }
   Move at(uint8_t turn) const { return Move::unpack(packed_[turn]); }
   const uint8_t* packed() const { return packed_; }
-  bool append(Move);                 // false once kMaxTurns are in
+  bool append(Move);                 // false once kLogSlots are in
 
   enum class Merge : uint8_t { Same, Grew, Stale, Conflict };
   // Conflict: the heard prefix disagrees with what is held. Only a bug or a
@@ -68,7 +80,7 @@ class MoveLog {
   Merge adopt(const uint8_t* packed, uint8_t count);
 
  private:
-  uint8_t packed_[DuelRules::kMaxTurns]{};
+  uint8_t packed_[DuelRules::kLogSlots]{};
   uint8_t count_ = 0;
 };
 
@@ -152,26 +164,33 @@ struct SideState {
 enum class Ending : uint8_t { Ongoing, AWon, BWon, Draw };
 
 struct Outcome {
+  Stakes stakes = Stakes::Spar;
   SideState side[2]{};
   TurnReport turns[DuelRules::kMaxTurns]{};
   uint8_t resolved = 0;    // turns with both moves known; turns past it are unreadable by design
   Ending ending = Ending::Ongoing;
+  bool downed[2]{};        // Mortal: fell to 0 hearts (Spar and Scrap: fainted, nothing pending)
+  Verdict verdict = Verdict::None;   // Mortal: the winner's, once it arrives; None while pending
+  bool awaitingVerdict() const { return stakes == Stakes::Mortal && (downed[0] != downed[1]) && verdict == Verdict::None; }
   uint32_t hash() const;   // both devices log it; the two books can be compared
 };
 
 // Symmetric in the two nonces, so neither device has to be "first". The
 // rematch number is part of the seed AND of the battle id on the wire, so a
 // late packet from the previous bout can never feed the next one.
-uint32_t duelSeed(uint32_t nonceA, uint32_t nonceB, uint8_t rematch);
+uint32_t duelSeed(uint32_t nonceA, uint32_t nonceB, uint8_t rematch, Stakes);
 
 // The battle's name, in both books and on the air: both nonces and the
 // rematch number. A packet from bout n never feeds bout n+1, because its id
 // differs (candidate A kept one id across rematches, so a late State could
 // seed a fresh log).
+// The stakes are part of the id too: two devices can never resolve one battle
+// at two different stakes.
 struct BattleId {
-  uint32_t seed = 0;     // duelSeed(nonceA, nonceB, rematch)
+  uint32_t seed = 0;     // duelSeed(nonceA, nonceB, rematch, stakes)
   uint8_t rematch = 0;
-  friend bool operator==(BattleId a, BattleId b) { return a.seed == b.seed && a.rematch == b.rematch; }
+  Stakes stakes = Stakes::Spar;
+  friend bool operator==(BattleId a, BattleId b) { return a.seed == b.seed && a.rematch == b.rematch && a.stakes == b.stakes; }
   friend bool operator!=(BattleId a, BattleId b) { return !(a == b); }
 };
 
@@ -214,9 +233,11 @@ static_assert(Assist::hearts(128, 140) == 0 && Assist::hearts(100, 140) == 1 && 
 //     dozing, +1 more to the clash loser (the rally), capped at kMeterMax;
 //     the turn counters tick down. Nothing rewards the winner: the probe
 //     measured every winner reward snowballing.
-//   7 a side at 0 hearts faints: the battle ends (both at 0: a draw)
+//   7 a side at 0 hearts faints (Spar, Scrap) or is downed (Mortal): the
+//     battle ends (both at 0: a draw, and nobody is downed). A downed side's
+//     fate is the winner's verdict, read from the winner's last log slot.
 // A powered move whose meter is short plays as an unpowered move.
-Outcome resolve(const BattleCard& a, const BattleCard& b, uint32_t seed, const MoveLog& movesA,
+Outcome resolve(const BattleCard& a, const BattleCard& b, uint32_t seed, Stakes, const MoveLog& movesA,
                 const MoveLog& movesB);
 
 // What a power handler sees: the turn so far, from its own side's view.

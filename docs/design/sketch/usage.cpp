@@ -11,7 +11,7 @@
 #include "blorb/duel_session.h"
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
-#include "blorb/kid_safe.h"
+#include "blorb/stakes.h"
 #include "blorb/paint_duel.h"
 #include "blorb/species.h"
 #include "hw/radio.h"
@@ -57,8 +57,9 @@ void dishTick(DishDuel& duel, Occupant& occupant, Lineage& lineage, Air* air, Se
   saveNow |= duel.step(occupant, lineage, air, raw, tiltX, tiltY, 0x9f31c2d04a7bull, petDay, tick);
   // raw now holds: shakes, holds, drops and lids untouched; lock-in knocks
   // removed; duel_bonked / duel_landed / duel_won / duel_fainted /
-  // duel_befriended added. The creature applies the duel ones through kidSafe():
-  assert(kidSafe(chem::injury, Fx::ratio(1, 2)) == Fx::zero());
+  // duel_befriended added. The creature applies the duel ones through
+  // duelFilter() at the agreed stakes; wounds come from the Outcome, not genes:
+  assert(duelFilter(Stakes::Mortal, chem::injury, Fx::ratio(1, 2)) == Fx::zero());
 }
 
 // A pet who is not up for it says why, on both screens.
@@ -91,9 +92,10 @@ bool twoDevicesAgree(uint64_t seed, const Genome& gA, const Genome& gB) {
   mom.prowess = 220;                           // a parent who reads; grungo's kid is at 128
   assert(Assist::hearts(grungo.prowess, mom.prowess) == 2);
 
+  uint8_t skulls[3] = {0, 0, 40};
   DuelSession a, b;
-  if (!a.open(DuelTestAccess::consent(), airA, grungo, DuelSkill{}, gA, 11, 0)) return false;
-  if (!b.open(DuelTestAccess::consent(), airB, mom, DuelSkill{}, gB, 22, 0)) return false;
+  if (!a.open(DuelTestAccess::consent(), airA, grungo, DuelSkill{}, gA, Stakes::Mortal, skulls, 11, 0)) return false;
+  if (!b.open(DuelTestAccess::consent(), airB, mom, DuelSkill{}, gB, Stakes::Scrap, skulls, 22, 0)) return false;
   const Script kidA{1}, kidB{2};
   std::optional<Meeting> metA, metB;
   for (uint32_t t = 1; t < 30000 && !(metA && metB); ++t) {
@@ -103,8 +105,9 @@ bool twoDevicesAgree(uint64_t seed, const Genome& gA, const Genome& gB) {
     if (ea.met) metA = ea.met;
     if (eb.met) metB = eb.met;
   }
-  return metA && metB && metA->battle == metB->battle && metA->outcomeHash == metB->outcomeHash &&
-         metA->me != metB->me;
+  // Mortal was asked on one side and Scrap on the other: the duel ran at Scrap.
+  return metA && metB && metA->battle == metB->battle && metA->battle.stakes == Stakes::Scrap &&
+         metA->outcomeHash == metB->outcomeHash && metA->me != metB->me;
 }
 
 // The consent rule, as a test: a device whose owner never opened hears
@@ -113,7 +116,8 @@ bool closedDeviceIsDeaf(const Genome& g) {
   blorbtest::Ether ether(7, blorbtest::Weather{});
   blorbtest::FakeAir eager(ether, PeerAddr{{2, 0, 0, 0, 0, 1}}), bystander(ether, PeerAddr{{2, 0, 0, 0, 0, 2}});
   DuelSession e, by;
-  e.open(DuelTestAccess::consent(), eager, BattleCard{}, DuelSkill{}, g, 1, 0);
+  uint8_t skulls[3] = {};
+  e.open(DuelTestAccess::consent(), eager, BattleCard{}, DuelSkill{}, g, Stakes::Spar, skulls, 1, 0);
   for (uint32_t t = 1; t < 600; ++t) {
     ether.advance(t);
     DuelInput knocking;
@@ -144,9 +148,25 @@ Ending twoTurns() {
   ma.append(Move{Stance::Guard});
   mb.append(Move{Stance::Guard});          // a bonk of heads: sparks for both
   ma.append(Move{Stance::Trick, true});    // asks for foresee with 3 of its 5 pips: plays plain
-  const Outcome o = resolve(a, b, duelSeed(11, 22, 0), ma, mb);   // gilly's third move is unknown: 2 turns resolve
+  const Outcome o = resolve(a, b, duelSeed(11, 22, 0, Stakes::Spar), Stakes::Spar, ma, mb);   // gilly's third move is unknown: 2 turns resolve
   assert(o.resolved == 2);
   return o.ending;
+}
+
+// A mortal ending: the downed pet waits for the winner's verdict, which is
+// the winner's last log slot. Both devices read the same verdict; each applies
+// its own pet's fate.
+bool finishedHim(const BattleCard& a, const BattleCard& b, uint32_t seed, const MoveLog& winner, const MoveLog& loser) {
+  const Outcome o = resolve(a, b, seed, Stakes::Mortal, winner, loser);
+  if (o.awaitingVerdict()) return false;   // the skull is still filling, or nobody has decided
+  const Wound w = woundFor(Stakes::Mortal, o, Side::B);
+  return w.downed && o.verdict == Verdict::Finish;   // -> DuelEffects::fall -> Creature::fall()
+}
+
+// The stakes screen: a scrap that could kill is not offered; a mortal one shows the skull.
+Stakes offer(const Creature& c, Stakes deviceCeiling) {
+  const Danger d = forecast(c, Stakes::Scrap);
+  return d.scrapCouldKill ? Stakes::Spar : ceilingFor(c, deviceCeiling);
 }
 
 blorbtool::BalanceReport tune() { return blorbtool::tournament(2000, blorbtool::Player::Random, blorbtool::Player::Random, 1); }

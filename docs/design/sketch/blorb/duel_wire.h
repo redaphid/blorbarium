@@ -35,6 +35,7 @@ struct BeaconPacket {
   PeerAddr wants{};              // whom my owner pointed at and knocked (none: nobody yet)
   uint8_t knockAgoTicks = 255;   // ticks since my last knock, 255 = none: the clink
   Decline decline = Decline::None;   // shown on the friend's screen as a picture; never matched while set
+  Stakes ceiling = Stakes::Spar;     // the highest tier this device allows (TWIST stakes) and its pet may enter
   BattleCard card{};             // encode() writes lineageId as 0 in a beacon: no permanent id is broadcast;
                                  // the matched friend learns it from the unicast State
 };
@@ -43,9 +44,13 @@ struct StatePacket {
   uint16_t roster = 0;
   BattleId battle{};
   uint32_t nonce = 0;
+  Stakes chosen = Stakes::Spar;  // what my kid picked on the stakes screen
+  bool confirmed = false;        // and confirmed with that tier's gesture; the duel starts at
+                                 // agreedStakes(mine, theirs) once both are confirmed
+  uint8_t skull = 0;             // my forecast at the agreed tier, shown on the friend's screen too
   BattleCard card{};
   uint8_t moveCount = 0;
-  uint8_t moves[DuelRules::kMaxTurns]{};   // Move::pack() each
+  uint8_t moves[DuelRules::kLogSlots]{};   // Move::pack() each
   uint8_t heard = 0;             // how many of your moves I hold: you may stop hurrying
   uint8_t emoteSeq = 0;          // bumps per cheer, so a doubled packet is one cheer
   Emote emote = Emote::None;
@@ -77,10 +82,10 @@ using Packet = std::variant<BeaconPacket, StatePacket, GenomePacket>;
 inline constexpr size_t kLookWireBytes = kRegionCount * 3 + 1 + 1 + 1 + 4 * 2 + 4;
 inline constexpr size_t kCardWireBytes = 1 + 1 + 1 + 1 + 4 + 1 + 1 + 8 + kLookWireBytes;
 inline constexpr size_t kFrameOverhead = 4 + 4;   // header + crc
-inline constexpr size_t kBattleIdBytes = 5;
-inline constexpr size_t kBeaconWireBytes = kFrameOverhead + 2 + 4 + 6 + 1 + 1 + kCardWireBytes;
+inline constexpr size_t kBattleIdBytes = 6;
+inline constexpr size_t kBeaconWireBytes = kFrameOverhead + 2 + 4 + 6 + 1 + 1 + 1 + kCardWireBytes;
 inline constexpr size_t kStateWireBytes =
-    kFrameOverhead + 2 + kBattleIdBytes + 4 + kCardWireBytes + 1 + DuelRules::kMaxTurns + 1 + 2 + 1 + 2 + 4;
+    kFrameOverhead + 2 + kBattleIdBytes + 4 + 1 + 1 + 1 + kCardWireBytes + 1 + DuelRules::kLogSlots + 1 + 2 + 1 + 2 + 4;
 inline constexpr size_t kGenomeWireBytes = kFrameOverhead + kBattleIdBytes + 8 + 1 + 1 + kGenomeChunk;
 static_assert(kBeaconWireBytes <= kDatagramMax && kStateWireBytes <= kDatagramMax && kGenomeWireBytes <= kDatagramMax,
               "a duel packet must fit one ESP-NOW v1 frame: never split a packet");

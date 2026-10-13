@@ -34,6 +34,9 @@ struct Meeting {
   uint8_t performance = 128;
   uint8_t manualTurns = 0;      // a battle the pet played alone moves prowess not at all
   DuelSkill skillAfter{};
+  Verdict verdict = Verdict::None;   // Mortal only
+  bool iFell = false, iSlew = false, iSpared = false, wasSpared = false, fled = false;
+  uint8_t scarsTaken = 0;
 };
 
 struct FriendSummary {
@@ -42,6 +45,10 @@ struct FriendSummary {
   CardLook look{};
   uint16_t met = 0, won = 0, lost = 0, drawn = 0;
   uint8_t daysMet = 0;          // distinct pet days with a duel: the friendship's depth, shown as hearts in the book
+  // The dark ledger, across every generation of both lines.
+  uint8_t fellTo = 0;            // of my line, felled by theirs
+  uint8_t slew = 0;              // of theirs, felled by my line
+  uint8_t owesUs = 0, weOwe = 0; // spared lives: a debt glyph in the book
   uint16_t firstGeneration = 0;
   uint32_t lastAt = 0;          // pet ticks
 };
@@ -70,6 +77,18 @@ class DuelBook {
   uint8_t level(uint16_t generation) const { return levelFromXp(xp(generation)); }
   const DuelSkill& skill() const { return skill_; }     // current generation's
   uint8_t prowess() const { return prowess_; }
+  // When a pet of this device fell, its line swears a vendetta: every later
+  // generation hatches with its duel Skill seeded against the victor's element
+  // (one nudge, as an instinct is), sees the victor's lineage marked on the
+  // rim in the lobby, and its hatch marquee names the debt ("GEN 5 REMEMBERS
+  // THE FIZZ"). Lasts until avenged (a Mortal or Scrap win against that
+  // lineage) or for 3 generations. Folded from the log like everything else.
+  struct Vendetta { uint64_t against; SpeciesId species; uint16_t sinceGeneration; };
+  std::optional<Vendetta> vendetta(uint16_t generation) const;
+  DuelSkill skillForNewLife(uint16_t generation) const;   // zeros, plus the vendetta's nudge
+  // Trophies of pets this line has felled, newest first, for the rim (up to
+  // three): the fallen species' token (a shell, a spore cap, a gill frond...).
+  template <class F> void forEachTrophy(F&& f) const;   // f(SpeciesId fallen, uint16_t generation)
   uint8_t lossesInARow() const { return lossStreak_; }
   uint16_t friendCount() const { return friends_; }
 

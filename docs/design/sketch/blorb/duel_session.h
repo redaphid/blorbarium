@@ -63,13 +63,22 @@ enum class DuelPhase : uint8_t {
   Closed,     // radio off
   Lobby,      // ready: beaconing; nearby ready friends' faces sit on the rim
   Greeting,   // matched: VS splash until the friend's first State proves they are in too
+  Staking,    // both kids pick a tier on the rim (tilt), see both forecasts (skulls), and confirm
+              // with the tier's gesture: knock (Spar), BOOT press (Scrap), BOOT held 3 s (Mortal)
   Choosing,   // tilt to aim, knock to lock, BOOT to power up, shake for a prophecy
   Waiting,    // locked; the friend has not ("..." over their head; a tick mark once they lock)
   Revealing,  // both known: the stances pop, the bonk plays, hearts fly (3 s)
-  Fainting,   // the loser swoons, spiral eyes; the winner hops in circles
+  Fainting,   // the loser swoons, spiral eyes; the winner hops in circles (Spar, Scrap)
+  Mercy,      // Mortal: the loser is down. The winner's kid holds BOOT 3 s to finish, or knocks
+              // (or waits 15 s) to spare. The loser's kid sees the skull fill and can only plead (a cheer).
+  Fallen,     // Mortal, finished: the fallen pet's last scene; the victor takes the trophy
   Friends,    // both pets side by side under a heart; knock for a rematch, hug (cradle 3 s) for a friend egg
 };
-enum class EndReason : uint8_t { None, Finished, LidDown, Dropped, WanderedOff, Conflict, LobbyTimeout };
+enum class EndReason : uint8_t { None, Finished, LidDown, Dropped, WanderedOff, Conflict, LobbyTimeout, StakesRefused, Fled };
+// Fled: a side ended a Scrap or Mortal duel (lid, drop, silence) while losing. It forfeits:
+// the other side wins, and the one who fled still takes the wound of the hearts it lost.
+// A pet downed in a Mortal duel that flees before the verdict takes the downed wound but
+// lives: yanking the cable is not policed, and the book remembers it as "fled".
 
 inline constexpr uint8_t kMaxLobbyPeers = 4;
 
@@ -80,6 +89,7 @@ struct DuelTimings {
   static constexpr uint16_t kRevealTicks = 30;
   static constexpr uint16_t kFaintTicks = 40;
   static constexpr uint16_t kFriendsTicks = 120;
+  static constexpr uint16_t kStakingTicks = 200;    // 20 s to agree on stakes, else back to the lobby
   static constexpr uint16_t kSilentTicks = 200;     // 20 s with no packet: they wandered off
   static constexpr uint8_t kClinkWindowTicks = 3;   // two knocks within 300 ms are a clink
   static constexpr uint8_t kBeaconEvery = 3, kHurryEvery = 2, kIdleEvery = 10;
@@ -106,6 +116,20 @@ struct DuelView {
 
   // Battle: me at the bottom, the friend at the top, both screens alike.
   BattleCard me{}, them{};
+  // Staking: the rim shows three tiers; the ones a pet or the fairness rule
+  // forbids are greyed with the reason (a cradle for "too young", a balance
+  // for "not a fair fight", a skull for "this could kill him").
+  Stakes ceiling[2]{};                  // [me, them]
+  Stakes chosen = Stakes::Spar, theyChose = Stakes::Spar, agreed = Stakes::Spar;
+  bool confirmed = false, theyConfirmed = false;
+  uint8_t skull[2]{};                   // [me, them]: each pet's forecast at the agreed tier
+  uint8_t confirmHold = 0;               // 0..255 while BOOT is held for Mortal
+  // Mercy and the end.
+  bool iAmDown = false, theyAreDown = false;
+  uint16_t mercyTicksLeft = 0;
+  uint8_t finishHold = 0;                // 0..255: the skull filling while the winner holds BOOT
+  Verdict verdict = Verdict::None;
+  uint8_t newScars = 0;                  // drawn appearing on my pet at the end
   SideState mine{}, theirs{};
   int8_t aim = -1;                      // stance under the tilt now
   Lean lean{};                          // what my pet would pick: he leans toward it, glowing brighter with the assist
@@ -131,10 +155,12 @@ struct DuelView {
 
 // What the Dish does with one duel tick.
 struct DuelEffects {
-  StimId stimuli[4]{};                  // Duel-sourced; the creature applies them through kidSafe()
+  StimId stimuli[4]{};                  // Duel-sourced; the creature applies them through duelFilter()
   uint8_t stimCount = 0;
   uint64_t captured = 0;                // which of this tick's raw stimuli were the duel's (within kDuelCaptures)
   std::optional<Meeting> met;           // the battle ended: DuelBook::record
+  std::optional<Wound> wound;           // Scrap and Mortal: my pet's injury, scars and whether he is down
+  bool fall = false;                    // Mortal, finished, and I am the one downed: Creature::fall()
   std::optional<FriendEggRecord> egg;   // both hugged and the genome arrived: FriendEggStore::save(record, friendGenome)
   const Genome* friendGenome = nullptr; // valid with `egg`, until the next tick
   bool radioClosed = false;
@@ -144,8 +170,8 @@ class DuelSession {
  public:
   // The only way in. The Dish has already checked he can duel (a creature,
   // awake, sleepiness under 0.8). False when Air::open() is refused (OTA).
-  bool open(LocalConsent, Air&, const BattleCard& mine, const DuelSkill&, const Genome& myGenome, uint32_t nonce,
-            uint32_t tick);
+  bool open(LocalConsent, Air&, const BattleCard& mine, const DuelSkill&, const Genome& myGenome, Stakes ceiling,
+            uint8_t skullByTier[3], uint32_t nonce, uint32_t tick);
   // Drain the air, apply the body, advance timers, send what is due.
   DuelEffects tick(Air&, const DuelInput&, uint32_t tick);
   void close(Air&, EndReason);          // idempotent; sends `leaving` once if in a battle

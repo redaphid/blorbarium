@@ -14,6 +14,7 @@
 #include "blorb/duel_book.h"
 #include "blorb/duel_session.h"
 #include "blorb/lineage.h"
+#include "blorb/stakes.h"
 
 namespace blorb {
 
@@ -43,8 +44,15 @@ class DishDuel {
   //    it fires in SenseOut::remote, and DuelInput::from and the open gesture
   //    ignore those bits, so a phone can neither open a duel nor lock a move.
   //  3 removes `captured` from raw; appends the duel stimuli to raw (they
-  //    reach the creature as StimSource::Duel, through kidSafe)
-  //  4 on a Meeting: book.record (idempotent by BattleId)
+  //    reach the creature as StimSource::Duel, through duelFilter at the
+  //    agreed stakes)
+  //  3b on a Wound (Scrap, Mortal): Creature::wound(injury) once, addScar for
+  //    each new scar; on `fall`: Creature::fall(), which writes the die and
+  //    cause loci as Injured (he died of his wounds), so the ordinary death
+  //    path runs: the Death entry, the remains, the vigil, the clutch
+  //  4 on a Meeting: book.record (idempotent by BattleId), which also holds the
+  //    dark ledger, the trophy and any vendetta; at the next hatch the Dish
+  //    seeds the newborn's duel Skill from book.skillForNewLife
   //  5 on a friend egg: FriendEggStore::save (the clutch reads it at the next death)
   // Returns true when the keepsake should be saved now (a genome graft went in).
   bool step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, uint64_t lineageId, uint16_t petDay,
