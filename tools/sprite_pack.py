@@ -472,7 +472,7 @@ def label_egg(rgb, alpha, eyes, froglet):
     return lab
 
 
-def label_egg_refs(rgb, alpha, eyes):
+def label_egg_refs(rgb, alpha, eyes, k=1.0):
     """A pet's egg from pack.json's egg_refs: the baby inside takes skin or cloak, so a
     clutch shows each child's genes; the jelly is shell; glow only at the baby's eyes."""
     h, s, v = to_hsv(rgb)
@@ -483,6 +483,13 @@ def label_egg_refs(rgb, alpha, eyes):
     zone = ref_zone(eye_zone, np.zeros(alpha.shape, bool), True)
     lab = nearest_region(rgb, refs, [zone.get(reg, np.ones(alpha.shape, bool)) for _, reg in refs])
     dark = v < CFG.get("ink", 0.16)
+    if CFG.get("egg_baby"):
+        # where colour cannot tell jelly from baby (a white owl in a white egg), the
+        # baby's outline in pack.json does: everything outside it is shell
+        baby = np.zeros(alpha.shape, bool)
+        for x0, y0, x1, y1 in CFG["egg_baby"]:
+            baby |= disc(alpha.shape, (x0 + x1) * k / 2, (y0 + y1) * k / 2, (x1 - x0) * k / 2, (y1 - y0) * k / 2)
+        lab[~baby & ~np.isin(lab, (REGION["glow"], REGION["eye"]))] = REGION["shell"]
     lab[dark & ~eye_zone] = INVARIANT
     for x, y, er in eyes:
         # the baby's eyes see whatever colour they were drawn: ink is eye, the rest glow
@@ -503,7 +510,7 @@ def egg_art():
     rgb, alpha = a[..., :3].copy(), a[..., 3]
     scaled = [(e["x"] * k, e["y"] * k, e["r"] * k) for e in eyes]
     if CFG:
-        lab = label_egg_refs(rgb, alpha, scaled)
+        lab = label_egg_refs(rgb, alpha, scaled, k)
     else:
         (fx, fy), (frx, fry) = EGG_FROGLET
         lab = label_egg(rgb, alpha, scaled, ((fx * k, fy * k), (frx * k, fry * k)))

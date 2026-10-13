@@ -87,10 +87,10 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/mossby/mossby_pack.h",
-        "palette": 232,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 104638,
-        "region_map": false
+        "flash_bytes": 105402,
+        "region_map": true
       }
     },
     {
@@ -127,9 +127,9 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/puffkin/puffkin_pack.h",
-        "palette": 212,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 87602,
+        "flash_bytes": 87254,
         "region_map": true
       }
     },
@@ -287,9 +287,9 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/fizz/fizz_pack.h",
-        "palette": 243,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 80194,
+        "flash_bytes": 81066,
         "region_map": true
       }
     },
@@ -329,7 +329,7 @@
         "pack": "pets/hushwing/hushwing_pack.h",
         "palette": 256,
         "frames": 18,
-        "flash_bytes": 102672,
+        "flash_bytes": 96796,
         "region_map": false
       }
     },
@@ -367,9 +367,9 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/tinker/tinker_pack.h",
-        "palette": 232,
+        "palette": 256,
         "frames": 18,
-        "flash_bytes": 79352,
+        "flash_bytes": 79584,
         "region_map": false
       }
     }
