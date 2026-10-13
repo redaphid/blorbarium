@@ -3,8 +3,9 @@
 // as the numbers BATTLES.md quotes. Run it by hand while tuning powers.def
 // costs (WSL survivor, from the checkout):
 //
-//   g++ -std=c++17 -O2 -Ilib/blorb/include tools/duel_balance.cpp lib/blorb/src/duel_resolve.cpp \
-//       lib/blorb/src/duel_mind.cpp -o /tmp/duel_balance && /tmp/duel_balance [battles per pair]
+//   g++ -std=c++17 -O2 -Ilib/blorb/include -o /tmp/duel_balance tools/duel_balance.cpp
+//       lib/blorb/src/duel_resolve.cpp lib/blorb/src/duel_mind.cpp     (one command)
+//   /tmp/duel_balance [battles per pair]
 //
 // test_duel_resolve includes this file with DUEL_BALANCE_NO_MAIN and holds
 // the same gate, so a row change that tips the wheel fails the suite.
