@@ -63,7 +63,7 @@ class Dish {
   void tick(uint32_t nowMs, Link&);
 
   Appearance appearance() const;
-  void flush();                    // explicit save: disconnect, a phone request
+  bool flush();                    // explicit save (an update, a phone request): false when it did not land
 
   // For the command and twist handlers (protocol.cpp, twists.cpp).
   Occupant& occupant() { return live_.occupant; }
@@ -103,7 +103,7 @@ class Dish {
   void onHatch(Egg&);
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
-  void save();
+  bool save();
 
   Storage& store_;
   Keepsake keep_;

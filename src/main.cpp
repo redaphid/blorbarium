@@ -23,6 +23,9 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
 #include "hw/link_nus.h"
+#include "hw/ota_esp.h"
+#include "hw/ota_pubkey.h"
+#include "ota/screen.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
 
@@ -82,7 +85,23 @@ static SerialLink phone;
 static blorb::Link& host = phone;
 #else
 static hw::NusLink ble;
-static hw::TwoLinks host(phone, ble);   // DEBUG lines stay on the cable: only SerialLink holds them back
+// Updates over the air (docs/ota.md). The session answers OTA lines before
+// the Dish sees them; what it needs from the pet is DishOtaHost, below.
+struct DishOtaHost : ota::Host {
+  bool busy() override;
+  bool save() override;
+  uint16_t chunk() override { return ble.mtu() > 7 ? ble.mtu() - 7 : 16; }   // ATT header and the offset
+  bool onTrial() override;
+};
+static DishOtaHost otaHost;
+static hw::EspSlot otaSlot;
+static hw::PacketRing otaPackets;
+static hw::OtaData otaData(otaPackets);
+static ota::Session updater(otaSlot, otaHost, ble,
+                            ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
+static hw::OtaLink otaLink(ble, updater);
+static hw::Trial trial;
+static hw::TwoLinks host(phone, otaLink);   // DEBUG lines stay on the cable: only SerialLink holds them back
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 static BoardDisplay display;
@@ -114,6 +133,15 @@ static blorb::BodySample readBody() {
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
   s.buttonDown = boardButtonDown();
+#if !defined(BADGE_BOARD_SIM)
+  // While the dish asks about an update, the button answers it, and the pet
+  // feels neither that press nor the rest of that hold.
+  static bool wasDown = false, otaOwns = false;
+  if (updater.asking() && s.buttonDown && !wasDown) updater.press(millis());
+  otaOwns = updater.asking() || (otaOwns && s.buttonDown);
+  wasDown = s.buttonDown;
+  if (otaOwns) s.buttonDown = false;
+#endif
   return s;
 }
 
@@ -171,6 +199,30 @@ static OccupantSummary summarize(const blorb::Occupant& o) {
   return std::visit(Visit{}, o);
 }
 
+static ota::PetMark petMark() {
+  const OccupantSummary o = summarize(dish->occupant());
+  return {o.gen, o.genome};
+}
+
+bool DishOtaHost::busy() {
+  // A clutch is chosen with the button, which the update's question would take.
+  if (std::holds_alternative<blorb::Clutch>(dish->occupant())) return true;
+  // Anything else he must finish first (a battle, one day) refuses here too.
+  return !storageState.slots;   // no save could be written before the transfer
+}
+bool DishOtaHost::save() { return dish->flush(); }
+bool DishOtaHost::onTrial() { return trial.onTrial(); }
+
+// The update is verified and set to boot: save him, say which pet the new
+// image must find, and go.
+static void restartIntoUpdate() {
+  hw::Trial::handOver(petMark());
+  const bool saved = dish->flush();
+  Serial.printf("[hw] ota: restarting into the update, save %s\n", saved ? "ok" : "FAILED");
+  Serial.flush();
+  ESP.restart();
+}
+
 static void reportBoot() {
   Serial.printf("[hw] blorbarium %s lcd128\n", BLORB_FW);
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
@@ -219,11 +271,13 @@ void setup() {
   options.rtc = &systemClock;
 #endif
   dish.emplace(store, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
-  display.init();
+  [[maybe_unused]] const bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
   reportBoot();
-  const char* name = ble.begin(mac);
+  trial.begin(panelUp, dish->boot() == blorb::Boot::Resumed, petMark());
+  otaPackets.begin();
+  const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
 #endif
@@ -290,6 +344,9 @@ void loop() {
   step(now);
   if (now - lastFrame >= kFrameMs) {
     paint::draw(shown(), grungoPack(), canvas, now);
+#if !defined(BADGE_BOARD_SIM)
+    if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
+#endif
     boardPresent(display, canvas);
     lastFrame = now;
   }
@@ -298,6 +355,10 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
+  otaPackets.drain([](const uint8_t* p, size_t n) { updater.data(p, n, millis()); });
+  updater.tick(millis());
+  if (updater.rebootDue(millis())) restartIntoUpdate();
+  trial.poll(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

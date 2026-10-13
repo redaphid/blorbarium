@@ -20,9 +20,11 @@ class NusLink : public blorb::Link {
   static constexpr const char* kService = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
   static constexpr const char* kRx = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";   // the phone writes
   static constexpr const char* kTx = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";   // the badge notifies
+  static constexpr const char* kOtaData = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";   // update images (docs/ota.md)
 
-  // Name "blorb-xxxx" from the MAC's last two bytes.
-  const char* begin(const uint8_t mac[6]) {
+  // Name "blorb-xxxx" from the MAC's last two bytes. `otaData` takes the
+  // update's image writes, when the firmware has updates.
+  const char* begin(const uint8_t mac[6], NimBLECharacteristicCallbacks* otaData = nullptr) {
     std::snprintf(name_, sizeof name_, "blorb-%02x%02x", mac[4], mac[5]);
     NimBLEDevice::init(name_);
     NimBLEDevice::setMTU(247);
@@ -33,6 +35,7 @@ class NusLink : public blorb::Link {
     NimBLEService* nus = server->createService(kService);
     nus->createCharacteristic(kRx, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(&rxCb_);
     tx_ = nus->createCharacteristic(kTx, NIMBLE_PROPERTY::NOTIFY);
+    if (otaData) nus->createCharacteristic(kOtaData, NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(otaData);
     nus->start();
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(kService);
@@ -45,6 +48,7 @@ class NusLink : public blorb::Link {
   }
 
   bool connected() override { return up_; }
+  uint16_t mtu() const { return mtu_; }
 
   std::optional<std::string_view> readLine() override {
     pump();
