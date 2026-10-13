@@ -1,68 +1,61 @@
 #pragma once
-// SKETCH (docs/design/BATTLES.md) of src/hw/radio_lease.h + src/hw/radio_espnow.h. Types
-// and the calls each method makes, no Arduino include, so it compiles here.
+// SKETCH (docs/design/BATTLES.md, "Radio") of src/hw/radio_espnow.h. Types and
+// the calls each method makes, no Arduino include, so it compiles here.
 //
 // One 2.4 GHz radio, three wants: BLE (always, the phone's window), ESP-NOW
-// (only while a duel is open), and the BLE OTA (DESIGN unit 22, a sibling's).
-// BLE and Wi-Fi share the radio by the IDF's software coexistence, which this
-// core has on (measured: sdkconfig CONFIG_SW_COEXIST_ENABLE 1 for esp32s3).
-// What must never share it is a duel and an OTA: the lease below is the one
-// place that decides, and both the duel's Air and the OTA ask it.
-#include <atomic>
+// (only while a duel is open), and the BLE OTA (branch `ota`, docs/ota.md
+// "Other users of the radio"). BLE and Wi-Fi share the radio by the IDF's
+// software coexistence, which this core has on (measured:
+// CONFIG_ESP32_WIFI_SW_COEXIST_ENABLE 1 in esp32s3/qio_qspi/include/sdkconfig.h).
+// What must never share it is a duel and an OTA. That interlock is OTA's own,
+// and duels bind to it rather than adding a second one:
+//
+//   a duel may open        only while !ota::Session::active() && !hw::Trial::onTrial()
+//   an update may start    only while !DishOtaHost::busy(), and busy() returns true
+//                          while EspNowAir::isOpen(); the update then answers BEGIN
+//                          `ERR 409 BUSY` and holds its restart until it is false
+//
+// No lock: the OTA session, the trial and busy() all run on the loop task, and
+// so does every EspNowAir call (the Dish ticks on the loop task). The BLE task
+// only pushes image packets into OTA's ring.
 #include <cstdint>
+#include <optional>
 #include "blorb/air.h"
 
 namespace hw {
 
-enum class RadioUse : uint8_t { Idle, Duel, Ota };
-
-// One compare-and-swap (graft from candidate B): the duel asks from the loop
-// task, and the OTA receiver may ask from the BLE host task, so the lease is
-// an atomic rather than a convention about which task writes. The OTA owner
-// (DESIGN unit 22, a sibling) adopts this header; its BEGIN asks for Ota and
-// its end, abort or stall releases it.
-class RadioLease {
- public:
-  // Idle -> Duel or Idle -> Ota. Refused when held, and Duel is also refused
-  // while the running image is still on trial (ESP_OTA_IMG_PENDING_VERIFY):
-  // a trial image writes nothing new and risks nothing it does not have to.
-  bool acquire(RadioUse);              // compare_exchange Idle -> use
-  void release(RadioUse);              // compare_exchange use -> Idle: only the holder releases
-  RadioUse holder() const { return holder_.load(); }
-  void setTrialImage(bool onTrial) { trial_.store(onTrial); }
- private:
-  std::atomic<RadioUse> holder_{RadioUse::Idle};
-  std::atomic<bool> trial_{false};
+// The two facts a duel needs from OTA. src/main.cpp implements it over the
+// real objects: otaActive() is `updater.active()` (ota::Session), onTrial() is
+// `trial.onTrial()` (hw::Trial). A trial image never opens a duel, so it never
+// writes a duel book entry, a wound or a friend egg that a rollback would meet.
+struct RadioGate {
+  virtual ~RadioGate() = default;
+  virtual bool otaActive() const = 0;
+  virtual bool onTrial() const = 0;
 };
-
-// The OTA side of the interlock (for unit 22's owner): its BEGIN handler
-// replies `OTA err busy:duel` when lease.acquire(RadioUse::Ota) is false, and
-// the website says "finish your battle first". Its end, abort or stall
-// releases the lease.
 
 // ESP-NOW behind blorb::Air. Wi-Fi exists only between open() and close(),
 // so a pet that never duels never pays its heap.
 class EspNowAir : public blorb::Air {
  public:
-  static constexpr int8_t kTxQuarterDbm = 40;   // 10 dBm, in the IDF's 0.25 dBm units
-  static constexpr uint8_t kChannel = 1;   // fixed; no AP is ever joined. Same as the sibling badge's mirror (its frames fail our magic).
-  explicit EspNowAir(RadioLease& lease) : lease_(lease) {}
+  static constexpr int8_t kTxQuarterDbm = 40;   // 10 dBm, in the IDF's 0.25 dBm units (a room, not a street)
+  static constexpr uint8_t kChannel = 1;        // fixed; no AP is ever joined
+  explicit EspNowAir(const RadioGate& gate) : gate_(gate) {}
 
-  // lease.acquire(Duel); WiFi.mode(WIFI_STA); WiFi.disconnect();
+  // Refused (false) while gate.otaActive() or gate.onTrial(): the pet shakes
+  // his head. Otherwise WiFi.mode(WIFI_STA); WiFi.disconnect();
   // esp_wifi_set_channel(kChannel, WIFI_SECOND_CHAN_NONE);
-  // esp_wifi_set_max_tx_power(kTxQuarterDbm) (graft from C: a room, not a street;
-  // BLE keeps its own +21 dBm); esp_now_init();
-  // add the broadcast peer; esp_now_register_recv_cb(onRecv). On any failure:
-  // undo, release, false.
+  // esp_wifi_set_max_tx_power(kTxQuarterDbm) (BLE keeps its own +21 dBm);
+  // esp_now_init(); add the broadcast peer; esp_now_register_recv_cb(onRecv);
+  // the promiscuous rx hook for RSSI. On any failure: undo, false.
   bool open() override;
   // esp_now_deinit(); WiFi.mode(WIFI_OFF) (esp_wifi_stop + deinit: the heap
-  // comes back); lease.release(Duel). Idempotent.
+  // comes back). Idempotent. From here DishOtaHost::busy() is false again.
   void close() override;
   bool isOpen() const override { return open_; }
   blorb::PeerAddr self() const override { return self_; }
   void broadcast(const uint8_t*, size_t) override;                    // esp_now_send(ff:ff:ff:ff:ff:ff, ...)
-  // Adds the peer on first use (unencrypted; at most a handful), then esp_now_send.
-  void send(const blorb::PeerAddr&, const uint8_t*, size_t) override;
+  void send(const blorb::PeerAddr&, const uint8_t*, size_t) override; // adds the peer on first use (unencrypted)
   std::optional<blorb::Datagram> receive() override;                  // pops the ring
 
  private:
@@ -73,9 +66,11 @@ class EspNowAir : public blorb::Air {
   // into a fixed ring of 8 datagrams (2 KB) and drops when full; the
   // state-based protocol makes a drop a delay.
   static void onRecv(const uint8_t* mac, const uint8_t* data, int len);
-  RadioLease& lease_;
+  const RadioGate& gate_;
   blorb::PeerAddr self_{};
   bool open_ = false;
 };
+
+// For src/main.cpp (branch `ota`): DishOtaHost::busy() gains `|| espNowAir.isOpen()`.
 
 }  // namespace hw

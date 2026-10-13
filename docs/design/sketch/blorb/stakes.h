@@ -44,12 +44,13 @@ struct StakesRule {
   Stage youngestStage;      // both pets must be at least this old
   uint8_t maxAssistHearts;  // the fight must be this fair (Assist::hearts) or the tier is refused
   uint16_t minManualTurns;  // both kids must have picked this many turns themselves (prowess is real)
+  bool headToHead;          // the two lines' record must not be lopsided (kHeadToHeadFloor)
   enum class Confirm : uint8_t { Knock, Press, Hold3s } confirm;
 };
 inline constexpr StakesRule kStakes[] = {
-    /* Spar   */ {Fx::zero(), Fx::zero(), false, false, false, Stage::Baby, 2, 0, StakesRule::Confirm::Knock},
-    /* Scrap  */ {Fx::ratio(6, 100), Fx::ratio(35, 100), true, true, false, Stage::Child, 2, 0, StakesRule::Confirm::Press},
-    /* Mortal */ {Fx::ratio(9, 100), Fx::ratio(60, 100), true, true, true, Stage::Adult, 1, 30, StakesRule::Confirm::Hold3s},
+    /* Spar   */ {Fx::zero(), Fx::zero(), false, false, false, Stage::Baby, 2, 0, false, StakesRule::Confirm::Knock},
+    /* Scrap  */ {Fx::ratio(6, 100), Fx::ratio(35, 100), true, true, false, Stage::Child, 2, 0, true, StakesRule::Confirm::Press},
+    /* Mortal */ {Fx::ratio(9, 100), Fx::ratio(60, 100), true, true, true, Stage::Adult, 1, 30, true, StakesRule::Confirm::Hold3s},
 };
 constexpr const StakesRule& rule(Stakes s) { return kStakes[uint8_t(s) % 3]; }
 
@@ -60,6 +61,12 @@ constexpr const StakesRule& rule(Stakes s) { return kStakes[uint8_t(s) % 3]; }
 // a parents' pool and a kids' pool; the record between these two does.
 inline constexpr uint8_t kHeadToHeadMin = 3;
 inline constexpr uint16_t kHeadToHeadFloor = 250;
+
+// No farming: at most this many for-keeps duels (Scrap or Mortal) between the
+// same two lineages per pet-day, counted from duels.log on both devices. With
+// the head-to-head floor, a stronger player cannot grind a weaker kid's pet:
+// one lopsided Scrap a day, and after three lopsided ones only Spars.
+inline constexpr uint8_t kForKeepsPerPairPerDay = 1;
 
 // Stand-ins until the rows land (stimuli.def, chemicals.def and feats.def are unit D2's).
 //   BLORB_STIM(43, duel_bonked,     Duel, 0)  // I lost a heart this turn

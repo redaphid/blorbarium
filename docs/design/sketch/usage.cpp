@@ -45,11 +45,9 @@ void frame(const Appearance& me, SpeciesId mySpecies, const DuelView* duel, pain
   // else paint::draw(me, paint::packFor(mySpecies), canvas, now) as today
 }
 
-// The radio lease, shared with the OTA (unit 22): whichever asks first holds it.
-void otaBegin(hw::RadioLease& lease, void (*reply)(const char*)) {
-  if (!lease.acquire(hw::RadioUse::Ota)) return reply("OTA err busy:duel");
-  reply("OTA ready");
-}
+// OTA's own interlock (branch `ota`): an update refuses while busy(), and a
+// duel holding the radio makes busy() true. The duel's open() asks the gate.
+bool otaBusy(const hw::EspNowAir& air, bool dishBusy) { return dishBusy || air.isOpen(); }
 
 // ---- 3. the Dish's one call (dish.cpp runOneTick) ----------------------------------------
 void dishTick(DishDuel& duel, Occupant& occupant, Lineage& lineage, Air* air, SenseOut& raw, Fx tiltX, Fx tiltY,
