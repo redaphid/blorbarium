@@ -15,6 +15,11 @@
 // factory `pet` beside a `petfs` an older build had formatted stayed unsavable
 // forever, and a real pet's blank `petfs` was never formatted.
 //
+// Nothing is written until all of that is decided. Opening never writes, and
+// a board that leaves any partition alone is sealed: it formats nothing and
+// opens nothing for writing. On the test board a read-write NVS open, before
+// the decision, wrote a fresh namespace entry into a keepsake it then sealed.
+//
 // The marks are bytes every save already carries, so a board saved before
 // this rule existed is recognised with no new marker:
 //  * slots: a snapshot's magic "BLRB" at the start of a 32-byte NVS entry,
@@ -32,14 +37,16 @@ namespace blorb {
 class Volume {
  public:
   virtual ~Volume() = default;
-  virtual bool open() = 0;     // mount it as it stands; never formats
-  virtual bool format() = 0;   // erase it and mount it empty
+  virtual bool open() = 0;       // read-only, as it stands: never writes a byte
+  virtual bool writable() = 0;   // after open(), once boot has decided to write (may itself write)
+  virtual bool format() = 0;     // erase it and open it, writable and empty
   virtual size_t size() = 0;
   virtual bool readRaw(size_t at, uint8_t* buf, size_t n) = 0;
 };
 
 enum class Holds : uint8_t { Blank, Foreign, Pet, Unreadable };
-enum class Opened : uint8_t { Ok, Formatted, LeftAlone, FormatFailed };
+// ReadOnly: it opened, but not for writing.
+enum class Opened : uint8_t { Ok, Formatted, LeftAlone, FormatFailed, ReadOnly };
 
 // `held` is read only when that partition would not open.
 struct VolumeReport { Opened opened = Opened::Ok; std::optional<Holds> held; };

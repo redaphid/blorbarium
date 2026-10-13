@@ -177,7 +177,7 @@ static void reportBoot() {
     Serial.println("[hw] !!! SEALED: a pet is on the flash and would not open; nothing reads or writes it. "
                    "Dump 0x810000+0x40000 and 0xA50000+0x5A0000 read-only for repair");
   for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
-    if (r->opened == blorb::Opened::FormatFailed)
+    if (r->opened == blorb::Opened::FormatFailed || r->opened == blorb::Opened::ReadOnly)
       Serial.println("[hw] !!! the pet is not being saved: a reset loses this boot's pet");
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");

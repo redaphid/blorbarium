@@ -33,6 +33,9 @@ class NvsFsStorage : public blorb::Storage {
     const blorb::Provisioned p = blorb::provision(slots, files, kBlock);
     slotsUp_ = isUp(p.slots.opened);
     filesUp_ = isUp(p.files.opened);
+    // A board with a keepsake left alone is sealed: whatever opened is read, never written.
+    slotsWrite_ = slotsUp_ && p.slots.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
+    filesWrite_ = filesUp_ && p.files.opened != blorb::Opened::ReadOnly && !blorb::leftAlone(p);
     return p;
   }
   uint32_t writes() const { return writes_; }
@@ -74,25 +77,35 @@ class NvsFsStorage : public blorb::Storage {
     explicit SlotsVolume(nvs_handle_t& handle)
         : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "pet")),
           handle_(handle) {}
-    bool open() override {
-      return nvs_flash_init_partition("pet") == ESP_OK &&
-             nvs_open_from_partition("pet", "blorb", NVS_READWRITE, &handle_) == ESP_OK;
+    // Read-only: a read-write open creates a missing namespace, and that is a
+    // write. A missing "blorb" answers NOT_FOUND, so this partition will not
+    // open and provision judges its raw bytes: a pet whose namespace entry was
+    // lost still shows by its BLRB and is sealed, not re-linked by accident.
+    bool open() override { return init() && openAs(NVS_READONLY); }
+    bool writable() override {
+      nvs_close(handle_);
+      return openAs(NVS_READWRITE);
     }
     // Safe after a half-open NVS (init succeeded, nvs_open did not): IDF's
     // nvs_flash_erase_partition deinits an initialised partition before it
     // erases (nvs_api.cpp).
-    bool format() override { return nvs_flash_erase_partition("pet") == ESP_OK && open(); }
+    bool format() override { return nvs_flash_erase_partition("pet") == ESP_OK && init() && openAs(NVS_READWRITE); }
    private:
+    static bool init() { return nvs_flash_init_partition("pet") == ESP_OK; }
+    bool openAs(nvs_open_mode_t mode) { return nvs_open_from_partition("pet", "blorb", mode, &handle_) == ESP_OK; }
     nvs_handle_t& handle_;
   };
   class FilesVolume : public Partition {
    public:
     FilesVolume()
         : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "petfs")) {}
-    bool open() override { return LittleFS.begin(false, kRoot, 4, "petfs"); }
+    bool open() override { return LittleFS.begin(false, kRoot, 4, "petfs"); }   // never formats
+    bool writable() override { return true; }
     bool format() override { return LittleFS.begin(true, kRoot, 4, "petfs"); }
   };
-  static bool isUp(blorb::Opened o) { return o == blorb::Opened::Ok || o == blorb::Opened::Formatted; }
+  static bool isUp(blorb::Opened o) {
+    return o == blorb::Opened::Ok || o == blorb::Opened::Formatted || o == blorb::Opened::ReadOnly;
+  }
 
   struct Path {
     char s[80];
@@ -113,7 +126,7 @@ class NvsFsStorage : public blorb::Storage {
     return whereOf(name) == Where::Slot ? putSlot(name, data, len) : putFile(name, data, len);
   }
   bool erase(const char* name) {
-    return whereOf(name) == Where::Slot ? eraseSlot(name) : filesUp() && std::remove(Path(name).s) == 0;
+    return whereOf(name) == Where::Slot ? eraseSlot(name) : filesWrite_ && std::remove(Path(name).s) == 0;
   }
   // The one cross case is a torn slot quarantined into rescue/ on petfs.
   bool move(const char* from, const char* to) {
@@ -147,10 +160,10 @@ class NvsFsStorage : public blorb::Storage {
     return n;
   }
   bool putSlot(const char* name, const uint8_t* data, size_t len) {   // NVS replaces a key atomically
-    return slotsUp_ && len > 0 && nvs_set_blob(nvs_, name, data, len) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
+    return slotsWrite_ && len > 0 && nvs_set_blob(nvs_, name, data, len) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
   }
   bool eraseSlot(const char* name) {
-    return slotsUp_ && nvs_erase_key(nvs_, name) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
+    return slotsWrite_ && nvs_erase_key(nvs_, name) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
   }
 
   // ---- files: POSIX stdio over the VFS (Arduino's File logs every missing-file probe) ----
@@ -175,16 +188,16 @@ class NvsFsStorage : public blorb::Storage {
     return std::fclose(f) == 0 && whole;
   }
   bool putFile(const char* name, const uint8_t* data, size_t len) {
-    if (!filesUp()) return false;
+    if (!filesWrite_) return false;
     char tmp[80];
     std::snprintf(tmp, sizeof tmp, "%s/%s.tmp", kRoot, name);
     return writeAll(tmp, "wb", data, len) && std::rename(tmp, Path(name).s) == 0;   // LittleFS replaces atomically
   }
   bool appendFile(const char* name, const uint8_t* data, size_t len) {
-    return filesUp() && writeAll(Path(name).s, "ab", data, len);
+    return filesWrite_ && writeAll(Path(name).s, "ab", data, len);
   }
   bool renameFile(const char* from, const char* to) {
-    if (!filesUp()) return false;
+    if (!filesWrite_) return false;
     if (const char* slash = std::strrchr(to, '/')) {
       char dir[80];
       std::snprintf(dir, sizeof dir, "%s/%.*s", kRoot, int(slash - to), to);
@@ -194,8 +207,8 @@ class NvsFsStorage : public blorb::Storage {
   }
 
   nvs_handle_t nvs_ = 0;
-  bool slotsUp_ = false;
-  bool filesUp_ = false;
+  bool slotsUp_ = false, slotsWrite_ = false;
+  bool filesUp_ = false, filesWrite_ = false;
   uint32_t writes_ = 0;
 };
 
