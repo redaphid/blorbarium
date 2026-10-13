@@ -22,7 +22,14 @@ const char* const kPhases[] = {"egg", "creature", "clutch"};
 const char* const kStages[] = {"baby", "child", "adult", "elder"};
 const char* const kCauses[] = {"old_age", "starved", "injured", "poisoned", "unknown"};
 const char* const kDirs[] = {"sense", "act", "free"};
-const char* const kSources[] = {"body", "world", "self", "phone", "duel"};   // StimSource order
+constexpr const char* kSources[] = {"body", "world", "self", "phone", "duel"};   // StimSource order
+// SCHEMA indexes it by each stimulus row's source, so a new source must bring its name.
+constexpr bool everySourceNamed() {
+  for (const StimInfo& s : STIMULI)
+    if (size_t(s.source) >= countOf(kSources)) return false;
+  return true;
+}
+static_assert(everySourceNamed(), "kSources needs a name for every StimSource a stimulus row uses");
 const char* const kClasses[] = {"body", "mind", "look", "life"};
 const char kRules[] = {'A', 'N', 'F', 'X'};   // MutRule: Any, Nudge, Flag, Fixed
 
