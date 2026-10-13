@@ -71,7 +71,19 @@ check (`ble_gap.c` `slave_conn[MAX + 1]`), a dropped link left a stale peer,
 and the dish stopped advertising until a power cycle. `NusLink::poll()` now
 also advertises whenever no connection is live by the host's table, and logs
 `[hw] ble conn h=`, `[hw] ble drop h= reason=`, `[hw] ble adv on|off` and
-`[hw] ble: a stale peer, advertising again`. Each line carries the connection
+`[hw] ble: a stale peer, advertising again`.
+
+A central must speak the protocol (a known verb, with or without an id, or an
+`OTA` line) within 10 s of connecting, or it is dropped
+(`[hw] ble drop ... reason=idle`) and its address is refused for a minute
+(`[hw] ble refused`, said once). A page always sends TIME or an OTA line at
+once, and a connection with an update in progress is never dropped this way.
+This keeps another program that knows the board's address (on the test board,
+a badge daemon from its earlier life) or a stranger from holding the dish's one
+connection. The decision is `blorb::Squatters` (`lib/blorb/include/blorb/squatters.h`,
+`test/test_squatters`). Each connection's line names the peer
+(`[hw] ble conn h= addr= type=public|random`), and its first line is logged
+once (`[hw] ble first line: ...`). Each line carries the connection
 it arrived on, tagged as its bytes come in, and a new connection drops the last
 one's unread bytes and half line (`lib/blorb/include/blorb/rx_lines.h`).
 

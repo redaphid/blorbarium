@@ -354,6 +354,7 @@ void setup() {
     trialWatchdog.start();
   }
   otaPackets.begin();
+  ble.keepWhile([] { return updater.active(); });
   const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));

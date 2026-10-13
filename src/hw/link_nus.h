@@ -7,12 +7,15 @@
 #include <NimBLEDevice.h>
 
 #include <cstdio>
+#include <functional>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "blorb/notify_queue.h"
 #include "blorb/rx_lines.h"
 #include "blorb/seams.h"
+#include "blorb/squatters.h"
 
 // One phone at a time, enforced in onConnect, never by shrinking NimBLE: its
 // host indexes per-connection arrays by the controller's raw handle with no
@@ -57,6 +60,8 @@ class NusLink : public blorb::Link {
   }
 
   bool connected() override { return up_; }
+  // While this is true (an update in progress) a quiet connection is never dropped.
+  void keepWhile(std::function<bool()> busy) { keep_ = std::move(busy); }
   uint16_t mtu() const { return mtu_; }
   uint32_t generation() const { return gen_; }   // which connection: a reconnect is a new number
 
@@ -66,6 +71,13 @@ class NusLink : public blorb::Link {
     const std::optional<blorb::RxLines<kRxMax>::Line> line = rx_.line();
     if (!line) return std::nullopt;
     lineConnection_ = line->connection;
+    if (line->connection == seenGen_) {
+      if (!firstLogged_) {
+        firstLogged_ = true;
+        Serial.printf("[hw] ble first line: %.40s\n", std::string(line->text).c_str());
+      }
+      if (blorb::speaksBlorb(line->text)) squatters_.spoke();
+    }
     return line->text;
   }
   // The connection the last line came on, tagged when its bytes arrived.
@@ -130,7 +142,16 @@ class NusLink : public blorb::Link {
     lastPoll_ = now;
     NimBLEServer* server = NimBLEDevice::getServer();
     if (!server) return;
-    if (lastConn_ != loggedConn_) Serial.printf("[hw] ble conn h=%u\n", unsigned(loggedConn_ = lastConn_));
+    if (gen_ != seenGen_) {   // a new connection: say who, and refuse an address that squatted
+      seenGen_ = gen_;
+      firstLogged_ = false;
+      const blorb::BleAddr a = peer_;
+      Serial.printf("[hw] ble conn h=%u addr=%02x:%02x:%02x:%02x:%02x:%02x type=%s\n", unsigned(conn_), a.b[5], a.b[4],
+                    a.b[3], a.b[2], a.b[1], a.b[0], a.type & 1 ? "random" : "public");
+      const blorb::Squatters::Act act = squatters_.connected(a, now);
+      if (act == blorb::Squatters::Act::Refuse) Serial.println("[hw] ble refused: it squatted; this address waits a minute");
+      if (act != blorb::Squatters::Act::None) server->disconnect(conn_);
+    }
     if (lastDrop_ != loggedDrop_) {
       loggedDrop_ = lastDrop_;
       Serial.printf("[hw] ble drop h=%u reason=0x%x\n", unsigned(loggedDrop_ >> 16), unsigned(loggedDrop_ & 0xffff));
@@ -149,6 +170,12 @@ class NusLink : public blorb::Link {
     const bool advertising = NimBLEDevice::getAdvertising()->isAdvertising();
     if (advertising != advLogged_) Serial.printf("[hw] ble adv %s\n", (advLogged_ = advertising) ? "on" : "off");
     if (!live) return;
+    if (squatters_.poll(now, keep_ && keep_()) == blorb::Squatters::Act::Evict) {
+      Serial.printf("[hw] ble drop h=%u reason=idle: nothing the protocol knows in %u s\n", unsigned(conn_),
+                    unsigned(blorb::Squatters::kSpeakWithinMs / 1000));
+      server->disconnect(conn_);
+      return;
+    }
     if (up_ && !paramsAsked_ && now - connAt_ > kParamsAfterMs) {
       paramsAsked_ = true;
       if (itvl_ < kConnMin || itvl_ > kConnMax || timeout_ < kTimeout10ms)
@@ -176,12 +203,14 @@ class NusLink : public blorb::Link {
     NusLink* link;
     explicit ServerCb(NusLink* l) : link(l) {}
     void onConnect(NimBLEServer* server, NimBLEConnInfo& info) override {
-      link->lastConn_ = info.getConnHandle();
       if (liveConnections(server) > 1) {   // a second phone: the first keeps the dish
         server->disconnect(info.getConnHandle());
         return;
       }
       link->conn_ = info.getConnHandle();
+      const NimBLEAddress addr = info.getAddress();
+      std::memcpy(link->peer_.b, addr.getVal(), sizeof link->peer_.b);
+      link->peer_.type = addr.getType();
       link->connAt_ = millis();
       link->mtu_ = info.getMTU();
       link->itvl_ = info.getConnInterval();
@@ -209,8 +238,13 @@ class NusLink : public blorb::Link {
   ServerCb serverCb_{this};
   blorb::RxLines<kRxMax> rx_;   // written by the BLE task, read by the loop
   uint32_t lineConnection_ = 0;
-  volatile uint32_t lastConn_ = 0xffff, lastDrop_ = 0;   // written by the BLE task, logged by poll()
-  uint32_t loggedConn_ = 0xffff, loggedDrop_ = 0;
+  volatile uint32_t lastDrop_ = 0;   // written by the BLE task, logged by poll()
+  uint32_t loggedDrop_ = 0;
+  blorb::BleAddr peer_;               // written by the BLE task before gen_ moves
+  uint32_t seenGen_ = 0;              // the connection poll() last announced
+  bool firstLogged_ = false;
+  blorb::Squatters squatters_;        // the loop's only
+  std::function<bool()> keep_;
   bool advLogged_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
