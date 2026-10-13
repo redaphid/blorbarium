@@ -13,6 +13,7 @@
 //   sim --shot out.bmp --after 3000      one frame, then quit
 //   sim --record dir/ --fps 20 --for 8000   every frame to dir/, then quit
 //   sim --sealed                         boot as a board whose keepsake would not open
+//   sim --species <slug|id>              draw the pet as that species (DEBUG species does it live)
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
@@ -20,7 +21,7 @@
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
-//   DEBUG stage <hatchling|child|adult|elder>
+//   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id>
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
 
@@ -164,6 +165,12 @@ static void debug(const char* verb, const char* a, const char* b) {
     dish->clock().alignToWall(unix, int16_t(atoi(b)));
     return;
   }
+  if (!strcmp(verb, "species")) {
+    blorb::SpeciesId s;
+    if (debugverbs::speciesByName(a, s)) pinnedSpecies = s;
+    else fprintf(stderr, "sim: DEBUG species: %s is not a species.def name or 0..255\n", a);
+    return;
+  }
   if (!strcmp(verb, "stage")) {
     if (const char* why = debugverbs::growTo(*dish, a, warp)) fprintf(stderr, "sim: DEBUG stage %s: %s\n", a, why);
     return;
@@ -256,6 +263,14 @@ int main(int argc, char** argv) {
     // a shot is the same frame, but nothing asks for a display.
     else if (!strcmp(a, "--headless")) setenv("SDL_VIDEODRIVER", "dummy", 1);
     else if (!strcmp(a, "--sealed")) simSealed = true;
+    else if (!strcmp(a, "--species") && i + 1 < argc) {
+      blorb::SpeciesId s;
+      if (!debugverbs::speciesByName(argv[++i], s)) {
+        fprintf(stderr, "sim: --species %s: not a species.def name or 0..255\n", argv[i]);
+        return 2;
+      }
+      pinnedSpecies = s;
+    }
     else if (!strcmp(a, "--clock") && i + 1 < argc) {
       const char* c = argv[++i];
       if (strcmp(c, "fixed") && strcmp(c, "wall")) { fprintf(stderr, "sim: --clock fixed|wall, not %s\n", c); return 2; }

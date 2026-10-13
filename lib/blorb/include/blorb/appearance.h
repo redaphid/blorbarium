@@ -11,6 +11,7 @@
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
+#include "blorb/species.h"
 #include "blorb/thoughts.h"
 
 namespace blorb {
@@ -28,6 +29,9 @@ struct Appearance {
   uint16_t generation = 0;
   Stage stage = Stage::Baby;
   uint32_t lifeSeed = 0;            // genome hash: mottling layout, blink and bob jitter
+  // Whose art draws him (paint::packFor). Every pet reads as grungo until the
+  // species gene exists to express it; src/main.cpp can pin it for a look.
+  SpeciesId species = kGrungo;
 
   // Where and how
   DishPos at{};

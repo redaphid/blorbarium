@@ -8,7 +8,6 @@
 #include <string_view>
 
 #include "blorb/dish.h"
-#include "grungo_pack.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
@@ -102,9 +101,14 @@ static constexpr bool kAskForTime = true;
 static constexpr bool kAskForTime = false;
 #endif
 
+// `DEBUG species` and the sim's --species pin the species drawn, to look at
+// every pack on one board. RAM only: the pet and its save never see it.
+static std::optional<blorb::SpeciesId> pinnedSpecies;
+
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
   if (!kAskForTime) a.timeUnknown = false;
+  if (pinnedSpecies) a.species = *pinnedSpecies;
   return a;
 }
 
@@ -289,14 +293,24 @@ static void press(const char* a) {
   Serial.printf("[hw] debug press %ld ms\n", ms);
 }
 
+static void pinSpecies(const char* a) {
+  blorb::SpeciesId s;
+  if (!debugverbs::speciesByName(a, s))
+    return (void)Serial.printf("[hw] debug species: '%s' is not a species.def name or 0..255\n", a);
+  pinnedSpecies = s;
+  Serial.printf("[hw] debug species %u: drawn as %s until reset, not saved\n", unsigned(s.v),
+                blorb::speciesInfo(s).name);
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
+  if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, shot, press [ms], bletest <bytes>)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, shot, press [ms], bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -321,7 +335,8 @@ void loop() {
 #endif
   step(now);
   if (!holdFrame && now - lastFrame >= kFrameMs) {
-    paint::draw(shown(), grungoPack(), canvas, now);
+    const blorb::Appearance a = shown();
+    paint::draw(a, paint::packFor(a.species), canvas, now);
     boardPresent(display, canvas);
     lastFrame = now;
   }
