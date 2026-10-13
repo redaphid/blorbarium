@@ -18,6 +18,7 @@ class HeldStorage : public blorb::Storage {
     return inner_.read(name, offset, buf, cap);
   }
   size_t size(const char* name) override { return inner_.size(name); }
+  bool writable() override { return !held_ && inner_.writable(); }
   bool writeAtomic(const char* name, const uint8_t* data, size_t len) override {
     return !held_ && inner_.writeAtomic(name, data, len);
   }

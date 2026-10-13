@@ -3,54 +3,12 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-#include <type_traits>
 
 namespace ota {
 namespace {
 
 constexpr const char* kLastNames[] = {"none",     "no_confirm", "busy",      "save_failed", "aborted", "timeout",
                                       "overflow", "bad_hash",   "bad_image", "flash_error", "on_trial"};
-
-int b64urlValue(char c) {
-  if (c >= 'A' && c <= 'Z') return c - 'A';
-  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-  if (c >= '0' && c <= '9') return c - '0' + 52;
-  if (c == '-') return 62;
-  if (c == '_') return 63;
-  return -1;
-}
-
-// Unpadded base64url of exactly `n` bytes, or false.
-bool unb64url(std::string_view s, uint8_t* out, size_t n) {
-  if (s.size() != (n * 8 + 5) / 6) return false;
-  uint32_t acc = 0;
-  int bits = 0;
-  size_t k = 0;
-  for (char c : s) {
-    const int v = b64urlValue(c);
-    if (v < 0) return false;
-    acc = acc << 6 | uint32_t(v);
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      if (k < n) out[k++] = uint8_t(acc >> bits);
-    }
-  }
-  return k == n && (acc & ((1u << bits) - 1)) == 0;   // leftover bits are zero in a canonical encoding
-}
-
-void b64url(const uint8_t* p, size_t n, char* out) {
-  static const char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-  uint32_t acc = 0;
-  int bits = 0;
-  for (size_t i = 0; i < n; ++i) {
-    acc = acc << 8 | p[i];
-    bits += 8;
-    while (bits >= 6) *out++ = kAlphabet[(acc >> (bits -= 6)) & 63];
-  }
-  if (bits) *out++ = kAlphabet[(acc << (6 - bits)) & 63];
-  *out = 0;
-}
 
 std::optional<uint32_t> hexId(std::string_view& rest) {
   if (rest.size() < 2 || rest[0] != '#') return std::nullopt;
@@ -72,9 +30,9 @@ std::optional<uint32_t> hexId(std::string_view& rest) {
 size_t signedText(const Image& im, char* out, size_t cap) {
   char sha[44];
   b64url(im.sha256, sizeof im.sha256, sha);
-  const int n = std::snprintf(out, cap, "blorbota1 %s %u.%u.%u %u %u %s", im.board, unsigned(im.version.major),
+  const int n = std::snprintf(out, cap, "blorbota2 %s %u.%u.%u %u %u %u %s", im.board, unsigned(im.version.major),
                               unsigned(im.version.minor), unsigned(im.version.patch), unsigned(im.flags),
-                              unsigned(im.size), sha);
+                              unsigned(im.fmt), unsigned(im.size), sha);
   return n > 0 && size_t(n) < cap ? size_t(n) : 0;
 }
 
@@ -82,33 +40,15 @@ uint32_t idOf(const Image& im) {
   return uint32_t(im.sha256[0]) << 24 | uint32_t(im.sha256[1]) << 16 | uint32_t(im.sha256[2]) << 8 | im.sha256[3];
 }
 
+bool is(const std::optional<std::string_view>& w, const char* s) { return w && *w == s; }
+
 }  // namespace
 
 const char* lastName(Last l) { return kLastNames[size_t(l)]; }
 
-std::optional<Version> parseVersion(std::string_view s) {
-  uint32_t part[3] = {};
-  size_t p = 0;
-  bool digit = false;
-  for (char c : s) {
-    if (c == '.') {
-      if (!digit || ++p > 2) return std::nullopt;
-      digit = false;
-    } else if (c >= '0' && c <= '9') {
-      part[p] = part[p] * 10 + uint32_t(c - '0');
-      if (part[p] > 0xffff) return std::nullopt;
-      digit = true;
-    } else {
-      return std::nullopt;
-    }
-  }
-  if (p != 2 || !digit) return std::nullopt;
-  return Version{uint16_t(part[0]), uint16_t(part[1]), uint16_t(part[2])};
-}
-
 bool Image::operator==(const Image& o) const {
-  return std::strcmp(board, o.board) == 0 && version == o.version && flags == o.flags && size == o.size &&
-         std::memcmp(sha256, o.sha256, sizeof sha256) == 0 && std::memcmp(sig, o.sig, sizeof sig) == 0;
+  return std::strcmp(board, o.board) == 0 && version == o.version && flags == o.flags && fmt == o.fmt &&
+         size == o.size && std::memcmp(sha256, o.sha256, sizeof sha256) == 0 && std::memcmp(sig, o.sig, sizeof sig) == 0;
 }
 
 Session::Session(Slot& slot, Host& host, blorb::Link& link, Config config)
@@ -120,58 +60,65 @@ bool Session::handle(std::string_view line, uint32_t now, Peer peer) {
   const std::optional<uint32_t> id = hexId(rest);
   if (!id) return false;
   blorb::Args args{rest};
-  if (args.word() != std::optional<std::string_view>("OTA")) return false;
+  if (!is(args.word(), "OTA")) return false;
 
   blorb::Reply reply(link_, *id);
   const std::optional<std::string_view> sub = args.word();
-  if (sub == std::optional<std::string_view>("BEGIN")) {
-    begin(args, reply, now, peer);
-  } else if (sub == std::optional<std::string_view>("STATUS")) {
-    status(reply);
-  } else if (sub == std::optional<std::string_view>("CONFIRM")) {
-    // The page reached this image over Bluetooth: the half of the trial a dish cannot check alone.
-    if (host_.onTrial()) host_.confirmTrial();
-    reply.ok("trial=%d", host_.onTrial() ? 1 : 0);
-  } else if (othersSession(peer)) {
-    reply.err(403, "NOT_YOURS");   // ABORT and REBOOT belong to the page that started it, while it is here
-  } else if (sub == std::optional<std::string_view>("ABORT")) {
-    if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) slot_.discard();
-    if (!std::holds_alternative<Idle>(state_)) fail(Last::Aborted);
-    reply.ok("state=idle");
-  } else if (sub == std::optional<std::string_view>("REBOOT")) {
-    if (Ready* r = std::get_if<Ready>(&state_)) {
-      r->rebootAt = now + kRebootDelayMs;
-      reply.ok("rebooting");
-    } else {
-      reply.err(409, "NOT_READY");
+  if (is(sub, "BEGIN")) return begin(args, reply, now, peer), true;
+  if (is(sub, "STATUS")) return status(reply), true;
+
+  // The rest name the page's token. A missing or malformed one is nobody's.
+  const std::optional<std::string_view> word = args.word();
+  const std::optional<Token> token = word ? parseToken(*word) : std::nullopt;
+  if (is(sub, "CONFIRM")) {
+    // The new image's half of the trial a dish cannot check alone: this page reached it over Bluetooth.
+    if (!token) return reply.err(403, "NOT_YOURS"), true;
+    switch (host_.confirmTrial(*token)) {
+      case Confirm::NotOnTrial: return reply.ok("trial=0"), true;
+      case Confirm::Confirmed: return reply.ok("trial=1"), true;
+      case Confirm::NotYours: return reply.err(403, "NOT_YOURS"), true;
     }
-  } else {
-    reply.err(400, "BAD_ARGS");
   }
+  if (!is(sub, "ABORT") && !is(sub, "REBOOT")) return reply.err(400, "BAD_ARGS"), true;
+  Owner* o = owner();
+  if (o && (!token || *token != o->token)) return reply.err(403, "NOT_YOURS"), true;
+  if (is(sub, "ABORT")) {
+    if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) slot_.discard();
+    if (o) fail(Last::Aborted);
+    return reply.ok("state=idle"), true;
+  }
+  Ready* r = std::get_if<Ready>(&state_);
+  if (!r) return reply.err(409, "NOT_READY"), true;
+  r->rebootAt = now + kRebootDelayMs;
+  reply.ok("rebooting");
   return true;
 }
 
 void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now, Peer peer) {
   Image im;
   const std::optional<std::string_view> board = args.word(), version = args.word();
-  const std::optional<uint32_t> flags = args.number(0xffff), size = args.number(0xffffffffu);
-  const std::optional<std::string_view> sha = args.word(), sig = args.word();
+  const std::optional<uint32_t> flags = args.number(0xffff), fmt = args.number(0xffff),
+                                size = args.number(0xffffffffu);
+  const std::optional<std::string_view> sha = args.word(), sig = args.word(), tok = args.word();
   const std::optional<Version> v = version ? parseVersion(*version) : std::nullopt;
-  if (!board || board->size() >= sizeof im.board || !v || !flags || !size || !sha || !sig || !args.done() ||
-      !unb64url(*sha, im.sha256, sizeof im.sha256) || !unb64url(*sig, im.sig, sizeof im.sig))
+  const std::optional<Token> token = tok ? parseToken(*tok) : std::nullopt;
+  if (!board || board->size() >= sizeof im.board || !v || !flags || !fmt || !size || !sha || !sig || !token ||
+      !args.done() || !unb64url(*sha, im.sha256, sizeof im.sha256) || !unb64url(*sig, im.sig, sizeof im.sig))
     return reply.err(400, "BAD_ARGS");
   std::memcpy(im.board, board->data(), board->size());
   im.version = *v;
   im.flags = *flags;
+  im.fmt = *fmt;
   im.size = *size;
 
-  // A session is open: its own BEGIN is the resume, and moves it to the page
-  // that sent it. Anything else waits for ABORT.
+  // A session is open: its own image and token is the resume, and moves the
+  // data to the connection that sent it. The image is public, so the same
+  // image under another token is someone else's page.
   if (const Image* open = current()) {
     if (!(*open == im)) return reply.err(409, "OTA_ACTIVE");
-    std::visit([&](auto& st) {
-      if constexpr (!std::is_same_v<std::decay_t<decltype(st)>, Idle>) st.owner = peer;
-    }, state_);
+    Owner* o = owner();
+    if (o->token != *token) return reply.err(403, "NOT_YOURS");
+    o->peer = peer;
     return status(reply);
   }
 
@@ -189,7 +136,7 @@ void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now, Peer p
   const size_t n = signedText(im, text, sizeof text);
   if (!n || !verifyP256(config_.publicKey, reinterpret_cast<const uint8_t*>(text), n, im.sig))
     return reply.err(403, "BAD_SIGNATURE");
-  state_ = Asking{im, peer, now};
+  state_ = Asking{im, Owner{*token, peer}, now};
   status(reply);
 }
 
@@ -197,8 +144,12 @@ void Session::status(blorb::Reply& reply) {
   const unsigned chunk = host_.chunk();
   if (const Idle* idle = std::get_if<Idle>(&state_)) {
     const Version& fw = config_.firmware;
-    return reply.ok("state=idle board=%s fw=%u.%u.%u chunk=%u trial=%d last=%s", config_.board, unsigned(fw.major),
-                    unsigned(fw.minor), unsigned(fw.patch), chunk, host_.onTrial() ? 1 : 0, lastName(idle->last));
+    char rolled[20] = "none";
+    if (const std::optional<Version> rb = host_.rolledBack())
+      std::snprintf(rolled, sizeof rolled, "%u.%u.%u", unsigned(rb->major), unsigned(rb->minor), unsigned(rb->patch));
+    return reply.ok("state=idle board=%s fw=%u.%u.%u chunk=%u trial=%d last=%s rolledback=%s", config_.board,
+                    unsigned(fw.major), unsigned(fw.minor), unsigned(fw.patch), chunk, host_.onTrial() ? 1 : 0,
+                    lastName(idle->last), rolled);
   }
   const char* name = asking() ? "confirm" : std::holds_alternative<Receiving>(state_) ? "receiving" : "ready";
   const Image& im = *current();
@@ -211,7 +162,7 @@ void Session::press(uint32_t now) {
   Asking* a = std::get_if<Asking>(&state_);
   if (!a || now - a->since < kMinAskMs) return;
   const Image im = a->image;
-  const Peer owner = a->owner;
+  const Owner owner = a->owner;
   if (host_.onTrial()) return fail(Last::OnTrial);
   if (host_.busy()) return fail(Last::Busy);
   if (!host_.save()) return fail(Last::SaveFailed);
@@ -222,7 +173,7 @@ void Session::press(uint32_t now) {
 
 void Session::data(const uint8_t* packet, size_t len, uint32_t now, Peer peer) {
   Receiving* r = std::get_if<Receiving>(&state_);
-  if (!r || len < 5 || peer != r->owner) return;   // bytes from any other phone never reach the slot
+  if (!r || len < 5 || peer != r->owner.peer) return;   // bytes from any other connection never reach the slot
   const uint32_t offset = uint32_t(packet[0]) | uint32_t(packet[1]) << 8 | uint32_t(packet[2]) << 16 |
                           uint32_t(packet[3]) << 24;
   const uint8_t* bytes = packet + 4;
@@ -258,8 +209,8 @@ void Session::finish(Receiving& r, uint32_t now) {
   if (std::memcmp(got, r.image.sha256, sizeof got) != 0) why = Last::BadHash;
   else if (!slot_.close()) why = Last::BadImage;
   // Before the switch: a power cut from here on boots the new image, which
-  // must find this record to know which pet it was handed.
-  else if (!host_.handOver()) why = Last::FlashError;
+  // must find this record to know which pet, version and page it was handed.
+  else if (!host_.handOver(r.image.version, r.owner.token)) why = Last::FlashError;
   else if (!slot_.activate()) why = Last::FlashError;
   if (why != Last::None) {
     slot_.discard();
@@ -289,8 +240,9 @@ bool Session::rebootDue(uint32_t now) {
 }
 
 bool Session::prepareRestart() {
-  if (host_.save() || host_.save()) {
-    host_.handOver();   // again: the pet may have moved on since ready, and a stale record only rolls back
+  const Ready* r = std::get_if<Ready>(&state_);
+  if (r && (host_.save() || host_.save())) {
+    host_.handOver(r->image.version, r->owner.token);   // again: the pet may have moved on since ready, and a stale record only rolls back
     return true;
   }
   slot_.discard();
@@ -313,22 +265,17 @@ void Session::fail(Last why) {
   event("state=idle last=%s", lastName(why));
 }
 
-std::optional<Peer> Session::owner() const {
-  if (const Asking* a = std::get_if<Asking>(&state_)) return a->owner;
-  if (const Receiving* r = std::get_if<Receiving>(&state_)) return r->owner;
-  if (const Ready* r = std::get_if<Ready>(&state_)) return r->owner;
-  return std::nullopt;
-}
-
-bool Session::othersSession(Peer peer) {
-  const std::optional<Peer> o = owner();
-  return o && *o != peer && host_.connected(*o);
-}
-
 const Image* Session::current() const {
   if (const Asking* a = std::get_if<Asking>(&state_)) return &a->image;
   if (const Receiving* r = std::get_if<Receiving>(&state_)) return &r->image;
   if (const Ready* r = std::get_if<Ready>(&state_)) return &r->image;
+  return nullptr;
+}
+
+Session::Owner* Session::owner() {
+  if (Asking* a = std::get_if<Asking>(&state_)) return &a->owner;
+  if (Receiving* r = std::get_if<Receiving>(&state_)) return &r->owner;
+  if (Ready* r = std::get_if<Ready>(&state_)) return &r->owner;
   return nullptr;
 }
 

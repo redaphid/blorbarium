@@ -11,7 +11,12 @@
 #include <string_view>
 
 #include "blorb/notify_queue.h"
+#include "blorb/rx_lines.h"
 #include "blorb/seams.h"
+
+// One phone at a time: the link, its queues and an update's session all
+// assume it (platformio.ini sets it; onConnect drops any second one too).
+static_assert(CONFIG_BT_NIMBLE_MAX_CONNECTIONS == 1, "NusLink serves one central");
 
 namespace hw {
 
@@ -54,20 +59,13 @@ class NusLink : public blorb::Link {
   std::optional<std::string_view> readLine() override {
     pump();
     poll();
-    while (tail_ != head_) {
-      const char c = rx_[tail_];
-      tail_ = (tail_ + 1) % kRxMax;
-      if (c == '\r') continue;
-      if (c != '\n') {
-        if (len_ < sizeof line_) line_[len_++] = c;
-        continue;
-      }
-      const size_t n = len_;
-      len_ = 0;
-      return std::string_view(line_, n);
-    }
-    return std::nullopt;
+    const std::optional<blorb::RxLines<kRxMax>::Line> line = rx_.line();
+    if (!line) return std::nullopt;
+    lineConnection_ = line->connection;
+    return line->text;
   }
+  // The connection the last line came on, tagged when its bytes arrived.
+  uint32_t lineConnection() const { return lineConnection_; }
 
   // Queued, sent by pump(). A line too big for what is left waits here while
   // the queue drains, so a genome past the queue's size still goes out whole.
@@ -145,18 +143,17 @@ class NusLink : public blorb::Link {
     explicit RxCb(NusLink* l) : link(l) {}
     void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
       const NimBLEAttValue v = c->getValue();
-      for (size_t i = 0; i < v.size(); i++) {
-        const size_t next = (link->head_ + 1) % kRxMax;
-        if (next == link->tail_) return;   // full: the rest is dropped, so the line reads as garbled
-        link->rx_[link->head_] = char(v.data()[i]);
-        link->head_ = next;
-      }
+      link->rx_.push(v.data(), v.size());
     }
   };
   struct ServerCb : NimBLEServerCallbacks {
     NusLink* link;
     explicit ServerCb(NusLink* l) : link(l) {}
-    void onConnect(NimBLEServer*, NimBLEConnInfo& info) override {
+    void onConnect(NimBLEServer* server, NimBLEConnInfo& info) override {
+      if (server->getConnectedCount() > 1) {   // never with max connections 1; if it ever is, the first phone keeps the dish
+        server->disconnect(info.getConnHandle());
+        return;
+      }
       link->conn_ = info.getConnHandle();
       link->connAt_ = millis();
       link->mtu_ = info.getMTU();
@@ -164,6 +161,7 @@ class NusLink : public blorb::Link {
       link->timeout_ = info.getConnTimeout();
       link->paramsAsked_ = false;
       link->gen_ = link->gen_ + 1;
+      link->rx_.connected(link->gen_);
       link->up_ = true;
     }
     void onConnParamsUpdate(NimBLEConnInfo& info) override {
@@ -181,10 +179,8 @@ class NusLink : public blorb::Link {
   NimBLECharacteristic* tx_ = nullptr;
   RxCb rxCb_{this};
   ServerCb serverCb_{this};
-  char rx_[kRxMax];
-  volatile size_t head_ = 0, tail_ = 0;   // head_ written by the BLE task, tail_ by the loop
-  char line_[256];                        // past the protocol's 200, so an overlong line still reads as overlong
-  size_t len_ = 0;
+  blorb::RxLines<kRxMax> rx_;   // written by the BLE task, read by the loop
+  uint32_t lineConnection_ = 0;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;

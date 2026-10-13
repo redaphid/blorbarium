@@ -42,8 +42,8 @@ def unb64url(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
-def signed_text(board, version, flags, size, sha256: bytes) -> bytes:
-    return f"blorbota1 {board} {version} {flags} {size} {b64url(sha256)}".encode()
+def signed_text(board, version, flags, fmt, size, sha256: bytes) -> bytes:
+    return f"blorbota2 {board} {version} {flags} {fmt} {size} {b64url(sha256)}".encode()
 
 
 def sign(key, text: bytes) -> bytes:
@@ -77,7 +77,12 @@ def image_stamp(image: bytes) -> dict:
     if at < 0:
         sys.exit("firmware.bin carries no blorbstamp1: is this a blorbarium build?")
     field = lambda off, n: image[at + off:at + off + n].split(b"\0", 1)[0].decode()
-    return {"fw": field(12, 16), "board": field(28, 16), "fmt": int.from_bytes(image[at + 44:at + 46], "little")}
+    return {"fw": field(12, 16), "board": field(28, 16), "fmt": int.from_bytes(image[at + 44:at + 46], "little"),
+            "commit": field(46, 24)}
+
+
+def git(*args) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
 def clean_tree():
@@ -140,17 +145,21 @@ def cmd_release(args):
     stamp, version = image_stamp(image), firmware_version()
     if stamp["fw"] != version or stamp["board"] != board:
         sys.exit(f"firmware.bin is {stamp['board']} {stamp['fw']}, not {board} {version}: build it again")
+    if stamp["commit"] != git("describe", "--always", "--dirty"):
+        sys.exit(f"firmware.bin was built from {stamp['commit']}, not this commit: build it again")
     out = ROOT / "web" / "public" / "fw" / board
-    previous = out / "manifest.json"
-    if previous.exists():
-        before = json.loads(previous.read_text()).get("fmt")
+    # The last release as committed, not whatever a working tree holds.
+    shown = subprocess.run(["git", "show", f"HEAD:web/public/fw/{board}/manifest.json"], cwd=ROOT,
+                           capture_output=True, text=True)
+    if shown.returncode == 0:
+        before = json.loads(shown.stdout).get("fmt")
         if before is not None and before != stamp["fmt"] and not args.format_change:
             sys.exit(f"this image saves format {stamp['fmt']}, the last release saved {before}. Read docs/ota.md "
                      "\"Save formats\" (an image on trial writes nothing, a kept one writes the new format), "
                      "then pass --format-change.")
     flags = 1 if args.allow_older else 0
     sha = hashlib.sha256(image).digest()
-    sig = sign(key, signed_text(board, version, flags, len(image), sha))
+    sig = sign(key, signed_text(board, version, flags, stamp["fmt"], len(image), sha))
     out.mkdir(parents=True, exist_ok=True)
     name = f"blorbarium-{board}-{version}.bin"
     (out / name).write_bytes(image)
@@ -171,7 +180,7 @@ def check(manifest_path: Path, public_key=None):
         public_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), embedded_point())
     raw = unb64url(m["sig"])
     der = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
-    public_key.verify(der, signed_text(m["board"], m["version"], m["flags"], m["size"], sha),
+    public_key.verify(der, signed_text(m["board"], m["version"], m["flags"], m["fmt"], m["size"], sha),
                       ec.ECDSA(hashes.SHA256()))
     print(f"ok: {m['board']} {m['version']} verifies against {PUBKEY_H.relative_to(ROOT)}")
 
@@ -185,8 +194,8 @@ def cmd_fixture(args):
     key = ec.generate_private_key(ec.SECP256R1())
     image = bytes((i * 37 + 11) & 255 for i in range(1000))
     sha = hashlib.sha256(image).digest()
-    sig = sign(key, signed_text("lcd128", "0.5.0", 0, len(image), sha))
-    begin = f"OTA BEGIN lcd128 0.5.0 0 {len(image)} {b64url(sha)} {b64url(sig)}"
+    sig = sign(key, signed_text("lcd128", "0.5.0", 0, 1, len(image), sha))
+    begin = f"OTA BEGIN lcd128 0.5.0 0 1 {len(image)} {b64url(sha)} {b64url(sig)}"
     FIXTURE_H.write_text(
         "#pragma once\n"
         "// Written by `tools/ota_release.py fixture`: a release signed by a throwaway\n"

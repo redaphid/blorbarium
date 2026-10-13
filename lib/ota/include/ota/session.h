@@ -7,7 +7,8 @@
 //   idle --BEGIN--> asking --button--> receiving --last byte--> ready --REBOOT--> restart
 //
 // A disconnect is not an event here. The session waits, and the page resumes
-// by sending the same BEGIN, which answers where the session stands.
+// by sending the same BEGIN with the same token, which answers where the
+// session stands.
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -16,11 +17,9 @@
 #include "blorb/protocol.h"
 #include "blorb/seams.h"
 #include "ota/crypto.h"
+#include "ota/types.h"
 
 namespace ota {
-
-// One Bluetooth connection, numbered so a reconnect is a different peer.
-using Peer = uint32_t;
 
 // The app slot that is not running. Firmware: esp_ota_*. Tests: memory.
 class Slot {
@@ -38,31 +37,20 @@ class Slot {
 class Host {
  public:
   virtual ~Host() = default;
-  virtual bool busy() = 0;                // the pet is doing something an update must not interrupt
-  virtual bool save() = 0;                // write the pet now; false when it did not land
-  virtual uint16_t chunk() = 0;           // image bytes one data write can carry on this link
-  virtual bool onTrial() = 0;             // this image has not yet kept itself (docs/ota.md "The trial")
-  virtual bool connected(Peer) = 0;       // that connection is still up
-  virtual bool handOver() = 0;            // record which pet the new image must find
-  virtual void confirmTrial() = 0;        // a page reached this image over Bluetooth
+  virtual bool busy() = 0;                                // the pet is doing something an update must not interrupt
+  virtual bool save() = 0;                                // write the pet now; false when it did not land
+  virtual uint16_t chunk() = 0;                           // image bytes one data write can carry on this link
+  virtual bool onTrial() = 0;                             // this image has not yet kept itself (docs/ota.md "The trial")
+  virtual bool handOver(Version to, const Token&) = 0;    // record which pet, version and page the new image must find
+  virtual Confirm confirmTrial(const Token&) = 0;         // a page reached this image over Bluetooth
+  virtual std::optional<Version> rolledBack() = 0;        // the last update that switched and then rolled back
 };
-
-struct Version {
-  uint16_t major = 0, minor = 0, patch = 0;
-  friend bool operator<(Version a, Version b) {
-    if (a.major != b.major) return a.major < b.major;
-    if (a.minor != b.minor) return a.minor < b.minor;
-    return a.patch < b.patch;
-  }
-  friend bool operator==(Version a, Version b) { return !(a < b) && !(b < a); }
-};
-std::optional<Version> parseVersion(std::string_view);
 
 // Everything BEGIN carries. All of it but the signature is signed.
 struct Image {
   char board[16] = "";
   Version version;
-  uint32_t flags = 0, size = 0;
+  uint32_t flags = 0, fmt = 0, size = 0;
   uint8_t sha256[32] = {};
   uint8_t sig[64] = {};
   bool operator==(const Image&) const;
@@ -102,8 +90,8 @@ class Session {
   // Replies and events go out on `link`: the Bluetooth link the page is on.
   Session(Slot&, Host&, blorb::Link& link, Config);
 
-  // An `#<id> OTA ...` line from `peer` is handled and true; any other line
-  // is false and left for the protocol.
+  // An `#<id> OTA ...` line from connection `peer` is handled and true; any
+  // other line is false and left for the protocol.
   bool handle(std::string_view line, uint32_t now, Peer peer);
   // One data write: a 4-byte little-endian offset, then image bytes.
   void data(const uint8_t* packet, size_t len, uint32_t now, Peer peer);
@@ -118,10 +106,13 @@ class Session {
   bool prepareRestart();
 
  private:
+  // A session belongs to the page's token; its data also to the connection
+  // that last presented it.
+  struct Owner { Token token; Peer peer; };
   struct Idle { Last last = Last::None; };
-  struct Asking { Image image; Peer owner; uint32_t since; };
-  struct Receiving { Image image; Peer owner; uint32_t at, heard, gapSaid; Sha256 hash; };
-  struct Ready { Image image; Peer owner; uint32_t since; std::optional<uint32_t> rebootAt; };
+  struct Asking { Image image; Owner owner; uint32_t since; };
+  struct Receiving { Image image; Owner owner; uint32_t at, heard, gapSaid; Sha256 hash; };
+  struct Ready { Image image; Owner owner; uint32_t since; std::optional<uint32_t> rebootAt; };
   using State = std::variant<Idle, Asking, Receiving, Ready>;
 
   void begin(blorb::Args&, blorb::Reply&, uint32_t now, Peer peer);
@@ -129,8 +120,7 @@ class Session {
   void finish(Receiving&, uint32_t now);
   void fail(Last);
   const Image* current() const;
-  std::optional<Peer> owner() const;
-  bool othersSession(Peer peer);            // another peer's session, and that peer is still here
+  Owner* owner();
   void event(const char* fmt, ...);
 
   Slot& slot_;
