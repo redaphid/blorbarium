@@ -46,7 +46,7 @@ the link its request came from, so serial traffic never reaches the phone.
 
 ```
 #1a HELLO
-#1a OK fw=0.3.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00
+#1a OK fw=0.4.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00
 ```
 
 `phase` is `egg`, `creature` or `clutch`. Trailing words after `HELLO` are ignored.

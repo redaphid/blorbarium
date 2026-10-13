@@ -13,7 +13,6 @@ namespace blorb {
 namespace {
 
 constexpr size_t kMaxLine = 200;
-constexpr const char* kFirmware = "0.3.0";
 constexpr size_t kChunkBytes = 120;          // 160 base64 characters: a "+ <offset> <b64>" line fits the cap
 constexpr uint32_t kStateEventTicks = 20;    // ! STATE every 2 s
 constexpr size_t kDefaultBeliefs = 8, kMaxBeliefs = 32;
@@ -279,7 +278,7 @@ void Protocol::disconnected() { subMask_ = 0; }
 
 void cmd_hello(Dish& dish, const Request&, Reply& r) {
   const Occupant& o = dish.occupant();
-  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x", kFirmware, unsigned(kFormatVersion),
+  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x", kFirmwareVersion, unsigned(kFormatVersion),
        (unsigned long long)(dish.settings().lineageId & 0xFFFFFFFFFFFFull), unsigned(generationOf(o)),
        dish.settings().name, kPhases[o.index()], unsigned(dish.lineage().legacyFeats()));
 }

@@ -5,3 +5,4 @@ __pycache__/
 outputs/
 web/.wrangler/
 web/node_modules/
+*signing-key*

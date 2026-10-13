@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "links.h"
+#include "ota_fixture.h"
 #include "ota/session.h"
 #include "ota/trial.h"
 
@@ -596,6 +597,37 @@ TEST(OtaTrial, AnImageNotOnTrialIsLeftAlone) {
 TEST(OtaTrial, WithNoHandoverRecordOnlyThePanelAndTimeCount) {
   TrialFacts f{true, true, false, std::nullopt, PetMark{0, 1}, kTrialMs};
   EXPECT_EQ(judge(f), Verdict::Keep);
+}
+
+// ---- the release tool's output -------------------------------------------------------
+
+TEST(OtaRelease, TheDishAcceptsWhatToolsOtaReleasePySigned) {
+  MemSlot slot;
+  FakeHost host;
+  ScriptedLink link;
+  Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, otafixture::kPublicKey}};
+  ASSERT_TRUE(session.handle(std::string("#1 ") + otafixture::kBegin, 0));
+  ASSERT_EQ(link.sent.size(), 1u);
+  EXPECT_EQ(link.sent[0].substr(0, 35), "#1 OK state=confirm at=0 size=1000 ");
+  session.press(0);
+  Bytes image(otafixture::kImageSize);
+  for (uint32_t i = 0; i < image.size(); ++i) image[i] = otafixture::imageByte(i);
+  for (uint32_t at = 0; at < image.size(); at += 200) {
+    Bytes p{uint8_t(at), uint8_t(at >> 8), 0, 0};
+    p.insert(p.end(), image.begin() + at, image.begin() + std::min<size_t>(at + 200, image.size()));
+    session.data(p.data(), p.size(), 0);
+  }
+  EXPECT_TRUE(slot.activated) << "the tool's sha256 matches the dish's";
+}
+
+TEST(OtaRelease, ToolSignaturesFailUnderAnotherKey) {
+  Signer other;
+  MemSlot slot;
+  FakeHost host;
+  ScriptedLink link;
+  Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, other.pub}};
+  session.handle(std::string("#1 ") + otafixture::kBegin, 0);
+  EXPECT_EQ(link.sent, (Lines{"#1 ERR 403 BAD_SIGNATURE"}));
 }
 
 int main(int argc, char** argv) {
