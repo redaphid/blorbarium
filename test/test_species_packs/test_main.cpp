@@ -70,14 +70,35 @@ std::set<uint8_t> regionsInPalette(const paint::SpritePack& pack) {
   return out;
 }
 
+// Pixels a region's tint must move, summed over every scene, for its gene to
+// show. Gilly's belly and Mudge's cloak were single-pixel specks once (a few
+// px in one face) until their region maps drew real parts.
+constexpr int kVisibleRegionPx = 200;
+
+// Slots the art tags only in specks today, so their genes barely show. Art's
+// to fix; listed so any other region that shrinks to specks fails.
+struct Sparse { const char* species; uint8_t region; };
+constexpr Sparse kSparse[] = {
+    {"mossby", blorb::region::belly.v},     // 160 px
+    {"fizz", blorb::region::belly.v},       // 9 px
+    {"hushwing", blorb::region::shell.v},   // 34 px: a white egg with little jelly
+};
+
+bool sparse(SpeciesId s, uint8_t region) {
+  for (const Sparse& k : kSparse)
+    if (k.region == region && std::string(k.species) == blorb::speciesInfo(s).name) return true;
+  return false;
+}
+
 class EverySpecies : public ::testing::TestWithParam<uint8_t> {};
 
 // The colour genes reach every species: each region the pack's region map tags
-// moves on screen under its own tint, and no pixel moves under two regions'.
+// moves a visible part on screen under its own tint, and no pixel moves under
+// two regions'.
 TEST_P(EverySpecies, EachRegionRecoloursOnItsOwn) {
   const SpeciesId s{GetParam()};
   const paint::SpritePack& pack = paint::packFor(s);
-  std::set<uint8_t> moved;
+  int moved[blorb::kRegionCount] = {};
   for (const auto& [name, plain] : scenes(s)) {
     const auto before = render(plain);
     std::vector<uint8_t> owner(kPx, 0xFF);
@@ -87,18 +108,25 @@ TEST_P(EverySpecies, EachRegionRecoloursOnItsOwn) {
       const auto after = render(tinted);
       for (int i = 0; i < kPx; ++i) {
         if (before->px[i] == after->px[i]) continue;
-        moved.insert(r);
+        ++moved[r];
         ASSERT_EQ(owner[i], 0xFF) << blorb::speciesInfo(s).name << " " << name << ": pixel " << i
                                   << " moved under region " << int(owner[i]) << " and region " << int(r);
         owner[i] = r;
       }
     }
   }
-  for (uint8_t r : regionsInPalette(pack))
-    EXPECT_TRUE(moved.count(r)) << blorb::speciesInfo(s).name << ": region " << int(r)
-                                << " is in the palette but no tint of it moved a pixel";
+  for (uint8_t r : regionsInPalette(pack)) {
+    if (sparse(s, r)) {
+      EXPECT_GT(moved[r], 0) << blorb::speciesInfo(s).name << ": region " << int(r) << " no longer moves at all";
+      EXPECT_LT(moved[r], kVisibleRegionPx) << blorb::speciesInfo(s).name << ": region " << int(r)
+                                            << " is real now; take it out of kSparse";
+      continue;
+    }
+    EXPECT_GE(moved[r], kVisibleRegionPx) << blorb::speciesInfo(s).name << ": region " << int(r) << " moves only "
+                                          << moved[r] << " px, specks rather than a part";
+  }
   for (uint8_t r : {blorb::region::skin.v, blorb::region::eye.v, blorb::region::glow.v, blorb::region::shell.v})
-    EXPECT_TRUE(moved.count(r)) << blorb::speciesInfo(s).name << ": region " << int(r) << " never recoloured";
+    EXPECT_GT(moved[r], 0) << blorb::speciesInfo(s).name << ": region " << int(r) << " never recoloured";
 }
 
 std::vector<uint8_t> rosterIds() {
