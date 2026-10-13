@@ -472,7 +472,7 @@ def label_egg(rgb, alpha, eyes, froglet):
     return lab
 
 
-def label_egg_refs(rgb, alpha, eyes):
+def label_egg_refs(rgb, alpha, eyes, k=1.0):
     """A pet's egg from pack.json's egg_refs: the baby inside takes skin or cloak, so a
     clutch shows each child's genes; the jelly is shell; glow only at the baby's eyes."""
     h, s, v = to_hsv(rgb)
@@ -483,6 +483,13 @@ def label_egg_refs(rgb, alpha, eyes):
     zone = ref_zone(eye_zone, np.zeros(alpha.shape, bool), True)
     lab = nearest_region(rgb, refs, [zone.get(reg, np.ones(alpha.shape, bool)) for _, reg in refs])
     dark = v < CFG.get("ink", 0.16)
+    if CFG.get("egg_baby"):
+        # where colour cannot tell jelly from baby (a white owl in a white egg), the
+        # baby's outline in pack.json does: everything outside it is shell
+        baby = np.zeros(alpha.shape, bool)
+        for x0, y0, x1, y1 in CFG["egg_baby"]:
+            baby |= disc(alpha.shape, (x0 + x1) * k / 2, (y0 + y1) * k / 2, (x1 - x0) * k / 2, (y1 - y0) * k / 2)
+        lab[~baby & ~np.isin(lab, (REGION["glow"], REGION["eye"]))] = REGION["shell"]
     lab[dark & ~eye_zone] = INVARIANT
     for x, y, er in eyes:
         # the baby's eyes see whatever colour they were drawn: ink is eye, the rest glow
@@ -503,7 +510,7 @@ def egg_art():
     rgb, alpha = a[..., :3].copy(), a[..., 3]
     scaled = [(e["x"] * k, e["y"] * k, e["r"] * k) for e in eyes]
     if CFG:
-        lab = label_egg_refs(rgb, alpha, scaled)
+        lab = label_egg_refs(rgb, alpha, scaled, k)
     else:
         (fx, fy), (frx, fry) = EGG_FROGLET
         lab = label_egg(rgb, alpha, scaled, ((fx * k, fy * k), (frx * k, fry * k)))
@@ -1020,7 +1027,7 @@ def emit_duel(entries, frames, idx):
                  "{{0, 0, 0}, {0, 0, 0}}, 0};")
     sizes = "small, medium, large"
     L += ["",
-          f"// [Scar::Kind: claw, scorch, notch, ripple, ring][{sizes}]",
+          f"// [Scar::Kind: claw, scorch, notch, stitches, bite][{sizes}]",
           "inline constexpr paint::FrameRef kScars[5][3] = {"]
     L += ["    {" + ", ".join(f"kScar{cap(k)}{z}" for z in "SML") + "}," for k in duel_art.SCARS]
     L += ["};",
@@ -1068,16 +1075,16 @@ def duel_sheets(text, outdir):
 
     # ART1: every kind at every size on every body, multiplying the body as the header says
     import duel_art
-    spots = [(0.32, 0.30), (0.68, 0.30), (0.50, 0.52), (0.30, 0.74), (0.70, 0.74)]
     cell = 200
     sheet = Image.new("RGB", (120 + 3 * cell, 30 + len(roster) * cell), BG)
     d = ImageDraw.Draw(sheet)
     for j, z in enumerate(("small", "medium", "large")):
-        label(d, (120 + j * cell + 6, 8), f"{z}: claw scorch notch ripple ring")
+        label(d, (120 + j * cell + 6, 8), f"{z}: claw scorch notch stitches bite")
     for i, c in enumerate(roster):
         ppal, pframes, _ = parse_header((ROOT / f"pets/{c['slug']}/{c['slug']}_pack.h").read_text())
         body = pframes["Body"]
         bh, bw = body["idx"].shape
+        spots = duel_art.SHEET_SPOTS[c["slug"]]
         for j, z in enumerate("SML"):
             canvas = np.zeros((bh, bw, 3), float)
             mask = body["idx"] > 0
@@ -1094,8 +1101,7 @@ def duel_sheets(text, outdir):
                             canvas[oy + y, ox + x] = np.clip(canvas[oy + y, ox + x] * pal[k][0] / 128, 0, 255)
             im = Image.new("RGB", (bw, bh), BG)
             im.paste(Image.fromarray(canvas.astype(np.uint8)), mask=Image.fromarray((mask * 255).astype(np.uint8)))
-            s = min((cell - 10) / bw, (cell - 10) / bh)
-            im = im.resize((max(1, int(bw * s)), max(1, int(bh * s))), Image.NEAREST)
+            # 1:1, the size it is on the device
             sheet.paste(im, (120 + j * cell + (cell - im.width) // 2, 30 + i * cell + (cell - im.height) // 2))
         label(d, (8, 30 + i * cell + 8), f"{c['id']} {c['name']}")
     sheet.save(outdir / "art1-scars.png")
