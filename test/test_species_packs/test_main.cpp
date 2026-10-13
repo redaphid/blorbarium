@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -6,6 +7,7 @@
 #include "blorb/appearance.h"
 #include "blorb/species.h"
 #include "paint/sprite_pack.h"
+#include "grungo_pack.h"
 
 using blorb::Appearance;
 using blorb::Fx;
@@ -133,6 +135,64 @@ TEST(PackFor, AnUnknownSpeciesIsGrungoInItsOwnColours) {
     int differ = 0;
     for (int i = 0; i < kPx; ++i) differ += plain->px[i] != recoloured->px[i];
     EXPECT_GT(differ, kPx / 50) << int(id) << ": the fallback frog ignores the skin gene";
+  }
+}
+
+// ---- the species the genes say, with no DEBUG pin --------------------------------
+
+bool sameCanvas(const Canvas240& x, const Canvas240& y) { return std::equal(x.px, x.px + kPx, y.px); }
+
+std::unique_ptr<Canvas240> renderWith(const Appearance& a, const paint::SpritePack& pack) {
+  auto cv = std::make_unique<Canvas240>();
+  paint::draw(a, pack, *cv, 0);
+  return cv;
+}
+
+// A pet founded from a species' starter is that species everywhere it is
+// drawn: as an egg, hatched, at every stage of the family tree, as remains
+// and as the clutch it leaves.
+TEST(FromTheGenes, EveryStarterIsItsSpeciesEverywhereItIsDrawn) {
+  const blorb::Habitat h;
+  const blorb::PetClock clock;
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    const blorb::Genome g = blorb::starterGenomeOf(r.id, 7);
+    const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{g, {}}, uint16_t(0), 0u};
+    EXPECT_EQ(present(egg, h, clock, 0).species, r.id) << r.name << "'s egg";
+    const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
+    EXPECT_EQ(present(hatched, h, clock, 0).species, r.id) << r.name;
+    for (uint8_t st = 0; st < blorb::kStageCount; ++st)
+      EXPECT_EQ(portrait(g, blorb::Stage(st), 0, 0).species, r.id) << r.name << "'s portrait at stage " << int(st);
+    blorb::Occupant gone{std::in_place_type<blorb::Clutch>};
+    std::get<blorb::Clutch>(gone).parent = g;
+    EXPECT_EQ(present(gone, h, clock, 0).species, r.id) << r.name << "'s remains";
+    std::get<blorb::Clutch>(gone).sinceDeath = blorb::Clutch::kVigilTicks;
+    EXPECT_EQ(present(gone, h, clock, 0).species, r.id) << r.name << "'s clutch";
+  }
+}
+
+TEST(FromTheGenes, EveryStarterDrawsItsOwnArtNotTheFrog) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    const Appearance a = portrait(blorb::starterGenomeOf(r.id, 7), blorb::Stage::Adult, 0, 0);
+    const auto drawn = render(a), own = renderWith(a, paint::packFor(r.id)), frog = renderWith(a, grungoPack());
+    EXPECT_TRUE(sameCanvas(*drawn, *own)) << r.name << " is not drawn from its own pack";
+    if (r.id != blorb::kGrungo) EXPECT_FALSE(sameCanvas(*drawn, *frog)) << r.name << " is drawn as the frog";
+  }
+}
+
+// starterGenome(15048) is the gift device's grungo (test_species): it has no
+// species gene, so it draws exactly as it did when grungoPack() was the only pack.
+TEST(FromTheGenes, TheGiftDrawsAsGrungoByteForByte) {
+  const blorb::Genome gift = blorb::starterGenome(15048);
+  ASSERT_EQ(gift.hash(), 0xd30f00d1u);
+  const blorb::Habitat h;
+  const blorb::PetClock clock;
+  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{gift, {}}, uint16_t(0), 0u};
+  const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
+  std::vector<Appearance> shown = {present(egg, h, clock, 0), present(hatched, h, clock, 0)};
+  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(gift, blorb::Stage(st), 0, 0));
+  for (const Appearance& a : shown) {
+    EXPECT_EQ(a.species, blorb::kGrungo);
+    EXPECT_TRUE(sameCanvas(*render(a), *renderWith(a, grungoPack())));
   }
 }
 
