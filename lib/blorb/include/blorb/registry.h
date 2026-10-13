@@ -17,7 +17,7 @@
 namespace blorb {
 
 enum class LocusDir : uint8_t { Sense, Act, Free };
-enum class StimSource : uint8_t { Body, World, Self, Phone };
+enum class StimSource : uint8_t { Body, World, Self, Phone, Duel };
 
 // ---- typed constants ---------------------------------------------------------
 namespace chem {

@@ -13,3 +13,7 @@ BLORB_CHEM(21, toxin,      0x4208, 1)  // rotten pellets; reacts into injury
 BLORB_CHEM(22, warmth,     0xFC10, 0)  // a hand's heat; speeds incubation
 BLORB_CHEM(23, melatonin,  0x4010, 0)  // emitted at pet night; reacts into sleepiness
 BLORB_CHEM(24, vision,     0x07FF, 1)  // rises while foreseeing; receptors drive the glow locus
+BLORB_CHEM(25, daze,       0xC81F, 1)  // the swoon; its readers may write only sleep_gate (stakes.h)
+BLORB_CHEM(26, pluck,      0xFD20, 1)  // the battle high; its readers may write only sleep_gate (stakes.h)
+BLORB_CHEM(27, mettle,     0xE8A0, 1)  // a trait over days: wins feed it; read as nerve
+BLORB_CHEM(28, dread,      0x780F, 1)  // a trait over days: losses and scars feed it

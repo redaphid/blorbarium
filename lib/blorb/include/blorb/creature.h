@@ -18,6 +18,8 @@
 #include "blorb/habitat.h"
 #include "blorb/mutate.h"
 #include "blorb/senses.h"
+#include "blorb/species.h"
+#include "blorb/stakes.h"
 
 namespace blorb {
 
@@ -45,6 +47,7 @@ struct Phenotype {
   std::vector<Instinct> instincts;     // every instinct expressed so far
   Size size{};
   Oracle oracle{};
+  SpeciesTraits species{};             // body, power and knack (species.h); grungo until a species gene says otherwise
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
@@ -125,6 +128,21 @@ class Creature {
   // An owner edit of one body byte; the phenotype is re-expressed from the
   // edited genome. False if the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
+
+  // Duels (stakes.h), applied between ticks by the Dish from the agreed Outcome.
+  // The tier every Duel-source stimulus is filtered at (duelFilter). Spar, the
+  // narrowest, until a duel names its stakes; kept after it closes so the
+  // aftermath (spared, slew) lands at the tier that caused it.
+  void setDuelStakes(Stakes s) { duelStakes_ = s; }
+  // Adds injury, clamped by woundRoom so no wound kills. Returns what was added.
+  Fx wound(Fx injury);
+  // Keeps the scar for this life. A fifth replaces the faintest; false when it
+  // is itself fainter than every scar he has.
+  bool addScar(Scar);
+  // A Finish: writes the die and cause loci as Injured, and the Dish's next
+  // tick runs the ordinary death path (Death entry, remains, clutch). Once.
+  void fall();
+  const Scars& scars() const { return scars_; }
   // A prophecy: the belief (feature, action, drive) becomes `effect`. False if
   // an id is on no brain axis.
   bool prophesy(LocusId feature, ActionId, DriveId, Fx effect);
@@ -139,6 +157,8 @@ class Creature {
   Chemistry chem_;
   Brain brain_;
   Body body_;
+  Scars scars_;                        // saved in the Body chunk's trailing bytes (keepsake.cpp)
+  Stakes duelStakes_ = Stakes::Spar;   // not saved: a reboot ends any duel
   LifeStats stats_;
   FaceState face_;
   ActionId action_{};
@@ -189,6 +209,11 @@ struct Clutch {
   Stage reached = Stage::Baby;
   EggPreview previews[kMaxClutch]{};
   uint8_t previewed = 0;               // previews[0..previewed) are valid; derived, never saved
+  // A friend egg (friend_egg.h) takes one of the `count` slots: 0 = none, else
+  // slot friendSlot - 1, crossed with the friend's genome by friendSeed.
+  // Saved as the clutch record's trailing bytes (keepsake.cpp).
+  uint8_t friendSlot = 0;
+  uint32_t friendSeed = 0;
 
   Offspring child(uint8_t i) const;    // pure; runs mutate() with its viability retries
   // Body choice: Button or Knock moves the cursor, ButtonHold or DoubleKnock
