@@ -92,7 +92,7 @@ std::optional<FriendEgg> FriendEggStore::load(Storage& s) {
   r.battleSeed = uint32_t(get(&b[14], 4));
   r.friendGenomeHash = uint32_t(get(&b[18], 4));
   std::optional<Genome> g = Genome::parse(&b[kHeadLen], genomeLen);
-  if (!g || g->hash() != r.friendGenomeHash) return std::nullopt;
+  if (!g) return std::nullopt;
   return FriendEgg{r, std::move(*g)};
 }
 

@@ -492,6 +492,9 @@ TEST(Keepsake, AFriendEggRoundTripsAndABadSlotIsNoFriendEgg) {
   EXPECT_EQ(k.friendSeed, kFixtureCrossSeed);
   EXPECT_EQ(back.hash(), s.hash());
   EXPECT_EQ(Keepsake::encode(back), blob);
+  Snapshot plain = friendEggV1();
+  std::get<Clutch>(plain.occupant).friendSlot = 0;
+  EXPECT_NE(plain.hash(), s.hash()) << "the snapshot hash covers the friend egg";
 
   const Tlv occ = *findChunk(chunksOf(blob), Chunk::Occupant);
   for (uint8_t slot : {0, 1, 4, 255}) {
