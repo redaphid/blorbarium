@@ -4,12 +4,15 @@
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
 #include "links.h"
 #include "ota_fixture.h"
+#include "ota/screen.h"
 #include "ota/session.h"
 #include "ota/trial.h"
 
@@ -628,6 +631,39 @@ TEST(OtaRelease, ToolSignaturesFailUnderAnotherKey) {
   Session session{slot, host, link, Config{"lcd128", Version{0, 4, 0}, other.pub}};
   session.handle(std::string("#1 ") + otafixture::kBegin, 0);
   EXPECT_EQ(link.sent, (Lines{"#1 ERR 403 BAD_SIGNATURE"}));
+}
+
+// ---- the screen ----------------------------------------------------------------------
+
+namespace {
+std::unique_ptr<paint::Canvas240> frame(const View& v) {
+  auto cv = std::make_unique<paint::Canvas240>();
+  for (int i = 0; i < 240 * 240; ++i) cv->px[i] = uint16_t(((i / 240) >> 3) << 11 | 0x0400);   // a stand-in for the pet
+  drawUpdate(*cv, v);
+  return cv;
+}
+uint16_t at(const paint::Canvas240& cv, int x, int y) { return cv.px[y * 240 + x]; }
+}  // namespace
+
+// OTA_DUMP=<dir> writes a PPM per phase for review.
+TEST(OtaScreen, TheRingFollowsProgress) {
+  const auto quarter = frame({View::Phase::Receiving, 300, 1000, 0});   // 30%: past three o'clock, short of six
+  const auto blank = frame({View::Phase::Receiving, 0, 1000, 0});
+  EXPECT_NE(at(*quarter, 235, 120), at(*blank, 235, 120)) << "three o'clock is lit at 30%";
+  EXPECT_EQ(at(*quarter, 120, 235), at(*blank, 120, 235)) << "six o'clock is not";
+  const auto asking = frame({View::Phase::Asking, 0, 1000, Session::kConfirmMs / 2});
+  EXPECT_NE(at(*asking, 120, 5), at(*blank, 120, 5)) << "the question's countdown starts at twelve";
+  if (const char* dir = std::getenv("OTA_DUMP")) {
+    const std::pair<const char*, View> shots[] = {{"asking", {View::Phase::Asking, 0, 1000, 20000}},
+                                                  {"receiving", {View::Phase::Receiving, 420, 1000, 0}},
+                                                  {"ready", {View::Phase::Ready, 1000, 1000, 0}}};
+    for (const auto& [name, v] : shots) {
+      const auto cv = frame(v);
+      std::ofstream f(std::string(dir) + "/ota-" + name + ".ppm", std::ios::binary);
+      f << "P6 240 240 255" << char(10);
+      for (uint16_t p : cv->px) f << char((p >> 11) << 3) << char(((p >> 5) & 63) << 2) << char((p & 31) << 3);
+    }
+  }
 }
 
 int main(int argc, char** argv) {
