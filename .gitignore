@@ -3,3 +3,5 @@ __pycache__/
 *.actual.png
 *.diff.png
 outputs/
+web/.wrangler/
+web/node_modules/
