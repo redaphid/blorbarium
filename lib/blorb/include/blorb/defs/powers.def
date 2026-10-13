@@ -1,0 +1,26 @@
+// Signature powers, one per species, named as roster/roster.json names them.
+// One row plus one handler power_<name>(PowerPhase, PowerCtx&) in
+// src/duel_powers.cpp. A handler is called once per phase of a turn and acts
+// only in the phases it cares about. Both sides' handlers in one phase read
+// the same inputs, so which device is side A never changes the outcome.
+//
+// `cost` is the spark pips the power spends (the meter holds kMeterMax = 6).
+// It is the tuning knob: tools/duel_balance.cpp sweeps it, and nothing else in
+// the rules is tuned per species. The values below are the last pass of
+// tools/roster_probe.py (Random vs Random, 81 pairs x 1,500 battles, measured
+// 2026-10-13): every species' overall win rate 0.450..0.546, the worst pair
+// 0.672 (hushwing over mudge), the median battle 12 turns.
+//
+// Effects run for `turns` turns from the turn the power fires (1 = this turn).
+// Stable ids: never renumber, never reuse.
+//
+// BLORB_POWER(id, name, cost, glyph)
+BLORB_POWER(0, foresee, 5, eye)      // grungo: he SAW your move: his stance becomes the one that beats it (this turn)
+BLORB_POWER(1, shell,   5, shell)    // mossby: a glowing shell; the next hit that would land just bonks off (until used)
+BLORB_POWER(2, spores,  6, spore)    // puffkin: drowsy spores; the friend nods off next turn (no stance, no spark)
+BLORB_POWER(3, mend,    6, leaf)     // gilly: her gills glow; one heart grows back, never past full (after damage)
+BLORB_POWER(4, lantern, 4, lamp)     // mothwick: dazzle; she wins a head bonk this turn, and for 2 turns the friend's winning hits miss half the time
+BLORB_POWER(5, dash,    3, wave)     // mudge: always first; for 2 turns a head bonk goes his way
+BLORB_POWER(6, zap,     6, spark)    // fizz: a tickly zap; the friend loses one heart whatever the clash (a shell still stops it)
+BLORB_POWER(7, hush,    5, feather)  // hushwing: silent wings; for 2 turns a clash she loses costs her nothing
+BLORB_POWER(8, gadget,  5, gear)     // tinker: a surprise gadget; one of the other eight powers, drawn from his own luck
