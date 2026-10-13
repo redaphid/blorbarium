@@ -45,9 +45,13 @@ struct StatePacket {
   BattleId battle{};
   uint32_t nonce = 0;
   Stakes chosen = Stakes::Spar;  // what my kid picked on the stakes screen
-  bool confirmed = false;        // and confirmed with that tier's gesture; the duel starts at
-                                 // agreedStakes(mine, theirs) once both are confirmed
+  bool confirmed = false;        // and confirmed with that tier's gesture; `chosen` is frozen once
+                                 // confirmed. The duel starts at agreedStakes(mine, theirs) once both
+                                 // are; a State already carrying that tier's BattleId also counts as
+                                 // the peer's confirm, so a lost confirm cannot strand Staking
   uint8_t skull = 0;             // my forecast at the agreed tier, shown on the friend's screen too
+  uint8_t hold = 0;              // 0..255: my confirm hold (Staking) or my Finish hold (Mercy), so the
+                                 // other screen shows the skull filling
   BattleCard card{};
   uint8_t moveCount = 0;
   uint8_t moves[DuelRules::kLogSlots]{};   // Move::pack() each
@@ -85,14 +89,14 @@ inline constexpr size_t kFrameOverhead = 4 + 4;   // header + crc
 inline constexpr size_t kBattleIdBytes = 6;
 inline constexpr size_t kBeaconWireBytes = kFrameOverhead + 2 + 4 + 6 + 1 + 1 + 1 + kCardWireBytes;
 inline constexpr size_t kStateWireBytes =
-    kFrameOverhead + 2 + kBattleIdBytes + 4 + 1 + 1 + 1 + kCardWireBytes + 1 + DuelRules::kLogSlots + 1 + 2 + 1 + 2 + 4;
+    kFrameOverhead + 2 + kBattleIdBytes + 4 + 1 + 1 + 1 + 1 + kCardWireBytes + 1 + DuelRules::kLogSlots + 1 + 2 + 1 + 2 + 4;
 inline constexpr size_t kGenomeWireBytes = kFrameOverhead + kBattleIdBytes + 8 + 1 + 1 + kGenomeChunk;
 static_assert(kBeaconWireBytes <= kDatagramMax && kStateWireBytes <= kDatagramMax && kGenomeWireBytes <= kDatagramMax,
               "a duel packet must fit one ESP-NOW v1 frame: never split a packet");
 
 size_t encode(const Packet&, uint8_t (&out)[kDatagramMax]);
 // Rejects: short, wrong magic, newer version, unknown kind, bad crc, a card
-// version this firmware does not speak, moveCount past kMaxTurns, a chunk
+// version this firmware does not speak, moveCount past kLogSlots, a chunk
 // index or length past kMaxGenomeBytes. A stance byte out of range is folded
 // by Move::unpack, so every byte is legal there.
 std::optional<Packet> decode(const uint8_t*, size_t);

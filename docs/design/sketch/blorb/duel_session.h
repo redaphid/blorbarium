@@ -45,6 +45,7 @@ class LocalConsent {
 struct DuelInput {
   int8_t aim = -1;   // Stance index, or -1
   bool knock = false, doubleKnock = false, press = false, shake = false, lid = false, dropped = false;
+  bool bootDown = false;   // the button's level this tick: the Mortal confirm and the Finish are holds
   static DuelInput from(const SenseOut& raw, Fx tiltX, Fx tiltY);
 };
 
@@ -58,6 +59,10 @@ inline constexpr uint64_t kDuelCaptures =
 static_assert((kDuelCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::button_hold) |
                                 duelStimBit(stim::dropped) | duelStimBit(stim::lid_down))) == 0,
               "a duel may not swallow a shake, a hold, a drop or the lid");
+// The one exception, in Staking and Mercy only: the BOOT hold IS the confirm
+// or the Finish there, so it is taken for those 20 s windows, and a confirm
+// or a Finish does not also tuck the pet in or grant a phone consent.
+inline constexpr uint64_t kHoldPhaseCaptures = kDuelCaptures | duelStimBit(stim::button_hold);
 
 enum class DuelPhase : uint8_t {
   Closed,     // radio off
@@ -75,10 +80,13 @@ enum class DuelPhase : uint8_t {
   Friends,    // both pets side by side under a heart; knock for a rematch, hug (cradle 3 s) for a friend egg
 };
 enum class EndReason : uint8_t { None, Finished, LidDown, Dropped, WanderedOff, Conflict, LobbyTimeout, StakesRefused, Fled };
-// Fled: a side ended a Scrap or Mortal duel (lid, drop, silence) while losing. It forfeits:
-// the other side wins, and the one who fled still takes the wound of the hearts it lost.
-// A pet downed in a Mortal duel that flees before the verdict takes the downed wound but
-// lives: yanking the cable is not policed, and the book remembers it as "fled".
+// Fled: a side ended a Scrap or Mortal duel (lid, face down, a drop, or silence) while
+// losing. It forfeits, and keeps every wound already applied (wounds land turn by turn
+// and are saved at once, so nothing is undone). A pet downed in a Mortal duel that
+// leaves before the verdict lives: at the downing, a "downed, pending" entry goes into
+// duels.log, which the book folds into "fled" at the next boot if no verdict followed.
+// The winner's side leaving during Mercy is "the victor left": the downed pet lives,
+// and nobody is marked fled.
 
 inline constexpr uint8_t kMaxLobbyPeers = 4;
 
@@ -159,7 +167,9 @@ struct DuelEffects {
   uint8_t stimCount = 0;
   uint64_t captured = 0;                // which of this tick's raw stimuli were the duel's (within kDuelCaptures)
   std::optional<Meeting> met;           // the battle ended: DuelBook::record
-  std::optional<Wound> wound;           // Scrap and Mortal: my pet's injury, scars and whether he is down
+  std::optional<TurnWound> wound;       // Scrap and Mortal: the turn that just resolved, for my pet;
+                                        // Creature::wound clamps it to woundRoom, then the Dish saves
+  bool downed = false;                  // Mortal: my pet was just downed: book.recordDowned, save
   bool fall = false;                    // Mortal, finished, and I am the one downed: Creature::fall()
   std::optional<FriendEggRecord> egg;   // both hugged and the genome arrived: FriendEggStore::save(record, friendGenome)
   const Genome* friendGenome = nullptr; // valid with `egg`, until the next tick
@@ -228,10 +238,10 @@ class DuelSession {
   // is never matched. Greeting keeps beaconing with `wants` set, so a friend
   // whose first State was lost still sees the match.
   //
-  // Rematch liveness: a State from my matched peer naming BattleId{duelSeed(
-  // nonces, n + 1), n + 1} counts as their rematch ask, so if their kid knocked
-  // and they moved on before my `rematch` flag reached them, I follow instead
-  // of waiting in Friends. Greeting ends only on P's State for the
+  // A rematch is not a shortcut: when both kids knock on the Friends screen,
+  // the session closes and DishDuel reopens it pinned to the same peer, with a
+  // fresh card, readiness, ceiling, forecast and a full Staking phase. It is
+  // refused when either occupant is no longer a Creature (he fell). Greeting ends only on P's State for the
   // same battle id, so a one-sided match times back to the lobby in 2 s.
   static std::optional<uint8_t> match(const Lobby&, PeerAddr self, uint32_t tick);
 };

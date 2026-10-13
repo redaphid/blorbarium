@@ -46,10 +46,13 @@ class DishDuel {
   //  3 removes `captured` from raw; appends the duel stimuli to raw (they
   //    reach the creature as StimSource::Duel, through duelFilter at the
   //    agreed stakes)
-  //  3b on a Wound (Scrap, Mortal): Creature::wound(injury) once, addScar for
-  //    each new scar; on `fall`: Creature::fall(), which writes the die and
-  //    cause loci as Injured (he died of his wounds), so the ordinary death
-  //    path runs: the Death entry, the remains, the vigil, the clutch
+  //  3b each tick a turn resolves (Scrap, Mortal): Creature::wound(woundFor(...,
+  //    woundRoom(creature))) and addScar if it is a scar turn, then save at
+  //    once, so a pulled cable never undoes a wound. On a Mortal downing of my
+  //    pet: book.recordDowned, saved at once. On a Finish read for my pet:
+  //    Creature::fall(), which writes the die and cause loci as Injured (he
+  //    died of his wounds), so the ordinary death path runs: the Death entry
+  //    (with book.featsThisLife ORed in), the remains, the vigil, the clutch
   //  4 on a Meeting: book.record (idempotent by BattleId), which also holds the
   //    dark ledger, the trophy and any vendetta; at the next hatch the Dish
   //    seeds the newborn's duel Skill from book.skillForNewLife

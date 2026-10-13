@@ -46,9 +46,10 @@ constexpr Side other(Side s) { return s == Side::A ? Side::B : Side::A; }
 // pet slept through under spores: the pet chose (its Skill), which the screen
 // celebrates rather than scolds. A dozing side's move is appended at once by
 // the session, so the logs keep marching; resolve() ignores its stance.
-// After a Mortal downing, the winner appends one more Move whose `verdict` is
-// Spare or Finish (its stance is ignored); that slot is the only one past
-// kMaxTurns, and only the winner may fill it.
+// After a Mortal downing on turn t, the winner appends one more Move at index
+// t + 1 (== Outcome::resolved) whose `verdict` is Spare or Finish; its stance
+// is ignored, and resolve() reads a verdict only from the winner's log at that
+// index. kLogSlots leaves room for it after a downing on the last turn.
 struct Move {
   Stance stance = Stance::Pounce;
   bool power = false;
@@ -180,10 +181,12 @@ struct Outcome {
 // late packet from the previous bout can never feed the next one.
 uint32_t duelSeed(uint32_t nonceA, uint32_t nonceB, uint8_t rematch, Stakes);
 
-// The battle's name, in both books and on the air: both nonces and the
-// rematch number. A packet from bout n never feeds bout n+1, because its id
-// differs (candidate A kept one id across rematches, so a late State could
-// seed a fresh log).
+// The battle's name, in both books and on the air. Before turn 0 (Greeting,
+// Staking) the pair is named by `stakes` = Spar and the session matches on
+// `seed` alone; from turn 0 on, the id carries the agreed stakes, so two
+// devices can never resolve one battle at two tiers. A rematch is a fresh open
+// with fresh nonces (dish_duel.h), so its id differs and a late packet from
+// the last bout never feeds it; `rematch` only numbers bouts for the book.
 // The stakes are part of the id too: two devices can never resolve one battle
 // at two different stakes.
 struct BattleId {

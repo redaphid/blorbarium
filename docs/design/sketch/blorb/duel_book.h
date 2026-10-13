@@ -84,6 +84,16 @@ class DuelBook {
   // THE FIZZ"). Lasts until avenged (a Mortal or Scrap win against that
   // lineage) or for 3 generations. Folded from the log like everything else.
   struct Vendetta { uint64_t against; SpeciesId species; uint16_t sinceGeneration; };
+  // Written the tick a Mortal duel downs my pet, before any verdict. A boot
+  // that finds it with no verdict after it folds it into "fled".
+  void recordDowned(BattleId, uint64_t victorLineage, uint32_t at);
+  // Feats this life earned in duels (slayer), ORed into the Death entry by the
+  // Dish at death, so LifeStats and its save format stay as they are.
+  uint32_t featsThisLife(uint16_t generation) const;
+  // The two lineages' record, for Mortal's head-to-head gate.
+  struct HeadToHead { uint16_t duels = 0, myWins = 0, theirWins = 0; };
+  HeadToHead headToHead(uint64_t friendLineage) const;
+  uint32_t manualTurns() const;   // every turn this device's kid picked, all lives
   std::optional<Vendetta> vendetta(uint16_t generation) const;
   DuelSkill skillForNewLife(uint16_t generation) const;   // zeros, plus the vendetta's nudge
   // Trophies of pets this line has felled, newest first, for the rim (up to

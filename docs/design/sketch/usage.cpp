@@ -159,14 +159,19 @@ Ending twoTurns() {
 bool finishedHim(const BattleCard& a, const BattleCard& b, uint32_t seed, const MoveLog& winner, const MoveLog& loser) {
   const Outcome o = resolve(a, b, seed, Stakes::Mortal, winner, loser);
   if (o.awaitingVerdict()) return false;   // the skull is still filling, or nobody has decided
-  const Wound w = woundFor(Stakes::Mortal, o, Side::B);
-  return w.downed && o.verdict == Verdict::Finish;   // -> DuelEffects::fall -> Creature::fall()
+  return o.downed[uint8_t(Side::B)] && o.verdict == Verdict::Finish;   // -> DuelEffects::fall -> Creature::fall()
 }
 
-// The stakes screen: a scrap that could kill is not offered; a mortal one shows the skull.
-Stakes offer(const Creature& c, Stakes deviceCeiling) {
-  const Danger d = forecast(c, Stakes::Scrap);
-  return d.scrapCouldKill ? Stakes::Spar : ceilingFor(c, deviceCeiling);
+// One resolved turn's wound, clamped to the room he has: no wound ever kills.
+Fx turnWound(const Creature& c, const Outcome& o, uint8_t turn) {
+  return woundFor(Stakes::Scrap, o, Side::A, turn, woundRoom(c)).injury;
+}
+
+// The stakes screen: the highest tier on offer, and how wounded the worst case would leave him.
+Stakes offer(const Creature& c, Stakes deviceCeiling, uint8_t& skull) {
+  const Stakes top = ceilingFor(c, deviceCeiling);
+  skull = forecast(c, top).skull;
+  return top;
 }
 
 blorbtool::BalanceReport tune() { return blorbtool::tournament(2000, blorbtool::Player::Random, blorbtool::Player::Random, 1); }

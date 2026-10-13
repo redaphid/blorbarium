@@ -32,14 +32,14 @@ enum class Decline : uint8_t {
   Hungry,         // hunger >= 0.8: an empty bowl; feed him first (the body's job)
   Resting,        // within 2 minutes of his last duel's end, 5 after a faint
   WantsACuddle,   // three losses in a row: cradle him (3 s) and he is ready again
-  Wounded,        // injury >= 0.5: he will only Spar until he heals (a bandage)
 };
 Decline readiness(const Occupant&, uint8_t lossesInARow, uint32_t ticksSinceLastDuel, bool faintedLast);
 
 // The highest tier he may enter now: his stage against StakesRule::youngestStage,
-// a Scrap only while forecast() says it cannot kill, and the device's own
-// ceiling (TWIST stakes). The fairness rule (maxAssistHearts) is checked once
-// both cards are known, in the session.
+// Spar while his injury is 0.5 or more (a bandage on the rim: wounded pets
+// still play, they just do not fight), and the device's own ceiling (TWIST
+// stakes). The fairness rules (maxAssistHearts, minManualTurns, the
+// head-to-head floor) are checked once both cards are known, in the session.
 Stakes ceilingFor(const Creature&, Stakes deviceCeiling);
 
 }  // namespace blorb
