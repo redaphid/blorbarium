@@ -203,11 +203,11 @@ TEST(Mixed, ARealPetBesideABlankPetfsKeepsThePetAndGetsItsLineage) {
   EXPECT_EQ(b.pet.bytes, petBytes);
 }
 
-// The test board (hw, 2026-10-13): 64 KB of random bytes over the start of
-// both partitions of a saved pet. IDF opened `pet` over the junk, its later
-// pages still held a snapshot, and the board fell back to it; `petfs` had no
-// superblock left, and the pair rule refused to format it, so nothing saved.
-TEST(Mixed, JunkOverASavedBoardsHeadsFormatsPetfsAndThePetFallsBack) {
+// The test board (hw, 2026-10-13, round 2): 64 KB of random bytes over the
+// start of both partitions of a saved pet. IDF opened `pet` over the junk and
+// its later pages still held a snapshot; `petfs` had lost its superblock, and
+// formatting it threw a living pet's lineage away. Junk beside a pet is kept.
+TEST(Mixed, JunkOverASavedBoardsHeadsLeavesPetfsBesideItsPet) {
   std::vector<uint8_t> petBytes = foreign(0x10000);
   const std::vector<uint8_t> saved = fixture("nvs_pet_v1.bin", kPetSize - 0x10000);
   petBytes.insert(petBytes.end(), saved.begin(), saved.end());
@@ -220,10 +220,22 @@ TEST(Mixed, JunkOverASavedBoardsHeadsFormatsPetfsAndThePetFallsBack) {
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Ok);
   EXPECT_EQ(p.files.held, Holds::Foreign);
-  EXPECT_EQ(p.files.opened, Opened::Formatted);
-  EXPECT_EQ(bootDish(b), Boot::FellBack);
-  EXPECT_TRUE(b.kept.files.count("lineage.log")) << "the lineage saves again";
+  EXPECT_EQ(p.files.opened, Opened::LeftAlone);
+  EXPECT_STREQ(describe(p.files), "LEFT ALONE: unknown bytes beside a blorbarium pet; nothing saves");
+  EXPECT_EQ(b.petfs.formats, 0);
+  EXPECT_EQ(b.petfs.bytes, fs) << "the lineage that may be in the junk is kept";
   EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+// The same caution when `pet` cannot be read: it may hold the pet.
+TEST(Mixed, JunkPetfsBesideAnUnreadablePetIsLeftAlone) {
+  Board b({foreign(kPetSize), false}, {foreign(kPetfsSize), false});
+  b.pet.readable = false;
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.held, Holds::Unreadable);
+  EXPECT_EQ(p.files.held, Holds::Foreign);
+  EXPECT_EQ(p.files.opened, Opened::LeftAlone);
+  EXPECT_EQ(b.petfs.formats, 0);
 }
 
 // ---- a keepsake: recognised by bytes every save already has ----
