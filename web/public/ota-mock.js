@@ -13,7 +13,7 @@
     const image = new Uint8Array(size);
     let x = 0x9e3779b9;
     for (let i = 0; i < size; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; image[i] = x & 255; }
-    const manifest = { board, version, flags: 0, size, sha256: await sha256(image), sig: "A".repeat(86), image: "mock.bin" };
+    const manifest = { board, version, flags: 0, fmt: 1, size, sha256: await sha256(image), sig: "A".repeat(86), image: "mock.bin" };
     return { manifest, image: async () => image.slice() };
   }
 
@@ -25,6 +25,8 @@
       Object.assign(this, { board, fw, confirmMs, bootMs, trialMs, faults, emit, onDrop });
       this.state = "idle";
       this.last = "none";
+      this.rolledback = "none";
+      this.trialToken = null;
       this.s = null;
       this.connected = true;
       this.booting = null;
@@ -34,7 +36,7 @@
       this.loseWritesAt = faults.gaps ? [0.15, 0.55, 0.85] : [];
       this.loseAckAt = faults.lostAck ? 0.7 : Infinity;
       this.corruptAt = faults.corrupt ? 0.5 : Infinity;
-      this.stats = { drops: 0, lostWrites: 0, gaps: 0, lostAcks: 0, polls: 0, reboots: 0, confirms: 0, ignored: 0, flashed: null };
+      this.stats = { drops: 0, lostWrites: 0, gaps: 0, lostAcks: 0, polls: 0, reboots: 0, confirms: 0, refusedConfirms: 0, ignored: 0, flashed: null };
     }
 
     say(text) { if (this.connected) this.emit(text); }
@@ -45,7 +47,7 @@
       this.say(state === "idle" ? `OTA state=idle last=${last}` : state === "receiving" ? `OTA state=receiving at=${this.s.at}` : `OTA state=${state}`);
     }
     where() {
-      if (this.state === "idle") return `state=idle board=${this.board} fw=${this.fw} chunk=${CHUNK} trial=${this.trial ? 1 : 0} last=${this.last}`;
+      if (this.state === "idle") return `state=idle board=${this.board} fw=${this.fw} chunk=${CHUNK} trial=${this.trial ? 1 : 0} last=${this.last} rolledback=${this.rolledback}`;
       return `state=${this.state} at=${this.s.at} size=${this.s.size} id=${this.s.id} chunk=${CHUNK}`;
     }
 
@@ -53,32 +55,45 @@
     command(args) {
       const [sub, ...a] = args.trim().split(/\s+/);
       if (sub === "STATUS") { if (this.state === "receiving" && this.s.at > 0) this.stats.polls++; return `OK ${this.where()}`; }
-      if (sub === "ABORT") { if (this.state !== "idle") this.to("idle", "aborted"); return "OK state=idle"; }
+      // The session, and the trial it leads to, belong to the token its BEGIN carried.
+      if (sub === "ABORT") {
+        if (!this.s) return "OK state=idle";
+        if (a[0] !== this.s.token) return "ERR 403 NOT_YOURS";
+        this.to("idle", "aborted");
+        return "OK state=idle";
+      }
       if (sub === "REBOOT") {
+        if (this.s && a[0] !== this.s.token) return "ERR 403 NOT_YOURS";
         if (this.state !== "ready") return "ERR 409 NOT_READY";
         setTimeout(() => this.restart(), 300);
         return "OK rebooting";
       }
       if (sub === "CONFIRM") {
-        if (this.trial) { this.confirmed = true; this.stats.confirms++; }
-        return `OK trial=${this.trial ? 1 : 0}`;
+        if (!this.trial) return "OK trial=0";
+        if (a[0] !== this.trialToken) { this.stats.refusedConfirms++; return "ERR 403 NOT_YOURS"; }
+        this.confirmed = true;
+        this.stats.confirms++;
+        return "OK trial=1";
       }
       if (sub === "BEGIN") return this.begin(a);
       return "ERR 400 BAD_ARGS";
     }
 
+    // In the dish's order: an open session first, then the cheap refusals.
     begin(a) {
-      const [board, version, flags, size, sha, sig] = a;
-      if (a.length !== 6 || !/^\d+\.\d+\.\d+$/.test(version) || !/^\d+$/.test(flags) || !/^\d+$/.test(size) ||
-          !/^[A-Za-z0-9_-]{43}$/.test(sha) || !/^[A-Za-z0-9_-]{86}$/.test(sig)) return "ERR 400 BAD_ARGS";
-      if (board !== this.board) return "ERR 403 WRONG_BOARD";
-      if (this.trial && this.state === "idle") return "ERR 409 TRIAL";
-      if (!(Number(flags) & 1) && !isNewer(version, this.fw)) return "ERR 409 NOT_NEWER";
-      if (Number(size) === 0 || Number(size) > SLOT) return "ERR 413 TOO_BIG";
+      const [board, version, flags, fmt, size, sha, sig, token] = a;
+      if (a.length !== 8 || !/^\d+\.\d+\.\d+$/.test(version) || !/^\d+$/.test(flags) || !/^\d+$/.test(fmt) ||
+          !/^\d+$/.test(size) || !/^[A-Za-z0-9_-]{43}$/.test(sha) || !/^[A-Za-z0-9_-]{86}$/.test(sig) ||
+          !/^[A-Za-z0-9_-]{22}$/.test(token)) return "ERR 400 BAD_ARGS";
       const id = imageId(sha);
       if (this.s && this.s.id !== id) return "ERR 409 OTA_ACTIVE";
+      if (this.s && this.s.token !== token) return "ERR 403 NOT_YOURS";
       if (this.s) return `OK ${this.where()}`;
-      this.s = { id, version, size: Number(size), sha, at: 0, buf: new Uint8Array(Number(size)) };
+      if (board !== this.board) return "ERR 403 WRONG_BOARD";
+      if (!(Number(flags) & 1) && !isNewer(version, this.fw)) return "ERR 409 NOT_NEWER";
+      if (Number(size) === 0 || Number(size) > SLOT) return "ERR 413 TOO_BIG";
+      if (this.trial) return "ERR 409 TRIAL";
+      this.s = { id, version, token, size: Number(size), sha, at: 0, buf: new Uint8Array(Number(size)) };
       this.to("confirm");
       this.timer("confirm", this.confirmMs, () => this.to("idle", "no_confirm"));
       return `OK ${this.where()}`;
@@ -144,10 +159,17 @@
       const version = this.s.version, old = this.fw;
       for (const name in this.timers) this.timer(name);
       this.confirmed = false;
+      this.trialToken = this.s.token;
       this.boot(version, true, () => this.timer("trial", this.trialMs, () => {
-        if (this.faults.rollback || !this.confirmed) this.boot(old, false);
+        if (this.faults.rollback || !this.confirmed) { this.rolledback = version; this.boot(old, false); }
         else this.trial = false;
       }));
+    }
+
+    // A lineage-writing twist (rename) waits for the trial: a rollback would undo it.
+    twist(args) {
+      if (this.trial && /^rename /.test(args)) return "ERR 409 TRIAL";
+      return null;
     }
 
     boot(fw, trial, then = () => {}) {
