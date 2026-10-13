@@ -174,7 +174,8 @@ static void reportBoot() {
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
   for (const blorb::VolumeReport* r : {&storageState.slots, &storageState.files})
-    if (r->opened == blorb::Opened::LeftAlone || r->opened == blorb::Opened::FormatFailed)
+    if (r->opened == blorb::Opened::LeftAlone || r->opened == blorb::Opened::FormatFailed ||
+        r->opened == blorb::Opened::ReadOnly)
       Serial.println("[hw] !!! the pet is not being saved: a reset loses this boot's pet");
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");

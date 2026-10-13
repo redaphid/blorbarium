@@ -230,6 +230,13 @@ All paths below are in that repo.
   Preferences prints an error's name from a table that stops at
   INVALID_LENGTH, so NEW_VERSION_FOUND, NO_FREE_PAGES or a flash fault
   printed through NULL and the test board panicked in a loop.
+  Nothing is written before boot has decided: `pet` opens read-only (a
+  read-write open creates a missing "blorb" namespace, which the test
+  board did to a pet it then sealed), a missing namespace counts as will
+  not open so the raw bytes are judged, and a board that leaves anything
+  alone formats nothing and opens nothing for writing. IDF's
+  nvs_flash_init_partition still runs first and can repair a damaged NVS on
+  its own (it erased nothing in the test board's 64 KB case).
   Known gaps. The screen says nothing when a keepsake is left alone, and the
   child sees a new egg that will not save. And IDF itself decides most of
   what "will not open" means for `pet`. It opens NVS over random bytes (seen

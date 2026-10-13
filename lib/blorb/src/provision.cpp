@@ -29,11 +29,13 @@ std::optional<Holds> scan(Volume& v, F&& seen) {
 
 bool mayHoldPet(Holds h) { return h == Holds::Pet || h == Holds::Unreadable; }
 
-// A partition that would not open: never formatted over a mark of ours, nor
-// when `keep` gives another reason it may hold part of a pet.
-VolumeReport settle(Volume& v, Holds held, bool keep) {
-  if (keep || mayHoldPet(held)) return {Opened::LeftAlone, held};
-  return {v.format() ? Opened::Formatted : Opened::FormatFailed, held};
+// The second half of boot's decision, once both partitions are judged. A
+// sealed board writes nothing, so nothing is formatted or opened for writing.
+void act(Volume& v, bool up, bool sealed, VolumeReport& r) {
+  if (r.opened == Opened::LeftAlone) return;
+  if (up) r.opened = sealed || v.writable() ? Opened::Ok : Opened::ReadOnly;
+  else if (sealed) r.opened = Opened::LeftAlone;
+  else r.opened = v.format() ? Opened::Formatted : Opened::FormatFailed;
 }
 
 }  // namespace
@@ -59,14 +61,21 @@ Holds filesHold(Volume& v, uint32_t blockSize) {
 
 Provisioned provision(Volume& slots, Volume& files, uint32_t fsBlockSize) {
   Provisioned p;
-  if (!slots.open()) p.slots = settle(slots, slotsHold(slots), false);
-  if (!files.open()) {
-    const Holds held = filesHold(files, fsBlockSize);
-    // Junk in petfs beside a pet is a half-damaged keepsake whose lineage may
-    // be in it. `pet` was read before any format, or is read now if it opened.
-    const bool besidePet = held == Holds::Foreign && mayHoldPet(p.slots.held ? *p.slots.held : slotsHold(slots));
-    p.files = settle(files, held, besidePet);
+  const bool slotsUp = slots.open(), filesUp = files.open();
+  if (!slotsUp) {
+    p.slots.held = slotsHold(slots);
+    if (mayHoldPet(*p.slots.held)) p.slots.opened = Opened::LeftAlone;
   }
+  if (!filesUp) {
+    p.files.held = filesHold(files, fsBlockSize);
+    // Junk in petfs beside a pet is a half-damaged keepsake whose lineage may be in it.
+    const bool besidePet =
+        p.files.held == Holds::Foreign && mayHoldPet(p.slots.held ? *p.slots.held : slotsHold(slots));
+    if (mayHoldPet(*p.files.held) || besidePet) p.files.opened = Opened::LeftAlone;
+  }
+  const bool sealed = leftAlone(p);
+  act(slots, slotsUp, sealed, p.slots);
+  act(files, filesUp, sealed, p.files);
   return p;
 }
 
@@ -79,8 +88,10 @@ const char* describe(const VolumeReport& r) {
     case Opened::LeftAlone:
       return r.held == Holds::Pet       ? "LEFT ALONE: it holds a damaged blorbarium pet; nothing saves"
              : r.held == Holds::Foreign ? "LEFT ALONE: unknown bytes beside a blorbarium pet; nothing saves"
+             : r.held == Holds::Blank   ? "LEFT ALONE: blank, beside a blorbarium pet; nothing saves"
                                         : "LEFT ALONE: it would not read; nothing saves";
     case Opened::FormatFailed: return "FAILED: it would not format; nothing saves";
+    case Opened::ReadOnly: return "FAILED: it opened but not for writing; nothing saves";
   }
   return "?";
 }

@@ -1,10 +1,13 @@
 // Boot's decision about pet partitions that will not open (issue #1). The
 // flash fixtures are the real formats, made by tools/storage_fixtures.sh.
 //
-// A MemVolume's `mounts` is what the real stack does with those bytes: IDF's
-// NVS opens over blank or random bytes (it counts pages it cannot read as
-// free) and refuses a newer format or a partition with no free page; LittleFS
-// mounts only its own superblock and needs blank flash formatted first.
+// A MemVolume's `mounts` is what the real stack does with those bytes, opened
+// read-only. `pet` opens only when IDF accepts the NVS and the "blorb"
+// namespace is in it, so blank or random bytes do not, nor does a pet whose
+// namespace entry was overwritten; IDF refuses a newer format or a partition
+// with no free page outright. LittleFS mounts only its own superblock.
+// Opening for writing is counted apart (rwOpens): on NVS it is itself a
+// write, creating a missing namespace, so a sealed board must never do it.
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -54,15 +57,24 @@ struct MemVolume : Volume {
   std::vector<uint8_t> bytes;
   bool mounts = false;   // whether these bytes open as they stand
   bool readable = true;
-  bool up = false;
-  int formats = 0;
+  bool rwRefused = false;   // opens, but not for writing
+  bool up = false, rw = false;
+  int formats = 0, rwOpens = 0;
 
   MemVolume(std::vector<uint8_t> b, bool m) : bytes(std::move(b)), mounts(m) {}
-  bool open() override { return up = mounts; }
+  bool open() override {
+    rw = false;
+    return up = mounts;
+  }
+  bool writable() override {
+    if (!up || rwRefused) return false;
+    ++rwOpens;
+    return rw = true;
+  }
   bool format() override {
     ++formats;
     std::fill(bytes.begin(), bytes.end(), 0xFF);
-    return up = mounts = true;
+    return up = mounts = rw = true;
   }
   size_t size() override { return bytes.size(); }
   bool readRaw(size_t at, uint8_t* buf, size_t n) override {
@@ -85,13 +97,13 @@ struct Board : Storage {
     return on(name).up ? kept.read(name, offset, buf, cap) : std::nullopt;
   }
   bool writeAtomic(const char* name, const uint8_t* data, size_t len) override {
-    return on(name).up && kept.writeAtomic(name, data, len);
+    return on(name).rw && kept.writeAtomic(name, data, len);
   }
   bool append(const char* name, const uint8_t* data, size_t len) override {
-    return on(name).up && kept.append(name, data, len);
+    return on(name).rw && kept.append(name, data, len);
   }
   bool rename(const char* from, const char* to) override {
-    return on(from).up && on(to).up && kept.rename(from, to);
+    return on(from).rw && on(to).rw && kept.rename(from, to);
   }
   size_t size(const char* name) override { return on(name).up ? kept.size(name) : 0; }
 };
@@ -141,21 +153,21 @@ TEST(NewBoard, AFactoryNvsWithNoFreePageIsFormatted) {
   expectFreshThenResumed(b);
 }
 
-TEST(NewBoard, RandomBytesInPetOpenSoOnlyPetfsIsFormatted) {
-  const std::vector<uint8_t> petBytes = foreign(kPetSize);
-  Board b({petBytes, true}, {foreign(kPetfsSize), false});
+// IDF accepts random bytes, but no "blorb" namespace is in them.
+TEST(NewBoard, RandomBytesInBothAreFormatted) {
+  Board b({foreign(kPetSize), false}, {foreign(kPetfsSize), false});
   Provisioned p = b.power();
-  EXPECT_EQ(p.slots.opened, Opened::Ok);
-  EXPECT_FALSE(p.slots.held) << "a partition that opened is not scanned";
+  EXPECT_EQ(p.slots.held, Holds::Foreign);
+  EXPECT_EQ(p.slots.opened, Opened::Formatted);
   EXPECT_EQ(p.files.opened, Opened::Formatted);
-  EXPECT_EQ(b.pet.bytes, petBytes) << "a partition that opened is never formatted";
   expectFreshThenResumed(b);
 }
 
 TEST(NewBoard, ABlankBoardBootsFreshAsToday) {
-  Board b({blank(kPetSize), true}, {blank(kPetfsSize), false});
+  Board b({blank(kPetSize), false}, {blank(kPetfsSize), false});
   Provisioned p = b.power();
-  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.slots.held, Holds::Blank);
+  EXPECT_EQ(p.slots.opened, Opened::Formatted);
   EXPECT_EQ(p.files.held, Holds::Blank);
   EXPECT_EQ(p.files.opened, Opened::Formatted);
   EXPECT_STREQ(describe(p.files), "formatted: it was blank");
@@ -303,17 +315,24 @@ TEST(Keepsake, APetNvsThatWillNotOpenIsLeftAloneAndSaysSo) {
   EXPECT_STREQ(describe(p.slots), "LEFT ALONE: it holds a damaged blorbarium pet; nothing saves");
   EXPECT_EQ(b.pet.formats, 0);
   EXPECT_EQ(b.pet.bytes, petBytes) << "not one byte of a keepsake is written";
+  EXPECT_EQ(p.files.opened, Opened::Ok);
+  EXPECT_EQ(b.petfs.rwOpens, 0) << "the board is sealed: petfs is read, never written";
   bootDish(b);
   EXPECT_FALSE(b.kept.files.count("snap.a")) << "nothing saves over it";
+  EXPECT_FALSE(b.kept.files.count("lineage.log")) << "nor beside it";
 }
 
-TEST(Keepsake, ADamagedPetfsIsLeftAlone) {
+// Even a blank `pet` is not formatted on a sealed board: nothing would be written to it.
+TEST(Keepsake, ADamagedPetfsIsLeftAloneAndSealsTheBoard) {
   const std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
-  Board b({blank(kPetSize), true}, {fs, false});
+  Board b({blank(kPetSize), false}, {fs, false});
   Provisioned p = b.power();
   EXPECT_EQ(p.files.held, Holds::Pet);
   EXPECT_EQ(p.files.opened, Opened::LeftAlone);
-  EXPECT_EQ(b.petfs.formats, 0);
+  EXPECT_EQ(p.slots.held, Holds::Blank);
+  EXPECT_EQ(p.slots.opened, Opened::LeftAlone);
+  EXPECT_STREQ(describe(p.slots), "LEFT ALONE: blank, beside a blorbarium pet; nothing saves");
+  EXPECT_EQ(b.pet.formats + b.petfs.formats, 0);
   EXPECT_EQ(b.petfs.bytes, fs);
 }
 
@@ -326,16 +345,61 @@ TEST(Keepsake, AnUnreadablePetIsLeftAlone) {
   EXPECT_STREQ(describe(p.slots), "LEFT ALONE: it would not read; nothing saves");
   EXPECT_EQ(p.files.opened, Opened::Ok);
   EXPECT_EQ(b.pet.formats, 0);
+  EXPECT_EQ(b.petfs.rwOpens, 0);
 }
 
 TEST(Keepsake, AnUnreadablePetfsIsLeftAlone) {
-  Board b({blank(kPetSize), true}, {foreign(kPetfsSize), false});
+  Board b({fixture("nvs_pet_v1.bin", kPetSize), true}, {foreign(kPetfsSize), false});
   b.petfs.readable = false;
   Provisioned p = b.power();
   EXPECT_EQ(p.slots.opened, Opened::Ok);
   EXPECT_EQ(p.files.held, Holds::Unreadable);
   EXPECT_EQ(p.files.opened, Opened::LeftAlone);
   EXPECT_EQ(b.petfs.formats, 0);
+}
+
+// ---- writing waits for the decision ----
+
+// The test board (hw, c1aa312): the read-write open that came before the
+// decision wrote a fresh "blorb" namespace entry into a pet it then sealed.
+// Here the namespace survived, so `pet` opens; petfs is junk beside it.
+TEST(Writing, ASealedBoardNeverOpensForWriting) {
+  const std::vector<uint8_t> petBytes = fixture("nvs_pet_v1.bin", kPetSize);
+  Board b({petBytes, true}, {foreign(kPetfsSize), false});
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.files.opened, Opened::LeftAlone);
+  EXPECT_EQ(b.pet.rwOpens, 0) << "opening NVS for writing can write";
+  EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+// The same 64 KB, where the junk took the namespace entry: `pet` will not open.
+TEST(Writing, APetWhoseNamespaceWasLostIsSealedNotRelinked) {
+  std::vector<uint8_t> petBytes = foreign(0x10000);
+  const std::vector<uint8_t> saved = fixture("nvs_pet_v1.bin", kPetSize - 0x10000);
+  petBytes.insert(petBytes.end(), saved.begin(), saved.end());
+  Board b({petBytes, false}, {fixture("petfs_head.bin", kPetfsSize), true});
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.held, Holds::Pet);
+  EXPECT_EQ(p.slots.opened, Opened::LeftAlone);
+  EXPECT_EQ(b.pet.rwOpens + b.pet.formats + b.petfs.rwOpens, 0);
+  EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+TEST(Writing, AnOpenBoardIsOpenedForWritingOnceDecided) {
+  Board b({fixture("nvs_pet_v1.bin", kPetSize), true}, {fixture("petfs_head.bin", kPetfsSize), true});
+  b.power();
+  EXPECT_TRUE(b.pet.rw);
+  EXPECT_TRUE(b.petfs.rw);
+}
+
+TEST(Writing, OneThatWillNotOpenForWritingSaysSo) {
+  Board b({fixture("nvs_pet_v1.bin", kPetSize), true}, {fixture("petfs_head.bin", kPetfsSize), true});
+  b.pet.rwRefused = true;
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::ReadOnly);
+  EXPECT_STREQ(describe(p.slots), "FAILED: it opened but not for writing; nothing saves");
+  EXPECT_EQ(p.files.opened, Opened::Ok);
 }
 
 int main(int argc, char** argv) {
