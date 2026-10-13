@@ -227,7 +227,8 @@ All paths below are in that repo.
   blank`, `formatted: it held another firmware's bytes and never a pet`.
   Known gaps. The screen says nothing when a keepsake is left alone, and the
   child sees a new egg that will not save. And IDF itself decides most of
-  what "will not open" means for `pet`. It opens NVS over random bytes or
+  what "will not open" means for `pet`. It opens NVS over random bytes (seen
+  on the test board, 2026-10-13, so a new board's foreign case is a petfs case) or
   pages whose header CRC fails: it counts those pages as free and erases
   them when it needs room (`PageManager::load`). So a damaged NVS may be
   reclaimed by IDF before provision ever sees it. That predates provision,

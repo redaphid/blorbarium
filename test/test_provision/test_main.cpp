@@ -7,6 +7,7 @@
 // mounts only its own superblock and needs blank flash formatted first.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -199,6 +200,29 @@ TEST(Mixed, ARealPetBesideABlankPetfsKeepsThePetAndGetsItsLineage) {
   EXPECT_EQ(p.files.opened, Opened::Formatted);
   EXPECT_EQ(bootDish(b), Boot::Resumed);
   EXPECT_TRUE(b.kept.files.count("lineage.log")) << "the lineage saves";
+  EXPECT_EQ(b.pet.bytes, petBytes);
+}
+
+// The test board (hw, 2026-10-13): 64 KB of random bytes over the start of
+// both partitions of a saved pet. IDF opened `pet` over the junk, its later
+// pages still held a snapshot, and the board fell back to it; `petfs` had no
+// superblock left, and the pair rule refused to format it, so nothing saved.
+TEST(Mixed, JunkOverASavedBoardsHeadsFormatsPetfsAndThePetFallsBack) {
+  std::vector<uint8_t> petBytes = foreign(0x10000);
+  const std::vector<uint8_t> saved = fixture("nvs_pet_v1.bin", kPetSize - 0x10000);
+  petBytes.insert(petBytes.end(), saved.begin(), saved.end());
+  std::vector<uint8_t> fs = fixture("petfs_head.bin", kPetfsSize);
+  const std::vector<uint8_t> junk = foreign(0x10000);
+  std::copy(junk.begin(), junk.end(), fs.begin());
+  Board b({petBytes, true}, {fs, false});
+  b.kept.files["snap.a"] = foreign(64);
+  b.kept.files["snap.b"] = currentBlob();
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::Ok);
+  EXPECT_EQ(p.files.held, Holds::Foreign);
+  EXPECT_EQ(p.files.opened, Opened::Formatted);
+  EXPECT_EQ(bootDish(b), Boot::FellBack);
+  EXPECT_TRUE(b.kept.files.count("lineage.log")) << "the lineage saves again";
   EXPECT_EQ(b.pet.bytes, petBytes);
 }
 
