@@ -7,7 +7,7 @@
 Framing comes from the neutral frame's alpha bbox, the eyeballs from the two blobs of
 masks/eyes.png. Reference colours are k-means clusters: of the body outside the eye and
 mouth masks (each the region of the nearest prototype: --skin, --cloak, --belly), of the
-eyes, of the open mouths that differ from the body, and of the power face's eyes that
+eyes, of what the open-mouthed faces repaint in the mouth, of the power face's eyes that
 differ from neutral's (the glow). roster/roster.json gives --skin and --cloak by
 default. The prototypes go into pack.json too: sprite_pack.py gives each ink-bounded
 patch of the body the region of the prototype nearest its mean colour. pack-refs.png shows every swatch with its region, to check and hand-correct.
@@ -112,16 +112,25 @@ def main():
     body = neutral[alpha & ~eye_mask & ~mouth_mask & (value(neutral) >= INK)]
     body_c = kmeans(body, 14)
 
-    protos = {"skin": skin, "cloak": cloak, "belly": hexrgb(a.belly)}
+    # hand-tuned keys of an existing pack.json (prototypes, region_paint) survive a redraft
+    old = json.loads((art / "pack.json").read_text()) if (art / "pack.json").exists() else {}
+    protos = old.get("prototypes") or {"skin": [int(v) for v in skin], "cloak": [int(v) for v in cloak],
+                                       "belly": [int(v) for v in hexrgb(a.belly)]}
+    flat = [(np.array(c, float), r) for r, cs in protos.items() for c in (cs if isinstance(cs[0], list) else [cs])]
 
     def body_region(c):
-        return min(protos, key=lambda r: ((c - protos[r]) ** 2).sum())
+        return min(flat, key=lambda f: ((c - f[0]) ** 2).sum())[1]
 
     refs = [(c, body_region(c)) for c in body_c]
     eye_c = far(kmeans(neutral[alpha & eye_mask], 6), body_c, 40)
     refs += [(c, "eye") for c in eye_c]
-    mouths = np.concatenate([frame(n)[0][alpha & mouth_mask] for n in ("meow", "blep", "yawn")])
-    refs += [(c, "mouth") for c in far(kmeans(mouths, 8), list(body_c) + list(eye_c), 45)]
+    # the mouth is what the open-mouthed faces repaint, so a pink mouth on a coral body is
+    # still found; only colours nearly equal to the body's are dropped
+    def opened(n):
+        f = frame(n)[0]
+        return f[alpha & mouth_mask & (np.abs(f - neutral).sum(-1) > 60) & (value(f) >= INK)]
+    mouths = np.concatenate([opened(n) for n in ("meow", "blep", "yawn")])
+    refs += [(c, "mouth") for c in far(kmeans(mouths, 8), list(body_c) + list(eye_c), 20)]
     power, _ = frame("foresee")
     lit = power[alpha & eye_mask & (value(power) > 0.55)]
     glow_c = far(kmeans(lit, 5), list(body_c) + list(eye_c), 40) if len(lit) else np.zeros((0, 3))
@@ -140,10 +149,12 @@ def main():
         "body": [int(xs.max()) + 1 - int(xs.min()), int(ys.max()) + 1 - int(ys.min())],
         "eyeballs": [[x, y] for x, y, _ in eyes],
         "eyeball_r": round(sum(r for *_, r in eyes) / len(eyes)),
-        "prototypes": {r: [int(v) for v in c] for r, c in protos.items()},
+        "prototypes": protos,
         "refs": [{"rgb": [int(v) for v in c], "region": r} for c, r in refs],
         "egg_refs": [{"rgb": [int(v) for v in c], "region": r} for c, r in egg_refs],
     }
+    if "region_paint" in old:
+        out["region_paint"] = old["region_paint"]
     (art / "pack.json").write_text(json.dumps(out, indent=1) + "\n", newline="\n")
 
     rows = [("refs", out["refs"]), ("egg", out["egg_refs"])]

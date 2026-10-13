@@ -4,3 +4,4 @@ __pycache__/
 *.diff.png
 outputs/
 pets/*/pack-refs.png
+pets/*/regions-map.png

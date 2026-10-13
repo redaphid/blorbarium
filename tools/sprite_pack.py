@@ -283,22 +283,24 @@ def patches(mask):
     return ndimage.label(mask)
 
 
-def by_patch(lab, rgb, alpha, eye_zone, mouth_zone):
+def by_patch(lab, rgb, alpha, eye_mask, mouth_zone):
     """Give each patch walled by linework one body region, the prototype (pack.json
     "prototypes") nearest its mean colour: a shell's highlight and its shading are one
     patch, so a tint moves the whole shell, where per pixel the highlight would match a
     pale face. A patch mostly labelled eye, mouth or glow keeps its labels (a tongue
-    hanging past the mouth zone), and one mostly in the eye zone is eye (an iris the
-    colour of shell shading)."""
+    hanging past the mouth zone), and one mostly inside the eye mask is eye (an iris
+    the colour of shell shading); the mask, not the wider zone, so a blush or the fur
+    beside an eye stays body."""
     h, s, v = to_hsv(rgb)
     comp, n = patches((alpha > 0) & (v >= CFG.get("edge", 0.45)))   # brown linework walls a patch too
     flat = comp.ravel()
     tally = lambda m: np.bincount(flat, weights=m.ravel().astype(float), minlength=n + 1)
     count = np.bincount(flat, minlength=n + 1).astype(float)
     special = tally(np.isin(lab, (REGION["eye"], REGION["mouth"], REGION["glow"])))
-    in_eye, in_mouth = tally(eye_zone), tally(mouth_zone & ~eye_zone)
+    in_eye, in_mouth = tally(eye_mask), tally(mouth_zone & ~eye_mask)
     mean = np.stack([tally(rgb[..., c]) for c in range(3)], -1) / np.maximum(count, 1)[:, None]
-    protos = [(np.array(c, float), REGION[r]) for r, c in CFG["prototypes"].items()]
+    protos = [(np.array(c, float), REGION[r]) for r, cs in CFG["prototypes"].items()
+              for c in (cs if isinstance(cs[0], list) else [cs])]   # a region may name several colours
     d = np.stack([((mean - c) ** 2).sum(-1) for c, _ in protos], -1)
     table = np.array([r for _, r in protos], np.uint8)[d.argmin(-1)]
     table[in_eye * 2 > count] = REGION["eye"]
@@ -308,6 +310,11 @@ def by_patch(lab, rgb, alpha, eye_zone, mouth_zone):
     out = lab.copy()
     m = vote[comp] & body
     out[m] = table[comp][m]
+    # inside the eye mask, a colour far from every body prototype is an eye, however its
+    # patch voted (an iris that merges into the face through a gap in its ring)
+    far = np.stack([((rgb.astype(float) - c) ** 2).sum(-1) for c, _ in protos], -1).min(-1) > 90 ** 2
+    m = eye_mask & np.isin(out, (REGION["skin"], REGION["belly"], REGION["cloak"])) & far
+    out[m] = REGION["eye"]
     return out
 
 
@@ -697,8 +704,16 @@ def build():
     frames, alpha, eyes, eye_mask, mouth_zone = load_art()
     if CFG:
         fixed, zone = {}, refs_eye_zone(eye_mask)
-        labels = {n: by_patch(label_refs(rgb, alpha, zone, mouth_zone, n == "foresee"), rgb, alpha, zone, mouth_zone)
+        labels = {n: by_patch(label_refs(rgb, alpha, zone, mouth_zone, n == "foresee"), rgb, alpha, eye_mask, mouth_zone)
                   for n, rgb in frames.items()}
+        painted = ART / "masks/regions.png"
+        if painted.exists():
+            # a hand-checked region map (tools/region_map.py) has the last word on the body
+            rmap = np.asarray(Image.open(painted).convert("L"))
+            body = (REGION["skin"], REGION["belly"], REGION["cloak"])
+            for lab in labels.values():
+                m = (rmap != 255) & np.isin(lab, body)
+                lab[m] = rmap[m]
         eyes = {**eyes, **measure_eyes(labels)}
         moved = tuple(n for n in frames if n != "neutral" and eyes[n]["eyes"])
     else:

@@ -24,15 +24,10 @@
    128,
    106
   ],
-  "cloak": [
+  "belly": [
    246,
    238,
    208
-  ],
-  "belly": [
-   244,
-   238,
-   226
   ]
  },
  "refs": [
@@ -74,7 +69,7 @@
     190,
     161
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -90,7 +85,7 @@
     213,
     181
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -98,7 +93,7 @@
     230,
     196
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -114,7 +109,7 @@
     239,
     203
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -122,7 +117,7 @@
     244,
     210
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -130,7 +125,7 @@
     188,
     156
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -138,7 +133,7 @@
     249,
     217
    ],
-   "region": "cloak"
+   "region": "belly"
   },
   {
    "rgb": [
@@ -166,8 +161,48 @@
   },
   {
    "rgb": [
-    248,
-    148,
+    66,
+    12,
+    28
+   ],
+   "region": "mouth"
+  },
+  {
+   "rgb": [
+    130,
+    28,
+    46
+   ],
+   "region": "mouth"
+  },
+  {
+   "rgb": [
+    156,
+    115,
+    109
+   ],
+   "region": "mouth"
+  },
+  {
+   "rgb": [
+    226,
+    53,
+    75
+   ],
+   "region": "mouth"
+  },
+  {
+   "rgb": [
+    242,
+    111,
+    121
+   ],
+   "region": "mouth"
+  },
+  {
+   "rgb": [
+    245,
+    155,
     178
    ],
    "region": "mouth"
@@ -252,7 +287,7 @@
     208,
     184
    ],
-   "region": "skin"
+   "region": "shell"
   },
   {
    "rgb": [
@@ -260,7 +295,7 @@
     235,
     210
    ],
-   "region": "skin"
+   "region": "shell"
   },
   {
    "rgb": [
@@ -268,7 +303,7 @@
     249,
     245
    ],
-   "region": "skin"
+   "region": "shell"
   },
   {
    "rgb": [
@@ -277,6 +312,29 @@
     134
    ],
    "region": "glow"
+  }
+ ],
+ "region_paint": [
+  {
+   "region": "skin",
+   "polygon": [
+    [
+     300,
+     60
+    ],
+    [
+     720,
+     60
+    ],
+    [
+     720,
+     172
+    ],
+    [
+     300,
+     172
+    ]
+   ]
   }
  ]
 }

@@ -110,7 +110,7 @@ and the packed `pets/<slug>/<slug>_pack.h`. In sprite-expressions, branch `roste
 `masks/`, `raw/<expr>/frame-00.png`, `eyes.json`.
 
 Flash cost: Grungo's pack is 107 KB (256 palette entries, 18 frames). All nine packs
-together are 842 KB (`art` in roster.json lists each), inside a 4 MB app slot.
+together are 838 KB (`art` in roster.json lists each), inside a 4 MB app slot.
 
 ## How a roster pet differs from Grungo when packed
 
@@ -124,9 +124,13 @@ unchanged and his header byte-identical. The differences:
   gives the body bbox, the eyeballs, three body prototypes (`skin`, `cloak`, `belly`)
   and reference colours per region. Each patch of the body walled by linework takes
   the prototype nearest its mean colour; eyes, mouth and glow keep per-pixel labels.
-  Where the art has no outline between two parts (Puffkin's rim and face, Mudge's body
-  and belly, Mothwick's upper wings and body) they share one region, so a gene tint
-  moves them together.
+  Where the art has no outline between two parts, `masks/regions.png` draws one: it is
+  drafted by `tools/region_map.py` (nearest prototype per pixel, a majority vote, then
+  the `region_paint` shapes in pack.json) and overrules the converter on the body.
+  Puffkin (rim and face), Mudge (body and belly), Mothwick (wings and body) and Fizz
+  (wings and body) have one. Inside the eye mask, a colour far from every body
+  prototype is always eye, and nothing outside the mask is, so a blush or the fur round
+  Tinker's eyes stays body. Mouth references are what the open-mouthed faces repaint.
 - Remains are derived from the asleep face exactly as Grungo's are, with the pool
   scaled to the pet's body. That is the contract's only death art.
 

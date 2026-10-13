@@ -49,7 +49,8 @@
         "pack": "pets/grungo/grungo_pack.h",
         "palette": 256,
         "frames": 18,
-        "flash_bytes": 107210
+        "flash_bytes": 107210,
+        "region_map": false
       }
     },
     {
@@ -88,7 +89,8 @@
         "pack": "pets/mossby/mossby_pack.h",
         "palette": 232,
         "frames": 18,
-        "flash_bytes": 101846
+        "flash_bytes": 104638,
+        "region_map": false
       }
     },
     {
@@ -125,9 +127,10 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/puffkin/puffkin_pack.h",
-        "palette": 252,
+        "palette": 212,
         "frames": 18,
-        "flash_bytes": 100936
+        "flash_bytes": 87602,
+        "region_map": true
       }
     },
     {
@@ -164,9 +167,10 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/gilly/gilly_pack.h",
-        "palette": 241,
+        "palette": 242,
         "frames": 18,
-        "flash_bytes": 92730
+        "flash_bytes": 92658,
+        "region_map": false
       }
     },
     {
@@ -205,7 +209,8 @@
         "pack": "pets/mothwick/mothwick_pack.h",
         "palette": 256,
         "frames": 18,
-        "flash_bytes": 86212
+        "flash_bytes": 91898,
+        "region_map": true
       }
     },
     {
@@ -242,9 +247,10 @@
         "egg": true,
         "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
         "pack": "pets/mudge/mudge_pack.h",
-        "palette": 245,
+        "palette": 222,
         "frames": 18,
-        "flash_bytes": 92302
+        "flash_bytes": 91428,
+        "region_map": true
       }
     },
     {
@@ -283,7 +289,8 @@
         "pack": "pets/fizz/fizz_pack.h",
         "palette": 243,
         "frames": 18,
-        "flash_bytes": 80834
+        "flash_bytes": 80194,
+        "region_map": true
       }
     },
     {
@@ -322,7 +329,8 @@
         "pack": "pets/hushwing/hushwing_pack.h",
         "palette": 256,
         "frames": 18,
-        "flash_bytes": 102620
+        "flash_bytes": 102672,
+        "region_map": false
       }
     },
     {
@@ -361,7 +369,8 @@
         "pack": "pets/tinker/tinker_pack.h",
         "palette": 232,
         "frames": 18,
-        "flash_bytes": 77682
+        "flash_bytes": 79352,
+        "region_map": false
       }
     }
   ]
