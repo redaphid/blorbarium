@@ -1,0 +1,9 @@
+#> from 400
+#> length 9000
+#> caption 0 Bored, he stares | into the future
+#> reel 1400 5400
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 !care 0

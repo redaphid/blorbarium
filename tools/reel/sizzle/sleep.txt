@@ -1,0 +1,17 @@
+#> from 400
+#> length 13400
+#> caption 400 Night falls | time to tuck him in
+#> caption 1500 Hold the button | tucked in
+#> caption 3200 Eyes shut | till morning
+#> reel 400 7000
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 2016000
+@300 !care 0
+@1500 !button 1500
+@3200 DEBUG warp 1200
+@4400 DEBUG warp 1200
+@5600 DEBUG warp 1200
+@6800 DEBUG warp 1200
+@8000 DEBUG warp 1200

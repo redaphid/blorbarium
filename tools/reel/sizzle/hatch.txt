@@ -1,0 +1,6 @@
+#> length 6000
+#> caption 0 It starts as an egg
+#> caption 1500 Half an hour later... | hatched!
+#> reel 0 5000
+@0 DEBUG time 1790000000
+@1500 DEBUG warp 18000

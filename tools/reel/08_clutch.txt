@@ -1,0 +1,18 @@
+#> title The clutch
+#> length 11400
+#> from 400
+#> caption 400 after the vigil: three eggs | (both feats earned, so a full clutch)
+#> caption 1500 BOOT: the next egg
+#> caption 6000 BOOT held: this one
+#> reel 400 8400
+# Death near 8,206,800 ticks after hatching, then the 30-minute vigil.
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 DEBUG warp 6400000
+@350 DEBUG warp 100800
+@1500 !button
+@3000 !button
+@4500 !button
+@6000 !button 1500

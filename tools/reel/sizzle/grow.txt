@@ -1,0 +1,9 @@
+#> length 5600
+#> caption 0 A hatchling...
+#> caption 1900 a child...
+#> caption 3700 a grown-up frog | with a hood
+#> reel 300 5600
+@0 DEBUG time 1790000000
+@100 DEBUG stage hatchling
+@1900 DEBUG stage child
+@3700 DEBUG stage adult

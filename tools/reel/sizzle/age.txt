@@ -1,0 +1,15 @@
+#> length 11000
+#> caption 400 Every day | a little older
+#> caption 7000 Old frog | (knees mostly rumour)
+#> reel 1400 8600
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@1500 DEBUG warp 864000
+@2500 DEBUG warp 864000
+@3500 DEBUG warp 864000
+@4500 DEBUG warp 864000
+@5500 DEBUG warp 864000
+@6500 DEBUG warp 864000
+@7500 DEBUG warp 432000

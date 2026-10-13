@@ -1,0 +1,12 @@
+#> title Shake hop
+#> length 9400
+#> from 400
+#> caption 400 minding his own business
+#> caption 2500 a shake through the IMU | adrenaline, then a startled hop
+#> reel 2000 6000
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 1728000
+@300 !care 0
+@2500 !shake 1200

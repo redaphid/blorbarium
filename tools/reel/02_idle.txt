@@ -1,0 +1,12 @@
+#> title Idle
+#> length 12400
+#> from 400
+#> caption 400 an adult morning | breathing, blinking, looking about
+#> reel 400 5400
+@0 DEBUG time 1790000000
+# The 30-minute egg hatches, then 2.7 pet days of an owner answering the care
+# hint grow him into an adult. The owner leaves before the camera rolls.
+@100 DEBUG warp 18000
+@150 !care 1500000000
+@200 DEBUG warp 2340000
+@300 !care 0
