@@ -269,8 +269,9 @@ web/public/fw/<board>/blorbarium-<board>-<version>.bin
 The manifest is published with the site. The image is the app image
 (`firmware.bin`), not the merged `.hex`, because it goes into an app slot.
 The page fetches `image` relative to the manifest. `fmt` is the save format
-the image writes. It is not signed and the dish ignores it: the release tool
-reads it to catch a format change.
+the image writes. It is signed (it is part of the `blorbota2` text) and carried
+in BEGIN, so a manifest cannot claim another format for the same image. The
+release tool also reads it to catch a format change.
 
 The manifest is committed, as the record of the last release. The image is
 not committed (`.gitignore` refuses `web/public/fw/**/*.bin`).
@@ -371,9 +372,15 @@ When the old image boots and finds a handover record but no trial, the
 update it switched to never kept itself. It records that version as
 `rolledback` (nvs key `rb`), clears the record, and logs
 `[hw] ota: the last update rolled back`. If `esp_ota` cannot roll back (no
-other slot to boot), the trial logs `rollback FAILED, keeping this image`
-once, releases the hold and lets the pet carry on, rather than retry every
-loop.
+other valid slot to boot), the running image is the only one that boots. The
+trial marks it valid (`esp_ota_mark_app_valid_cancel_rollback`), so the next
+reset does not find it still pending with nowhere to go. It logs
+`rollback FAILED: no other image; keeping this one` once, releases the hold
+and lets the pet carry on.
+
+An update that ends without a restart (an ABORT when ready, a slot that will
+not switch, a save that fails twice) forgets the handover record it wrote.
+Otherwise the next ordinary boot would report the version as `rolledback`.
 
 The verdict is `ota::judge` in `lib/ota/include/ota/trial.h`, a pure function
 that the native suite tests case by case. `hw::Trial` in `src/hw/ota_esp.h`
@@ -423,6 +430,8 @@ so a cable flash always takes priority over an update.
    writes `web/public/fw/lcd128/manifest.json` and the image, and verifies the
    result. `--no-build` signs the `firmware.bin` that is already built.
    `--allow-older` signs flag 1, for a deliberate downgrade.
+   Run it again before committing and it puts its own last manifest back
+   first. Any other uncommitted change is still refused.
 3. Commit the manifest, and deploy the site from the same tree. Deploys are
    the owner's call. The image is not committed.
 

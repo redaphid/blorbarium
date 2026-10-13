@@ -157,17 +157,18 @@ struct MemSlot : Slot {
     return true;
   }
   bool close() override { return closeOk; }
+  bool activateOk = true;
   bool activate() override {
     if (order) order->push_back("activate");
     ++activations;
-    return activated = true;
+    return activated = activateOk;
   }
   void discard() override { discarded = true; activated = false; }
 };
 
 struct FakeHost : Host {
   bool isBusy = false, saveOk = true, trial = false, handOverOk = true;
-  int saves = 0, handOvers = 0, saveFailures = 0;   // saveFailures: that many saves fail before saveOk applies
+  int saves = 0, handOvers = 0, forgets = 0, saveFailures = 0;   // saveFailures: that many saves fail before saveOk applies
   std::optional<Token> handedToken, confirmedWith;
   std::optional<Version> handedTo, rolled;
   Confirm confirmAnswer = Confirm::Confirmed;
@@ -188,6 +189,7 @@ struct FakeHost : Host {
     handedToken = t;
     return handOverOk;
   }
+  void forgetHandover() override { ++forgets; }
   Confirm confirmTrial(const Token& t) override {
     if (!trial) return Confirm::NotOnTrial;
     confirmedWith = t;
@@ -745,6 +747,7 @@ TEST(OtaTrialRun, ARollbackThatCannotHappenLetsThePetCarryOn) {
   EXPECT_FALSE(trial.onTrial());
   EXPECT_EQ(trial.poll(20), Trial::Poll::Running);
   EXPECT_EQ(port.rollBacks, 1) << "tried once, not every loop";
+  EXPECT_EQ(port.keeps, 1) << "the only image that boots is marked valid, not left pending";
 }
 
 TEST(OtaTrialRun, ARollbackRestarts) {
@@ -849,6 +852,45 @@ TEST(OtaSession, HandsOverThePetBeforeSwitchingSlots) {
   rig.confirm(r);
   rig.stream(r.bytes, 0, 10000);
   EXPECT_EQ(order, (std::vector<std::string>{"save", "open", "handover", "activate"}));
+}
+
+TEST(OtaSession, AnUpdateThatEndsWithoutARestartForgetsItsHandover) {
+  {
+    Rig rig;   // the slot will not switch
+    Release r;
+    rig.slot.activateOk = false;
+    rig.confirm(r);
+    rig.stream(r.bytes, 0, 10000);
+    EXPECT_EQ(rig.host.handOvers, 1);
+    EXPECT_EQ(rig.last(), "! OTA state=idle last=flash_error");
+    EXPECT_EQ(rig.host.forgets, 1);
+  }
+  {
+    Rig rig;   // ABORT when ready
+    Release r;
+    rig.confirm(r);
+    rig.stream(r.bytes, 0, 10000);
+    ASSERT_EQ(rig.host.handOvers, 1);
+    rig.send("#2 OTA ABORT " + kTokenA);
+    EXPECT_EQ(rig.host.forgets, 1) << "else the next boot says it rolled back";
+  }
+  {
+    Rig rig;   // the save before the restart fails twice
+    Release r;
+    rig.confirm(r);
+    rig.stream(r.bytes, 0, 10000);
+    rig.host.saveFailures = 2;
+    EXPECT_FALSE(rig.session.prepareRestart());
+    EXPECT_EQ(rig.host.forgets, 1);
+  }
+  {
+    Rig rig;   // a restart keeps it: the new image reads it
+    Release r;
+    rig.confirm(r);
+    rig.stream(r.bytes, 0, 10000);
+    EXPECT_TRUE(rig.session.prepareRestart());
+    EXPECT_EQ(rig.host.forgets, 0);
+  }
 }
 
 TEST(OtaSession, AHandoverThatFailsNeverSwitches) {
@@ -1123,9 +1165,11 @@ TEST(OtaTrialGuard, LineageTwistsWaitWhileOnTrial) {
   ScriptedLink inner;
   bool trial = true;
   TrialGuard guard(inner, [&] { return trial; });
-  inner.inbound = {"#4 TWIST rename Bob", "#5 TWIST gene_edit 3 0 9", "#6 TWIST pick 1", "#7 TWIST say HI", "#8 HELLO"};
+  inner.inbound = {"#4 TWIST rename Bob", "#5 TWIST gene_edit 3 0 9", "#6 TWIST pick 1", "TWIST rename Bob",
+                   "#7 TWIST say HI", "#8 HELLO"};
   EXPECT_EQ(guard.readLine(), std::optional<std::string_view>("#7 TWIST say HI")) << "say writes nothing";
-  EXPECT_EQ(inner.sent, (Lines{"#4 ERR 409 TRIAL", "#5 ERR 409 TRIAL", "#6 ERR 409 TRIAL"}));
+  EXPECT_EQ(inner.sent, (Lines{"#4 ERR 409 TRIAL", "#5 ERR 409 TRIAL", "#6 ERR 409 TRIAL", "#0 ERR 409 TRIAL"}))
+      << "a line with no id is id 0 to the protocol, so it is to the guard";
   EXPECT_EQ(guard.readLine(), std::optional<std::string_view>("#8 HELLO"));
   trial = false;
   inner.inbound = {"#9 TWIST rename Bob"};

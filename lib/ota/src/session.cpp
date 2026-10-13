@@ -261,6 +261,9 @@ std::optional<View> Session::view(uint32_t now) const {
 }
 
 void Session::fail(Last why) {
+  // Leaving receiving or ready without a restart: a record left behind would
+  // read, at the next boot, as an update that rolled back.
+  if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) host_.forgetHandover();
   state_ = Idle{why};
   event("state=idle last=%s", lastName(why));
 }

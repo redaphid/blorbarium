@@ -102,6 +102,7 @@ struct DishOtaHost : ota::Host {
   uint16_t chunk() override { return ble.mtu() > 7 ? ble.mtu() - 7 : 16; }   // ATT header and the offset
   bool onTrial() override;
   bool handOver(ota::Version to, const ota::Token& token) override;
+  void forgetHandover() override;
   ota::Confirm confirmTrial(const ota::Token& token) override;
   std::optional<ota::Version> rolledBack() override;
 };
@@ -232,6 +233,7 @@ bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
   return hw::EspTrialPort::write(
       ota::Handover{readThePet ? std::optional<ota::PetMark>(petMark()) : std::nullopt, to, token});
 }
+void DishOtaHost::forgetHandover() { trialPort.forgetHandover(); }
 ota::Confirm DishOtaHost::confirmTrial(const ota::Token& token) { return trial.confirm(token); }
 std::optional<ota::Version> DishOtaHost::rolledBack() { return trialPort.rolledBack(); }
 

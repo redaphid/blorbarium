@@ -59,6 +59,15 @@ TEST(RxLines, AHalfLineReadBeforeAReconnectIsDropped) {
   EXPECT_EQ(c, 2u);
 }
 
+TEST(RxLines, TheConnectionIsTheWholeNumber) {
+  RxLines<64> rx;
+  rx.connected(0x12345);   // the session compares it with the data packets' 32-bit number
+  push(rx, "#1 HELLO\n");
+  uint32_t c = 0;
+  EXPECT_EQ(next(rx, &c), "#1 HELLO");
+  EXPECT_EQ(c, 0x12345u);
+}
+
 TEST(RxLines, AFullRingDropsTheRest) {
   RxLines<8> rx;
   rx.connected(1);

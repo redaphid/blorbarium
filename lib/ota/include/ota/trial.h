@@ -96,10 +96,14 @@ class Trial {
         port_->say(facts_.confirmed ? "[hw] ota trial: FAILED (checks), rolling back"
                                     : "[hw] ota trial: FAILED (checks or no page), rolling back");
         port_->rollBack();
-        // Still here: the bootloader has nothing to go back to. Keep running
-        // this image and let the pet live and save, rather than retry forever.
+        // Still here: there is no other image to go back to, so this one is
+        // the only one that boots. Mark it valid, or the next reset finds it
+        // still pending with nowhere to roll back; and let the pet live and
+        // save rather than retry forever.
+        port_->keep();
+        port_->forgetHandover();
         facts_.pending = false;
-        port_->say("[hw] ota trial: rollback FAILED, keeping this image");
+        port_->say("[hw] ota trial: rollback FAILED: no other image; keeping this one");
         return Poll::GaveUp;
       default:
         return Poll::Running;

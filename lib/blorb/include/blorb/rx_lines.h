@@ -15,8 +15,6 @@ namespace blorb {
 
 template <size_t N>
 class RxLines {
-  static_assert(N < 0x10000, "positions are packed into 16 bits beside the connection");
-
  public:
   struct Line {
     std::string_view text;
@@ -24,9 +22,10 @@ class RxLines {
   };
 
   // Radio task: bytes from here on belong to `connection`.
+  // Where it starts, then which connection: the loop reads them the other way round.
   void connected(uint32_t connection) {
-    mark_.store(uint32_t(connection & 0xffff) << 16 | uint32_t(head_.load(std::memory_order_relaxed)),
-                std::memory_order_release);
+    markAt_.store(head_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    markConnection_.store(connection, std::memory_order_release);
   }
   // Radio task. A full ring drops the rest, so that line reads as garbled.
   void push(const uint8_t* p, size_t n) {
@@ -41,18 +40,17 @@ class RxLines {
   // Loop: the next whole line, '\r' dropped. Longer than the buffer keeps
   // its first bytes, so an overlong line still reads as overlong.
   std::optional<Line> line() {
-    const uint32_t mark = mark_.load(std::memory_order_acquire);
-    if (mark != seenMark_) {
-      seenMark_ = mark;
-      connection_ = mark >> 16;
-      tail_.store(mark & 0xffff, std::memory_order_release);   // the last connection's unread bytes
-      len_ = 0;                                                 // and its half line
+    const uint32_t mark = markConnection_.load(std::memory_order_acquire);
+    if (mark != connection_) {
+      connection_ = mark;
+      tail_.store(markAt_.load(std::memory_order_relaxed), std::memory_order_release);   // the last one's unread bytes
+      len_ = 0;                                                                           // and its half line
     }
     // The radio task marks a connection before it pushes any of its bytes.
     // An unchanged mark after reading the head means every byte up to that
     // head is this connection's; a changed one is taken on the next call.
     const size_t head = head_.load(std::memory_order_acquire);
-    if (mark_.load(std::memory_order_acquire) != mark) return std::nullopt;
+    if (markConnection_.load(std::memory_order_acquire) != mark) return std::nullopt;
     size_t tail = tail_.load(std::memory_order_relaxed);
     while (tail != head) {
       const char c = ring_[tail];
@@ -73,8 +71,9 @@ class RxLines {
  private:
   char ring_[N];
   std::atomic<size_t> head_{0}, tail_{0};
-  std::atomic<uint32_t> mark_{0};
-  uint32_t seenMark_ = 0, connection_ = 0;
+  std::atomic<size_t> markAt_{0};
+  std::atomic<uint32_t> markConnection_{0};   // the whole number: the session compares it with the data packets'
+  uint32_t connection_ = 0;
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
 };

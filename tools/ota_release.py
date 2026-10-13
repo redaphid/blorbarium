@@ -85,11 +85,17 @@ def git(*args) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def clean_tree():
-    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True,
-                           check=True).stdout.strip()
+def clean_tree(board: str):
+    """Nothing uncommitted but this tool's own last manifest, which it puts back:
+    it writes a new one anyway, and the build's `git describe --dirty` must see a clean tree."""
+    own = f"web/public/fw/{board}/manifest.json"
+    dirty = [line for line in subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True,
+                                             text=True, check=True).stdout.splitlines() if line.strip()]
+    if any(line[3:] != own for line in dirty):
+        sys.exit("the tree has uncommitted changes, so the image would not be any commit's:\n" + "\n".join(dirty))
     if dirty:
-        sys.exit("the tree has uncommitted changes, so the image would not be any commit's:\n" + dirty)
+        subprocess.run(["git", "checkout", "--", own], cwd=ROOT, check=True)
+        print(f"put back {own}: the last release was not committed")
 
 
 def firmware_version() -> str:
@@ -135,7 +141,7 @@ def cmd_release(args):
         sys.exit(f"{PUBKEY_H.relative_to(ROOT)} holds another key's public half: a dish built from this tree "
                  "would refuse what this key signs. Run `keygen` with this key first.")
     board, env = args.board, BOARDS[args.board]
-    clean_tree()
+    clean_tree(board)
     if not args.no_build:
         pio = Path.home() / ".platformio" / "penv" / ("Scripts/pio.exe" if os.name == "nt" else "bin/pio")
         subprocess.run([str(pio), "run", "-e", env], cwd=ROOT, check=True)

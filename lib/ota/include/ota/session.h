@@ -42,6 +42,7 @@ class Host {
   virtual uint16_t chunk() = 0;                           // image bytes one data write can carry on this link
   virtual bool onTrial() = 0;                             // this image has not yet kept itself (docs/ota.md "The trial")
   virtual bool handOver(Version to, const Token&) = 0;    // record which pet, version and page the new image must find
+  virtual void forgetHandover() = 0;                      // the update ended here: no new image will look for it
   virtual Confirm confirmTrial(const Token&) = 0;         // a page reached this image over Bluetooth
   virtual std::optional<Version> rolledBack() = 0;        // the last update that switched and then rolled back
 };
