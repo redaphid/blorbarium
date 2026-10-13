@@ -317,7 +317,7 @@ void turnHits(const Outcome& o, Side me, uint32_t seed, const BattleCard& mine, 
 
 // ---- the pet's own mind in a duel ------------------------------------------------------
 // What the pet would pick, and how it learns, keyed by who it is fighting.
-// Context = the friend's element (3) x the friend's last shown stance or none
+// Context = the friend's element (3) x the friend's last locked stance or none
 // (4) = 12; moves = the three stances. This is v2's Skill/chooseMove/learnMove
 // for a games.def row; until v2's Games chunk exists it is its own small
 // table, saved in duels.log.
