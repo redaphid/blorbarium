@@ -208,7 +208,7 @@ TEST(Wounds, AWoundNeverExceedsTheRoomGiven) {
 TEST(Wounds, TheFirstTwoTurnsThatCostHeartsLeaveScarsOfWhatHitHim) {
   TurnHit hits[kTurns]{};
   hits[2] = TurnHit{1, Scar::Kind::Scorch, 0x1234};
-  hits[5] = TurnHit{2, Scar::Kind::Ring, 0};
+  hits[5] = TurnHit{2, Scar::Kind::Bite, 0};
   hits[9] = TurnHit{1, Scar::Kind::Claw, 0};
   std::vector<uint8_t> scarred;
   for (uint8_t t = 0; t < kTurns; ++t)
@@ -297,7 +297,7 @@ TEST(Scars, AFifthReplacesTheFaintestAndAFainterOneIsRefused) {
   for (uint8_t f : {200, 150, 250, 180}) EXPECT_TRUE(r.c.addScar(Scar{Scar::Kind::Claw, 0, 0, f}));
   EXPECT_NE(r.c.hash(), unscarred) << "a scar is state the replay check sees";
   EXPECT_FALSE(r.c.addScar(Scar{Scar::Kind::Notch, 0, 0, 100}));
-  EXPECT_TRUE(r.c.addScar(Scar{Scar::Kind::Ring, 9, 9, 255}));
+  EXPECT_TRUE(r.c.addScar(Scar{Scar::Kind::Bite, 9, 9, 255}));
   ASSERT_EQ(r.c.scars().count, kMaxScars);
   for (const Scar& m : r.c.scars().mark) EXPECT_NE(m.fade, 150) << "the faintest went";
 }

@@ -126,7 +126,7 @@ All numbers are starting values in `stakes.h` (`kStakes`), one row per tier, for
 
 **Wounds are the engine's, not the genes'.** The amounts come from the tier table, applied from the agreed Outcome by `woundFor()` turn by turn. Stimulus genes still decide what a duel feels like, but `duelFilter()` refuses any stimulus write to injury, life, toxin or an unnamed chemical at every tier. Two expression-time guards (unit D3) cover the second step. A gene reading daze or pluck may write only `sleep_gate`. And a receptor writing the die or cause locus is inert unless it reads a vital chemical (life, injury, toxin, starvation). The second guard is a rule for every pet, duel or not. It closes a mutation that wires pain, adrenaline, a drive, mettle or dread to `die`, which would otherwise fire mid-Scrap. So a duel ends a life in exactly two ways: a Finish someone chose, and the pet's own ordinary chemistry over the following days if he is badly hurt and neglected. The second is how wounds work, and the engine already has it.
 
-**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, a ripple for Splash, a ring for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap or Mortal duel. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
+**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, stitches for Splash, a bite for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap or Mortal duel. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
 
 ### How lethal by default (recommendation, and the alternatives)
 
@@ -281,6 +281,7 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 - **Assist hearts** look like the pet cheering, never like a label.
 - **Stakes and fate:** the three tier glyphs (a feather for Spar, a bandage for Scrap, a skull for Mortal) with both pets' skulls; in Mercy, the downed pet, the skull filling under the winner's thumb, and the plea cheers floating up; after, the new scars drawn on, and the fallen pet's remains in the friend's dish.
 - **At home:** scars on the pet for the rest of his life, trophies and debt and vendetta marks on the rim.
+- **Where a scar goes:** on a limb, a shoulder, a side or the head, never on the front of the chest or the belly. A scar's x and y come from the hit's luck, so D11 maps them into those regions of each body rather than anywhere in its bounding box. No battle mark (scar, war paint, trophy or vendetta mark) may read as a piercing or a body ornament. The owner vetoed the ripple and ring scars for exactly that, which is why the kinds are claw, scorch, notch, stitches and bite.
 - **No reading needed.** Text appears only as the pet's voice line on the existing marquee. Everything a 6-year-old needs is a picture, and no state is shown by colour alone.
 
 ## Consent, stakes and fairness
@@ -455,7 +456,7 @@ Every file has one owner. "C" is created and "E" is edited. Engine paths are und
 
 | Unit | Delivers | Acceptance | Needed by |
 |---|---|---|---|
-| **ART1 Scar overlays** | 5 kinds (claw, scorch, notch, ripple, ring) x 3 sizes, generic across species, recoloured from the skin region at draw time | byte-stable conversion; each reads on all nine bodies at 240 px (a contact sheet the owner looks at) | D11 |
+| **ART1 Scar overlays** | 5 kinds (claw, scorch, notch, stitches, bite) x 3 sizes, generic across species, recoloured from the skin region at draw time | byte-stable conversion; each reads on all nine bodies at 240 px (a contact sheet the owner looks at) | D11 |
 | **ART2 Trophy tokens** | 9 tokens at 24 x 24, one per species (shell, spore cap, gill frond, wing scale, fin, hood, lamp, feather, gear) | byte-stable; legible on the rim at 24 px | D11 |
 | **ART3 Duel glyphs** | stance glyphs (3), power glyphs (9), tier glyphs (feather, bandage, skull) with a skull fill, the debt and vendetta marks, the bandage for `Wounded` | byte-stable; each distinguishable without colour | D11 |
 
