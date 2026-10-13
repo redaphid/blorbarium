@@ -68,6 +68,8 @@ Offspring Clutch::child(uint8_t i) const {
 
 // The vigil first; then Button or Knock moves the cursor, ButtonHold or
 // DoubleKnock picks, and the timeout picks the cursor. One egg needs no choice.
+// The timeout never picks a friend egg: a kid chooses it or nobody does, so a
+// cursor left on it falls back to his own first egg.
 std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
   ++sinceDeath;
   if (sinceDeath < kVigilTicks) return std::nullopt;
@@ -77,7 +79,7 @@ std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
     if (s == stim::button_hold || s == stim::double_knock) return cursor;
     if (s == stim::button || s == stim::knock) cursor = uint8_t((cursor + 1) % count);
   }
-  if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return cursor;
+  if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return friendSlot && cursor == friendSlot - 1 ? uint8_t(0) : cursor;
   return std::nullopt;
 }
 
