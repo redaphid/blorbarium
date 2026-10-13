@@ -665,7 +665,7 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=11,128,96 cloak=0,128,118 shell=11,128,96 look=2 mind=5",
+      "#6d + egg=0 skin=11,128,98 cloak=-90,110,120 shell=11,128,98 look=4 mind=5",
       "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=4 mind=8",
       "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=4",
       "#6d OK eggs=3 cursor=1 previewed=3",
