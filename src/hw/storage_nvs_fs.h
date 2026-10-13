@@ -6,7 +6,7 @@
 #pragma once
 
 #include <LittleFS.h>
-#include <Preferences.h>
+#include <nvs.h>
 #include <esp_partition.h>
 #include <nvs_flash.h>
 #include <sys/stat.h>
@@ -28,7 +28,7 @@ inline Where whereOf(const char* name) { return std::strncmp(name, "snap.", 5) =
 class NvsFsStorage : public blorb::Storage {
  public:
   blorb::Provisioned begin() {
-    SlotsVolume slots(prefs_);
+    SlotsVolume slots(nvs_);
     FilesVolume files;
     const blorb::Provisioned p = blorb::provision(slots, files, kBlock);
     slotsUp_ = isUp(p.slots.opened);
@@ -65,18 +65,25 @@ class NvsFsStorage : public blorb::Storage {
    private:
     const esp_partition_t* p_;
   };
+  // IDF's own NVS calls, not Arduino's Preferences: Preferences logs every
+  // failure through a table of error names that ends at INVALID_LENGTH, and a
+  // later code (NEW_VERSION_FOUND, NO_FREE_PAGES, a flash fault) is printed
+  // through NULL. On the test board that was a panic every 0.6 s (issue #1).
   class SlotsVolume : public Partition {
    public:
-    explicit SlotsVolume(Preferences& prefs)
+    explicit SlotsVolume(nvs_handle_t& handle)
         : Partition(esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, "pet")),
-          prefs_(prefs) {}
-    bool open() override { return prefs_.begin("blorb", false, "pet"); }
+          handle_(handle) {}
+    bool open() override {
+      return nvs_flash_init_partition("pet") == ESP_OK &&
+             nvs_open_from_partition("pet", "blorb", NVS_READWRITE, &handle_) == ESP_OK;
+    }
     // Safe after a half-open NVS (init succeeded, nvs_open did not): IDF's
     // nvs_flash_erase_partition deinits an initialised partition before it
     // erases (nvs_api.cpp).
     bool format() override { return nvs_flash_erase_partition("pet") == ESP_OK && open(); }
    private:
-    Preferences& prefs_;
+    nvs_handle_t& handle_;
   };
   class FilesVolume : public Partition {
    public:
@@ -106,7 +113,7 @@ class NvsFsStorage : public blorb::Storage {
     return whereOf(name) == Where::Slot ? putSlot(name, data, len) : putFile(name, data, len);
   }
   bool erase(const char* name) {
-    return whereOf(name) == Where::Slot ? prefs_.remove(name) : filesUp() && std::remove(Path(name).s) == 0;
+    return whereOf(name) == Where::Slot ? eraseSlot(name) : filesUp() && std::remove(Path(name).s) == 0;
   }
   // The one cross case is a torn slot quarantined into rescue/ on petfs.
   bool move(const char* from, const char* to) {
@@ -117,26 +124,33 @@ class NvsFsStorage : public blorb::Storage {
     return put(to, whole.data(), *n) && erase(from);
   }
 
-  // ---- slots: NVS blobs ----
-  // isKey first: getBytesLength logs an error for every missing key.
+  // ---- slots: NVS blobs (the SlotsVolume comment says why not Preferences) ----
   std::optional<size_t> slotLength(const char* name) {
-    if (!slotsUp_ || !prefs_.isKey(name)) return std::nullopt;
-    return prefs_.getBytesLength(name);
+    size_t len = 0;
+    if (!slotsUp_ || nvs_get_blob(nvs_, name, nullptr, &len) != ESP_OK) return std::nullopt;
+    return len;
   }
-  // getBytes wants a buffer the blob's whole size, so a partial range reads through a copy.
+  bool getSlot(const char* name, uint8_t* buf, size_t len) {
+    size_t n = len;
+    return nvs_get_blob(nvs_, name, buf, &n) == ESP_OK && n == len;
+  }
+  // nvs_get_blob wants a buffer the blob's whole size, so a partial range reads through a copy.
   std::optional<size_t> readSlot(const char* name, size_t offset, uint8_t* buf, size_t cap) {
     std::optional<size_t> len = slotLength(name);
     if (!len) return std::nullopt;
     if (cap == 0 || offset >= *len) return 0;
-    if (offset == 0 && cap >= *len) return prefs_.getBytes(name, buf, *len);
+    if (offset == 0 && cap >= *len) return getSlot(name, buf, *len) ? *len : 0;
     std::vector<uint8_t> whole(*len);
-    if (prefs_.getBytes(name, whole.data(), *len) != *len) return 0;
+    if (!getSlot(name, whole.data(), *len)) return 0;
     const size_t n = std::min(cap, *len - offset);
     std::memcpy(buf, whole.data() + offset, n);
     return n;
   }
-  bool putSlot(const char* name, const uint8_t* data, size_t len) {
-    return slotsUp_ && len > 0 && prefs_.putBytes(name, data, len) == len;   // NVS replaces a key atomically
+  bool putSlot(const char* name, const uint8_t* data, size_t len) {   // NVS replaces a key atomically
+    return slotsUp_ && len > 0 && nvs_set_blob(nvs_, name, data, len) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
+  }
+  bool eraseSlot(const char* name) {
+    return slotsUp_ && nvs_erase_key(nvs_, name) == ESP_OK && nvs_commit(nvs_) == ESP_OK;
   }
 
   // ---- files: POSIX stdio over the VFS (Arduino's File logs every missing-file probe) ----
@@ -179,7 +193,7 @@ class NvsFsStorage : public blorb::Storage {
     return std::rename(Path(from).s, Path(to).s) == 0;
   }
 
-  Preferences prefs_;
+  nvs_handle_t nvs_ = 0;
   bool slotsUp_ = false;
   bool filesUp_ = false;
   uint32_t writes_ = 0;

@@ -225,6 +225,10 @@ All paths below are in that repo.
   before this rule (the gift device) is recognised with no new marker. The
   boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
   blank`, `formatted: it held another firmware's bytes and never a pet`.
+  The slots go through IDF's `nvs_*` calls, never Arduino's Preferences:
+  Preferences prints an error's name from a table that stops at
+  INVALID_LENGTH, so NEW_VERSION_FOUND, NO_FREE_PAGES or a flash fault
+  printed through NULL and the test board panicked in a loop.
   Known gaps. The screen says nothing when a keepsake is left alone, and the
   child sees a new egg that will not save. And IDF itself decides most of
   what "will not open" means for `pet`. It opens NVS over random bytes (seen
