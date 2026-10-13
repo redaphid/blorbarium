@@ -1,0 +1,55 @@
+// v2 SKETCH of defs/stimuli.def. Rows marked v2 are new or changed; the rest
+// are origin/engine's. Ids stay < 64 (recent loci are 64 + id). The depth
+// branch adds an `interrupts` column; v2 rows set it as the comment says.
+//
+// situation = 1: a brain feature and an oracle cue. Oracle-only cues are in
+// cues.def, so the brain table does not grow with them.
+//
+// BLORB_STIM(id, name, source, situation)
+BLORB_STIM( 0, knock,          Body,  1)  // the command cue for tricks (story 1's "two clicks" is a knock here)
+BLORB_STIM( 1, double_knock,   Body,  1)  // v2: situation on. Praise: "good frog"
+BLORB_STIM( 2, shake,          Body,  1)
+BLORB_STIM( 3, picked_up,      Body,  1)
+BLORB_STIM( 4, put_down,       Body,  0)
+BLORB_STIM( 5, dropped,        Body,  0)  // an oracle cue (cues.def)
+BLORB_STIM( 6, flipped,        Body,  0)
+BLORB_STIM( 7, righted,        Body,  0)
+BLORB_STIM( 8, button,         Body,  0)  // v2: raw short press only; gestures.def routes it (Live: bell)
+BLORB_STIM( 9, button_hold,    Body,  0)  // v2: raw 1 s hold. Alive: a pellet drops by the bell. Never routed (static check)
+BLORB_STIM(10, cradle,         Body,  1)
+BLORB_STIM(11, lid_down,       Body,  0)  // v2: face down and still 2 s (a table), never a flip in a moving hand; the only tuck-in
+BLORB_STIM(12, lid_up,         Body,  0)
+BLORB_STIM(13, touched,        Body,  0)
+BLORB_STIM(14, button_double,  Body,  0)  // v2: raw, a second press within 400 ms of the first release (Live: the game wheel)
+BLORB_STIM(15, bell,           Body,  1)  // v2: BOOT press, routed. Neutral at birth; worth whatever it predicts. interrupts
+BLORB_STIM(16, pellet_dropped, World, 0)  // an oracle cue (cues.def): the meal omen
+BLORB_STIM(17, fed,            World, 1)
+BLORB_STIM(18, fed_bad,        World, 0)
+BLORB_STIM(19, marble_hit,     World, 1)
+BLORB_STIM(20, dusk,           World, 0)
+BLORB_STIM(21, dawn,           World, 0)
+BLORB_STIM(22, owner_arrived,  World, 1)
+BLORB_STIM(23, owner_left,     World, 0)
+BLORB_STIM(24, fly_caught,     World, 0)  // v2: the tongue landed; a small meal
+BLORB_STIM(25, fly_missed,     World, 0)  // v2
+BLORB_STIM(26, fly_hatched,    World, 0)  // v2: rot or two flies made a fly
+BLORB_STIM(27, game_point,     World, 0)  // v2: a game outcome he wanted (a save, a catch, an on-beat croak)
+BLORB_STIM(28, reunion,        World, 0)  // v2: Bond: contact after a gap 1.5x the usual one, powered or not. interrupts
+BLORB_STIM(29, strange_hands,  World, 0)  // v2: Bond: this session's gesture mix is far from the owner's print
+BLORB_STIM(30, wheel_opened,   World, 0)  // v2: the game wheel is up (an omen: "GAMES")
+BLORB_STIM(31, game_lost,      World, 0)  // v2: a game outcome he did not want
+BLORB_STIM(32, self_called,    Self,  0)
+BLORB_STIM(33, self_foresaw,   Self,  0)
+BLORB_STIM(34, woke,           Self,  0)
+BLORB_STIM(35, hatched,        Self,  0)
+BLORB_STIM(36, self_prophesied, Self, 0)  // v2: he committed to a prophecy (Foresee, the 8-ball or the phone)
+BLORB_STIM(37, prophecy_kept,  Self,  0)  // v2: it came true inside its window: "it is WRITTEN" (pride)
+BLORB_STIM(38, prophecy_broken, Self, 0)  // v2: the window closed first, or the owner broke it (sheepish)
+BLORB_STIM(39, self_surprised, Self,  0)  // v2: an omen he gave under 0.2 happened
+BLORB_STIM(40, self_let_down,  Self,  0)  // v2: an omen he gave 0.6 or more did not come
+BLORB_STIM(41, self_sang,      Self,  0)  // v2: he croaked the family rhythm
+BLORB_STIM(42, game_started,   World, 0)  // v2
+BLORB_STIM(48, petted,         Phone, 1)
+BLORB_STIM(49, played,         Phone, 0)
+BLORB_STIM(50, spoken_to,      Phone, 0)
+BLORB_STIM(51, rain,           Phone, 0)  // v2: the weather twist; drizzle runs down the dish

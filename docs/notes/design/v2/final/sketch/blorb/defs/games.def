@@ -1,0 +1,20 @@
+// Games: rule overlays on the dish. The pieces (marble, pellets, flies) are
+// the world's and obey its physics whether or not a game runs. A game adds
+// rules, a score, a time limit, an owner role and the places he walks to.
+// Row 0 is ambient: always running, captures nothing, no skill. The rest open
+// from the wheel (two BOOT presses; tilt points, a knock or a press starts)
+// or from his invitation (a bell accepts). A game ends on its own, on two
+// presses, the lid or a drop. Through a hop or a trance it pauses.
+//
+// He gets better at a game through its Skill table: contexts x moves, played
+// and learned by the shared chooseMove/learnMove. A row with 0 x 0 has none.
+// Outcomes are World stimuli (game_point, game_lost, fly_caught), so the
+// brain and the oracle learn a game like anything else.
+//
+// BLORB_GAME(id, name, Type, captures, seconds, unlock, contexts, moves, glyph)
+BLORB_GAME(0, marble, MarbleToy, 0,                                                    0, 0,                   0, 0, marble)
+BLORB_GAME(1, keeper, Keeper,    0,                                                  180, 0,                  12, 3, marble)  // tilt the marble into his pond; he guards a third of it
+BLORB_GAME(2, pads,   Pads,      0,                                                  180, 0,                   9, 3, pad)     // hide a fly under one of three pads; he guesses your habit
+BLORB_GAME(3, snap,   Snap,      0,                                                  120, 0,                  16, 2, fly)     // press when a fly crosses his tongue line; he learns to snap first
+BLORB_GAME(4, drum,   Drum,      stimBit(stim::knock) | stimBit(stim::double_knock), 120, feat::lived_a_week, 12, 2, drum)  // knock a beat; he croaks on the beat he predicts
+BLORB_GAME(5, drill,  Drill,     0,                                                  300, 0,                   0, 0, bell)    // the bell drill: knock (cue), he acts, ring, a pellet
