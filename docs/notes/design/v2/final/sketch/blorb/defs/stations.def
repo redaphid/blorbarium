@@ -1,0 +1,21 @@
+// Where he goes to do each action (ask 17). He rests at the centre and
+// crosses the face to act, and one walker reads this. In the real change it
+// is a column of actions.def. The sketch keeps a side table only so it
+// compiles against origin/engine's registry.h, and v2_registry.h checks that
+// every action has exactly one row.
+//
+// BLORB_STATION(action, station)
+BLORB_STATION(rest,        Home)
+BLORB_STATION(wander,      Roam)
+BLORB_STATION(eat,         Food)
+BLORB_STATION(sleep,       Home)
+BLORB_STATION(foresee,     Home)      // just below centre: the bubble gets the top third
+BLORB_STATION(call,        Home)
+BLORB_STATION(curl,        Rim)       // the rim away from the last shake
+BLORB_STATION(follow_tilt, Downhill)
+BLORB_STATION(flee_tilt,   Uphill)
+BLORB_STATION(chase,       Marble)
+BLORB_STATION(hop_circles, Here)
+BLORB_STATION(beg,         Bell)      // 6 o'clock: the bell, the jar's pips, where pellets drop
+BLORB_STATION(invite,      Home)
+BLORB_STATION(hunt,        Fly)
