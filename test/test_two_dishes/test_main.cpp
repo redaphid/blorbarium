@@ -865,15 +865,22 @@ TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {
   Bout bout(7, kGrungo, SpeciesId{6});
   bout.b.kid.askRematch = true;   // the friend wants another bout
   bout.a.kid.leaveAfter = 30;     // my kid sees that, and leaves with a double press
-  bool sawAsk = false;
-  for (int t = 0; t < 4000; ++t) {
+  bool sawAsk = false, wasFriends = false, anotherBout = false;
+  auto watch = [&] {
     bout.step();
     const DuelView v = bout.a.dish->duelView();
     sawAsk = sawAsk || (v.phase == DuelPhase::Friends && v.theyAskedRematch);
+    // A press that asked on the way out reopens at once, since the friend asked too.
+    anotherBout = anotherBout || (wasFriends && v.phase != DuelPhase::Friends && v.phase != DuelPhase::Closed);
+    wasFriends = wasFriends || v.phase == DuelPhase::Friends;
+  };
+  for (int t = 0; t < 4000; ++t) {
+    watch();
     if (sawAsk && !bout.a.dish->duelActive()) break;
   }
   ASSERT_TRUE(sawAsk) << "the friend's ask reached my screen first";
-  for (int t = 0; t < 100; ++t) bout.step();
+  for (int t = 0; t < 100; ++t) watch();
+  EXPECT_FALSE(anotherBout) << "from the friends screen the only way on is out";
   EXPECT_FALSE(bout.a.dish->duelActive()) << "I left";
   EXPECT_EQ(bout.a.dish->duels().state().friends[0].s.met, 1) << "and no second bout began";
 }
