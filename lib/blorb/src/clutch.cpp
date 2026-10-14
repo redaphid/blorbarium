@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <utility>
 #include "blorb/appearance.h"
+#include "blorb/friend_egg.h"
 
 namespace blorb {
 namespace {
@@ -83,12 +84,12 @@ std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
   return std::nullopt;
 }
 
-void Clutch::derivePreviewStep() {
+void Clutch::derivePreviewStep(const FriendEgg* friendEgg) {
   if (previewed >= count) return;
-  Offspring o = child(previewed);
+  Offspring o = childOf(*this, previewed, friendEgg);
   const Appearance born = portrait(o.genome, Stage::Baby, generation, 0);
   EggPreview& e = previews[previewed];
-  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0};
+  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0, born.species};
   for (const MutationOp& op : o.diff.ops) {
     GeneUid uid = std::visit([](const auto& x) -> GeneUid {
       if constexpr (std::is_same_v<std::decay_t<decltype(x)>, MutHeirloom>) return x.after;

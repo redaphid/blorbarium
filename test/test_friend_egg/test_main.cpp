@@ -5,6 +5,7 @@
 #include <iterator>
 #include <string>
 #include "blorb/friend_egg.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/appearance.h"
 #include "blorb/keepsake.h"
 #include "mem_storage.h"
 
@@ -353,6 +354,39 @@ TEST(Clutch, ARebootDuringThePickKeepsTheFriendsGenome) {
   ASSERT_TRUE(FriendEggStore::consume(store));
   EXPECT_FALSE(FriendEggStore::load(store)) << "consumed at the Birth";
   EXPECT_EQ(store.files[FriendEggStore::kUsed], saved) << "renamed, never deleted";
+}
+
+// The clutch screen draws each egg as its own species, so a friend egg that
+// took the friend's body previews as the friend's species and his own eggs
+// stay his. Without its friend egg the slot previews the plain egg.
+TEST(Clutch, AFriendEggOfAnotherSpeciesPreviewsAsThatSpecies) {
+  const SpeciesId mine{1}, theirs{6};
+  Clutch k = clutchOf(starterGenomeOf(mine, 3), 2, 8);
+  FriendEgg f = friendEggOf(starterGenomeOf(theirs, 3), 0);
+  for (uint32_t seed = 1;; ++seed) {
+    ASSERT_LT(seed, 64u) << "no seed in 64 gave the friend's body";
+    f.record.battleSeed = seed;
+    joinClutch(k, seed);
+    if (lifeOf(childOf(k, 2, &f).genome).species.body == theirs) break;
+  }
+  Clutch plain = k;
+  for (uint8_t i = 0; i < kMaxClutch; ++i) k.derivePreviewStep(&f), plain.derivePreviewStep();
+  ASSERT_EQ(k.previewed, 3);
+  EXPECT_EQ(k.previews[0].species, mine);
+  EXPECT_EQ(k.previews[1].species, mine);
+  EXPECT_EQ(k.previews[2].species, theirs) << "the friend egg";
+  EXPECT_EQ(plain.previews[2].species, mine) << "no friend.egg: the plain egg";
+  Appearance a = present(Occupant{k}, Habitat{}, PetClock{}, 0);
+  ASSERT_EQ(a.eggCount, 3);
+  EXPECT_EQ(a.eggs[2].species, theirs) << "the clutch screen is handed it";
+}
+
+// A friend egg that joins after his eggs were previewed redraws its slot.
+TEST(Clutch, AJoinAfterThePreviewsRedrawsTheFriendSlot) {
+  Clutch k = clutchOf(starterGenome(7), 3, 2);
+  for (uint8_t i = 0; i < kMaxClutch; ++i) k.derivePreviewStep();
+  joinClutch(k, 5);
+  EXPECT_EQ(k.previewed, 2) << "the last egg is drawn again, as the friend egg";
 }
 
 // ---- friend.egg and the receiving boundary ------------------------------------------------

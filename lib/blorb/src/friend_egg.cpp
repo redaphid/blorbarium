@@ -1,5 +1,6 @@
 #include "blorb/friend_egg.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 #include "blorb/seams.h"
@@ -55,11 +56,13 @@ MutationDiff crossDiff(const Genome& mine, const Genome& friends, Rng& rng) {
   return d;
 }
 
-// Twice is no change: a second call only moves the seed.
+// Twice is no change: a second call only moves the seed. A preview of the
+// slot it takes is redrawn as the friend egg.
 void joinClutch(Clutch& k, uint32_t crossSeed) {
   if (k.friendSlot == 0 && k.count < kMaxClutch) ++k.count;
   k.friendSlot = k.count;
   k.friendSeed = crossSeed;
+  k.previewed = std::min<uint8_t>(k.previewed, uint8_t(k.friendSlot - 1));
 }
 
 Offspring childOf(const Clutch& k, uint8_t i, const FriendEgg* f) {
