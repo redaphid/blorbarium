@@ -327,6 +327,47 @@ TEST(Legibility, NoStateIsColourOnly) {
   }
 }
 
+// ---- from D4's Outcome ----------------------------------------------------------------
+
+// Side A's screen and side B's screen are one duel seen from either end: what
+// is mine on one is theirs on the other, and the winner is the same pet.
+TEST(FromOutcome, EachSideSeesTheSameTurnMirrored) {
+  blorb::Outcome o;
+  o.stakes = blorb::Stakes::Scrap;
+  o.side[0].hearts = 4;
+  o.side[0].spark = 5;
+  o.side[1].hearts = 2;
+  o.side[1].spark = 1;
+  o.resolved = 3;
+  blorb::TurnReport& r = o.turns[2];
+  r.shown[0] = blorb::Stance::Guard;
+  r.shown[1] = blorb::Stance::Pounce;
+  r.clash = blorb::Clash::AWins;
+  r.hit[1] = 1;
+  r.powered[0] = true;
+  r.super[0] = true;
+  DuelScene a, b;
+  paint::fromOutcome(a, o, blorb::Side::A);
+  paint::fromOutcome(b, o, blorb::Side::B);
+  EXPECT_EQ(a.won, paint::Side::Me);
+  EXPECT_EQ(b.won, paint::Side::Them);
+  EXPECT_TRUE(a.super && b.super);
+  EXPECT_EQ(a.me.hearts, 4);
+  EXPECT_EQ(b.them.hearts, 4);
+  EXPECT_EQ(a.them.hit, 1);
+  EXPECT_EQ(b.me.hit, 1);
+  EXPECT_EQ(a.me.stance, int8_t(blorb::Stance::Guard));
+  EXPECT_EQ(b.them.stance, int8_t(blorb::Stance::Guard));
+  EXPECT_TRUE(a.me.fired && b.them.fired && !a.them.fired);
+  EXPECT_EQ(b.me.sparks, 1);
+  r.dozed[1] = true;
+  paint::fromOutcome(a, o, blorb::Side::A);
+  EXPECT_EQ(a.them.stance, -1) << "a dozing side shows no stance";
+  o.ending = blorb::Ending::BWon;
+  paint::fromOutcome(a, o, blorb::Side::A);
+  EXPECT_EQ(a.won, paint::Side::Them) << "the duel's ending outranks the last clash";
+}
+
 // ---- the rim at home ------------------------------------------------------------------
 
 TEST(Rim, TrophiesAndMarksSitOnTheRimAtHome) {

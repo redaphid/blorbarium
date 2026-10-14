@@ -437,6 +437,34 @@ void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
 
 }  // namespace
 
+void fromOutcome(DuelScene& sc, const blorb::Outcome& o, blorb::Side me) {
+  const int m = int(me), t = 1 - m;
+  Fighter* f[2] = {&sc.me, &sc.them};
+  const int by[2] = {m, t};   // my side first
+  for (int i = 0; i < 2; ++i) {
+    const blorb::SideState& s = o.side[by[i]];
+    f[i]->hearts = s.hearts;
+    f[i]->maxHearts = s.maxHearts;
+    f[i]->sparks = s.spark;
+  }
+  sc.stakes = o.stakes;
+  auto sideOf = [&](int s) { return s == m ? Side::Me : Side::Them; };
+  if (o.resolved) {
+    const blorb::TurnReport& r = o.turns[o.resolved - 1];
+    for (int i = 0; i < 2; ++i) {
+      const int s = by[i];
+      f[i]->stance = r.dozed[s] ? int8_t(-1) : int8_t(r.shown[s]);
+      f[i]->hit = r.hit[s];
+      f[i]->fired = r.powered[s];
+    }
+    sc.won = r.clash == blorb::Clash::Bonk ? Side::Neither : sideOf(r.clash == blorb::Clash::AWins ? 0 : 1);
+    sc.super = sc.won != Side::Neither && r.super[sc.won == Side::Me ? m : t];
+  }
+  if (o.ending != blorb::Ending::Ongoing)
+    sc.won = o.ending == blorb::Ending::Draw ? Side::Neither : sideOf(o.ending == blorb::Ending::AWon ? 0 : 1);
+  sc.verdict = o.verdict;
+}
+
 DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs) {
   DuelStaging s;
   s.fig[kMe] = atHome(kMe);

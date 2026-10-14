@@ -15,6 +15,7 @@
 // hollow, a locked stance is stamped, a forbidden tier is struck through.
 #include <cstdint>
 #include "blorb/appearance.h"
+#include "blorb/duel.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
 #include "paint/canvas.h"
@@ -75,6 +76,13 @@ struct DuelScene {
   // Outcome
   uint8_t newScars = 0;             // my last n scars are new: drawn coming in
 };
+
+// What D4's Outcome says, from my side: hearts and meters, the last resolved
+// turn as the clash plays it (stances shown, hearts lost, powers fired, who
+// won it, SUPER), and, once it has ended, who won the duel, its stakes and the
+// verdict. The act, the clock and everything a kid is doing right now (aim,
+// lock, the holds) come from the session's view, not from here.
+void fromOutcome(DuelScene&, const blorb::Outcome&, blorb::Side me);
 
 // ---- the display list -------------------------------------------------------------
 
