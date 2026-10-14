@@ -599,7 +599,8 @@ be flashed (COM11, USB serial `5C94095006`, MAC `d4:05:92:77:1b:34`; see
 owner's Android phone. The desk PC has no Bluetooth adapter. The page is
 served from this PC with `wrangler dev`, and the phone reaches it over USB
 through `adb reverse`. Chrome treats `http://localhost` as a secure context,
-so Web Bluetooth works there. The production site is not deployed.
+so Web Bluetooth works there. The production site is https://blorb.hypnodroid.com
+(`cd web && npx -y wrangler@4.149.0 deploy`), first deployed 2026-10-14 with 0.5.0.
 
 Only one program can hold COM11 at a time. Run `serial_log.py` and `shot.py`
 one after the other, never together.
