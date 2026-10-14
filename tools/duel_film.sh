@@ -25,6 +25,14 @@ case "${1:-}" in
     if command -v ffmpeg >/dev/null; then
       ffmpeg -loglevel error -y -framerate 10 -i "$dir/frame_%04d.bmp" -vf scale=480:480:flags=neighbor \
         -pix_fmt yuv420p "outputs/duel-film-$mine-$theirs.mp4" || status=$?
+    else   # no ffmpeg: an animated GIF, which every phone and chat plays
+      python3 - "$dir" "outputs/duel-film-$mine-$theirs.gif" <<'PY' || status=$?
+import glob, sys
+from PIL import Image
+frames = [Image.open(f).convert("RGB").resize((480, 480), Image.NEAREST) for f in sorted(glob.glob(sys.argv[1] + "/frame_*.bmp"))]
+frames[0].save(sys.argv[2], save_all=True, append_images=frames[1:], duration=100, loop=0, optimize=True)
+print("wrote", sys.argv[2])
+PY
     fi ;;
   *) python3 tests/duel_frames.py "$@" || status=$? ;;
 esac
