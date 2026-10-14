@@ -16,6 +16,7 @@
 #include <cstdint>
 #include "blorb/appearance.h"
 #include "blorb/duel.h"
+#include "blorb/duel_session.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
 #include "paint/canvas.h"
@@ -38,6 +39,7 @@ enum class Side : uint8_t { Me, Them, Neither };
 
 struct Fighter {
   blorb::Appearance look;           // mine: my live Appearance; theirs: their CardLook as one
+  int16_t power = -1;               // PowerId from his card (a hybrid's); -1: his species' own
   uint8_t hearts = 5, maxHearts = 5;
   uint8_t assist = 0;               // of maxHearts, the ones the fairness rule gave: drawn with the pet's cheer
   uint8_t sparks = 0;               // 0..kMeterMax
@@ -105,6 +107,14 @@ struct DuelScene {
 // verdict. The act, the clock and everything a kid is doing right now (aim,
 // lock, the holds) come from the session's view, not from here.
 void fromOutcome(DuelScene&, const blorb::Outcome&, blorb::Side me);
+
+// The session's view of the duel (D8) as the screen draws it, with my pet's
+// live Appearance: the phase as the act, both fighters from the cards and the
+// side states, the last turn as the clash, the holds, the mercy clock, the
+// verdict. What main.cpp and the sim draw every frame:
+//   paint::drawDuel(paint::sceneOf(view, a), paint::packFor(a.species),
+//                   paint::packFor(view.them.species), canvas, now);
+DuelScene sceneOf(const blorb::DuelView&, const blorb::Appearance& mine);
 
 // ---- the display list -------------------------------------------------------------
 
