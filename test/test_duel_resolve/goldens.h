@@ -35,7 +35,7 @@ constexpr BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess = 128
   BattleCard c{};
   c.species = s;
   c.power = speciesInfo(s).power;
-  c.knack = Knack{knackFor(speciesInfo(s).style)};
+  c.knack = Knack{duelgolden::knackFor(speciesInfo(s).style)};
   c.lineageId = lineage;
   c.prowess = prowess;
   return c;

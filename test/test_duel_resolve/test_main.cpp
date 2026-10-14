@@ -335,7 +335,7 @@ TEST(TurnHits, HeartsKindAndLuckPerTurn) {
   EXPECT_EQ(hits[0].hearts, 1);
   EXPECT_EQ(hits[0].kind, Scar::Kind::Claw) << "a pounce claws";
   EXPECT_EQ(hits[6].hearts, 1);
-  EXPECT_EQ(hits[6].kind, Scar::Kind::Ring) << "a zap rings";
+  EXPECT_EQ(hits[6].kind, Scar::Kind::Bite) << "a zap bites";
   EXPECT_EQ(hits[7].hearts, 1);
   EXPECT_EQ(hits[7].kind, Scar::Kind::Scorch) << "a spark pet's trick scorches";
   EXPECT_EQ(hits[1].hearts, 0);
