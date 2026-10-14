@@ -75,7 +75,10 @@ MutationDiff crossDiff(const Genome& mine, const Genome& friends, Rng&);
 // At layClutch, when a friend egg waits: it joins WITHIN kMaxClutch. A clutch
 // of 1 or 2 grows by one; a full clutch gives its last slot. The saved count
 // stays 1..3, so neither the keepsake nor lineage's three seeds change shape.
-void joinClutch(Clutch&, uint32_t crossSeed);
+// A clutch already carrying this seed is left as it is, so a replayed join
+// (a power cut before friend.egg was consumed) cannot add the hug twice.
+enum class Join : uint8_t { Joined, AlreadyJoined };
+Join joinClutch(Clutch&, uint32_t crossSeed);
 
 // Egg i of the clutch. The friend slot, with this clutch's friend egg, is the
 // cross: crossed = apply(parent, crossDiff) must pass viability(), then
@@ -87,7 +90,9 @@ Offspring childOf(const Clutch&, uint8_t i, const FriendEgg*);
 // friend.egg on petfs, a new file an older firmware never opens. One at a
 // time: a newer hug replaces it. Consumed at the Birth (any egg picked), not
 // when the clutch is laid, so a reboot during the 30-minute pick keeps the
-// friend's genome. Renamed to friend.used, never deleted.
+// friend's genome. Renamed to the next free friend.used.<n>, never deleted.
+// load refuses a file past the largest friend egg before reading it, and a
+// genome that is not the one the friend announced (friendGenomeHash).
 struct FriendEggStore {
   static constexpr const char* kFile = "friend.egg";
   static constexpr const char* kUsed = "friend.used";

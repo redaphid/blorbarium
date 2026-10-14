@@ -77,6 +77,14 @@ mutant "another hug's friend.egg is crossed" $F 's/ || f->record.battleSeed != k
   "Cross.AnotherSlotOrAnotherHugsEggIsThePlainEgg"
 mutant "friend.egg's crc is not checked" $F 's/if (uint32_t(get(\&b\[kHeadLen + genomeLen\], 4)) != crc32(b.data(), kHeadLen + genomeLen)) return std::nullopt;//' \
   "Store.AnyDamageIsNoFriendEggNeverAMisreadOne"
+mutant "friend.egg's announced hash is not checked" $F 's/if (!g || g->hash() != r.friendGenomeHash) return std::nullopt;/if (!g) return std::nullopt;/' \
+  "Store.AGenomeThatIsNotTheAnnouncedOneIsNoFriendEgg"
+mutant "friend.egg is read whatever its size" $F 's/ || size > kMaxFileLen//' \
+  "Store.AFilePastTheLargestFriendEggIsRefusedBeforeItIsRead"
+mutant "consume overwrites the last used egg" $F 's/if (!s.read(to, 0, \&probe, 0)) break;/break;/' \
+  "Store.EveryUsedFriendEggIsKept"
+mutant "the same hug joins twice" $F 's/if (k.friendSlot != 0 \&\& k.friendSeed == crossSeed) return Join::AlreadyJoined;//' \
+  "Clutch.JoiningTheSameHugTwiceIsANoOp"
 mutant "the announced hash is not checked" $F 's/if (!g || g->hash() != announcedHash) return std::nullopt;/if (!g) return std::nullopt;/' \
   "Accept.RefusesDamageAWrongHashAndAStranger"
 mutant "a stranger's genome is accepted" $F 's/if (!shares) return std::nullopt;//' \
