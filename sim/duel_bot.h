@@ -9,6 +9,7 @@
 // Everything the film needs is a stderr line:
 //   duel <ms> phase <name>
 //   duel <ms> state <my hearts> <max> <their hearts> <max> <my sparks> <theirs> <my special> <theirs> <stakes>
+//                   <my hold> <theirs>   (0..255: the Mortal confirm, or in Mercy the Finish)
 //   duel <ms> turn <n> <my stance> <theirs> <hearts I lost> <they lost> <my special's fate> <theirs> <super>
 //   duel <ms> downed | fall | egg | closed
 //   duel <ms> met <outcome hash> <turns> <won|lost|draw>
@@ -101,10 +102,10 @@ class BenchDuel {
       const size_t p = size_t(v.phase);
       fprintf(stderr, "duel %u phase %s\n", ms, p < sizeof(kPhase) / sizeof(*kPhase) ? kPhase[p] : "other");
     }
-    char state[96];
-    snprintf(state, sizeof(state), "%u %u %u %u %u %u %s %s %s", v.mine.hearts, v.mine.maxHearts, v.theirs.hearts,
+    char state[112];
+    snprintf(state, sizeof(state), "%u %u %u %u %u %u %s %s %s %u %u", v.mine.hearts, v.mine.maxHearts, v.theirs.hearts,
              v.theirs.maxHearts, v.mine.spark, v.theirs.spark, kWind[uint8_t(v.mine.queued)],
-             kWind[uint8_t(v.theirs.queued)], kStakes[uint8_t(v.agreed)]);
+             kWind[uint8_t(v.theirs.queued)], kStakes[uint8_t(v.agreed)], v.confirmHold, v.theirHold);
     if (state_ != state) {
       state_ = state;
       fprintf(stderr, "duel %u state %s\n", ms, state);
@@ -119,6 +120,13 @@ class BenchDuel {
   }
 
   static void act(uint32_t ms, const char* what) { fprintf(stderr, "kid %u %s\n", ms, what); }
+
+  // Once per phase: a hold starts on whatever tick the kid first sees the phase.
+  void actOnce(uint32_t ms, const blorb::DuelView& v, const char* what) {
+    if (actedIn_ == v.phase) return;
+    actedIn_ = v.phase;
+    act(ms, what);
+  }
 
   // D8's scripted kid (test_duel_session, Device::kid), naming each move, and
   // aiming Trick at a friend who is winding up a special, to stagger it.
@@ -173,7 +181,7 @@ class BenchDuel {
           in.press = v.phaseTicks == 5;
         } else if (style_.finish) {
           in.bootDown = true;
-          if (v.phaseTicks == 0) act(ms, "holds BOOT: finish");
+          actOnce(ms, v, "holds BOOT: finish");
         } else if (v.phaseTicks == 10) {
           in.knock = true;
           act(ms, "knock: spare");
@@ -182,7 +190,7 @@ class BenchDuel {
       case DuelPhase::Friends:
         if (style_.hug) {
           in.bootDown = true;
-          if (v.phaseTicks == 0) act(ms, "holds BOOT: hug");
+          actOnce(ms, v, "holds BOOT: hug");
         }
         break;
       default:
@@ -203,6 +211,7 @@ class BenchDuel {
   int8_t planAim_ = 0;
   uint8_t planHow_ = 0;
   bool punish_ = false, picked_ = false;
+  blorb::DuelPhase actedIn_ = blorb::DuelPhase::Closed;
 };
 
 }  // namespace duelbot

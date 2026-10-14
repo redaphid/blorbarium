@@ -314,6 +314,10 @@ class Stage:
     @staticmethod
     def status(phase, state):
         """The line over a disc in a duel: a special winding up, else the phase."""
+        mine, theirs = (int(state[9]), int(state[10])) if state else (0, 0)
+        if phase == "mercy" and mine: return "MERCY: holding BOOT, the skull %d%% full" % (mine * 100 // 255), RED
+        if phase == "mercy" and theirs: return "MERCY: the skull fills, %d%%" % (theirs * 100 // 255), RED
+        if phase == "staking" and mine: return "STAKING: holding BOOT for mortal, %d%%" % (mine * 100 // 255), mr.PINK
         if state and state[6] != "-": return "winding up a %s special" % state[6], mr.PINK
         if state and state[7] != "-": return "the friend is winding up a %s special!" % state[7], mr.AMBER
         return phase.upper(), mr.DIM
