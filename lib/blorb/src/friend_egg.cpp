@@ -1,6 +1,7 @@
 #include "blorb/friend_egg.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 #include "blorb/seams.h"
@@ -18,6 +19,7 @@ constexpr char kMagic[4] = {'B', 'F', 'E', 'G'};
 constexpr uint8_t kVersion = 1;
 constexpr size_t kHeadLen = 4 + 1 + 8 + 1 + 4 + 4 + 2;
 constexpr size_t kCrcLen = 4;
+constexpr size_t kMaxFileLen = kHeadLen + kMaxGenomeBytes + kCrcLen;
 
 void put(std::vector<uint8_t>& b, uint64_t v, int bytes) {
   for (int i = 0; i < bytes; ++i) b.push_back(uint8_t(v >> (8 * i)));
@@ -56,13 +58,15 @@ MutationDiff crossDiff(const Genome& mine, const Genome& friends, Rng& rng) {
   return d;
 }
 
-// Twice is no change: a second call only moves the seed. A preview of the
-// slot it takes is redrawn as the friend egg.
-void joinClutch(Clutch& k, uint32_t crossSeed) {
+// A preview of the slot it takes is redrawn as the friend egg. The same hug
+// twice changes nothing; another hug only moves the seed.
+Join joinClutch(Clutch& k, uint32_t crossSeed) {
+  if (k.friendSlot != 0 && k.friendSeed == crossSeed) return Join::AlreadyJoined;
   if (k.friendSlot == 0 && k.count < kMaxClutch) ++k.count;
   k.friendSlot = k.count;
   k.friendSeed = crossSeed;
   k.previewed = std::min<uint8_t>(k.previewed, uint8_t(k.friendSlot - 1));
+  return Join::Joined;
 }
 
 Offspring childOf(const Clutch& k, uint8_t i, const FriendEgg* f) {
@@ -80,9 +84,11 @@ Offspring childOf(const Clutch& k, uint8_t i, const FriendEgg* f) {
   return Offspring{std::move(child.genome), std::move(cross)};
 }
 
+// Sized before anything is allocated: no friend egg is bigger than the largest genome.
 std::optional<FriendEgg> FriendEggStore::load(Storage& s) {
-  std::vector<uint8_t> b(s.size(kFile));
-  if (b.size() < kHeadLen + kCrcLen) return std::nullopt;
+  const size_t size = s.size(kFile);
+  if (size < kHeadLen + kCrcLen || size > kMaxFileLen) return std::nullopt;
+  std::vector<uint8_t> b(size);
   std::optional<size_t> n = s.read(kFile, 0, b.data(), b.size());
   if (!n || *n != b.size() || std::memcmp(b.data(), kMagic, sizeof kMagic) != 0 || b[4] != kVersion)
     return std::nullopt;
@@ -95,7 +101,7 @@ std::optional<FriendEgg> FriendEggStore::load(Storage& s) {
   r.battleSeed = uint32_t(get(&b[14], 4));
   r.friendGenomeHash = uint32_t(get(&b[18], 4));
   std::optional<Genome> g = Genome::parse(&b[kHeadLen], genomeLen);
-  if (!g) return std::nullopt;
+  if (!g || g->hash() != r.friendGenomeHash) return std::nullopt;
   return FriendEgg{r, std::move(*g)};
 }
 
@@ -107,13 +113,22 @@ bool FriendEggStore::save(Storage& s, const FriendEgg& egg) {
   put(b, egg.record.friendLineage, 8);
   put(b, egg.record.friendSpecies.v, 1);
   put(b, egg.record.battleSeed, 4);
-  put(b, egg.genome.hash(), 4);
+  put(b, egg.record.friendGenomeHash, 4);
   put(b, g.size(), 2);
   b.insert(b.end(), g.begin(), g.end());
   put(b, crc32(b.data(), b.size()), 4);
   return s.writeAtomic(kFile, b.data(), b.size());
 }
 
-bool FriendEggStore::consume(Storage& s) { return s.rename(kFile, kUsed); }
+// Every used egg is kept, numbered like rescue/: friend.used.0, .1, ...
+bool FriendEggStore::consume(Storage& s) {
+  char to[32];
+  uint8_t probe;
+  for (unsigned k = 0;; ++k) {
+    std::snprintf(to, sizeof to, "%s.%u", kUsed, k);
+    if (!s.read(to, 0, &probe, 0)) break;
+  }
+  return s.rename(kFile, to);
+}
 
 }  // namespace blorb

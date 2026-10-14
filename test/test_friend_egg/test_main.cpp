@@ -286,11 +286,11 @@ TEST(Cross, AnotherSlotOrAnotherHugsEggIsThePlainEgg) {
 TEST(Clutch, AFriendEggJoinsWithinThreeAndAFullClutchGivesUpItsLastSlot) {
   for (uint8_t count : {1, 2, 3}) {
     Clutch k = clutchOf(starterGenome(7), count, 1);
-    joinClutch(k, 42);
+    EXPECT_EQ(joinClutch(k, 42), Join::Joined);
     EXPECT_EQ(k.count, std::min<int>(count + 1, kMaxClutch));
     EXPECT_EQ(k.friendSlot, k.count) << "the last egg";
     EXPECT_EQ(k.friendSeed, 42u);
-    joinClutch(k, 43);
+    EXPECT_EQ(joinClutch(k, 43), Join::Joined) << "another hug moves the seed";
     EXPECT_EQ(k.count, std::min<int>(count + 1, kMaxClutch)) << "a second join does not grow it again";
     EXPECT_EQ(k.friendSeed, 43u);
   }
@@ -353,7 +353,7 @@ TEST(Clutch, ARebootDuringThePickKeepsTheFriendsGenome) {
   const std::vector<uint8_t> saved = store.files[FriendEggStore::kFile];
   ASSERT_TRUE(FriendEggStore::consume(store));
   EXPECT_FALSE(FriendEggStore::load(store)) << "consumed at the Birth";
-  EXPECT_EQ(store.files[FriendEggStore::kUsed], saved) << "renamed, never deleted";
+  EXPECT_EQ(store.files["friend.used.0"], saved) << "renamed, never deleted";
 }
 
 // The clutch screen draws each egg as its own species, so a friend egg that
@@ -379,6 +379,20 @@ TEST(Clutch, AFriendEggOfAnotherSpeciesPreviewsAsThatSpecies) {
   Appearance a = present(Occupant{k}, Habitat{}, PetClock{}, 0);
   ASSERT_EQ(a.eggCount, 3);
   EXPECT_EQ(a.eggs[2].species, theirs) << "the clutch screen is handed it";
+}
+
+// D9 joins at death and saves; a power cut before friend.egg is consumed
+// replays the join. The same hug is then a no-op, previews included.
+TEST(Clutch, JoiningTheSameHugTwiceIsANoOp) {
+  Clutch k = clutchOf(starterGenome(7), 2, 2);
+  ASSERT_EQ(joinClutch(k, 77), Join::Joined);
+  for (uint8_t i = 0; i < kMaxClutch; ++i) k.derivePreviewStep();
+  const Clutch before = k;
+  EXPECT_EQ(joinClutch(k, 77), Join::AlreadyJoined);
+  EXPECT_EQ(k.count, before.count);
+  EXPECT_EQ(k.friendSlot, before.friendSlot);
+  EXPECT_EQ(k.friendSeed, before.friendSeed);
+  EXPECT_EQ(k.previewed, before.previewed) << "nothing to redraw";
 }
 
 // A friend egg that joins after his eggs were previewed redraws its slot.
@@ -407,6 +421,41 @@ TEST(Store, FriendEggRoundTripsAndANewerHugReplacesIt) {
   EXPECT_EQ(FriendEggStore::load(store)->record.battleSeed, 8u);
   MemStorage empty;
   EXPECT_FALSE(FriendEggStore::load(empty)) << "no file";
+}
+
+// The record carries the hash the friend announced; a genome that is not that
+// one (a writer that mixed up two hugs) is no friend egg.
+TEST(Store, AGenomeThatIsNotTheAnnouncedOneIsNoFriendEgg) {
+  MemStorage store;
+  FriendEgg f = friendEggOf(starterGenomeOf(SpeciesId{3}, 1), 7);
+  f.record.friendGenomeHash ^= 1;
+  ASSERT_TRUE(FriendEggStore::save(store, f));
+  EXPECT_FALSE(FriendEggStore::load(store));
+}
+
+TEST(Store, AFilePastTheLargestFriendEggIsRefusedBeforeItIsRead) {
+  const size_t largest = 24 + kMaxGenomeBytes + 4;   // header, the largest genome, crc
+  MemStorage store;
+  store.files[FriendEggStore::kFile].assign(largest + 1, 0);
+  EXPECT_FALSE(FriendEggStore::load(store));
+  EXPECT_EQ(store.largestRead, 0u) << "nothing allocated or read for it";
+  store.files[FriendEggStore::kFile].assign(largest, 0);
+  EXPECT_FALSE(FriendEggStore::load(store)) << "read, and refused by its magic";
+  EXPECT_EQ(store.largestRead, largest) << "the largest friend egg is still read";
+}
+
+// Nothing is ever deleted: each consumed friend egg keeps its own file.
+TEST(Store, EveryUsedFriendEggIsKept) {
+  MemStorage store;
+  std::vector<std::vector<uint8_t>> used;
+  for (uint32_t seed : {1u, 2u, 3u}) {
+    ASSERT_TRUE(FriendEggStore::save(store, friendEggOf(starterGenomeOf(SpeciesId{uint8_t(seed)}, 1), seed)));
+    used.push_back(store.files[FriendEggStore::kFile]);
+    ASSERT_TRUE(FriendEggStore::consume(store));
+  }
+  for (unsigned i = 0; i < used.size(); ++i)
+    EXPECT_EQ(store.files["friend.used." + std::to_string(i)], used[i]) << "friend.used." << i;
+  EXPECT_FALSE(FriendEggStore::consume(store)) << "nothing waiting";
 }
 
 TEST(Store, AnyDamageIsNoFriendEggNeverAMisreadOne) {
