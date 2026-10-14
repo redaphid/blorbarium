@@ -59,6 +59,8 @@ struct Kid {
   bool special = false;          // a quick special whenever the meter holds it
   bool pressForMortal = false;   // tries to agree to Mortal with a press (it must not count)
   bool spareByPress = false;     // spares with BOOT, not a knock
+  bool askRematch = false;       // the friends screen: BOOT once for another bout, then waits
+  uint16_t leaveAfter = 0;       // the friends screen: ticks to look before leaving
   Rng rng = Rng::seeded(1);
   bool shook = false;
 
@@ -105,6 +107,11 @@ struct Kid {
         }
         return;
       case DuelPhase::Friends:
+        if (askRematch) {
+          if (!v.rematchAsked) hold(-1, 2, Frame{-1, true}), hold(-1, 6, Frame{});
+          return;
+        }
+        if (v.phaseTicks < leaveAfter) return hold(-1, 1, Frame{});
         if (hug && !v.iHugged) return hold(-1, 34, Frame{-1, true}), hold(-1, 1, Frame{});
         if (hug && !(v.eggLaid || v.eggFizzled)) return hold(-1, 1, Frame{});
         if (leave) hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
@@ -144,6 +151,7 @@ struct Device {
   std::vector<Meeting> met;
   DuelPhase shownPhase = DuelPhase::Closed;
   std::set<uint8_t> contexts;      // every BootContext a duel showed, each checked against its hint
+  bool hopped = false, prophesied = false, judged = false;
 
   Device(Ether& e, uint8_t n) : air(e, addr(n)) {}
 
@@ -184,6 +192,11 @@ struct Device {
     ms += 100;
     dish->tick(ms, link);
     if (dish->duelActive()) {
+      const DuelView w = dish->duelView();
+      const Appearance look = dish->appearance();
+      prophesied = prophesied || w.prophesied;
+      judged = judged || w.prophecyJudged;
+      hopped = hopped || (look.reflexActive && look.reflex == reflex::hop);
       const BootContext ctx = dish->bootContext();
       contexts.insert(uint8_t(ctx));
       EXPECT_EQ(dish->appearance().boot.glyph, bootMeaning(ctx).hint) << "context " << int(ctx);
@@ -318,6 +331,9 @@ TEST(TwoDishes, ASparRunsWholeAndChangesNothingAWoundWould) {
   EXPECT_FALSE(a.feltDueling.count(stim::button.v));
   EXPECT_FALSE(a.feltDueling.count(stim::button_hold.v));
   EXPECT_TRUE(a.feltDueling.count(stim::shake.v)) << "a shake always reaches him";
+  EXPECT_TRUE(a.hopped) << "and hops him";
+  EXPECT_TRUE(a.prophesied) << "he foretells the friend's stance";
+  EXPECT_TRUE(a.judged) << "and the reveal judges it";
 
   // A Spar leaves no wound: injury, toxin and life as his still twin's.
   const Creature& me = a.creature();
@@ -406,10 +422,42 @@ TEST(TwoDishes, AFinishKillsOnceAndCrownsTheVictor) {
     EXPECT_EQ(deaths(victor->dish->lineage()), 0u);
     EXPECT_EQ(victor->dish->appearance().trophyCount, 1) << "on the rim at home";
 
-    // The slayer's line: the feat reaches his Death entry, and opens the war paint.
+    // A reboot right after the fall: he loads dead and dies once, not twice.
+    {
+      MemStorage cut;
+      cut.files = fallen->store.files;
+      const uint32_t s = fallen == &bout.a ? 11 : 22;
+      Dish back(cut, s, 0xD15400ull + s);
+      NullLink link;
+      for (uint32_t ms = 100; ms <= 500; ms += 100) back.tick(ms, link);
+      EXPECT_EQ(deaths(back.lineage()), 1u);
+    }
+
+    // Each line's next generation: the fallen's hatches seeded against the
+    // victor's element (the vendetta); the slayer's wears the war paint.
+    const auto nextGeneration = [&](Device& d) {
+      Clutch& k = std::get<Clutch>(d.dish->occupant());
+      k.sinceDeath = Clutch::kVigilTicks;
+      d.dish->pick(0);
+      for (int t = 0; t < 200000 && !d.alive(); t += 10) d.dish->tick(d.ms += 1000, d.link);
+      return d.alive();
+    };
     victor->creature().fall();
     for (int t = 0; t < 3; ++t) bout.step();
-    EXPECT_TRUE(victor->dish->lineage().legacyFeats() & feat::slayer);
+    EXPECT_TRUE(victor->dish->lineage().legacyFeats() & feat::slayer) << "the feat reaches his Death entry";
+    ASSERT_TRUE(nextGeneration(*victor));
+    bool warPaint = false;
+    for (const auto& m : victor->creature().phenotype().marks) warPaint = warPaint || m.layer == 2;
+    EXPECT_TRUE(warPaint) << "the slayer's line wears the war paint from the next generation";
+
+    ASSERT_TRUE(nextGeneration(*fallen));
+    const uint16_t gen = fallen->creature().generation();
+    ASSERT_TRUE(fallen->dish->duels().vendetta(gen).has_value()) << "his line remembers";
+    const DuelSkill seeded = fallen->dish->duels().skill(gen);
+    bool nudged = false;
+    for (const auto& ctx : seeded.win)
+      for (Q15 q : ctx) nudged = nudged || q.v != 0;
+    EXPECT_TRUE(nudged) << "and the newborn's duel Skill is seeded against the victor";
     return;
   }
   FAIL() << "no seed under 30 downed a pet";
@@ -811,6 +859,23 @@ TEST(Scene, EveryPhaseOfALiveDuelDrawsItsAct) {
     return;
   }
   FAIL() << "no seed under 30 finished a pet";
+}
+
+TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {
+  Bout bout(7, kGrungo, SpeciesId{6});
+  bout.b.kid.askRematch = true;   // the friend wants another bout
+  bout.a.kid.leaveAfter = 30;     // my kid sees that, and leaves with a double press
+  bool sawAsk = false;
+  for (int t = 0; t < 4000; ++t) {
+    bout.step();
+    const DuelView v = bout.a.dish->duelView();
+    sawAsk = sawAsk || (v.phase == DuelPhase::Friends && v.theyAskedRematch);
+    if (sawAsk && !bout.a.dish->duelActive()) break;
+  }
+  ASSERT_TRUE(sawAsk) << "the friend's ask reached my screen first";
+  for (int t = 0; t < 100; ++t) bout.step();
+  EXPECT_FALSE(bout.a.dish->duelActive()) << "I left";
+  EXPECT_EQ(bout.a.dish->duels().state().friends[0].s.met, 1) << "and no second bout began";
 }
 
 int main(int argc, char** argv) {
