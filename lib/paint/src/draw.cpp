@@ -759,11 +759,14 @@ void fill(Canvas240& cv, int x0, int y0, int x1, int y1, const Rgb& c, int alpha
     }
 }
 
-void drawClutch(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
+// Each egg in its own species' art: a friend egg can be another species' than
+// the parent whose clutch it joins.
+void drawClutch(const Appearance& a, Canvas240& cv) {
   const int n = imin(a.eggCount, blorb::kMaxClutch);
-  const FrameRef f = pack.egg(Fx::zero());
   const Rgb cream{kHintColour[0], kHintColour[1], kHintColour[2]};
   for (int i = 0; i < n; ++i) {
+    const SpritePack& pack = packFor(a.eggs[i].species);
+    const FrameRef f = pack.egg(Fx::zero());
     Tint tints[blorb::kRegionCount]{};
     tints[blorb::region::skin.v] = a.eggs[i].skin;
     tints[blorb::region::cloak.v] = a.eggs[i].cloak;
@@ -1028,7 +1031,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Creature: drawCreature(a, pack, cv); break;
     case Kind::Egg: drawEgg(a, pack, cv); break;
     case Kind::Remains: drawRemains(a, pack, cv); break;
-    case Kind::Clutch: drawClutch(a, pack, cv); break;
+    case Kind::Clutch: drawClutch(a, cv); break;
   }
   pips(cv, a.pantry);
   rimTokens(cv, a);

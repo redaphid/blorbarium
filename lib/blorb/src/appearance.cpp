@@ -138,8 +138,10 @@ void presentEgg(const Egg& e, Appearance& a) {
   look(p, nullptr, a);
 }
 
-// The eggs are the parent's mutants, and no mutation changes a species, so
-// the clutch shows the parent's species' eggs. One Phenotype on the stack.
+// The parent's mutants keep its species (no mutation changes one), but a
+// friend egg is a cross and can be another's: each preview carries the species
+// of the genome it shows, and the renderer draws that egg in that species' art.
+// a.species is the parent's, for the vigil's remains. One Phenotype on the stack.
 void presentClutch(const Clutch& k, Appearance& a) {
   a.lifeSeed = k.parent.hash();
   const bool vigil = k.sinceDeath < Clutch::kVigilTicks;

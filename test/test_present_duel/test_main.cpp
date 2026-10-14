@@ -554,6 +554,39 @@ TEST(Rim, TrophiesAndMarksSitOnTheRimAtHome) {
   EXPECT_EQ(upper, 0) << "a token strayed off the lower rim";
 }
 
+// ---- a friend egg in the clutch --------------------------------------------------------
+
+// A friend egg can be another species than the parent whose clutch it joins:
+// it is drawn in its own species' art, and the parent's eggs in theirs.
+TEST(Clutch, AFriendEggOfAnotherSpeciesIsDrawnInItsArt) {
+  auto clutch = [&](SpeciesId first, SpeciesId second) {
+    Appearance a;
+    a.kind = Appearance::Kind::Clutch;
+    a.species = blorb::kGrungo;
+    a.eggCount = 2;
+    a.cursor = 2;   // no cursor: nothing but the eggs differs
+    a.eggs[0].species = first;
+    a.eggs[1].species = second;
+    auto cv = std::make_unique<Canvas240>();
+    paint::draw(a, paint::packFor(a.species), *cv, 0);
+    return cv;
+  };
+  const SpeciesId frog = blorb::kGrungo, fizz = byName("fizz");
+  auto mixed = clutch(frog, fizz), frogs = clutch(frog, frog), fizzes = clutch(fizz, fizz);
+  int leftMoved = 0, rightVsFrog = 0, rightVsFizz = 0;
+  for (int i = 0; i < kSide * kSide; ++i) {
+    const bool right = i % kSide >= kSide / 2;
+    if (!right) leftMoved += mixed->px[i] != frogs->px[i];
+    else {
+      rightVsFrog += mixed->px[i] != frogs->px[i];
+      rightVsFizz += mixed->px[i] != fizzes->px[i];
+    }
+  }
+  EXPECT_EQ(leftMoved, 0) << "the parent's own egg changed";
+  EXPECT_GT(rightVsFrog, 200) << "the friend egg is drawn as the parent's species";
+  EXPECT_EQ(rightVsFizz, 0) << "the friend egg is not fizz's egg";
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
