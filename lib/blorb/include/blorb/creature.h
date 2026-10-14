@@ -189,8 +189,10 @@ class Egg {
   EggRules rules_;                     // decoded from the child's EggGene
 };
 
-// What the clutch screen shows per egg. Derived, never saved.
-struct EggPreview { Tint skin, cloak, shell; uint8_t lookChanges, mindChanges; };
+// What the clutch screen shows per egg. Derived, never saved. A friend egg
+// can be another species, so each egg names its own.
+struct EggPreview { Tint skin, cloak, shell; uint8_t lookChanges, mindChanges; SpeciesId species = kGrungo; };
+struct FriendEgg;   // friend_egg.h
 
 // After a death: the remains for the vigil, then 1..3 eggs. Seeds, not
 // genomes: egg i is mutate(parent, policy, heirlooms, Rng::seeded(seeds[i])).
@@ -221,7 +223,9 @@ struct Clutch {
   std::optional<uint8_t> tick(const SenseOut&);
   // One egg per call (one mutate and dry run, about 30 ms estimated), called
   // once per tick during the vigil, so death never stalls a frame. Idempotent.
-  void derivePreviewStep();
+  // The friend slot previews the cross only when given its friend egg;
+  // without it, the plain egg that slot would hatch.
+  void derivePreviewStep(const FriendEgg* = nullptr);
 };
 
 using Occupant = std::variant<Egg, Creature, Clutch>;
