@@ -120,11 +120,20 @@ const ThoughtInfo* thoughtInfo(ThoughtId id) {
   return nullptr;
 }
 
-size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out) {
+size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out, SpeciesId species) {
   const ThoughtInfo* t = thoughtInfo(id);
   const char* text = t ? t->text : "";
+  uint8_t mine = 0;
+  for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
+  if (mine) {
+    uint8_t want = uint8_t(pick % mine);
+    for (const SpeciesLine& l : SPECIES_LINES)
+      if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
+    pick = uint8_t(pick / mine);   // so the frame is not tied to which line was drawn
+  }
   uint8_t own = 0;
-  for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
+  if (!mine)
+    for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
   if (own) {
     uint8_t want = uint8_t(pick % own);
     for (const VoicedLine& l : VOICED_LINES)
@@ -237,7 +246,8 @@ void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
 void Thinker::start(const Creature& c, ThoughtPick pick, uint32_t tick, Rng& rng) {
   const ThoughtInfo* info = thoughtInfo(pick.id);
   Shown s{info->prophecy() ? Spoken::prophecy : Spoken::thought, pick.id, tick, 0, {}};
-  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line);
+  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line,
+                               c.phenotype().species.body);
   s.ticks = passTicks(len);
   now_ = s;
   readyAt_[info - THOUGHTS] = tick + uint32_t(info->cooldownS) * (1000 / kTickMs);

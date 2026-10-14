@@ -384,6 +384,38 @@ TEST(Voice, AVoicesOwnLineReplacesTheFrame) {
   EXPECT_STREQ(out, "GEN 4. HATLESS. AS FORETOLD.");
 }
 
+TEST(Personality, PreviewSaysWhatTheDeviceSays) {
+  struct Case { uint8_t species, thought, voice, pick; uint16_t num; const char* text; };
+  static constexpr Case kCases[] = {
+#include "said_lines.inc"
+  };
+  char out[kThoughtLineCap];
+  for (const Case& k : kCases) {
+    thoughtLine(ThoughtId{k.thought}, k.num, VoiceId{k.voice}, k.pick, out, SpeciesId{k.species});
+    ASSERT_STREQ(out, k.text) << "tools/personality.py frames thought " << int(k.thought) << " differently; port the change";
+  }
+}
+
+TEST(Personality, ASpeciesLineIsHisAlone) {
+  const SpeciesId mossby{1};
+  auto heard = [](SpeciesId s) {
+    std::vector<std::string> lines;
+    char out[kThoughtLineCap];
+    for (uint8_t pick = 0; pick < 8; ++pick) {
+      thoughtLine(thought::peckish, 0, voice::mystic, pick, out, s);
+      lines.emplace_back(out);
+    }
+    return lines;
+  };
+  auto says = [](const std::vector<std::string>& lines, const char* what) {
+    return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.find(what) != std::string::npos; });
+  };
+  EXPECT_TRUE(says(heard(kGrungo), "I FORESEE FLIES. IN MY MOUTH."));
+  EXPECT_FALSE(says(heard(kGrungo), "THE GOOD BITS")) << "his own line replaces the shared one";
+  EXPECT_FALSE(says(heard(mossby), "FORESEE FLIES"));
+  EXPECT_TRUE(says(heard(mossby), "SNACK? SNACK. THE GOOD BITS!"));
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

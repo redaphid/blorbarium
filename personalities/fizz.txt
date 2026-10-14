@@ -1,0 +1,27 @@
+FIZZ
+firefly beetle: crackles
+Element Spark, style Pounce, power zap. Voice: hoarder, which wraps his lines as "LINE. MINE.", "PSST. LINE. TELL NO ONE.", "LINE. NOT SHARING.".
+
+Write anything above the LINES marker: who he is, what he loves, what scares
+him, how he talks, words he overuses, catchphrases, a story. Nothing up here
+reaches the screen. Claude reads it when it writes his lines.
+
+WHO HE IS
+
+
+HOW HE TALKS
+
+
+LOVES
+
+
+FEARS
+
+
+CATCHPHRASES
+
+
+=== LINES ===
+# Lines only he says. Head a section with a line name from _shared.txt
+# (or a situation only one line uses), then indent each line under it.
+# His lines replace the shared line for him; write several and he picks one.
