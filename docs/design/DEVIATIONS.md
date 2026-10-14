@@ -46,6 +46,15 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
 This folds into units 12 (the anchor in the snapshot), 13 (`TIME` feeds the
 phone source) and 14 (the seam, the catch-up and its tests).
 
+**No battery (user, 2026-10-13).** The devices ship without one, so unit 23
+is off and a phone's `TIME` is the only clock after a replug. Unpowered time
+is stasis until a phone connects, and then a catch-up lives at most **12
+hours** of the gap (`kMaxCatchUpSteps` in `dish.cpp`); the rest is dropped.
+The cap keeps a phone visit (an OTA update, say) from being what kills a pet
+that sat a week in a drawer. It does not prevent death: a pet already near
+death still dies inside the twelve hours (user: "close to dead + time =
+dead"), and absence after absence starves a pet nobody feeds.
+
 ## 4. User-directed: the phone adds twists; the board stays the one writer
 
 The user (2026-10-02, final after two superseded same-day readings, neither
