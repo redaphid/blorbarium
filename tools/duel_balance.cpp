@@ -18,23 +18,23 @@
 namespace blorbtool {
 using namespace blorb;
 
+// The players are special_probe.py's, so the two can be compared.
 enum class Player : uint8_t {
-  Random,     // a six-year-old mashing: uniform stances
-  Habit,      // the pet's loved stance 60% of the time, else uniform: readable
-  Reader,     // counters the friend's most frequent locked stance so far: a parent
+  Random,     // a six-year-old mashing: uniform stances, queues on 70% of turns (quick or heavy)
+  Habit,      // the pet's loved stance 60% of the time, else uniform; always queues quick: readable
+  Reader,     // a parent: staggers a bracing friend, counters a landing, else counters the
+              // friend's most frequent stance and queues it (heavy half the time)
   Pet,        // petChoice() every turn, learning as it goes from a fresh Skill: the autopilot
   LeanHalf,   // takes the pet's whispered lean half the time, else plays Habit
+  Queuer,     // queues whenever it can (heavy half the time), staggers a bracing friend
 };
-// When the kid presses BOOT. Always: every turn, so the power fires the turn
-// the meter holds its cost, which is what roster_probe.py modelled. Half: on a
-// random half of turns, a kid who forgets.
-enum class Arming : uint8_t { Always, Half };
 
 struct Matchup {
   Player a = Player::Random, b = Player::Random;
-  Arming arming = Arming::Always;
   uint8_t assistB = 0;   // extra hearts for side B, through its kid's lower prowess
 };
+
+struct Pick { Stance stance; Windup special = Windup::None; };
 
 struct Rng {
   uint64_t s;
@@ -53,17 +53,11 @@ struct Seat {
   DuelSkill skill{};
 };
 
-constexpr uint8_t knackFor(Stance style) {
-  for (uint8_t k = 0; k < 6; ++k)
-    if (Knack{k}.best() == style) return k;
-  return 0;
-}
-
 BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess) {
   BattleCard c{};
   c.species = s;
   c.power = speciesInfo(s).power;
-  c.knack = Knack{blorbtool::knackFor(speciesInfo(s).style)};
+  c.knack = Knack{knackOrderOf(knackFor(speciesInfo(s).style))};
   c.lineageId = lineage;
   c.prowess = prowess;
   return c;
@@ -78,15 +72,28 @@ static_assert(Assist::hearts(kidProwess(0), kParentProwess) == 0 && Assist::hear
                   Assist::hearts(kidProwess(2), kParentProwess) == 2,
               "kidProwess(n) buys exactly n hearts");
 
-Stance habit(Rng& rng, const BattleCard& mine) {
-  return rng.chance(600) ? speciesInfo(mine.species).style : Stance(rng.below(kCycle));
+Pick habit(Rng& rng, const BattleCard& mine) {
+  return {rng.chance(600) ? speciesInfo(mine.species).style : Stance(rng.below(kCycle)), Windup::Quick};
 }
 
-Stance read(Rng& rng, const Outcome& o, uint8_t me) {
+Windup heavyOrQuick(Rng& rng) { return rng.chance(500) ? Windup::Heavy : Windup::Quick; }
+
+// The friend's special: bracing now, landing now, or neither.
+enum class Their : uint8_t { Free, Bracing, Landing };
+Their theirSpecial(const Outcome& o, uint8_t me) {
+  const SideState& s = o.side[1 - me];
+  if (s.queued == Windup::None) return Their::Free;
+  return o.resolved < s.landsOn ? Their::Bracing : Their::Landing;
+}
+
+// The stance that beats the friend's most frequent chosen one (ties at random).
+Stance counterTheirHabit(Rng& rng, const Outcome& o, uint8_t me) {
   uint8_t n[kCycle]{};
   bool any = false;
-  for (uint8_t t = 0; t < o.resolved; ++t)
-    if (!o.turns[t].dozed[1 - me]) { ++n[uint8_t(o.turns[t].move[1 - me].stance)]; any = true; }
+  for (uint8_t t = 0; t < o.resolved; ++t) {
+    const TurnReport& r = o.turns[t];
+    if (!r.dozed[1 - me] && !r.bracing[1 - me]) { ++n[uint8_t(r.shown[1 - me])]; any = true; }
+  }
   if (!any) return Stance(rng.below(kCycle));
   const uint8_t top = *std::max_element(n, n + kCycle);
   uint8_t ties[kCycle]{}, k = 0;
@@ -95,24 +102,65 @@ Stance read(Rng& rng, const Outcome& o, uint8_t me) {
   return counterOf(Stance(ties[rng.below(k)]));
 }
 
-Stance choose(Seat& seat, Rng& rng, const Outcome& o, uint8_t me, const BattleCard (&card)[2], uint32_t seed,
-              uint8_t assist) {
+Pick choose(Seat& seat, Rng& rng, const Outcome& o, uint8_t me, const BattleCard (&card)[2], uint32_t seed,
+            uint8_t assist) {
   const BattleCard& mine = card[me];
   const BattleCard& theirs = card[1 - me];
+  const Their t = theirSpecial(o, me);
   switch (seat.player) {
-    case Player::Random: return Stance(rng.below(kCycle));
+    case Player::Random: {
+      const Stance s = Stance(rng.below(kCycle));
+      return {s, rng.chance(700) ? heavyOrQuick(rng) : Windup::None};
+    }
     case Player::Habit: return habit(rng, mine);
-    case Player::Reader: return read(rng, o, me);
-    case Player::Pet: return petChoice(seat.skill, o, Side(me), mine, theirs, assist, seed).stance;
-    case Player::LeanHalf:
-      return rng.chance(500) ? petChoice(seat.skill, o, Side(me), mine, theirs, assist, seed).stance : habit(rng, mine);
+    case Player::Reader: {
+      if (t == Their::Bracing) return {Stance::Trick};
+      const Stance s = counterTheirHabit(rng, o, me);
+      return {s, t == Their::Landing ? Windup::None : heavyOrQuick(rng)};
+    }
+    case Player::Pet: {
+      const Lean l = petChoice(seat.skill, o, Side(me), mine, theirs, assist, seed);
+      return {l.stance, l.special};
+    }
+    case Player::LeanHalf: {
+      if (!rng.chance(500)) return habit(rng, mine);
+      const Lean l = petChoice(seat.skill, o, Side(me), mine, theirs, assist, seed);
+      return {l.stance, l.special};
+    }
+    case Player::Queuer:
+      if (t == Their::Bracing) return {Stance::Trick};
+      return {Stance(rng.below(kCycle)), heavyOrQuick(rng)};
   }
-  return Stance::Pounce;
+  return {Stance::Pounce};
 }
+
+// What the specials did, over a whole tournament.
+struct SpecialStats { uint64_t committed = 0, landed = 0, riposted = 0, whiffed = 0, staggered = 0; };
 
 struct Battle { Ending ending; uint8_t turns; };
 
-Battle play(SpeciesId sa, SpeciesId sb, const Matchup& m, Rng& rng, uint32_t seed) {
+// A kid can commit only when the hint glyph is lit: the meter holds the cost
+// and the landing fits before the last turn. Otherwise the press locks a
+// plain stance.
+bool canQueue(const Outcome& o, uint8_t me, const BattleCard& mine, Windup w) {
+  return o.side[me].spark >= powerInfo(mine.power).cost && o.resolved + uint8_t(w) < DuelRules::kMaxTurns;
+}
+
+// A commit staggered on its own commit turn reports Staggered, not Committed.
+void count(const Outcome& o, SpecialStats& st) {
+  using S = TurnReport::Special;
+  for (uint8_t t = 0; t < o.resolved; ++t)
+    for (uint8_t i = 0; i < 2; ++i) {
+      const S sp = o.turns[t].special[i];
+      st.committed += sp == S::Committed || (sp == S::Staggered && o.turns[t].move[i].windup != Windup::None);
+      st.landed += sp == S::Landed;
+      st.riposted += sp == S::Riposted;
+      st.whiffed += sp == S::Whiffed;
+      st.staggered += sp == S::Staggered;
+    }
+}
+
+Battle play(SpeciesId sa, SpeciesId sb, const Matchup& m, Rng& rng, uint32_t seed, SpecialStats& stats) {
   const BattleCard card[2] = {cardOf(sa, 0xA11CE, kParentProwess), cardOf(sb, 0xB0B, kidProwess(m.assistB))};
   Seat seat[2] = {{m.a}, {m.b}};
   const uint8_t assist[2] = {0, m.assistB};
@@ -120,17 +168,16 @@ Battle play(SpeciesId sa, SpeciesId sb, const Matchup& m, Rng& rng, uint32_t see
   Outcome o = resolve(card[0], card[1], seed, Stakes::Spar, log[0], log[1]);
   while (!o.over()) {
     for (uint8_t i = 0; i < 2; ++i) {
-      Move mv{};
-      if (o.side[i].dozing) mv.byPet = true;
-      else {
-        mv.stance = choose(seat[i], rng, o, i, card, seed + i, assist[i]);
-        mv.power = m.arming == Arming::Always || rng.chance(500);
-      }
-      log[i].append(mv);
+      if (log[i].count() > o.resolved) continue;   // a committed special already wrote this turn
+      if (o.side[i].dozing) { log[i].append(Move{Stance::Pounce, false, true}); continue; }
+      const Pick p = choose(seat[i], rng, o, i, card, seed + i, assist[i]);
+      if (p.special == Windup::None || !canQueue(o, i, card[i], p.special)) log[i].append(Move{p.stance});
+      else log[i].appendSpecial(p.special, p.stance);
     }
     o = resolve(card[0], card[1], seed, Stakes::Spar, log[0], log[1]);
     for (uint8_t i = 0; i < 2; ++i) learnTurn(seat[i].skill, o, Side(i), card[1 - i], uint8_t(o.resolved - 1));
   }
+  count(o, stats);
   return Battle{o.ending, o.resolved};
 }
 
@@ -144,6 +191,7 @@ struct BalanceReport {
   uint8_t medianTurns = 0;
   uint8_t worstA = 0, worstB = 0;              // the pair furthest from even
   uint16_t worstPermille = 500;                // as A's rate in that pair
+  SpecialStats specials{};
 };
 
 uint16_t permille(uint64_t wins2, uint64_t games) { return uint16_t((wins2 * 1000 / 2 + games / 2) / games); }
@@ -161,7 +209,7 @@ BalanceReport tournament(uint32_t perPair, const Matchup& m, uint32_t seed) {
       Rng rng{(uint64_t(seed) << 32) ^ (uint64_t(a) << 8) ^ b};
       PairResult& p = r.pairs[a][b];
       for (uint32_t k = 0; k < perPair; ++k) {
-        const Battle x = play(SpeciesId{a}, SpeciesId{b}, m, rng, rng.next());
+        const Battle x = play(SpeciesId{a}, SpeciesId{b}, m, rng, rng.next(), r.specials);
         ++turnCount[x.turns];
         if (x.ending == Ending::AWon) ++p.aWins;
         else if (x.ending == Ending::BWon) ++p.bWins;
@@ -187,7 +235,7 @@ BalanceReport tournament(uint32_t perPair, const Matchup& m, uint32_t seed) {
 }
 
 // The gate BATTLES.md sets: every species within 430..570 permille and every
-// pair within 300..700, Random against Random with kids who always fire.
+// pair within 300..700, Random against Random.
 bool wheelHolds(const BalanceReport& r) {
   for (uint16_t pm : r.speciesPermille)
     if (pm < 430 || pm > 570) return false;
@@ -199,15 +247,22 @@ bool wheelHolds(const BalanceReport& r) {
   return true;
 }
 
-// roster_probe.py's species rates, from its last pass (BATTLES.md, "Measured
-// balance"). The tournament must land within 30 permille of each.
-inline constexpr uint16_t kProbePermille[kSpeciesCount] = {499, 546, 450, 492, 512, 509, 492, 497, 504};
+// special_probe.py's species rates, Random v Random at 800 a pair, with its
+// heavy special winding up two turns as the design says (the committed probe
+// lands a heavy after one; BATTLES.md, "Measured through resolve()"). The
+// tournament must land within 30 permille of each.
+inline constexpr uint16_t kProbePermille[kSpeciesCount] = {465, 501, 557, 492, 460, 483, 532, 509, 502};
 
 void printWheel(const char* label, const BalanceReport& r) {
   std::printf("%s, %u a pair: median %u turns, worst pair %s over %s %u\n  ", label, r.perPair, r.medianTurns,
               SPECIES[r.worstA].name, SPECIES[r.worstB].name, r.worstPermille);
   for (uint8_t s = 0; s < kSpeciesCount; ++s) std::printf("%s %u  ", SPECIES[s].name, r.speciesPermille[s]);
-  std::printf("\n");
+  const SpecialStats& st = r.specials;
+  const uint64_t q = st.committed ? st.committed : 1;
+  std::printf("\n  specials (permille of %llu queued): landed %llu, riposted %llu, whiffed %llu, staggered %llu\n",
+              (unsigned long long)st.committed, (unsigned long long)(st.landed * 1000 / q),
+              (unsigned long long)(st.riposted * 1000 / q), (unsigned long long)(st.whiffed * 1000 / q),
+              (unsigned long long)(st.staggered * 1000 / q));
 }
 
 }  // namespace blorbtool
@@ -215,25 +270,24 @@ void printWheel(const char* label, const BalanceReport& r) {
 #ifndef DUEL_BALANCE_NO_MAIN
 int main(int argc, char** argv) {
   using namespace blorbtool;
-  const uint32_t n = argc > 1 ? uint32_t(std::strtoul(argv[1], nullptr, 10)) : 1500;
-  const BalanceReport always = tournament(n, {Player::Random, Player::Random, Arming::Always, 0}, 1);
-  printWheel("random v random, always fire", always);
+  const uint32_t n = argc > 1 ? uint32_t(std::strtoul(argv[1], nullptr, 10)) : 800;
+  const BalanceReport random = tournament(n, {Player::Random, Player::Random, 0}, 1);
+  printWheel("random v random", random);
   int furthest = 0;
   for (uint8_t s = 0; s < kSpeciesCount; ++s)
-    furthest = std::max(furthest, std::abs(int(always.speciesPermille[s]) - int(kProbePermille[s])));
-  std::printf("  furthest species from roster_probe.py: %d permille; gate %s\n", furthest,
-              wheelHolds(always) ? "holds" : "FAILS");
-  printWheel("random v random, armed half the turns",
-             tournament(n, {Player::Random, Player::Random, Arming::Half, 0}, 1));
-  printWheel("pet v pet (autopilot both sides)", tournament(n / 5, {Player::Pet, Player::Pet, Arming::Always, 0}, 1));
+    furthest = std::max(furthest, std::abs(int(random.speciesPermille[s]) - int(kProbePermille[s])));
+  std::printf("  furthest species from special_probe.py: %d permille; gate %s\n", furthest,
+              wheelHolds(random) ? "holds" : "FAILS");
+  printWheel("queuer v queuer", tournament(n, {Player::Queuer, Player::Queuer, 0}, 1));
+  printWheel("pet v pet (autopilot both sides)", tournament(n / 4, {Player::Pet, Player::Pet, 0}, 1));
 
-  const uint32_t m = n / 5;
-  const Player kids[] = {Player::Habit, Player::LeanHalf, Player::Pet};
-  const char* names[] = {"habit kid", "kid follows the lean half the time", "pet on autopilot"};
-  for (uint8_t k = 0; k < 3; ++k)
+  const uint32_t m = n / 4;
+  const Player kids[] = {Player::Habit, Player::LeanHalf, Player::Pet, Player::Queuer};
+  const char* names[] = {"habit kid", "kid follows the lean half the time", "pet on autopilot", "queuer"};
+  for (uint8_t k = 0; k < 4; ++k)
     for (uint8_t assist = 0; assist <= DuelRules::kMaxAssistHearts; ++assist)
       std::printf("parent (reader) v %s, assist %u: parent %u\n", names[k], assist,
-                  tournament(m, {Player::Reader, kids[k], Arming::Always, assist}, 2).sideAPermille);
-  return wheelHolds(always) ? 0 : 1;
+                  tournament(m, {Player::Reader, kids[k], assist}, 2).sideAPermille);
+  return wheelHolds(random) ? 0 : 1;
 }
 #endif

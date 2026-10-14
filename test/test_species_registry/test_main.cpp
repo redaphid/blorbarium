@@ -10,7 +10,7 @@ using namespace blorb;
 // names and costs moves it, and that must be a decision, not an accident.
 // tools/species_neg_check.sh checks the ESP32-S3 compiler agrees with the host.
 TEST(RosterHash, IsPinned) {
-  EXPECT_EQ(rosterHash(), 58950u);
+  EXPECT_EQ(rosterHash(), 47322u);   // lantern 4 to 3 for the queued special (unit D4)
 }
 
 // Written out by hand from roster/roster.json (origin/roster-art d98055e), the

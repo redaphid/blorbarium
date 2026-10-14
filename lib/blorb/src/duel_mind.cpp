@@ -3,6 +3,7 @@
 // the pet's own device runs these, and what they pick reaches the friend as a
 // logged move, so unlike resolve() they owe the other device nothing.
 #include "blorb/duel.h"
+#include <algorithm>
 
 namespace blorb {
 namespace {
@@ -14,19 +15,22 @@ constexpr int32_t kMoodLean = 48;        // per mood point past its threshold
 // battle every time (grungo lost to puffkin 300 times in 300); at four, pet v
 // pet spreads like random play and a learned cell still outvotes it.
 constexpr uint32_t kNoise = 8192;
+constexpr int32_t kSureToQueue = 24;     // a score margin of 3,072: three-quarters of a knack rank
 
 uint32_t mix(uint32_t h) {
   h ^= h >> 16; h *= 0x85ebca6bu; h ^= h >> 13; h *= 0xc2b2ae35u; h ^= h >> 16;
   return h;
 }
 
-// The friend's locked stance on turn t, or none (3) if they slept through it.
-// Locked, not shown: foresee rewrites the shown stance from mine, and the
-// pet is reading the kid, not the power.
-uint8_t lockedBy(const TurnReport& r, uint8_t side) { return r.dozed[side] ? kCycle : uint8_t(r.move[side].stance); }
+// The stance a side chose on turn t, or none (kCycle) if it slept or braced
+// through it: a bracing turn's entry is a placeholder, and the pet is reading
+// the kid, not the log.
+uint8_t chosenBy(const TurnReport& r, uint8_t side) {
+  return r.dozed[side] || r.bracing[side] ? kCycle : uint8_t(r.shown[side]);
+}
 
 uint8_t contextAt(const Outcome& o, uint8_t me, const BattleCard& theirs, uint8_t turn) {
-  const uint8_t last = turn == 0 ? kCycle : lockedBy(o.turns[turn - 1], uint8_t(1 - me));
+  const uint8_t last = turn == 0 ? kCycle : chosenBy(o.turns[turn - 1], uint8_t(1 - me));
   return uint8_t(uint8_t(speciesInfo(theirs.species).element) * (kCycle + 1) + last);
 }
 
@@ -35,7 +39,7 @@ uint8_t contextAt(const Outcome& o, uint8_t me, const BattleCard& theirs, uint8_
 uint8_t kidsHabit(const Outcome& o, uint8_t me) {
   uint8_t n[kCycle]{};
   for (uint8_t t = 0; t < o.resolved; ++t)
-    if (!o.turns[t].move[me].byPet && !o.turns[t].dozed[me]) ++n[uint8_t(o.turns[t].move[me].stance)];
+    if (!o.turns[t].move[me].byPet && chosenBy(o.turns[t], me) < kCycle) ++n[chosenBy(o.turns[t], me)];
   uint8_t best = kCycle;
   for (uint8_t s = 0; s < kCycle; ++s)
     if (n[s] > 0 && (best == kCycle || n[s] > n[best])) best = s;
@@ -51,6 +55,16 @@ uint8_t duelContext(const Outcome& o, Side me, const BattleCard& theirs) {
 Lean petChoice(const DuelSkill& skill, const Outcome& o, Side me, const BattleCard& mine, const BattleCard& theirs,
                uint8_t assistHearts, uint32_t seed) {
   const uint8_t i = uint8_t(me);
+  const int32_t bright = 32 * assistHearts;
+  // Their special is public from its commit; only its landing stance is not.
+  const SideState& them = o.side[1 - i];
+  if (them.queued != Windup::None && o.resolved < them.landsOn)
+    return Lean{Stance::Trick, uint8_t(std::min<int32_t>(255, 192 + bright))};
+  if (them.queued != Windup::None && o.resolved == them.landsOn) {
+    const Foretelling f = foretell(o, other(me), mine, theirs, seed);
+    return Lean{counterOf(f.stance), uint8_t(std::min<int32_t>(255, 64 + (f.confidence.raw >> 18) + bright))};
+  }
+
   const Q15(&cell)[kCycle] = skill.win[duelContext(o, me, theirs)];
   const uint8_t habit = kidsHabit(o, i);
   int32_t score[kCycle]{};
@@ -66,15 +80,24 @@ Lean petChoice(const DuelSkill& skill, const Outcome& o, Side me, const BattleCa
   if (score[2] > score[best]) { second = best; best = 2; }
   else if (score[2] > score[second]) second = 2;
   // How sure it is: the margin over the runner-up, then the assist on top.
-  const int32_t sure = (score[best] - score[second]) / 128;
-  const int32_t whisper = 64 + (sure > 127 ? 127 : sure) + 32 * assistHearts;
-  return Lean{Stance(best), uint8_t(whisper > 255 ? 255 : whisper)};
+  const int32_t sure = std::min<int32_t>(127, (score[best] - score[second]) / 128);
+  // The autopilot queues when the meter holds the cost and it is sure of its
+  // read, or the meter is full and waiting wastes sparks; a spirited pet
+  // winds up the heavy one.
+  const SideState& self = o.side[i];
+  Windup special = Windup::None;
+  if (self.queued == Windup::None && self.spark >= powerInfo(mine.power).cost &&
+      (self.spark == kMeterMax || sure >= kSureToQueue)) {
+    special = mine.mood.spirit > 160 ? Windup::Heavy : Windup::Quick;
+    if (o.resolved + uint8_t(special) >= DuelRules::kMaxTurns) special = Windup::None;
+  }
+  return Lean{Stance(best), uint8_t(std::min<int32_t>(255, 64 + sure + bright)), special};
 }
 
 void learnTurn(DuelSkill& skill, const Outcome& o, Side me, const BattleCard& theirs, uint8_t turn) {
   if (turn >= o.resolved) return;
   const uint8_t i = uint8_t(me);
-  const uint8_t them = lockedBy(o.turns[turn], uint8_t(1 - i));
+  const uint8_t them = chosenBy(o.turns[turn], uint8_t(1 - i));
   if (them == kCycle) return;
   Q15(&cell)[kCycle] = skill.win[contextAt(o, i, theirs, turn)];
   for (uint8_t s = 0; s < kCycle; ++s) {
@@ -88,7 +111,7 @@ Foretelling foretell(const Outcome& o, Side about, const BattleCard& seer, const
   uint8_t h[DuelRules::kMaxTurns]{};
   uint8_t n = 0;
   for (uint8_t t = 0; t < o.resolved; ++t)
-    if (!o.turns[t].dozed[a]) h[n++] = uint8_t(o.turns[t].move[a].stance);
+    if (chosenBy(o.turns[t], a) < kCycle) h[n++] = chosenBy(o.turns[t], a);
 
   // Their species' style is the prior; every turn is a vote for their habit;
   // a turn that followed the same pattern they just played is worth four.
