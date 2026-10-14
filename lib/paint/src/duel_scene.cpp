@@ -16,6 +16,17 @@ namespace expr = blorb::expr;
 
 constexpr int kSide = 240;
 constexpr int kMe = 0, kThem = 1;
+using Special = blorb::TurnReport::Special;
+
+// The burst's word for a clash, the special's fate first (paint's burst table).
+constexpr int kBonk = 0, kSuper = 2, kWham = 4, kCounter = 5, kOof = 6, kWhiff = 7;
+int beatWord(const Fighter& winner, const Fighter& loser, bool super) {
+  if (winner.special == Special::Landed) return kWham;
+  if (loser.special == Special::Riposted) return kCounter;
+  if (loser.special == Special::Staggered) return kOof;
+  if (loser.special == Special::Whiffed) return kWhiff;
+  return super ? kSuper : kBonk;
+}
 
 int imin(int a, int b) { return a < b ? a : b; }
 int imax(int a, int b) { return a > b ? a : b; }
@@ -147,6 +158,30 @@ P headOf(const Figure& f, const Body& b) { return {f.x, f.y - b.top - 6}; }
 // so the clash itself has the middle of the dish.
 P popAt(P head, int side) { return {head.x + (side ? 28 : -38), head.y + (side ? 18 : 14)}; }
 
+blorb::PowerGlyph powerOf(const Fighter& f) {
+  return blorb::powerInfo(blorb::speciesInfo(f.look.species).power).glyph;
+}
+
+// A special winding up, the same on both screens: he crouches into it, light
+// in his power's colour gathers behind him, his power's glyph hangs over him
+// and pips under it count the turns to the landing. On the turn it lands he
+// shakes and the glyph swells. What stance it lands with is never shown.
+void telegraph(const Fighter& x, Figure& g, const Body& b, int side, int t, DuelStaging& s) {
+  if (x.windup == blorb::Windup::None) return;
+  const bool now = x.landsIn == 0;
+  const int heavy = x.windup == blorb::Windup::Heavy;
+  g.widePct = uint8_t(g.widePct + 6 + 4 * heavy);
+  g.tallPct = uint8_t(g.tallPct - 6 - 4 * heavy);
+  if (now) g.x = int16_t(g.x + ((t & 1) ? 1 : -1));
+  const int pulse = bump(t % (now ? 4 : 10), 0, now ? 4 : 10);
+  const P mid = {g.x, g.y - b.h / 2};
+  add(s, prop(PropKind::Aura, int(powerOf(x)), mid, (side ? 70 : 100) + 15 * heavy, 120 + pulse * (now ? 135 : 70) / 256));
+  const P head = headOf(g, b);
+  const P over = side ? P{head.x - 42, head.y + 34} : P{head.x + 30, head.y - 8};   // the friend's clear of the top rim and the hint
+  add(s, prop(PropKind::Power, int(powerOf(x)), over, (now ? 150 : 115) + pulse * 20 / 256));
+  add(s, prop(PropKind::Countdown, x.landsIn, {over.x, over.y + (now ? 24 : 20)}, 100));
+}
+
 void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
   // Each slides in from his own corner and lands with a bounce.
@@ -236,6 +271,8 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const P head = headOf(s.fig[kMe], b[kMe]);
     add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 14 - bump(t % 10, 0, 10) * 4 / 256}, 130));
   }
+  telegraph(sc.me, s.fig[kMe], b[kMe], kMe, t, s);
+  telegraph(sc.them, s.fig[kThem], b[kThem], kThem, t, s);
   // Over the friend: "..." while choosing, a tick once locked; never the stance.
   const P head = headOf(s.fig[kThem], b[kThem]);
   if (sc.them.locked) add(s, prop(PropKind::Tick, 0, {head.x + 20, head.y - 6}, 110));
@@ -276,12 +313,15 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
     Figure& g = s.fig[side];
     const Fighter& x = *f[side];
     const P other = home[1 - side];
+    const bool bracing = x.windup != blorb::Windup::None && x.special != Special::Landed &&
+                         x.special != Special::Riposted && x.special != Special::Whiffed;
     if (x.stance < 0) face(g, expr::asleep);   // dozed through it
-    else play(g, x.stance, other, t);
+    else if (bracing) telegraph(x, g, b[side], side, t, s);
+    else play(g, x.special == Special::Landed || x.special == Special::Whiffed ? int(Stance::Pounce) : x.stance, other, t);
     // His stance pops over his head, a power glyph with it when it fired.
     const P head = headOf(Figure{int16_t(home[side].x), int16_t(home[side].y)}, b[side]);
     const int pop = imin(ramp(t, kPop, kPop + 4) * 140 / 256, 140 - ramp(t, kPop + 4, kPop + 6) * 20 / 256);
-    if (x.stance >= 0) add(s, prop(PropKind::Stance, x.stance, popAt(head, side), pop));
+    if (x.stance >= 0 && !bracing) add(s, prop(PropKind::Stance, x.stance, popAt(head, side), pop));
     if (x.fired) {
       const blorb::PowerInfo& pw = blorb::powerInfo(blorb::speciesInfo(x.look.species).power);
       add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 16}, 100 + bump(t, 0, 10) * 40 / 256, 255 - ramp(t, 16, 24) * 255 / 256));
@@ -307,7 +347,12 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       const int lose = 1 - win;
       // The burst lands where they meet, a little toward the one it hurt.
       const P loser = {home[lose].x, home[lose].y - b[lose].h / 2};
-      add(s, prop(PropKind::Burst, sc.super ? 2 : 0, {mid.x + (loser.x - mid.x) / 5, mid.y + (loser.y - mid.y) / 5}, grow));
+      const P at = {mid.x + (loser.x - mid.x) / 5, mid.y + (loser.y - mid.y) / 5};
+      const int word = beatWord(*f[win], *f[lose], sc.super);
+      add(s, prop(PropKind::Burst, word, at, word == kWham || word == kCounter ? grow + 25 : grow));
+      // A landing is big: both pets jolt with it.
+      if (f[win]->special == Special::Landed && t < kImpact + 5)
+        for (Figure& g : s.fig) g.y = int16_t(g.y + ((t & 1) ? 2 : -2));
       if (sc.super) {
         const blorb::Element e = blorb::speciesInfo(f[win]->look.species).element;
         add(s, prop(PropKind::Element, int(e), {mid.x - 46, mid.y - 30}, 120));
@@ -335,7 +380,14 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       }
     }
     if (t >= kImpact + 2) face(s.fig[win], expr::happy);
+    // Staggered mid wind-up: knocked out of it, stars round his head.
+    if (f[lose]->special == Special::Staggered && t >= kImpact)
+      add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[lose], b[lose]), lose ? 80 : 100));
   }
+  // A dodge: the special whiffs through where he was (Hush folds away into the dark).
+  for (int side = 0; side < 2; ++side)
+    if (f[1 - side]->special == Special::Whiffed)
+      s.fig[side].alpha = uint8_t(255 - bump(t, kMoveAt, kSettle) * 170 / 256);
 }
 
 // The downed pet: slumped, leaning away, eyes shut, stars round his head.
@@ -446,6 +498,8 @@ void fromOutcome(DuelScene& sc, const blorb::Outcome& o, blorb::Side me) {
     f[i]->hearts = s.hearts;
     f[i]->maxHearts = s.maxHearts;
     f[i]->sparks = s.spark;
+    f[i]->windup = s.queued;
+    f[i]->landsIn = s.queued != blorb::Windup::None && s.landsOn > o.resolved ? uint8_t(s.landsOn - o.resolved) : 0;
   }
   sc.stakes = o.stakes;
   auto sideOf = [&](int s) { return s == m ? Side::Me : Side::Them; };
@@ -456,6 +510,9 @@ void fromOutcome(DuelScene& sc, const blorb::Outcome& o, blorb::Side me) {
       f[i]->stance = r.dozed[s] ? int8_t(-1) : int8_t(r.shown[s]);
       f[i]->hit = r.hit[s];
       f[i]->fired = r.powered[s];
+      f[i]->special = r.special[s];
+      // Braced through that turn with nothing queued after it: knocked out of it, or it was the commit.
+      if (r.bracing[s] && f[i]->windup == blorb::Windup::None) f[i]->windup = blorb::Windup::Quick;
     }
     sc.won = r.clash == blorb::Clash::Bonk ? Side::Neither : sideOf(r.clash == blorb::Clash::AWins ? 0 : 1);
     sc.super = sc.won != Side::Neither && r.super[sc.won == Side::Me ? m : t];
@@ -654,18 +711,21 @@ void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
 }
 
 void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
-  static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!"};
+  static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!", "WHAM!", "COUNTER!", "OOF!", "WHIFF"};
   // Whole multiples of the font only: a fractional scale drops a row and an E reads as an F.
-  static constexpr int kScale[] = {256, 512, 256, 256};
+  static constexpr int kScale[] = {256, 512, 256, 256, 256, 256, 256, 256};
   const int R = 46 * p.scalePct / 100, inner = 30 * p.scalePct / 100, rot = ticks * 2;
-  const uint16_t edge = c565(kBurstEdge), body = c565(kBurst);
+  // A whiff is a grey puff of air, not a hit.
+  const bool whiff = p.variant == 7;
+  const uint16_t edge = c565(whiff ? Rgb{90, 90, 110} : kBurstEdge), body = c565(whiff ? Rgb{200, 200, 215} : kBurst);
   for (int y = p.y - R; y <= p.y + R; ++y)
     for (int x = p.x - R; x <= p.x + R; ++x) {
       const int dx = x - p.x, dy = y - p.y;
-      if (!spiky(dx, dy, R, inner, 12, rot)) continue;
-      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, 12, rot) ? body : edge, p.alpha + 1);
+      const int n = whiff ? 7 : 12;
+      if (!spiky(dx, dy, R, inner, n, rot)) continue;
+      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, n, rot) ? body : edge, p.alpha + 1);
     }
-  const int v = imin(p.variant, 3);
+  const int v = imin(p.variant, 7);
   if (p.scalePct >= 90) text(cv, kWords[v], p.x, p.y, kScale[v], {255, 255, 255});
 }
 
@@ -745,6 +805,35 @@ void glow(Canvas240& cv, const Prop& p) {
     }
 }
 
+// Each power's colour, for the light a special gathers (by PowerGlyph).
+constexpr Rgb kPowerLight[9] = {{64, 236, 214}, {210, 160, 90}, {190, 120, 240}, {110, 230, 90}, {255, 220, 90},
+                                {80, 170, 255}, {255, 245, 90}, {235, 235, 255}, {190, 200, 210}};
+
+void aura(Canvas240& cv, const Prop& p) {
+  const uint16_t c = c565(kPowerLight[p.variant % 9]);
+  const int R = 46 * p.scalePct / 100;
+  for (int y = -R; y <= R; ++y)
+    for (int x = -R; x <= R; ++x) {
+      const int d2 = x * x + y * y * 3 / 2;
+      if (d2 >= R * R) continue;
+      // Brightest a little inside its edge, so it reads as light round him, not a disc.
+      const int t = d2 * 256 / (R * R), lit = t < 160 ? t * 256 / 160 : (256 - t) * 256 / 96;
+      put(cv, p.x + x, p.y + y, c, p.alpha * lit / 256);
+    }
+}
+
+// Turns to the landing: a diamond each; none left means it lands now (a bar).
+void countdown(Canvas240& cv, const Prop& p) {
+  const int n = p.variant;
+  if (n == 0) return inked(cv, p.x - 9, p.y, p.x + 9, p.y, 2, kCream, 256);
+  for (int i = 0; i < n; ++i) {
+    Prop q = p;
+    q.variant = 0;
+    q.x = int16_t(p.x + (2 * i - (n - 1)) * 7);
+    pip(cv, q);
+  }
+}
+
 void backed(Canvas240& cv, const Prop& p, int rPx) { disc(cv, p.x, p.y, rPx * p.scalePct / 100, kInk, 150 * (p.alpha + 1) / 256); }
 
 void art(Canvas240& cv, const FrameRef& f, const Prop& p) { drawArt(cv, f, p.x, p.y, p.scalePct, p.alpha + 1); }
@@ -778,6 +867,8 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
     case PropKind::Timer: return timer(cv, p);
     case PropKind::Stars: return stars(cv, p);
     case PropKind::Glow: return glow(cv, p);
+    case PropKind::Aura: return aura(cv, p);
+    case PropKind::Countdown: return countdown(cv, p);
     case PropKind::Button:
       disc(cv, p.x, p.y, 13, kInk, 170);
       return bits(cv, p.variant ? kKnock : kButton, p.x, p.y, 200 * p.scalePct / 100, kCream, p.alpha + 1, false);
@@ -806,6 +897,9 @@ void arena(Canvas240& cv) {
     }
 }
 
+// Light and the clock go under the pets; everything else over them.
+bool behind(PropKind k) { return k == PropKind::Timer || k == PropKind::Glow || k == PropKind::Aura; }
+
 // His look for the duel: breathing on the duel's clock in his idle pose; the
 // power face glows only while his power fires.
 Appearance lookFor(const Fighter& f, const Figure& g, uint16_t ticks) {
@@ -822,16 +916,51 @@ Appearance lookFor(const Fighter& f, const Figure& g, uint16_t ticks) {
 
 }  // namespace
 
+namespace {
+
+// boot.h's BootGlyph values that ART4 leaves to ART3 (their kBootGlyphs slots are empty).
+constexpr uint8_t kGlyphTier = 12, kGlyphSkull = 13, kGlyphQuick = 14, kGlyphHeavy = 15, kGlyphCountdown = 21;
+constexpr int kBootGlyphCount = int(sizeof(duel_art::kBootGlyphs) / sizeof(duel_art::kBootGlyphs[0]));
+static_assert(kBootGlyphCount == kGlyphCountdown + 1, "kBootGlyphs is indexed by boot.h's BootGlyph");
+
+// Beside the BOOT button on the rim, clear of both heart arcs.
+constexpr P kBootAt = {150, 26};
+constexpr int kHintPct = 125;
+
+}  // namespace
+
+void drawBootHint(Canvas240& cv, const RimHint& h) {
+  if (!h.glyph || h.glyph >= kBootGlyphCount) return;
+  const P at = kBootAt;
+  disc(cv, at.x, at.y, 15, kInk, 190);
+  const int alpha = h.greyed ? 150 : 256;
+  if (h.glyph == kGlyphTier) drawArt(cv, duel_art::kTiers[h.art % 3], at.x, at.y, 70, alpha);
+  else if (h.glyph == kGlyphSkull) drawArt(cv, duel_art::kTiers[2], at.x, at.y, 70, alpha);
+  else if (h.glyph == kGlyphQuick || h.glyph == kGlyphHeavy) drawArt(cv, duel_art::kPowers[h.art % 9], at.x, at.y, 70, alpha);
+  else drawArt(cv, (h.greyed ? duel_art::kBootGlyphsGrey : duel_art::kBootGlyphs)[h.glyph], at.x, at.y, kHintPct, 256);
+  // A hold that means something else: the ring round it, filling clockwise from the top.
+  if (h.hasHold) drawArt(cv, duel_art::kHoldRing[h.holdFill * 8 / 255], at.x, at.y, kHintPct, 256);
+  if (h.hasDouble) drawArt(cv, duel_art::kDoublePress, at.x, at.y + 19, kHintPct, 256);
+  // Pips toward the middle of the dish: how far short a greyed one is, or the turns a wind-up has left.
+  if (h.greyed || h.glyph == kGlyphCountdown)
+    for (int i = 0; i < imin(h.pips, 6); ++i) {
+      Prop q = prop(PropKind::Pip, 0, {at.x - 22 - 9 * i, at.y + 4});
+      q.variant = h.greyed ? 1 : 0;
+      pip(cv, q);
+    }
+}
+
 void drawDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv, uint32_t) {
   const DuelStaging s = stageDuel(sc, mine, theirs);
   arena(cv);
   for (int i = 0; i < s.propCount; ++i)
-    if (s.props[i].kind == PropKind::Timer || s.props[i].kind == PropKind::Glow) paintProp(cv, s.props[i], sc.ticks);
+    if (behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
   drawFigure(lookFor(sc.them, s.fig[kThem], sc.ticks), theirs, cv, s.fig[kThem]);
   drawFigure(lookFor(sc.me, s.fig[kMe], sc.ticks), mine, cv, s.fig[kMe]);
   for (int i = 0; i < s.propCount; ++i)
-    if (s.props[i].kind != PropKind::Timer && s.props[i].kind != PropKind::Glow) paintProp(cv, s.props[i], sc.ticks);
+    if (!behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
+  drawBootHint(cv, sc.boot);
   for (int y = 0; y < kSide; ++y)
     for (int x = 0; x < kSide; ++x)
       if (!inDisc(x, y)) cv.px[y * kSide + x] = 0;
