@@ -41,8 +41,12 @@ class PhoneTime : public TimeSource {
   std::optional<uint32_t> pending_;
 };
 
-// The last unpowered gap the Dish simulated, and how much of it the cost cap dropped.
-struct CatchUp { uint32_t ticks = 0, clampedTicks = 0; };
+// The last unpowered gap the Dish simulated, how much of it the cost cap
+// dropped, how long he was away, and whether that was long enough to hurt him.
+struct CatchUp {
+  uint32_t ticks = 0, clampedTicks = 0, awaySeconds = 0;
+  bool hurt = false;
+};
 
 struct DishOptions {
   TimeSource* rtc = nullptr;           // first in priority: a clock that kept counting while unpowered

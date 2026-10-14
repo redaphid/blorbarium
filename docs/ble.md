@@ -76,14 +76,17 @@ by newer firmware (an update rolled back) is sealed the same way and says
 
 ```
 #7 TIME <unix seconds> [tzMinutes]
-#7 OK caught_up=72000
+#7 OK caught_up=72000 away=7200 hurt=0
 ```
 
 `tzMinutes` is -720 to 840 and defaults to 0. TIME is more than a clock set:
 the board compares the wall time against its own record, lives through any
 unpowered gap it finds (the pet ages, eats from the pantry and can hatch or
 die), snaps the pet's day and night to the real day, and saves at once.
-`caught_up` is how many 100 ms ticks that catch-up ran (72000 is two hours).
+`caught_up` is how many 100 ms ticks that catch-up ran (72000 is two hours);
+it is at most 12 hours however long the gap. `away` is the whole unpowered
+gap in seconds, 0 when there was none. `hurt=1` means the gap was three weeks
+or more: he woke starving and injured, and needs feeding now.
 A bad number or tz is `#7 ERR 400 BAD_ARGS`.
 
 ### TWIST rename

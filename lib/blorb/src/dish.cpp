@@ -19,6 +19,21 @@ constexpr uint8_t kDefaultBrightness = 200;
 // hours is a night in a drawer; a pet already near death still dies inside it.
 constexpr uint32_t kCatchUpStride = 5 * kTicksPerMinute;
 constexpr uint32_t kMaxCatchUpSteps = 12 * 12;
+// The cap must not make abandonment free: a gap this long also lands as harm
+// the catch-up's twelve hours cannot show.
+constexpr int64_t kLongAbsenceSeconds = 21 * 24 * 3600;
+
+// He wakes starving (hunger above the kStarving locus, energy low enough to
+// keep calling it up) and hurt; feeding saves him, neglect carries on from
+// here. wound() stops short of lethal. Twelve hours unfed often leaves him
+// worse than these levels already, and the harm must never ease him.
+void longAbsence(Creature& c) {
+  const Chemistry& now = c.chemistry();
+  c.inject(driveChem(drive::hunger), fxMax(now.drive(drive::hunger), Fx::ratio(9, 10)));
+  c.inject(chem::energy, fxMin(now.chem[chem::energy.v], Fx::ratio(2, 10)));
+  c.wound(Fx::ratio(1, 2));
+}
+
 // A source within this of the anchor is clock drift, not an unpowered gap.
 constexpr int64_t kDriftSeconds = 60;
 // Once wall time is known, the sources are read again this often.
@@ -254,12 +269,23 @@ void Dish::checkWall() {
   }
   if (!now) return;
   wallKnown_ = true;
+  // Each reading reports its own gap, so a phone reconnecting is not told of the last one again.
+  lastCatchUp_ = CatchUp{};
   if (live_.wall) {
     int64_t powered = int64_t((tick_ - live_.wall->tick) / kTicksPerSecond);
     int64_t gap = int64_t(*now) - int64_t(live_.wall->wallSeconds) - powered;
     if (gap > -kDriftSeconds && gap < kDriftSeconds) return;
     // A source that runs backwards is believed from here on; only a forward gap is lived.
-    if (gap > 0) catchUp(uint32_t(std::min<int64_t>(gap * kTicksPerSecond, UINT32_MAX)));
+    if (gap > 0) {
+      catchUp(uint32_t(std::min<int64_t>(gap * kTicksPerSecond, UINT32_MAX)));
+      lastCatchUp_.awaySeconds = uint32_t(std::min<int64_t>(gap, UINT32_MAX));
+      // Before the anchor moves and the save, so the harm lands once, in the same save.
+      Creature* c = std::get_if<Creature>(&live_.occupant);
+      if (c && gap >= kLongAbsenceSeconds) {
+        longAbsence(*c);
+        lastCatchUp_.hurt = true;
+      }
+    }
   }
   live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
