@@ -108,4 +108,11 @@ size_t encode(const Packet&, uint8_t (&out)[kDatagramMax]);
 // Move::unpack, so every move byte is legal.
 std::optional<Packet> decode(const uint8_t*, size_t);
 
+// One frame in a few words, for a log or the sim film's ticker: "beacon",
+// "beacon wants", "state t5 h3 Scrap", "genome 4 have 3", or why decode()
+// refuses it ("short", "magic", "version", "kind", "bad crc", "bad body").
+// t is how many moves the sender has locked, h how many of the friend's it holds.
+struct WireText { char s[40]; };
+WireText describe(const uint8_t*, size_t);
+
 }  // namespace blorb
