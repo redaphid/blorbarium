@@ -137,8 +137,12 @@ bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId,
     refusal_ = Refusal{why, tick, true};
     return false;
   }
-  if (why != Decline::None) refusal_ = Refusal{why, tick, true};
-  else if (!pin) faintedLast_ = false;   // read by readiness above: the rest after the last duel's faint
+  if (why != Decline::None) {
+    refusal_ = Refusal{why, tick, true};
+  } else {
+    refusal_ = Refusal{};
+    if (!pin) faintedLast_ = false;   // read by readiness above: the rest after the last duel's faint
+  }
   return true;
 }
 
@@ -208,6 +212,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     out.save = true;
   }
   if (fx.met) {
+    battled_ = true;
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();
     book_.record(*fx.met, gen, tick, petDay);
     fell_ = fell_ || fx.met->iFell || fx.met->iSlew;
@@ -217,9 +222,12 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     FriendEggStore::save(*store_, *fx.egg);
     out.save = true;
   }
-  if (fx.radioClosed) {
+  // The rest is after a battle: a lobby that only beaconed a picture, or
+  // found nobody, asks none.
+  if (fx.radioClosed && battled_) {
     lastEndTick_ = tick;
     dueledThisBoot_ = true;
+    battled_ = false;
   }
   if (fx.rematch && !fell_ && std::holds_alternative<Creature>(o)) open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
   if (!session_.active()) fell_ = false;

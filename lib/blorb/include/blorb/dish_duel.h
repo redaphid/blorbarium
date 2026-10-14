@@ -93,7 +93,7 @@ class DishDuel {
   Stakes deviceCeiling_ = Stakes::Mortal;
   uint32_t opens_ = 0;
   uint32_t lastEndTick_ = 0;
-  bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false;
+  bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false, battled_ = false;
   Refusal refusal_;
   std::optional<uint32_t> heldPress_;   // a press waiting to see if a second one follows
 };

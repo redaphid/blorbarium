@@ -4,6 +4,7 @@
 // reads the screen.
 #include <gtest/gtest.h>
 #include <deque>
+#include <map>
 #include <optional>
 #include <set>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
@@ -51,6 +52,9 @@ struct Kid {
   Stakes tier = Stakes::Spar;
   Mercy mercy = Mercy::Spare;
   bool hug = false, shakeOnce = false, wantDuel = true, leave = true;
+  bool special = false;          // a quick special whenever the meter holds it
+  bool pressForMortal = false;   // tries to agree to Mortal with a press (it must not count)
+  bool spareByPress = false;     // spares with BOOT, not a knock
   Rng rng = Rng::seeded(1);
   bool shook = false;
 
@@ -71,7 +75,7 @@ struct Kid {
         const int8_t t = int8_t(std::min(uint8_t(tier), uint8_t(v.ceiling[0])));
         hold(t, 4, Frame{});
         if (t == 0) hold(t, 1, Frame{-1, false, true});
-        else if (t == 1) hold(t, 2, Frame{-1, true}), hold(t, 1, Frame{});
+        else if (t == 1 || pressForMortal) hold(t, 2, Frame{-1, true}), hold(t, 1, Frame{});
         else hold(t, 33, Frame{-1, true}), hold(t, 1, Frame{});
         return;
       }
@@ -83,12 +87,16 @@ struct Kid {
         }
         {
           const int8_t a = int8_t(rng.below(3));
-          hold(a, 4, Frame{}), hold(a, 1, Frame{-1, false, true}), hold(-1, 2, Frame{});
+          hold(a, 4, Frame{});
+          if (special && v.specialReady) hold(a, 2, Frame{-1, true}), hold(a, 1, Frame{});
+          else hold(a, 1, Frame{-1, false, true});
+          hold(-1, 2, Frame{});
         }
         return;
       case DuelPhase::Mercy:
         if (v.theyAreDown && v.verdict == Verdict::None) {
           if (mercy == Mercy::Finish) hold(-1, 34, Frame{-1, true}), hold(-1, 1, Frame{});
+          else if (spareByPress) hold(-1, 2, Frame{-1, true}), hold(-1, 5, Frame{});
           else hold(-1, 1, Frame{-1, false, true}), hold(-1, 5, Frame{});
         }
         return;
@@ -102,9 +110,25 @@ struct Kid {
   }
 };
 
+// MemStorage that, while taping, keeps every state its files pass through:
+// each is what a power cut right after that write would leave.
+struct CutStorage : MemStorage {
+  bool taping = false;
+  std::vector<std::map<std::string, std::vector<uint8_t>>> tape;
+  bool writeAtomic(const char* n, const uint8_t* d, size_t l) override { return keep(MemStorage::writeAtomic(n, d, l)); }
+  bool append(const char* n, const uint8_t* d, size_t l) override { return keep(MemStorage::append(n, d, l)); }
+  bool rename(const char* f, const char* t) override { return keep(MemStorage::rename(f, t)); }
+
+ private:
+  bool keep(bool ok) {
+    if (taping) tape.push_back(files);
+    return ok;
+  }
+};
+
 // One device: its storage, radio, Dish and the kid holding it.
 struct Device {
-  MemStorage store;
+  CutStorage store;
   FakeAir air;
   std::optional<Dish> dish;
   NullLink link;
@@ -115,6 +139,7 @@ struct Device {
   std::set<uint8_t> feltDueling;   // the ones he took while a duel was open
   std::vector<Meeting> met;
   DuelPhase shownPhase = DuelPhase::Closed;
+  std::set<uint8_t> contexts;      // every BootContext a duel showed, each checked against its hint
 
   Device(Ether& e, uint8_t n) : air(e, addr(n)) {}
 
@@ -154,6 +179,11 @@ struct Device {
     for (uint8_t i = 0; i < 5; ++i) dish->sample(sampleOf(f, i), ms + 20 * i);
     ms += 100;
     dish->tick(ms, link);
+    if (dish->duelActive()) {
+      const BootContext ctx = dish->bootContext();
+      contexts.insert(uint8_t(ctx));
+      EXPECT_EQ(dish->appearance().boot.glyph, bootMeaning(ctx).hint) << "context " << int(ctx);
+    }
     if (const Creature* c = std::get_if<Creature>(&dish->occupant()))
       for (uint8_t s = 0; s < 64; ++s)
         if (c->chemistry().locus[kRecentBase + s] >= Fx::ratio(1, 2)) {
@@ -278,6 +308,8 @@ TEST(TwoDishes, ASparRunsWholeAndChangesNothingAWoundWould) {
   EXPECT_TRUE(a.felt.count(stim::duel_befriended.v)) << "both sides, always";
   EXPECT_TRUE(b.felt.count(stim::duel_befriended.v));
 
+  EXPECT_EQ(a.dish->duels().state().friends[0].s.met, 1) << "leaving by a double press asked no rematch";
+  EXPECT_TRUE(a.contexts.count(uint8_t(BootContext::DuelOutcome))) << "the friends screen";
   EXPECT_FALSE(a.feltDueling.count(stim::knock.v)) << "a lock-in knock is the duel's, not the pet's";
   EXPECT_FALSE(a.feltDueling.count(stim::button.v));
   EXPECT_FALSE(a.feltDueling.count(stim::button_hold.v));
@@ -391,6 +423,334 @@ TEST(TwoDishes, BothHugsLayAFriendEggOnEachSide) {
   EXPECT_EQ(eb->record.friendLineage, 0xD15400ull + 11);
   EXPECT_EQ(ea->genome.hash(), bout.b.creature().genome().hash());
   EXPECT_EQ(ea->record.battleSeed, eb->record.battleSeed) << "the battle's seed is the cross's";
+}
+
+// ---- the graft, consent, and what is written at once ----------------------------------
+
+namespace {
+// One device alone in the room, founded on the gift's starter: no duel genes.
+struct Alone {
+  Ether ether{1, Weather{}};
+  Device d{ether, 1};
+  Genome g = starterGenome(33);
+  Alone() { d.boot(g, 33), d.growUp(); }
+  void tick(Frame f = {}) {
+    ether.advance(d.ms / 100);
+    d.plan.clear();
+    d.plan.push_back(f);
+    d.kid.wantDuel = false;
+    d.step();
+  }
+  void doublePress() { tick({-1, true}), tick(), tick({-1, true}), tick(), tick(), tick(); }
+};
+}  // namespace
+
+TEST(Graft, APreDuelLineGetsTheDuelGenesOnceAsOneCheckpoint) {
+  Alone a;
+  const size_t genes = a.d.creature().genome().geneCount();
+  const uint32_t marks = checkpoints(a.d.dish->lineage());
+  a.doublePress();
+  ASSERT_TRUE(a.d.dish->duelActive()) << "he is ready: the lobby opens";
+  EXPECT_EQ(a.d.creature().genome().geneCount(), genes + kDuelGeneCount);
+  EXPECT_EQ(checkpoints(a.d.dish->lineage()), marks + 1) << "recorded as one Checkpoint";
+  const uint32_t grown = a.d.creature().genome().hash();
+  {
+    MemStorage cut;
+    cut.files = a.d.store.files;
+    Dish back(cut, 33, 0xD15400ull + 33);
+    EXPECT_EQ(std::get<Creature>(back.occupant()).genome().hash(), grown) << "saved at once";
+  }
+  a.doublePress();
+  EXPECT_FALSE(a.d.dish->duelActive()) << "a double press closes the lobby";
+  for (int t = 0; t < 1300; ++t) a.tick();   // past the rest after a duel
+  a.doublePress();
+  ASSERT_TRUE(a.d.dish->duelActive());
+  EXPECT_EQ(a.d.creature().genome().hash(), grown) << "idempotent";
+  EXPECT_EQ(checkpoints(a.d.dish->lineage()), marks + 1);
+}
+
+TEST(Consent, ThePhoneCanNeitherOpenADuelNorLockAMove) {
+  {
+    Alone a;
+    for (int i = 0; i < 3; ++i) a.d.dish->fire(stim::button_double), a.tick();
+    EXPECT_FALSE(a.d.dish->duelActive());
+    EXPECT_EQ(a.d.air.opens, 0u) << "a closed device is deaf and dumb";
+    EXPECT_EQ(a.d.air.framesSent, 0u);
+  }
+  Bout bout(7, kGrungo, SpeciesId{6});
+  bout.a.kid.wantDuel = false;   // nobody presses BOOT on a
+  for (int t = 0; t < 300; ++t) bout.step();
+  EXPECT_EQ(bout.a.air.opens, 0u) << "b's beacons never reach a closed device";
+  bout.a.kid.wantDuel = true;
+  for (int t = 0; t < 600 && bout.a.dish->duelView().phase != DuelPhase::Choosing; ++t) bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  for (int t = 0; t < 20; ++t) {
+    bout.a.plan.assign(1, Frame{0});   // the kid aims and does nothing else
+    bout.a.dish->fire(stim::knock), bout.a.dish->fire(stim::button);
+    bout.step();
+    ASSERT_FALSE(bout.a.dish->duelView().locked) << "a knock or a press from the phone locks nothing";
+  }
+}
+
+TEST(AtOnce, ACablePulledMidScrapKeepsEveryWoundSoFar) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  bout.a.kid.tier = bout.b.kid.tier = Stakes::Scrap;
+  for (int t = 0; t < 4000; ++t) {
+    bout.step();
+    if (!bout.a.dish->duelActive()) continue;
+    const DuelView v = bout.a.dish->duelView();
+    if (v.agreed != Stakes::Scrap || v.phase < DuelPhase::Choosing || v.mine.hearts == v.mine.maxHearts) continue;
+    const Fx live = level(bout.a.creature(), chem::injury);
+    MemStorage cut;
+    cut.files = bout.a.store.files;   // the cable comes out now
+    Dish back(cut, 11, 0xD15400ull + 11);
+    const Creature& rebooted = std::get<Creature>(back.occupant());
+    EXPECT_GT(level(rebooted, chem::injury), level(bout.twin.creature(), chem::injury)) << "the wound was saved";
+    EXPECT_LE(level(rebooted, chem::injury), live + Fx::ratio(1, 1000));
+    EXPECT_EQ(rebooted.scars().count, bout.a.creature().scars().count);
+    return;
+  }
+  FAIL() << "grungo never lost a heart";
+}
+
+TEST(AtOnce, ADownedPetWhoseCableComesOutBeforeTheVerdictLivesAndFled) {
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
+    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
+    for (int t = 0; t < 4000; ++t) {
+      bout.step();
+      for (Device* d : {&bout.a, &bout.b}) {
+        if (!d->dish->duelActive() || !d->dish->duelView().iAmDown) continue;
+        MemStorage cut;
+        cut.files = d->store.files;
+        const uint32_t mine = d == &bout.a ? 11 : 22, theirs = d == &bout.a ? 22 : 11;
+        Dish back(cut, mine, 0xD15400ull + mine);
+        EXPECT_TRUE(std::holds_alternative<Creature>(back.occupant())) << "he lives";
+        const std::optional<FriendSummary> f = back.duels().friendOf(0xD15400ull + theirs);
+        ASSERT_TRUE(f.has_value());
+        EXPECT_EQ(f->lost, 1) << "fled: a loss to the victor's line";
+        return;
+      }
+      if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
+    }
+  }
+  FAIL() << "no seed under 30 downed a pet";
+}
+
+// The friend egg's life, cut after every write from the death to the hatch:
+// whatever a power cut leaves, the friend's egg is used once or lost, never twice.
+TEST(FriendEgg, APowerCutAtAnyStepNeverHatchesItTwice) {
+  Bout bout(5, kGrungo, SpeciesId{6});
+  bout.a.kid.hug = bout.b.kid.hug = true;
+  ASSERT_TRUE(bout.runDuel());
+  ASSERT_TRUE(FriendEggStore::load(bout.a.store));
+  Device& a = bout.a;
+  a.store.taping = true;
+  a.creature().fall();
+  for (int t = 0; t < 3; ++t) a.step();
+  Clutch& k = std::get<Clutch>(a.dish->occupant());
+  ASSERT_NE(k.friendSlot, 0) << "the friend egg joined the clutch";
+  k.sinceDeath = Clutch::kVigilTicks;
+  ASSERT_TRUE(a.dish->pick(uint8_t(k.friendSlot - 1)));
+  for (int t = 0; t < 3; ++t) a.step();
+  a.dish->flush();
+  a.store.taping = false;
+  ASSERT_GE(a.store.tape.size(), 4u);
+
+  for (size_t i = 0; i < a.store.tape.size(); ++i) {
+    MemStorage cut;
+    cut.files = a.store.tape[i];
+    Dish back(cut, 11, 0xD15400ull + 11);
+    if (Clutch* again = std::get_if<Clutch>(&back.occupant())) {
+      again->sinceDeath = Clutch::kVigilTicks;
+      back.pick(again->friendSlot ? uint8_t(again->friendSlot - 1) : 0);
+    }
+    uint32_t used = 0;
+    for (const auto& f : cut.files) used += f.first.rfind(FriendEggStore::kUsed, 0) == 0;
+    EXPECT_LE(used, 1u) << "cut after write " << i;
+    if (std::holds_alternative<Egg>(back.occupant())) {
+      EXPECT_EQ(cut.files.count(FriendEggStore::kFile), 0u) << "a born egg leaves no friend egg waiting, cut " << i;
+    }
+  }
+}
+
+// ---- three losses want a cuddle -------------------------------------------------------
+
+TEST(Readiness, ThreeLossesInARowWantACuddleAndACuddleIsEnough) {
+  Alone a;
+  {
+    DuelBook book = DuelBook::open(a.d.store);
+    for (uint32_t i = 0; i < 3; ++i) {
+      Meeting m;
+      m.friendCard.lineageId = 0xF00;
+      m.battle.seed = 100 + i;
+      m.me = Side::A;
+      m.ending = Ending::BWon;
+      book.record(m, 0, 10 + i, 0);
+    }
+  }
+  a.d.dish.reset();
+  a.d.boot(a.g, 33);
+  a.d.ms = 0;
+  a.doublePress();
+  EXPECT_FALSE(a.d.dish->duelView().phase == DuelPhase::Lobby && a.d.dish->appearance().declined == Decline::None);
+  EXPECT_EQ(a.d.dish->appearance().declined, Decline::WantsACuddle) << "a hug, as a picture";
+  if (a.d.dish->duelActive()) a.doublePress();   // he beaconed his picture; close the lobby
+  for (int t = 0; t < 40; ++t) a.tick(Frame{-1, false, false, false, true});
+  for (int t = 0; t < 5; ++t) a.tick();
+  EXPECT_EQ(a.d.dish->duels().lossesInARow(), 0) << "the cuddle is in the book";
+  a.doublePress();
+  EXPECT_TRUE(a.d.dish->duelActive());
+  EXPECT_EQ(a.d.dish->appearance().declined, Decline::None);
+}
+
+// ---- BOOT, everywhere: one row of kBoot at a time --------------------------------------
+
+namespace {
+void expectRow(const Dish& d, BootContext ctx, const char* where) {
+  EXPECT_EQ(d.bootContext(), ctx) << where;
+  const Appearance a = d.appearance();
+  EXPECT_EQ(a.boot.glyph, bootMeaning(ctx).hint) << where;
+  EXPECT_EQ(a.boot.hasDouble, bootMeaning(ctx).doublePress != BootAct::Nothing) << where;
+}
+uint8_t pellets(const Dish& d) {
+  uint8_t n = 0;
+  const Appearance a = d.appearance();
+  for (uint8_t k = 0; k < a.itemCount; ++k) n += a.items[k].what != Appearance::Item::What::Marble;
+  return n;
+}
+}  // namespace
+
+TEST(BootRows, AwakeAPressFeedsAHoldTucksInADoubleOpensTheLobby) {
+  Alone a;
+  expectRow(*a.d.dish, BootContext::Awake, "awake");
+  EXPECT_TRUE(a.d.dish->appearance().boot.hasHold) << "the moon ring: a hold tucks him in";
+  const uint8_t before = pellets(*a.d.dish);
+  a.tick({-1, true}), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
+  EXPECT_EQ(pellets(*a.d.dish), before + 1) << "a press drops a pellet";
+  a.d.felt.clear();
+  for (int t = 0; t < 6; ++t) a.tick({-1, true});
+  EXPECT_GT(a.d.dish->appearance().boot.holdFill, 0) << "while held, the ring fills";
+  for (int t = 0; t < 8; ++t) a.tick({-1, true});
+  a.tick();
+  EXPECT_TRUE(a.d.felt.count(stim::button_hold.v)) << "a hold is the tuck-in";
+  a.doublePress();
+  EXPECT_TRUE(a.d.dish->duelActive()) << "a double press opens the lobby";
+}
+
+TEST(BootRows, AsleepADoublePressIsTwoPellets) {
+  Alone a;
+  a.d.creature().inject(driveChem(drive::sleepiness), Fx::ratio(9, 10));
+  a.d.creature().force(action::sleep);
+  for (int t = 0; t < 3; ++t) a.tick();
+  ASSERT_TRUE(a.d.creature().body().asleep);
+  expectRow(*a.d.dish, BootContext::Asleep, "asleep");
+  const uint8_t before = pellets(*a.d.dish);
+  a.doublePress();
+  EXPECT_FALSE(a.d.dish->duelActive()) << "a sleeping pet never duels";
+  EXPECT_EQ(a.d.air.opens, 0u);
+  EXPECT_EQ(pellets(*a.d.dish), before + 2) << "where a double means nothing, it is two presses";
+}
+
+TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
+  Alone a;
+  a.d.creature().fall();
+  a.tick(), a.tick();
+  expectRow(*a.d.dish, BootContext::Vigil, "vigil");
+  a.tick({-1, true}), a.tick();
+  EXPECT_EQ(a.d.dish->appearance().echo, BootAct::LayFlower);
+  Clutch& k = std::get<Clutch>(a.d.dish->occupant());
+  ASSERT_EQ(k.count, 2) << "an adult's clutch";
+  k.sinceDeath = Clutch::kVigilTicks;
+  a.tick();
+  expectRow(*a.d.dish, BootContext::ClutchPick, "clutch");
+  a.tick({-1, true}), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a press: the next egg";
+  a.doublePress();
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a quick double is two taps, round a clutch of two";
+  for (int t = 0; t < 14; ++t) a.tick({-1, true});
+  a.tick();
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a hold keeps the egg";
+  expectRow(*a.d.dish, BootContext::Egg, "egg");
+  a.tick({-1, true}), a.tick();
+  EXPECT_EQ(a.d.dish->appearance().echo, BootAct::PeekEgg);
+}
+
+TEST(BootRows, ASealedDishShowsTheLockAndAPressMovesNothing) {
+  MemStorage store;
+  DishOptions o;
+  o.sealed = true;
+  Dish d(store, 1, 2, o);
+  NullLink link;
+  const uint32_t hash = d.hash();
+  BodySample down;
+  down.buttonDown = true;
+  for (uint32_t ms = 0; ms < 3000; ms += 20) d.sample(ms < 200 ? down : BodySample{}, ms), d.tick(ms, link);
+  expectRow(d, BootContext::Sealed, "sealed");
+  EXPECT_EQ(d.hash(), hash);
+  EXPECT_TRUE(store.files.empty()) << "nothing written";
+}
+
+// The duel's rows, as a Mortal duel visits them: each context the screen is
+// in shows that row's hint, and the ones a duel must pass through all appear.
+TEST(BootRows, EveryDuelRowShowsItsOwnHint) {
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
+    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
+    bout.a.kid.special = bout.b.kid.special = true;
+    std::set<uint8_t> seen;
+    for (int t = 0; t < 6000; ++t) {
+      bout.step();
+      for (Device* d : {&bout.a, &bout.b}) {
+        if (!d->dish->duelActive()) continue;
+        const BootContext ctx = d->dish->bootContext();
+        seen.insert(uint8_t(ctx));
+        ASSERT_EQ(d->dish->appearance().boot.glyph, bootMeaning(ctx).hint) << "context " << int(ctx);
+      }
+      if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
+    }
+    if (!seen.count(uint8_t(BootContext::Fallen)) || !seen.count(uint8_t(BootContext::WindingUp))) continue;
+    // A fall ends the duel on its last scene; the friends screen is the Spar test's.
+    for (BootContext c : {BootContext::Lobby, BootContext::Staking, BootContext::DuelTurn, BootContext::WindingUp,
+                          BootContext::MercyWinner, BootContext::MercyLoser, BootContext::Fallen})
+      EXPECT_TRUE(seen.count(uint8_t(c))) << "never in context " << int(c);
+    return;
+  }
+  FAIL() << "no seed under 30 queued a special and finished a pet";
+}
+
+TEST(BootRows, APressNeverFinishesAPetNorAgreesToAMortalDuel) {
+  {
+    Bout bout(1, kGrungo, SpeciesId{6}, true);
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
+    bout.a.kid.pressForMortal = true;
+    for (int t = 0; t < 400; ++t) {
+      bout.step();
+      ASSERT_FALSE(bout.a.dish->duelView().confirmed && bout.a.dish->duelView().chosen == Stakes::Mortal)
+          << "a press under the skull confirms nothing";
+    }
+  }
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
+    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Spare;   // a knock
+    bout.a.kid.spareByPress = bout.b.kid.spareByPress = true;
+    bout.runDuel();
+    if (!bout.a.alive() || !bout.b.alive()) FAIL() << "a press finished a pet, seed " << seed;
+    const DuelBook& ab = bout.a.dish->duels();
+    const DuelBook& bb = bout.b.dish->duels();
+    const auto spared = [](const DuelBook& b) {
+      uint8_t n = 0;
+      b.forEachFriend([&](const FriendSummary& f) { n += f.owesUs + f.weOwe; });
+      return n;
+    };
+    if (spared(ab) + spared(bb) == 0) continue;   // nobody was downed: another seed
+    EXPECT_EQ(deaths(bout.a.dish->lineage()) + deaths(bout.b.dish->lineage()), 0u);
+    return;
+  }
+  FAIL() << "no seed under 30 downed a pet";
 }
 
 int main(int argc, char** argv) {
