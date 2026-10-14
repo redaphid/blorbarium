@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -515,6 +516,33 @@ TEST(BootHint, EveryStateDrawsItsGlyphAndReadsWithoutColour) {
     Canvas240 d{};
     paint::drawBootHint(d, twice);
     EXPECT_GE(lumaDiffers(cv, d), 8) << r.context << ": the double-press bars do not show";
+  }
+}
+
+// The hint and the home screen's marquee share the top of the disc: no hint,
+// in any state, with every extra drawn at once, reaches the strip the letters
+// scroll along (measured from the strip itself, not a copied number).
+TEST(BootHint, StaysOffTheMarqueeStrip) {
+  Appearance a = blorbtest::duelLook(blorb::kGrungo, 7, 0);
+  a.timeUnknown = false;
+  Canvas240 plain{}, strip{};
+  paint::draw(a, paint::packFor(a.species), plain, 0);
+  a.timeUnknown = true;
+  paint::draw(a, paint::packFor(a.species), strip, 0);
+  int top = kSide;
+  for (int i = 0; i < kSide * kSide; ++i)
+    if (plain.px[i] != strip.px[i] && i / kSide < kSide / 2) top = std::min(top, i / kSide);
+  ASSERT_LT(top, kSide / 2) << "no marquee strip found";
+  for (const blorbtest::HintRow& r : blorbtest::kHintRows) {
+    paint::RimHint h = r.hint;
+    h.greyed = true;
+    h.pips = 3;
+    h.hasHold = h.hasDouble = true;
+    h.holdFill = 255;
+    Canvas240 cv{};
+    paint::drawBootHint(cv, h);
+    for (int i = 0; i < kSide * kSide; ++i)
+      if (cv.px[i] && i / kSide >= top) { ADD_FAILURE() << r.context << ": the hint reaches the marquee at row " << i / kSide; break; }
   }
 }
 
