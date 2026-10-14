@@ -116,6 +116,7 @@ class Dish {
   DuelView duelView() const { return duel_.view(tick_); }
   const DuelBook& duels() const { return duel_.book(); }
   const std::optional<Meeting>& lastMeeting() const { return duel_.lastMeeting(); }
+  const DishDuel::Refusal& duelRefusal() const { return duel_.refusal(); }
   void setDuelCeiling(Stakes s) { duel_.setDeviceCeiling(s); }
   // Where BOOT is now (boot.h). Never OtaQuestion: that is main.cpp's.
   BootContext bootContext() const;

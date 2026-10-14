@@ -188,11 +188,35 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
   paint::drawBootHint(canvas, hint);   // what BOOT does now, in every state
 }
 
-// `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
-// that waits on the button can be answered over the cable. 0 is no press.
-// `DEBUG double` adds a second press after it; `DEBUG lean <aim>` tilts the
-// screen-space sample toward one rim edge, as a kid's hand would.
-static uint32_t pressAt = 0, pressMs = 0, press2At = 0, press2Ms = 0;
+// The body is sensed at 50 Hz on a task of its own and replayed on the loop.
+// A frame takes about 190 ms to draw (measured on the board, 0.6.0), so a
+// loop that sampled between frames sensed at 5 Hz: a quick press or half a
+// double press fell between samples, and the tilt smoothing, tuned per
+// 50 Hz sample, took 3 s to aim. Each sample carries its own millis(), so
+// every detector times gestures as designed however long a frame takes.
+// The task is the IMU's only reader; the Dish is still only the loop's.
+namespace bodyq {
+struct Timed { blorb::BodySample s; uint32_t ms; };
+constexpr uint8_t kRing = 32;   // 640 ms of samples: a long save or a warp drops the newest, never blocks
+static Timed ring[kRing];
+static uint8_t head = 0, tail = 0;
+#if !defined(BADGE_BOARD_SIM)
+static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+#endif
+
+// `DEBUG press` and `DEBUG double` hold BOOT down over these windows, read by
+// the sense task, so the cable's presses are sampled like a thumb's.
+struct Window { volatile uint32_t at = 0, ms = 0; };
+static Window presses[2];
+static bool pressed(uint32_t ms) {
+  for (const Window& w : presses)
+    if (ms - w.at < w.ms) return true;
+  return false;
+}
+}  // namespace bodyq
+
+// `DEBUG lean <aim>` tilts the screen-space sample toward one rim edge, as a
+// hand would, from leanAt for leanMs.
 static uint32_t leanAt = 0, leanMs = 0;
 static int8_t leanAim = -1;
 
@@ -205,39 +229,78 @@ static void applyLean(blorb::BodySample& s, uint32_t now) {
   s.az = 866;
 }
 
-static blorb::BodySample readBody(uint32_t now) {
+static blorb::BodySample readBody(uint32_t ms) {
   blorb::BodySample s;
   if (!imuOk || !imu::read(s)) {
     s = blorb::BodySample{};
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
-  s.buttonDown = boardButtonDown() || now - pressAt < pressMs || now - press2At < press2Ms;
-#if !defined(BADGE_BOARD_SIM)
-  // While the dish asks about an update, the button answers it, and the pet
-  // feels neither that press nor the rest of that hold. A cable's DEBUG press
-  // answers too: the cable is a hand on the dish.
-  static bool wasDown = false, otaOwns = false;
-  if (updater.asking() && s.buttonDown && !wasDown) updater.press(millis());
-  otaOwns = updater.asking() || (otaOwns && s.buttonDown);
-  wasDown = s.buttonDown;
-  if (otaOwns) s.buttonDown = false;
-#endif
+  s.buttonDown = boardButtonDown() || bodyq::pressed(ms);
   return s;
 }
 
-// The engine's half of the loop: sense at 50 Hz, then run whatever 100 ms
-// ticks are due. The simulator's warp calls this with no frames between.
+#if !defined(BADGE_BOARD_SIM)
+namespace bodyq {
+static void sense(void*) {
+  TickType_t wake = xTaskGetTickCount();
+  for (;;) {
+    vTaskDelayUntil(&wake, pdMS_TO_TICKS(blorb::kSampleMs));
+    const uint32_t ms = millis();
+    const blorb::BodySample s = readBody(ms);
+    portENTER_CRITICAL(&mux);
+    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms};
+    portEXIT_CRITICAL(&mux);
+  }
+}
+
+static std::optional<Timed> take() {
+  std::optional<Timed> t;
+  portENTER_CRITICAL(&mux);
+  if (head != tail) t = ring[tail++ % kRing];
+  portEXIT_CRITICAL(&mux);
+  return t;
+}
+}  // namespace bodyq
+#endif
+
+// While the dish asks about an update, the button answers it, and the pet
+// feels neither that press nor the rest of that hold. A cable's DEBUG press
+// answers too: the cable is a hand on the dish.
+static bool petFeels(bool down) {
+#if !defined(BADGE_BOARD_SIM)
+  static bool wasDown = false, otaOwns = false;
+  if (updater.asking() && down && !wasDown) updater.press(millis());
+  otaOwns = updater.asking() || (otaOwns && down);
+  wasDown = down;
+  return down && !otaOwns;
+#else
+  return down;
+#endif
+}
+
+static void feel(const blorb::BodySample& body, uint32_t ms) {
+  lastBody = body;
+  // The panel and the engine turn together, so downhill is down on the glass.
+  const uint8_t rot = up.sample(body, ms);
+  if (rot != display.getRotation()) display.setRotation(rot);
+  blorb::BodySample screen = up.toScreen(body);
+  applyLean(screen, ms);
+  screen.buttonDown = petFeels(screen.buttonDown);
+  dish->sample(screen, ms);
+}
+
+// The engine's half of the loop: sense, then run whatever 100 ms ticks are
+// due. The simulator's warp calls this with no frames between.
 static void step(uint32_t now) {
+#if !defined(BADGE_BOARD_SIM)
+  const uint32_t ahead = now - millis();   // a DEBUG warp runs the loop's clock ahead of millis()
+  while (std::optional<bodyq::Timed> t = bodyq::take()) feel(t->s, t->ms + ahead);
+#else
   if (now - lastSample >= blorb::kSampleMs) {
-    lastBody = readBody(now);
-    // The panel and the engine turn together, so downhill is down on the glass.
-    const uint8_t rot = up.sample(lastBody, now);
-    if (rot != display.getRotation()) display.setRotation(rot);
-    blorb::BodySample screen = up.toScreen(lastBody);
-    applyLean(screen, now);
-    dish->sample(screen, now);
+    feel(readBody(now), now);
     lastSample = now;
   }
+#endif
   dish->tick(now, host);
 }
 
@@ -398,6 +461,8 @@ static void reportStatus(uint32_t now) {
 void setup() {
   Serial.begin(115200);
   boardButtonBegin();
+#if !defined(BADGE_BOARD_SIM)
+#endif
   imuOk = imu::begin(PIN_IMU_SDA, PIN_IMU_SCL, tapReady);
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -458,6 +523,7 @@ void setup() {
   const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
 #endif
 }
 
@@ -510,18 +576,20 @@ static bool sendShotLine() {
 static void press(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 150;   // the sim's !button
   if (ms <= 0 || ms > 10000) return (void)Serial.printf("[hw] debug press: bad ms '%s'\n", a);
-  pressAt = millis() + warpMs;
-  pressMs = uint32_t(ms);
+  bodyq::presses[1].ms = 0;
+  bodyq::presses[0].ms = uint32_t(ms);
+  bodyq::presses[0].at = millis();
   Serial.printf("[hw] debug press %ld ms\n", ms);
 }
 
-// Two presses inside the 400 ms double-press window: the gesture that opens a duel.
+// Two 100 ms presses 150 ms apart, inside the 400 ms window: the gesture that opens a duel.
 static void doublePress() {
-  pressAt = millis() + warpMs;
-  pressMs = 100;
-  press2At = pressAt + 220;
-  press2Ms = 100;
-  Serial.printf("[hw] debug double\n");
+  const uint32_t t = millis();
+  bodyq::presses[0].ms = bodyq::presses[1].ms = 100;
+  bodyq::presses[0].at = t;
+  bodyq::presses[1].at = t + 250;
+  // A duel opens only from Awake (15); Asleep is 14 (boot.h's BootContext).
+  Serial.printf("[hw] debug double, boot context %u\n", unsigned(dish->bootContext()));
 }
 
 static void lean(const char* line) {
@@ -538,7 +606,12 @@ static void lean(const char* line) {
 static void reportDuel() {
   static blorb::DuelPhase phase = blorb::DuelPhase::Closed;
   static uint8_t peers = 0, turn = 0;
-  static uint32_t metHash = 0;
+  static uint32_t metHash = 0, refusedAt = 0;
+  if (const blorb::DishDuel::Refusal& r = dish->duelRefusal(); r.any && r.tick != refusedAt) {
+    refusedAt = r.tick;
+    Serial.printf("[duel] refused why=%u (0: the radio would not open) boot_context=%u\n", unsigned(r.why),
+                  unsigned(dish->bootContext()));
+  }
   if (!dish->duelActive() && phase == blorb::DuelPhase::Closed) return;
   constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
                                     "revealing", "fainting", "mercy",    "fallen",  "friends"};
