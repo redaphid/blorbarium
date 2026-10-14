@@ -1,7 +1,6 @@
 # A Scrap between two simulators: D8's session on each, over sim/serial_air.h
-# in bad weather, each side played by a scripted kid (sim/duel_bot.h). The
-# dish screens do not draw the duel yet (D11's scene waits on D9 and D12), so
-# the duel is written under them.
+# in bad weather, each side played by a scripted kid (sim/duel_bot.h) and drawn
+# with D11's duel screen. Nothing reaches the pets yet (that is D9's Dish).
 #> title Mossby vs Tinker: a Scrap over a fake radio
 #> length 86000
 #> side A mossby 02:b1:0b:00:00:01 duel=scrap:3:spare:hug
@@ -11,7 +10,7 @@
 #> caption 1000 Each kid asks for a duel | and picks the friend on the rim
 #> caption 2200 Both choose the stakes: | a Scrap, wounds but no death
 #> caption 4800 Each turn: tilt to aim, | knock to lock it in
-#> caption 9000 The real duel engine runs on both; | the duel screen is not drawn yet
+#> caption 9000 Duel engine, before it is wired | into the pet
 #> caption 17500 Pounce beats Trick
 #> caption 29000 Tinker's kid queues a special...
 #> caption 29600 ...and Mossby's Trick | staggers it

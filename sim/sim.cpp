@@ -31,7 +31,9 @@
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
+#include "blorb/duel_wire.h"
 #include "duel_bot.h"
+#include "paint/duel.h"
 #include "serial_air.h"
 
 #include <fcntl.h>
@@ -135,7 +137,7 @@ static uint32_t argMs(const char* arg, uint32_t fallback) { return arg && *arg ?
 
 // ---- the radio ---------------------------------------------------------------
 // Every frame that crosses is one stderr line, which is what a film reads:
-//   air <ms> sent|received|lost|deaf <seq> <the other mac> <len> <text, or hex>
+//   air <ms> sent|received|lost|deaf <seq> <the other mac> <len> <text, or what the duel wire calls it>
 static std::optional<simair::SerialAir> air;
 
 static void logAir(const simair::Event& e) {
@@ -144,7 +146,7 @@ static void logAir(const simair::Event& e) {
   bool printable = true;
   for (size_t i = 0; i < e.len; i++) printable &= e.bytes[i] >= ' ' && e.bytes[i] < 127;
   if (printable) snprintf(text, sizeof(text), "%.*s", int(e.len), (const char*)e.bytes);
-  else for (size_t i = 0; i < e.len; i++) snprintf(text + 2 * i, 3, "%02x", e.bytes[i]);
+  else snprintf(text, sizeof(text), "%s", blorb::describe(e.bytes, e.len).s);
   const uint8_t* m = e.peer.mac;
   fprintf(stderr, "air %u %s %u %02x%02x%02x%02x%02x%02x %u %s\n", e.at, kWhat[int(e.what)], e.seq, m[0], m[1], m[2],
           m[3], m[4], m[5], unsigned(e.len), text);
@@ -326,7 +328,16 @@ static int run(bool* running) {
     for (const std::string& line : due) simLine(line);
     release();
     care();
+    const uint32_t framed = lastFrame;
     loop();
+    // While a duel is open the glass is the duel screen, drawn over the frame
+    // main.cpp just drew, until main.cpp draws it itself (D9 and D12).
+    if (bench && bench->active() && lastFrame != framed) {
+      const blorb::Appearance a = shown();
+      const blorb::DuelView v = bench->view(since / 100);
+      paint::drawDuel(paint::sceneOf(v, a), paint::packFor(a.species), paint::packFor(v.them.species), canvas, lastFrame);
+      boardPresent(display, canvas);
+    }
     // The session runs at the Dish's 10 Hz, on the script's clock, so both sims tick it on the same steps.
     if (bench && since / 100 != (since - kStepMs) / 100) bench->tick(*air, since / 100, since);
     else if (air && !bench) answerPings();

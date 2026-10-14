@@ -19,8 +19,9 @@ its fixed clock in lockstep, so a duel film is the same frames every run;
 --twice records it twice and fails if it is not. Every frame that crosses is
 drawn flying between the discs: lost ones burst halfway, late ones fly
 slower, doubles fly twice. Under each disc is what its radio and its kid did;
-once a `!duel` opens (D8's session, sim/duel_bot.h), its hearts, the turns as
-they reveal, and at the end the outcome hash each side's book holds.
+once a `!duel` opens (D8's session, sim/duel_bot.h), the disc is the duel
+screen, and under it are the kid's moves and each turn as it reveals; at the
+end the line under the title shows the outcome hash each side's book holds.
 
 Writes <duel>-wide.mp4 (1920x1080), <duel>-square.mp4 (1080x1080) and
 check/<duel>-*.png (the middle of each caption, and a contact sheet) to --out.
@@ -290,12 +291,9 @@ class Stage:
             else:
                 d.text((cx, y - 18), *self.status(phase, state), font=self.f_small, anchor="mm")
             ty = y + self.disc + 34
-            if state:
-                self.hearts(d, cx, ty, int(state[0]), int(state[1]), int(state[4]))
-                ty += 50
             for age, text, colour in ticker(events[key], ms, phase is not None):
                 fade = max(0.5, 1 - age / TICKER_MS)
-                d.text((cx, ty), text, font=self.f_tick, fill=tuple(int(c * fade + b * (1 - fade)) for c, b in zip(colour, mr.BG)),
+                d.text((cx, ty), text, font=self.fit(d, text, self.f_tick, self.w // 2 - 30), fill=tuple(int(c * fade + b * (1 - fade)) for c, b in zip(colour, mr.BG)),
                        anchor="mm")
                 ty += 34
         for f in flying:
@@ -306,9 +304,10 @@ class Stage:
                              anchor="mm", align="center", spacing=10)
         return img
 
-    def fit(self, d, text, f):
-        """`f`, or a smaller size of it, so `text` fits the frame with a margin."""
-        while d.textlength(text, font=f) > self.w - 60 and f.size > 12: f = f.font_variant(size=f.size - 2)
+    def fit(self, d, text, f, width=None):
+        """`f`, or a smaller size of it, so `text` fits `width` (the frame, less a margin)."""
+        width = width or self.w - 60
+        while d.textlength(text, font=f) > width and f.size > 12: f = f.font_variant(size=f.size - 2)
         return f
 
     @staticmethod
@@ -321,20 +320,6 @@ class Stage:
         if state and state[6] != "-": return "winding up a %s special" % state[6], mr.PINK
         if state and state[7] != "-": return "the friend is winding up a %s special!" % state[7], mr.AMBER
         return phase.upper(), mr.DIM
-
-    def hearts(self, d, cx, y, have, most, sparks):
-        """Hearts left full, lost ones hollow; the spark meter's pips beside them."""
-        r = self.disc // 40
-        step = 3 * r
-        x0 = cx - (most * step + 6 * r) // 2
-        for i in range(most):
-            x = x0 + i * step + r
-            shape = [(x - r, y - r // 3), (x - r // 2, y - r), (x, y - r // 2), (x + r // 2, y - r), (x + r, y - r // 3),
-                     (x, y + r)]
-            d.polygon(shape, fill=RED if i < have else None, outline=RED, width=3)
-        px = x0 + most * step + r
-        for i in range(sparks):
-            d.ellipse((px + i * (r + 2), y - 4, px + i * (r + 2) + r // 2 + 4, y + 4), fill=mr.AMBER)
 
     def draw_flight(self, d, f, ms):
         other = "B" if f.sender == "A" else "A"

@@ -1,10 +1,11 @@
 #pragma once
 // A whole duel in the simulator, ahead of the Dish: D8's DuelSession on the
 // sim's radio, played by a scripted kid who reads the view as a kid reads the
-// screen. It stands in for D9's DishDuel until the Dish takes the radio, so
-// nothing it does reaches the pet: wounds, a fall, the book and the friend
-// egg are logged, not applied. When the Dish duels, the kid's moves become
-// hand lines (a tilt, a knock, BOOT) instead of a DuelInput.
+// screen, and drawn with D11's duel screen. It stands in for D9's DishDuel
+// until the Dish takes the radio, so nothing it does reaches the pet: wounds,
+// a fall, the book and the friend egg are logged, not applied. When the Dish
+// duels, the kid's moves become hand lines (a tilt, a knock, BOOT) instead of
+// a DuelInput.
 //
 // Everything the film needs is a stderr line:
 //   duel <ms> phase <name>
@@ -69,6 +70,7 @@ class BenchDuel {
 
   bool open(blorb::Air& air, uint32_t tick) { return session_.open(blorb::DuelTestAccess::consent(), air, setup_, tick); }
   bool active() const { return session_.active(); }
+  blorb::DuelView view(uint32_t tick) const { return session_.view(tick); }
 
   // One 10 Hz tick, at script time `ms`.
   void tick(blorb::Air& air, uint32_t tick, uint32_t ms) {
