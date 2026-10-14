@@ -162,7 +162,9 @@ bool finishedHim(const BattleCard& a, const BattleCard& b, uint32_t seed, const 
 
 // One resolved turn's wound, clamped to the room he has: no wound ever kills.
 Fx turnWound(const Creature& c, const Outcome& o, uint8_t turn) {
-  return woundFor(Stakes::Scrap, o, Side::A, turn, woundRoom(c)).injury;
+  TurnHit hits[DuelRules::kMaxTurns]{};
+  for (uint8_t i = 0; i <= turn && i < o.resolved; ++i) hits[i].hearts = o.turns[i].hit[0];
+  return woundFor(Stakes::Scrap, hits, turn, woundRoom(c)).injury;
 }
 
 // The stakes screen: the highest tier on offer, and how wounded the worst case would leave him.

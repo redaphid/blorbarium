@@ -1,0 +1,84 @@
+#pragma once
+// Golden battles: fixed cards, seed, stakes and logs, and the Outcome::hash
+// each must give. test_duel_resolve pins them on the host, and
+// tools/duel_determinism.sh has the host compiler and the ESP32-S3 compiler
+// each evaluate the same battles in static_asserts, so both devices of a pair
+// are held to one answer.
+#include "blorb/duel.h"
+
+namespace duelgolden {
+using namespace blorb;
+
+// 'P' 'G' 'T' lock a stance; lower case also arms the power; '.' is a turn
+// the pet slept through; 'S' and 'F' are a verdict, Spare and Finish.
+constexpr MoveLog logOf(const char* s) {
+  MoveLog l{};
+  for (; *s; ++s) {
+    Move m{};
+    const char c = *s;
+    m.stance = (c == 'G' || c == 'g') ? Stance::Guard : (c == 'T' || c == 't') ? Stance::Trick : Stance::Pounce;
+    m.power = c == 'p' || c == 'g' || c == 't';
+    m.byPet = c == '.';
+    m.verdict = c == 'S' ? Verdict::Spare : c == 'F' ? Verdict::Finish : Verdict::None;
+    l.append(m);
+  }
+  return l;
+}
+
+constexpr uint8_t knackFor(Stance style) {
+  for (uint8_t k = 0; k < 6; ++k)
+    if (Knack{k}.best() == style) return k;
+  return 0;
+}
+
+constexpr BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess = 128) {
+  BattleCard c{};
+  c.species = s;
+  c.power = speciesInfo(s).power;
+  c.knack = Knack{knackFor(speciesInfo(s).style)};
+  c.lineageId = lineage;
+  c.prowess = prowess;
+  return c;
+}
+
+namespace sp {
+inline constexpr SpeciesId grungo{0}, mossby{1}, puffkin{2}, gilly{3}, mothwick{4}, mudge{5}, fizz{6}, hushwing{7},
+    tinker{8};
+}
+
+struct Golden {
+  const char* name;
+  BattleCard a, b;
+  uint32_t seed;
+  Stakes stakes;
+  const char* movesA;
+  const char* movesB;
+  uint32_t hash;
+};
+
+inline constexpr Golden kGoldens[] = {
+    {"a spar, grungo v fizz", cardOf(sp::grungo, 0x1D0001), cardOf(sp::fizz, 0x2D0002), 0xD4D40001u, Stakes::Spar,
+     "TtPGpTgPtGTpGTp", "PpGTpPgTtGpPTgT", 0x84a00fe2u},
+    {"a scrap with assist, tinker v gilly", cardOf(sp::tinker, 0xA, 200), cardOf(sp::gilly, 0xB, 100), 0xD4D40002u,
+     Stakes::Scrap, "ptgptgptgptgptg", "GgTtPpGgTtPpGgT", 0xe4b1e1dbu},
+    {"every power armed, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD), 0xD4D40003u,
+     Stakes::Spar, "pgtpgtpgtpgtpgt", "tgptgptgptgptgp", 0x109a5de8u},
+    {"a mortal downing and a finish, mudge v hushwing", cardOf(sp::mudge, 0x3), cardOf(sp::hushwing, 0x4),
+     0xD4D40004u, Stakes::Mortal, "PPPPPF", "TTTTT", 0x770ea094u},
+    {"downed on the last turn, spared in slot 16, gilly v grungo", cardOf(sp::gilly, 0x7), cardOf(sp::grungo, 0x8),
+     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPTTTTTF", 0x7cd0c7cfu},
+};
+
+// The first golden whose hash differs, or -1. Its own function so the S3
+// check can call it in a static_assert through resolveCore.
+template <class Resolve>
+constexpr int firstBroken(Resolve resolveFn) {
+  int i = 0;
+  for (const Golden& g : kGoldens) {
+    if (resolveFn(g.a, g.b, g.seed, g.stakes, logOf(g.movesA), logOf(g.movesB)).hash() != g.hash) return i;
+    ++i;
+  }
+  return -1;
+}
+
+}  // namespace duelgolden

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -6,6 +7,7 @@
 #include "blorb/appearance.h"
 #include "blorb/species.h"
 #include "paint/sprite_pack.h"
+#include "grungo_pack.h"
 
 using blorb::Appearance;
 using blorb::Fx;
@@ -61,40 +63,16 @@ Tint strongest(const paint::SpritePack& pack, uint8_t region) {
   return Tint{int8_t(-b.hueMin > b.hueMax ? b.hueMin : b.hueMax), b.satMax, b.valMax};
 }
 
-std::set<uint8_t> regionsInPalette(const paint::SpritePack& pack) {
-  uint16_t n = 0;
-  const paint::PaletteEntry* pal = pack.palette(n);
-  std::set<uint8_t> out;
-  for (int i = 1; i < n; ++i)
-    if (pal[i].region < blorb::kRegionCount) out.insert(pal[i].region);
-  return out;
-}
-
 // Pixels a region's tint must move, summed over every scene, for its gene to
-// show. Gilly's belly and Mudge's cloak were single-pixel specks once (a few
-// px in one face) until their region maps drew real parts.
+// show. Every species uses all seven slots; a slot drawn only in specks (a few
+// px in one face) or not at all is a gene that does nothing for that species.
 constexpr int kVisibleRegionPx = 200;
-
-// Slots the art tags only in specks today, so their genes barely show. Art's
-// to fix; listed so any other region that shrinks to specks fails.
-struct Sparse { const char* species; uint8_t region; };
-constexpr Sparse kSparse[] = {
-    {"mossby", blorb::region::belly.v},     // 160 px
-    {"fizz", blorb::region::belly.v},       // 9 px
-    {"hushwing", blorb::region::shell.v},   // 34 px: a white egg with little jelly
-};
-
-bool sparse(SpeciesId s, uint8_t region) {
-  for (const Sparse& k : kSparse)
-    if (k.region == region && std::string(k.species) == blorb::speciesInfo(s).name) return true;
-  return false;
-}
 
 class EverySpecies : public ::testing::TestWithParam<uint8_t> {};
 
-// The colour genes reach every species: each region the pack's region map tags
-// moves a visible part on screen under its own tint, and no pixel moves under
-// two regions'.
+// The colour genes reach every species: each of the seven regions moves a
+// visible part on screen under its own tint, and no pixel moves under two
+// regions'.
 TEST_P(EverySpecies, EachRegionRecoloursOnItsOwn) {
   const SpeciesId s{GetParam()};
   const paint::SpritePack& pack = paint::packFor(s);
@@ -115,18 +93,9 @@ TEST_P(EverySpecies, EachRegionRecoloursOnItsOwn) {
       }
     }
   }
-  for (uint8_t r : regionsInPalette(pack)) {
-    if (sparse(s, r)) {
-      EXPECT_GT(moved[r], 0) << blorb::speciesInfo(s).name << ": region " << int(r) << " no longer moves at all";
-      EXPECT_LT(moved[r], kVisibleRegionPx) << blorb::speciesInfo(s).name << ": region " << int(r)
-                                            << " is real now; take it out of kSparse";
-      continue;
-    }
-    EXPECT_GE(moved[r], kVisibleRegionPx) << blorb::speciesInfo(s).name << ": region " << int(r) << " moves only "
-                                          << moved[r] << " px, specks rather than a part";
-  }
-  for (uint8_t r : {blorb::region::skin.v, blorb::region::eye.v, blorb::region::glow.v, blorb::region::shell.v})
-    EXPECT_GT(moved[r], 0) << blorb::speciesInfo(s).name << ": region " << int(r) << " never recoloured";
+  for (const blorb::RegionInfo& r : blorb::REGIONS)
+    EXPECT_GE(moved[r.id.v], kVisibleRegionPx) << blorb::speciesInfo(s).name << "'s " << r.name << " moves only "
+                                               << moved[r.id.v] << " px: specks or nothing, not a part";
 }
 
 std::vector<uint8_t> rosterIds() {
@@ -166,6 +135,64 @@ TEST(PackFor, AnUnknownSpeciesIsGrungoInItsOwnColours) {
     int differ = 0;
     for (int i = 0; i < kPx; ++i) differ += plain->px[i] != recoloured->px[i];
     EXPECT_GT(differ, kPx / 50) << int(id) << ": the fallback frog ignores the skin gene";
+  }
+}
+
+// ---- the species the genes say, with no DEBUG pin --------------------------------
+
+bool sameCanvas(const Canvas240& x, const Canvas240& y) { return std::equal(x.px, x.px + kPx, y.px); }
+
+std::unique_ptr<Canvas240> renderWith(const Appearance& a, const paint::SpritePack& pack) {
+  auto cv = std::make_unique<Canvas240>();
+  paint::draw(a, pack, *cv, 0);
+  return cv;
+}
+
+// A pet founded from a species' starter is that species everywhere it is
+// drawn: as an egg, hatched, at every stage of the family tree, as remains
+// and as the clutch it leaves.
+TEST(FromTheGenes, EveryStarterIsItsSpeciesEverywhereItIsDrawn) {
+  const blorb::Habitat h;
+  const blorb::PetClock clock;
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    const blorb::Genome g = blorb::starterGenomeOf(r.id, 7);
+    const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{g, {}}, uint16_t(0), 0u};
+    EXPECT_EQ(present(egg, h, clock, 0).species, r.id) << r.name << "'s egg";
+    const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
+    EXPECT_EQ(present(hatched, h, clock, 0).species, r.id) << r.name;
+    for (uint8_t st = 0; st < blorb::kStageCount; ++st)
+      EXPECT_EQ(portrait(g, blorb::Stage(st), 0, 0).species, r.id) << r.name << "'s portrait at stage " << int(st);
+    blorb::Occupant gone{std::in_place_type<blorb::Clutch>};
+    std::get<blorb::Clutch>(gone).parent = g;
+    EXPECT_EQ(present(gone, h, clock, 0).species, r.id) << r.name << "'s remains";
+    std::get<blorb::Clutch>(gone).sinceDeath = blorb::Clutch::kVigilTicks;
+    EXPECT_EQ(present(gone, h, clock, 0).species, r.id) << r.name << "'s clutch";
+  }
+}
+
+TEST(FromTheGenes, EveryStarterDrawsItsOwnArtNotTheFrog) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    const Appearance a = portrait(blorb::starterGenomeOf(r.id, 7), blorb::Stage::Adult, 0, 0);
+    const auto drawn = render(a), own = renderWith(a, paint::packFor(r.id)), frog = renderWith(a, grungoPack());
+    EXPECT_TRUE(sameCanvas(*drawn, *own)) << r.name << " is not drawn from its own pack";
+    if (r.id != blorb::kGrungo) EXPECT_FALSE(sameCanvas(*drawn, *frog)) << r.name << " is drawn as the frog";
+  }
+}
+
+// starterGenome(15048) is the gift device's grungo (test_species): it has no
+// species gene, so it draws exactly as it did when grungoPack() was the only pack.
+TEST(FromTheGenes, TheGiftDrawsAsGrungoByteForByte) {
+  const blorb::Genome gift = blorb::starterGenome(15048);
+  ASSERT_EQ(gift.hash(), 0xd30f00d1u);
+  const blorb::Habitat h;
+  const blorb::PetClock clock;
+  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{gift, {}}, uint16_t(0), 0u};
+  const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
+  std::vector<Appearance> shown = {present(egg, h, clock, 0), present(hatched, h, clock, 0)};
+  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(gift, blorb::Stage(st), 0, 0));
+  for (const Appearance& a : shown) {
+    EXPECT_EQ(a.species, blorb::kGrungo);
+    EXPECT_TRUE(sameCanvas(*render(a), *renderWith(a, grungoPack())));
   }
 }
 
