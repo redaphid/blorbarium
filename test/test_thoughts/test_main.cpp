@@ -369,9 +369,9 @@ TEST(Voice, EveryVoiceSaysEveryLineWithinTheFontAndTheCap) {
 TEST(Voice, ATerseVoiceStopsAtTheFirstSentenceAndAnEllipsisIsNotOne) {
   char out[kThoughtLineCap];
   thoughtLine(thought::peckish, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "PELLET?");
+  EXPECT_STREQ(out, "SNACK?");
   thoughtLine(thought::see_pellet, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "I SEE... A PELLET");
+  EXPECT_STREQ(out, "I SEE... A MORSEL.");
   thoughtLine(thought::no_hat, 12, voice::terse, 0, out);
   EXPECT_STREQ(out, "GEN 12.");
 }
