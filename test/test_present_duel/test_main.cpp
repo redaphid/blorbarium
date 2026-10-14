@@ -432,6 +432,65 @@ TEST(Special, EachFateHasItsOwnBeat) {
       EXPECT_GE(lumaDiffers(*shots[i], *shots[j]), 100) << fates[i] << " and " << fates[j] << " look alike";
 }
 
+// ---- the faces stay clear --------------------------------------------------------------
+
+namespace {
+bool inBox(const paint::Box& b, int x, int y) { return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1; }
+}  // namespace
+
+// The reaction faces are the fight on a 1.28" screen: a burst sits between the
+// pets and never paints inside either face, at any tick of any beat.
+TEST(Faces, NoBurstEverCoversAFace) {
+  for (const Pairing& pr : kPairings)
+    for (const char* m : {"meeting", "hit", "bonk", "landing", "riposte", "stagger", "whiff"}) {
+      int drawn = 0;
+      for (uint16_t t = 0; t <= 30; ++t) {
+        DuelScene s = duelScene(m, byName(pr.mine), byName(pr.theirs));
+        s.ticks = t;
+        const paint::SpritePack& mp = paint::packFor(s.me.look.species);
+        const paint::SpritePack& tp = paint::packFor(s.them.look.species);
+        const DuelStaging st = paint::stageDuel(s, mp, tp);
+        DuelStaging bare = st;
+        bare.propCount = 0;
+        for (int i = 0; i < st.propCount; ++i)
+          if (st.props[i].kind != PropKind::Burst) bare.props[bare.propCount++] = st.props[i];
+        if (bare.propCount == st.propCount) continue;
+        Canvas240 with{}, without{};
+        paint::drawStaged(s, st, mp, tp, with);
+        paint::drawStaged(s, bare, mp, tp, without);
+        for (int i = 0; i < kSide * kSide; ++i) {
+          if (with.px[i] == without.px[i]) continue;
+          ++drawn;
+          for (int side = 0; side < 2; ++side)
+            ASSERT_FALSE(inBox(st.face[side], i % kSide, i / kSide))
+                << pr.mine << "-" << pr.theirs << " " << m << " tick " << t << ": the burst covers "
+                << (side ? "the friend's" : "my") << " face at " << i % kSide << ',' << i / kSide;
+        }
+      }
+      EXPECT_GT(drawn, 500) << pr.mine << "-" << pr.theirs << " " << m << ": no burst drawn";
+    }
+}
+
+// The keep-out is only as good as the box: each pet's eyes are inside his.
+TEST(Faces, EachFaceBoxHoldsHisEyes) {
+  for (const blorb::SpeciesInfo& sp : blorb::SPECIES) {
+    const DuelScene s = duelScene("choosing", sp.id, sp.id);
+    const DuelStaging st = staged(s);
+    for (int side = 0; side < 2; ++side) {
+      const paint::Figure& f = st.fig[side];
+      const blorb::Appearance& a = side ? s.them.look : s.me.look;
+      const FrameRef body = paint::packFor(sp.id).body(blorb::pose::idle, a.stage, 0);
+      const int k = a.scalePct * f.scalePct;   // x1/10000
+      for (int e = 0; e < body.eyeCount; ++e) {
+        const int x = f.x + (body.eyes[e].x - body.originX) * k / 10000;
+        const int y = f.y + (body.eyes[e].y - body.originY) * k / 10000;
+        EXPECT_TRUE(inBox(st.face[side], x, y)) << sp.name << (side ? " (friend)" : " (mine)") << ": eye " << e
+                                                << " at " << x << ',' << y << " outside his face box";
+      }
+    }
+  }
+}
+
 // ---- the BOOT hint -------------------------------------------------------------------
 
 TEST(BootHint, EveryStateDrawsItsGlyphAndReadsWithoutColour) {

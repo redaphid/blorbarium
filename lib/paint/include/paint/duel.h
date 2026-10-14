@@ -158,9 +158,13 @@ struct Prop {
   uint8_t fill = 255;
 };
 
+// A rectangle on the canvas, px, inclusive; empty when x0 > x1.
+struct Box { int16_t x0 = 1, y0 = 1, x1 = 0, y1 = 0; };
+
 struct DuelStaging {
   static constexpr int kMaxProps = 48;
   Figure fig[2];                    // [me, them]
+  Box face[2];                      // where each pet's face is: a burst never covers one
   Prop props[kMaxProps];
   uint8_t propCount = 0;
 };
@@ -171,5 +175,7 @@ DuelStaging stageDuel(const DuelScene&, const SpritePack& mine, const SpritePack
 
 // Pure over (scene, nowMs) like draw(): the same scene is the same bytes.
 void drawDuel(const DuelScene&, const SpritePack& mine, const SpritePack& theirs, Canvas240&, uint32_t nowMs);
+// The same, from a staging already made (what a test holds the staging to).
+void drawStaged(const DuelScene&, const DuelStaging&, const SpritePack& mine, const SpritePack& theirs, Canvas240&);
 
 }  // namespace paint

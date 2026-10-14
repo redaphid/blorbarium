@@ -87,18 +87,64 @@ constexpr int kGlyphPct = 125, kAimedPct = 170;
 constexpr int kTimerFillOf = 255;
 
 constexpr uint16_t kClashTicks = 30;   // the reveal takes 3 s
+constexpr int kBurstR = 34;       // a burst's radius at full size, px: room between two faces
 constexpr int kPop = 0, kArrowAt = 6, kMoveAt = 8, kImpact = 12, kSettle = 22;
 
 // ---- staging ----------------------------------------------------------------------------
 
-struct Body { int top, h, w; };   // px on screen at the home scale
+// px on screen at the home scale; the face patch's box from the stand point.
+struct Body { int top, h, w; int fx0, fy0, fx1, fy1; };
 
 Body bodyOf(const Fighter& f, const SpritePack& pack, int scalePct) {
   const FrameRef b = pack.body(blorb::pose::idle, f.look.stage, 0);
+  const FrameRef face = pack.face(expr::neutral, f.look.stage);
   const bool small = f.look.stage == blorb::Stage::Baby || f.look.stage == blorb::Stage::Child;
   const int k = f.look.scalePct * scalePct / 100;   // percent
   const int ky = small ? k * 90 / 100 : k, kx = small ? k * 116 / 100 : k;
-  return {b.originY * ky / 100, b.h * ky / 100, b.w * kx / 100};
+  return {b.originY * ky / 100, b.h * ky / 100, b.w * kx / 100,
+          -face.originX * kx / 100, -face.originY * ky / 100, (face.w - face.originX) * kx / 100,
+          (face.h - face.originY) * ky / 100};
+}
+
+bool discClear(const Box& b, int x, int y, int r) {
+  if (b.x0 > b.x1) return true;
+  const int nx = clampi(x, b.x0, b.x1), ny = clampi(y, b.y0, b.y1);
+  return (nx - x) * (nx - x) + (ny - y) * (ny - y) > r * r;
+}
+
+// A burst moves to the nearest spot, in rings out from where the pets meet,
+// whose whole disc clears both faces and stays on the glass, so it never sits
+// on a reaction face and its word stays whole. Where nothing clears it stays
+// put and the faces mask it.
+void clearOfFaces(Prop& p, const Box* face) {
+  const int r = kBurstR * p.scalePct / 100 + 3;
+  for (int d = 0; d <= 96; d += 4)
+    for (int k = 0; k < (d ? 16 : 1); ++k) {
+      const int x = p.x + d * cosA(k * 16) / 4096, y = p.y + d * sinA(k * 16) / 4096;
+      const int dx = x - kSide / 2, dy = y - kSide / 2;
+      if (dx * dx + dy * dy > (kSide / 2 - r) * (kSide / 2 - r)) continue;
+      if (discClear(face[0], x, y, r) && discClear(face[1], x, y, r)) {
+        p.x = int16_t(x);
+        p.y = int16_t(y);
+        return;
+      }
+    }
+}
+
+// His face where the staging left him: squashed, lifted, leaning, grown.
+// A little margin, so a burst's ink edge stays off his cheek too.
+Box faceBox(const Figure& g, const Body& b, int homePct) {
+  Box r;
+  if (g.remainsIn == 255 || g.alpha < 64) return r;
+  constexpr int kMargin = 3;
+  const int k = g.scalePct * 100 / homePct;   // percent of his home size
+  const int wide = g.widePct * k / 100, tall = g.tallPct * k / 100;
+  const int lean = (iabs(g.leanPct) * (-b.fy0) * tall / 100 + 99) / 100;
+  r.x0 = int16_t(g.x + b.fx0 * wide / 100 - lean - kMargin);
+  r.x1 = int16_t(g.x + b.fx1 * wide / 100 + lean + kMargin);
+  r.y0 = int16_t(g.y - g.lift + b.fy0 * tall / 100 - kMargin);
+  r.y1 = int16_t(g.y - g.lift + b.fy1 * tall / 100 + kMargin);
+  return r;
 }
 
 void add(DuelStaging& s, const Prop& p) {
@@ -330,7 +376,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   const int win = sc.won == Side::Me ? kMe : (sc.won == Side::Them ? kThem : -1);
   // The "beats" arrow, from the winner's stance glyph toward the loser's.
-  if (win >= 0 && t >= kArrowAt && t < kSettle + 4) {
+  if (win >= 0 && t >= kArrowAt && t < kImpact + 2) {   // gone by the hit, off the faces
     const P a = popAt(headOf(Figure{int16_t(home[win].x), int16_t(home[win].y)}, b[win]), win);
     const P z = popAt(headOf(Figure{int16_t(home[1 - win].x), int16_t(home[1 - win].y)}, b[1 - win]), 1 - win);
     Prop arrow = prop(PropKind::Arrow, 0, {a.x + (z.x - a.x) / 4, a.y + (z.y - a.y) / 4}, 100, ramp(t, kArrowAt, kArrowAt + 2));
@@ -349,16 +395,12 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       const int lose = 1 - win;
       // The burst lands where they meet, a little toward the one it hurt.
       const P loser = {home[lose].x, home[lose].y - b[lose].h / 2};
-      const P at = {mid.x + (loser.x - mid.x) / 5, mid.y + (loser.y - mid.y) / 5};
+      const P at = {mid.x + (loser.x - mid.x) / 8, mid.y + (loser.y - mid.y) / 8};
       const int word = beatWord(*f[win], *f[lose], sc.super);
       if (fade) add(s, prop(PropKind::Burst, word, at, grow, fade));
       // A landing is big: both pets jolt with it.
       if (f[win]->special == Special::Landed && t < kImpact + 5)
         for (Figure& g : s.fig) g.y = int16_t(g.y + ((t & 1) ? 2 : -2));
-      if (sc.super) {
-        const blorb::Element e = blorb::speciesInfo(f[win]->look.species).element;
-        add(s, prop(PropKind::Element, int(e), {mid.x - 46, mid.y - 30}, 120));
-      }
     }
   }
   if (win >= 0) {
@@ -550,6 +592,9 @@ DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpriteP
       meter(s, sc.them, kThem, t);
     }
   }
+  for (int side = 0; side < 2; ++side) s.face[side] = faceBox(s.fig[side], b[side], kHome[side].scalePct);
+  for (int i = 0; i < s.propCount; ++i)
+    if (s.props[i].kind == PropKind::Burst) clearOfFaces(s.props[i], s.face);
   return s;
 }
 
@@ -572,7 +617,17 @@ bool inDisc(int x, int y) {
   return dx * dx + dy * dy <= kSide * kSide;
 }
 
+// Where a burst may not paint: the two faces (drawStaged sets it while bursts draw).
+const Box* gKeepOut = nullptr;
+bool keptOut(int x, int y) {
+  if (!gKeepOut) return false;
+  for (int i = 0; i < 2; ++i)
+    if (x >= gKeepOut[i].x0 && x <= gKeepOut[i].x1 && y >= gKeepOut[i].y0 && y <= gKeepOut[i].y1) return true;
+  return false;
+}
+
 void put(Canvas240& cv, int x, int y, uint16_t c, int alpha) {
+  if (keptOut(x, y)) return;
   if (x < 0 || y < 0 || x >= kSide || y >= kSide || alpha <= 0) return;
   uint16_t& px = cv.px[y * kSide + x];
   px = alpha >= 256 ? c : blend(px, c, alpha);
@@ -723,12 +778,12 @@ void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
 
 void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
   static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!", "WHAM!", "NOPE!", "OOF!", "WHIFF"};
-  // Twice the font, a whole multiple: a fractional scale drops a row and an E reads as an F.
-  constexpr int kScale = 512;
   const int v = imin(p.variant, 7);
-  // The burst grows to hold its word.
-  const int R = imax(46 * p.scalePct / 100, (textW(kWords[v], kScale) / 2 + 16) * p.scalePct / 120);
-  const int inner = R * 65 / 100, rot = ticks * 2;
+  // Small enough to sit between two faces: the reactions are the show. The
+  // word is twice the font where it fits (VS, OOF!), else the font bold; whole
+  // multiples only, since a fractional scale drops a row and an E reads as an F.
+  const int R = kBurstR * p.scalePct / 100, inner = R * 65 / 100, rot = ticks * 2;
+  const int kScale = textW(kWords[v], 512) <= 2 * inner + 8 ? 512 : 256;
   // A whiff is a grey puff of air, not a hit.
   const bool whiff = p.variant == 7;
   const uint16_t edge = c565(whiff ? Rgb{90, 90, 110} : kBurstEdge), body = c565(whiff ? Rgb{200, 200, 215} : kBurst);
@@ -963,20 +1018,27 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
     }
 }
 
-void drawDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv, uint32_t) {
-  const DuelStaging s = stageDuel(sc, mine, theirs);
+void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv) {
   arena(cv);
   for (int i = 0; i < s.propCount; ++i)
     if (behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
   drawFigure(lookFor(sc.them, s.fig[kThem], sc.ticks), theirs, cv, s.fig[kThem]);
   drawFigure(lookFor(sc.me, s.fig[kMe], sc.ticks), mine, cv, s.fig[kMe]);
-  for (int i = 0; i < s.propCount; ++i)
-    if (!behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
+  for (int i = 0; i < s.propCount; ++i) {
+    if (behind(s.props[i].kind)) continue;
+    gKeepOut = s.props[i].kind == PropKind::Burst ? s.face : nullptr;
+    paintProp(cv, s.props[i], sc.ticks);
+    gKeepOut = nullptr;
+  }
   drawBootHint(cv, sc.boot);
   for (int y = 0; y < kSide; ++y)
     for (int x = 0; x < kSide; ++x)
       if (!inDisc(x, y)) cv.px[y * kSide + x] = 0;
+}
+
+void drawDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv, uint32_t) {
+  drawStaged(sc, stageDuel(sc, mine, theirs), mine, theirs, cv);
 }
 
 }  // namespace paint
