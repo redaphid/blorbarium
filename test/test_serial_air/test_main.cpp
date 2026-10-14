@@ -25,7 +25,7 @@ struct Seen {
   std::string bytes;
 };
 
-// Two airs on one socketpair, as tools/duel_film.py joins two sims.
+// Two airs on one socketpair, as tools/duel_video.py joins two sims.
 struct Pair {
   int fds[2];
   SerialAir* a;
