@@ -1,6 +1,6 @@
 #!/bin/bash
 # Flashes the gift devices one at a time and proves each one's first boot:
-#   tools/flash_fleet.sh .pio/build/badge128/merged.hex [fleet-dir]
+#   tools/flash_fleet.sh --species gilly .pio/build/badge128/merged.hex [fleet-dir]
 # Plug in ONE gift board, run this, unplug it, repeat. It finds the single
 # CH343 board on a cable that is not a test board, flashes it through
 # flash_board.sh (so the serial and MAC are checked before writing), then
@@ -9,8 +9,13 @@
 # board 3 (2026-10-14) flashed cleanly and then hung with nothing on serial,
 # and a flash that "succeeded" is not a gift that works. Each board's boot
 # log and a row in fleet.csv (serial, MAC, BLE name, genome, verdict) land in
-# the fleet dir, default D:/projects/bak/blorbarium/fleet.
+# the fleet dir, default D:/projects/bak/blorbarium/fleet. --species
+# (a slug from species.def: grungo, mossby, puffkin, gilly, mothwick, mudge,
+# fizz, hushwing, tinker) pins the egg a fresh device founds; a board that
+# does not confirm the pin fails.
 set -euo pipefail
+species=
+if [ "${1:-}" = --species ]; then species=$2; shift 2; fi
 [ $# -ge 1 ] || { sed -n '2,3p' "$0"; exit 2; }
 image=$1 dir=${2:-/d/projects/bak/blorbarium/fleet}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -35,17 +40,19 @@ mac=$("$py" ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --po
 log="$dir/$serial-$(date +%Y%m%d-%H%M%S).log"
 
 bash "$here/flash_board.sh" "$port" "$serial" "$mac" "$image"
-uv run -q "$here/serial_log.py" --port "$port" --seconds 20 --reset > "$log" 2>&1 || true
+pin=0
+uv run -q "$here/fleet_boot.py" --port "$port" --seconds 20 ${species:+--species "$species"} > "$log" 2>&1 || pin=$?
 
 verdict=PASS
+[ $pin -eq 0 ] || verdict=FAIL
 grep -Eq '\[hw\] storage pet: (ok|formatted)' "$log" || verdict=FAIL
 grep -Eq '\[hw\] storage petfs: (ok|formatted)' "$log" || verdict=FAIL
-grep -Eq '\[hw\] boot=' "$log" || verdict=FAIL
+grep -Eq '\[hw\] boot=(Fresh|Resumed)' "$log" || verdict=FAIL
 grep -Eq 'Guru|panic|abort\(\)|SEALED|!!!' "$log" && verdict=FAIL
 name=$(grep -oE 'ble name=[^ ]+' "$log" | head -1 | cut -d= -f2)
 genome=$(grep -oE 'genome=[0-9a-f]+' "$log" | head -1 | cut -d= -f2)
 
-[ -f "$dir/fleet.csv" ] || echo "when,serial,mac,ble,genome,verdict,log" > "$dir/fleet.csv"
-echo "$(date -Is),$serial,$mac,${name:-?},${genome:-?},$verdict,$(basename "$log")" >> "$dir/fleet.csv"
-echo "flash_fleet: $verdict  $serial $mac ${name:-?} genome=${genome:-?}  log: $log"
+[ -f "$dir/fleet.csv" ] || echo "when,serial,mac,ble,species,genome,verdict,log" > "$dir/fleet.csv"
+echo "$(date -Is),$serial,$mac,${name:-?},${species:-rolled},${genome:-?},$verdict,$(basename "$log")" >> "$dir/fleet.csv"
+echo "flash_fleet: $verdict  $serial $mac ${name:-?} ${species:-rolled} genome=${genome:-?}  log: $log"
 [ "$verdict" = PASS ]

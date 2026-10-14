@@ -378,6 +378,23 @@ static void reportStatus(uint32_t now) {
 }
 #endif
 
+// A device that has never had a pet waits a moment on its first boot for
+// `DEBUG found <species>`: tools/flash_fleet.sh --species sends it, so each
+// gift hatches the creature chosen for its kid. The pin must land before the
+// founding below, and storage is blank until this boot formats it, so there
+// is no earlier moment to write it. A device with a pet never waits.
+[[maybe_unused]] static void awaitFoundPin() {
+  Serial.println("[hw] fresh: DEBUG found <species> in 5 s pins the egg");
+  for (const uint32_t t0 = millis(); millis() - t0 < 5000; delay(10)) {
+    phone.readLine();
+    const char* line = phone.takeDebug();
+    if (!line || std::strncmp(line, "found ", 6) != 0) continue;
+    const char* why = debugverbs::found(dishStore, line + 6);
+    Serial.printf("[hw] found pin %s: %s\n", line + 6, why ? why : "ok");
+    if (!why) return;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   boardButtonBegin();
@@ -405,6 +422,9 @@ void setup() {
   // choice; three eggs wait for the kid once the nest is drawn here, and until
   // then the Dish founds its default.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
+#if !defined(BADGE_BOARD_SIM)
+  if (!options.sealed && blorb::needsFounding(dishStore)) awaitFoundPin();
+#endif
   std::optional<blorb::Genome> founder;
   if (!options.sealed)
     if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
