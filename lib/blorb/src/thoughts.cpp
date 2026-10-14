@@ -90,6 +90,9 @@ bool sees_famine(const Observed& o, uint16_t&) {
 }
 bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_near) >= kHalf; }
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
+// No battery: the phone is his only clock, so after half a day of play without
+// one he asks for it, rarely, in his own voice rather than a nagging banner.
+bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phoneAwayTicks >= Thinker::kMissPhoneTicks; }
 bool elder(const Observed& o, uint16_t&) { return awake(o) && o.c.stage() == Stage::Elder; }
 bool old(const Observed& o, uint16_t&) { return o.c.stage() == Stage::Elder; }
 bool night(const Observed& o, uint16_t&) { return awake(o) && o.clock.night(); }
@@ -241,10 +244,10 @@ void Thinker::start(const Creature& c, ThoughtPick pick, uint32_t tick, Rng& rng
 }
 
 void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& clock, const Lineage& lineage,
-                   uint32_t tick, bool shook) {
+                   uint32_t tick, bool shook, uint32_t phoneAwayTicks) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
-  const Observed o{c, habitat, clock, heirlooms_, tick};
+  const Observed o{c, habitat, clock, heirlooms_, tick, phoneAwayTicks};
   // Every shake foretells, and a new shake restarts the line rather than
   // queueing behind it. With every row on cooldown he repeats one. The
   // phone's said line is the one thing a shake does not cut short.

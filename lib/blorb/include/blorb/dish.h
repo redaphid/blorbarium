@@ -110,6 +110,9 @@ class Dish {
  private:
   void runOneTick(Link&);
   bool askingForTime() const { return askForTime_ && !wallKnown_; }   // the marquee shows and he keeps quiet
+  // Powered ticks since a phone last gave the time. Across a replug the saved
+  // anchor stands in: with no battery only a phone can have set it.
+  uint32_t phoneAwayTicks() const;
   void onDeath(Creature&);         // record death, lay the clutch, save
   void onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save
   void onHatch(Egg&);
@@ -131,6 +134,7 @@ class Dish {
   PhoneTime phone_;
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;
+  std::optional<uint32_t> lastPhoneTick_;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;

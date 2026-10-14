@@ -177,6 +177,31 @@ TEST(Thoughts, ABoardThatDoesNotAskForTheTimeThinksAndForetellsWithoutIt) {
   EXPECT_FALSE(a.timeUnknown) << "no marquee asks for a phone";
 }
 
+TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
+  Rig r(quickEgg(), /*knowTime=*/false, /*askForTime=*/false);
+  auto missed = [&r] {
+    int n = 0;
+    for (const Line& l : r.said) n += l.id == thought::miss_phone;
+    return n;
+  };
+  auto play = [&r](uint32_t forMs) {
+    for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
+      r.dish.fire(stim::button);
+      r.run(20 * kMinute);
+    }
+  };
+  play(11 * 60 * kMinute);
+  EXPECT_EQ(missed(), 0) << "not before twelve hours";
+  play(6 * 60 * kMinute);
+  ASSERT_GT(missed(), 0) << "fed and played with, but no phone for 17 hours";
+
+  const int before = missed();
+  r.dish.phoneTime().set(1790000000);
+  r.dish.checkWall();
+  play(4 * 60 * kMinute);
+  EXPECT_EQ(missed(), before) << "a phone visit quiets it";
+}
+
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
   auto routine = [](Rig& r) {
     r.pastWarmUp();

@@ -140,7 +140,8 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-    else if (!askingForTime()) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake));
+    else if (!askingForTime()) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake),
+                        phoneAwayTicks());
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -243,6 +244,12 @@ std::optional<uint32_t> Dish::wallNow() const {
   return live_.wall->wallSeconds + (tick_ - live_.wall->tick) / kTicksPerSecond;
 }
 
+uint32_t Dish::phoneAwayTicks() const {
+  uint32_t since = live_.wall ? live_.wall->tick : 0;
+  if (lastPhoneTick_) since = std::max(since, *lastPhoneTick_);   // a catch-up re-anchors after the phone spoke
+  return tick_ - since;
+}
+
 void Dish::checkWall() {
   lastWallCheckTick_ = tick_;
   std::optional<uint32_t> now;
@@ -250,6 +257,7 @@ void Dish::checkWall() {
   for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_)}) {
     if (!source) continue;
     std::optional<uint32_t> t = source->unixSeconds();
+    if (t && source == &phone_) lastPhoneTick_ = tick_;
     if (!now) now = t;
   }
   if (!now) return;

@@ -40,6 +40,7 @@ struct Observed {
   const PetClock& clock;
   const Heirlooms& heirlooms;
   uint32_t tick;
+  uint32_t phoneAwayTicks = 0;   // powered ticks since a phone last gave the time
 };
 
 // A condition; it may set the number the text shows in place of its '#'.
@@ -160,7 +161,8 @@ class Thinker {
   // Once per tick while a creature lives and wall time is known. `shook`: a
   // shake landed this tick. A new life (or a reboot) restarts it: fresh
   // cooldowns, heirlooms re-read, a quiet gap before the first thought.
-  void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook);
+  void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook,
+            uint32_t phoneAwayTicks = 0);
   // Sim scripts and tests: that line starts now, as if its condition held.
   void force(ThoughtId, const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick);
   // The phone's line (already in the font, at most kMaxSaidText): it starts
@@ -172,6 +174,7 @@ class Thinker {
   // phone's line shows: the time-unknown marquee outranks his own.
   void show(Appearance&, uint32_t tick) const;
 
+  static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one
   static constexpr uint32_t kWarmUpTicks = 3 * kTicksPerMinute;        // a hatchling's first minutes are wordless
   static constexpr uint32_t kQuietTicks = kTicksPerMinute;             // after a line, at least this ...
   static constexpr uint32_t kQuietJitterTicks = 2 * kTicksPerMinute;   // ... plus up to this, drawn
