@@ -162,6 +162,11 @@ Prop prop(PropKind k, int variant, P at, int scalePct = 100, int alpha = 255, in
   return p;
 }
 
+const blorb::PowerInfo& powerFor(const Fighter& f) {
+  return blorb::powerInfo(f.power >= 0 ? blorb::PowerId{uint8_t(f.power)} : blorb::speciesInfo(f.look.species).power);
+}
+blorb::PowerGlyph powerOf(const Fighter& f) { return powerFor(f).glyph; }
+
 Figure atHome(int side) {
   Figure f;
   f.x = int16_t(kHome[side].x);
@@ -192,7 +197,7 @@ void hearts(DuelStaging& s, const Fighter& f, int side, int blinkLost, int t) {
 void meter(DuelStaging& s, const Fighter& f, int side, int t) {
   for (int i = 0; i < blorb::kMeterMax; ++i)
     add(s, prop(PropKind::Pip, i < f.sparks ? 0 : 1, rim(kPipArc + i * kPipStep + side * kFlip, kPipR)));
-  const blorb::PowerInfo& pw = blorb::powerInfo(blorb::speciesInfo(f.look.species).power);
+  const blorb::PowerInfo& pw = powerFor(f);
   const bool ready = f.sparks >= pw.cost;
   // Not yet: small and dim. Ready: full size and breathing. Armed: big, over his head (staged by the caller).
   const int pulse = ready ? 100 + bump(t % 10, 0, 10) * 15 / 256 : 70;
@@ -204,9 +209,6 @@ P headOf(const Figure& f, const Body& b) { return {f.x, f.y - b.top - 6}; }
 // so the clash itself has the middle of the dish.
 P popAt(P head, int side) { return {head.x + (side ? 28 : -38), head.y + (side ? 18 : 14)}; }
 
-blorb::PowerGlyph powerOf(const Fighter& f) {
-  return blorb::powerInfo(blorb::speciesInfo(f.look.species).power).glyph;
-}
 
 // A special winding up, the same on both screens: he crouches into it, light
 // in his power's colour gathers behind him, his power's glyph hangs over him
@@ -313,7 +315,7 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     s.fig[kMe].leanPct = int8_t(clampi(s.fig[kMe].leanPct + (to.x - 120) / 6, -24, 24));
   }
   if (sc.me.armed) {
-    const blorb::PowerInfo& pw = blorb::powerInfo(blorb::speciesInfo(sc.me.look.species).power);
+    const blorb::PowerInfo& pw = powerFor(sc.me);
     const P head = headOf(s.fig[kMe], b[kMe]);
     add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 14 - bump(t % 10, 0, 10) * 4 / 256}, 130));
   }
@@ -369,7 +371,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const int pop = imin(ramp(t, kPop, kPop + 4) * 140 / 256, 140 - ramp(t, kPop + 4, kPop + 6) * 20 / 256);
     if (x.stance >= 0 && !bracing) add(s, prop(PropKind::Stance, x.stance, popAt(head, side), pop));
     if (x.fired) {
-      const blorb::PowerInfo& pw = blorb::powerInfo(blorb::speciesInfo(x.look.species).power);
+      const blorb::PowerInfo& pw = powerFor(x);
       add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 16}, 100 + bump(t, 0, 10) * 40 / 256, 255 - ramp(t, 16, 24) * 255 / 256));
       if (t < kImpact) face(g, expr::foresee);
     }
@@ -533,34 +535,121 @@ void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
 
 }  // namespace
 
+namespace {
+
+// One side's state between turns onto a fighter; `now` is the turn on screen.
+void sideOnto(Fighter& f, const blorb::SideState& s, int now) {
+  f.hearts = s.hearts;
+  f.maxHearts = s.maxHearts;
+  f.sparks = s.spark;
+  f.windup = s.queued;
+  f.landsIn = s.queued != blorb::Windup::None && s.landsOn > now ? uint8_t(s.landsOn - now) : 0;
+}
+
+// A resolved turn as the clash plays it; side `m` of the report is mine.
+void turnOnto(DuelScene& sc, const blorb::TurnReport& r, int m) {
+  Fighter* f[2] = {&sc.me, &sc.them};
+  for (int i = 0; i < 2; ++i) {
+    const int s = i ? 1 - m : m;
+    f[i]->stance = r.dozed[s] ? int8_t(-1) : int8_t(r.shown[s]);
+    f[i]->hit = r.hit[s];
+    f[i]->fired = r.powered[s];
+    f[i]->special = r.special[s];
+    // Braced through that turn with nothing queued after it: knocked out of it, or it was the commit.
+    if (r.bracing[s] && f[i]->windup == blorb::Windup::None) f[i]->windup = blorb::Windup::Quick;
+  }
+  const int winner = r.clash == blorb::Clash::AWins ? 0 : 1;
+  sc.won = r.clash == blorb::Clash::Bonk ? Side::Neither : (winner == m ? Side::Me : Side::Them);
+  sc.super = sc.won != Side::Neither && r.super[sc.won == Side::Me ? m : 1 - m];
+}
+
+// The friend's pet from his card: his species' art in his colours, his size, stage and marks.
+blorb::Appearance lookOf(const blorb::BattleCard& c) {
+  blorb::Appearance a;
+  a.species = c.species;
+  a.stage = c.look.stage;
+  a.scalePct = c.look.scalePct;
+  a.lifeSeed = c.look.lifeSeed;
+  for (size_t r = 0; r < blorb::kRegionCount; ++r) a.regions[r] = c.look.regions[r];
+  a.markCount = uint8_t(imin(c.look.markCount, 4));
+  for (int i = 0; i < a.markCount; ++i) a.marks[i] = {c.look.marks[i].layer, c.look.marks[i].variant, blorb::Tint{}};
+  a.exprTicks = 100;
+  return a;
+}
+
+DuelAct actOf(blorb::DuelPhase p) {
+  using P = blorb::DuelPhase;
+  switch (p) {
+    case P::Staking: return DuelAct::Staking;
+    case P::Choosing: case P::Waiting: return DuelAct::Choosing;
+    case P::Revealing: return DuelAct::Clash;
+    case P::Mercy: return DuelAct::Mercy;
+    case P::Fallen: return DuelAct::Fallen;
+    case P::Fainting: case P::Friends: return DuelAct::Outcome;
+    case P::Closed: case P::Lobby: case P::Greeting: return DuelAct::Meeting;
+  }
+  return DuelAct::Meeting;
+}
+
+}  // namespace
+
+DuelScene sceneOf(const blorb::DuelView& v, const blorb::Appearance& mine) {
+  DuelScene sc;
+  sc.act = actOf(v.phase);
+  sc.ticks = v.phaseTicks;
+  sc.me.look = mine;
+  sc.them.look = lookOf(v.them);
+  sc.me.power = int16_t(v.me.power.v);
+  sc.them.power = int16_t(v.them.power.v);
+  // The turn on screen: the last one while it plays out, else the one being chosen.
+  const int now = v.hasLast ? v.lastTurn + (sc.act == DuelAct::Clash ? 0 : 1) : 0;
+  sideOnto(sc.me, v.mine, now);
+  sideOnto(sc.them, v.theirs, now);
+  sc.me.assist = v.assistHearts[0];
+  sc.them.assist = v.assistHearts[1];
+  // Staking: each side's tier, ceiling, confirm and forecast at the tier it aims.
+  sc.me.chose = v.chosen;
+  sc.them.chose = v.theyChose;
+  sc.me.ceiling = v.ceiling[0];
+  sc.them.ceiling = v.ceiling[1];
+  sc.me.confirmed = v.confirmed;
+  sc.them.confirmed = v.theyConfirmed;
+  sc.me.skull = v.skull[0][uint8_t(v.chosen) % 3];
+  sc.them.skull = v.skull[1][uint8_t(v.theyChose) % 3];
+  sc.stakes = v.agreed;
+  // Choosing
+  sc.aim = v.aim;
+  sc.lean = v.locked ? int8_t(-1) : int8_t(v.lean.stance);
+  sc.whisper = v.lean.whisper;
+  sc.me.locked = v.locked;
+  sc.them.locked = v.theyLocked;
+  sc.ticksLeft = v.chooseTicksLeft;
+  sc.turnTicks = blorb::DuelTimings::kChooseTicks;
+  if (v.hasLast && sc.act == DuelAct::Clash) turnOnto(sc, v.last, 0);   // the view mirrors it: index 0 is me
+  // Mercy and the end: the downed side lost; in Mercy the hold is the winner's Finish.
+  if (sc.act != DuelAct::Clash) sc.won = v.draw ? Side::Neither : (v.iWon ? Side::Me : Side::Them);
+  if (v.iAmDown) sc.won = Side::Them;
+  if (v.theyAreDown) sc.won = Side::Me;
+  if (sc.act == DuelAct::Staking) {
+    sc.me.hold = v.confirmHold;
+    sc.them.hold = v.theirHold;
+  }
+  sc.finishHold = v.iAmDown ? v.theirHold : v.confirmHold;
+  sc.mercyLeft = v.mercyTicksLeft;
+  sc.mercyTicks = blorb::kMercyTicks;
+  sc.verdict = v.verdict;
+  sc.pleading = v.emoteIn == blorb::Emote::Plead;
+  sc.newScars = v.newScars;
+  return sc;
+}
+
 void fromOutcome(DuelScene& sc, const blorb::Outcome& o, blorb::Side me) {
   const int m = int(me), t = 1 - m;
-  Fighter* f[2] = {&sc.me, &sc.them};
-  const int by[2] = {m, t};   // my side first
-  for (int i = 0; i < 2; ++i) {
-    const blorb::SideState& s = o.side[by[i]];
-    f[i]->hearts = s.hearts;
-    f[i]->maxHearts = s.maxHearts;
-    f[i]->sparks = s.spark;
-    f[i]->windup = s.queued;
-    f[i]->landsIn = s.queued != blorb::Windup::None && s.landsOn > o.resolved ? uint8_t(s.landsOn - o.resolved) : 0;
-  }
+  sideOnto(sc.me, o.side[m], o.resolved);
+  sideOnto(sc.them, o.side[t], o.resolved);
   sc.stakes = o.stakes;
   auto sideOf = [&](int s) { return s == m ? Side::Me : Side::Them; };
-  if (o.resolved) {
-    const blorb::TurnReport& r = o.turns[o.resolved - 1];
-    for (int i = 0; i < 2; ++i) {
-      const int s = by[i];
-      f[i]->stance = r.dozed[s] ? int8_t(-1) : int8_t(r.shown[s]);
-      f[i]->hit = r.hit[s];
-      f[i]->fired = r.powered[s];
-      f[i]->special = r.special[s];
-      // Braced through that turn with nothing queued after it: knocked out of it, or it was the commit.
-      if (r.bracing[s] && f[i]->windup == blorb::Windup::None) f[i]->windup = blorb::Windup::Quick;
-    }
-    sc.won = r.clash == blorb::Clash::Bonk ? Side::Neither : sideOf(r.clash == blorb::Clash::AWins ? 0 : 1);
-    sc.super = sc.won != Side::Neither && r.super[sc.won == Side::Me ? m : t];
-  }
+  if (o.resolved) turnOnto(sc, o.turns[o.resolved - 1], m);
   if (o.ending != blorb::Ending::Ongoing)
     sc.won = o.ending == blorb::Ending::Draw ? Side::Neither : sideOf(o.ending == blorb::Ending::AWon ? 0 : 1);
   sc.verdict = o.verdict;
