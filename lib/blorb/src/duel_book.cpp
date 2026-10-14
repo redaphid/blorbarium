@@ -21,8 +21,6 @@ constexpr int32_t kVendettaNudge = 32767 / 4;   // one learnTurn step: what one 
 
 struct Dated { uint16_t generation; uint32_t at; uint16_t petDay; };
 
-bool sameBattle(BattleId a, BattleId b) { return a == b; }
-
 BookState::Friend& friendFor(BookState& st, uint64_t lineage, uint16_t generation) {
   auto it = std::find_if(st.friends.begin(), st.friends.end(), [&](const BookState::Friend& f) { return f.s.lineageId == lineage; });
   BookState::Friend f{};
@@ -61,9 +59,9 @@ void settleAll(BookState& st) {
 }
 void settleOthers(BookState& st, BattleId keep) {
   for (const BookState::Downed& d : st.downed)
-    if (!sameBattle(d.battle, keep)) settleFled(st, d);
+    if (d.battle != keep) settleFled(st, d);
   st.downed.erase(std::remove_if(st.downed.begin(), st.downed.end(),
-                                 [&](const BookState::Downed& d) { return !sameBattle(d.battle, keep); }),
+                                 [&](const BookState::Downed& d) { return d.battle != keep; }),
                   st.downed.end());
 }
 
@@ -310,7 +308,7 @@ bool logged(Storage& s, Kind kind, BattleId b) {
   logframes::walk(s, kFile, SIZE_MAX, [&](uint8_t k, In in, const std::vector<uint8_t>&, size_t) {
     if (!found && k == uint8_t(kind)) {
       if (kind == Kind::Met) in.u16(), in.u32(), in.u16();
-      found = sameBattle(getBattle(in), b) && in.ok;
+      found = getBattle(in) == b && in.ok;
     }
   });
   return found;

@@ -516,6 +516,58 @@ TEST(Keepsake, ANewerFirmwaresScarsLoadAsScarsThisOneCanDraw) {
   EXPECT_EQ(std::get<Creature>(many.occupant).scars().count, kMaxScars);
 }
 
+namespace {
+// The scarred v1 pet with its Body chunk's bytes after the fixed fields replaced by `tail`.
+std::vector<uint8_t> withBodyTail(const std::vector<uint8_t>& tail) {
+  std::vector<uint8_t> blob = cutTail(Keepsake::encode(scarredV1()), Chunk::Body, kBodyFixedLen);
+  const Tlv body = *findChunk(chunksOf(blob), Chunk::Body);
+  blob.insert(blob.begin() + long(body.at + body.n), tail.begin(), tail.end());
+  const size_t n = body.n + tail.size();
+  blob[body.at - 2] = uint8_t(n), blob[body.at - 1] = uint8_t(n >> 8);
+  reseal(blob);
+  return blob;
+}
+}  // namespace
+
+// Scars are decoration: a scar tail no firmware writes (a count past its
+// records, a torn record, a stray byte after the bite) loads the pet with the
+// whole scars only, and never sends a keepsake to rescue/.
+TEST(Keepsake, AMalformedScarTailNeverCostsThePet) {
+  const std::vector<uint8_t> v1 = readFile(kV1);
+  const uint32_t genome = std::get<Creature>(decoded(v1).occupant).genome().hash();
+  const struct { const char* what; std::vector<uint8_t> tail; uint8_t scars; } cases[] = {
+      {"a count of 255 with one record", {0, 255, 1, 10, 20, 200}, 1},
+      {"a torn second record", {0, 2, 1, 10, 20, 200, 3, 40}, 1},
+      {"a stray byte after the bite", {0, 7}, 0},
+      {"a count and nothing after it", {0, 1}, 0},
+  };
+  for (const auto& c : cases) {
+    const std::vector<uint8_t> blob = withBodyTail(c.tail);
+    Snapshot s;
+    ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), s)) << c.what;
+    const Creature& pet = std::get<Creature>(s.occupant);
+    EXPECT_EQ(pet.genome().hash(), genome) << c.what;
+    EXPECT_EQ(pet.body().mouth, Mouthful::Nothing) << c.what;
+    ASSERT_EQ(pet.scars().count, c.scars) << c.what;
+    if (c.scars) EXPECT_EQ(pet.scars().mark[0].fade, 200) << c.what;
+
+    MemStorage store;
+    store.files["snap.a"] = blob;
+    store.files["snap.b"] = blob;
+    Snapshot loaded;
+    EXPECT_EQ(Keepsake(store).load(loaded), SlotState::Resumed) << c.what << ": both slots load, nothing rescued";
+  }
+}
+
+// A saved scar's kind is its ordinal, so a rename may not reorder them.
+TEST(Keepsake, TheFiveScarKindsKeepTheirSavedOrdinals) {
+  EXPECT_EQ(uint8_t(Scar::Kind::Claw), 0);
+  EXPECT_EQ(uint8_t(Scar::Kind::Scorch), 1);
+  EXPECT_EQ(uint8_t(Scar::Kind::Notch), 2);
+  EXPECT_EQ(uint8_t(Scar::Kind::Stitches), 3);
+  EXPECT_EQ(uint8_t(Scar::Kind::Bite), 4);
+}
+
 TEST(Keepsake, AFriendEggRoundTripsAndABadSlotIsNoFriendEgg) {
   Snapshot s = friendEggV1();
   std::vector<uint8_t> blob = Keepsake::encode(s);

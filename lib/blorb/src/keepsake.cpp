@@ -194,8 +194,10 @@ LifeStats getStats(In& in) {
 }
 
 // The scar kinds this firmware draws (stakes.h). A newer one's kind reads as a
-// claw rather than reaching a renderer that has no art for it.
+// claw rather than reaching a renderer that has no art for it. Saved scars are
+// these ordinals, so a reorder or a sixth kind must move this too.
 constexpr uint8_t kScarKinds = 5;
+static_assert(uint8_t(Scar::Kind::Bite) + 1 == kScarKinds, "a saved scar's kind is its ordinal in Scar::Kind");
 
 void putBody(Out& o, const Body& b, const Scars& scars) {
   o.fx(b.at.x), o.fx(b.at.y), o.fx(b.facing), o.u8(b.pose.v), o.u16(b.poseTick), o.u8(b.asleep), o.u8(b.dreaming);
@@ -232,14 +234,17 @@ Body getBody(In& in) {
   b.mouth = mouth <= uint8_t(Mouthful::RottenPellet) ? Mouthful(mouth) : Mouthful::Nothing;
   return b;
 }
-// What follows the bite. Past four, a newer firmware's, read and not kept.
-Scars getScars(In& in) {
+// What follows the bite. Scars are decoration, so they are read from a copy and
+// never fail the pet: only whole records are kept, and a count past them, a
+// torn record or a stray byte is ignored. Past four, a newer firmware's, read
+// and not kept.
+Scars getScars(In in) {
   Scars s;
   if (in.at >= in.n) return s;
-  for (uint8_t i = 0, n = in.u8(); i < n && in.ok; ++i) {
+  for (uint8_t i = 0, n = in.u8(); i < n && in.n - in.at >= 4; ++i) {
     uint8_t kind = in.u8();
     Scar m{kind < kScarKinds ? Scar::Kind(kind) : Scar::Kind{}, in.u8(), in.u8(), in.u8()};
-    if (in.ok && s.count < kMaxScars) s.mark[s.count++] = m;
+    if (s.count < kMaxScars) s.mark[s.count++] = m;
   }
   return s;
 }
