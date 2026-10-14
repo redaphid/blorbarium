@@ -78,6 +78,10 @@ def main():
                     b.send("DEBUG lean 0 4000")
                     time.sleep(0.8)
                     b.send("DEBUG press 150")
+                elif "boot context" in line and not line.rstrip().endswith("boot context 15"):
+                    print("%s: the pet is not awake (14 is asleep), so the double press fed him instead; "
+                          "wait for him to wake, or `DEBUG stage <his stage>` rests him" % b.name, flush=True)
+                    return 1
                 elif "-> closed" in line and b.name not in met:
                     print("%s closed before it met anyone" % b.name, flush=True)
                     return 1

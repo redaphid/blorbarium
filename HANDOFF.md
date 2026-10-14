@@ -67,7 +67,19 @@ device, or "all different". Settle this before R3.
 - **Provisioning a factory board** (COM12): blank partitions are formatted,
   the first boot is Fresh, the next is Resumed. Issue #1 is closed.
 - **All 9 species** draw on the real board.
-- **Not yet proven:** ESP-NOW between two boards (D12).
+- **A Spar over ESP-NOW between COM11 and COM14** (D12, firmware 0.6.0):
+  `uv run tools/duel_hw.py COM11 COM14` plays it by DEBUG verbs (double,
+  lean, press), 12 turns, both boards logged `outcome_hash=8430b2b9`. Heap
+  with BLE and ESP-NOW up: 57 KB free, 49 KB largest block (from 95 KB);
+  after the first close Wi-Fi keeps about 16 KB, stable across reopens.
+  `src/hw/air_espnow.h` reads RSSI from promiscuous mode (IDF 4.4's ESP-NOW
+  callback has none).
+- **The body is sensed at 50 Hz on its own task** (`bodyq` in main.cpp): a
+  frame takes about 190 ms to draw, so sampling between frames ran at 5 Hz
+  and missed double presses and made aiming take 3 s. The draw itself is
+  still slow (on `main` too, since the envelope in 0885b2d); not fixed.
+- **Not yet proven:** Scrap and Mortal on hardware, OTA `ERR 409 BUSY`
+  mid-duel, the RSSI at 30 cm and 2 m for `kNearRssi`.
 
 ### Boards and keys
 
