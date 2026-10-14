@@ -554,6 +554,89 @@ TEST(Rim, TrophiesAndMarksSitOnTheRimAtHome) {
   EXPECT_EQ(upper, 0) << "a token strayed off the lower rim";
 }
 
+// ---- from D8's DuelView ----------------------------------------------------------------
+
+namespace {
+blorb::DuelView viewOf(blorb::DuelPhase phase) {
+  blorb::DuelView v;
+  v.phase = phase;
+  v.phaseTicks = 14;
+  v.me.species = blorb::kGrungo;
+  v.them.species = byName("fizz");
+  v.them.power = blorb::speciesInfo(byName("gilly")).power;   // a hybrid: fizz's body, gilly's power
+  v.them.look.stage = Stage::Child;
+  v.them.look.regions[blorb::region::skin.v].hue = 30;
+  v.mine.hearts = 4;
+  v.mine.spark = 5;
+  v.theirs.hearts = 2;
+  v.theirs.queued = blorb::Windup::Heavy;
+  v.theirs.landsOn = 6;
+  v.hasLast = true;
+  v.lastTurn = 4;
+  v.last.shown[0] = blorb::Stance::Guard;
+  v.last.shown[1] = blorb::Stance::Pounce;
+  v.last.clash = blorb::Clash::AWins;   // index 0 is me in the view
+  v.last.hit[1] = 1;
+  return v;
+}
+}  // namespace
+
+TEST(SceneOf, TheViewBecomesTheScreen) {
+  const Appearance mine = blorbtest::duelLook(blorb::kGrungo, 7, 0);
+  blorb::DuelView v = viewOf(blorb::DuelPhase::Revealing);
+  DuelScene s = paint::sceneOf(v, mine);
+  EXPECT_EQ(s.act, paint::DuelAct::Clash);
+  EXPECT_EQ(s.ticks, 14);
+  EXPECT_EQ(s.won, paint::Side::Me) << "the view's index 0 is me";
+  EXPECT_EQ(s.them.hit, 1);
+  EXPECT_EQ(s.me.stance, int8_t(blorb::Stance::Guard));
+  EXPECT_EQ(s.them.look.species, byName("fizz"));
+  EXPECT_EQ(s.them.look.stage, Stage::Child);
+  EXPECT_EQ(s.them.look.regions[blorb::region::skin.v].hue, 30) << "the friend in his own colours";
+  EXPECT_EQ(s.them.power, int(blorb::speciesInfo(byName("gilly")).power.v)) << "a hybrid's power from his card";
+  EXPECT_EQ(s.me.hearts, 4);
+  EXPECT_EQ(s.them.windup, blorb::Windup::Heavy);
+  EXPECT_EQ(s.them.landsIn, 2) << "turn 4 on screen, landing on 6";
+  v.phase = blorb::DuelPhase::Choosing;
+  EXPECT_EQ(paint::sceneOf(v, mine).them.landsIn, 1) << "choosing turn 5";
+
+  v = viewOf(blorb::DuelPhase::Mercy);
+  v.iAmDown = true;
+  v.theirHold = 200;
+  v.confirmHold = 9;
+  v.emoteIn = blorb::Emote::Plead;
+  s = paint::sceneOf(v, mine);
+  EXPECT_EQ(s.act, paint::DuelAct::Mercy);
+  EXPECT_EQ(s.won, paint::Side::Them) << "I am the one down";
+  EXPECT_EQ(s.finishHold, 200) << "the skull fills with the winner's thumb, not mine";
+  EXPECT_TRUE(s.pleading);
+
+  v = viewOf(blorb::DuelPhase::Staking);
+  v.chosen = blorb::Stakes::Scrap;
+  v.theyChose = blorb::Stakes::Mortal;
+  v.skull[0][1] = 77;
+  v.skull[1][2] = 190;
+  v.confirmHold = 120;
+  s = paint::sceneOf(v, mine);
+  EXPECT_EQ(s.me.skull, 77);
+  EXPECT_EQ(s.them.skull, 190) << "each skull at the tier that side aims";
+  EXPECT_EQ(s.me.hold, 120);
+}
+
+TEST(SceneOf, EveryPhaseDrawsBothPets) {
+  const Appearance mine = blorbtest::duelLook(blorb::kGrungo, 7, 0);
+  for (int p = int(blorb::DuelPhase::Greeting); p <= int(blorb::DuelPhase::Friends); ++p) {
+    blorb::DuelView v = viewOf(blorb::DuelPhase(p));
+    const DuelScene s = paint::sceneOf(v, mine);
+    const DuelStaging st = staged(s);
+    EXPECT_TRUE(st.fig[0].alpha > 0 && st.fig[1].alpha > 0) << "phase " << p;
+    auto cv = shoot(s);
+    int lit = 0;
+    for (uint16_t px : cv->px) lit += px != 0;
+    EXPECT_GT(lit, 30000) << "phase " << p << " drew nothing";
+  }
+}
+
 // ---- a friend egg in the clutch --------------------------------------------------------
 
 // A friend egg can be another species than the parent whose clutch it joins:
