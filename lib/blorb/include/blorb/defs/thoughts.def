@@ -71,3 +71,4 @@ BLORB_THOUGHT(50, p_pond_no,      pond,   anytime,       1,  300, "THE POND SAYS
 BLORB_THOUGHT(51, p_pond_yes,     pond,   anytime,       1,  300, "THE POND SAYS: YES. NO. YES.")
 BLORB_THOUGHT(52, p_ripples,      pond,   anytime,       1,  300, "RIPPLES. ASK AGAIN LATER.")
 BLORB_THOUGHT(53, p_ancestor,     pond,   foreseen,      3,  300, "GEN # FORESAW THIS TOO.")
+BLORB_THOUGHT(54, miss_phone,     none,   phone_long_gone, 2, 3600, "I MISS THE GLOWING RECTANGLE")

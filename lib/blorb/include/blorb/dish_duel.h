@@ -72,6 +72,9 @@ class DishDuel {
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }
   const DuelBook& book() const { return book_; }
+  // The newest battle this boot recorded, for a log line that two boards'
+  // logs can be compared by (its outcomeHash).
+  const std::optional<Meeting>& lastMeeting() const { return lastMet_; }
   // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Mortal: every tier.
   void setDeviceCeiling(Stakes s) { deviceCeiling_ = s; }
 
@@ -95,7 +98,8 @@ class DishDuel {
   uint32_t lastEndTick_ = 0;
   bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false, battled_ = false;
   Refusal refusal_;
-  std::optional<uint32_t> heldPress_;   // a press waiting to see if a second one follows
+  std::optional<uint32_t> heldPress_;
+  std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows
 };
 
 }  // namespace blorb

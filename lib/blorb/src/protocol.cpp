@@ -524,7 +524,8 @@ void cmd_time(Dish& dish, const Request& req, Reply& r) {
   dish.checkWall();
   // After any catch-up the pet tick stands for this wall time, so the day snaps here.
   dish.clock().alignToWall(*unix, int16_t(*tz));
-  r.ok("caught_up=%u", unsigned(dish.lastCatchUp().ticks));
+  const CatchUp& c = dish.lastCatchUp();
+  r.ok("caught_up=%u away=%u hurt=%u", unsigned(c.ticks), unsigned(c.awaySeconds), unsigned(c.hurt));
 }
 
 void cmd_sub(Dish& dish, const Request& req, Reply& r) {

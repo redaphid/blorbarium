@@ -43,8 +43,12 @@ class PhoneTime : public TimeSource {
   std::optional<uint32_t> pending_;
 };
 
-// The last unpowered gap the Dish simulated, and how much of it the cost cap dropped.
-struct CatchUp { uint32_t ticks = 0, clampedTicks = 0; };
+// The last unpowered gap the Dish simulated, how much of it the cost cap
+// dropped, how long he was away, and whether that was long enough to hurt him.
+struct CatchUp {
+  uint32_t ticks = 0, clampedTicks = 0, awaySeconds = 0;
+  bool hurt = false;
+};
 
 struct DishOptions {
   TimeSource* rtc = nullptr;           // first in priority: a clock that kept counting while unpowered
@@ -53,6 +57,9 @@ struct DishOptions {
   // The Dish reads nothing, writes nothing and runs no life, so a reset
   // finds the keepsake exactly as it was; the screen shows it sealed.
   bool sealed = false;
+  // A board nobody can answer (no phone, no battery) shows no time-unknown
+  // marquee and lets him think and prophesy without wall time.
+  bool askForTime = true;
   // The duel radio (air.h). Null: this board has no duel radio, and a double
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
@@ -108,6 +115,7 @@ class Dish {
   bool duelActive() const { return duel_.active(); }
   DuelView duelView() const { return duel_.view(tick_); }
   const DuelBook& duels() const { return duel_.book(); }
+  const std::optional<Meeting>& lastMeeting() const { return duel_.lastMeeting(); }
   void setDuelCeiling(Stakes s) { duel_.setDeviceCeiling(s); }
   // Where BOOT is now (boot.h). Never OtaQuestion: that is main.cpp's.
   BootContext bootContext() const;
@@ -123,6 +131,11 @@ class Dish {
 
  private:
   void runOneTick(Link&);
+  bool askingForTime() const { return askForTime_ && !wallKnown_; }   // the marquee shows and he keeps quiet
+  // Powered ticks since a phone last gave the time. Across a replug the saved
+  // anchor stands in: with no battery only a phone can have set it.
+  uint32_t phoneAwayTicks() const;
+  void welcomePhone();
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
@@ -154,10 +167,11 @@ class Dish {
   PhoneTime phone_;
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;
+  std::optional<uint32_t> lastPhoneTick_;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
-  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
+  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false, askForTime_ = true;
 };
 
 }  // namespace blorb

@@ -517,20 +517,26 @@ TEST(CatchUp, TenMinutesUnpluggedMovesTheDrivesALittleAndNothingElse) {
   EXPECT_TRUE(box.dish->timeKnown());
 }
 
-TEST(CatchUp, DaysOfNeglectKillHimAndLeaveAClutchWithOneDeath) {
+// No absence is lived for more than twelve hours, but each one is lived:
+// nobody feeds him while unplugged, so day after day away starves him.
+TEST(CatchUp, AbsenceAfterAbsenceStarvesHimAndLeavesAClutchWithOneDeath) {
   Box box;
   box.rtc.atBoot = kWall0;
   box.boot();
   box.hatch();
   box.run(60000);
   box.dish->flush();
-  box.unplugFor(6 * kDaySeconds);
-
-  box.boot();
+  int absences = 0;
+  while (std::holds_alternative<Creature>(box.dish->occupant()) && absences < 30) {
+    box.unplugFor(kDaySeconds);
+    box.boot();
+    ++absences;
+    ASSERT_LE(box.dish->lastCatchUp().ticks, 12u * 3600 * 10) << "absence " << absences;
+  }
   const Clutch* k = std::get_if<Clutch>(&box.dish->occupant());
-  ASSERT_NE(k, nullptr) << "he died while unplugged";
+  ASSERT_NE(k, nullptr) << "still alive after " << absences << " days away";
+  EXPECT_GT(absences, 1) << "one capped absence does not kill a fed pet";
   EXPECT_EQ(k->cause, DeathCause::Starved);
-  EXPECT_EQ(k->sinceDeath, Clutch::kVigilTicks) << "the vigil ran out; the choice waits for the owner";
   EXPECT_EQ(count(box.dish->lineage(), kDeath), 1);
   std::optional<Snapshot> saved = newest(box.store);
   ASSERT_TRUE(saved && std::holds_alternative<Clutch>(saved->occupant)) << "saved at once";
@@ -538,6 +544,12 @@ TEST(CatchUp, DaysOfNeglectKillHimAndLeaveAClutchWithOneDeath) {
   box.boot();
   EXPECT_EQ(box.dish->lastCatchUp().ticks, 0u);
   EXPECT_EQ(count(box.dish->lineage(), kDeath), 1) << "a reboot records no second death";
+
+  box.unplugFor(kDaySeconds);
+  box.boot();
+  k = std::get_if<Clutch>(&box.dish->occupant());
+  ASSERT_NE(k, nullptr);
+  EXPECT_EQ(k->sinceDeath, Clutch::kVigilTicks) << "the vigil ran out; the choice waits for the owner";
 }
 
 TEST(CatchUp, TheSameWallTimeIsNeverAppliedTwice) {
@@ -581,7 +593,7 @@ TEST(CatchUp, WithNoSourceNothingIsCaughtUpUntilThePhoneGivesTheTime) {
   phone.inbound.push_back("#7 TIME " + std::to_string(anchorWall + 60 + 2 * 3600));
   box.dish->tick(box.ms - kSampleMs, phone);
   ASSERT_FALSE(phone.sent.empty());
-  EXPECT_EQ(phone.sent[0], "#7 OK caught_up=72000") << "two hours, after the powered minute";
+  EXPECT_EQ(phone.sent[0], "#7 OK caught_up=72000 away=7200 hurt=0") << "two hours, after the powered minute";
   EXPECT_TRUE(box.dish->timeKnown());
 }
 
@@ -604,10 +616,77 @@ TEST(CatchUp, AnAbsenceLongerThanTheCapIsClampedAndRecorded) {
   box.dish->flush();
   box.unplugFor(60 * kDaySeconds);
   box.boot();
-  EXPECT_EQ(box.dish->lastCatchUp().ticks, 30u * kDaySeconds * 10);
-  EXPECT_EQ(box.dish->lastCatchUp().clampedTicks, 30u * kDaySeconds * 10);
+  EXPECT_EQ(box.dish->lastCatchUp().ticks, 12u * 3600 * 10);
+  EXPECT_EQ(box.dish->lastCatchUp().clampedTicks, (60u * kDaySeconds - 12u * 3600) * 10);
   EXPECT_EQ(box.dish->wallNow(), box.rtc.unixSeconds()) << "re-anchored at now: the clamped days stay dropped";
-  EXPECT_TRUE(std::holds_alternative<Clutch>(box.dish->occupant()));
+  EXPECT_TRUE(std::holds_alternative<Creature>(box.dish->occupant())) << "a fed pet lives through twelve hours";
+}
+
+// A hatched, fed pet, saved, then unplugged for `seconds` and booted again.
+void awayFor(Box& box, uint32_t seconds) {
+  box.rtc.atBoot = kWall0;
+  box.boot();
+  box.hatch();
+  box.run(60000);
+  box.dish->flush();
+  box.unplugFor(seconds);
+  box.boot();
+}
+
+constexpr Fx kStarvingHunger = Fx::ratio(8, 10);   // the kStarving locus in starter_genome.cpp
+
+Fx injuryOf(const Box& box) { return box.creature().chemistry().chem[chem::injury.v]; }
+Fx hungerOf(const Box& box) { return box.creature().chemistry().drive(drive::hunger); }
+Fx energyOf(const Box& box) { return box.creature().chemistry().chem[chem::energy.v]; }
+
+TEST(CatchUp, ThreeWeeksAwayHeWakesStarvingAndHurtOnce) {
+  Box twenty, box;
+  awayFor(twenty, 20 * kDaySeconds);
+  awayFor(box, 21 * kDaySeconds);
+  ASSERT_TRUE(std::holds_alternative<Creature>(box.dish->occupant()));
+  EXPECT_FALSE(box.creature().dead());
+  EXPECT_GE(hungerOf(box), kStarvingHunger);
+  EXPECT_GT(injuryOf(box), injuryOf(twenty) + Fx::ratio(3, 10));
+  EXPECT_GE(hungerOf(box), hungerOf(twenty)) << "the harm never eases him";
+  EXPECT_LE(energyOf(box), energyOf(twenty)) << "the harm never eases him";
+  EXPECT_TRUE(box.dish->lastCatchUp().hurt);
+  EXPECT_EQ(box.dish->lastCatchUp().awaySeconds, 21u * kDaySeconds);
+
+  const Fx hunger = hungerOf(box), injury = injuryOf(box);
+  const uint32_t h = box.dish->hash();
+  box.boot();
+  EXPECT_FALSE(box.dish->lastCatchUp().hurt) << "rebooted from the snapshot the harm was saved in";
+  EXPECT_EQ(hungerOf(box), hunger);
+  EXPECT_EQ(injuryOf(box), injury);
+  EXPECT_EQ(box.dish->hash(), h);
+}
+
+TEST(CatchUp, TwentyDaysAwayCostsNoMoreThanTheTwelveHoursLived) {
+  Box day, box;
+  awayFor(day, kDaySeconds);
+  awayFor(box, 20 * kDaySeconds);
+  EXPECT_FALSE(box.dish->lastCatchUp().hurt);
+  EXPECT_EQ(box.dish->lastCatchUp().awaySeconds, 20u * kDaySeconds);
+  EXPECT_EQ(injuryOf(box), injuryOf(day));
+  EXPECT_EQ(hungerOf(box), hungerOf(day));
+}
+
+// "Close to dead + time = dead": the harm never delays a death neglect brings.
+int daysToDie(uint32_t firstAbsence) {
+  Box box;
+  awayFor(box, firstAbsence);
+  int days = 0;
+  while (std::holds_alternative<Creature>(box.dish->occupant()) && days < 30) {
+    box.unplugFor(kDaySeconds);
+    box.boot();
+    ++days;
+  }
+  EXPECT_TRUE(std::holds_alternative<Clutch>(box.dish->occupant())) << "away " << firstAbsence << " s, then " << days << " days unfed";
+  return days;
+}
+
+TEST(CatchUp, AfterALongAbsenceNeglectStillKillsHim) {
+  EXPECT_LE(daysToDie(60 * kDaySeconds), daysToDie(kDaySeconds));
 }
 
 int main(int argc, char** argv) {

@@ -30,7 +30,8 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
   build unit 23 (DESIGN section 10); only the seam and host fakes for both
   sources exist now.
 - With no source, he resumes as if no time passed, and catches up once a
-  source appears. While time is unknown, `Appearance::timeUnknown` is set
+  source appears. While time is unknown on a Dish that asks for it
+  (`DishOptions::askForTime`, entry 11), `Appearance::timeUnknown` is set
   and the renderer scrolls a marquee reading "TAP ME WITH YOUR PHONE". The
   text is one constant, `kTimeUnknownMarquee` in `lib/paint/src/draw.cpp`.
 - The keepsake persists a wall anchor: the last known wall time and the pet
@@ -45,6 +46,19 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
 
 This folds into units 12 (the anchor in the snapshot), 13 (`TIME` feeds the
 phone source) and 14 (the seam, the catch-up and its tests).
+
+**No battery (user, 2026-10-13).** The devices ship without one, so unit 23
+is off and a phone's `TIME` is the only clock after a replug. Unpowered time
+is stasis until a phone connects, and then a catch-up lives at most **12
+hours** of the gap (`kMaxCatchUpSteps` in `dish.cpp`); the rest is dropped.
+The cap keeps a phone visit (an OTA update, say) from being what kills a pet
+that sat a week in a drawer. It does not prevent death: a pet already near
+death still dies inside the twelve hours (user: "close to dead + time =
+dead"), and absence after absence starves a pet nobody feeds. A gap of **three
+weeks** or more also hurts him once (`kLongAbsenceSeconds`, `longAbsence` in
+`dish.cpp`): he wakes starving and injured, and TIME replies `hurt=1`. The
+wound stops short of lethal, but nothing shields him after it: left unfed, a
+pet already low, or one more absence, ends in death.
 
 ## 4. User-directed: the phone adds twists; the board stays the one writer
 
@@ -272,10 +286,14 @@ which was backed up whole before the first write (two 16 MB reads, sha256
   `kDishStackBytes = 16384` (`SET_LOOP_TASK_STACK_SIZE`). The measured
   high-water mark is 12,296 to 12,488 B free, so about 4 KB is used. The
   extra margin is kept for BLE callbacks and future verbs.
-- **The board does not ask for the time.** With no battery and no website
-  yet, every replug forgets wall time, so the "tap me" marquee would show
-  forever. `kAskForTime = false` on the board, and the sim keeps the marquee
-  for its golden. With no time source the Dish resumes without a catch-up.
+- **The board does not ask for the time.** With no battery, every replug
+  forgets wall time, so the "tap me" marquee would show until a phone
+  visits, and a kid with no phone would have a pet that never thinks or
+  prophesies. The board builds its Dish with `DishOptions::askForTime =
+  false`: no marquee, and his thoughts and shake prophecies run as if the
+  time were known. The sim keeps `askForTime` true for its `time_unknown`
+  golden. With no time source the Dish resumes without a catch-up, and a
+  `TIME` from a phone still catches up and anchors as before.
 - **Power cuts.** EN-pin resets at random moments, many during a save (a
   `TIME` line saves at once), brought the same pet back every time: 25 of
   25, 25 of 25, 13 of 13 and 11 of 11 boots across four builds. 47 of the cuts came

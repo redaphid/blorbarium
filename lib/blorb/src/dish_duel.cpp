@@ -215,6 +215,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     battled_ = true;
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();
     book_.record(*fx.met, gen, tick, petDay);
+    lastMet_ = fx.met;
     fell_ = fell_ || fx.met->iFell || fx.met->iSlew;
     out.save = true;
   }

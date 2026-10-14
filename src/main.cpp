@@ -25,6 +25,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/board_lcd128.h"
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
+#include "hw/air_espnow.h"
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
@@ -134,13 +135,15 @@ struct RadioGate : blorb::Air {
   void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner.send(to, p, n); }
   std::optional<blorb::Datagram> receive() override { return inner.receive(); }
 };
+static hw::EspNowAir espNow;
+static RadioGate radioGate(espNow);
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
-// The duel radio the Dish is handed (DishOptions::air). Null until a board
-// brings one up (unit D12's ESP-NOW, behind RadioGate below); the simulator
-// sets its SerialAir here before setup(), since it includes this file whole.
+// The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
+// RadioGate on the board; the simulator sets its own here before setup(),
+// since it includes this file whole.
 static blorb::Air* duelAir = nullptr;
 static BoardDisplay display;
 static paint::Canvas240 canvas;
@@ -149,22 +152,12 @@ static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 static orient::Up up{ORIENT_R0};
 
-// The "tap me with your phone" marquee asks for the time. Until the website
-// exists nothing can answer, and with no battery every replug forgets the
-// time, so the board does not ask. The sim keeps it for its golden.
-#if defined(BADGE_BOARD_SIM)
-static constexpr bool kAskForTime = true;
-#else
-static constexpr bool kAskForTime = false;
-#endif
-
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
 
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
-  if (!kAskForTime) a.timeUnknown = false;
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
@@ -197,7 +190,20 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
 
 // `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
 // that waits on the button can be answered over the cable. 0 is no press.
-static uint32_t pressAt = 0, pressMs = 0;
+// `DEBUG double` adds a second press after it; `DEBUG lean <aim>` tilts the
+// screen-space sample toward one rim edge, as a kid's hand would.
+static uint32_t pressAt = 0, pressMs = 0, press2At = 0, press2Ms = 0;
+static uint32_t leanAt = 0, leanMs = 0;
+static int8_t leanAim = -1;
+
+// Half a g along the aimed axis, the rest down, so the tilt detector takes it
+// as steady: aim 0 raises +x, 1 raises -x, 2 lowers +y, 3 raises +y.
+static void applyLean(blorb::BodySample& s, uint32_t now) {
+  if (leanAim < 0 || now - leanAt >= leanMs) return;
+  s.ax = leanAim == 0 ? 500 : leanAim == 1 ? -500 : 0;
+  s.ay = leanAim == 2 ? -500 : leanAim == 3 ? 500 : 0;
+  s.az = 866;
+}
 
 static blorb::BodySample readBody(uint32_t now) {
   blorb::BodySample s;
@@ -205,7 +211,7 @@ static blorb::BodySample readBody(uint32_t now) {
     s = blorb::BodySample{};
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
-  s.buttonDown = boardButtonDown() || now - pressAt < pressMs;
+  s.buttonDown = boardButtonDown() || now - pressAt < pressMs || now - press2At < press2Ms;
 #if !defined(BADGE_BOARD_SIM)
   // While the dish asks about an update, the button answers it, and the pet
   // feels neither that press nor the rest of that hold. A cable's DEBUG press
@@ -227,7 +233,9 @@ static void step(uint32_t now) {
     // The panel and the engine turn together, so downhill is down on the glass.
     const uint8_t rot = up.sample(lastBody, now);
     if (rot != display.getRotation()) display.setRotation(rot);
-    dish->sample(up.toScreen(lastBody), now);
+    blorb::BodySample screen = up.toScreen(lastBody);
+    applyLean(screen, now);
+    dish->sample(screen, now);
     lastSample = now;
   }
   dish->tick(now, host);
@@ -387,6 +395,9 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
+  // With no battery every replug forgets the time, and a kid with no phone
+  // still gets a pet that talks. The sim keeps asking, for its golden.
+  options.askForTime = false;
 #else
   options.sealed = simSealed;
 #endif
@@ -400,6 +411,9 @@ void setup() {
       if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
         founder = blorb::starterGenomeOf(*pick, speciesSeed);
   if (founder) options.founder = &*founder;
+#if !defined(BADGE_BOARD_SIM)
+  duelAir = &radioGate;
+#endif
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
@@ -481,6 +495,65 @@ static void press(const char* a) {
   Serial.printf("[hw] debug press %ld ms\n", ms);
 }
 
+// Two presses inside the 400 ms double-press window: the gesture that opens a duel.
+static void doublePress() {
+  pressAt = millis() + warpMs;
+  pressMs = 100;
+  press2At = pressAt + 220;
+  press2Ms = 100;
+  Serial.printf("[hw] debug double\n");
+}
+
+static void lean(const char* line) {
+  long aim = -1, ms = 3000;
+  if (std::sscanf(line, "%*s %ld %ld", &aim, &ms) < 1 || aim < 0 || aim > 3 || ms <= 0 || ms > 60000)
+    return (void)Serial.printf("[hw] debug lean: want <aim 0..3> [ms]\n");
+  leanAim = int8_t(aim);
+  leanAt = millis() + warpMs;
+  leanMs = uint32_t(ms);
+  Serial.printf("[hw] debug lean %ld for %ld ms\n", aim, ms);
+}
+
+// One line per duel event, so the two boards' logs alone prove a duel.
+static void reportDuel() {
+  static blorb::DuelPhase phase = blorb::DuelPhase::Closed;
+  static uint8_t peers = 0, turn = 0;
+  static uint32_t metHash = 0;
+  if (!dish->duelActive() && phase == blorb::DuelPhase::Closed) return;
+  constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
+                                    "revealing", "fainting", "mercy",    "fallen",  "friends"};
+  constexpr const char* kStance[] = {"pounce", "guard", "trick"};
+  constexpr const char* kStakes[] = {"spar", "scrap", "mortal"};
+  const blorb::DuelView v = dish->duelView();
+  if (v.phase != phase) {
+    Serial.printf("[duel] phase %s -> %s end=%u stakes=%s hearts %u-%u\n", kPhase[size_t(phase)],
+                  kPhase[size_t(v.phase)], unsigned(v.ended), kStakes[size_t(v.agreed)], unsigned(v.mine.hearts),
+                  unsigned(v.theirs.hearts));
+    phase = v.phase;
+    if (phase == blorb::DuelPhase::Closed) peers = 0, turn = 0;
+  }
+  if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
+    peers = v.peerCount;
+    Serial.printf("[duel] lobby hears %u friend(s)%s\n", unsigned(peers),
+                  peers && v.peers[0].wantsMe ? ", the first wants me" : "");
+  }
+  if (v.hasLast && v.lastTurn != turn) {
+    turn = v.lastTurn;
+    Serial.printf("[duel] turn %u me=%s%s them=%s%s lost %u/%u hearts %u-%u\n", unsigned(turn),
+                  kStance[size_t(v.last.move[0].stance)], v.last.move[0].byPet ? "(pet)" : "",
+                  kStance[size_t(v.last.move[1].stance)], v.last.move[1].byPet ? "(pet)" : "",
+                  unsigned(v.last.hit[0]), unsigned(v.last.hit[1]), unsigned(v.mine.hearts),
+                  unsigned(v.theirs.hearts));
+  }
+  if (const std::optional<blorb::Meeting>& m = dish->lastMeeting(); m && m->outcomeHash != metHash) {
+    metHash = m->outcomeHash;
+    constexpr const char* kEnding[] = {"ongoing", "A won", "B won", "draw"};
+    Serial.printf("[duel] met side=%c ending=%s turns=%u outcome_hash=%08x battle=%08x/%u\n",
+                  m->me == blorb::Side::A ? 'A' : 'B', kEnding[size_t(m->ending)], unsigned(m->turns),
+                  unsigned(m->outcomeHash), unsigned(m->battle.seed), unsigned(m->battle.rematch));
+  }
+}
+
 static void pinSpecies(const char* a) {
   if (!std::strcmp(a, "off")) {
     pinnedSpecies.reset();
@@ -505,11 +578,13 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
+  if (std::strcmp(verb, "double") == 0) return doublePress();
+  if (std::strcmp(verb, "lean") == 0) return lean(line);
   if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
   if (std::strcmp(verb, "found") == 0) return pinFounding(a);
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
-                  "bletest <bytes>)\n", verb);
+                  "double, lean <aim> [ms], bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -546,6 +621,7 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
+  reportDuel();
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();

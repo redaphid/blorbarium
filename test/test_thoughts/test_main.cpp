@@ -38,8 +38,8 @@ struct Rig {
   bool wasThinking = false;
   Fx lastPhase{};
 
-  explicit Rig(const Genome& founder = quickEgg(), bool knowTime = true)
-      : dish(store, 7, 1, DishOptions{nullptr, &founder}) {
+  explicit Rig(const Genome& founder = quickEgg(), bool knowTime = true, bool askForTime = true)
+      : dish(store, 7, 1, DishOptions{nullptr, &founder, /*sealed=*/false, askForTime}) {
     if (knowTime) {
       dish.phoneTime().set(1790000000);
       dish.checkWall();
@@ -160,6 +160,55 @@ TEST(Thoughts, TimeUnknownOutranksAnyThought) {
   EXPECT_TRUE(a.timeUnknown);
   EXPECT_FALSE(a.thinking) << "with no wall time, the only line is the request for a phone";
   EXPECT_TRUE(r.said.empty());
+}
+
+TEST(Thoughts, ABoardThatDoesNotAskForTheTimeThinksAndForetellsWithoutIt) {
+  Rig r(quickEgg(), /*knowTime=*/false, /*askForTime=*/false);
+  r.pastWarmUp();
+  r.run(10 * kMinute);
+  ASSERT_FALSE(r.dish.timeKnown());
+  EXPECT_FALSE(r.said.empty()) << "ten minutes in, he has said something with no phone";
+  const int before = r.prophecies();
+  r.shake(6);
+  r.run(400);
+  Appearance a = r.dish.appearance();
+  EXPECT_EQ(r.prophecies(), before + 1) << "a shake foretells with no phone";
+  EXPECT_TRUE(a.thinking && a.prophecy);
+  EXPECT_FALSE(a.timeUnknown) << "no marquee asks for a phone";
+}
+
+TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
+  Rig r(quickEgg(), /*knowTime=*/false, /*askForTime=*/false);
+  auto missed = [&r] {
+    int n = 0;
+    for (const Line& l : r.said) n += l.id == thought::miss_phone;
+    return n;
+  };
+  auto play = [&r](uint32_t forMs) {
+    for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
+      r.dish.fire(stim::button);
+      r.run(20 * kMinute);
+    }
+  };
+  play(11 * 60 * kMinute);
+  EXPECT_EQ(missed(), 0) << "not before twelve hours";
+  play(6 * 60 * kMinute);
+  ASSERT_GT(missed(), 0) << "fed and played with, but no phone for 17 hours";
+
+  const int before = missed();
+  r.dish.phoneTime().set(1790000000);
+  r.dish.checkWall();
+  r.run(500);
+  ASSERT_FALSE(r.said.empty());
+  EXPECT_EQ(r.said.back().text, "THE GLOWING ONE RETURNS!") << "the visit he asked for is welcomed";
+  EXPECT_GE(r.dish.appearance().glow, Fx::ratio(1, 4)) << "and he glows";
+  play(4 * 60 * kMinute);
+  EXPECT_EQ(missed(), before) << "a phone visit quiets it";
+
+  r.dish.phoneTime().set(1790000000 + 4 * 3600 + 30);
+  r.dish.checkWall();
+  r.run(500);
+  EXPECT_NE(r.said.back().text, "THE GLOWING ONE RETURNS!") << "only a phone he missed is welcomed";
 }
 
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
