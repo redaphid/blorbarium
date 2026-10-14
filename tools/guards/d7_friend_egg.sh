@@ -45,6 +45,8 @@ mutant "scars without the bite before them" $K 's/if (b.mouth != Mouthful::Nothi
   "Fixture.TheScarsFixtureIsTheV1PetPlusTrailingBytes"
 mutant "scars are not read back" $K 's/c.scars_ = getScars(\*body);//' \
   "Keepsake.ScarsRoundTripWithAndWithoutABite"
+mutant "a short scar tail fails the pet" $K 's/Scars getScars(In in)/Scars getScars(In\& in)/;s/i < n \&\& in.n - in.at >= 4;/i < n \&\& in.ok;/'   "Keepsake.AMalformedScarTailNeverCostsThePet"
+mutant "a torn scar record is kept" $K 's/i < n \&\& in.n - in.at >= 4;/i < n;/'   "Keepsake.AMalformedScarTailNeverCostsThePet"
 mutant "a kind with no art is kept" $K 's/kind < kScarKinds ? Scar::Kind(kind) : Scar::Kind{}/Scar::Kind(kind)/' \
   "Keepsake.ANewerFirmwaresScarsLoadAsScarsThisOneCanDraw"
 mutant "an ordinary clutch writes the friend tail" $K 's/if (k.friendSlot) o.u8(k.friendSlot), o.u32(k.friendSeed);/o.u8(k.friendSlot), o.u32(k.friendSeed);/' \
