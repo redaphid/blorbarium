@@ -43,6 +43,23 @@ struct DuelRules {
 enum class Side : uint8_t { A = 0, B = 1 };
 constexpr Side other(Side s) { return s == Side::A ? Side::B : Side::A; }
 
+// The queued special (BATTLES.md, "The queued special"). A power is never
+// instant: BOOT commits it on turn t with a wind-up of 1 (Quick) or 2 (Heavy)
+// turns, and MoveLog::appendSpecial writes every entry it needs at once: turn
+// t carries `windup` (its stance is written as Pounce and ignored, so it leaks
+// nothing), a Heavy's turn t+1 is a placeholder, and turn t + windup carries
+// the hidden landing stance with `power` set. resolve() reads the wind-up from
+// turn t's entry, so the queue lives in the logs both devices already
+// exchange, and the landing stance is unreadable until that turn resolves.
+enum class Windup : uint8_t { None = 0, Quick = 1, Heavy = 2 };
+
+// The special's numbers, from sketch/tools/special_probe.py (measured 2026-10-13).
+struct SpecialRules {
+  static constexpr uint8_t kQuickExtra = 1;   // hearts on top of 1 when a quick special lands
+  static constexpr uint8_t kHeavyExtra = 2;   // ... when a heavy one lands
+  static constexpr uint8_t extra(Windup w) { return w == Windup::Heavy ? kHeavyExtra : kQuickExtra; }
+};
+
 // One locked choice. `byPet` marks a turn the kid let run out, or a turn the
 // pet slept through under spores: the pet chose, which the screen celebrates
 // rather than scolds. A dozing side's move is appended at once by the session,
@@ -58,13 +75,18 @@ struct Move {
   bool power = false;
   bool byPet = false;
   Verdict verdict = Verdict::None;
+  Windup windup = Windup::None;
   constexpr uint8_t pack() const {
-    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4));
+    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4) |
+                   (uint8_t(windup) << 6));
   }
   static constexpr Move unpack(uint8_t b) {
-    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3)};
+    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3),
+                Windup(((b >> 6) & 3) % 3)};
   }
 };
+static_assert(Move::unpack(Move{Stance::Trick, true, false, Verdict::None, Windup::Heavy}.pack()).windup == Windup::Heavy,
+              "the wind-up survives the wire");
 
 // One side's moves: append-only, and the only state either device writes
 // about the battle. My log grows by append(); the friend's grows only by
@@ -83,6 +105,17 @@ class MoveLog {
     if (count_ >= DuelRules::kLogSlots) return false;
     packed_[count_++] = m.pack();
     return true;
+  }
+  // The commit: turn t's wind-up entry, a Heavy's placeholder, and the landing
+  // entry, appended together. False, and nothing appended, when the landing
+  // would fall past kMaxTurns (the hint glyph greys out near the end). Whether
+  // the meter holds the cost is resolve()'s to judge, from the same logs.
+  constexpr bool appendSpecial(Windup w, Stance landing, bool byPet = false) {
+    const uint8_t turns = uint8_t(w);
+    if (turns == 0 || count_ + turns >= DuelRules::kMaxTurns) return false;
+    append(Move{Stance::Pounce, false, byPet, Verdict::None, w});
+    if (w == Windup::Heavy) append(Move{Stance::Pounce, false, byPet});
+    return append(Move{landing, true, byPet});
   }
 
   enum class Merge : uint8_t { Same, Grew, Stale, Conflict };
@@ -106,12 +139,11 @@ class MoveLog {
   uint8_t count_ = 0;
 };
 
-// The genome's knack, ranked: one of the six permutations of {2, 1, 0} over
-// (Pounce, Guard, Trick). Taste, never strength.
+// The genome's knack, ranked: one of genes.h's six orders over (Pounce,
+// Guard, Trick), knackOrderOf(KnackGene). Taste, never strength.
 struct Knack {
   uint8_t order = 0;   // 0..5
-  static constexpr uint8_t kOrders[6][kCycle] = {{2, 1, 0}, {2, 0, 1}, {1, 2, 0}, {0, 2, 1}, {1, 0, 2}, {0, 1, 2}};
-  constexpr uint8_t rank(Stance s) const { return kOrders[order % 6][uint8_t(s)]; }
+  constexpr uint8_t rank(Stance s) const { return kKnackOrders[order % 6][uint8_t(s)]; }
   constexpr Stance best() const {
     return rank(Stance::Pounce) == 2 ? Stance::Pounce : rank(Stance::Guard) == 2 ? Stance::Guard : Stance::Trick;
   }
@@ -157,13 +189,15 @@ enum class Clash : uint8_t { AWins, BWins, Bonk };   // Bonk: heads bonk, nobody
 
 struct TurnReport {
   Move move[2]{};          // as locked, by side
-  Stance shown[2]{};       // after foresee: what the clash animation plays
-  bool dozed[2]{};         // slept through it (spores): no stance, no spark, no power
+  Stance shown[2]{};       // what the clash animation plays; meaningless where dozed or bracing
+  bool dozed[2]{};         // slept through it (spores): no stance, no spark, no special
+  bool bracing[2]{};       // winding up a special this turn (the telegraph, on both screens)
+  enum class Special : uint8_t { None, Committed, Landed, Riposted, Whiffed, Staggered } special[2]{};
   Clash clash = Clash::Bonk;
   uint8_t hit[2]{};        // hearts each side lost (after blocks)
   uint8_t healed[2]{};
   PowerId fired[2]{};      // valid where powered[i]; for gadget, the power it became
-  bool powered[2]{};
+  bool powered[2]{};       // a special landed and its power fired
   bool blocked[2]{};       // a shell, a hush or a dazzle turned a hit away (the "bonk off" sparkle)
   bool super[2]{};         // display only: the clash winner's element beats the loser's ("SUPER!")
   bool zone[2]{};          // display only: won the clash with its knack's best stance (a sparkle)
@@ -179,7 +213,9 @@ struct SideState {
   bool dozing = false;              // next turn: no stance, no spark
   uint8_t bonkTurns = 0;            // turns left winning head bonks (dash, lantern)
   uint8_t dazzledTurns = 0;         // turns left in which MY winning clash hits miss half the time (lantern)
-  uint8_t hushTurns = 0;            // turns left in which a lost clash costs me nothing (hush)
+  uint8_t hushTurns = 0;            // turns left in which a lost clash costs me nothing and a special whiffs (hush)
+  Windup queued = Windup::None;     // a special in flight (its strength: a stagger drops Heavy to Quick)
+  uint8_t landsOn = 0;              // the turn it lands, valid while queued
 };
 
 enum class Ending : uint8_t { Ongoing, AWon, BWon, Draw };
@@ -209,15 +245,17 @@ struct Outcome {
     h = fnvByte(h, uint8_t(stakes)); h = fnvByte(h, resolved); h = fnvByte(h, uint8_t(ending));
     h = fnvByte(h, downed[0]); h = fnvByte(h, downed[1]); h = fnvByte(h, uint8_t(verdict));
     for (const SideState& s : side) {
-      const uint8_t b[] = {s.hearts, s.maxHearts, s.spark, s.shell, s.dozing, s.bonkTurns, s.dazzledTurns, s.hushTurns};
+      const uint8_t b[] = {s.hearts,    s.maxHearts,    s.spark,     s.shell,           s.dozing,
+                           s.bonkTurns, s.dazzledTurns, s.hushTurns, uint8_t(s.queued), s.landsOn};
       for (uint8_t x : b) h = fnvByte(h, x);
     }
     for (uint8_t t = 0; t < resolved && t < DuelRules::kMaxTurns; ++t) {
       const TurnReport& r = turns[t];
       h = fnvByte(h, uint8_t(r.clash));
       for (uint8_t i = 0; i < 2; ++i) {
-        const uint8_t b[] = {r.move[i].pack(), uint8_t(r.shown[i]), r.dozed[i], r.hit[i],  r.healed[i],
-                             r.fired[i].v,     r.powered[i],         r.blocked[i], r.super[i], r.zone[i]};
+        const uint8_t b[] = {r.move[i].pack(), uint8_t(r.shown[i]), r.dozed[i],   r.bracing[i], uint8_t(r.special[i]),
+                             r.hit[i],         r.healed[i],         r.fired[i].v, r.powered[i], r.blocked[i],
+                             r.super[i],       r.zone[i]};
         for (uint8_t x : b) h = fnvByte(h, x);
       }
     }
@@ -269,38 +307,42 @@ static_assert(Assist::hearts(128, 140) == 0 && Assist::hearts(100, 140) == 1 && 
 // 15 turns: microseconds). Before turn 0: hearts = kHearts + Assist::hearts,
 // and the side whose element beats the other's starts with kElementHeadStart
 // pips. Inside one turn:
-//   1 a dozing side has no stance (it loses the clash and deals nothing),
-//     earns no spark and cannot fire
-//   2 powers: a side whose move asks for power and whose meter holds the
-//     cost spends it; gadget draws the power it becomes from its own luck.
-//     BeforeClash handlers read both ORIGINAL stances: foresee turns its
-//     stance into the counter, dash and lantern win head bonks, lantern
-//     dazzles the friend, hush starts, shell goes up
-//   3 clash: beats(), or a head bonk on equal stances, which a side with
-//     bonkTurns > 0 wins (both or neither: still a bonk)
-//   4 damage: 1 heart to the clash loser; OnDamage handlers only ADD hits (zap)
-//   5 blocks only TAKE hits away: hush cancels a lost clash, a dazzled
-//     winner's clash hit misses on its own luck, then a shell absorbs one hit
-//   6 AfterDamage handlers (mend, spores); then sparks: +1 to each side not
-//     dozing, +1 more to the clash loser (the rally), capped at kMeterMax;
-//     the turn counters tick down. Nothing rewards the winner: every winner
-//     reward snowballed in the probe
-//   7 a side at 0 hearts faints (Spar, Scrap) or is downed (Mortal) and the
+//   1 what each side plays. A dozing side has no stance. A side with a
+//     special in flight braces until its landing turn, then plays the landing
+//     entry's hidden stance (asleep on its landing turn, the special is lost).
+//     Otherwise a wind-up entry commits a special if the meter holds the cost
+//     (spent now) and the landing fits in kMaxTurns, and he braces this turn.
+//     Any other entry, a short-metered commit included, is a plain stance
+//   2 a landing meets the friend's stance, and there is no clash that turn.
+//     If the friend's stance beats it, it is riposted: its owner takes
+//     1 + extra and the power does not fire (a Foresee whiffs instead: he saw
+//     it coming). A hushing friend dodges it: a whiff. Otherwise, ties
+//     included, it lands: the friend takes 1 + extra and the power fires
+//     (gadget draws the power it becomes from its own luck)
+//   3 with no landing, the clash: beats(), a sleeper loses to anyone awake, and
+//     only a Trick beats a bracer (a Pounce or a Guard bonks off). Equal is a
+//     head bonk, which a side with bonkTurns > 0 wins. The loser takes 1 heart
+//     unless the winner is dazzled and misses on its luck, or the loser
+//     hushes. A bracer that loses the clash is staggered: a Heavy drops to
+//     Quick, a Quick is lost and its landing entry plays as a plain stance
+//   4 the fired power: OnDamage handlers only ADD hits (zap) and set what
+//     lasts (shell, dash, lantern, hush); then a shell absorbs one hit; then
+//     AfterDamage handlers (mend, spores)
+//   5 sparks: +1 to each side not dozing, +1 more to a side that took hits
+//     while the other took none (the rally), capped at kMeterMax; the turn
+//     counters tick down. Nothing rewards the winner
+//   6 a side at 0 hearts faints (Spar, Scrap) or is downed (Mortal) and the
 //     battle ends; both at 0 is a draw and nobody is downed. After kMaxTurns,
 //     more hearts wins
-// A powered move whose meter is short plays as an unpowered move.
 Outcome resolve(const BattleCard& a, const BattleCard& b, uint32_t seed, Stakes, const MoveLog& movesA,
                 const MoveLog& movesB);
 
 // What a power handler sees: the turn so far, from its own side's view.
-// Handlers are called only for a side whose power fired this turn; what
+// Handlers are called only for a side whose special landed this turn; what
 // lasts past the turn lives in SideState and the turn's own steps read it.
 struct PowerCtx {
   Side me;
   PowerId acting;                // the row's power, or what gadget became
-  const Stance (&original)[2];   // as locked, before any handler
-  const bool (&dozed)[2];
-  Stance (&shown)[2];            // what the clash plays
   uint8_t (&hit)[2];
   uint8_t (&healed)[2];
   SideState (&side)[2];
@@ -332,7 +374,11 @@ uint8_t duelContext(const Outcome&, Side me, const BattleCard& theirs);
 // never peeks at an unpaired move. `whisper` (0..255) is how brightly the
 // screen shows it: it rises with how sure the pet is and with the assist, so a
 // young kid is shown the reading the pet has made. Also the 10 s autopilot.
-struct Lean { Stance stance; uint8_t whisper; };
+// `special` is the autopilot's own commit: Quick or Heavy when the meter
+// holds the cost and the pet is sure of its read (a spirited pet goes Heavy),
+// None otherwise. Against a bracing friend the lean is Trick (stagger it); on
+// the friend's landing turn it is the counter of the landing it foresees.
+struct Lean { Stance stance; uint8_t whisper; Windup special = Windup::None; };
 Lean petChoice(const DuelSkill&, const Outcome&, Side me, const BattleCard& mine, const BattleCard& theirs,
                uint8_t assistHearts, uint32_t seed);
 // After each resolved turn: the friend's shown stance makes every one of my

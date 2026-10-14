@@ -42,7 +42,7 @@ mutant "a turn reads how long the logs are" $R 's/playTurn(o, card, seed, t, m);
   "Prefix.ResolvingMoreTurnsNeverChangesTheTurnsBefore"
 mutant "hearts wrap below zero" $R 's/s\[i\].hearts = r.hit\[i\] >= s\[i\].hearts ? 0 : uint8_t(s\[i\].hearts - r.hit\[i\]);/s[i].hearts = uint8_t(s[i].hearts - r.hit[i]);/' \
   "Hearts.StayWithinZeroAndMaxEveryTurn"
-mutant "a short meter fires anyway" $R 's/if (dozed\[i\] || !m\[i\].power || s\[i\].spark < p.cost) continue;/if (dozed[i] || !m[i].power) continue;/' \
+mutant "a short meter commits anyway" $R 's/if (s.spark < cost || lands >= DuelRules::kMaxTurns) return false;/if (lands >= DuelRules::kMaxTurns) return false;/' \
   "Meter.AShortMeterPlaysPlain"
 mutant "the verdict read from the loser's log" $R 's/\*log\[o.downed\[0\] ? 1 : 0\]/*log[o.downed[0] ? 0 : 1]/' \
   "Verdict.AMortalLoserIsDownedAndTheWinnersSlotDecides"
@@ -50,14 +50,14 @@ mutant "the verdict slot one late" $R 's/if (winner.count() > o.resolved) o.verd
   "Verdict.ReadFromTheSixteenthSlotAfterADowningOnTurnFifteen"
 mutant "gadget can draw itself" $R 's/% (kPowerCount - 1)/% kPowerCount/; s/if (p.id != power::gadget \&\& pick-- == 0)/if (pick-- == 0)/' \
   "Powers.GadgetDrawsEachOfTheOtherEightAndNeverItself"
-mutant "a dazzle never misses" $R 's/(draw(luck\[win\], Purpose::Dazzle) \& 1) != 0/false/' \
-  "Powers.LanternWinsTheBonkAndDazzlesTheFriendForTwoTurns"
-mutant "a zap leaves the clash's mark" $R 's/return Scar::Kind::Ring;/return Scar::Kind::Claw;/' \
+mutant "a dazzle never misses" $R 's/(draw(luck\[w\], Purpose::Dazzle) \& 1) != 0/false/' \
+  "Powers.LanternDazzlesTheFriendNextTurn"
+mutant "a zap leaves the strike's mark" $R 's/return Scar::Kind::Bite;/return Scar::Kind::Claw;/' \
   "TurnHits.HeartsKindAndLuckPerTurn"
-mutant "hush lasts one turn" $P 's/c.side\[mine(c)\].hushTurns = 2;/c.side[mine(c)].hushTurns = 1;/' \
-  "Powers.HushCancelsLostClashesForTwoTurns"
-mutant "dash lasts one turn" $P 's/c.side\[mine(c)\].bonkTurns = 2;/c.side[mine(c)].bonkTurns = 1;/' \
-  "Powers.DashWinsHeadBonksForTwoTurns"
+mutant "hush is gone by the next turn" $P 's/c.side\[mine(c)\].hushTurns = 2;/c.side[mine(c)].hushTurns = 1;/' \
+  "Powers.HushWhiffsTheNextSpecialAndCancelsTheNextLostClash"
+mutant "dash is gone by the next turn" $P 's/c.side\[mine(c)\].bonkTurns = 2;/c.side[mine(c)].bonkTurns = 1;/' \
+  "Powers.DashWinsTheNextHeadBonk"
 mutant "adopt takes a conflicting prefix" $H 's/      if (packed\[i\] != packed_\[i\]) return Merge::Conflict;/      (void)packed;/' \
   "MoveLog.AdoptKeepsTheLongestConsistentPrefix"
 mutant "duelSeed depends on who is A" $H 's/const uint32_t lo = nonceA < nonceB ? nonceA : nonceB, hi = nonceA < nonceB ? nonceB : nonceA;/const uint32_t lo = nonceA, hi = nonceB;/' \
@@ -68,6 +68,22 @@ mutant "grungo reads one turn like the rest" $M 's/seer.species == kGrungo ? 2 :
   "Foretell.GrungoReadsATwoTurnPatternTheOthersMiss"
 mutant "zap at three pips tips the wheel" $D 's/BLORB_POWER(6, zap,     6,/BLORB_POWER(6, zap,     3,/' \
   "Balance.TheWheelHoldsAndMatchesTheProbe"
-mutant "the parent stops reading" $B 's/case Player::Reader: return read(rng, o, me);/case Player::Reader: return Stance(rng.below(kCycle));/' \
+mutant "the parent stops reading" $B 's/const Stance s = counterTheirHabit(rng, o, me);/const Stance s = Stance(rng.below(kCycle));/' \
   "Balance.AReaderBeatsAHabitKid"
+mutant "a heavy winds up one turn, as the probe had it" $R 's/const uint8_t lands = uint8_t(t + uint8_t(m.windup));/const uint8_t lands = uint8_t(t + 1);/' \
+  "Special.AHeavyBracesTwoTurnsThenLandsForThree"
+mutant "a stagger leaves a heavy at full strength" $R 's/s\[l\].queued = s\[l\].queued == Windup::Heavy ? Windup::Quick : Windup::None;/s[l].queued = s[l].queued == Windup::Heavy ? Windup::Heavy : Windup::None;/' \
+  "Special.AStaggeredHeavyDropsToQuickStrength"
+mutant "a riposted special still fires" $R 's/    r.special\[i\] = Special::Riposted;/    r.special[i] = Special::Riposted; r.powered[i] = true; acting = r.fired[i] = fires;/' \
+  "Special.ACounteredLandingIsRipostedAndThePowerDoesNotFire"
+mutant "a tie goes to the friend" $R 's/!r.bracing\[o\] \&\& beats(r.shown\[o\], r.shown\[i\]);/!r.bracing[o] \&\& !beats(r.shown[i], r.shown[o]);/' \
+  "Special.ATieGoesToTheSpecial"
+mutant "any stance staggers a bracer" $R 's/if (r.bracing\[b\]) return r.shown\[a\] == Stance::Trick;/if (r.bracing[b]) return true;/' \
+  "Special.AQuickBracesOneTurnThenLandsForTwo"
+mutant "a special lands in its sleep" $R '/else if (r.dozed\[i\]) s.queued = Windup::None;/d' \
+  "Special.AsleepOnItsLandingTurnTheSpecialIsLost"
+mutant "foresee is riposted like the rest" $P 's/constexpr bool seesTheRiposte(PowerId p) { return p == power::foresee; }/constexpr bool seesTheRiposte(PowerId) { return false; }/' \
+  "Powers.ForeseeWhiffsWhereOthersAreRiposted"
+mutant "the commit leaks its landing" $H 's/append(Move{Stance::Pounce, false, byPet, Verdict::None, w});/append(Move{landing, false, byPet, Verdict::None, w});/' \
+  "MoveLog.AppendSpecialWritesTheCommitAndRefusesALandingPastTheEnd"
 exit $failed

@@ -9,8 +9,10 @@
 namespace duelgolden {
 using namespace blorb;
 
-// 'P' 'G' 'T' lock a stance; lower case also arms the power; '.' is a turn
-// the pet slept through; 'S' and 'F' are a verdict, Spare and Finish.
+// 'P' 'G' 'T' lock a stance. A special is 'q' (quick) or 'h' (heavy) for the
+// commit, '_' for a heavy's placeholder, then lower case 'p' 'g' 't' for the
+// landing entry. '.' is a turn the pet slept through; 'S' and 'F' are a
+// verdict, Spare and Finish.
 constexpr MoveLog logOf(const char* s) {
   MoveLog l{};
   for (; *s; ++s) {
@@ -20,22 +22,17 @@ constexpr MoveLog logOf(const char* s) {
     m.power = c == 'p' || c == 'g' || c == 't';
     m.byPet = c == '.';
     m.verdict = c == 'S' ? Verdict::Spare : c == 'F' ? Verdict::Finish : Verdict::None;
+    m.windup = c == 'q' ? Windup::Quick : c == 'h' ? Windup::Heavy : Windup::None;
     l.append(m);
   }
   return l;
-}
-
-constexpr uint8_t knackFor(Stance style) {
-  for (uint8_t k = 0; k < 6; ++k)
-    if (Knack{k}.best() == style) return k;
-  return 0;
 }
 
 constexpr BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess = 128) {
   BattleCard c{};
   c.species = s;
   c.power = speciesInfo(s).power;
-  c.knack = Knack{duelgolden::knackFor(speciesInfo(s).style)};
+  c.knack = Knack{knackOrderOf(knackFor(speciesInfo(s).style))};
   c.lineageId = lineage;
   c.prowess = prowess;
   return c;
@@ -58,15 +55,17 @@ struct Golden {
 
 inline constexpr Golden kGoldens[] = {
     {"a spar, grungo v fizz", cardOf(sp::grungo, 0x1D0001), cardOf(sp::fizz, 0x2D0002), 0xD4D40001u, Stakes::Spar,
-     "TtPGpTgPtGTpGTp", "PpGTpPgTtGpPTgT", 0x84a00fe2u},
+     "TPGqtPGh_pTGP", "PGTPqgTTGPh_t", 0xc371ec08u},
     {"a scrap with assist, tinker v gilly", cardOf(sp::tinker, 0xA, 200), cardOf(sp::gilly, 0xB, 100), 0xD4D40002u,
-     Stakes::Scrap, "ptgptgptgptgptg", "GgTtPpGgTtPpGgT", 0xe4b1e1dbu},
-    {"every power armed, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD), 0xD4D40003u,
-     Stakes::Spar, "pgtpgtpgtpgtpgt", "tgptgptgptgptgp", 0x109a5de8u},
+     Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0xb01a435au},
+    {"specials on both sides, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD),
+     0xD4D40003u, Stakes::Spar, "PPPPPqpTGh_tPG", "PPPqtGPh_gTqpP", 0x1ab43fc2u},
     {"a mortal downing and a finish, mudge v hushwing", cardOf(sp::mudge, 0x3), cardOf(sp::hushwing, 0x4),
-     0xD4D40004u, Stakes::Mortal, "PPPPPF", "TTTTT", 0x770ea094u},
+     0xD4D40004u, Stakes::Mortal, "PPPPPF", "TTTTT", 0x4bcd6224u},
     {"downed on the last turn, spared in slot 16, gilly v grungo", cardOf(sp::gilly, 0x7), cardOf(sp::grungo, 0x8),
-     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPTTTTTF", 0x7cd0c7cfu},
+     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPTTTTTF", 0xa1f5b1c7u},
+    {"a riposte and a stagger, mudge v gilly", cardOf(sp::mudge, 0x9), cardOf(sp::gilly, 0xA), 0xD4D40006u,
+     Stakes::Scrap, "PPPqpPPh_pTqg", "PPPGGPTPGPPTG", 0x88df67a4u},
 };
 
 // The first golden whose hash differs, or -1. Its own function so the S3
