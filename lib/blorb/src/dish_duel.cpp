@@ -161,6 +161,24 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   }
   if (!air) return out;
 
+  // Where a double press also means something (the lobby: close; the friends
+  // screen: leave), a press waits out the double's window first, so a kid
+  // leaving never asks for a rematch on the way out.
+  {
+    const DuelView v = session_.view(tick);
+    const bool both = bootMeaning(bootContext(o, &v)).doublePress != BootAct::Nothing;
+    const uint32_t window = kDoublePressMs / kTickMs + 1;
+    if (fired(raw, stim::button_double)) heldPress_.reset();
+    if (both && fromBody(raw, stim::button)) {
+      drop(raw, duelStimBit(stim::button));
+      heldPress_ = tick;
+    }
+    // A second press still down may yet be the double: it fires on release.
+    if (heldPress_ && (!both || (tick - *heldPress_ >= window && !bootDown))) {
+      raw.fire(stim::button);
+      heldPress_.reset();
+    }
+  }
   const DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
   DuelEffects fx = session_.tick(*air, in, tick);
   drop(raw, fx.captured);

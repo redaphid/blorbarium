@@ -5,6 +5,7 @@
 // duel; this applies what it decides to the pet he is: wounds, scars, a fall,
 // the book, the friend egg.
 #include <cstdint>
+#include <optional>
 #include "blorb/air.h"
 #include "blorb/boot.h"
 #include "blorb/creature.h"
@@ -94,6 +95,7 @@ class DishDuel {
   uint32_t lastEndTick_ = 0;
   bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false;
   Refusal refusal_;
+  std::optional<uint32_t> heldPress_;   // a press waiting to see if a second one follows
 };
 
 }  // namespace blorb
