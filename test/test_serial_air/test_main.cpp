@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 
+#include "blorb/air.h"   // named here so the library finder links lib/blorb for the sim header
 #include "../../sim/serial_air.h"
 
 using simair::Heard;

@@ -26,11 +26,7 @@
 #include <optional>
 #include <vector>
 
-#if __has_include("blorb/air.h")
 #include "blorb/air.h"
-#else
-#include "../docs/design/sketch/blorb/air.h"   // until D8 lands the real one
-#endif
 
 namespace simair {
 
