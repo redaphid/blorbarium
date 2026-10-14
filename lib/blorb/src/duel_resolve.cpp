@@ -33,63 +33,115 @@ constexpr PowerId gadgetPick(uint32_t luck) {
 
 constexpr Element elementOf(const BattleCard& c) { return speciesInfo(c.species).element; }
 
+using Special = TurnReport::Special;
+
+// Step 1 for one side: what it plays this turn, and whether its special lands.
+// Asleep while winding up, a special keeps winding; asleep on its landing
+// turn, it is lost.
+constexpr bool takeStance(TurnReport& r, SideState& s, const BattleCard& card, uint8_t i, uint8_t t, const Move& m) {
+  r.shown[i] = m.stance;
+  if (s.queued != Windup::None) {
+    if (t < s.landsOn) r.bracing[i] = !r.dozed[i];
+    else if (r.dozed[i]) s.queued = Windup::None;
+    else return true;
+    return false;
+  }
+  if (m.windup == Windup::None || r.dozed[i]) return false;
+  const uint8_t cost = powerInfo(card.power).cost;
+  const uint8_t lands = uint8_t(t + uint8_t(m.windup));
+  if (s.spark < cost || lands >= DuelRules::kMaxTurns) return false;
+  s.spark = uint8_t(s.spark - cost);
+  s.queued = m.windup;
+  s.landsOn = lands;
+  r.bracing[i] = true;
+  r.special[i] = Special::Committed;
+  return false;
+}
+
+// Step 2 for one landing side. Reads only what neither landing writes.
+constexpr void land(TurnReport& r, SideState (&s)[2], const BattleCard& card, uint8_t i, uint32_t luck, PowerId& acting) {
+  const uint8_t o = uint8_t(1 - i);
+  const PowerId p = powerInfo(card.power).id;
+  const PowerId fires = p == power::gadget ? gadgetPick(luck) : p;
+  const uint8_t hearts = uint8_t(1 + SpecialRules::extra(s[i].queued));
+  const bool countered = !r.dozed[o] && !r.bracing[o] && beats(r.shown[o], r.shown[i]);
+  if (countered && seesTheRiposte(fires)) {
+    r.special[i] = Special::Whiffed;
+  } else if (countered) {
+    r.hit[i] = uint8_t(r.hit[i] + hearts);
+    r.special[i] = Special::Riposted;
+  } else if (s[o].hushTurns > 0) {
+    r.special[i] = Special::Whiffed;
+  } else {
+    r.hit[o] = uint8_t(r.hit[o] + hearts);
+    r.special[i] = Special::Landed;
+    r.powered[i] = true;
+    acting = r.fired[i] = fires;
+  }
+}
+
+// Step 3: a side strikes in a clash only awake and not bracing; a sleeper
+// loses to any striker, and a bracer only to a Trick.
+constexpr bool strikes(const TurnReport& r, uint8_t i) { return !r.dozed[i] && !r.bracing[i]; }
+constexpr bool winsClash(const TurnReport& r, uint8_t a, uint8_t b) {
+  if (!strikes(r, a)) return false;
+  if (r.dozed[b]) return true;
+  if (r.bracing[b]) return r.shown[a] == Stance::Trick;
+  return beats(r.shown[a], r.shown[b]);
+}
+
+constexpr void clash(TurnReport& r, SideState (&s)[2], const BattleCard* const (&card)[2], const uint32_t (&luck)[2]) {
+  int8_t win = -1;
+  if (winsClash(r, 0, 1)) win = 0;
+  else if (winsClash(r, 1, 0)) win = 1;
+  else if ((s[0].bonkTurns > 0) != (s[1].bonkTurns > 0)) win = s[0].bonkTurns > 0 ? 0 : 1;
+  r.clash = win < 0 ? Clash::Bonk : win == 0 ? Clash::AWins : Clash::BWins;
+  if (win < 0 || !strikes(r, uint8_t(win))) return;
+  const uint8_t w = uint8_t(win), l = uint8_t(1 - win);
+  const bool dazzleMiss = s[w].dazzledTurns > 0 && (draw(luck[w], Purpose::Dazzle) & 1) != 0;
+  if (dazzleMiss || s[l].hushTurns > 0) r.blocked[l] = true;
+  else ++r.hit[l];
+  if (r.bracing[l]) {
+    s[l].queued = s[l].queued == Windup::Heavy ? Windup::Quick : Windup::None;
+    r.special[l] = Special::Staggered;
+  }
+  r.super[w] = beats(elementOf(*card[w]), elementOf(*card[l]));
+  r.zone[w] = r.shown[w] == card[w]->knack.best();
+}
+
 constexpr void playTurn(Outcome& o, const BattleCard* const (&card)[2], uint32_t seed, uint8_t t, const Move (&m)[2]) {
   TurnReport& r = o.turns[t];
   SideState(&s)[2] = o.side;
   uint32_t luck[2]{};
-  Stance original[2]{};
-  bool dozed[2]{};
+  bool landing[2]{};
   PowerId acting[2]{};
   for (uint8_t i = 0; i < 2; ++i) {
     r.move[i] = m[i];
     luck[i] = sideLuck(seed, t, card[i]->lineageId);
-    dozed[i] = r.dozed[i] = s[i].dozing;
+    r.dozed[i] = s[i].dozing;
     s[i].dozing = false;
-    original[i] = r.shown[i] = m[i].stance;
+    landing[i] = takeStance(r, s[i], *card[i], i, t, m[i]);
   }
 
-  // 2 powers
-  for (uint8_t i = 0; i < 2; ++i) {
-    const PowerInfo& p = powerInfo(card[i]->power);
-    if (dozed[i] || !m[i].power || s[i].spark < p.cost) continue;
-    s[i].spark = uint8_t(s[i].spark - p.cost);
-    acting[i] = r.fired[i] = p.id == power::gadget ? gadgetPick(luck[i]) : p.id;
-    r.powered[i] = true;
+  // 2 landings, or 3 the clash
+  if (landing[0] || landing[1]) {
+    for (uint8_t i = 0; i < 2; ++i)
+      if (landing[i]) land(r, s, *card[i], i, luck[i], acting[i]);
+    for (uint8_t i = 0; i < 2; ++i)
+      if (landing[i]) s[i].queued = Windup::None;
+  } else {
+    clash(r, s, card, luck);
   }
+
+  // 4 the fired powers, around the shell
   const auto phase = [&](PowerPhase ph) {
     for (uint8_t i = 0; i < 2; ++i) {
       if (!r.powered[i]) continue;
-      PowerCtx c{Side(i), acting[i], original, dozed, r.shown, r.hit, r.healed, s, luck[i]};
+      PowerCtx c{Side(i), acting[i], r.hit, r.healed, s, luck[i]};
       kPowerHandlers[acting[i].v](ph, c);
     }
   };
-  phase(PowerPhase::BeforeClash);
-
-  // 3 clash. A dozing side has no stance: it loses to anyone awake.
-  int8_t win = -1;
-  if (dozed[0] != dozed[1]) win = dozed[0] ? 1 : 0;
-  else if (!dozed[0] && beats(r.shown[0], r.shown[1])) win = 0;
-  else if (!dozed[0] && beats(r.shown[1], r.shown[0])) win = 1;
-  else {
-    const bool bonk0 = s[0].bonkTurns > 0, bonk1 = s[1].bonkTurns > 0;
-    if (bonk0 != bonk1) win = bonk0 ? 0 : 1;
-  }
-  r.clash = win < 0 ? Clash::Bonk : win == 0 ? Clash::AWins : Clash::BWins;
-  const uint8_t lose = uint8_t(1 - win);
-
-  // 4 damage. A dozing winner (both asleep, one dashing) deals nothing.
-  const bool clashLands = win >= 0 && !dozed[win];
-  if (clashLands) r.hit[lose] = 1;
   phase(PowerPhase::OnDamage);
-
-  // 5 blocks
-  if (clashLands) {
-    const bool dazzleMiss = s[win].dazzledTurns > 0 && (draw(luck[win], Purpose::Dazzle) & 1) != 0;
-    if (dazzleMiss || s[lose].hushTurns > 0) {
-      --r.hit[lose];
-      r.blocked[lose] = true;
-    }
-  }
   for (uint8_t i = 0; i < 2; ++i) {
     if (r.hit[i] > 0 && s[i].shell) {
       --r.hit[i];
@@ -98,21 +150,17 @@ constexpr void playTurn(Outcome& o, const BattleCard* const (&card)[2], uint32_t
     }
     s[i].hearts = r.hit[i] >= s[i].hearts ? 0 : uint8_t(s[i].hearts - r.hit[i]);
   }
-
-  // 6 after: mend, spores, then sparks and the counters
   phase(PowerPhase::AfterDamage);
+
+  // 5 sparks and the counters
   for (uint8_t i = 0; i < 2; ++i) {
     uint8_t spark = s[i].spark;
-    if (!dozed[i]) ++spark;
-    if (win >= 0 && i == lose) ++spark;
+    if (!r.dozed[i]) ++spark;
+    if (r.hit[i] > 0 && r.hit[1 - i] == 0) ++spark;
     s[i].spark = spark > kMeterMax ? kMeterMax : spark;
     if (s[i].bonkTurns) --s[i].bonkTurns;
     if (s[i].dazzledTurns) --s[i].dazzledTurns;
     if (s[i].hushTurns) --s[i].hushTurns;
-  }
-  if (clashLands) {
-    r.super[win] = beats(elementOf(*card[win]), elementOf(*card[lose]));
-    r.zone[win] = r.shown[win] == card[win]->knack.best();
   }
 }
 
@@ -153,8 +201,9 @@ constexpr Outcome resolveCore(const BattleCard& a, const BattleCard& b, uint32_t
   return o;
 }
 
-// What hit me on one turn, as a scar names it: a zap's ring over the clash's
-// mark, then a Pounce's claw, then the winner's element.
+// What hit me on one turn, as a scar names it: a zap's bite over the strike's
+// mark, then a Pounce's claw, then the striker's element. A riposte is struck
+// by the friend's stance like any other hit.
 constexpr Scar::Kind hitKind(const TurnReport& r, uint8_t me, const BattleCard& theirs) {
   const uint8_t them = uint8_t(1 - me);
   if (r.powered[them] && r.fired[them] == power::zap) return Scar::Kind::Bite;

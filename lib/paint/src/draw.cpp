@@ -1,5 +1,7 @@
 #include <cstring>
 #include "blorb/registry.h"
+#include "duel/duel_art.h"
+#include "figure.h"
 #include "paint/marquee.h"
 #include "paint/sprite_pack.h"
 
@@ -154,7 +156,7 @@ void addLight(Canvas240& cv, int x, int y, const Rgb& c, int intensity) {
 struct Colours {
   uint16_t base[256];
   uint16_t spot[256];
-  bool skin[256];
+  uint8_t region[256];   // the entry's palette region, 255 invariant
 };
 
 void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t spotHue, Colours& out) {
@@ -169,8 +171,8 @@ void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t 
     Rgb c{e.r, e.g, e.b};
     if (e.region < blorb::kRegionCount) c = tinted(c, clamped[e.region], elder ? kElderSat : 128);
     out.base[i] = out.spot[i] = to565(c);
-    out.skin[i] = e.region == blorb::region::skin.v;
-    if (out.skin[i]) out.spot[i] = to565(tinted(c, Tint{spotHue, 128, 92}, 128));
+    out.region[i] = e.region;
+    if (e.region == blorb::region::skin.v) out.spot[i] = to565(tinted(c, Tint{spotHue, 128, 92}, 128));
   }
 }
 
@@ -338,7 +340,14 @@ bool spotted(const Mottle& m, int rx, int ry) {
   return lx * lx + ly * ly <= r2;
 }
 
-void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, int alpha, const Mottle* mottle) {
+// A skin pixel under his scars, x/128 in each channel.
+uint16_t scarred(uint16_t c, int q) {
+  const int r = imin(31, ((c >> 11) & 31) * q / 128), g = imin(63, ((c >> 5) & 63) * q / 128), b = imin(31, (c & 31) * q / 128);
+  return uint16_t((r << 11) | (g << 5) | b);
+}
+
+void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, int alpha, const Mottle* mottle,
+          const ScarLayer* scars = nullptr) {
   if (!drawable(f) || alpha <= 0) return;
   const Xf& v = p.xf;
   int lean = iabs(v.shear) * (f.h * v.ky / kOne + v.lift + 2) / kOne + 1;
@@ -359,8 +368,9 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
       if (sx < 0 || sx >= f.w) continue;
       uint8_t i = row[sx];
       if (!i) continue;
-      bool spot = mottle && col.skin[i] && spotted(*mottle, sx - f.originX, sy - f.originY);
+      bool spot = mottle && col.region[i] == blorb::region::skin.v && spotted(*mottle, sx - f.originX, sy - f.originY);
       uint16_t c = spot ? col.spot[i] : col.base[i];
+      if (scars && scars->count && isHide(col.region[i])) c = scarred(c, scarShade(*scars, sx - f.originX, sy - f.originY));
       uint16_t& dst = cv.px[y * kSide + x];
       dst = alpha >= 256 ? c : blend(dst, c, alpha);
     }
@@ -634,6 +644,14 @@ void pelletInMouth(Canvas240& cv, const SpritePack& pack, const Appearance& a, c
   blit(cv, f, q, col, 256, nullptr);
 }
 
+// His scars, placed on his stage's resting body so they sit still on him
+// whatever pose or squash the frame is drawn in.
+ScarLayer scarsOn(const Appearance& a, const SpritePack& pack, int scale, uint8_t newest = 0, uint8_t newStrength = 255) {
+  uint16_t count = 0;
+  const PaletteEntry* pal = pack.palette(count);
+  return placeScars(a.scars, pack.body(blorb::pose::idle, a.stage, 0), pal, count, scale, newest, newStrength);
+}
+
 void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
@@ -679,14 +697,15 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift, 0};
   if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
   const Mottle* spots = mottle.density ? &mottle : nullptr;
-  blit(cv, body, p, col, 256, spots);
+  const ScarLayer scars = scarsOn(a, pack, base.kx);
+  blit(cv, body, p, col, 256, spots, &scars);
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer != 0) blit(cv, pack.mark(a.marks[i].layer, a.marks[i].variant), p, col, 256, nullptr);
 
   FaceShown face = faceFor(a);
   FrameRef now = pack.face(face.now, a.stage);
-  if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, 256, spots);
-  blit(cv, now, p, col, face.mix, spots);
+  if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, 256, spots, &scars);
+  blit(cv, now, p, col, face.mix, spots, &scars);
   halo(cv, a, pack, now.eyeCount ? now : body, p);
   pelletInMouth(cv, pack, a, now, p, col);
   drawItems(a, pack, cv, d, col, p, foot, true);
@@ -900,7 +919,94 @@ void sealedInAmber(Canvas240& cv, uint32_t nowMs) {
                 nowMs);
 }
 
+// The battle art's colours are fixed, so one LUT serves every frame of it.
+const Colours& artColours() {
+  static const Colours c = [] {
+    Colours o;
+    std::memset(&o, 0, sizeof(o));
+    std::memset(o.region, 255, sizeof(o.region));
+    for (int i = 0; i < imin(duel_art::kPaletteCount, 256); ++i)
+      o.base[i] = o.spot[i] = to565({duel_art::kPalette[i].r, duel_art::kPalette[i].g, duel_art::kPalette[i].b});
+    return o;
+  }();
+  return c;
+}
+
+// What his line's duel book puts on the rim at home: the newest trophies down
+// the lower right, the debt and vendetta marks down the lower left, clear of
+// the care hint at the bottom.
+constexpr int kTokenPct = 75;
+constexpr int kTokenAt[3][2] = {{207, 170}, {191, 191}, {170, 207}};
+constexpr int kDebtAt[2] = {33, 170}, kVendettaAt[2] = {49, 191};
+
+void rimTokens(Canvas240& cv, const Appearance& a) {
+  for (int i = 0; i < imin(a.trophyCount, Appearance::kRimTrophies); ++i)
+    drawArt(cv, duel_art::kTrophies[a.trophies[i].v % blorb::kSpeciesCount], kTokenAt[i][0], kTokenAt[i][1], kTokenPct, 256);
+  if (a.owesDebt) drawArt(cv, duel_art::kDebt, kDebtAt[0], kDebtAt[1], kTokenPct, 256);
+  if (a.vendetta) drawArt(cv, duel_art::kVendetta, kVendettaAt[0], kVendettaAt[1], kTokenPct, 256);
+}
+
 }  // namespace
+
+void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int alpha, int fillRows) {
+  if (!drawable(f)) return;
+  FrameRef g = f;
+  if (fillRows < 255) {
+    const int skip = f.h - f.h * imax(0, fillRows) / 255;
+    for (int row = 0; row < skip; ++row)
+      for (int px = 0; px < f.w; px += g.rle[0], g.rle += 2) {}
+    g.h = uint16_t(f.h - skip);
+    g.originY = int16_t(f.originY - skip);
+    if (!g.h) return;
+  }
+  Place p;
+  p.x = x;
+  p.y = y;
+  p.xf.kx = p.xf.ky = imax(kMinScale, kOne * scalePct / 100);
+  blit(cv, g, p, artColours(), alpha, nullptr);
+}
+
+void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Figure& fig) {
+  Mottle mottle{a.lifeSeed, 0};
+  int8_t spotHue = 0;
+  for (int i = 0; i < imin(a.markCount, 8); ++i)
+    if (a.marks[i].layer == 0) { mottle.density = a.marks[i].variant; spotHue = a.marks[i].tint.hue; }
+  Colours col;
+  buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
+  if (fig.flash)
+    for (int i = 0; i < 256; ++i) {
+      col.base[i] = blend(col.base[i], 0xFFFF, fig.flash);
+      col.spot[i] = blend(col.spot[i], 0xFFFF, fig.flash);
+    }
+  const int k = imax(kMinScale, int(int64_t(a.scalePct) * fig.scalePct * kOne / 10000));
+  Xf base{k, k, 0, 0};
+  if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+    base.kx = k * kHatchlingWide / kOne;
+    base.ky = k * kHatchlingTall / kOne;
+  }
+  Place p;
+  p.x = fig.x;
+  p.y = fig.y;
+  p.xf = base;
+  if (fig.remainsIn) blit(cv, pack.remains(), p, col, (fig.alpha + 1) * (fig.remainsIn + 1) / 256, nullptr);
+  if (fig.remainsIn == 255) return;
+
+  const FrameRef body = pack.body(a.pose, a.stage, a.poseTick);
+  shadow(cv, p, footHalfW(body, base.kx), fig.lift, kHopMaxPx * base.ky / kOne);
+  p.xf = {imax(1, base.kx * fig.widePct / 100), imax(1, base.ky * fig.tallPct / 100), fig.lift, fig.leanPct * kOne / 100};
+  if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
+  const Mottle* spots = mottle.density ? &mottle : nullptr;
+  const ScarLayer scars = scarsOn(a, pack, base.kx, fig.newScars, fig.scarIn);
+  const int alpha = (fig.alpha + 1) * (256 - fig.remainsIn) / 256;
+  blit(cv, body, p, col, alpha, spots, &scars);
+  for (int i = 0; i < imin(a.markCount, 8); ++i)
+    if (a.marks[i].layer != 0) blit(cv, pack.mark(a.marks[i].layer, a.marks[i].variant), p, col, alpha, nullptr);
+  const FaceShown face = fig.hasFace ? FaceShown{fig.face, fig.face, 256} : faceFor(a);
+  const FrameRef now = pack.face(face.now, a.stage);
+  if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, alpha, spots, &scars);
+  blit(cv, now, p, col, face.mix * alpha / 256, spots, &scars);
+  halo(cv, a, pack, now.eyeCount ? now : body, p);
+}
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   background(cv, a.night);
@@ -917,6 +1023,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutch(a, pack, cv); break;
   }
   pips(cv, a.pantry);
+  rimTokens(cv, a);
   hint(cv, a);
   if (a.timeUnknown) timeUnknown(cv, nowMs, a.at.y < Fx::zero());
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());

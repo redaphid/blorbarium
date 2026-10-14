@@ -123,6 +123,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
+  a.scars = c.scars();
   careHint(c, a);
   lastStimulus(chem, a);
 }

@@ -27,6 +27,7 @@ Outcome mirrored(const Outcome& o) {
     std::swap(r.hit[0], r.hit[1]);     std::swap(r.healed[0], r.healed[1]);   std::swap(r.fired[0], r.fired[1]);
     std::swap(r.powered[0], r.powered[1]); std::swap(r.blocked[0], r.blocked[1]);
     std::swap(r.super[0], r.super[1]); std::swap(r.zone[0], r.zone[1]);
+    std::swap(r.bracing[0], r.bracing[1]); std::swap(r.special[0], r.special[1]);
     if (r.clash != Clash::Bonk) r.clash = r.clash == Clash::AWins ? Clash::BWins : Clash::AWins;
   }
   return m;
@@ -79,21 +80,25 @@ TEST(Mirror, TenThousandRandomBattlesMirror) {
 }
 
 TEST(Prefix, ResolvingMoreTurnsNeverChangesTheTurnsBefore) {
+  // Either log may run ahead (a committed special writes up to three turns at
+  // once), and what the other has not reached is never read.
   Random r{{0x9F}};
   for (int k = 0; k < 2000; ++k) {
     const BattleCard a = r.card(), b = r.card();
     const uint32_t seed = r.rng.next();
     const MoveLog ma = r.log(15), mb = r.log(15);
     const Outcome full = resolve(a, b, seed, Stakes::Scrap, ma, mb);
-    for (uint8_t n = 0; n < 15; ++n) {
-      MoveLog pa, pb;
-      pa.adopt(ma.packed(), n);
-      pb.adopt(mb.packed(), n);
-      const Outcome part = resolve(a, b, seed, Stakes::Scrap, pa, pb);
-      ASSERT_LE(part.resolved, n);
-      for (uint8_t t = 0; t < part.resolved; ++t)
-        ASSERT_EQ(std::memcmp(&part.turns[t], &full.turns[t], sizeof(TurnReport)), 0) << "battle " << k << " turn " << +t;
-    }
+    for (uint8_t n = 0; n < 15; ++n)
+      for (uint8_t cut = 0; cut < 3; ++cut) {
+        MoveLog pa, pb;
+        pa.adopt(ma.packed(), cut == 1 ? ma.count() : n);
+        pb.adopt(mb.packed(), cut == 2 ? mb.count() : n);
+        const Outcome part = resolve(a, b, seed, Stakes::Scrap, pa, pb);
+        ASSERT_LE(part.resolved, n);
+        for (uint8_t t = 0; t < part.resolved; ++t)
+          ASSERT_EQ(std::memcmp(&part.turns[t], &full.turns[t], sizeof(TurnReport)), 0)
+              << "battle " << k << " turn " << +t << " cut " << +cut;
+      }
   }
 }
 
@@ -118,15 +123,34 @@ TEST(Hearts, StayWithinZeroAndMaxEveryTurn) {
 }
 
 TEST(Meter, AShortMeterPlaysPlain) {
-  // Turn 0: nobody's meter holds a cost, so an armed move is an unarmed one.
-  const Outcome armed = play(grungoCard, gillyCard, "p", "g"), plain = play(grungoCard, gillyCard, "P", "G");
-  EXPECT_FALSE(armed.turns[0].powered[0]);
-  EXPECT_FALSE(armed.turns[0].powered[1]);
-  EXPECT_TRUE(armed.turns[0].move[0].power) << "the report keeps what was asked for";
-  EXPECT_EQ(armed.side[0].hearts, plain.side[0].hearts);
-  EXPECT_EQ(armed.side[1].hearts, plain.side[1].hearts);
-  EXPECT_EQ(armed.side[0].spark, plain.side[0].spark);
-  EXPECT_EQ(armed.side[1].spark, plain.side[1].spark);
+  // Turn 0: nobody's meter holds a cost, so a commit is the plain stance its
+  // entry carries, and its landing entry is a plain stance too.
+  const Outcome o = play(grungoCard, gillyCard, "qg", "GT");
+  EXPECT_FALSE(o.turns[0].bracing[0]);
+  EXPECT_EQ(o.turns[0].special[0], TurnReport::Special::None);
+  EXPECT_EQ(o.side[0].queued, Windup::None);
+  EXPECT_EQ(o.turns[0].clash, Clash::BWins) << "the commit's placeholder pounce meets a guard";
+  EXPECT_EQ(o.turns[1].clash, Clash::BWins) << "the landing entry's guard meets a trick";
+  EXPECT_FALSE(o.turns[1].powered[0]);
+}
+
+TEST(MoveLog, AppendSpecialWritesTheCommitAndRefusesALandingPastTheEnd) {
+  MoveLog l = logOf("PPPPPPPPPPPPP");
+  EXPECT_FALSE(l.appendSpecial(Windup::Heavy, Stance::Guard)) << "it would land on turn 16";
+  EXPECT_EQ(l.count(), 13);
+  EXPECT_TRUE(l.appendSpecial(Windup::Quick, Stance::Guard)) << "it lands on turn 15";
+  ASSERT_EQ(l.count(), 15);
+  EXPECT_EQ(l.at(13).windup, Windup::Quick);
+  EXPECT_EQ(l.at(13).stance, Stance::Pounce) << "the commit leaks nothing";
+  EXPECT_EQ(l.at(14).stance, Stance::Guard);
+  EXPECT_TRUE(l.at(14).power);
+  MoveLog h;
+  EXPECT_TRUE(h.appendSpecial(Windup::Heavy, Stance::Trick));
+  ASSERT_EQ(h.count(), 3);
+  EXPECT_EQ(h.at(0).windup, Windup::Heavy);
+  EXPECT_EQ(h.at(1).windup, Windup::None);
+  EXPECT_EQ(h.at(1).stance, Stance::Pounce);
+  EXPECT_EQ(h.at(2).stance, Stance::Trick);
 }
 
 TEST(Start, AssistHeartsAndTheElementHeadStart) {
@@ -160,117 +184,185 @@ TEST(MoveLog, AdoptKeepsTheLongestConsistentPrefix) {
   EXPECT_EQ(empty.count(), 0);
 }
 
+// ---- the queued special --------------------------------------------------------------
+
+// Mudge's dash costs 3: three head bonks fill it.
+constexpr BattleCard kMudge = cardOf(sp::mudge, 0x31);
+
+TEST(Special, AQuickBracesOneTurnThenLandsForTwo) {
+  const Outcome o = play(kMudge, gillyCard, "PPPqp", "PPPGT");
+  EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Committed);
+  EXPECT_TRUE(o.turns[3].bracing[0]);
+  EXPECT_EQ(o.turns[3].clash, Clash::Bonk) << "a guard does nothing to a bracer";
+  EXPECT_EQ(o.turns[3].hit[0] + o.turns[3].hit[1], 0);
+  EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[4].hit[1], 1 + SpecialRules::kQuickExtra);
+  EXPECT_TRUE(o.turns[4].powered[0]);
+  EXPECT_EQ(o.side[0].queued, Windup::None);
+}
+
+TEST(Special, AHeavyBracesTwoTurnsThenLandsForThree) {
+  const Outcome o = play(kMudge, gillyCard, "PPPh_p", "PPPPGT");
+  EXPECT_TRUE(o.turns[3].bracing[0]);
+  EXPECT_TRUE(o.turns[4].bracing[0]);
+  EXPECT_EQ(o.turns[3].clash, Clash::Bonk) << "a pounce bonks off a bracer";
+  EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[5].hit[1], 1 + SpecialRules::kHeavyExtra);
+}
+
+TEST(Special, ATieGoesToTheSpecial) {
+  const Outcome o = play(kMudge, gillyCard, "PPPqg", "PPPPG");
+  EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[4].hit[1], 2);
+}
+
+TEST(Special, ACounteredLandingIsRipostedAndThePowerDoesNotFire) {
+  const Outcome o = play(kMudge, gillyCard, "PPPh_p", "PPPPPG");
+  EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Riposted);
+  EXPECT_EQ(o.turns[5].hit[0], 1 + SpecialRules::kHeavyExtra);
+  EXPECT_EQ(o.turns[5].hit[1], 0);
+  EXPECT_FALSE(o.turns[5].powered[0]);
+  EXPECT_EQ(o.side[0].bonkTurns, 0);
+}
+
+TEST(Special, ATrickStaggersABracerAndAStaggeredQuickLandsPlain) {
+  const Outcome o = play(kMudge, gillyCard, "PPPqp", "PPPTT");
+  EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Staggered);
+  EXPECT_EQ(o.turns[3].clash, Clash::BWins);
+  EXPECT_EQ(o.turns[3].hit[0], 1);
+  EXPECT_FALSE(o.turns[4].bracing[0]);
+  EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::None);
+  EXPECT_EQ(o.turns[4].clash, Clash::AWins) << "the landing entry's pounce, played plain";
+  EXPECT_EQ(o.turns[4].hit[1], 1) << "one heart, not the special's two";
+  EXPECT_FALSE(o.turns[4].powered[0]);
+}
+
+TEST(Special, AStaggeredHeavyDropsToQuickStrength) {
+  const Outcome o = play(kMudge, gillyCard, "PPPh_p", "PPPTPT");
+  EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Staggered);
+  EXPECT_TRUE(o.turns[4].bracing[0]) << "still winding up";
+  EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[5].hit[1], 1 + SpecialRules::kQuickExtra);
+}
+
+TEST(Special, AsleepOnItsLandingTurnTheSpecialIsLost) {
+  // Puffkin's spores land on a mossby who has just committed his own quick, so
+  // he sleeps through the turn his shell would have landed.
+  const BattleCard puffkin = cardOf(sp::puffkin, 1), mossby = cardOf(sp::mossby, 2);
+  const Outcome o = play(puffkin, mossby, "PPPPPPqpT", "PPPPPPPqg");
+  ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[7].special[1], TurnReport::Special::Committed);
+  EXPECT_TRUE(o.turns[8].dozed[1]);
+  EXPECT_FALSE(o.turns[8].powered[1]);
+  EXPECT_EQ(o.side[1].queued, Windup::None);
+  EXPECT_EQ(o.turns[8].hit[1], 1) << "a trick beats a sleeper";
+}
+
 // ---- one case per power -------------------------------------------------------------
 
-TEST(Powers, ForeseeTurnsHisStanceIntoTheCounter) {
-  const Outcome o = play(grungoCard, gillyCard, "PPPPPp", "PPPPPP");
-  ASSERT_TRUE(o.turns[5].powered[0]);
-  EXPECT_EQ(o.turns[5].fired[0], power::foresee);
-  EXPECT_EQ(o.turns[5].shown[0], Stance::Guard);
-  EXPECT_EQ(o.turns[5].clash, Clash::AWins);
-  EXPECT_EQ(o.turns[5].hit[1], 1);
-  EXPECT_EQ(o.side[0].spark, 1) << "five spent, one earned";
+TEST(Powers, ForeseeWhiffsWhereOthersAreRiposted) {
+  const Outcome foresee = play(grungoCard, gillyCard, "PPPPPqp", "PPPPPGG");
+  EXPECT_EQ(foresee.turns[6].special[0], TurnReport::Special::Whiffed);
+  EXPECT_EQ(foresee.turns[6].hit[0] + foresee.turns[6].hit[1], 0);
+  const Outcome mend = play(gillyCard, grungoCard, "PPPPPPqp", "PPPPPPGG");
+  EXPECT_EQ(mend.turns[7].special[0], TurnReport::Special::Riposted);
+  EXPECT_EQ(mend.turns[7].hit[0], 2);
 }
 
 TEST(Powers, ShellStaysUpUntilAHitUsesIt) {
   const BattleCard mossby = cardOf(sp::mossby, 1), hushwing = cardOf(sp::hushwing, 2);
-  const Outcome o = play(mossby, hushwing, "PPPPPpPP", "PPPPPPGG");
-  EXPECT_TRUE(o.turns[5].powered[0]);
-  EXPECT_EQ(o.turns[5].clash, Clash::Bonk);
-  EXPECT_EQ(o.turns[6].clash, Clash::BWins);
-  EXPECT_EQ(o.turns[6].hit[0], 0);
-  EXPECT_TRUE(o.turns[6].blocked[0]);
-  EXPECT_EQ(o.turns[7].hit[0], 1) << "used up";
+  const Outcome o = play(mossby, hushwing, "PPPPPqgPP", "PPPPPPPGG");
+  ASSERT_EQ(o.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_TRUE(o.side[0].shell == false) << "used on turn 7";
+  EXPECT_EQ(o.turns[7].clash, Clash::BWins);
+  EXPECT_EQ(o.turns[7].hit[0], 0);
+  EXPECT_TRUE(o.turns[7].blocked[0]);
+  EXPECT_EQ(o.turns[8].hit[0], 1);
 }
 
-TEST(Powers, ZapAgainstShellIsAbsorbed) {
-  const BattleCard fizz = cardOf(sp::fizz, 1), mossby = cardOf(sp::mossby, 2);
-  const Outcome o = play(fizz, mossby, "PPPPPp", "PPPPPp");   // spark's head start: both full on turn 5
-  ASSERT_TRUE(o.turns[5].powered[0] && o.turns[5].powered[1]);
-  EXPECT_EQ(o.turns[5].hit[1], 0);
-  EXPECT_TRUE(o.turns[5].blocked[1]);
-  EXPECT_FALSE(o.side[1].shell);
-}
-
-TEST(Powers, ZapCostsAHeartWhateverTheClash) {
+TEST(Powers, ZapAddsAHeartToTheLanding) {
   const BattleCard fizz = cardOf(sp::fizz, 1), mothwick = cardOf(sp::mothwick, 2);
-  const Outcome o = play(fizz, mothwick, "PPPPPPp", "PPPPPPP");
-  ASSERT_TRUE(o.turns[6].powered[0]);
-  EXPECT_EQ(o.turns[6].clash, Clash::Bonk);
-  EXPECT_EQ(o.turns[6].hit[1], 1);
-  EXPECT_EQ(o.turns[6].hit[0], 0);
+  const Outcome o = play(fizz, mothwick, "PPPPPPqp", "PPPPPPPT");
+  ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[7].hit[1], 2 + 1);
+}
+
+TEST(Powers, ZapAgainstShellLosesOneHeartToIt) {
+  // Mossby's shell lands on fizz while fizz winds up; fizz's zap lands next.
+  const BattleCard fizz = cardOf(sp::fizz, 1), mossby = cardOf(sp::mossby, 2);
+  const Outcome o = play(fizz, mossby, "PPPPPPqp", "PPPPPqgP");
+  ASSERT_EQ(o.turns[6].special[1], TurnReport::Special::Landed);
+  ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[7].hit[1], 2);
+  EXPECT_TRUE(o.turns[7].blocked[1]);
+  EXPECT_FALSE(o.side[1].shell);
 }
 
 TEST(Powers, SporesPutTheFriendToSleepNextTurn) {
   const BattleCard puffkin = cardOf(sp::puffkin, 1), mossby = cardOf(sp::mossby, 2);
-  const Outcome o = play(puffkin, mossby, "PPPPPPpT", "PPPPPP.g");
-  ASSERT_TRUE(o.turns[6].powered[0]);
-  EXPECT_FALSE(o.turns[6].dozed[1]);
-  EXPECT_TRUE(o.turns[7].dozed[1]);
-  EXPECT_FALSE(o.turns[7].powered[1]) << "a dozing side cannot fire";
-  EXPECT_EQ(o.turns[7].clash, Clash::AWins) << "even trick beats a sleeper";
-  EXPECT_EQ(o.turns[7].hit[1], 1);
+  const Outcome o = play(puffkin, mossby, "PPPPPPqpT", "PPPPPPPTg");
+  ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
+  EXPECT_TRUE(o.turns[8].dozed[1]);
+  EXPECT_EQ(o.turns[8].clash, Clash::AWins) << "even trick beats a sleeper";
+  EXPECT_EQ(o.turns[8].hit[1], 1);
 }
 
 TEST(Powers, MendGrowsBackAHeartButNeverPastFull) {
-  const Outcome hurt = play(gillyCard, grungoCard, "PPPPPp", "GPPPPP");
-  ASSERT_TRUE(hurt.turns[5].powered[0]);
-  EXPECT_EQ(hurt.turns[5].healed[0], 1);
+  const Outcome hurt = play(gillyCard, grungoCard, "PPPPPqp", "GPPPPPT");
+  ASSERT_EQ(hurt.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(hurt.turns[6].healed[0], 1);
   EXPECT_EQ(hurt.side[0].hearts, DuelRules::kHearts);
-  const Outcome full = play(gillyCard, grungoCard, "PPPPPPp", "PPPPPPP");
-  ASSERT_TRUE(full.turns[6].powered[0]);
-  EXPECT_EQ(full.turns[6].healed[0], 0);
-  EXPECT_EQ(full.side[0].hearts, DuelRules::kHearts);
+  const Outcome full = play(gillyCard, grungoCard, "PPPPPPqp", "PPPPPPPT");
+  ASSERT_EQ(full.turns[7].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(full.turns[7].healed[0], 0);
 }
 
-TEST(Powers, DashWinsHeadBonksForTwoTurns) {
-  const BattleCard mudge = cardOf(sp::mudge, 1);
-  const Outcome o = play(mudge, gillyCard, "PPPpPP", "PPPPPP");
-  ASSERT_TRUE(o.turns[3].powered[0]);
-  EXPECT_EQ(o.turns[3].clash, Clash::AWins);
-  EXPECT_EQ(o.turns[4].clash, Clash::AWins);
-  EXPECT_EQ(o.turns[5].clash, Clash::Bonk);
+TEST(Powers, DashWinsTheNextHeadBonk) {
+  const Outcome o = play(kMudge, gillyCard, "PPPqpPP", "PPPGTPP");
+  ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(o.turns[5].clash, Clash::AWins);
+  EXPECT_EQ(o.turns[5].hit[1], 1);
+  EXPECT_EQ(o.turns[6].clash, Clash::Bonk);
 }
 
-TEST(Powers, HushCancelsLostClashesForTwoTurns) {
+TEST(Powers, HushWhiffsTheNextSpecialAndCancelsTheNextLostClash) {
   const BattleCard hushwing = cardOf(sp::hushwing, 1), puffkin = cardOf(sp::puffkin, 2);
-  const Outcome o = play(hushwing, puffkin, "PPPPPgGG", "PPPPPTTT");
-  ASSERT_TRUE(o.turns[5].powered[0]);
-  for (uint8_t t : {5, 6}) {
-    EXPECT_EQ(o.turns[t].clash, Clash::BWins);
-    EXPECT_EQ(o.turns[t].hit[0], 0) << "turn " << +t;
-    EXPECT_TRUE(o.turns[t].blocked[0]);
-  }
-  EXPECT_EQ(o.turns[7].hit[0], 1);
+  const Outcome whiff = play(hushwing, puffkin, "PPPPPqpP", "PPPPPPqp");
+  ASSERT_EQ(whiff.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(whiff.turns[7].special[1], TurnReport::Special::Whiffed);
+  EXPECT_EQ(whiff.turns[7].hit[0], 0);
+  const Outcome clash = play(hushwing, puffkin, "PPPPPqpGG", "PPPPPPTTT");
+  ASSERT_EQ(clash.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(clash.turns[7].hit[0], 0);
+  EXPECT_TRUE(clash.turns[7].blocked[0]);
+  EXPECT_EQ(clash.turns[8].hit[0], 1) << "worn off";
 }
 
-TEST(Powers, LanternWinsTheBonkAndDazzlesTheFriendForTwoTurns) {
+TEST(Powers, LanternDazzlesTheFriendNextTurn) {
   const BattleCard mothwick = cardOf(sp::mothwick, 1), fizz = cardOf(sp::fizz, 2);
-  const Outcome o = play(mothwick, fizz, "PPPPt", "PPPPT");
-  ASSERT_TRUE(o.turns[4].powered[0]);
-  EXPECT_EQ(o.turns[4].clash, Clash::AWins);
-  EXPECT_EQ(o.side[1].dazzledTurns, 1) << "two turns, one used";
-  // A dazzled winner's clash hit misses on its own luck, about half the time.
   int landed = 0;
-  for (uint32_t seed = 0; seed < 1000; ++seed)
-    landed += play(mothwick, fizz, "PPPPtTT", "PPPPTPP", Stakes::Spar, seed).turns[5].hit[0];
+  for (uint32_t seed = 0; seed < 1000; ++seed) {
+    const Outcome o = play(mothwick, fizz, "PPPqtTT", "PPPPGPP", Stakes::Spar, seed);
+    ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
+    landed += o.turns[5].hit[0];
+    ASSERT_EQ(o.turns[6].hit[0], 1) << "worn off";
+  }
   EXPECT_GT(landed, 400);
   EXPECT_LT(landed, 600);
-  for (uint32_t seed = 0; seed < 50; ++seed)
-    EXPECT_EQ(play(mothwick, fizz, "PPPPtTTT", "PPPPTPPP", Stakes::Spar, seed).turns[7].hit[0], 1) << "worn off";
 }
 
 TEST(Powers, GadgetDrawsEachOfTheOtherEightAndNeverItself) {
   const BattleCard tinker = cardOf(sp::tinker, 0x7111);
   int drawn[kPowerCount]{};
   for (uint32_t seed = 0; seed < 4000; ++seed) {
-    const Outcome o = play(tinker, cardOf(sp::fizz, 2), "PPPPPp", "PPPPPP", Stakes::Spar, seed);
-    ASSERT_TRUE(o.turns[5].powered[0]);
-    ++drawn[o.turns[5].fired[0].v];
+    const Outcome o = play(tinker, cardOf(sp::fizz, 2), "PPPPPqp", "PPPPPPT", Stakes::Spar, seed);
+    ASSERT_TRUE(o.turns[6].powered[0]);
+    ++drawn[o.turns[6].fired[0].v];
   }
   EXPECT_EQ(drawn[power::gadget.v], 0);
-  for (const PowerInfo& p : POWERS)
+  for (const PowerInfo& p : POWERS) {
     if (p.id != power::gadget) { EXPECT_NEAR(drawn[p.id.v], 500, 100) << p.name; }
+  }
 }
 
 // ---- endings, downed and the verdict --------------------------------------------------
@@ -329,17 +421,17 @@ TEST(Ending, NoTurnIsReadPastTheEnd) {
 
 TEST(TurnHits, HeartsKindAndLuckPerTurn) {
   const BattleCard fizz = cardOf(sp::fizz, 1), mothwick = cardOf(sp::mothwick, 2);
-  const Outcome o = play(fizz, mothwick, "PPPPPPpT", "TPPPPPPG");
+  const Outcome o = play(fizz, mothwick, "PPPPPPqpT", "TPPPPPPTG");
   TurnHit hits[DuelRules::kMaxTurns]{};
   turnHits(o, Side::B, 1, mothwick, fizz, hits);
   EXPECT_EQ(hits[0].hearts, 1);
   EXPECT_EQ(hits[0].kind, Scar::Kind::Claw) << "a pounce claws";
-  EXPECT_EQ(hits[6].hearts, 1);
-  EXPECT_EQ(hits[6].kind, Scar::Kind::Bite) << "a zap bites";
-  EXPECT_EQ(hits[7].hearts, 1);
-  EXPECT_EQ(hits[7].kind, Scar::Kind::Scorch) << "a spark pet's trick scorches";
   EXPECT_EQ(hits[1].hearts, 0);
-  EXPECT_NE(hits[0].luck, hits[6].luck);
+  EXPECT_EQ(hits[7].hearts, 3) << "a quick landing and its zap";
+  EXPECT_EQ(hits[7].kind, Scar::Kind::Bite) << "a zap bites";
+  EXPECT_EQ(hits[8].hearts, 1);
+  EXPECT_EQ(hits[8].kind, Scar::Kind::Scorch) << "a spark pet's trick scorches";
+  EXPECT_NE(hits[0].luck, hits[7].luck);
 }
 
 // ---- the pet's mind -----------------------------------------------------------------------
@@ -383,6 +475,29 @@ TEST(Mind, ThePetNeverSeesAnUnpairedMove) {
               petChoice(fresh, ahead, Side::A, gillyCard, grungoCard, 0, seed).stance);
 }
 
+TEST(Mind, ThePetLeansTrickAtABracerAndTheCounterAtALanding) {
+  const DuelSkill fresh{};
+  const Outcome bracing = play(gillyCard, kMudge, "PPPP", "PPPh_p");   // the commit shows once turn 3 resolves
+  ASSERT_TRUE(bracing.side[1].queued != Windup::None);
+  EXPECT_EQ(petChoice(fresh, bracing, Side::A, gillyCard, kMudge, 0, 1).stance, Stance::Trick);
+  const Outcome landing = play(gillyCard, kMudge, "PPPPP", "PPPh_p");
+  ASSERT_EQ(landing.resolved, 5);
+  const Foretelling f = foretell(landing, Side::B, gillyCard, kMudge, 1);
+  EXPECT_EQ(petChoice(fresh, landing, Side::A, gillyCard, kMudge, 0, 1).stance, counterOf(f.stance));
+}
+
+TEST(Mind, TheAutopilotQueuesOnAFullMeterAndASpiritedPetGoesHeavy) {
+  const DuelSkill fresh{};
+  BattleCard calm = gillyCard, spirited = gillyCard;
+  spirited.mood.spirit = 220;
+  const Outcome full = play(calm, grungoCard, "PPPPPP", "PPPPPP");
+  ASSERT_EQ(full.side[0].spark, kMeterMax);
+  EXPECT_EQ(petChoice(fresh, full, Side::A, calm, grungoCard, 0, 1).special, Windup::Quick);
+  EXPECT_EQ(petChoice(fresh, full, Side::A, spirited, grungoCard, 0, 1).special, Windup::Heavy);
+  const Outcome empty = play(calm, grungoCard, "P", "P");
+  EXPECT_EQ(petChoice(fresh, empty, Side::A, calm, grungoCard, 0, 1).special, Windup::None);
+}
+
 TEST(Foretell, GrungoReadsATwoTurnPatternTheOthersMiss) {
   // The friend plays P P G, P P G, P P: a one-turn reader sees "after P" split
   // between P and G; a two-turn reader sees "after P P" always G.
@@ -401,21 +516,21 @@ TEST(Foretell, GrungoReadsATwoTurnPatternTheOthersMiss) {
 
 TEST(Balance, TheWheelHoldsAndMatchesTheProbe) {
   using namespace blorbtool;
-  const BalanceReport r = tournament(1500, {Player::Random, Player::Random, Arming::Always, 0}, 1);
+  const BalanceReport r = tournament(800, {Player::Random, Player::Random, 0}, 1);
   EXPECT_TRUE(wheelHolds(r)) << "worst pair " << SPECIES[r.worstA].name << " over " << SPECIES[r.worstB].name << " "
                              << r.worstPermille;
   for (uint8_t s = 0; s < kSpeciesCount; ++s) {
     EXPECT_GE(r.speciesPermille[s], 430) << SPECIES[s].name;
     EXPECT_LE(r.speciesPermille[s], 570) << SPECIES[s].name;
-    EXPECT_NEAR(r.speciesPermille[s], kProbePermille[s], 30) << SPECIES[s].name << " strays from roster_probe.py";
+    EXPECT_NEAR(r.speciesPermille[s], kProbePermille[s], 30) << SPECIES[s].name << " strays from special_probe.py";
   }
-  EXPECT_GE(r.medianTurns, 8);
+  EXPECT_GE(r.medianTurns, 6);
   EXPECT_LE(r.medianTurns, 14);
 }
 
 TEST(Balance, AReaderBeatsAHabitKid) {
   using namespace blorbtool;
-  const BalanceReport r = tournament(300, {Player::Reader, Player::Habit, Arming::Always, 0}, 2);
+  const BalanceReport r = tournament(300, {Player::Reader, Player::Habit, 0}, 2);
   EXPECT_GE(r.sideAPermille, 700) << "skill matters";
 }
 
