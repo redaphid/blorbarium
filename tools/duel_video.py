@@ -9,8 +9,8 @@ the script's clock in ms:
 
     #> title Ping                      the film's name on screen
     #> length 12000                    how long to record
-    #> side A mossby 02:b1:0b:00:00:01 kid=3:1000:9000
-    #> side B tinker 3c:84:27:aa:10:5e   species, MAC, and a kid on the hand (sim --kid)
+    #> side A mossby 02:b1:0b:00:00:01 duel=scrap:3:spare:hug
+    #> side B tinker 3c:84:27:aa:10:5e   species, MAC, and how its kid duels (sim --duel)
     #> weather loss=30,dup=10,reorder=20,late=600,seed=4
     #> caption 0 Two dishes | one fake radio    " | " breaks the line
 
@@ -18,7 +18,9 @@ The sims are joined by a socketpair (sim --air-fd, sim/serial_air.h), each on
 its fixed clock in lockstep, so a duel film is the same frames every run;
 --twice records it twice and fails if it is not. Every frame that crosses is
 drawn flying between the discs: lost ones burst halfway, late ones fly
-slower, doubles fly twice. Under each disc is what its radio and its kid did.
+slower, doubles fly twice. Under each disc is what its radio and its kid did;
+once a `!duel` opens (D8's session, sim/duel_bot.h), its hearts, the turns as
+they reveal, and at the end the outcome hash each side's book holds.
 
 Writes <duel>-wide.mp4 (1920x1080), <duel>-square.mp4 (1080x1080) and
 check/<duel>-*.png (the middle of each caption, and a contact sheet) to --out.
@@ -49,13 +51,14 @@ BURST_MS = 400
 TICKER_MS = 4000
 RED = (255, 90, 80)
 GREY = (110, 116, 124)
+DIM_INK = (180, 184, 190)
 
 
 @dataclass
 class Side:
     species: str = "grungo"
     mac: str = ""
-    kid: str = ""
+    duel: str = ""
     lines: list = field(default_factory=list)
 
 
@@ -95,8 +98,8 @@ def load(path):
                     side.species, side.mac = species, mac
                     for o in opts:
                         k, _, v = o.partition("=")
-                        if k != "kid": raise SystemExit("%s: side options are kid=..., not %s" % (path, o))
-                        side.kid = v
+                        if k != "duel": raise SystemExit("%s: side options are duel=..., not %s" % (path, o))
+                        side.duel = v
                 else: raise SystemExit("%s: unknown #> %s" % (path, key))
             elif not line or line.startswith("#"):
                 continue
@@ -112,7 +115,7 @@ def load(path):
 @dataclass
 class Event:
     ms: int
-    kind: str          # sent, received, lost, deaf, kid
+    kind: str          # sent, received, lost, deaf, kid, duel
     seq: int = 0
     peer: str = ""
     text: str = ""
@@ -125,8 +128,8 @@ def read_log(path):
             w = line.rstrip("\n").split(" ", 6)
             if w[0] == "air" and len(w) >= 6:
                 events.append(Event(int(w[1]), w[2], int(w[3]), w[4], w[6] if len(w) > 6 else ""))
-            elif w[0] == "kid" and len(w) >= 3:
-                events.append(Event(int(w[1]), "kid", text=line.split(" ", 2)[2].strip()))
+            elif w[0] in ("kid", "duel") and len(w) >= 3:
+                events.append(Event(int(w[1]), w[0], text=line.split(" ", 2)[2].strip()))
     return events
 
 
@@ -142,7 +145,7 @@ def record(duel, tmp):
         args = [sv.PROGRAM, "--headless", "--script", out + ".txt", "--record", out, "--fps", str(FPS),
                 "--for", str(duel.length), "--species", side.species, "--air-fd", str(sock.fileno())]
         if duel.weather: args += ["--air-weather", duel.weather]
-        if side.kid: args += ["--kid", side.kid]
+        if side.duel: args += ["--duel", side.duel]
         env = dict(os.environ, BLORB_SIM_MAC=side.mac)
         log = open(out + ".log", "w")
         running[key] = (subprocess.Popen(args, pass_fds=[sock.fileno()], stdin=subprocess.DEVNULL,
@@ -193,17 +196,51 @@ def flights(duel, shot):
     return out
 
 
-def ticker(events, ms):
-    """What a side's radio and kid did in the last few seconds, oldest first: (age ms, text, colour)."""
+def turn_words(text):
+    """`turn 3 pounce guard 0 1 - - super`, from my side: what a kid would say happened."""
+    _, n, me, them, hit_me, hit_them, fate_me, fate_them, sup = text.split()
+    words = "turn %s: %s vs %s" % (n, me, them)
+    if fate_me != "-": words += ", my special %s" % fate_me
+    elif fate_them != "-": words += ", theirs %s" % fate_them
+    if int(hit_them) > int(hit_me): return words + (", SUPER hit!" if sup == "super" else ", hit!"), mr.TEAL
+    if int(hit_me) > int(hit_them): return words + ", ouch", RED
+    return words + ", bonk", DIM_INK
+
+
+def ticker(events, ms, dueling):
+    """What a side's kid, radio and duel did in the last few seconds, oldest first: (age ms, text, colour).
+    In a duel the radio talks five times a second, so its frames only fly."""
     lines = []
     for e in events:
         if e.ms > ms or e.ms < ms - TICKER_MS: continue
-        if e.kind == "sent": lines.append((ms - e.ms, "sends  " + e.text, mr.TEAL))
-        elif e.kind == "received": lines.append((ms - e.ms, "hears  " + e.text, mr.INK))
-        elif e.kind == "lost": lines.append((ms - e.ms, "lost in the air: " + e.text, RED))
-        elif e.kind == "deaf": lines.append((ms - e.ms, "radio off: missed " + e.text, GREY))
-        elif e.kind == "kid": lines.append((ms - e.ms, "kid: " + e.text, mr.AMBER))
-    return lines[-4:]
+        age = ms - e.ms
+        if e.kind == "kid": lines.append((age, "kid: " + e.text, mr.AMBER))
+        elif e.kind == "duel":
+            word = e.text.split()[0]
+            if word == "turn": lines.append((age,) + turn_words(e.text))
+            elif word == "downed": lines.append((age, "DOWN", RED))
+            elif word == "fall": lines.append((age, "fell", RED))
+            elif word == "egg": lines.append((age, "a friend egg!", mr.PINK))
+            elif word == "met": lines.append((age, "over: %s in %s turns" % (e.text.split()[3], e.text.split()[2]), mr.INK))
+        elif dueling: continue
+        elif e.kind == "sent": lines.append((age, "sends  " + e.text, mr.TEAL))
+        elif e.kind == "received": lines.append((age, "hears  " + e.text, mr.INK))
+        elif e.kind == "lost": lines.append((age, "lost in the air: " + e.text, RED))
+        elif e.kind == "deaf": lines.append((age, "radio off: missed " + e.text, GREY))
+    return lines[-3:] if dueling else lines[-4:]
+
+
+def standing(events, ms):
+    """The duel as it stands at `ms` on one side: (phase, state words, outcome hash), or Nones."""
+    phase = state = met = None
+    for e in events:
+        if e.ms > ms: break
+        if e.kind != "duel": continue
+        word, _, rest = e.text.partition(" ")
+        if word == "phase": phase = rest
+        elif word == "state": state = rest.split()
+        elif word == "met": met = rest.split()[0]
+    return phase, state, met
 
 
 class Stage:
@@ -211,7 +248,7 @@ class Stage:
         self.w, self.h = w, h
         wide = w > h
         k = h / 1080
-        self.disc = 540 if wide else 420
+        self.disc = 500 if wide else 420
         gap = 300 if wide else 160
         x0 = (w - 2 * self.disc - gap) // 2
         self.boxes = {"A": (x0, 215), "B": (x0 + self.disc + gap, 215)}
@@ -228,9 +265,18 @@ class Stage:
     def render(self, duel, panels, events, flying, ms):
         img = Image.new("RGB", (self.w, self.h), mr.BG)
         d = ImageDraw.Draw(img)
-        d.text((self.w // 2, 64), duel.title, font=self.f_title, fill=mr.TEAL, anchor="mm")
-        if duel.weather:
-            d.text((self.w // 2, 118), weather_words(duel.weather), font=self.f_small, fill=mr.DIM, anchor="mm")
+        d.text((self.w // 2, 64), duel.title, font=self.fit(d, duel.title, self.f_title), fill=mr.TEAL, anchor="mm")
+        air = [e for k in "AB" for e in events[k] if e.ms <= ms and e.kind in ("sent", "lost")]
+        sent, lost = sum(e.kind == "sent" for e in air), sum(e.kind == "lost" for e in air)
+        stands = {k: standing(events[k], ms) for k in "AB"}
+        hashes = [stands[k][2] for k in "AB"]
+        air_words, colour = weather_words(duel.weather), mr.DIM
+        if all(hashes):   # the proof the two devices agree: the same battle in both books
+            same = hashes[0] == hashes[1]
+            air_words = "both books: outcome %s %s %s" % (hashes[0], "=" if same else "!=", hashes[1])
+            colour = mr.TEAL if same else RED
+        line = "%s  |  %d frames, %d lost" % (air_words, sent, lost)
+        d.text((self.w // 2, 118), line, font=self.fit(d, line, self.f_small), fill=colour, anchor="mm")
         for key, (x, y) in self.boxes.items():
             side = duel.sides[key]
             big, mask = mr.round_panel(panels[key], self.disc)
@@ -238,10 +284,17 @@ class Stage:
             img.paste(big, (x, y), mask)
             cx = x + self.disc // 2
             d.text((cx, y - 50), side.species.upper(), font=self.f_name, fill=mr.INK, anchor="mm")
-            d.text((cx, y - 18), side.mac.lower(), font=self.f_small, fill=mr.DIM, anchor="mm")
+            phase, state, _ = stands[key]
+            if phase is None:
+                d.text((cx, y - 18), side.mac.lower(), font=self.f_small, fill=mr.DIM, anchor="mm")
+            else:
+                d.text((cx, y - 18), *self.status(phase, state), font=self.f_small, anchor="mm")
             ty = y + self.disc + 34
-            for age, text, colour in ticker(events[key], ms):
-                fade = max(0.25, 1 - age / TICKER_MS)
+            if state:
+                self.hearts(d, cx, ty, int(state[0]), int(state[1]), int(state[4]))
+                ty += 50
+            for age, text, colour in ticker(events[key], ms, phase is not None):
+                fade = max(0.5, 1 - age / TICKER_MS)
                 d.text((cx, ty), text, font=self.f_tick, fill=tuple(int(c * fade + b * (1 - fade)) for c, b in zip(colour, mr.BG)),
                        anchor="mm")
                 ty += 34
@@ -252,6 +305,32 @@ class Stage:
             d.multiline_text((self.w // 2, self.caption_y), caption.replace(" | ", "\n"), font=self.f_cap, fill=mr.INK,
                              anchor="mm", align="center", spacing=10)
         return img
+
+    def fit(self, d, text, f):
+        """`f`, or a smaller size of it, so `text` fits the frame with a margin."""
+        while d.textlength(text, font=f) > self.w - 60 and f.size > 12: f = f.font_variant(size=f.size - 2)
+        return f
+
+    @staticmethod
+    def status(phase, state):
+        """The line over a disc in a duel: a special winding up, else the phase."""
+        if state and state[6] != "-": return "winding up a %s special" % state[6], mr.PINK
+        if state and state[7] != "-": return "the friend is winding up a %s special!" % state[7], mr.AMBER
+        return phase.upper(), mr.DIM
+
+    def hearts(self, d, cx, y, have, most, sparks):
+        """Hearts left full, lost ones hollow; the spark meter's pips beside them."""
+        r = self.disc // 40
+        step = 3 * r
+        x0 = cx - (most * step + 6 * r) // 2
+        for i in range(most):
+            x = x0 + i * step + r
+            shape = [(x - r, y - r // 3), (x - r // 2, y - r), (x, y - r // 2), (x + r // 2, y - r), (x + r, y - r // 3),
+                     (x, y + r)]
+            d.polygon(shape, fill=RED if i < have else None, outline=RED, width=3)
+        px = x0 + most * step + r
+        for i in range(sparks):
+            d.ellipse((px + i * (r + 2), y - 4, px + i * (r + 2) + r // 2 + 4, y + 4), fill=mr.AMBER)
 
     def draw_flight(self, d, f, ms):
         other = "B" if f.sender == "A" else "A"
@@ -280,6 +359,7 @@ class Stage:
 
 
 def weather_words(spec):
+    if not spec: return "the air: clear"
     w = dict(kv.split("=") for kv in spec.split(","))
     parts = []
     if "loss" in w: parts.append("%s%% lost" % w["loss"])

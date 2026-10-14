@@ -1,17 +1,16 @@
 # Two species on two simulators, their radios joined by sim/serial_air.h, in
-# bad weather. No duel engine yet (D8, D9, D11): this proves the link and the
-# camera. Mossby eats; Tinker's kid plays the duel gestures blind, so his BOOT
-# presses drop pellets for now.
+# bad weather, and no duel: the radio alone (scrap.txt is a duel). Mossby
+# eats; Tinker rests.
 #> title Two dishes, one fake radio
 #> length 22000
 #> side A mossby 02:b1:0b:00:00:01
-#> side B tinker 3c:84:27:aa:10:5e kid=7:11000:5000
+#> side B tinker 3c:84:27:aa:10:5e
 #> weather loss=25,dup=10,reorder=20,late=600,seed=4
 #> caption 0 Mossby and Tinker | each on their own simulator
 #> caption 3500 Their radios are joined | by fake ESP-NOW over a socket
 #> caption 7000 A ping crosses, | a pong comes back
 #> caption 10500 A quarter of the frames | are lost on purpose
-#> caption 14500 A kid plays Tinker: | BOOT twice, tilt, knock
+#> caption 14500 Late frames are overtaken | doubled ones fly twice
 #> caption 19000 Same frames every run: | the two clocks step in lockstep
 @0 DEBUG time 1790000000
 @100 DEBUG warp 18000

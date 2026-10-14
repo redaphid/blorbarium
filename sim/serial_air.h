@@ -1,6 +1,6 @@
 #pragma once
 // The duel radio, faked over a byte stream: two simulators joined by a
-// socketpair (tools/duel_film.py makes it) hear each other's ESP-NOW frames,
+// socketpair (tools/duel_video.py makes it) hear each other's ESP-NOW frames,
 // so a duel can be filmed with no board.
 //
 // Two sims each run their own fixed clock, so the stream carries time as well

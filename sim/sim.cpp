@@ -17,7 +17,8 @@
 //   sim --air-fd <n> [--air-weather loss=30,dup=10,reorder=20,late=800,latency=3,rssi=-45,seed=1]
 //                                        the duel radio over a socket another sim holds the far end of
 //                                        (sim/serial_air.h; tools/duel_video.py joins two)
-//   sim --kid <seed>[:<from ms>[:<turn ms>]]   a kid playing a duel on the hand (sim/duel_bot.h)
+//   sim --duel <spar|scrap|mortal>[:seed[:finish|spare[:hug]]]
+//                                        how this sim's kid plays a duel that `!duel` opens (sim/duel_bot.h)
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
@@ -25,6 +26,7 @@
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !care <ms>  !shot <path>
 //   !air open  !air close  !air ping <word>   (the far sim answers a ping with `pong <word>`)
+//   !duel                                (open a duel on the radio: D8's session, played by --duel's kid)
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
 // Anything else is a protocol line, as a phone would send it.
@@ -168,7 +170,15 @@ static void answerPings() {
   }
 }
 
-static std::optional<duelbot::KidBot> kid;
+static duelbot::Style duelStyle;
+static std::optional<duelbot::BenchDuel> bench;
+static uint32_t scriptMs = 0;   // the script's clock, which the duel ticks on
+
+static void openDuel() {
+  if (!air) { fprintf(stderr, "sim: !duel needs --air-fd\n"); return; }
+  bench.emplace(shown().species, air->self(), duelStyle);
+  if (!bench->open(*air, scriptMs / 100)) fprintf(stderr, "sim: the duel would not open\n");
+}
 
 // ---- the caretaker -------------------------------------------------------------
 // `!care <ms>`: for that long, warps included, an owner glances at the glass
@@ -218,6 +228,7 @@ static void hand(const char* word, const char* a, const char* b) {
   else if (!strcmp(word, "care")) { careUntil = now + argMs(a, 0); careNextLook = now; }
   else if (!strcmp(word, "shot")) shoot(a);
   else if (!strcmp(word, "air")) airLine(a, b);
+  else if (!strcmp(word, "duel")) openDuel();
   else fprintf(stderr, "sim: unknown hand line !%s\n", word);
 }
 
@@ -307,19 +318,18 @@ static int run(bool* running) {
   while (*running) {
     const uint32_t frame = millis();
     const uint32_t since = frame - started - simWarpMs;   // the script's clock
+    scriptMs = since;
     if (air) air->begin(since);
     while (scriptNext < script.size() && script[scriptNext].at <= since) Serial.arrive(script[scriptNext++].text.c_str());
-    for (duelbot::Move m; kid && kid->next(since, m);) {
-      if (*m.why) fprintf(stderr, "kid %u %s\n", since, m.why);
-      if (!m.line.empty()) simPending.push_back(m.line);
-    }
     std::vector<std::string> due;
     due.swap(simPending);   // a warp reads stdin and may queue more; those wait a frame
     for (const std::string& line : due) simLine(line);
     release();
     care();
     loop();
-    if (air) answerPings();
+    // The session runs at the Dish's 10 Hz, on the script's clock, so both sims tick it on the same steps.
+    if (bench && since / 100 != (since - kStepMs) / 100) bench->tick(*air, since / 100, since);
+    else if (air && !bench) answerPings();
     const uint32_t after = millis() - started - simWarpMs;
     if (shotPath && after >= shotAfterMs) {
       shoot(shotPath);
@@ -382,13 +392,11 @@ int main(int argc, char** argv) {
         return 2;
       }
     }
-    else if (!strcmp(a, "--kid") && i + 1 < argc) {
-      unsigned seed = 0, from = 1000, turn = 10000;
-      if (sscanf(argv[++i], "%u:%u:%u", &seed, &from, &turn) < 1 || turn < 5000) {
-        fprintf(stderr, "sim: --kid <seed>[:<from ms>[:<turn ms, at least 5000>]], not %s\n", argv[i]);
+    else if (!strcmp(a, "--duel") && i + 1 < argc) {
+      if (const char* why = duelbot::parseStyle(argv[++i], duelStyle)) {
+        fprintf(stderr, "sim: --duel %s: %s\n", argv[i], why);
         return 2;
       }
-      kid.emplace(seed, from, turn);
     }
     else { fprintf(stderr, "sim: unknown argument %s\n", a); return 2; }
   }

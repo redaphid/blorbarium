@@ -55,27 +55,40 @@ Broadcasts are teal and unicasts are amber. A lost frame bursts red halfway. A
 late frame flies more slowly, and a double flies twice. The ticker under each
 disc lists what that radio sent, heard and lost, and what its kid did.
 
-### The kid
+### The duel and its kid
 
-`#> side B tinker 3c:84:27:aa:10:5e kid=7:11000:5000` gives a side a kid
-(`sim --kid seed:from:turn`, `sim/duel_bot.h`). From `from` ms, the kid presses
-BOOT twice, which is the duel gesture. Then, each `turn` ms, the kid thinks,
-tilts toward one of three rims, and knocks to lock in. Now and then the kid
-also shakes, cheers with a double knock, or presses BOOT for the power. The
-kid plays blind on a fixed schedule, because nothing tells it yet when a turn
-opens.
+`!duel` opens a duel on the sim's radio: D8's `DuelSession`, played by a
+scripted kid who reads the duel's view as a kid reads the screen
+(`sim/duel_bot.h`). `#> side B tinker 3c:84:27:aa:10:5e duel=scrap:8:spare:hug`
+says how that side's kid plays (`sim --duel tier:seed:finish|spare:hug`). The
+kid picks the friend on the rim, confirms the tier, then each turn aims and
+knocks. With the meter full, the kid sometimes queues a quick or a heavy
+special instead. When the friend is winding one up, the kid often aims Trick to
+stagger it. A kid who says `finish` holds BOOT over a downed friend, and one
+who says `hug` hugs after. `tools/duels/scrap.txt` is a whole Scrap.
 
-### Until the duel engine lands
+The film writes the duel under each disc: the hearts and the spark meter, the
+phase or the special winding up, the kid's moves and each turn as it reveals.
+When the duel ends, the line under the title shows the outcome hash each
+side's book holds. They must be equal, because both devices compute the same
+battle.
 
-The Dish does not take the radio yet. Until D9 adds `DishOptions::air`, the sim
-reads the radio itself:
+This stands in for D9's Dish. Nothing the duel does reaches the pet: wounds, a
+fall, the book and the friend egg are logged, not applied. The dish screens
+show the pets, not the duel screen, until the duel is drawn by `main.cpp`.
+
+### The radio on its own
+
+Without a duel, the sim reads the radio itself:
 
 - `!air open` and `!air close` switch the radio on and off. A closed radio
   sends nothing, and frames that arrive while it is closed are lost.
 - `!air ping <word>` broadcasts `ping <word>`. The other sim answers each ping
-  it hears with `pong <word>`, sent back to the pinger.
+  it hears with `pong <word>`, sent back to the pinger. `tools/duels/link.txt`
+  does this.
 
-Every frame is one stderr line, which the film reads:
+Everything the film reads is a stderr line:
 
     air <ms> sent|received|lost|deaf <seq> <other mac> <len> <text, or hex>
+    duel <ms> phase|state|turn|downed|fall|egg|closed|met ...   (sim/duel_bot.h lists them)
     kid <ms> <what the kid did>
