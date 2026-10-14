@@ -424,7 +424,7 @@ TEST(Special, EachFateHasItsOwnBeat) {
     int word = -1;
     for (int i = 0; i < st.propCount; ++i)
       if (st.props[i].kind == PropKind::Burst) word = st.props[i].variant;
-    EXPECT_EQ(word, 4 + k) << m << ": WHAM, COUNTER, OOF, WHIFF in that order";
+    EXPECT_EQ(word, 4 + k) << m << ": WHAM, NOPE, OOF, WHIFF in that order";
     shots.push_back(shoot(s));
   }
   for (size_t i = 0; i < shots.size(); ++i)

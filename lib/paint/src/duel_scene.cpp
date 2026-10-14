@@ -19,10 +19,10 @@ constexpr int kMe = 0, kThem = 1;
 using Special = blorb::TurnReport::Special;
 
 // The burst's word for a clash, the special's fate first (paint's burst table).
-constexpr int kBonk = 0, kSuper = 2, kWham = 4, kCounter = 5, kOof = 6, kWhiff = 7;
+constexpr int kBonk = 0, kSuper = 2, kWham = 4, kNope = 5, kOof = 6, kWhiff = 7;
 int beatWord(const Fighter& winner, const Fighter& loser, bool super) {
   if (winner.special == Special::Landed) return kWham;
-  if (loser.special == Special::Riposted) return kCounter;
+  if (loser.special == Special::Riposted) return kNope;
   if (loser.special == Special::Staggered) return kOof;
   if (loser.special == Special::Whiffed) return kWhiff;
   return super ? kSuper : kBonk;
@@ -340,8 +340,10 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   if (t >= kImpact && t < kSettle + 4) {
     const int grow = 60 + ramp(t, kImpact, kImpact + 3) * 60 / 256;
+    // The burst holds its word for under a second and goes, so the pets read again.
+    const int fade = 255 - ramp(t, kImpact + 6, kImpact + 9) * 255 / 256;
     if (win < 0) {
-      add(s, prop(PropKind::Burst, 3, mid, grow - 10));
+      if (fade) add(s, prop(PropKind::Burst, 3, mid, grow - 10, fade));
       for (int side = 0; side < 2; ++side) add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[side], b[side]), side ? 80 : 100));
     } else {
       const int lose = 1 - win;
@@ -349,7 +351,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       const P loser = {home[lose].x, home[lose].y - b[lose].h / 2};
       const P at = {mid.x + (loser.x - mid.x) / 5, mid.y + (loser.y - mid.y) / 5};
       const int word = beatWord(*f[win], *f[lose], sc.super);
-      add(s, prop(PropKind::Burst, word, at, word == kWham || word == kCounter ? grow + 25 : grow));
+      if (fade) add(s, prop(PropKind::Burst, word, at, grow, fade));
       // A landing is big: both pets jolt with it.
       if (f[win]->special == Special::Landed && t < kImpact + 5)
         for (Figure& g : s.fig) g.y = int16_t(g.y + ((t & 1) ? 2 : -2));
@@ -680,30 +682,39 @@ bool spiky(int dx, int dy, int R, int inner, int n, int rot) {
   return false;
 }
 
-void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
+int textW(const char* s, int scale256) {
   const Font& f = kFreeSans9pt7b;
   int w = 0;
   for (const char* q = s; *q; ++q)
     if (*q >= f.first && *q <= f.last) w += f.glyphs[*q - f.first].xAdvance;
-  int pen = cx - w * scale256 / 512;
+  return w * scale256 / 256;
+}
+
+// Comic lettering: the font at a whole multiple, thickened a pixel to the
+// right, with a 3 px ink edge, so a word reads at arm's length.
+void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
+  const Font& f = kFreeSans9pt7b;
+  int pen = cx - textW(s, scale256) / 2;
   const int base = cy + 13 * scale256 / 512;
   const uint16_t ink = c565(kInk), k = c565(c);
-  static constexpr int kD[8][2] = {{-2, 0}, {2, 0}, {0, -2}, {0, 2}, {-1, -1}, {1, 1}, {-1, 1}, {1, -1}};
+  static constexpr int kD[12][2] = {{-3, 0}, {3, 0}, {0, -3}, {0, 3}, {-2, -2}, {2, 2}, {-2, 2}, {2, -2},
+                                    {-1, -1}, {1, 1}, {-1, 1}, {1, -1}};
   for (const char* q = s; *q; ++q) {
     if (*q < f.first || *q > f.last) continue;
     const Glyph& g = f.glyphs[*q - f.first];
     const int W = g.width * scale256 / 256, H = g.height * scale256 / 256;
-    auto on = [&](int ox, int oy) {
+    auto lit = [&](int ox, int oy) {
       if (ox < 0 || oy < 0 || ox >= W || oy >= H) return false;
       const int sx = ox * 256 / scale256, sy = oy * 256 / scale256, bit = sy * g.width + sx;
       return ((f.bitmap[g.bitmapOffset + bit / 8] >> (7 - bit % 8)) & 1) != 0;
     };
+    auto on = [&](int ox, int oy) { return lit(ox, oy) || lit(ox - 1, oy); };
     const int x0 = pen + g.xOffset * scale256 / 256, y0 = base + g.yOffset * scale256 / 256;
-    for (int oy = -2; oy < H + 2; ++oy)
-      for (int ox = -2; ox < W + 2; ++ox) {
+    for (int oy = -3; oy < H + 3; ++oy)
+      for (int ox = -3; ox < W + 4; ++ox) {
         if (on(ox, oy)) { put(cv, x0 + ox, y0 + oy, k, 256); continue; }
         bool edge = false;
-        for (int d = 0; d < 8 && !edge; ++d) edge = on(ox + kD[d][0], oy + kD[d][1]);
+        for (int d = 0; d < 12 && !edge; ++d) edge = on(ox + kD[d][0], oy + kD[d][1]);
         if (edge) put(cv, x0 + ox, y0 + oy, ink, 256);
       }
     pen += g.xAdvance * scale256 / 256;
@@ -711,10 +722,13 @@ void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
 }
 
 void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
-  static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!", "WHAM!", "COUNTER!", "OOF!", "WHIFF"};
-  // Whole multiples of the font only: a fractional scale drops a row and an E reads as an F.
-  static constexpr int kScale[] = {256, 512, 256, 256, 256, 256, 256, 256};
-  const int R = 46 * p.scalePct / 100, inner = 30 * p.scalePct / 100, rot = ticks * 2;
+  static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!", "WHAM!", "NOPE!", "OOF!", "WHIFF"};
+  // Twice the font, a whole multiple: a fractional scale drops a row and an E reads as an F.
+  constexpr int kScale = 512;
+  const int v = imin(p.variant, 7);
+  // The burst grows to hold its word.
+  const int R = imax(46 * p.scalePct / 100, (textW(kWords[v], kScale) / 2 + 16) * p.scalePct / 120);
+  const int inner = R * 65 / 100, rot = ticks * 2;
   // A whiff is a grey puff of air, not a hit.
   const bool whiff = p.variant == 7;
   const uint16_t edge = c565(whiff ? Rgb{90, 90, 110} : kBurstEdge), body = c565(whiff ? Rgb{200, 200, 215} : kBurst);
@@ -725,8 +739,7 @@ void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
       if (!spiky(dx, dy, R, inner, n, rot)) continue;
       put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, n, rot) ? body : edge, p.alpha + 1);
     }
-  const int v = imin(p.variant, 7);
-  if (p.scalePct >= 90) text(cv, kWords[v], p.x, p.y, kScale[v], {255, 255, 255});
+  if (p.scalePct >= 90 && p.alpha > 200) text(cv, kWords[v], p.x, p.y, kScale, {255, 255, 255});
 }
 
 void arrow(Canvas240& cv, const Prop& p) {

@@ -159,6 +159,14 @@ struct Colours {
   uint8_t region[256];   // the entry's palette region, 255 invariant
 };
 
+// The one LUT every draw builds into. It is 1,280 B, too much for each frame
+// that draws to carry on the loop task's 8 KB stack, and nothing draws from two
+// tasks or builds one LUT while another is in use, so they share it.
+Colours& scratchColours() {
+  static Colours c;
+  return c;
+}
+
 void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t spotHue, Colours& out) {
   std::memset(&out, 0, sizeof(out));
   Tint clamped[blorb::kRegionCount];
@@ -657,7 +665,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   int8_t spotHue = 0;
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer == 0) { mottle.density = a.marks[i].variant; spotHue = a.marks[i].tint.hue; }
-  Colours col;
+  Colours& col = scratchColours();
   buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
 
   // Away from home he shrinks a little, easing with his distance from it, so
@@ -716,7 +724,7 @@ int eggShear(Fx wobble, uint16_t tick, int lean) {
 }
 
 void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
-  Colours col;
+  Colours& col = scratchColours();
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.egg(a.eggProgress);
   const Xf variants[2] = {{kOne, kOne, 0, kEggLean}, {kOne, kOne, 0, -kEggLean}};
@@ -731,7 +739,7 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 }
 
 void drawRemains(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
-  Colours col;
+  Colours& col = scratchColours();
   buildColours(pack, a.regions, false, 0, col);
   FrameRef f = pack.remains();
   const Xf rest{};
@@ -760,7 +768,7 @@ void drawClutch(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     tints[blorb::region::skin.v] = a.eggs[i].skin;
     tints[blorb::region::cloak.v] = a.eggs[i].cloak;
     tints[blorb::region::shell.v] = a.eggs[i].shell;
-    Colours col;
+    Colours& col = scratchColours();
     buildColours(pack, tints, false, 0, col);
     Place p;
     p.xf.kx = p.xf.ky = imin(kOne, kOne * kClutchEggPx / imax(1, f.h));
@@ -971,7 +979,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
   int8_t spotHue = 0;
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer == 0) { mottle.density = a.marks[i].variant; spotHue = a.marks[i].tint.hue; }
-  Colours col;
+  Colours& col = scratchColours();
   buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
   if (fig.flash)
     for (int i = 0; i < 256; ++i) {

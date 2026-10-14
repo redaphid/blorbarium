@@ -135,7 +135,7 @@ enum class PropKind : uint8_t {
   Trophy,     // variant: SpeciesId
   Debt,
   Plaster,    // the Scrap risk, stuck on his head
-  Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), COUNTER, OOF (a stagger), WHIFF
+  Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), NOPE (a riposte), OOF (a stagger), WHIFF
   Aura,       // a special winding up: light in its power's colour behind him; variant: PowerGlyph
   Countdown,  // the turns until it lands, as pips under its glyph; variant: how many
   Arrow,      // "beats": from (x, y) toward (x2, y2)
