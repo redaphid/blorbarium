@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "blorb/dish.h"
+#include "blorb/founding.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
@@ -339,7 +340,17 @@ void setup() {
 #else
   options.sealed = simSealed;
 #endif
-  dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
+  // A fresh device's nest (founding.h). An owner's pin is one egg and needs no
+  // choice; three eggs wait for the kid once the nest is drawn here, and until
+  // then the Dish founds its default.
+  const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
+  std::optional<blorb::Genome> founder;
+  if (!options.sealed)
+    if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
+      if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
+        founder = blorb::starterGenomeOf(*pick, speciesSeed);
+  if (founder) options.founder = &*founder;
+  dish.emplace(dishStore, speciesSeed, lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
@@ -432,6 +443,11 @@ static void pinSpecies(const char* a) {
                 blorb::speciesInfo(s).name);
 }
 
+static void pinFounding(const char* a) {
+  const char* why = debugverbs::found(dishStore, a);
+  Serial.printf("[hw] debug found %s: %s\n", a, why ? why : "ok, the next fresh founding's nest is this egg");
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
@@ -439,8 +455,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
   if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
+  if (std::strcmp(verb, "found") == 0) return pinFounding(a);
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, shot, press [ms], bletest <bytes>)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
+                  "bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
