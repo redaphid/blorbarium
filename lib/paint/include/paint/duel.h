@@ -53,7 +53,28 @@ struct Fighter {
   bool fired = false;               // his power went off this turn
   uint8_t hit = 0;                  // hearts lost this turn
   bool locked = false;              // Choosing: he has locked (for the friend: a tick, never the stance)
+  // The queued special: telegraphed on both screens while it winds up, so it
+  // can be read and punished. When it lands shows; the landing stance never does.
+  blorb::Windup windup = blorb::Windup::None;
+  uint8_t landsIn = 0;              // turns until it lands: 0 = this turn
+  blorb::TurnReport::Special special = blorb::TurnReport::Special::None;   // Clash: what became of it this turn
 };
+
+// The BOOT hint on the rim beside the button: boot.h's BootHint, as drawn.
+// What it shows is what a press does now; a ring around it fills while the
+// button is held when a hold does something else.
+struct RimHint {
+  uint8_t glyph = 1;                // blorb::BootGlyph, which indexes duel_art::kBootGlyphs
+  uint8_t art = 0;                  // Tier: the tier under the tilt; a special: the pet's PowerGlyph
+  bool greyed = false;              // not now: grey, with `pips` beside it saying how far short
+  uint8_t pips = 0;                 // greyed: how many short; Countdown: turns left
+  bool hasHold = false;             // a hold does something else: the ring, filling with holdFill
+  uint8_t holdFill = 0;
+  bool hasDouble = false;           // a double press does something: two short bars under it
+};
+
+// The hint at its place on the rim, for any screen (the dish draws it too).
+void drawBootHint(Canvas240&, const RimHint&);
 
 struct DuelScene {
   DuelAct act = DuelAct::Meeting;
@@ -75,6 +96,7 @@ struct DuelScene {
   bool pleading = false;            // the downed pet's kid sent a cheer: it floats up
   // Outcome
   uint8_t newScars = 0;             // my last n scars are new: drawn coming in
+  RimHint boot;                     // every act shows what BOOT does now
 };
 
 // What D4's Outcome says, from my side: hearts and meters, the last resolved
@@ -113,7 +135,9 @@ enum class PropKind : uint8_t {
   Trophy,     // variant: SpeciesId
   Debt,
   Plaster,    // the Scrap risk, stuck on his head
-  Burst,      // a spiky star: BONK (variant 0), VS (1), SUPER (2), a bonk of heads (3)
+  Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), COUNTER, OOF (a stagger), WHIFF
+  Aura,       // a special winding up: light in its power's colour behind him; variant: PowerGlyph
+  Countdown,  // the turns until it lands, as pips under its glyph; variant: how many
   Arrow,      // "beats": from (x, y) toward (x2, y2)
   Tick,       // locked or confirmed
   Dots,       // still choosing

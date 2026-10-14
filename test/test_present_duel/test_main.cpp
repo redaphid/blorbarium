@@ -210,8 +210,8 @@ TEST(Scars, NeverOnTheFrontOfHim) {
           }
       for (int scalePct : {25, 60, 100})   // a hatchling in the duel, a pet in the duel, a pet at home
       for (int k = 0; k < 5; ++k)
-        for (int lx = 0; lx < 256; lx += 51)
-          for (int ly = 0; ly < 256; ly += 51) {
+        for (int lx = 0; lx < 256; lx += 17)
+          for (int ly = 0; ly < 256; ly += 17) {
             blorb::Scars s;
             s.mark[0] = {Scar::Kind(k), uint8_t(lx), uint8_t(ly), 255};
             s.count = 1;
@@ -366,6 +366,115 @@ TEST(FromOutcome, EachSideSeesTheSameTurnMirrored) {
   o.ending = blorb::Ending::BWon;
   paint::fromOutcome(a, o, blorb::Side::A);
   EXPECT_EQ(a.won, paint::Side::Them) << "the duel's ending outranks the last clash";
+}
+
+// ---- the queued special ------------------------------------------------------------
+
+namespace {
+int countProps(const DuelStaging& st, PropKind k) {
+  int n = 0;
+  for (int i = 0; i < st.propCount; ++i) n += st.props[i].kind == k;
+  return n;
+}
+DuelStaging staged(const DuelScene& s) {
+  return paint::stageDuel(s, paint::packFor(s.me.look.species), paint::packFor(s.them.look.species));
+}
+}  // namespace
+
+// The friend's special winds up on my screen too (so I can read and punish
+// it), with its countdown; mine does on his.
+TEST(Special, TheTelegraphShowsOnBothScreens) {
+  for (const char* m : {"windup_quick", "windup_heavy"}) {
+    const DuelStaging st = staged(duelScene(m, byName("gilly"), byName("fizz")));
+    EXPECT_EQ(countProps(st, PropKind::Aura), 2) << m << ": a light behind each pet winding up";
+    EXPECT_EQ(countProps(st, PropKind::Countdown), 2) << m << ": each telegraph says when it lands";
+  }
+  DuelScene a = duelScene("windup_quick", byName("gilly"), byName("fizz")), b = a;
+  b.me.landsIn = 2;
+  EXPECT_GE(lumaDiffers(*shoot(a), *shoot(b)), 20) << "two turns to go reads apart from one, without colour";
+  DuelScene none = a;
+  none.them.windup = blorb::Windup::None;
+  EXPECT_GE(lumaDiffers(*shoot(a), *shoot(none)), 200) << "a friend winding up is plain to see";
+}
+
+// The landing stance stays hidden until it lands: a pet bracing in the clash
+// shows his telegraph, never a stance, whatever stance the scene carries.
+TEST(Special, ABracingPetNeverShowsItsLandingStance) {
+  DuelScene s = duelScene("clash", byName("gilly"), byName("fizz"));
+  s.them.windup = blorb::Windup::Heavy;
+  s.them.landsIn = 1;
+  s.them.special = blorb::TurnReport::Special::Committed;
+  s.them.stance = int8_t(blorb::Stance::Trick);
+  s.ticks = 8;
+  const DuelStaging st = staged(s);
+  for (int i = 0; i < st.propCount; ++i)
+    if (st.props[i].kind == PropKind::Stance)
+      EXPECT_LT(st.props[i].x, 120) << "a stance popped on the friend's side while he braced";
+  EXPECT_EQ(countProps(st, PropKind::Countdown), 1);
+}
+
+TEST(Special, EachFateHasItsOwnBeat) {
+  const char* fates[] = {"landing", "riposte", "stagger", "whiff"};
+  std::vector<std::unique_ptr<Canvas240>> shots;
+  for (int k = 0; k < 4; ++k) {
+    const char* m = fates[k];
+    DuelScene s = duelScene(m, byName("tinker"), byName("hushwing"));
+    s.ticks = 16;
+    const DuelStaging st = staged(s);
+    int word = -1;
+    for (int i = 0; i < st.propCount; ++i)
+      if (st.props[i].kind == PropKind::Burst) word = st.props[i].variant;
+    EXPECT_EQ(word, 4 + k) << m << ": WHAM, COUNTER, OOF, WHIFF in that order";
+    shots.push_back(shoot(s));
+  }
+  for (size_t i = 0; i < shots.size(); ++i)
+    for (size_t j = i + 1; j < shots.size(); ++j)
+      EXPECT_GE(lumaDiffers(*shots[i], *shots[j]), 100) << fates[i] << " and " << fates[j] << " look alike";
+}
+
+// ---- the BOOT hint -------------------------------------------------------------------
+
+TEST(BootHint, EveryStateDrawsItsGlyphAndReadsWithoutColour) {
+  Canvas240 blank{};
+  for (const blorbtest::HintRow& r : blorbtest::kHintRows) {
+    Canvas240 cv{};
+    paint::drawBootHint(cv, r.hint);
+    EXPECT_GE(lumaDiffers(cv, blank), 40) << r.context << ": no hint drawn";
+    paint::RimHint grey = r.hint, held = r.hint, twice = r.hint;
+    grey.greyed = !grey.greyed;
+    grey.pips = 2;
+    Canvas240 g{};
+    paint::drawBootHint(g, grey);
+    EXPECT_GE(lumaDiffers(cv, g), 8) << r.context << ": 'not now' shows only as a colour";
+    if (r.hint.hasHold) {
+      held.holdFill = uint8_t(255 - r.hint.holdFill);
+      Canvas240 h{};
+      paint::drawBootHint(h, held);
+      EXPECT_GE(lumaDiffers(cv, h), 8) << r.context << ": the hold ring does not fill";
+    }
+    twice.hasDouble = !twice.hasDouble;
+    Canvas240 d{};
+    paint::drawBootHint(d, twice);
+    EXPECT_GE(lumaDiffers(cv, d), 8) << r.context << ": the double-press bars do not show";
+  }
+}
+
+TEST(FromOutcome, CarriesTheSpecialInFlightAndItsFate) {
+  blorb::Outcome o;
+  o.resolved = 3;
+  o.side[0].queued = blorb::Windup::Heavy;
+  o.side[0].landsOn = 5;
+  o.turns[2].bracing[0] = true;
+  o.turns[2].special[1] = blorb::TurnReport::Special::Riposted;
+  DuelScene a, b;
+  paint::fromOutcome(a, o, blorb::Side::A);
+  paint::fromOutcome(b, o, blorb::Side::B);
+  EXPECT_EQ(a.me.windup, blorb::Windup::Heavy);
+  EXPECT_EQ(a.me.landsIn, 2);
+  EXPECT_EQ(b.them.windup, blorb::Windup::Heavy) << "the friend's wind-up is on my screen too";
+  EXPECT_EQ(b.them.landsIn, 2);
+  EXPECT_EQ(a.them.special, blorb::TurnReport::Special::Riposted);
+  EXPECT_EQ(b.me.special, blorb::TurnReport::Special::Riposted);
 }
 
 // ---- the rim at home ------------------------------------------------------------------

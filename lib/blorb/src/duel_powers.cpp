@@ -1,11 +1,13 @@
-// The nine signature powers (defs/powers.def), one handler each. A handler
-// runs only for a side whose power fired this turn, once per phase, and acts
-// in the phases it cares about. What lasts past the turn goes into SideState,
-// and the turn's own steps read it (duel_resolve.cpp), so a two-turn hush is
-// the core's to honour on the second turn, not the handler's.
+// The nine signature powers (defs/powers.def), one handler each. A power is a
+// queued special (duel.h): a handler runs only on the turn its owner's special
+// LANDS, once per phase, and acts in the phases it cares about. What lasts
+// past that turn goes into SideState, and later turns' own steps read it, so
+// a hush whiffing the friend's next special is the core's to honour.
 //
-// Both sides' handlers in one phase must commute: each reads `original`,
-// never what the other just wrote, and writes only its own fields or adds.
+// The counters are set on the landing turn and tick down at its end, so "2"
+// covers the turn after the landing; a landing turn has no clash for them to
+// change. Both sides' handlers in one phase must commute: each writes only its
+// own fields, or adds.
 //
 // Everything here is constexpr, and duel_resolve.cpp includes this file, so
 // the S3 compiler can evaluate whole battles (tools/duel_determinism.sh).
@@ -18,15 +20,15 @@ namespace duel_detail {
 constexpr uint8_t mine(const PowerCtx& c) { return uint8_t(c.me); }
 constexpr uint8_t theirs(const PowerCtx& c) { return uint8_t(other(c.me)); }
 
-// He SAW your move: his stance becomes the one that beats it. A dozing friend
-// has no move to see.
-constexpr void power_foresee(PowerPhase ph, PowerCtx& c) {
-  if (ph == PowerPhase::BeforeClash && !c.dozed[theirs(c)]) c.shown[mine(c)] = counterOf(c.original[theirs(c)]);
-}
+// He SAW the counter coming: a Foresee landing that the friend's stance beats
+// whiffs instead of being riposted. special_probe.py measured the two other
+// readings and rejected both (always the counter: grungo 0.667; plain: 0.429).
+constexpr bool seesTheRiposte(PowerId p) { return p == power::foresee; }
+constexpr void power_foresee(PowerPhase, PowerCtx&) {}
 
-// Up from this turn until a hit uses it.
+// Up from the landing until a hit uses it.
 constexpr void power_shell(PowerPhase ph, PowerCtx& c) {
-  if (ph == PowerPhase::BeforeClash) c.side[mine(c)].shell = true;
+  if (ph == PowerPhase::OnDamage) c.side[mine(c)].shell = true;
 }
 
 constexpr void power_spores(PowerPhase ph, PowerCtx& c) {
@@ -43,14 +45,11 @@ constexpr void power_mend(PowerPhase ph, PowerCtx& c) {
 }
 
 constexpr void power_lantern(PowerPhase ph, PowerCtx& c) {
-  if (ph != PowerPhase::BeforeClash) return;
-  SideState& s = c.side[mine(c)];
-  if (s.bonkTurns < 1) s.bonkTurns = 1;
-  c.side[theirs(c)].dazzledTurns = 2;
+  if (ph == PowerPhase::OnDamage) c.side[theirs(c)].dazzledTurns = 2;
 }
 
 constexpr void power_dash(PowerPhase ph, PowerCtx& c) {
-  if (ph == PowerPhase::BeforeClash) c.side[mine(c)].bonkTurns = 2;
+  if (ph == PowerPhase::OnDamage) c.side[mine(c)].bonkTurns = 2;
 }
 
 constexpr void power_zap(PowerPhase ph, PowerCtx& c) {
@@ -58,7 +57,7 @@ constexpr void power_zap(PowerPhase ph, PowerCtx& c) {
 }
 
 constexpr void power_hush(PowerPhase ph, PowerCtx& c) {
-  if (ph == PowerPhase::BeforeClash) c.side[mine(c)].hushTurns = 2;
+  if (ph == PowerPhase::OnDamage) c.side[mine(c)].hushTurns = 2;
 }
 
 // Never called: the core swaps gadget for the power it draws before any phase.

@@ -161,6 +161,25 @@ Owner (2026-10-13): "Maybe have a dark souls esque queued special move." A power
 - specials land 0.593 of the time, are riposted 0.188, staggered 0.194, and whiff 0.036;
 - the median battle shortens from 12 turns to 7.
 
+**Measured through `resolve()`** (unit D4, `tools/duel_balance.cpp 800`, 2026-10-13; the Random row gates `test_duel_resolve`). The probe above lands a heavy special on the turn after its commit, the same as a quick one: it starts the countdown at the wind-up less one and also ticks it on the commit turn. `resolve()` winds a heavy up for two turns, as this section says. With that one line changed (`[windup, ...]` for `[windup - 1, ...]`), the probe measures every species 0.460 to 0.557, worst pair 0.628, median 8 turns, specials landed 0.594, riposted 0.149, whiffed 0.032, staggered 0.232, and a reader over a habit kid 0.761 (0.655 with two hearts). `resolve()` reproduces those numbers within 0.018 per species, and against the committed probe it is within 0.033 (Mothwick):
+
+| Players, 81 pairs | Grungo | Mossby | Puffkin | Gilly | Mothwick | Mudge | Fizz | Hushwing | Tinker | Worst pair | Median | Landed / riposted / whiffed / staggered |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Random v Random (the probe's players), 800 a pair | 0.471 | 0.506 | 0.539 | 0.499 | 0.452 | 0.488 | 0.523 | 0.506 | 0.515 | Fizz over Mothwick 0.606 | 8 | 0.594 / 0.148 / 0.032 / 0.233 |
+| Queuer v Queuer, 800 a pair | 0.465 | 0.517 | 0.576 | 0.527 | **0.394** | **0.413** | 0.568 | 0.525 | 0.513 | Puffkin over Mothwick 0.699 | 8 | 0.546 / 0.107 / 0.026 / 0.462 |
+| Both pets on autopilot, 200 a pair | 0.552 | 0.446 | 0.476 | 0.460 | 0.504 | 0.558 | 0.541 | 0.492 | 0.472 | Mudge over Gilly 0.755 | 8 | 0.481 / 0.261 / 0.034 / 0.222 |
+
+The gate holds for the probe's players. Two rows sit outside it and are not gated. Kids who queue at every chance and always stagger a bracer leave Mothwick and Mudge under 0.430, because their 3-pip specials are queued most often and staggered 46 percent of the time. Two autopilots give the widest pair of all (0.755, with 200 battles a pair, so about 0.035 of noise). The autopilot is what a demo films, so D13 should pick its pairing with that row in mind. The pet's pick has noise four knack ranks wide: at one rank, two autopilots replayed the same battle every time (measured on the instant powers, where Grungo lost to Puffkin 300 times in 300).
+
+Fairness through `resolve()` (300 battles a pair, parent first):
+
+| Parent (reader) against | no help | 1 heart | 2 hearts |
+|---|---|---|---|
+| a habit kid | 0.762 | 0.707 | 0.657 |
+| a kid who follows the real `petChoice` half the time | 0.470 | 0.377 | 0.294 |
+| a pet on autopilot every turn | 0.234 | 0.152 | 0.080 |
+| a queuer | 0.551 | 0.454 | 0.374 |
+
 Two other Foresee rules were measured and rejected: an always-counter landing (Grungo 0.667) and a plain landing (0.429). Lantern's cost moves from 4 to 3 (it measured 0.450 at 4). Other extras were also measured: quick +0 and heavy +1 left Grungo at 0.667 or 0.429 under the other Foresee rules, and quick +1 and heavy +1 gave no reason to choose a heavy.
 
 **How it meets the rest of the design.**
@@ -289,15 +308,7 @@ Senders send at 5 Hz while the friend lacks something and at 1 Hz otherwise. A t
 
 The worst single pair is Hushwing over Mudge at 0.672, and the median battle is 12 turns. The first pass, with flat costs and one-turn Hush and Lantern, had Hushwing at 0.328 and Mossby at 0.620. Three changes moved it: Hush and Lantern last two turns, Shell no longer refunds a spark, and each power got its own cost. Then a cost sweep settled Dash at 3 and Spores at 6. Each sweep step is in the probe's history and reruns in about 30 s. The C++ gate (`tools/duel_balance.cpp`, unit D4) re-measures through the real `resolve()`: species within 430 to 570 permille, pairs within 300 to 700.
 
-**Measured through `resolve()`** (unit D4, `tools/duel_balance.cpp 1500`, 2026-10-13; the same numbers gate `test_duel_resolve`). Same players, 81 pairs x 1,500 battles, no cost changed:
-
-| Variant | Grungo | Mossby | Puffkin | Gilly | Mothwick | Mudge | Fizz | Hushwing | Tinker | Worst pair | Median turns |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| Random, always fire (the probe's model) | 0.496 | 0.543 | 0.452 | 0.493 | 0.514 | 0.509 | 0.495 | 0.499 | 0.500 | Hushwing over Mudge 0.699 | 12 |
-| Random, BOOT on a random half of turns (armed) | 0.523 | 0.527 | 0.479 | 0.476 | 0.508 | 0.509 | 0.492 | 0.482 | 0.504 | Fizz over Hushwing 0.590 | 11 |
-| Both pets on autopilot (`petChoice`, 300 a pair) | 0.486 | 0.601 | 0.455 | 0.513 | 0.472 | 0.489 | 0.494 | 0.459 | 0.532 | Mossby over Puffkin 0.702 | 12 |
-
-Every species lands within 0.004 of the probe. The worst pair is 0.699 at 1,500 a pair and 0.693 at 6,000 (measured), so it sits just inside the 700 bound. A one-pip sweep of every cost found no single change that moves it without pushing another pair or species out of bounds (Hush 6 drops Hushwing to 0.418, Dash 2 puts Mudge over Fizz at 0.718; measured), so the costs stand. Arming only half the time narrows the wheel, because a power that fires later matters less. The autopilot row is the demo case. With less noise in the pet's pick (one knack rank instead of four), two autopilots replayed the same battle every time, and Grungo lost to Puffkin 300 times in 300 (measured).
+Before the queued special, D4 confirmed these instant-power numbers through `resolve()` (1,500 a pair): every species within 0.004 of the probe, worst pair Hushwing over Mudge 0.699, and no one-pip cost change that tightened it without breaking another bound. The live numbers are under "The queued special".
 
 ## Fairness: a 6-year-old against a parent
 
@@ -307,11 +318,8 @@ The probe's scripted players: a **parent** who counters the friend's most freque
 |---|---|---|---|---|
 | against a habit kid | 0.923 | 0.872 | 0.801 | 0.705 |
 | against a kid who follows the lean half the time | 0.491 | 0.311 | 0.172 | 0.092 |
-| the same, through `resolve()` and the real `petChoice` (D4) | 0.478 | 0.291 | 0.160 | (max 2) |
-| against a pet on autopilot every turn (D4) | 0.156 | 0.049 | 0.012 | (max 2) |
-| against a habit kid, through `resolve()` (D4) | 0.924 | 0.876 | 0.803 | (max 2) |
 
-The first two rows are measured in the probe, with the caveat above; the D4 rows are measured through `resolve()` at 300 battles a pair. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. The real `petChoice` is as good as the probe assumed. A pet left on autopilot beats this scripted parent 0.844 of the time, because the parent counters a habit and the pet's Skill learns the counter to the counter. A real parent adapts, so read that row as "the autopilot is no pushover", not as a ranking. The design uses both, in this order:
+All measured in the probe, with instant powers and the caveat above. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. Through `resolve()` with queued specials (the fairness table under "The queued special"), the real `petChoice` does what the probe assumed: a kid who follows it half the time holds a reading parent to 0.470. A pet left on autopilot beats this scripted parent 0.766 of the time, because the parent counters a habit and the pet's Skill learns the counter to the counter. A real parent adapts, so read that row as "the autopilot is no pushover", not as a ranking. The design uses both, in this order:
 
 1. **The pet whispers.** The pet's lean is its Skill reading of the friend, and it always shows as a soft glow on one glyph. Its brightness rises with the assist, so a young kid is shown the reading the pet has made. Following your pet is how a 6-year-old beats a parent, and it is what the toy wants kids to learn anyway.
 2. **Assist hearts, by skill and not by level** (graft from candidate C). The card carries the kid's **prowess**, a running mean (1/8 step) of how well that kid has picked: the share of turns the kid chose (not the pet) that won or bonked. Inside a 24-point dead band nobody gets help. Past it, the weaker side gets one heart per 32 points, at most two. The stronger side loses nothing. A kid who starts following the lean plays better, their prowess rises, and the help backs off by itself, so the 0.311 and 0.172 cells do not persist.
@@ -504,7 +512,7 @@ There were no dropouts.
 - We accept that a friend's unrevealed move sits in RAM, readable by a modified firmware, in exchange for one packet kind per turn and no cryptography.
 - We accept that a battle one device never finished is a fizzle there and a result on the other side, in exchange for no agreement protocol beyond the logs. Rewards are nearly equal either way.
 - We accept that genes shape style and not strength, in exchange for no line ever becoming a bully.
-- We accept per-pair matchups up to 0.699 (measured through `resolve()`, Hushwing over Mudge), in exchange for nine distinct powers. No one-pip cost change tightens it without breaking another bound.
+- We accept per-pair matchups up to 0.606 between random players (measured through `resolve()`, Fizz over Mothwick), and up to 0.755 between two autopilots, in exchange for nine distinct powers.
 - We accept every device carrying all nine packs (about 630 KB, estimate), in exchange for drawing any friend and any hybrid.
 - We accept Wi-Fi start-up latency (a guess of under a second) at each duel, in exchange for an untouched heap the rest of the time.
 - We accept that only shared-locus genes cross, in exchange for no lineage format change.
@@ -589,7 +597,7 @@ Only product calls. Each has the default this design ships. Your ruling that pet
 - **The Wi-Fi heap is an estimate.** D12 measures it first. The levers, in order: Wi-Fi buffers in PSRAM (already allowed), fewer static RX buffers, then pausing BLE advertising during a duel.
 - **A clink may not trip both tap engines.** Pointing and knocking always works.
 - **RSSI in IDF 4.4 needs a promiscuous hook.** If it misbehaves beside ESP-NOW, the gate becomes "matched by clink or mutual choice only", which is still consent on both sides.
-- **The pair spread** (worst 0.699, Hushwing over Mudge) may feel unfair within one family, and with Mortal it matters more. Costs alone did not tighten it (D4's sweep); a rule change to Hush or the element head start would.
+- **The pair spread** (worst 0.606 between random players, 0.755 between two autopilots) may feel unfair within one family, and with Mortal it matters more. Kids who queue at every chance push Mothwick and Mudge under 0.430 (D4, measured), so their 3-pip specials are the first lever if families play that way.
 - **A child's pet killed by a cousin** is the point of the ruling, and it will still land hard some days. The mitigations are design, not refusal: consent with the skull shown, the fairness gate, mercy by default, and a death that leaves a clutch and a vendetta rather than nothing.
 - **The forecast is coarse.** A Scrap it allows can still contribute to a later death if the pet is then neglected. That is intended ("wounds work"), and the stakes screen says so with the bandage.
 - **v2's double-press detector does not exist yet.** D9 adds a minimal one, and v2 U3 replaces it.
