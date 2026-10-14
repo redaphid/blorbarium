@@ -217,6 +217,29 @@ TEST(SerialAir, TheWeatherReplaysFromItsSeed) {
   EXPECT_NE(arrivals(7), arrivals(8));
 }
 
+// How far ahead a side reads the stream is up to the scheduler, so an event
+// told when its bytes are read would land in the log at a different place
+// each run. Each one is told on the step it happens, in time order.
+TEST(SerialAir, NothingIsToldBeforeItHappens) {
+  Weather w = clear(4);
+  w.lossPct = 40;
+  w.dupPct = 20;
+  w.reorderPct = 20;
+  w.lateMs = 50;
+  Pair p(w);
+  std::vector<std::pair<uint32_t, uint32_t>> told;   // (step it was told on, its time)
+  p.b->onEvent = [&](const simair::Event& e) { told.push_back({p.now, e.at}); };
+  sendNumbered(p, 300);
+  p.runTo(p.now + 100);
+  ASSERT_GT(told.size(), 250u);
+  uint32_t last = 0;
+  for (const auto& [step, at] : told) {
+    EXPECT_LE(at, step);
+    EXPECT_GE(at, last) << "told in time order";
+    last = at;
+  }
+}
+
 TEST(SerialAir, AFriendThatLeavesDoesNotHangUs) {
   Pair p(clear());
   p.runTo(5);

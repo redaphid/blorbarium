@@ -117,8 +117,8 @@ class SerialAir final : public blorb::Air {
     while (!flight_.empty() && flight_.front().arrive <= now) {
       const Flight f = flight_.front();
       flight_.pop_front();
-      if (open_) inbox_.push_back(f.d);
-      tell(open_ ? Heard::Received : Heard::Deaf, f.arrive, f.seq, f.d.from, f.d.bytes, f.d.len);
+      if (open_ && !f.lost) inbox_.push_back(f.d);
+      tell(f.lost ? Heard::Lost : open_ ? Heard::Received : Heard::Deaf, f.arrive, f.seq, f.d.from, f.d.bytes, f.d.len);
     }
   }
 
@@ -165,6 +165,7 @@ class SerialAir final : public blorb::Air {
     uint32_t arrive;
     uint32_t seq;
     Datagram d;
+    bool lost;   // flies anyway, so it is told when it would have landed, not when it was read
   };
 
   static void put32(uint8_t* p, uint32_t v) {
@@ -237,12 +238,9 @@ class SerialAir final : public blorb::Air {
     d.len = r[21];
     memcpy(d.bytes, r + kHead, d.len);
     const uint32_t arrive = sentAt + w_.latencyMs + (reorderRoll < w_.reorderPct ? late : 0);
-    if (lossRoll < w_.lossPct) {
-      tell(Heard::Lost, arrive, seq, from, d.bytes, d.len);
-      return;
-    }
-    land({arrive, seq, d});
-    if (dupRoll < w_.dupPct) land({arrive + dupGap, seq, d});
+    const bool lost = lossRoll < w_.lossPct;
+    land({arrive, seq, d, lost});
+    if (!lost && dupRoll < w_.dupPct) land({arrive + dupGap, seq, d, false});
   }
 
   // In arrival order; frames due on the same ms keep the order they came off the stream.
