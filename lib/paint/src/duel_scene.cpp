@@ -314,11 +314,6 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     s.fig[kMe].x = int16_t(s.fig[kMe].x + (to.x - 120) / 12);
     s.fig[kMe].leanPct = int8_t(clampi(s.fig[kMe].leanPct + (to.x - 120) / 6, -24, 24));
   }
-  if (sc.me.armed) {
-    const blorb::PowerInfo& pw = powerFor(sc.me);
-    const P head = headOf(s.fig[kMe], b[kMe]);
-    add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 14 - bump(t % 10, 0, 10) * 4 / 256}, 130));
-  }
   telegraph(sc.me, s.fig[kMe], b[kMe], kMe, t, s);
   telegraph(sc.them, s.fig[kThem], b[kThem], kThem, t, s);
   // Over the friend: "..." while choosing, a tick once locked; never the stance.

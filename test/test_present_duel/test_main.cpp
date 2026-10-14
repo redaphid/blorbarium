@@ -637,6 +637,140 @@ TEST(SceneOf, EveryPhaseDrawsBothPets) {
   }
 }
 
+namespace {
+
+// The view D8's session would give for a fixture moment, from my side: what
+// the screen shows, said the way the session says it.
+blorb::DuelView viewFrom(const DuelScene& fx, blorb::DuelPhase phase) {
+  blorb::DuelView v;
+  v.phase = phase;
+  v.phaseTicks = fx.ticks;
+  v.me.species = fx.me.look.species;
+  v.them.species = fx.them.look.species;
+  v.me.power = blorb::speciesInfo(fx.me.look.species).power;
+  v.them.power = blorb::speciesInfo(fx.them.look.species).power;
+  v.them.look.stage = fx.them.look.stage;
+  v.them.look.scalePct = fx.them.look.scalePct;
+  v.them.look.lifeSeed = fx.them.look.lifeSeed;
+  for (size_t r = 0; r < blorb::kRegionCount; ++r) v.them.look.regions[r] = fx.them.look.regions[r];
+  const bool clash = phase == blorb::DuelPhase::Revealing;
+  v.hasLast = true;
+  v.lastTurn = 4;
+  const int now = clash ? 4 : 5;
+  auto side = [&](const paint::Fighter& f, blorb::SideState& s) {
+    s.hearts = f.hearts;
+    s.maxHearts = f.maxHearts;
+    s.spark = f.sparks;
+    const bool spent = f.special == blorb::TurnReport::Special::Landed || f.special == blorb::TurnReport::Special::Riposted ||
+                       f.special == blorb::TurnReport::Special::Whiffed;
+    s.queued = spent ? blorb::Windup::None : f.windup;
+    s.landsOn = uint8_t(now + f.landsIn);
+  };
+  side(fx.me, v.mine);
+  side(fx.them, v.theirs);
+  v.assistHearts[0] = fx.me.assist;
+  v.assistHearts[1] = fx.them.assist;
+  v.chosen = fx.me.chose;
+  v.theyChose = fx.them.chose;
+  v.ceiling[0] = fx.me.ceiling;
+  v.ceiling[1] = fx.them.ceiling;
+  v.confirmed = fx.me.confirmed;
+  v.theyConfirmed = fx.them.confirmed;
+  v.skull[0][uint8_t(fx.me.chose)] = fx.me.skull;
+  v.skull[1][uint8_t(fx.them.chose)] = fx.them.skull;
+  v.agreed = fx.stakes;
+  v.aim = fx.aim;
+  v.lean = {blorb::Stance(fx.lean < 0 ? 0 : fx.lean), fx.whisper};
+  v.locked = fx.me.locked;
+  v.theyLocked = fx.them.locked;
+  v.chooseTicksLeft = fx.ticksLeft;
+  const paint::Fighter* f[2] = {&fx.me, &fx.them};
+  for (int i = 0; i < 2; ++i) {
+    v.last.dozed[i] = f[i]->stance < 0;
+    v.last.shown[i] = blorb::Stance(f[i]->stance < 0 ? 0 : f[i]->stance);
+    v.last.hit[i] = f[i]->hit;
+    v.last.powered[i] = f[i]->fired;
+    v.last.special[i] = f[i]->special;
+  }
+  v.last.clash = fx.won == paint::Side::Me ? blorb::Clash::AWins : fx.won == paint::Side::Them ? blorb::Clash::BWins : blorb::Clash::Bonk;
+  if (fx.won != paint::Side::Neither) v.last.super[fx.won == paint::Side::Me ? 0 : 1] = fx.super;
+  v.iWon = fx.won == paint::Side::Me;
+  v.draw = fx.won == paint::Side::Neither;
+  const bool fate = phase == blorb::DuelPhase::Mercy || phase == blorb::DuelPhase::Fallen;
+  v.theyAreDown = fate && fx.won == paint::Side::Me;
+  v.iAmDown = fate && fx.won == paint::Side::Them;
+  if (phase == blorb::DuelPhase::Staking) {
+    v.confirmHold = fx.me.hold;
+    v.theirHold = fx.them.hold;
+  } else if (phase == blorb::DuelPhase::Mercy) {
+    (v.iAmDown ? v.theirHold : v.confirmHold) = fx.finishHold;
+  }
+  v.mercyTicksLeft = fx.mercyLeft;
+  v.verdict = fx.verdict;
+  v.emoteIn = fx.pleading ? blorb::Emote::Plead : blorb::Emote::None;
+  v.newScars = fx.newScars;
+  return v;
+}
+
+}  // namespace
+
+// Each fixture moment, said as D8's view of its phase, draws what the fixture
+// draws: the same figures and props, to the pixel coordinate.
+TEST(SceneOf, EachPhaseDrawsLikeItsFixture) {
+  using P = blorb::DuelPhase;
+  struct Case { const char* moment; P phase; };
+  const Case cases[] = {{"meeting", P::Greeting},   {"staking", P::Staking},       {"staking_mortal", P::Staking},
+                        {"choosing", P::Choosing},  {"locked", P::Waiting},        {"windup_quick", P::Choosing},
+                        {"windup_heavy", P::Choosing}, {"clash", P::Revealing},   {"hit", P::Revealing},
+                        {"bonk", P::Revealing},     {"landing", P::Revealing},     {"riposte", P::Revealing},
+                        {"stagger", P::Revealing},  {"whiff", P::Revealing},       {"mercy", P::Mercy},
+                        {"fallen", P::Fallen},      {"spared", P::Fallen},         {"outcome", P::Fainting}};
+  for (const Pairing& pr : kPairings)
+    for (const Case& c : cases) {
+      const DuelScene fx = duelScene(c.moment, byName(pr.mine), byName(pr.theirs));
+      const DuelScene got = paint::sceneOf(viewFrom(fx, c.phase), fx.me.look);
+      EXPECT_EQ(dump(staged(got)), dump(staged(fx))) << pr.mine << "-" << pr.theirs << " " << c.moment;
+    }
+}
+
+// One duel seen from either end: what is mine on one screen is theirs on the
+// other, and the same pet won.
+TEST(SceneOf, EachSideSeesTheSameDuelMirrored) {
+  const DuelScene fx = duelScene("stagger", byName("gilly"), byName("fizz"));
+  const blorb::DuelView a = viewFrom(fx, blorb::DuelPhase::Revealing);
+  blorb::DuelView b = a;
+  std::swap(b.me, b.them);
+  std::swap(b.mine, b.theirs);
+  std::swap(b.assistHearts[0], b.assistHearts[1]);
+  std::swap(b.chosen, b.theyChose);
+  std::swap(b.confirmed, b.theyConfirmed);
+  std::swap(b.locked, b.theyLocked);
+  std::swap(b.last.shown[0], b.last.shown[1]);
+  std::swap(b.last.dozed[0], b.last.dozed[1]);
+  std::swap(b.last.hit[0], b.last.hit[1]);
+  std::swap(b.last.powered[0], b.last.powered[1]);
+  std::swap(b.last.special[0], b.last.special[1]);
+  std::swap(b.last.super[0], b.last.super[1]);
+  b.last.clash = a.last.clash == blorb::Clash::AWins ? blorb::Clash::BWins
+                 : a.last.clash == blorb::Clash::BWins ? blorb::Clash::AWins : blorb::Clash::Bonk;
+  const Appearance them = blorbtest::duelLook(byName("fizz"), 2, 20);
+  const DuelScene sa = paint::sceneOf(a, fx.me.look), sb = paint::sceneOf(b, them);
+  EXPECT_EQ(sb.won == paint::Side::Me, sa.won == paint::Side::Them);
+  EXPECT_EQ(sb.won == paint::Side::Them, sa.won == paint::Side::Me);
+  const paint::Fighter* pa[2] = {&sa.me, &sa.them};
+  const paint::Fighter* pb[2] = {&sb.them, &sb.me};
+  for (int i = 0; i < 2; ++i) {
+    EXPECT_EQ(pa[i]->hearts, pb[i]->hearts);
+    EXPECT_EQ(pa[i]->stance, pb[i]->stance);
+    EXPECT_EQ(pa[i]->hit, pb[i]->hit);
+    EXPECT_EQ(pa[i]->special, pb[i]->special);
+    EXPECT_EQ(pa[i]->windup, pb[i]->windup);
+    EXPECT_EQ(pa[i]->landsIn, pb[i]->landsIn);
+    EXPECT_EQ(pa[i]->look.species, pb[i]->look.species);
+  }
+  EXPECT_EQ(sa.me.special, blorb::TurnReport::Special::Staggered) << "the fixture's fate survives the trip";
+}
+
 // ---- a friend egg in the clutch --------------------------------------------------------
 
 // A friend egg can be another species than the parent whose clutch it joins:

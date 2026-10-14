@@ -75,7 +75,6 @@ void turn1Choose(DuelScene& s, int t) {
   s.aim = int8_t(t < 8 ? -1 : int(t < 14 ? blorb::Stance::Pounce : blorb::Stance::Guard));
   s.me.locked = t >= 18;
   s.them.locked = t >= 10;
-  s.me.armed = false;
 }
 void turn1Clash(DuelScene& s, int) {
   s.me.hearts = 5;

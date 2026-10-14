@@ -129,7 +129,6 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.whisper = 200;
     s.ticksLeft = n == "choosing" ? 70 : 48;
     s.me.locked = n == "locked";
-    s.me.armed = n == "locked";
     s.them.locked = n == "locked";
   } else if (n == "clash" || n == "hit" || n == "bonk") {
     s.won = n == "bonk" ? Side::Neither : Side::Me;

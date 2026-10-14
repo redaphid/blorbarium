@@ -43,7 +43,6 @@ struct Fighter {
   uint8_t hearts = 5, maxHearts = 5;
   uint8_t assist = 0;               // of maxHearts, the ones the fairness rule gave: drawn with the pet's cheer
   uint8_t sparks = 0;               // 0..kMeterMax
-  bool armed = false;               // the power is called for this turn
   // Staking
   blorb::Stakes chose = blorb::Stakes::Spar;
   blorb::Stakes ceiling = blorb::Stakes::Mortal;   // tiers above it are struck through
