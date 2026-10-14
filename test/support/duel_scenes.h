@@ -25,6 +25,41 @@ inline constexpr DuelMoment kDuelMoments[] = {
     {"fallen", paint::DuelAct::Fallen, 30},
     {"spared", paint::DuelAct::Fallen, 20},
     {"outcome", paint::DuelAct::Outcome, 24},
+    // The queued special (BATTLES.md, "Amendment"): a telegraph and its four fates.
+    {"windup_quick", paint::DuelAct::Choosing, 30},
+    {"windup_heavy", paint::DuelAct::Choosing, 30},
+    {"landing", paint::DuelAct::Clash, 13},
+    {"riposte", paint::DuelAct::Clash, 14},
+    {"stagger", paint::DuelAct::Clash, 14},
+    {"whiff", paint::DuelAct::Clash, 13},
+};
+
+// boot.h's BootGlyph values the scenes use (D9 owns the enum).
+namespace glyph {
+inline constexpr uint8_t Pellet = 1, Moon = 2, Peek = 4, Flower = 5, Arrow = 6, Check = 7, Lock = 8, Download = 9,
+                         Friend = 10, Door = 11, Tier = 12, Skull = 13, SpecialQuick = 14, SpecialHeavy = 15,
+                         OpenHand = 16, Plead = 17, Candle = 18, Rematch = 19, Heart = 20, Countdown = 21;
+}
+
+// Each kBoot row's hint, as boot.h's table draws it: one per BootContext, in order.
+struct HintRow { const char* context; paint::RimHint hint; };
+inline const HintRow kHintRows[] = {
+    {"ota", {glyph::Download, 0, false, 0, false, 0, false}},
+    {"sealed", {glyph::Lock, 0, false, 0, false, 0, false}},
+    {"staking", {glyph::Tier, 1, false, 0, true, 0, false}},
+    {"turn", {glyph::SpecialQuick, 3, false, 0, true, 0, false}},
+    {"winding", {glyph::Countdown, 0, false, 2, false, 0, false}},
+    {"mercy_winner", {glyph::OpenHand, 0, false, 0, true, 120, false}},
+    {"mercy_loser", {glyph::Plead, 0, false, 0, false, 0, false}},
+    {"fallen", {glyph::Candle, 0, false, 0, false, 0, false}},
+    {"outcome", {glyph::Rematch, 0, false, 0, true, 0, true}},
+    {"lobby", {glyph::Friend, 0, false, 0, false, 0, true}},
+    {"nest", {glyph::Arrow, 0, false, 0, true, 0, false}},
+    {"clutch", {glyph::Arrow, 0, false, 0, true, 200, false}},
+    {"vigil", {glyph::Flower, 0, false, 0, false, 0, false}},
+    {"egg", {glyph::Peek, 0, false, 0, false, 0, false}},
+    {"asleep", {glyph::Pellet, 0, true, 0, true, 0, false}},
+    {"awake", {glyph::Pellet, 0, false, 0, true, 0, true}},
 };
 
 // A pet of `species` as the duel would carry him: the starter's look in that
@@ -66,6 +101,17 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
   s.me.assist = 1;
   s.me.sparks = 4;
   s.them.sparks = 2;
+  const uint8_t power = uint8_t(blorb::powerInfo(blorb::speciesInfo(mine).power).glyph);
+  using G = paint::RimHint;
+  switch (s.act) {
+    case DuelAct::Meeting: s.boot = G{glyph::Friend, 0, false, 0, false, 0, true}; break;
+    case DuelAct::Staking: s.boot = G{glyph::Tier, 1, false, 0, true, 0, false}; break;
+    case DuelAct::Choosing: s.boot = G{glyph::SpecialQuick, power, false, 0, true, 0, false}; break;
+    case DuelAct::Clash: s.boot = G{glyph::SpecialQuick, power, true, 1, true, 0, false}; break;
+    case DuelAct::Mercy: s.boot = G{glyph::OpenHand, 0, false, 0, true, 0, false}; break;
+    case DuelAct::Fallen: s.boot = G{glyph::Candle, 0, false, 0, false, 0, false}; break;
+    case DuelAct::Outcome: s.boot = G{glyph::Rematch, 0, false, 0, true, 0, true}; break;
+  }
 
   if (n == "staking" || n == "staking_mortal") {
     s.me.chose = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
@@ -103,6 +149,46 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.won = Side::Me;
     s.them.hearts = 0;
     s.verdict = n == "fallen" ? blorb::Verdict::Finish : blorb::Verdict::Spare;
+  } else if (n == "windup_quick" || n == "windup_heavy") {
+    // My kid queued a special; the friend's is landing this turn: both telegraphs at once.
+    const bool heavy = n == "windup_heavy";
+    s.me.windup = heavy ? blorb::Windup::Heavy : blorb::Windup::Quick;
+    s.me.landsIn = heavy ? 2 : 1;
+    s.me.locked = true;
+    s.me.sparks = 1;
+    s.them.windup = blorb::Windup::Quick;
+    s.them.landsIn = 0;
+    s.ticksLeft = 60;
+    s.boot = paint::RimHint{glyph::Countdown, 0, false, s.me.landsIn, false, 0, false};
+  } else if (n == "landing" || n == "riposte" || n == "stagger" || n == "whiff") {
+    using Sp = blorb::TurnReport::Special;
+    s.me.windup = blorb::Windup::Heavy;
+    s.me.stance = int8_t(blorb::Stance::Pounce);
+    s.them.stance = int8_t(blorb::Stance::Trick);
+    if (n == "landing") {
+      s.me.special = Sp::Landed;
+      s.me.fired = true;
+      s.won = Side::Me;
+      s.them.hit = 3;
+      s.them.hearts = 0;
+    } else if (n == "riposte") {
+      s.me.special = Sp::Riposted;
+      s.me.stance = int8_t(blorb::Stance::Trick);
+      s.them.stance = int8_t(blorb::Stance::Pounce);
+      s.won = Side::Them;
+      s.me.hit = 2;
+      s.me.hearts = 2;
+    } else if (n == "stagger") {
+      s.me.special = Sp::Staggered;
+      s.me.landsIn = 1;
+      s.them.stance = int8_t(blorb::Stance::Trick);
+      s.won = Side::Them;
+      s.me.hit = 1;
+    } else {
+      s.me.special = Sp::Whiffed;
+      s.them.stance = int8_t(blorb::Stance::Guard);
+      s.won = Side::Them;
+    }
   } else if (n == "outcome") {
     s.stakes = Stakes::Scrap;
     s.won = Side::Them;

@@ -21,7 +21,7 @@ import film  # noqa: E402
 
 PROGRAM = os.path.join(film.ROOT, ".pio", "build", "duelshot", "program")
 MOMENTS = ["meeting", "staking", "staking_mortal", "choosing", "locked", "clash", "hit", "bonk", "mercy", "fallen",
-           "spared", "outcome"]
+           "spared", "outcome", "windup_quick", "windup_heavy", "landing", "riposte", "stagger", "whiff"]
 PAIRINGS = [("grungo", "fizz"), ("gilly", "mothwick"), ("tinker", "mudge")]
 
 
