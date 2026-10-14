@@ -20,7 +20,7 @@ inline constexpr DuelMoment kDuelMoments[] = {
     {"locked", paint::DuelAct::Choosing, 52},
     {"clash", paint::DuelAct::Clash, 6},
     {"hit", paint::DuelAct::Clash, 14},
-    {"bonk", paint::DuelAct::Clash, 14},
+    {"bonk", paint::DuelAct::Clash, 16},
     {"mercy", paint::DuelAct::Mercy, 20},
     {"fallen", paint::DuelAct::Fallen, 30},
     {"spared", paint::DuelAct::Fallen, 20},
@@ -28,10 +28,10 @@ inline constexpr DuelMoment kDuelMoments[] = {
     // The queued special (BATTLES.md, "Amendment"): a telegraph and its four fates.
     {"windup_quick", paint::DuelAct::Choosing, 30},
     {"windup_heavy", paint::DuelAct::Choosing, 30},
-    {"landing", paint::DuelAct::Clash, 13},
+    {"landing", paint::DuelAct::Clash, 15},
     {"riposte", paint::DuelAct::Clash, 14},
     {"stagger", paint::DuelAct::Clash, 14},
-    {"whiff", paint::DuelAct::Clash, 13},
+    {"whiff", paint::DuelAct::Clash, 16},
 };
 
 // boot.h's BootGlyph values the scenes use (D9 owns the enum).
