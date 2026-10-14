@@ -93,7 +93,9 @@ ScarLayer placeScars(const blorb::Scars& scars, const FrameRef& body, const Pale
                      int scale, uint8_t newest, uint8_t newStrength) {
   ScarLayer out;
   if (!scars.count || !body.rle || !pal) return out;
-  Extents e;
+  // Shared, like draw.cpp's LUT: 1,280 B one call below drawCreature is too deep for the loop task.
+  static Extents e;
+  e = Extents{};
   extents(body, pal, palCount, e);
   if (e.top < 0) return out;
   scale = imax(scale, kOne / 16);
