@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <utility>
 #include "blorb/appearance.h"
+#include "blorb/friend_egg.h"
 
 namespace blorb {
 namespace {
@@ -68,6 +69,8 @@ Offspring Clutch::child(uint8_t i) const {
 
 // The vigil first; then Button or Knock moves the cursor, ButtonHold or
 // DoubleKnock picks, and the timeout picks the cursor. One egg needs no choice.
+// The timeout never picks a friend egg: a kid chooses it or nobody does, so a
+// cursor left on it falls back to his own first egg.
 std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
   ++sinceDeath;
   if (sinceDeath < kVigilTicks) return std::nullopt;
@@ -77,16 +80,16 @@ std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
     if (s == stim::button_hold || s == stim::double_knock) return cursor;
     if (s == stim::button || s == stim::knock) cursor = uint8_t((cursor + 1) % count);
   }
-  if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return cursor;
+  if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return friendSlot && cursor == friendSlot - 1 ? uint8_t(0) : cursor;
   return std::nullopt;
 }
 
-void Clutch::derivePreviewStep() {
+void Clutch::derivePreviewStep(const FriendEgg* friendEgg) {
   if (previewed >= count) return;
-  Offspring o = child(previewed);
+  Offspring o = childOf(*this, previewed, friendEgg);
   const Appearance born = portrait(o.genome, Stage::Baby, generation, 0);
   EggPreview& e = previews[previewed];
-  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0};
+  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0, born.species};
   for (const MutationOp& op : o.diff.ops) {
     GeneUid uid = std::visit([](const auto& x) -> GeneUid {
       if constexpr (std::is_same_v<std::decay_t<decltype(x)>, MutHeirloom>) return x.after;

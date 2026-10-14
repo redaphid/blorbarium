@@ -193,13 +193,28 @@ LifeStats getStats(In& in) {
   return s;
 }
 
-void putBody(Out& o, const Body& b) {
+// The scar kinds this firmware draws (stakes.h). A newer one's kind reads as a
+// claw rather than reaching a renderer that has no art for it. Saved scars are
+// these ordinals, so a reorder or a sixth kind must move this too.
+constexpr uint8_t kScarKinds = 5;
+static_assert(uint8_t(Scar::Kind::Bite) + 1 == kScarKinds, "a saved scar's kind is its ordinal in Scar::Kind");
+
+void putBody(Out& o, const Body& b, const Scars& scars) {
   o.fx(b.at.x), o.fx(b.at.y), o.fx(b.facing), o.u8(b.pose.v), o.u16(b.poseTick), o.u8(b.asleep), o.u8(b.dreaming);
   o.u8(b.reflex.has_value());
   ActiveReflex r = b.reflex.value_or(ActiveReflex{});
   o.u8(r.kind.v), o.u16(r.tick), o.u16(r.ticks), o.fx(r.strength);
-  // Only while he holds a bite, so every body format 1 could hold encodes as it always has.
-  if (b.mouth != Mouthful::Nothing) o.u8(uint8_t(b.mouth));
+  // The bite only while he holds one, so every body format 1 could hold
+  // encodes as it always has. A reader takes any next byte as the bite, so
+  // once he has a scar the bite is always written (0 for nothing), and the
+  // scars after it are bytes an older reader never looks at.
+  if (b.mouth != Mouthful::Nothing || scars.count) o.u8(uint8_t(b.mouth));
+  if (!scars.count) return;
+  o.u8(scars.count);
+  for (uint8_t i = 0; i < scars.count; ++i) {
+    const Scar& m = scars.mark[i];
+    o.u8(uint8_t(m.kind)), o.u8(m.x), o.u8(m.y), o.u8(m.fade);
+  }
 }
 Body getBody(In& in) {
   Body b;
@@ -218,6 +233,20 @@ Body getBody(In& in) {
   uint8_t mouth = in.at < in.n ? in.u8() : 0;
   b.mouth = mouth <= uint8_t(Mouthful::RottenPellet) ? Mouthful(mouth) : Mouthful::Nothing;
   return b;
+}
+// What follows the bite. Scars are decoration, so they are read from a copy and
+// never fail the pet: only whole records are kept, and a count past them, a
+// torn record or a stray byte is ignored. Past four, a newer firmware's, read
+// and not kept.
+Scars getScars(In in) {
+  Scars s;
+  if (in.at >= in.n) return s;
+  for (uint8_t i = 0, n = in.u8(); i < n && in.n - in.at >= 4; ++i) {
+    uint8_t kind = in.u8();
+    Scar m{kind < kScarKinds ? Scar::Kind(kind) : Scar::Kind{}, in.u8(), in.u8(), in.u8()};
+    if (s.count < kMaxScars) s.mark[s.count++] = m;
+  }
+  return s;
 }
 
 void putDiff(Out& o, const MutationDiff& d) {
@@ -296,6 +325,8 @@ uint32_t clutchHash(const Clutch& k) {
   for (uint64_t s : k.seeds) mix(uint32_t(s)), mix(uint32_t(s >> 32));
   mix(uint32_t(k.count) | uint32_t(k.cursor) << 8 | uint32_t(k.cause) << 16 | uint32_t(k.reached) << 24);
   mix(k.sinceDeath);
+  // Only with a friend egg, so every clutch hash from before friend eggs stands.
+  if (k.friendSlot) mix(k.friendSlot), mix(k.friendSeed);
   return h;
 }
 
@@ -405,7 +436,7 @@ struct Keepsake::Codec {
         for (Fx v : c->chem_.locus) o.fx(v);
       });
       chunk(o, Chunk::Brain, [&] { putBrain(o, c->brain_); });
-      chunk(o, Chunk::Body, [&] { putBody(o, c->body_); });
+      chunk(o, Chunk::Body, [&] { putBody(o, c->body_, c->scars_); });
       chunk(o, Chunk::Stats, [&] { putStats(o, c->stats_); });
     } else {
       const Clutch& k = std::get<Clutch>(occ);
@@ -415,6 +446,8 @@ struct Keepsake::Codec {
         o.u8(k.count), o.u8(k.cursor), o.u32(k.sinceDeath), o.u8(uint8_t(k.cause)), o.u8(uint8_t(k.reached));
         o.u8(uint8_t(k.heirlooms.size()));
         for (const Belief& b : k.heirlooms) putBelief(o, b);
+        // After the heirlooms, where an older reader stops, and only with a friend egg.
+        if (k.friendSlot) o.u8(k.friendSlot), o.u32(k.friendSeed);
       });
       chunk(o, Chunk::Genome, [&] { o.raw(k.parent.bytes().data(), k.parent.bytes().size()); });
     }
@@ -467,6 +500,7 @@ struct Keepsake::Codec {
         for (Fx& v : c.chem_.locus) v = chem->fx();
         getBrain(*brain, c.brain_);
         c.body_ = getBody(*body);
+        c.scars_ = getScars(*body);
         c.stats_ = getStats(*stats);
         if (!in.ok || !chem->ok || !brain->ok || !body->ok || !stats->ok) return false;
         // Derived, never saved: the phenotype is re-expressed stage by stage.
@@ -486,6 +520,12 @@ struct Keepsake::Codec {
         k.cause = DeathCause(std::min<uint8_t>(in.u8(), uint8_t(DeathCause::Unknown)));
         k.reached = Stage(in.u8() & 3);
         for (uint8_t i = 0, n = in.u8(); i < n && in.ok; ++i) k.heirlooms.push_back(getBelief(in));
+        // A friend egg is never his first egg (the timeout's), and lies within the clutch.
+        if (in.ok && in.n - in.at >= 5) {
+          uint8_t slot = in.u8();
+          uint32_t seed = in.u32();
+          if (slot >= 2 && slot <= k.count) k.friendSlot = slot, k.friendSeed = seed;
+        }
         return in.ok;
       }
     }
