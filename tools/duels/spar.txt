@@ -1,0 +1,78 @@
+# A Spar between two simulators: D8's session on each, over sim/serial_air.h
+# in bad weather, each side played by a scripted kid (sim/duel_bot.h) and drawn
+# with D11's duel screen. Nothing reaches the pets yet (that is D9's Dish).
+#> title Puffkin vs Hushwing: a Spar
+#> length 95000
+#> side A puffkin 02:b1:0b:00:00:01 duel=spar:5:spare:hug
+#> side B hushwing 3c:84:27:aa:10:5e duel=spar:9:spare:hug
+#> weather loss=25,dup=10,reorder=20,late=600,seed=4
+#> caption 0 Puffkin and Hushwing | on two simulators, one fake radio
+#> caption 2200 A Spar: | play, no wounds
+#> caption 4800 Each turn: tilt to aim, | knock to lock it in
+#> caption 9000 Duel engine, before it is wired | into the pet
+#> caption 10300 Hushwing takes the first heart
+#> caption 25300 ...and keeps winning
+#> caption 39500 Puffkin is down | to one heart
+#> caption 47500 Hushwing's kid queues a special
+#> caption 53900 Puffkin's kid aims Trick: the special | is riposted, and costs its owner two hearts
+#> caption 60900 Puffkin's Guard holds, | twice
+#> caption 70400 Hushwing faints: | a comeback from one heart
+#> caption 74400 Both books hold | the same battle
+#> caption 75500 Friends: both kids hug...
+#> caption 78700 ...and their pets swap genomes | for a friend egg
+@0 DEBUG time 1790000000
+@100 DEBUG warp 18000
+@200 DEBUG inject life 0.5
+@300 DEBUG warp 600
+@400 DEBUG inject vision 0
+@1000 !duel
+@400 DEBUG force rest
+@2400 DEBUG force rest
+@4400 DEBUG force rest
+@6400 DEBUG force rest
+@8400 DEBUG force rest
+@10400 DEBUG force rest
+@12400 DEBUG force rest
+@14400 DEBUG force rest
+@16400 DEBUG force rest
+@18400 DEBUG force rest
+@20400 DEBUG force rest
+@22400 DEBUG force rest
+@24400 DEBUG force rest
+@26400 DEBUG force rest
+@28400 DEBUG force rest
+@30400 DEBUG force rest
+@32400 DEBUG force rest
+@34400 DEBUG force rest
+@36400 DEBUG force rest
+@38400 DEBUG force rest
+@40400 DEBUG force rest
+@42400 DEBUG force rest
+@44400 DEBUG force rest
+@46400 DEBUG force rest
+@48400 DEBUG force rest
+@50400 DEBUG force rest
+@52400 DEBUG force rest
+@54400 DEBUG force rest
+@56400 DEBUG force rest
+@58400 DEBUG force rest
+@60400 DEBUG force rest
+@62400 DEBUG force rest
+@64400 DEBUG force rest
+@66400 DEBUG force rest
+@68400 DEBUG force rest
+@70400 DEBUG force rest
+@72400 DEBUG force rest
+@74400 DEBUG force rest
+@76400 DEBUG force rest
+@78400 DEBUG force rest
+@80400 DEBUG force rest
+@82400 DEBUG force rest
+@84400 DEBUG force rest
+@86400 DEBUG force rest
+@88400 DEBUG force rest
+@90400 DEBUG force rest
+@92400 DEBUG force rest
+@94400 DEBUG force rest
+@96400 DEBUG force rest
+@98400 DEBUG force rest

@@ -142,9 +142,11 @@ def record(duel, tmp):
         side = duel.sides[key]
         out = os.path.join(tmp, key)
         os.makedirs(out)
-        with open(out + ".txt", "w") as f: f.write("\n".join(side.lines) + "\n")
+        # Founded as its species from its genes (D10), not painted as one.
+        script = ["@0 DEBUG found " + side.species] + side.lines
+        with open(out + ".txt", "w") as f: f.write("\n".join(script) + "\n")
         args = [sv.PROGRAM, "--headless", "--script", out + ".txt", "--record", out, "--fps", str(FPS),
-                "--for", str(duel.length), "--species", side.species, "--air-fd", str(sock.fileno())]
+                "--for", str(duel.length), "--air-fd", str(sock.fileno())]
         if duel.weather: args += ["--air-weather", duel.weather]
         if side.duel: args += ["--duel", side.duel]
         env = dict(os.environ, BLORB_SIM_MAC=side.mac)
