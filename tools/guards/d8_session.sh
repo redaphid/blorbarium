@@ -53,7 +53,7 @@ mutant "a confirm counts only under the pair's first id" $S 's/  if (b.phase == 
   test_duel_session "DuelSession.ALostConfirmDoesNotStrandStaking"
 mutant "a packet from the last bout feeds this one" $S 's/return id.rematch == b.battle.rematch \&\& id.seed == .*;/return true;/; s/ || st.battle != b.battle) return;/) return;/' \
   test_duel_session "DuelSession.ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored"
-mutant "the downed side writes a verdict too" $S 's/    if (o.downed\[me\]) {/    if (false) {/' \
+mutant "the downed side writes a verdict too" $S 's/^    if (o.downed\[me\]) {/    if (false) {/' \
   test_duel_session "DuelSession.TheWinnersSilenceSparesAndAFinishNeedsTheAck"
 mutant "the victor slays before the fallen side hears" $S 's/!b.metSent \&\& b.theyHold > o.resolved/!b.metSent/' \
   test_duel_session "DuelSession.AFinishTheFallenSideNeverHeardSlaysNobody"
