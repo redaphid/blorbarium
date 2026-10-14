@@ -517,20 +517,26 @@ TEST(CatchUp, TenMinutesUnpluggedMovesTheDrivesALittleAndNothingElse) {
   EXPECT_TRUE(box.dish->timeKnown());
 }
 
-TEST(CatchUp, DaysOfNeglectKillHimAndLeaveAClutchWithOneDeath) {
+// No absence is lived for more than twelve hours, but each one is lived:
+// nobody feeds him while unplugged, so day after day away starves him.
+TEST(CatchUp, AbsenceAfterAbsenceStarvesHimAndLeavesAClutchWithOneDeath) {
   Box box;
   box.rtc.atBoot = kWall0;
   box.boot();
   box.hatch();
   box.run(60000);
   box.dish->flush();
-  box.unplugFor(6 * kDaySeconds);
-
-  box.boot();
+  int absences = 0;
+  while (std::holds_alternative<Creature>(box.dish->occupant()) && absences < 30) {
+    box.unplugFor(kDaySeconds);
+    box.boot();
+    ++absences;
+    ASSERT_LE(box.dish->lastCatchUp().ticks, 12u * 3600 * 10) << "absence " << absences;
+  }
   const Clutch* k = std::get_if<Clutch>(&box.dish->occupant());
-  ASSERT_NE(k, nullptr) << "he died while unplugged";
+  ASSERT_NE(k, nullptr) << "still alive after " << absences << " days away";
+  EXPECT_GT(absences, 1) << "one capped absence does not kill a fed pet";
   EXPECT_EQ(k->cause, DeathCause::Starved);
-  EXPECT_EQ(k->sinceDeath, Clutch::kVigilTicks) << "the vigil ran out; the choice waits for the owner";
   EXPECT_EQ(count(box.dish->lineage(), kDeath), 1);
   std::optional<Snapshot> saved = newest(box.store);
   ASSERT_TRUE(saved && std::holds_alternative<Clutch>(saved->occupant)) << "saved at once";
@@ -538,6 +544,12 @@ TEST(CatchUp, DaysOfNeglectKillHimAndLeaveAClutchWithOneDeath) {
   box.boot();
   EXPECT_EQ(box.dish->lastCatchUp().ticks, 0u);
   EXPECT_EQ(count(box.dish->lineage(), kDeath), 1) << "a reboot records no second death";
+
+  box.unplugFor(kDaySeconds);
+  box.boot();
+  k = std::get_if<Clutch>(&box.dish->occupant());
+  ASSERT_NE(k, nullptr);
+  EXPECT_EQ(k->sinceDeath, Clutch::kVigilTicks) << "the vigil ran out; the choice waits for the owner";
 }
 
 TEST(CatchUp, TheSameWallTimeIsNeverAppliedTwice) {
@@ -604,10 +616,10 @@ TEST(CatchUp, AnAbsenceLongerThanTheCapIsClampedAndRecorded) {
   box.dish->flush();
   box.unplugFor(60 * kDaySeconds);
   box.boot();
-  EXPECT_EQ(box.dish->lastCatchUp().ticks, 30u * kDaySeconds * 10);
-  EXPECT_EQ(box.dish->lastCatchUp().clampedTicks, 30u * kDaySeconds * 10);
+  EXPECT_EQ(box.dish->lastCatchUp().ticks, 12u * 3600 * 10);
+  EXPECT_EQ(box.dish->lastCatchUp().clampedTicks, (60u * kDaySeconds - 12u * 3600) * 10);
   EXPECT_EQ(box.dish->wallNow(), box.rtc.unixSeconds()) << "re-anchored at now: the clamped days stay dropped";
-  EXPECT_TRUE(std::holds_alternative<Clutch>(box.dish->occupant()));
+  EXPECT_TRUE(std::holds_alternative<Creature>(box.dish->occupant())) << "a fed pet lives through twelve hours";
 }
 
 int main(int argc, char** argv) {

@@ -13,10 +13,12 @@ constexpr Fx kLevel = Fx::ratio(1, 2);
 constexpr uint8_t kDefaultBrightness = 200;
 
 // The unpowered catch-up (DEVIATIONS.md 3): chemistry at the dry run's
-// five-minute stride, at most 30 pet days of it per catch-up (about 8,600
-// coarse steps, under a second on the device by the dry run's estimate).
+// five-minute stride, at most 12 hours of it per catch-up. The boards have no
+// battery, so the only clock after a replug is a phone's TIME: an uncapped gap
+// would make connecting a phone, not neglect, the thing that kills him. Twelve
+// hours is a night in a drawer; a pet already near death still dies inside it.
 constexpr uint32_t kCatchUpStride = 5 * kTicksPerMinute;
-constexpr uint32_t kMaxCatchUpSteps = 30 * 24 * 12;
+constexpr uint32_t kMaxCatchUpSteps = 12 * 12;
 // A source within this of the anchor is clock drift, not an unpowered gap.
 constexpr int64_t kDriftSeconds = 60;
 // Once wall time is known, the sources are read again this often.
