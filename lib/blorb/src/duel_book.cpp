@@ -13,7 +13,7 @@ constexpr logframes::LogFile kFile{"duels.log", "duels.tmp"};
 
 // Met and Downed are what happened; the rest are a compaction's snapshot of
 // the fold, written at the head of the log in this order.
-enum class Kind : uint8_t { Met = 1, Downed = 2, Self = 3, Friend = 4, Trophy = 5, Vendetta = 6 };
+enum class Kind : uint8_t { Met = 1, Downed = 2, Self = 3, Friend = 4, Trophy = 5, Vendetta = 6, Cuddled = 7 };
 
 constexpr int32_t kVendettaNudge = 32767 / 4;   // one learnTurn step: what one lesson teaches
 
@@ -291,6 +291,10 @@ void apply(BookState& st, uint8_t kind, In in) {
       if (in.ok) pushCapped(st.vendettas, v);
       return;
     }
+    case Kind::Cuddled:
+      in.u32();
+      if (in.ok) st.lossStreak = 0;
+      return;
   }
 }
 
@@ -330,6 +334,13 @@ void DuelBook::record(const Meeting& m, uint16_t generation, uint32_t at, uint16
   if (logged(*store_, Kind::Met, m.battle)) return;
   const Dated when{generation, at, petDay};
   if (append(encodeMet(m, when))) applyMet(state_, m, when);
+}
+
+void DuelBook::recordCuddle(uint32_t at) {
+  if (state_.lossStreak == 0) return;
+  Out o;
+  o.u32(at);
+  if (append(logframes::frame(uint8_t(Kind::Cuddled), o))) state_.lossStreak = 0;
 }
 
 void DuelBook::recordDowned(BattleId battle, uint64_t victorLineage, uint32_t at) {

@@ -116,10 +116,30 @@ static ota::Trial trial;
 static hw::EspTrialPort trialPort;
 static hw::TrialWatchdog trialWatchdog;
 static hw::TwoLinks links(phone, otaLink);   // DEBUG lines stay on the cable: only SerialLink holds them back
+
+// OTA's interlock, from the duel's side (docs/ota.md, "Other users of the
+// radio"): no duel opens while an update session is active or this image is
+// still on trial, so a trial image never writes a wound, a book entry or a
+// friend egg a rollback would meet. Every call runs on the loop task.
+struct RadioGate : blorb::Air {
+  blorb::Air& inner;
+  explicit RadioGate(blorb::Air& a) : inner(a) {}
+  bool open() override;
+  void close() override { inner.close(); }
+  bool isOpen() const override { return inner.isOpen(); }
+  blorb::PeerAddr self() const override { return inner.self(); }
+  void broadcast(const uint8_t* p, size_t n) override { inner.broadcast(p, n); }
+  void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner.send(to, p, n); }
+  std::optional<blorb::Datagram> receive() override { return inner.receive(); }
+};
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
+// The duel radio the Dish is handed (DishOptions::air). Null until a board
+// brings one up (unit D12's ESP-NOW, behind RadioGate below); the simulator
+// sets its SerialAir here before setup(), since it includes this file whole.
+static blorb::Air* duelAir = nullptr;
 static BoardDisplay display;
 static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
@@ -144,6 +164,10 @@ static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
   if (!kAskForTime) a.timeUnknown = false;
   if (pinnedSpecies) a.species = *pinnedSpecies;
+#if !defined(BADGE_BOARD_SIM)
+  // The update's question owns the button (readBody), so it owns the hint too.
+  if (updater.asking()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
+#endif
   return a;
 }
 
@@ -224,12 +248,15 @@ static ota::PetMark petMark() {
 bool DishOtaHost::busy() {
   // A clutch is chosen with the button, which the update's question would take.
   if (std::holds_alternative<blorb::Clutch>(dish->occupant())) return true;
-  // Anything else he must finish first (a battle, one day) refuses here too.
+  // A duel holds the radio and the button: BEGIN answers ERR 409 BUSY until it closes.
+  if (dish->duelActive()) return true;
+  // Anything else he must finish first refuses here too.
   // A board that cannot save is refused by the save before the transfer; a
   // sealed one may update, since a newer firmware is how a sealed pet wakes.
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
+bool RadioGate::open() { return !updater.active() && !trial.onTrial() && inner.open(); }
 bool DishOtaHost::onTrial() { return trial.onTrial(); }
 bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
   // A sealed or newer-format keepsake was never read: the Dish's egg is a stand-in, not the pet.
@@ -339,6 +366,7 @@ void setup() {
 #else
   options.sealed = simSealed;
 #endif
+  options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)

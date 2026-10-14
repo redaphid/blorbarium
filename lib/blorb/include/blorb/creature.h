@@ -128,6 +128,9 @@ class Creature {
   // An owner edit of one body byte; the phenotype is re-expressed from the
   // edited genome. False if the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
+  // The one-time duel-gene graft (dish_duel.h): a genome that is his own with
+  // genes appended. False, and nothing changes, unless his genome is its prefix.
+  bool extendGenome(Genome grown);
 
   // Duels (stakes.h), applied between ticks by the Dish from the agreed Outcome.
   // The tier every Duel-source stimulus is filtered at (duelFilter). Spar, the

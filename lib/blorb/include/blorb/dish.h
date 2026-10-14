@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
+#include "blorb/air.h"
 #include "blorb/appearance.h"
 #include "blorb/creature.h"
+#include "blorb/dish_duel.h"
 #include "blorb/habitat.h"
 #include "blorb/keepsake.h"
 #include "blorb/lineage.h"
@@ -51,6 +53,10 @@ struct DishOptions {
   // The Dish reads nothing, writes nothing and runs no life, so a reset
   // finds the keepsake exactly as it was; the screen shows it sealed.
   bool sealed = false;
+  // The duel radio (air.h). Null: this board has no duel radio, and a double
+  // press only shakes his head. The firmware passes ESP-NOW behind OTA's
+  // interlock, the sim its SerialAir, tests a FakeAir.
+  Air* air = nullptr;
 };
 
 class Dish {
@@ -86,7 +92,9 @@ class Dish {
   uint32_t tickCount() const { return tick_; }
   void markDirty() { eventDirty_ = true; }
   bool pick(uint8_t egg);          // the pick twist and the body's clutch choice share this
-  void fire(StimId);               // as if a detector saw it; lands at the next tick
+  // As if a detector saw it, landing at the next tick, but marked as the
+  // phone's (SenseOut::remote): the pet feels it, and a duel never takes it as a gesture.
+  void fire(StimId);
   void think(ThoughtId);           // sim scripts and tests: he says that line now (thoughts.h)
   bool say(std::string_view line); // TWIST say: he croaks the phone's line now; false with no creature
   // One body byte of the creature's genome, recorded in the lineage. False
@@ -94,6 +102,15 @@ class Dish {
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
   void rename(const char* name);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
+
+  // Duels (dish_duel.h). The view is plain data for the duel scene and the
+  // films; Closed when none is open.
+  bool duelActive() const { return duel_.active(); }
+  DuelView duelView() const { return duel_.view(tick_); }
+  const DuelBook& duels() const { return duel_.book(); }
+  void setDuelCeiling(Stakes s) { duel_.setDeviceCeiling(s); }
+  // Where BOOT is now (boot.h). Never OtaQuestion: that is main.cpp's.
+  BootContext bootContext() const;
   uint32_t hash() const { return live_.hash(); }   // the replay check and HASH
 
   // Wall time (DEVIATIONS.md 3). checkWall reads the sources in order; on an
@@ -107,7 +124,8 @@ class Dish {
  private:
   void runOneTick(Link&);
   void onDeath(Creature&);         // record death, lay the clutch, save
-  void onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save
+  bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
+  void routeBoot(BootContext, SenseOut&);
   void onHatch(Egg&);
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
@@ -124,6 +142,15 @@ class Dish {
   Thinker thinker_;                // presentation only: never saved or hashed
   Behaviours behaviours_;
   SenseOut pending_;               // what the detectors saw since the last tick
+  DishDuel duel_;
+  Air* air_ = nullptr;
+  // BOOT's level, from the samples: a duel times its 3 s holds by it, and the
+  // rim's hold ring fills with it.
+  bool buttonDown_ = false;
+  uint32_t buttonSinceMs_ = 0, lastSampleMs_ = 0;
+  // The last press that is only for the eyes (an egg peeked at, a flower laid).
+  BootAct echo_ = BootAct::Nothing;
+  uint32_t echoTick_ = 0;
   PhoneTime phone_;
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;

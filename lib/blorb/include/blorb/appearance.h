@@ -7,7 +7,9 @@
 // Plain fixed-size data, so golden tests compare it as a struct and the sim
 // renders it byte-identically run after run.
 #include <cstdint>
+#include "blorb/boot.h"
 #include "blorb/creature.h"
+#include "blorb/duel_card.h"
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
@@ -101,6 +103,22 @@ struct Appearance {
   // Boot::Sealed: a keepsake is on the flash and could not be opened. Drawn as
   // the pet asleep in amber with a line for a grown-up, never as a new life.
   bool sealed = false;
+
+  // BOOT (boot.h): what a press does now, drawn on the rim beside the button
+  // in every state (paint::drawBootHint), so a kid never has to guess.
+  BootHint boot{};
+  // A press only for the eyes, `echoTicks` ago: an egg peeked into
+  // (PeekEgg), a flower laid on the remains (LayFlower).
+  BootAct echo = BootAct::Nothing;
+  uint16_t echoTicks = 0;
+  // A double press that opened no duel, `refusedTicks` ago: why, as a picture
+  // (zzz, a bowl, a hug), or None when the radio was the update's and he
+  // shakes his head.
+  bool refused = false;
+  Decline declined = Decline::None;
+  uint16_t refusedTicks = 0;
+  // A duel is open: the duel scene replaces the dish, drawn from Dish::duelView().
+  bool dueling = false;
 
   // A line scrolling once across the dish (thoughts.h): the row, the line as
   // his voice says it, and how far through its pass (0..1). The time-unknown

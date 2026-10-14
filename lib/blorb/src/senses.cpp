@@ -161,9 +161,15 @@ void SenseOut::fire(StimId id) {
   if (stimCount < sizeof(stimuli) / sizeof(stimuli[0])) stimuli[stimCount++] = id;
 }
 
+void SenseOut::fireRemote(StimId id) {
+  fire(id);
+  if (id.v < 64) remote |= uint64_t(1) << id.v;
+}
+
 void SenseOut::clear() {
   lociCount = 0;
   stimCount = 0;
+  remote = 0;
 }
 
 // ---- detectors -------------------------------------------------------------------
@@ -250,13 +256,17 @@ void ButtonDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   if (s.buttonDown && !down_) {
     down_ = true;
     held_ = false;
+    second_ = released_ && ms - lastRelease_ <= kDoublePressMs;
     downSince_ = ms;
   } else if (s.buttonDown && !held_ && ms - downSince_ >= kButtonHoldMs) {
     held_ = true;
     out.fire(stim::button_hold);
   } else if (!s.buttonDown && down_) {
     down_ = false;
-    if (!held_) out.fire(stim::button);
+    // A double ends the pair: a third quick press starts a new one.
+    released_ = !held_ && !second_;
+    lastRelease_ = ms;
+    if (!held_) out.fire(second_ ? stim::button_double : stim::button);
   }
 }
 

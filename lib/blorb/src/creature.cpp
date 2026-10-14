@@ -279,6 +279,16 @@ bool Creature::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
   return true;
 }
 
+bool Creature::extendGenome(Genome grown) {
+  const std::vector<uint8_t>& mine = genome_.bytes();
+  const std::vector<uint8_t>& next = grown.bytes();
+  if (next.size() <= mine.size() || !std::equal(mine.begin(), mine.end(), next.begin())) return false;
+  genome_ = std::move(grown);
+  pheno_ = Phenotype{};
+  for (uint8_t s = 0; s <= uint8_t(stage_); ++s) expressStage(genome_, Stage(s), legacyFeats_, pheno_);
+  return true;
+}
+
 Fx Creature::wound(Fx injury) {
   const Fx added = fxMin(fxMax(injury, Fx::zero()), woundRoom(*this));
   chem_.add(chem::injury, added);

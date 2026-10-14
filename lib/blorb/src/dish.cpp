@@ -1,6 +1,7 @@
 #include "blorb/dish.h"
 
 #include <algorithm>
+#include "blorb/friend_egg.h"
 #include <cstring>
 #include <utility>
 
@@ -11,6 +12,8 @@ constexpr int kMaxTicksPerCall = 10;
 constexpr uint32_t kTicksPerSecond = 1000 / kTickMs;
 constexpr Fx kLevel = Fx::ratio(1, 2);
 constexpr uint8_t kDefaultBrightness = 200;
+// A press for the eyes (a peek, a flower) or a refused duel shows this long.
+constexpr uint32_t kEchoTicks = 3 * 1000 / kTickMs;
 
 // The unpowered catch-up (DEVIATIONS.md 3): chemistry at the dry run's
 // five-minute stride, at most 30 pet days of it per catch-up (about 8,600
@@ -64,7 +67,7 @@ void copyName(char (&to)[16], const char* from) {
 }  // namespace
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), rtc_(options.rtc) {
+    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -81,6 +84,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
     return;
   }
   lineage_ = Lineage::open(store, founder, lineageId, 0);
+  duel_.attach(store);
   if (loaded == SlotState::Resumed || loaded == SlotState::FellBack) {
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
@@ -97,7 +101,12 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   save();
 }
 
-void Dish::sample(const BodySample& s, uint32_t nowMs) { detectors_.sample(s, nowMs, pending_); }
+void Dish::sample(const BodySample& s, uint32_t nowMs) {
+  detectors_.sample(s, nowMs, pending_);
+  if (s.buttonDown && !buttonDown_) buttonSinceMs_ = nowMs;
+  buttonDown_ = s.buttonDown;
+  lastSampleMs_ = nowMs;
+}
 
 void Dish::tick(uint32_t nowMs, Link& link) {
   for (int n = 0; n < kMaxTicksPerCall && nowMs - lastTickMs_ >= kTickMs; ++n) {
@@ -130,6 +139,11 @@ void Dish::runOneTick(Link& link) {
     if (out.loci[i].locus == locus::tilt_x) tiltX_ = out.loci[i].value;
     if (out.loci[i].locus == locus::tilt_y) tiltY_ = out.loci[i].value;
   }
+  routeBoot(bootContext(), out);
+  const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
+  if (duel_.step(live_.occupant, lineage_, air_, out, tiltX_, tiltY_, buttonDown_, live_.settings.lineageId, petDay, tick_)
+          .save)
+    save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
     if (fired(out, stim::button)) live_.habitat.dropPellet(rules, live_.rng, tick_, out);
@@ -143,25 +157,65 @@ void Dish::runOneTick(Link& link) {
     if (e->tick(out)) onHatch(*e);
   } else {
     Clutch& k = std::get<Clutch>(live_.occupant);
-    k.derivePreviewStep();
+    if (k.previewed < k.count) {
+      const std::optional<FriendEgg> egg = k.friendSlot ? FriendEggStore::load(store_) : std::nullopt;
+      k.derivePreviewStep(egg ? &*egg : nullptr);
+    }
     if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
   }
   ++tick_;
 }
 
+BootContext Dish::bootContext() const {
+  if (sealed()) return BootContext::Sealed;
+  const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
+  return blorb::bootContext(live_.occupant, duel_.active() ? &v : nullptr);
+}
+
+// kBoot's rows outside a duel (inside one, the session routes the button).
+// A double press where it means nothing is a press again, so tapping through a
+// clutch is not slowed; OpenDuel is DishDuel's. A press for the eyes only is
+// remembered for the screen.
+void Dish::routeBoot(BootContext ctx, SenseOut& out) {
+  if (duel_.active()) return;
+  const BootMeaning& m = bootMeaning(ctx);
+  if (m.doublePress == BootAct::Nothing && fired(out, stim::button_double)) {
+    const bool remote = out.remote & duelStimBit(stim::button_double);
+    uint8_t kept = 0;
+    for (uint8_t i = 0; i < out.stimCount; ++i)
+      if (out.stimuli[i] != stim::button_double) out.stimuli[kept++] = out.stimuli[i];
+    out.stimCount = kept;
+    out.remote &= ~duelStimBit(stim::button_double);
+    if (remote) out.fireRemote(stim::button);
+    else out.fire(stim::button);
+  }
+  if ((m.press == BootAct::PeekEgg || m.press == BootAct::LayFlower) && fired(out, stim::button)) {
+    echo_ = m.press;
+    echoTick_ = tick_;
+  }
+}
+
 void Dish::onDeath(Creature& c) {
-  lineage_.recordDeath(c, lineage_.currentName(), tick_);
+  lineage_.recordDeath(c, lineage_.currentName(), tick_, duel_.book().featsThisLife(c.generation()));
   Unlocks u = unlocksFor(lineage_.legacyFeats());
   Clutch k = c.layClutch(u.clutchSize, u.wildBonus, tick_);
+  // A hug's egg waits in friend.egg for this clutch (friend_egg.h).
+  if (std::optional<FriendEgg> egg = FriendEggStore::load(store_)) joinClutch(k, egg->record.battleSeed);
   live_.occupant = std::move(k);
   eventDirty_ = true;
 }
 
-void Dish::onPicked(Clutch& k, uint8_t i) {
-  Egg egg(k.child(i), k.generation, tick_);
+// friend.egg is consumed before the Birth is written, so a power cut at any
+// step can lose a friend egg but never hatch it twice. A consume refused (an
+// image on trial writes nothing) leaves the clutch waiting for the pick.
+bool Dish::onPicked(Clutch& k, uint8_t i) {
+  const std::optional<FriendEgg> friendEgg = k.friendSlot ? FriendEggStore::load(store_) : std::nullopt;
+  Egg egg(childOf(k, i, friendEgg ? &*friendEgg : nullptr), k.generation, tick_);
+  if (friendEgg && !FriendEggStore::consume(store_)) return false;
   lineage_.recordBirth(egg, k, i, tick_);
   live_.occupant = std::move(egg);
   eventDirty_ = true;
+  return true;
 }
 
 void Dish::onHatch(Egg& e) {
@@ -177,11 +231,10 @@ void Dish::onHatch(Egg& e) {
 bool Dish::pick(uint8_t egg) {
   Clutch* k = std::get_if<Clutch>(&live_.occupant);
   if (!k || egg >= k->count) return false;
-  onPicked(*k, egg);
-  return true;
+  return onPicked(*k, egg);
 }
 
-void Dish::fire(StimId s) { pending_.fire(s); }
+void Dish::fire(StimId s) { pending_.fireRemote(s); }
 
 void Dish::think(ThoughtId id) {
   if (const Creature* c = std::get_if<Creature>(&live_.occupant))
@@ -226,10 +279,27 @@ Appearance Dish::appearance() const {
     a.pose = pose::sleep;
     a.expression = a.previous = expr::asleep;
     a.intensity = Fx::one();
+    a.boot = bootHint(BootContext::Sealed, nullptr, 0);
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   a.timeUnknown = !wallKnown_;
+  const BootContext ctx = bootContext();
+  const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
+  a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
+  if ((ctx == BootContext::Awake || ctx == BootContext::Asleep) && live_.habitat.pantry == 0) a.boot.greyed = true;
+  a.dueling = duel_.active();
+  if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
+  const DishDuel::Refusal& r = duel_.refusal();
+  if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
+  const DuelBook& book = duel_.book();
+  book.forEachTrophy([&](const Trophy& t) {
+    if (a.trophyCount < Appearance::kRimTrophies) a.trophies[a.trophyCount++] = t.fallen;
+  });
+  const uint16_t gen = std::holds_alternative<Creature>(live_.occupant) ? std::get<Creature>(live_.occupant).generation()
+                                                                         : lineage_.currentGeneration();
+  a.vendetta = book.vendetta(gen).has_value();
+  book.forEachFriend([&](const FriendSummary& f) { a.owesDebt = a.owesDebt || f.weOwe > 0; });
   if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_, wallKnown_);
   return a;
 }

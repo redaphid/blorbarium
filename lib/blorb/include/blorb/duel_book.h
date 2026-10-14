@@ -115,6 +115,9 @@ class DuelBook {
   // Meeting with the same battle id follows, the book reads it as "fled": a
   // loss to the victor's line, and no XP.
   void recordDowned(BattleId, uint64_t victorLineage, uint32_t at);
+  // A cradle while he wants one after a run of losses: the run is over
+  // (duel_card.h, Decline::WantsACuddle). Nothing is written without a run.
+  void recordCuddle(uint32_t at);
 
   uint16_t xp(uint16_t generation) const { return generation == state_.generation ? state_.xp : 0; }
   uint8_t level(uint16_t generation) const { return levelFromXp(xp(generation)); }
