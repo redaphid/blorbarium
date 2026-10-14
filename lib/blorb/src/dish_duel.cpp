@@ -229,7 +229,8 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     dueledThisBoot_ = true;
     battled_ = false;
   }
-  if (fx.rematch && !fell_ && std::holds_alternative<Creature>(o)) open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
+  if (fx.rematch && !fell_ && std::holds_alternative<Creature>(o))
+    open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
   if (!session_.active()) fell_ = false;
   return out;
 }
