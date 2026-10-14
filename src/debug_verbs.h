@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "blorb/dish.h"
+#include "blorb/founding.h"
 #include "blorb/registry.h"
 #include "blorb/species.h"
 
@@ -49,6 +50,18 @@ inline bool speciesByName(const char* s, blorb::SpeciesId& out) {
   if (end == s || *end || n < 0 || n > 255) return false;
   out = blorb::SpeciesId{uint8_t(n)};
   return true;
+}
+
+// `DEBUG found <slug|id|off>`, for an adult before a device is handed over:
+// the one egg a fresh founding offers, kept in found.pin (founding.h); `off`
+// gives the three-egg nest back. Refused once a pet lives here, so it never
+// writes to a keepsake's flash. nullptr on success, else why not.
+inline const char* found(blorb::Storage& store, const char* arg) {
+  if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";
+  if (!std::strcmp(arg, "off")) return blorb::clearFoundPin(store) ? nullptr : "found.pin would not move aside";
+  blorb::SpeciesId s;
+  if (!speciesByName(arg, s) || s.v >= blorb::kSpeciesCount) return "not a species.def name or 0..8";
+  return blorb::writeFoundPin(store, s) ? nullptr : "found.pin was not written";
 }
 
 struct StageName { const char* name; blorb::Stage stage; };
