@@ -3,6 +3,8 @@
 // BodySamples from a scripted kid who reads only the duel view, as a kid
 // reads the screen.
 #include <gtest/gtest.h>
+#include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <map>
 #include <optional>
@@ -11,6 +13,8 @@
 #include "blorb/friend_egg.h"
 #include "blorb/species.h"
 #include "blorb/starter_duel.h"
+#include "paint/duel_view.h"
+#include "paint/sprite_pack.h"
 #include "fake_air.h"
 #include "links.h"
 #include "mem_storage.h"
@@ -751,6 +755,62 @@ TEST(BootRows, APressNeverFinishesAPetNorAgreesToAMortalDuel) {
     return;
   }
   FAIL() << "no seed under 30 downed a pet";
+}
+
+// ---- the duel scene, from a live view ---------------------------------------------------
+
+namespace {
+// D9_FRAMES=<dir> writes the first frame of each phase there, to look at.
+void dump(const paint::Canvas240& cv, const char* name) {
+  const char* dir = std::getenv("D9_FRAMES");
+  if (!dir) return;
+  const std::string path = std::string(dir) + "/" + name + ".ppm";
+  FILE* f = std::fopen(path.c_str(), "wb");
+  if (!f) return;
+  std::fprintf(f, "P6 240 240 255\n");
+  for (uint16_t p : cv.px) {
+    const uint8_t rgb[3] = {uint8_t((p >> 11) << 3), uint8_t(((p >> 5) & 63) << 2), uint8_t((p & 31) << 3)};
+    std::fwrite(rgb, 1, 3, f);
+  }
+  std::fclose(f);
+}
+}  // namespace
+
+TEST(Scene, EveryPhaseOfALiveDuelDrawsItsAct) {
+  static paint::Canvas240 cv;
+  static paint::DuelScene scene;
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
+    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
+    bout.a.kid.special = bout.b.kid.special = true;
+    std::set<uint8_t> drawn;
+    for (int t = 0; t < 6000; ++t) {
+      bout.step();
+      for (Device* d : {&bout.a, &bout.b}) {
+        if (!d->dish->duelActive()) continue;
+        const DuelView v = d->dish->duelView();
+        if (!paint::hasScene(v.phase)) continue;
+        const Appearance me = d->dish->appearance();
+        scene = paint::sceneOf(v, me);
+        paint::drawDuel(scene, paint::packFor(me.species), paint::packFor(v.them.species), cv, d->ms);
+        uint32_t lit = 0;
+        for (uint16_t p : cv.px) lit += p != 0;
+        ASSERT_GT(lit, 20000u) << "phase " << int(v.phase) << " drew a disc";
+        if (drawn.insert(uint8_t(v.phase) * 2 + (d == &bout.a)).second) {
+          char name[32];
+          std::snprintf(name, sizeof name, "%s_phase%d", d == &bout.a ? "a" : "b", int(v.phase));
+          dump(cv, name);
+        }
+      }
+      if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
+    }
+    if (!drawn.count(uint8_t(DuelPhase::Fallen) * 2) && !drawn.count(uint8_t(DuelPhase::Fallen) * 2 + 1)) continue;
+    for (DuelPhase p : {DuelPhase::Greeting, DuelPhase::Staking, DuelPhase::Choosing, DuelPhase::Revealing, DuelPhase::Mercy})
+      EXPECT_TRUE(drawn.count(uint8_t(p) * 2) || drawn.count(uint8_t(p) * 2 + 1)) << "never drew phase " << int(p);
+    return;
+  }
+  FAIL() << "no seed under 30 finished a pet";
 }
 
 int main(int argc, char** argv) {

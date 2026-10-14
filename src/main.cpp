@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "blorb/dish.h"
+#include "paint/duel_view.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
@@ -169,6 +170,24 @@ static blorb::Appearance shown() {
   if (updater.asking()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
 #endif
   return a;
+}
+
+// One frame of the dish, or of the duel while one has a scene. In the common
+// path, not behind a board, because the simulator draws (and films) exactly
+// what this draws. The scene is static: it holds two Appearances, which the
+// loop task's stack should not carry every frame.
+static paint::DuelScene duelScene;
+static void drawFrame(const blorb::Appearance& a, uint32_t now) {
+  if (a.dueling) {
+    const blorb::DuelView v = dish->duelView();
+    if (paint::hasScene(v.phase)) {
+      duelScene = paint::sceneOf(v, a);
+      paint::drawDuel(duelScene, paint::packFor(a.species), paint::packFor(v.them.species), canvas, now);
+      return;
+    }
+  }
+  paint::draw(a, paint::packFor(a.species), canvas, now);
+  paint::drawBootHint(canvas, paint::rimOf(a.boot));   // what BOOT does now, in every state
 }
 
 // `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
@@ -493,8 +512,7 @@ void loop() {
 #endif
   step(now);
   if (!holdFrame && now - lastFrame >= kFrameMs) {
-    const blorb::Appearance a = shown();
-    paint::draw(a, paint::packFor(a.species), canvas, now);
+    drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
 #endif
