@@ -5,7 +5,7 @@ nobody watching. Rerun it if ComfyUI restarts and loses its queue (it resubmits 
     python tools/comfy_queue.py --se D:/Projects/_wt/sprexp-roster          # submit everything
     python tools/comfy_queue.py --se ... --dry                               # count only
 
-Uses sprite-expressions' flows (inpaint.json, concept.json) and each species' anchor,
+Jobs go ahead of anything already queued (--back appends instead). Uses sprite-expressions' flows (inpaint.json, concept.json) and each species' anchor,
 the same pipeline and style as the roster. Every image is saved by SaveImage under
 blorbarium/<item>/<species>/<variant> in ComfyUI's output folder; roster/art-queue.json
 says what each prefix is. Ordered most useful first. Stills only. tools/art_sheets.py
@@ -256,7 +256,7 @@ def main():
     ap.add_argument("--expr", help="with --only expressions: one expression")
     ap.add_argument("--species", nargs="*", help="limit the expressions to these species")
     ap.add_argument("--seeds", type=int, help="seeds per expression (default 24)")
-    ap.add_argument("--front", action="store_true", help="put the jobs at the front of ComfyUI's queue")
+    ap.add_argument("--back", action="store_true", help="append behind whatever is queued (default: ahead of it)")
     ap.add_argument("--paints", type=Path, help="save the painted inits here to look at, and submit nothing")
     ap.add_argument("--fuzz", type=int, help="N jobs per species and expression, each with random FUZZ settings")
     ap.add_argument("--fuzz-tag", default="run1", help="output folder blorbarium/fuzz/<tag>/ and roster/fuzz-<tag>.jsonl")
@@ -379,10 +379,13 @@ def main():
     print(len(jobs), "jobs,", len(manifest), "prefixes")
     if a.dry:
         return
-    for i, (flow, v, prefix, about) in enumerate(jobs):
+    # Ahead of the queue by default: ComfyUI puts each front job first, so submitting in
+    # reverse keeps this batch in its own order, all of it before anything already waiting.
+    order = jobs if a.back else list(reversed(jobs))
+    for i, (flow, v, prefix, about) in enumerate(order):
         g = with_mix(fill(flows[flow], v), v)
         req = {"prompt": g, "client_id": "blorb-queue"}
-        if a.front:
+        if not a.back:
             req["front"] = True
         body = json.dumps(req).encode()
         urllib.request.urlopen(urllib.request.Request(COMFY + "/prompt", body, {"Content-Type": "application/json"}), timeout=120).read()
