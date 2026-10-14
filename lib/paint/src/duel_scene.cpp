@@ -232,14 +232,16 @@ void telegraph(const Fighter& x, Figure& g, const Body& b, int side, int t, Duel
 
 void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
-  // Each slides in from his own corner and lands with a bounce.
-  const int in = ramp(t, 0, 8);
-  const P from[2] = {{-50, 270}, {290, -30}};
+  // Each drops into his own spot from above and lands with a bounce, so the
+  // first frame already shows both of them arriving.
+  const int drop[2] = {44, 22};   // the friend's head is near the top of the glass
   for (int side = 0; side < 2; ++side) {
     Figure& f = s.fig[side];
-    f.x = int16_t(from[side].x + (f.x - from[side].x) * in / 256);
-    f.y = int16_t(from[side].y + (f.y - from[side].y) * in / 256);
-    f.lift = int8_t(bump(t, 6, 12) * 10 / 256);
+    f.lift = int8_t(drop[side] * (256 - ramp(t, 0, 7)) / 256 + bump(t, 7, 12) * 8 / 256);
+    if (t >= 6 && t < 8) {   // the landing squash
+      f.widePct = 114;
+      f.tallPct = 86;
+    }
     face(f, t < 8 ? expr::alarmed : expr::happy);
   }
   if (t >= 8) {
@@ -1075,8 +1077,9 @@ constexpr uint8_t kGlyphTier = 12, kGlyphSkull = 13, kGlyphQuick = 14, kGlyphHea
 constexpr int kBootGlyphCount = int(sizeof(duel_art::kBootGlyphs) / sizeof(duel_art::kBootGlyphs[0]));
 static_assert(kBootGlyphCount == kGlyphCountdown + 1, "kBootGlyphs is indexed by boot.h's BootGlyph");
 
-// Beside the BOOT button on the rim, clear of both heart arcs.
-constexpr P kBootAt = {150, 26};
+// Beside the BOOT button on the rim, clear of both heart arcs and above the
+// home screen's marquee strip (rows 34 to 53), which scrolls under nothing.
+constexpr P kBootAt = {146, 18};
 constexpr int kHintPct = 125;
 
 }  // namespace
@@ -1092,11 +1095,12 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
   else drawArt(cv, (h.greyed ? duel_art::kBootGlyphsGrey : duel_art::kBootGlyphs)[h.glyph], at.x, at.y, kHintPct, 256);
   // A hold that means something else: the ring round it, filling clockwise from the top.
   if (h.hasHold) drawArt(cv, duel_art::kHoldRing[h.holdFill * 8 / 255], at.x, at.y, kHintPct, 256);
-  if (h.hasDouble) drawArt(cv, duel_art::kDoublePress, at.x, at.y + 19, kHintPct, 256);
+  // The double-press bars sit beside it, toward the middle: under it is the marquee's strip.
+  if (h.hasDouble) drawArt(cv, duel_art::kDoublePress, at.x - 24, at.y + 2, kHintPct, 256);
   // Pips toward the middle of the dish: how far short a greyed one is, or the turns a wind-up has left.
   if (h.greyed || h.glyph == kGlyphCountdown)
     for (int i = 0; i < imin(h.pips, 6); ++i) {
-      Prop q = prop(PropKind::Pip, 0, {at.x - 22 - 9 * i, at.y + 4});
+      Prop q = prop(PropKind::Pip, 0, {at.x - (h.hasDouble ? 40 : 22) - 9 * i, at.y + 6});
       q.variant = h.greyed ? 1 : 0;
       pip(cv, q);
     }
