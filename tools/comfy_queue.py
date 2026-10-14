@@ -72,6 +72,158 @@ FRIEND_PAIRS = [("grungo", "gilly"), ("mossby", "fizz"), ("puffkin", "mothwick")
                 ("gilly", "mudge"), ("fizz", "tinker"), ("hushwing", "mothwick"), ("mossby", "puffkin"), ("grungo", "hushwing")]
 
 
+NEG_EXPR = {
+    "sad": "smile, smiling, happy, grin, cheerful, open mouth smile",
+    "angry": "smile, smiling, happy, grin, calm, sad",
+    "sick": "smile, smiling, happy, grin, healthy",
+    "hurt": "smile, smiling, happy, grin, calm",
+    "fallen": "smile, open eyes, pupils, happy",
+}
+INKC = (30, 22, 18)
+
+
+def painted_face(se, s, expr):
+    """The anchor with the expression blocked in by hand, as the roster's lids and glow
+    were: a prompt alone keeps the anchor's smile. The inpaint then heals it at ~0.6."""
+    import numpy as np
+    from scipy import ndimage
+    ch = se / f"characters/{s}"
+    im = Image.open(ch / "anchor-raw.png").convert("RGB")
+    a = np.asarray(im).astype(int)
+    face = np.asarray(Image.open(ch / "masks/face.png").convert("L")) > 127
+    eyes = np.asarray(Image.open(ch / "masks/eyes.png").convert("L")) > 127
+    mouth = np.asarray(Image.open(ch / "masks/mouth.png").convert("L")) > 127
+    skin = tuple(int(c) for c in np.median(a[face & ~eyes & ~mouth], 0))
+    lab, n = ndimage.label(eyes)
+    boxes = sorted([ndimage.find_objects(lab)[i] for i in range(n)], key=lambda b: -(b[0].stop - b[0].start) * (b[1].stop - b[1].start))[:2]
+    boxes = sorted(((b[1].start, b[0].start, b[1].stop, b[0].stop) for b in boxes), key=lambda b: b[0])
+    ys, xs = np.nonzero(mouth)
+    mx0, my0, mx1, my1 = xs.min(), ys.min(), xs.max(), ys.max()
+    mcx, mcy, mw = (mx0 + mx1) / 2, (my0 + my1) / 2, (mx1 - mx0)
+    d = ImageDraw.Draw(im)
+    w = max(8, int(mw * 0.05))
+    # the mouth: covered with skin, then drawn again
+    d.ellipse([mcx - mw * 0.32, mcy - (my1 - my0) * 0.35, mcx + mw * 0.32, mcy + (my1 - my0) * 0.35], fill=skin)
+    frown = [mcx - mw * 0.2, mcy - mw * 0.02, mcx + mw * 0.2, mcy + mw * 0.22]
+    if expr == "fallen":
+        d.arc([mcx - mw * 0.18, mcy - mw * 0.12, mcx + mw * 0.18, mcy + mw * 0.06], 20, 160, fill=INKC, width=w)
+        d.ellipse([mcx + mw * 0.02, mcy, mcx + mw * 0.14, mcy + mw * 0.14], fill=(235, 110, 140), outline=INKC, width=3)
+    elif expr == "sick":
+        pts = [(mcx - mw * 0.2 + i * mw * 0.05, mcy + (8 if i % 2 else -8)) for i in range(9)]
+        d.line(pts, fill=INKC, width=w, joint="curve")
+    else:
+        d.arc(frown, 200, 340, fill=INKC, width=w)
+    for i, (x0, y0, x1, y1) in enumerate(boxes):
+        ew, eh = x1 - x0, y1 - y0
+        inner = x1 if i == 0 else x0
+        outer = x0 if i == 0 else x1
+        top = y0 - eh * 0.18
+        if expr == "fallen" or (expr == "hurt" and i == 1):
+            d.ellipse([x0, y0, x1, y1], fill=skin)
+            if expr == "fallen":
+                d.line([(x0 + ew * 0.2, y0 + eh * 0.2), (x1 - ew * 0.2, y1 - eh * 0.2)], fill=INKC, width=w)
+                d.line([(x0 + ew * 0.2, y1 - eh * 0.2), (x1 - ew * 0.2, y0 + eh * 0.2)], fill=INKC, width=w)
+            else:
+                d.line([(x0 + ew * 0.15, (y0 + y1) / 2 - eh * 0.1), (x1 - ew * 0.15, (y0 + y1) / 2 + eh * 0.1)], fill=INKC, width=w)
+            continue
+        if expr in ("sad", "sick", "hurt"):   # brows up in the middle
+            d.line([(outer, top), (inner, top - eh * 0.3)], fill=INKC, width=w)
+        elif expr == "angry":                  # brows down in the middle
+            d.line([(outer, top - eh * 0.3), (inner, top + eh * 0.12)], fill=INKC, width=int(w * 1.4))
+        if expr in ("sad", "sick"):            # heavy upper lids
+            d.chord([x0, y0, x1, y1], 180, 360, fill=skin)
+            d.line([(x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)], fill=INKC, width=max(4, w // 2))
+        if expr == "sad":                      # a tear under each eye
+            tx = outer - (ew * 0.1 if i == 0 else -ew * 0.1)
+            d.ellipse([tx - ew * 0.09, y1, tx + ew * 0.09, y1 + eh * 0.32], fill=(150, 210, 250), outline=INKC, width=3)
+    if expr == "sick":
+        tint = Image.new("RGB", im.size, (150, 200, 110))
+        im = Image.composite(Image.blend(im, tint, 0.28), im, Image.fromarray((face & ~eyes).astype(np.uint8) * 255))
+    return im
+
+
+FUZZ = {   # name: (low, high), or a list to choose from; --range name=lo:hi overrides
+    "ipa_weight": (0.1, 0.6),
+    "ipa_end_at": (0.3, 0.8),
+    "ipa_weight_type": ["ease in-out", "linear", "weak input", "ease out"],
+    "denoise": (0.5, 0.92),
+    "cfg": (5.0, 9.0),
+    "steps": [24, 28, 32],
+    "mix": (0.0, 0.7),     # share of the expression-only conditioning (ConditioningAverage)
+}
+
+
+def fuzz_values(rng, ranges):
+    out = {}
+    for k, r in ranges.items():
+        if isinstance(r, list):
+            out[k] = r[rng.randrange(len(r))]
+        else:
+            out[k] = round(rng.uniform(*r), 2)
+    return out
+
+
+def fuzz_jobs(a, base, U, se, cfg, style, neg):
+    """--fuzz N: N jobs per species and expression, each with its own draw of FUZZ, the
+    values written into the output folder name and roster/fuzz-<tag>.jsonl."""
+    import random
+    ranges = dict(FUZZ)
+    for r in a.range or []:
+        k, v = r.split("=")
+        lo, hi = v.split(":")
+        ranges[k] = (float(lo), float(hi))
+    rng = random.Random(a.fuzz_seed)
+    out = []
+    exprs = [a.expr] if a.expr else list(EXPRESSIONS)
+    log = []
+    for e in exprs:
+        for s in (a.species or SPECIES):
+            v0 = base(s)
+            v0["mask"] = U(f"{s}-face", lambda s=s: Image.open(se / f"characters/{s}/masks/face.png").convert("L"))
+            if not a.no_paint:
+                v0["init"] = U(f"{s}-paint-{e}", lambda s=s, e=e: painted_face(se, s, e))
+            for i in range(a.fuzz):
+                f = fuzz_values(rng, ranges)
+                v = dict(v0)
+                v.update(f)
+                v["seed"] = rng.randrange(1 << 31)
+                v["positive"] = f"{v['subject']}, {EXPRESSIONS[e]}, {v.get('style', style)}"
+                v["expr_only"] = f"{EXPRESSIONS[e]}, {v.get('style', style)}"
+                v["negative"] = f"{neg}, {NEG_EXPR[e]}"
+                short = {"ipa_weight": "w", "ipa_end_at": "end", "ipa_weight_type": "", "denoise": "d", "cfg": "cfg", "steps": "st", "mix": "mix"}
+                tag = "_".join(f"{short.get(k, k)}{str(f[k]).replace(' ', '')}" for k in sorted(f))
+                v["prefix"] = f"blorbarium/fuzz/{a.fuzz_tag}/{s}/{e}/{tag}_s{v['seed']}"
+                out.append(("inpaint", v, v["prefix"], f"{s} {e} fuzz"))
+                log.append({"prefix": v["prefix"], "species": s, "expr": e, "seed": v["seed"], "painted": not a.no_paint, **f})
+    (ROOT / f"roster/fuzz-{a.fuzz_tag}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in log), newline="\n")
+    return out
+
+
+def with_mix(g, v):
+    """Blend the positive with the expression alone (no subject) by v['mix'], so the face
+    can be pushed further from the anchor's own look."""
+    if not v.get("mix"):
+        return g
+    g = dict(g)
+    g["90"] = {"class_type": "CLIPTextEncode", "inputs": {"clip": ["1", 1], "text": v["expr_only"]}}
+    g["91"] = {"class_type": "ConditioningAverage",
+               "inputs": {"conditioning_to": ["90", 0], "conditioning_from": ["3", 0], "conditioning_to_strength": v["mix"]}}
+    ks = dict(g["6"])
+    ks["inputs"] = {**ks["inputs"], "positive": ["91", 0]}
+    g["6"] = ks
+    return g
+
+
+def cancel_mine():
+    """Delete every pending job this script queued (client_id blorb-queue); leaves the
+    running one and anybody else's alone."""
+    q = json.load(urllib.request.urlopen(COMFY + "/queue", timeout=120))
+    mine = [p[1] for p in q["queue_pending"] if p[3].get("client_id") == "blorb-queue"]
+    body = json.dumps({"delete": mine}).encode()
+    urllib.request.urlopen(urllib.request.Request(COMFY + "/queue", body, {"Content-Type": "application/json"}), timeout=120).read()
+    print("cancelled", len(mine), "pending jobs of mine")
+
+
 def upload(data, name):
     b = uuid.uuid4().hex
     body = (f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\nContent-Type: image/png\r\n\r\n").encode() \
@@ -100,7 +252,21 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--se", required=True, help="a sprite-expressions checkout with the roster characters")
     ap.add_argument("--dry", action="store_true")
+    ap.add_argument("--only", choices=["expressions"], help="submit only this item")
+    ap.add_argument("--expr", help="with --only expressions: one expression")
+    ap.add_argument("--species", nargs="*", help="limit the expressions to these species")
+    ap.add_argument("--seeds", type=int, help="seeds per expression (default 24)")
+    ap.add_argument("--front", action="store_true", help="put the jobs at the front of ComfyUI's queue")
+    ap.add_argument("--paints", type=Path, help="save the painted inits here to look at, and submit nothing")
+    ap.add_argument("--fuzz", type=int, help="N jobs per species and expression, each with random FUZZ settings")
+    ap.add_argument("--fuzz-tag", default="run1", help="output folder blorbarium/fuzz/<tag>/ and roster/fuzz-<tag>.jsonl")
+    ap.add_argument("--fuzz-seed", type=int, default=1, help="the draw of settings; same seed, same jobs")
+    ap.add_argument("--range", action="append", help="override a FUZZ range: name=lo:hi (e.g. ipa_weight=0.0:0.3)")
+    ap.add_argument("--no-paint", action="store_true", help="fuzz from the plain anchor, without the painted expression")
+    ap.add_argument("--cancel-mine", action="store_true", help="delete this script's pending jobs from ComfyUI's queue, then exit")
     a = ap.parse_args()
+    if a.cancel_mine:
+        return cancel_mine()
     se = Path(a.se)
     flows = {n: {k: x for k, x in json.loads((se / f"flows/{n}.json").read_text()).items() if not k.startswith("_")}
              for n in ("inpaint", "concept")}
@@ -133,13 +299,16 @@ def main():
 
     style = cfg["grungo"]["vars"]["style"]
     neg = cfg["grungo"]["vars"]["negative_base"] + ", " + NEG_SAFE
-    # 1. expressions: the face re-inpainted on the anchor
+    # 1. expressions: blocked in by hand on the anchor's face, then healed by the inpaint
     for e, pos in EXPRESSIONS.items():
-        for s in SPECIES:
+        for s in (a.species or SPECIES):
             v = base(s)
             v["mask"] = U(f"{s}-face", lambda s=s: Image.open(se / f"characters/{s}/masks/face.png").convert("L"))
-            add("inpaint", v, f"{v['subject']}, {pos}, {v.get('style', style)}", neg, f"blorbarium/expressions/{s}/{e}",
-                f"{s} face: {e}", 24, 0.85)
+            v["init"] = U(f"{s}-paint-{e}", lambda s=s, e=e: painted_face(se, s, e))
+            add("inpaint", v, f"{v['subject']}, {pos}, {v.get('style', style)}", f"{neg}, {NEG_EXPR[e]}",
+                f"blorbarium/expressions/{s}/{e}", f"{s} face: {e}", a.seeds or 24, 0.6)
+    if a.only == "expressions":
+        jobs[:] = [j for j in jobs if j[2].startswith("blorbarium/expressions/") and (not a.expr or j[2].endswith("/" + a.expr))]
     # 2. duel poses: the whole body redrawn from the anchor, identity held by IP-Adapter
     full = lambda: Image.new("L", (1024, 1024), 255)
     for p, pos in POSES.items():
@@ -194,16 +363,28 @@ def main():
         v.update(ipa_weight=0.35, ipa_end_at=0.5)
         add("concept", v, f"{pos}, {style}", neg, f"blorbarium/spares/{n}", f"spare species: {n}", 24)
 
+    if a.fuzz:
+        jobs[:] = fuzz_jobs(a, base, U, se, cfg, style, neg)
+    if a.paints:
+        a.paints.mkdir(parents=True, exist_ok=True)
+        for s in (a.species or SPECIES):
+            for e in ([a.expr] if a.expr else EXPRESSIONS):
+                painted_face(se, s, e).save(a.paints / f"{s}-{e}.png")
+        return
     manifest = {}
     for flow, v, prefix, about in jobs:
         manifest.setdefault(prefix, {"about": about, "flow": flow, "count": 0, "positive": v["positive"]})["count"] += 1
-    (ROOT / "roster/art-queue.json").write_text(json.dumps(manifest, indent=1) + "\n", newline="\n")
+    if not a.only and not a.species and not a.fuzz:
+        (ROOT / "roster/art-queue.json").write_text(json.dumps(manifest, indent=1) + "\n", newline="\n")
     print(len(jobs), "jobs,", len(manifest), "prefixes")
     if a.dry:
         return
     for i, (flow, v, prefix, about) in enumerate(jobs):
-        g = fill(flows[flow], v)
-        body = json.dumps({"prompt": g, "client_id": "blorb-queue"}).encode()
+        g = with_mix(fill(flows[flow], v), v)
+        req = {"prompt": g, "client_id": "blorb-queue"}
+        if a.front:
+            req["front"] = True
+        body = json.dumps(req).encode()
         urllib.request.urlopen(urllib.request.Request(COMFY + "/prompt", body, {"Content-Type": "application/json"}), timeout=120).read()
         if i % 200 == 0:
             print("queued", i, prefix, flush=True)
