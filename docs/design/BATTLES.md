@@ -289,16 +289,29 @@ Senders send at 5 Hz while the friend lacks something and at 1 Hz otherwise. A t
 
 The worst single pair is Hushwing over Mudge at 0.672, and the median battle is 12 turns. The first pass, with flat costs and one-turn Hush and Lantern, had Hushwing at 0.328 and Mossby at 0.620. Three changes moved it: Hush and Lantern last two turns, Shell no longer refunds a spark, and each power got its own cost. Then a cost sweep settled Dash at 3 and Spores at 6. Each sweep step is in the probe's history and reruns in about 30 s. The C++ gate (`tools/duel_balance.cpp`, unit D4) re-measures through the real `resolve()`: species within 430 to 570 permille, pairs within 300 to 700.
 
+**Measured through `resolve()`** (unit D4, `tools/duel_balance.cpp 1500`, 2026-10-13; the same numbers gate `test_duel_resolve`). Same players, 81 pairs x 1,500 battles, no cost changed:
+
+| Variant | Grungo | Mossby | Puffkin | Gilly | Mothwick | Mudge | Fizz | Hushwing | Tinker | Worst pair | Median turns |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Random, always fire (the probe's model) | 0.496 | 0.543 | 0.452 | 0.493 | 0.514 | 0.509 | 0.495 | 0.499 | 0.500 | Hushwing over Mudge 0.699 | 12 |
+| Random, BOOT on a random half of turns (armed) | 0.523 | 0.527 | 0.479 | 0.476 | 0.508 | 0.509 | 0.492 | 0.482 | 0.504 | Fizz over Hushwing 0.590 | 11 |
+| Both pets on autopilot (`petChoice`, 300 a pair) | 0.486 | 0.601 | 0.455 | 0.513 | 0.472 | 0.489 | 0.494 | 0.459 | 0.532 | Mossby over Puffkin 0.702 | 12 |
+
+Every species lands within 0.004 of the probe. The worst pair is 0.699 at 1,500 a pair and 0.693 at 6,000 (measured), so it sits just inside the 700 bound. A one-pip sweep of every cost found no single change that moves it without pushing another pair or species out of bounds (Hush 6 drops Hushwing to 0.418, Dash 2 puts Mudge over Fizz at 0.718; measured), so the costs stand. Arming only half the time narrows the wheel, because a power that fires later matters less. The autopilot row is the demo case. With less noise in the pet's pick (one knack rank instead of four), two autopilots replayed the same battle every time, and Grungo lost to Puffkin 300 times in 300 (measured).
+
 ## Fairness: a 6-year-old against a parent
 
-The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time. The probe models the whisper as a perfect frequency reader. The real lean is `petChoice` over a Skill table that starts each life at zero, so the lean-follower row is an upper bound until D4 measures `petChoice` itself.
+The probe's scripted players: a **parent** who counters the friend's most frequent stance, a **habit kid** who picks their pet's loved stance 60 percent of the time, and a **lean follower** who takes the pet's whispered pick half the time. The probe models the whisper as a perfect frequency reader. D4 measured the real one: `petChoice` over a Skill table that starts each battle at zero and learns after every turn.
 
 | Parent's win rate | no help | 1 heart | 2 hearts | 3 hearts |
 |---|---|---|---|---|
 | against a habit kid | 0.923 | 0.872 | 0.801 | 0.705 |
 | against a kid who follows the lean half the time | 0.491 | 0.311 | 0.172 | 0.092 |
+| the same, through `resolve()` and the real `petChoice` (D4) | 0.478 | 0.291 | 0.160 | (max 2) |
+| against a pet on autopilot every turn (D4) | 0.156 | 0.049 | 0.012 | (max 2) |
+| against a habit kid, through `resolve()` (D4) | 0.924 | 0.876 | 0.803 | (max 2) |
 
-All measured in the probe, with the caveat above. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. How good `petChoice` gets is D4's measurement. The design uses both, in this order:
+The first two rows are measured in the probe, with the caveat above; the D4 rows are measured through `resolve()` at 300 battles a pair. The lesson is that hearts alone barely rescue a habit-bound kid, while a good enough whisper can turn a 0.92 rout into a coin flip. The real `petChoice` is as good as the probe assumed. A pet left on autopilot beats this scripted parent 0.844 of the time, because the parent counters a habit and the pet's Skill learns the counter to the counter. A real parent adapts, so read that row as "the autopilot is no pushover", not as a ranking. The design uses both, in this order:
 
 1. **The pet whispers.** The pet's lean is its Skill reading of the friend, and it always shows as a soft glow on one glyph. Its brightness rises with the assist, so a young kid is shown the reading the pet has made. Following your pet is how a 6-year-old beats a parent, and it is what the toy wants kids to learn anyway.
 2. **Assist hearts, by skill and not by level** (graft from candidate C). The card carries the kid's **prowess**, a running mean (1/8 step) of how well that kid has picked: the share of turns the kid chose (not the pet) that won or bonked. Inside a 24-point dead band nobody gets help. Past it, the weaker side gets one heart per 32 points, at most two. The stronger side loses nothing. A kid who starts following the lean plays better, their prowess rises, and the help backs off by itself, so the 0.311 and 0.172 cells do not persist.
@@ -491,7 +504,7 @@ There were no dropouts.
 - We accept that a friend's unrevealed move sits in RAM, readable by a modified firmware, in exchange for one packet kind per turn and no cryptography.
 - We accept that a battle one device never finished is a fizzle there and a result on the other side, in exchange for no agreement protocol beyond the logs. Rewards are nearly equal either way.
 - We accept that genes shape style and not strength, in exchange for no line ever becoming a bully.
-- We accept per-pair matchups up to 0.672 (measured), in exchange for nine distinct powers. The C++ harness can tighten them.
+- We accept per-pair matchups up to 0.699 (measured through `resolve()`, Hushwing over Mudge), in exchange for nine distinct powers. No one-pip cost change tightens it without breaking another bound.
 - We accept every device carrying all nine packs (about 630 KB, estimate), in exchange for drawing any friend and any hybrid.
 - We accept Wi-Fi start-up latency (a guess of under a second) at each duel, in exchange for an untouched heap the rest of the time.
 - We accept that only shared-locus genes cross, in exchange for no lineage format change.
@@ -576,7 +589,7 @@ Only product calls. Each has the default this design ships. Your ruling that pet
 - **The Wi-Fi heap is an estimate.** D12 measures it first. The levers, in order: Wi-Fi buffers in PSRAM (already allowed), fewer static RX buffers, then pausing BLE advertising during a duel.
 - **A clink may not trip both tap engines.** Pointing and knocking always works.
 - **RSSI in IDF 4.4 needs a promiscuous hook.** If it misbehaves beside ESP-NOW, the gate becomes "matched by clink or mutual choice only", which is still consent on both sides.
-- **The pair spread** (worst 0.672) may feel unfair within one family, and with Mortal it matters more. D4 can tighten it with costs.
+- **The pair spread** (worst 0.699, Hushwing over Mudge) may feel unfair within one family, and with Mortal it matters more. Costs alone did not tighten it (D4's sweep); a rule change to Hush or the element head start would.
 - **A child's pet killed by a cousin** is the point of the ruling, and it will still land hard some days. The mitigations are design, not refusal: consent with the skull shown, the fairness gate, mercy by default, and a death that leaves a clutch and a vendetta rather than nothing.
 - **The forecast is coarse.** A Scrap it allows can still contribute to a later death if the pet is then neglected. That is intended ("wounds work"), and the stakes screen says so with the bandage.
 - **v2's double-press detector does not exist yet.** D9 adds a minimal one, and v2 U3 replaces it.
