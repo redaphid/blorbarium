@@ -22,6 +22,8 @@ constexpr uint32_t kMaxCatchUpSteps = 12 * 12;
 // The cap must not make abandonment free: a gap this long also lands as harm
 // the catch-up's twelve hours cannot show.
 constexpr int64_t kLongAbsenceSeconds = 21 * 24 * 3600;
+// The glow a welcomed phone leaves, the size of the phone's prophecy treat.
+constexpr Fx kWelcomeVision = Fx::ratio(1, 2);
 
 // He wakes starving (hunger above the kStarving locus, energy low enough to
 // keep calling it up) and hurt; feeding saves him, neglect carries on from
@@ -268,11 +270,15 @@ uint32_t Dish::phoneAwayTicks() const {
 void Dish::checkWall() {
   lastWallCheckTick_ = tick_;
   std::optional<uint32_t> now;
+  bool welcome = false;
   // Every source is read, so a phone reading behind a working RTC is spent, not kept for later.
   for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_)}) {
     if (!source) continue;
     std::optional<uint32_t> t = source->unixSeconds();
-    if (t && source == &phone_) lastPhoneTick_ = tick_;
+    if (t && source == &phone_) {
+      welcome = phoneAwayTicks() >= Thinker::kMissPhoneTicks;
+      lastPhoneTick_ = tick_;
+    }
     if (!now) now = t;
   }
   if (!now) return;
@@ -282,7 +288,10 @@ void Dish::checkWall() {
   if (live_.wall) {
     int64_t powered = int64_t((tick_ - live_.wall->tick) / kTicksPerSecond);
     int64_t gap = int64_t(*now) - int64_t(live_.wall->wallSeconds) - powered;
-    if (gap > -kDriftSeconds && gap < kDriftSeconds) return;
+    if (gap > -kDriftSeconds && gap < kDriftSeconds) {
+      if (welcome) welcomePhone();
+      return;
+    }
     // A source that runs backwards is believed from here on; only a forward gap is lived.
     if (gap > 0) {
       catchUp(uint32_t(std::min<int64_t>(gap * kTicksPerSecond, UINT32_MAX)));
@@ -297,6 +306,18 @@ void Dish::checkWall() {
   }
   live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
+  if (welcome) welcomePhone();
+}
+
+// A phone came back after he had been asking for it: the visit is worth
+// making. He glows as the phone's treat makes him, the stimulus eases his
+// loneliness through his own genes, and he says so, sorer if it was weeks.
+void Dish::welcomePhone() {
+  Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (!c) return;
+  c->inject(chem::vision, c->chemistry().chem[chem::vision.v] + kWelcomeVision);
+  fire(stim::spoken_to);
+  thinker_.say(lastCatchUp_.hurt ? "YOU LEFT ME. I AM HUNGRY." : "THE GLOWING ONE RETURNS!", *c, lineage_, tick_);
 }
 
 // Nobody is there: no gestures, no feeding, no brain. The chemistry runs

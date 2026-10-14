@@ -117,6 +117,7 @@ class Dish {
   // Powered ticks since a phone last gave the time. Across a replug the saved
   // anchor stands in: with no battery only a phone can have set it.
   uint32_t phoneAwayTicks() const;
+  void welcomePhone();
   void onDeath(Creature&);         // record death, lay the clutch, save
   void onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save
   void onHatch(Egg&);

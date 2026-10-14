@@ -198,8 +198,17 @@ TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
   const int before = missed();
   r.dish.phoneTime().set(1790000000);
   r.dish.checkWall();
+  r.run(500);
+  ASSERT_FALSE(r.said.empty());
+  EXPECT_EQ(r.said.back().text, "THE GLOWING ONE RETURNS!") << "the visit he asked for is welcomed";
+  EXPECT_GE(r.dish.appearance().glow, Fx::ratio(1, 4)) << "and he glows";
   play(4 * 60 * kMinute);
   EXPECT_EQ(missed(), before) << "a phone visit quiets it";
+
+  r.dish.phoneTime().set(1790000000 + 4 * 3600 + 30);
+  r.dish.checkWall();
+  r.run(500);
+  EXPECT_NE(r.said.back().text, "THE GLOWING ONE RETURNS!") << "only a phone he missed is welcomed";
 }
 
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
