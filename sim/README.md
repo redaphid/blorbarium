@@ -10,15 +10,15 @@ pets.
 
 Two simulators can hear each other. Each one's duel radio (the `Air` in
 `docs/design/BATTLES.md`) runs over a socket instead of ESP-NOW
-(`sim/serial_air.h`). `tools/duel_film.py` starts two sims on the two ends of
+(`sim/serial_air.h`). `tools/duel_video.py` starts two sims on the two ends of
 one socketpair, records both screens, and composes them side by side.
 
 1. Write a duel script in `tools/duels/<name>.txt`. Copy `tools/duels/link.txt`
    and change the sides, the weather and the lines. The format is at the top
-   of `tools/duel_film.py`.
+   of `tools/duel_video.py`.
 2. Run it in WSL `survivor`:
 
-       MSYS_NO_PATHCONV=1 wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/duel_film.sh --twice <name>
+       MSYS_NO_PATHCONV=1 wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/duel_video.sh --twice <name>
 
    The script builds the sim, then writes `<name>-wide.mp4` (1920x1080),
    `<name>-square.mp4` (1080x1080) and `check/` to

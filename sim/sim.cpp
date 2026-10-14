@@ -16,7 +16,7 @@
 //   sim --species <slug|id>              draw the pet as that species (DEBUG species does it live)
 //   sim --air-fd <n> [--air-weather loss=30,dup=10,reorder=20,late=800,latency=3,rssi=-45,seed=1]
 //                                        the duel radio over a socket another sim holds the far end of
-//                                        (sim/serial_air.h; tools/duel_film.py joins two)
+//                                        (sim/serial_air.h; tools/duel_video.py joins two)
 //   sim --kid <seed>[:<from ms>[:<turn ms>]]   a kid playing a duel on the hand (sim/duel_bot.h)
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to

@@ -128,6 +128,19 @@ TEST(Card, TheLookIsWhatPresentDrawsForEveryStarterAtEveryStage) {
   }
 }
 
+TEST(Card, TheLookTurnsWithTheHueShiftLocusAsPresentDoes) {
+  const ReceptorGene r{chem::adrenaline.v, locus::hue_shift.v, 0, 255, 128, 1};
+  GeneHeader h{GeneKindOf<ReceptorGene>::value, sizeof r, GeneFlags::Mutable, Stage::Baby, 0, 64, {}};
+  h.uid = starterGenome(7).nextUid();
+  Rig rig(*GenomeBuilder::from(starterGenome(7)).append(h, &r.chem).build());
+  rig.c().inject(chem::adrenaline, Fx::one());
+  rig.run(2);
+  ASSERT_GT(rig.c().chemistry().locus[locus::hue_shift.v], Fx::zero());
+  const CardLook look = cardOf(rig.c(), 1, 1, 128).look;
+  const Appearance a = present(rig.o, rig.habitat, rig.clock, rig.tick);
+  for (uint8_t k = 0; k < kRegionCount; ++k) EXPECT_EQ(look.regions[k].hue, a.regions[k].hue) << int(k);
+}
+
 TEST(Card, ABuiltCardIsFrozenWhileHisChemistryGoesOn) {
   Rig r = calm();
   const BattleCard frozen = cardOf(r.c(), 1, 1, 128);

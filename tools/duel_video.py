@@ -1,7 +1,7 @@
 """Two simulators linked by a fake radio, filmed side by side.
 
-    tools/duel_film.sh [duel ...]       (builds the sim, then runs this in WSL survivor)
-    python3 tools/duel_film.py --out DIR [--twice] [duel ...]
+    tools/duel_video.sh [duel ...]       (builds the sim, then runs this in WSL survivor)
+    python3 tools/duel_video.py --out DIR [--twice] [duel ...]
 
 A duel is tools/duels/<name>.txt: one script for two sims. A line goes to
 both unless it starts `A:` or `B:`. `#>` lines are for this tool, times on
