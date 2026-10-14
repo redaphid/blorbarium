@@ -157,10 +157,10 @@ constexpr Outcome resolveCore(const BattleCard& a, const BattleCard& b, uint32_t
 // mark, then a Pounce's claw, then the winner's element.
 constexpr Scar::Kind hitKind(const TurnReport& r, uint8_t me, const BattleCard& theirs) {
   const uint8_t them = uint8_t(1 - me);
-  if (r.powered[them] && r.fired[them] == power::zap) return Scar::Kind::Ring;
+  if (r.powered[them] && r.fired[them] == power::zap) return Scar::Kind::Bite;
   if (r.shown[them] == Stance::Pounce) return Scar::Kind::Claw;
   switch (elementOf(theirs)) {
-    case Element::Splash: return Scar::Kind::Ripple;
+    case Element::Splash: return Scar::Kind::Stitches;
     case Element::Spark: return Scar::Kind::Scorch;
     case Element::Sprout: return Scar::Kind::Notch;
   }
