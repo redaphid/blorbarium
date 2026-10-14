@@ -11,7 +11,10 @@ constexpr int kTopShare = 16, kSpanShare = 224;
 // How far in from the edge of his hide a scar's centre sits, as a share of the
 // scar's width (of 256): most of it on him, its outer edge breaking his outline
 // a little, the way a nick in an ear or a scratch down a flank does.
-constexpr int kInShare = 96;
+constexpr int kInShare = 128;
+// The art's crease (g below 128) and ridge (above) are deepened by this much
+// (x/2) so a scar reads at the duel's size; at home it is the same scar, clearer.
+constexpr int kDepth = 3;
 
 int imin(int a, int b) { return a < b ? a : b; }
 int floorDiv(int a, int b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
@@ -125,7 +128,7 @@ int scarShade(const ScarLayer& layer, int rx, int ry) {
     const uint8_t idx = artPixel(art, ax, ay);
     if (!idx) continue;
     const int g = duel_art::kPalette[idx].r;
-    q = q * (128 + (g - 128) * s.strength / 255) / 128;
+    q = q * imax(16, 128 + (g - 128) * kDepth / 2 * s.strength / 255) / 128;
   }
   return q;
 }

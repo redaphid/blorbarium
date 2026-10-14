@@ -76,6 +76,7 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.them.confirmed = true;
     s.me.ceiling = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
     s.me.confirmed = n == "staking";
+    s.stakes = n == "staking" ? Stakes::Scrap : Stakes::Mortal;   // the lower of the two
   } else if (n == "choosing" || n == "locked") {
     s.aim = int8_t(blorb::Stance::Guard);
     s.lean = int8_t(blorb::Stance::Trick);

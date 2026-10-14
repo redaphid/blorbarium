@@ -56,7 +56,7 @@ int bump(int t, int t0, int t1) {
 // Where each pet stands at rest, how big (of his size at home), and how far he
 // leans toward the other. Mine is near, so big; the friend's is across the dish.
 struct Home { int x, y, scalePct, leanPct; };
-constexpr Home kHome[2] = {{78, 208, 60, 8}, {162, 106, 42, -8}};
+constexpr Home kHome[2] = {{84, 208, 54, 8}, {162, 106, 42, -8}};
 
 // The rim arcs, in 1/256 turn: my hearts run down the lower right, the
 // friend's up the upper left, the same arc turned half round.
@@ -66,7 +66,7 @@ constexpr int kPowerAngle = 40, kPowerR = 62;
 constexpr int kFlip = 128;   // the friend's side of the disc
 
 // The three places a tilt points: left, right, toward you.
-constexpr int kTiltR = 84;
+constexpr int kTiltR = 92;
 constexpr P kLeft = {kSide / 2 - kTiltR, kSide / 2}, kRight = {kSide / 2 + kTiltR, kSide / 2},
             kNear = {kSide / 2, kSide / 2 + kTiltR};
 constexpr P kStanceAt[3] = {kLeft, kRight, kNear};   // Pounce, Guard, Trick
@@ -143,6 +143,9 @@ void meter(DuelStaging& s, const Fighter& f, int side, int t) {
 }
 
 P headOf(const Figure& f, const Body& b) { return {f.x, f.y - b.top - 6}; }
+// Where a pet's stance pops in the clash: beside his head on his outer side,
+// so the clash itself has the middle of the dish.
+P popAt(P head, int side) { return {head.x + (side ? 28 : -38), head.y + (side ? 18 : 14)}; }
 
 void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
@@ -157,7 +160,7 @@ void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
     face(f, t < 8 ? expr::alarmed : expr::happy);
   }
   if (t >= 8) {
-    add(s, prop(PropKind::Burst, 1, {120, 120}, 70 + ramp(t, 8, 11) * 50 / 256 - bump(t, 10, 14) * 10 / 256));
+    add(s, prop(PropKind::Burst, 1, {124, 114}, 64 + ramp(t, 8, 11) * 40 / 256 - bump(t, 10, 14) * 10 / 256));
     const blorb::Element e[2] = {blorb::speciesInfo(sc.me.look.species).element,
                                  blorb::speciesInfo(sc.them.look.species).element};
     for (int side = 0; side < 2; ++side)
@@ -187,18 +190,20 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const Fighter& x = *f[side];
     const P head = headOf(s.fig[side], b[side]);
     const int bob = bump(t % 16, 0, 16) * 3 / 256;
+    // Over my head; beside the friend's, whose head is near the top of the glass.
+    const P over = side ? P{head.x - 40, head.y + 16} : P{head.x, head.y - 14};
     switch (x.chose) {
-      case Stakes::Spar: add(s, prop(PropKind::Tier, 0, {head.x, head.y - 10 - bob}, side ? 80 : 100)); break;
+      case Stakes::Spar: add(s, prop(PropKind::Tier, 0, {over.x, over.y - bob}, side ? 90 : 100)); break;
       case Stakes::Scrap:
         add(s, prop(PropKind::Plaster, 0, {head.x + (side ? -6 : 8), head.y + 14}, side ? 90 : 120));
         face(s.fig[side], expr::annoyed);
         break;
       case Stakes::Mortal:
-        add(s, prop(PropKind::Tier, 2, {head.x, head.y - 14 - bob}, side ? 110 : 140, 255, imax(x.skull, 1)));
+        add(s, prop(PropKind::Tier, 2, {over.x, over.y - bob}, side ? 120 : 140, 255, imax(x.skull, 1)));
         face(s.fig[side], expr::alarmed);
         break;
     }
-    if (side == kThem && x.confirmed) add(s, prop(PropKind::Tick, 0, {head.x + 24, head.y - 4}, 90));
+    if (side == kThem && x.confirmed) add(s, prop(PropKind::Tick, 0, {head.x + 26, head.y + 12}, 90));
   }
   // Both confirmed: the agreed tier, the lower of the two, in the middle.
   if (sc.me.confirmed && sc.them.confirmed)
@@ -276,8 +281,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
     // His stance pops over his head, a power glyph with it when it fired.
     const P head = headOf(Figure{int16_t(home[side].x), int16_t(home[side].y)}, b[side]);
     const int pop = imin(ramp(t, kPop, kPop + 4) * 140 / 256, 140 - ramp(t, kPop + 4, kPop + 6) * 20 / 256);
-    const P glyphAt = {head.x + (side ? -30 : 34), head.y + (side ? 14 : 4)};
-    if (x.stance >= 0) add(s, prop(PropKind::Stance, x.stance, glyphAt, pop));
+    if (x.stance >= 0) add(s, prop(PropKind::Stance, x.stance, popAt(head, side), pop));
     if (x.fired) {
       const blorb::PowerInfo& pw = blorb::powerInfo(blorb::speciesInfo(x.look.species).power);
       add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 16}, 100 + bump(t, 0, 10) * 40 / 256, 255 - ramp(t, 16, 24) * 255 / 256));
@@ -287,8 +291,8 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int win = sc.won == Side::Me ? kMe : (sc.won == Side::Them ? kThem : -1);
   // The "beats" arrow, from the winner's stance glyph toward the loser's.
   if (win >= 0 && t >= kArrowAt && t < kSettle + 4) {
-    const P a = {home[win].x + (win ? -30 : 34), home[win].y - b[win].top + (win ? 8 : -2)};
-    const P z = {home[1 - win].x + (win ? 34 : -30), home[1 - win].y - b[1 - win].top + (win ? -2 : 8)};
+    const P a = popAt(headOf(Figure{int16_t(home[win].x), int16_t(home[win].y)}, b[win]), win);
+    const P z = popAt(headOf(Figure{int16_t(home[1 - win].x), int16_t(home[1 - win].y)}, b[1 - win]), 1 - win);
     Prop arrow = prop(PropKind::Arrow, 0, {a.x + (z.x - a.x) / 4, a.y + (z.y - a.y) / 4}, 100, ramp(t, kArrowAt, kArrowAt + 2));
     arrow.x2 = int16_t(z.x - (z.x - a.x) / 4);
     arrow.y2 = int16_t(z.y - (z.y - a.y) / 4);
@@ -301,10 +305,12 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       for (int side = 0; side < 2; ++side) add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[side], b[side]), side ? 80 : 100));
     } else {
       const int lose = 1 - win;
-      add(s, prop(PropKind::Burst, sc.super ? 2 : 0, {(mid.x + home[lose].x) / 2, (mid.y + home[lose].y - b[lose].h / 2) / 2}, grow));
+      // The burst lands where they meet, a little toward the one it hurt.
+      const P loser = {home[lose].x, home[lose].y - b[lose].h / 2};
+      add(s, prop(PropKind::Burst, sc.super ? 2 : 0, {mid.x + (loser.x - mid.x) / 5, mid.y + (loser.y - mid.y) / 5}, grow));
       if (sc.super) {
         const blorb::Element e = blorb::speciesInfo(f[win]->look.species).element;
-        add(s, prop(PropKind::Element, int(e), {mid.x + (win ? -40 : 40), mid.y - 30}, 120));
+        add(s, prop(PropKind::Element, int(e), {mid.x - 46, mid.y - 30}, 120));
       }
     }
   }
@@ -334,30 +340,32 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
 
 // The downed pet: slumped, leaning away, eyes shut, stars round his head.
 void slump(Figure& f, int awayX) {
-  f.tallPct = 72;
-  f.widePct = 118;
+  f.tallPct = 64;
+  f.widePct = 124;
   f.leanPct = int8_t(awayX < 0 ? -20 : 20);
   face(f, expr::asleep);
 }
+
+// The skull over the downed pet, clear of both pets and the rim: [me down, them down].
+constexpr P kMercySkull[2] = {{100, 64}, {108, 58}};
 
 void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
   const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
   slump(s.fig[down], s.fig[down].x - s.fig[win].x);
-  add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 72 / 100, b[down].h, b[down].w}), down ? 80 : 100));
+  add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 64 / 100, b[down].h, b[down].w}), down ? 80 : 100));
   // The winner stands over him: a little bigger, leaning in, grim once the thumb is down.
   s.fig[win].scalePct = uint8_t(s.fig[win].scalePct + 6);
   face(s.fig[win], sc.finishHold ? expr::annoyed : expr::neutral);
   add(s, prop(PropKind::Timer, 0, {120, 120}, 100, 255, sc.mercyTicks ? sc.mercyLeft * kTimerFillOf / sc.mercyTicks : 0));
   // The skull over the downed pet fills from the bottom while the winner holds BOOT.
-  const P head = headOf(s.fig[down], b[down]);
-  const P skull = {(head.x + 120) / 2, imax(52, head.y - 22)};
-  add(s, prop(PropKind::Tier, 2, skull, 200, 255, imax(sc.finishHold, 1)));
+  add(s, prop(PropKind::Tier, 2, kMercySkull[down], 190, 255, imax(sc.finishHold, 1)));
   if (sc.won == Side::Me) {
-    // Mine to decide: hold BOOT under the skull, or knock to spare (the heart).
-    add(s, prop(PropKind::Button, 0, {skull.x - 30, skull.y + 34}, 100, 210));
-    add(s, prop(PropKind::Button, 1, {skull.x + 30, skull.y + 34}, 100, 210));
-    add(s, prop(PropKind::Plea, 0, {skull.x + 30, skull.y + 12}, 110, 210));
+    // Mine to decide, in the empty lower right: hold BOOT for the skull, or knock for the heart.
+    add(s, prop(PropKind::Button, 0, {150, 164}, 100, 230));
+    add(s, prop(PropKind::Tier, 2, {178, 164}, 75));
+    add(s, prop(PropKind::Button, 1, {150, 198}, 100, 230));
+    add(s, prop(PropKind::Plea, 0, {178, 198}, 130));
   }
   // The downed pet's kid can only plead: a heart floats up toward the winner.
   if (sc.pleading) {
@@ -619,7 +627,8 @@ void text(Canvas240& cv, const char* s, int cx, int cy, int scale256, Rgb c) {
 
 void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
   static constexpr const char* kWords[] = {"BONK!", "VS", "SUPER!", "BOINK!"};
-  static constexpr int kScale[] = {352, 512, 320, 320};
+  // Whole multiples of the font only: a fractional scale drops a row and an E reads as an F.
+  static constexpr int kScale[] = {256, 512, 256, 256};
   const int R = 46 * p.scalePct / 100, inner = 30 * p.scalePct / 100, rot = ticks * 2;
   const uint16_t edge = c565(kBurstEdge), body = c565(kBurst);
   for (int y = p.y - R; y <= p.y + R; ++y)
@@ -629,7 +638,7 @@ void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
       put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, 12, rot) ? body : edge, p.alpha + 1);
     }
   const int v = imin(p.variant, 3);
-  text(cv, kWords[v], p.x, p.y, kScale[v] * p.scalePct / 100, {255, 255, 255});
+  if (p.scalePct >= 90) text(cv, kWords[v], p.x, p.y, kScale[v], {255, 255, 255});
 }
 
 void arrow(Canvas240& cv, const Prop& p) {
