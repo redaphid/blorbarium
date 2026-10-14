@@ -1,0 +1,1136 @@
+{
+ "blorbarium/expressions/grungo/sad": {
+  "about": "grungo face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mossby/sad": {
+  "about": "mossby face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/puffkin/sad": {
+  "about": "puffkin face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/gilly/sad": {
+  "about": "gilly face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mothwick/sad": {
+  "about": "mothwick face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mudge/sad": {
+  "about": "mudge face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/fizz/sad": {
+  "about": "fizz face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/hushwing/sad": {
+  "about": "hushwing face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/tinker/sad": {
+  "about": "tinker face: sad",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (sad expression:1.4), (teary droopy eyes looking down:1.3), (small wobbly frown:1.3), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/grungo/angry": {
+  "about": "grungo face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mossby/angry": {
+  "about": "mossby face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/puffkin/angry": {
+  "about": "puffkin face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/gilly/angry": {
+  "about": "gilly face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mothwick/angry": {
+  "about": "mothwick face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mudge/angry": {
+  "about": "mudge face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/fizz/angry": {
+  "about": "fizz face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/hushwing/angry": {
+  "about": "hushwing face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/tinker/angry": {
+  "about": "tinker face: angry",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (furious angry expression:1.4), (slanted angry brows:1.4), narrowed glaring eyes, (small shouting mouth:1.2), front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/grungo/sick": {
+  "about": "grungo face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mossby/sick": {
+  "about": "mossby face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/puffkin/sick": {
+  "about": "puffkin face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/gilly/sick": {
+  "about": "gilly face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mothwick/sick": {
+  "about": "mothwick face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mudge/sick": {
+  "about": "mudge face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/fizz/sick": {
+  "about": "fizz face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/hushwing/sick": {
+  "about": "hushwing face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/tinker/sick": {
+  "about": "tinker face: sick",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (sick unwell queasy expression:1.4), droopy tired half-closed eyes with dark bags, (green-tinged pale cheeks:1.2), wavy queasy mouth, a sweat drop, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/grungo/hurt": {
+  "about": "grungo face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mossby/hurt": {
+  "about": "mossby face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/puffkin/hurt": {
+  "about": "puffkin face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/gilly/hurt": {
+  "about": "gilly face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mothwick/hurt": {
+  "about": "mothwick face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mudge/hurt": {
+  "about": "mudge face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/fizz/hurt": {
+  "about": "fizz face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/hushwing/hurt": {
+  "about": "hushwing face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/tinker/hurt": {
+  "about": "tinker face: hurt",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (hurt pained expression:1.4), (one eye squeezed shut wincing:1.4), clenched wobbly mouth, a little sticking plaster on the cheek, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/grungo/fallen": {
+  "about": "grungo face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mossby/fallen": {
+  "about": "mossby face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/puffkin/fallen": {
+  "about": "puffkin face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/gilly/fallen": {
+  "about": "gilly face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mothwick/fallen": {
+  "about": "mothwick face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/mudge/fallen": {
+  "about": "mudge face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/fizz/fallen": {
+  "about": "fizz face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/hushwing/fallen": {
+  "about": "hushwing face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/expressions/tinker/fallen": {
+  "about": "tinker face: fallen",
+  "flow": "inpaint",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (knocked out:1.4), (cartoon X X eyes:1.5), tongue lolling out of the corner of the mouth, comically fainted, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/windup": {
+  "about": "grungo duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/windup": {
+  "about": "mossby duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/windup": {
+  "about": "puffkin duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/windup": {
+  "about": "gilly duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/windup": {
+  "about": "mothwick duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/windup": {
+  "about": "mudge duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/windup": {
+  "about": "fizz duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/windup": {
+  "about": "hushwing duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/windup": {
+  "about": "tinker duel pose: windup",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (winding up to pounce:1.4), crouched low, leaning back, gathering energy, determined face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/strike": {
+  "about": "grungo duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/strike": {
+  "about": "mossby duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/strike": {
+  "about": "puffkin duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/strike": {
+  "about": "gilly duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/strike": {
+  "about": "mothwick duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/strike": {
+  "about": "mudge duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/strike": {
+  "about": "fizz duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/strike": {
+  "about": "hushwing duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/strike": {
+  "about": "tinker duel pose: strike",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (lunging forward in a playful bonk:1.4), leaning hard into a charge, motion lines, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/guard": {
+  "about": "grungo duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/guard": {
+  "about": "mossby duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/guard": {
+  "about": "puffkin duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/guard": {
+  "about": "gilly duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/guard": {
+  "about": "mothwick duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/guard": {
+  "about": "mudge duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/guard": {
+  "about": "fizz duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/guard": {
+  "about": "hushwing duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/guard": {
+  "about": "tinker duel pose: guard",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (guarding:1.4), arms or wings raised in front to block, braced stance, focused face, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/flinch": {
+  "about": "grungo duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/flinch": {
+  "about": "mossby duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/flinch": {
+  "about": "puffkin duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/flinch": {
+  "about": "gilly duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/flinch": {
+  "about": "mothwick duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/flinch": {
+  "about": "mudge duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/flinch": {
+  "about": "fizz duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/flinch": {
+  "about": "hushwing duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/flinch": {
+  "about": "tinker duel pose: flinch",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (flinching from a bonk:1.4), recoiling backwards, eyes squeezed shut, little stars, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/faint": {
+  "about": "grungo duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/faint": {
+  "about": "mossby duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/faint": {
+  "about": "puffkin duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/faint": {
+  "about": "gilly duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/faint": {
+  "about": "mothwick duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/faint": {
+  "about": "mudge duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/faint": {
+  "about": "fizz duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/faint": {
+  "about": "hushwing duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/faint": {
+  "about": "tinker duel pose: faint",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (fainted flat on its back:1.4), lying down, dizzy spiral eyes, little stars circling, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/grungo/victory": {
+  "about": "grungo duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mossby/victory": {
+  "about": "mossby duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/puffkin/victory": {
+  "about": "puffkin duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/gilly/victory": {
+  "about": "gilly duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mothwick/victory": {
+  "about": "mothwick duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/mudge/victory": {
+  "about": "mudge duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/fizz/victory": {
+  "about": "fizz duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/hushwing/victory": {
+  "about": "hushwing duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/poses/tinker/victory": {
+  "about": "tinker duel pose: victory",
+  "flow": "inpaint",
+  "count": 16,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (victory pose:1.4), cheering with arms or wings raised high, beaming proud face, sparkles, full body, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/grungo/egg": {
+  "about": "grungo egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/mossby/egg": {
+  "about": "mossby egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/puffkin/egg": {
+  "about": "puffkin egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/gilly/egg": {
+  "about": "gilly egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/mothwick/egg": {
+  "about": "mothwick egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/mudge/egg": {
+  "about": "mudge egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/fizz/egg": {
+  "about": "fizz egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/hushwing/egg": {
+  "about": "hushwing egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/tinker/egg": {
+  "about": "tinker egg",
+  "flow": "concept",
+  "count": 12,
+  "positive": "(a single round glossy translucent jelly egg:1.4), a tiny curled baby a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly visible inside, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/grungo-gilly": {
+  "about": "friend egg of grungo and gilly",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin and half a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/mossby-fizz": {
+  "about": "friend egg of mossby and fizz",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell and half a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/puffkin-mothwick": {
+  "about": "friend egg of puffkin and mothwick",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet and half a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/mudge-hushwing": {
+  "about": "friend egg of mudge and hushwing",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head and half a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/tinker-grungo": {
+  "about": "friend egg of tinker and grungo",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly and half a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/gilly-mudge": {
+  "about": "friend egg of gilly and mudge",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly and half a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/fizz-tinker": {
+  "about": "friend egg of fizz and tinker",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body and half a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/hushwing-mothwick": {
+  "about": "friend egg of hushwing and mothwick",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak and half a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/mossby-puffkin": {
+  "about": "friend egg of mossby and puffkin",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell and half a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/eggs/friend/grungo-hushwing": {
+  "about": "friend egg of grungo and hushwing",
+  "flow": "concept",
+  "count": 8,
+  "positive": "(a single round glossy jelly egg:1.4), inside it a tiny baby that is half a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin and half a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, mixed colours of both, cute, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/grungo/claw": {
+  "about": "grungo scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/grungo/scorch": {
+  "about": "grungo scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/grungo/notch": {
+  "about": "grungo scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/grungo/stitches": {
+  "about": "grungo scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/grungo/bite": {
+  "about": "grungo scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/grungo/warpaint": {
+  "about": "grungo war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a stocky green frog villager in a brown hooded cloak and a brown scarf, wide green frog face, two big round dark red-brown eyes on top of the head, two small eye-stalk antennae, mottled olive green skin, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mossby/claw": {
+  "about": "mossby scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mossby/scorch": {
+  "about": "mossby scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mossby/notch": {
+  "about": "mossby scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mossby/stitches": {
+  "about": "mossby scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mossby/bite": {
+  "about": "mossby scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/mossby/warpaint": {
+  "about": "mossby war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/puffkin/claw": {
+  "about": "puffkin scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/puffkin/scorch": {
+  "about": "puffkin scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/puffkin/notch": {
+  "about": "puffkin scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/puffkin/stitches": {
+  "about": "puffkin scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/puffkin/bite": {
+  "about": "puffkin scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/puffkin/warpaint": {
+  "about": "puffkin war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/gilly/claw": {
+  "about": "gilly scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/gilly/scorch": {
+  "about": "gilly scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/gilly/notch": {
+  "about": "gilly scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/gilly/stitches": {
+  "about": "gilly scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/gilly/bite": {
+  "about": "gilly scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/gilly/warpaint": {
+  "about": "gilly war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mothwick/claw": {
+  "about": "mothwick scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mothwick/scorch": {
+  "about": "mothwick scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mothwick/notch": {
+  "about": "mothwick scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mothwick/stitches": {
+  "about": "mothwick scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mothwick/bite": {
+  "about": "mothwick scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/mothwick/warpaint": {
+  "about": "mothwick war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mudge/claw": {
+  "about": "mudge scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mudge/scorch": {
+  "about": "mudge scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mudge/notch": {
+  "about": "mudge scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mudge/stitches": {
+  "about": "mudge scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/mudge/bite": {
+  "about": "mudge scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/mudge/warpaint": {
+  "about": "mudge war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/fizz/claw": {
+  "about": "fizz scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/fizz/scorch": {
+  "about": "fizz scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/fizz/notch": {
+  "about": "fizz scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/fizz/stitches": {
+  "about": "fizz scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/fizz/bite": {
+  "about": "fizz scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/fizz/warpaint": {
+  "about": "fizz war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/hushwing/claw": {
+  "about": "hushwing scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/hushwing/scorch": {
+  "about": "hushwing scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/hushwing/notch": {
+  "about": "hushwing scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/hushwing/stitches": {
+  "about": "hushwing scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/hushwing/bite": {
+  "about": "hushwing scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/hushwing/warpaint": {
+  "about": "hushwing war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/tinker/claw": {
+  "about": "tinker scar: claw, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (three healed claw scratch scars on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/tinker/scorch": {
+  "about": "tinker scar: scorch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (a healed singe scorch mark on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/tinker/notch": {
+  "about": "tinker scar: notch, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (a small healed notch nick on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/tinker/stitches": {
+  "about": "tinker scar: stitches, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (a healed scar with cartoon stitches across it on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/scars/tinker/bite": {
+  "about": "tinker scar: bite, on limbs and head only",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (a healed arch of little bite nicks on the arm and head:1.3), healed, cartoon, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/warpaint/tinker/warpaint": {
+  "about": "tinker war paint on the face",
+  "flow": "inpaint",
+  "count": 8,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (bold swamp-mud war paint stripes on the cheeks and forehead:1.4), fierce, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/mossby/gritty": {
+  "about": "mossby, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a plump cute snail, a round soft peach-cream face peeking out of the opening of a big glossy amber-orange striped spiral shell, two big round shiny brown eyes, rosy peach cheeks, two orange eye-stalk antennae on top of the shell, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/puffkin/gritty": {
+  "about": "puffkin, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a round fluffy puffball mushroom creature, a bumpy peach and coral-red puffy body, a big round cream face, two big round dark brown eyes with orange rims and white shines, a tiny pink nose, rosy pink blush cheeks, stubby pink feet, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/gilly/gritty": {
+  "about": "gilly, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute chubby pink axolotl with big feathery magenta gills fanned round her round head, big glossy dark eyes with magenta irises, pink blush cheeks, soft pink skin, a pale cream belly, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/mothwick/gritty": {
+  "about": "mothwick, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute fluffy round violet moth creature, big round black eyes with yellow rims and white highlights, pink blush cheeks, a tiny pink nose, a white fluffy fur collar, two curly antennae with pink tips, wide lavender and pale yellow wings, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/mudge/gritty": {
+  "about": "mudge, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a round chubby sky blue mudskipper fish, two big round brown eyes, a pale cream face and a cream scaled belly, rosy cheeks, wing-like blue side fins, a little curly blue tuft on top of his head, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/fizz/gritty": {
+  "about": "fizz, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute round sunny-yellow firefly beetle, big round glossy yellow head, two big round dark brown eyes with gold rims and white highlights, a small happy smile, two thin black antennae with little yellow ball tips, pale translucent yellow wings spread wide, round glossy yellow shell body, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/hushwing/gritty": {
+  "about": "hushwing, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a chubby round snow-white owl, soft white feathers with tiny grey speckles, grey wings, two grey-brown ear tufts, big round orange-gold eyes with black pupils ringed in black, a small orange beak, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/gritty/tinker/gritty": {
+  "about": "tinker, grittier",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute slate-grey raccoon tinkerer with a black eye mask, white fur around the mask, two round brown eyes, a black nose, copper goggles with teal lenses on a striped copper cap, brown leather harness straps over a cream belly, (grittier, scrappier, more weathered look:1.3), a few patches and scuffs, muddy swamp-settler survivor, darker muted colours, like a frog settler of a sinking swamp colony, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/mudge-alt/lungfish": {
+  "about": "Mudge alternative: lungfish",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a chubby round lungfish creature standing upright on stubby fins, smooth slick blue-grey skin, wide frog-like fish mouth, no wings, no beak, no feathers, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/mudge-alt/mudpuppy": {
+  "about": "Mudge alternative: mudpuppy",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute round mudpuppy salamander-fish with frilly red gills, sky blue spotted skin, sitting on its tail, no wings, no beak, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/mudge-alt/goby": {
+  "about": "Mudge alternative: goby",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a round goofy mudskipper goby fish propped on two thick pectoral fins on wet mud, big bulging eyes on top of its head, scaly blue skin, a fish tail, no wings, no beak, no feathers, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/mudge-alt/tadfish": {
+  "about": "Mudge alternative: tadfish",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a fat round blue fish creature with a big tail curled beside it, bubble eyes, tiny fin arms, on a mud puddle, no wings, no beak, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/spares/newt": {
+  "about": "spare species: newt",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute chubby orange fire newt creature with a spotted back and a long curled tail, standing upright, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/spares/beetle_crab": {
+  "about": "spare species: beetle_crab",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute round hermit crab creature living in an old rusty tin can, two small claws, eye stalks, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/spares/mole": {
+  "about": "spare species: mole",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute chubby velvet mole creature with big pink digging paws and tiny goggles, a swamp tunneler, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/spares/toadstool_bat": {
+  "about": "spare species: toadstool_bat",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute round fruit bat creature with big ears and leathery wings, hanging upside down from a toadstool, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ },
+ "blorbarium/spares/slug": {
+  "about": "spare species: slug",
+  "flow": "concept",
+  "count": 24,
+  "positive": "a cute glowing sea-slug creature with frilly coloured fringes, plump and round, a swamp drifter, front view facing the viewer, cartoon game character illustration, bold black outlines, flat cel shading, clean shapes, plain flat pure white background"
+ }
+}
