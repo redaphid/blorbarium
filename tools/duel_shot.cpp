@@ -54,8 +54,8 @@ bool species(const char* name, blorb::SpeciesId& out) {
 }
 
 // A whole mortal duel, beat by beat, for a film: they meet, both kids take the
-// skull, three turns (a guard that holds, a bonk of heads, a pounce that lands
-// with SUPER), my pet stands over the friend's, the thumb goes down, he falls,
+// skull, a guard that holds, a bonk of heads, my kid winds up a heavy special
+// (the friend's own quick one telegraphed beside it), it lands with a WHAM, my pet stands over the friend's, the thumb goes down, he falls,
 // and mine takes his token.
 struct Beat { const char* moment; uint16_t frames; void (*tweak)(DuelScene&, int turn); };
 
@@ -87,15 +87,6 @@ void turn2Clash(DuelScene& s, int) {
   s.me.hearts = 5;
   s.them.hearts = 4;
 }
-void turn3Clash(DuelScene& s, int) {
-  s.me.hearts = 5;
-  s.them.hearts = 0;
-  s.them.hit = 4;
-  s.me.stance = int8_t(blorb::Stance::Pounce);
-  s.them.stance = int8_t(blorb::Stance::Trick);
-  s.me.fired = true;
-  s.super = true;
-}
 void mercyHold(DuelScene& s, int t) {
   s.finishHold = uint8_t(t < 10 ? 0 : (t - 10) * 255 / 30 < 255 ? (t - 10) * 255 / 30 : 255);
   s.mercyLeft = uint16_t(150 - t * 2);
@@ -104,7 +95,8 @@ void mercyHold(DuelScene& s, int t) {
 
 constexpr Beat kFilm[] = {
     {"meeting", 24, noTweak},   {"staking_mortal", 36, stakeHold}, {"choosing", 30, turn1Choose},
-    {"hit", 30, turn1Clash},    {"bonk", 30, turn2Clash},          {"hit", 30, turn3Clash},
+    {"hit", 30, turn1Clash},    {"bonk", 30, turn2Clash},          {"windup_heavy", 30, noTweak},
+    {"landing", 30, noTweak},
     {"mercy", 44, mercyHold},   {"fallen", 34, noTweak},           {"outcome", 30, noTweak},
 };
 
