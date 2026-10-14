@@ -54,7 +54,11 @@ hours** of the gap (`kMaxCatchUpSteps` in `dish.cpp`); the rest is dropped.
 The cap keeps a phone visit (an OTA update, say) from being what kills a pet
 that sat a week in a drawer. It does not prevent death: a pet already near
 death still dies inside the twelve hours (user: "close to dead + time =
-dead"), and absence after absence starves a pet nobody feeds.
+dead"), and absence after absence starves a pet nobody feeds. A gap of **three
+weeks** or more also hurts him once (`kLongAbsenceSeconds`, `longAbsence` in
+`dish.cpp`): he wakes starving and injured, and TIME replies `hurt=1`. The
+wound stops short of lethal, but nothing shields him after it: left unfed, a
+pet already low, or one more absence, ends in death.
 
 ## 4. User-directed: the phone adds twists; the board stays the one writer
 

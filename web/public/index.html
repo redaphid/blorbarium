@@ -424,7 +424,7 @@ class MockTransport {
     const m = /^#([0-9a-f]+) (\S+) ?(.*)\n$/.exec(text);
     const id = m[1], verb = m[2], args = m[3];
     const lines = [];
-    if (verb === "TIME") lines.push("OK caught_up=0");
+    if (verb === "TIME") lines.push("OK caught_up=0 away=0 hurt=0");
     else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
     else if (verb === "STATE") lines.push(
       "+ phase=creature gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0",
