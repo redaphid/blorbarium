@@ -160,6 +160,25 @@ TEST(DuelWire, TheBoundaryRefusesEachMalformedFrame) {
   EXPECT_FALSE(Frame{Packet{g}}.decoded());   // the last chunk overruns kMaxGenomeBytes
 }
 
+TEST(DuelWire, DescribeNamesEachFrameAndEachRefusal) {
+  Frame st{Packet{state()}};
+  EXPECT_STREQ(describe(st.b, st.n).s, "state t16 h15 Mortal hug");
+  BeaconPacket bp;
+  bp.wants = PeerAddr{{2, 0, 0, 0, 0, 1}};
+  Frame b{Packet{bp}};
+  EXPECT_STREQ(describe(b.b, b.n).s, "beacon wants");
+  GenomePacket g;
+  g.index = 4, g.len = 10, g.have = 0b111;
+  Frame gf{Packet{g}};
+  EXPECT_STREQ(describe(gf.b, gf.n).s, "genome 4 have 3");
+  st.b[20] ^= 1;
+  EXPECT_STREQ(describe(st.b, st.n).s, "bad crc");
+  st.b[20] ^= 1;
+  st.b[2] = kWireVersion + 1;
+  EXPECT_STREQ(describe(st.b, st.n).s, "version");
+  EXPECT_STREQ(describe(st.b, 3).s, "short");
+}
+
 // A million random buffers: decode never crashes, and nothing without a valid
 // crc gets through. Half carry a real header and length, so the fuzz reaches
 // past the cheap checks to the crc.

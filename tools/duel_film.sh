@@ -22,8 +22,14 @@ case "${1:-}" in
     dir="outputs/duel-film-$mine-$theirs"
     rm -rf "$dir"; mkdir -p "$dir"
     .pio/build/duelshot/program --film "$dir" --mine "$mine" --theirs "$theirs" || status=$?
-    if command -v ffmpeg >/dev/null; then
-      ffmpeg -loglevel error -y -framerate 10 -i "$dir/frame_%04d.bmp" -vf scale=480:480:flags=neighbor \
+    # ffmpeg off PATH, else the one imageio-ffmpeg ships (uv fetches it), else a GIF.
+    ff="$(command -v ffmpeg || true)"
+    uv="$(command -v uv || echo "$HOME/.local/bin/uv")"
+    if [ -z "$ff" ] && [ -x "$uv" ]; then
+      ff="$("$uv" run -q --with imageio-ffmpeg python3 -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || true)"
+    fi
+    if [ -n "$ff" ]; then
+      "$ff" -loglevel error -y -framerate 10 -i "$dir/frame_%04d.bmp" -vf scale=480:480:flags=neighbor \
         -pix_fmt yuv420p "outputs/duel-film-$mine-$theirs.mp4" || status=$?
     else   # no ffmpeg: an animated GIF, which every phone and chat plays
       python3 - "$dir" "outputs/duel-film-$mine-$theirs.gif" <<'PY' || status=$?

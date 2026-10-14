@@ -231,6 +231,11 @@ struct Clutch {
   void derivePreviewStep(const FriendEgg* = nullptr);
 };
 
+// The egg gestures, one rule for a clutch and the founding nest (founding.h):
+// Button or Knock moves the cursor, ButtonHold or DoubleKnock keeps the egg
+// under it. One egg needs no choice. The kept index, or nullopt.
+std::optional<uint8_t> pickEgg(const SenseOut&, uint8_t& cursor, uint8_t count);
+
 using Occupant = std::variant<Egg, Creature, Clutch>;
 
 }  // namespace blorb

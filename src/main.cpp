@@ -9,7 +9,8 @@
 #include <string_view>
 
 #include "blorb/dish.h"
-#include "paint/duel_view.h"
+#include "blorb/founding.h"
+#include "paint/duel.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
@@ -178,16 +179,20 @@ static blorb::Appearance shown() {
 // loop task's stack should not carry every frame.
 static paint::DuelScene duelScene;
 static void drawFrame(const blorb::Appearance& a, uint32_t now) {
+  const blorb::BootHint& b = a.boot;
+  const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble};
   if (a.dueling) {
+    // The lobby has no act of its own yet: the dish stays, with the friend hint.
     const blorb::DuelView v = dish->duelView();
-    if (paint::hasScene(v.phase)) {
+    if (v.phase != blorb::DuelPhase::Lobby) {
       duelScene = paint::sceneOf(v, a);
+      duelScene.boot = hint;
       paint::drawDuel(duelScene, paint::packFor(a.species), paint::packFor(v.them.species), canvas, now);
       return;
     }
   }
   paint::draw(a, paint::packFor(a.species), canvas, now);
-  paint::drawBootHint(canvas, paint::rimOf(a.boot));   // what BOOT does now, in every state
+  paint::drawBootHint(canvas, hint);   // what BOOT does now, in every state
 }
 
 // `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
@@ -385,8 +390,18 @@ void setup() {
 #else
   options.sealed = simSealed;
 #endif
+  // A fresh device's nest (founding.h). An owner's pin is one egg and needs no
+  // choice; three eggs wait for the kid once the nest is drawn here, and until
+  // then the Dish founds its default.
+  const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
+  std::optional<blorb::Genome> founder;
+  if (!options.sealed)
+    if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
+      if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
+        founder = blorb::starterGenomeOf(*pick, speciesSeed);
+  if (founder) options.founder = &*founder;
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
-  dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
+  dish.emplace(dishStore, speciesSeed, lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
@@ -479,6 +494,11 @@ static void pinSpecies(const char* a) {
                 blorb::speciesInfo(s).name);
 }
 
+static void pinFounding(const char* a) {
+  const char* why = debugverbs::found(dishStore, a);
+  Serial.printf("[hw] debug found %s: %s\n", a, why ? why : "ok, the next fresh founding's nest is this egg");
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
@@ -486,8 +506,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
   if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
+  if (std::strcmp(verb, "found") == 0) return pinFounding(a);
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, shot, press [ms], bletest <bytes>)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
+                  "bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();

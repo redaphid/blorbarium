@@ -1,5 +1,6 @@
 #include "blorb/duel_wire.h"
 
+#include <cstdio>
 #include <cstring>
 #include "log_frames.h"
 
@@ -142,13 +143,24 @@ size_t encode(const Packet& packet, uint8_t (&out)[kDatagramMax]) {
   return o.n;
 }
 
-std::optional<Packet> decode(const uint8_t* bytes, size_t len) {
-  if (len < kFrameOverhead || bytes[0] != kWireMagic0 || bytes[1] != kWireMagic1 || bytes[2] != kWireVersion)
-    return std::nullopt;
+namespace {
+// Why the envelope is refused, or nullptr when the body may be parsed.
+const char* envelopeFault(const uint8_t* bytes, size_t len) {
+  if (len < kFrameOverhead) return "short";
+  if (bytes[0] != kWireMagic0 || bytes[1] != kWireMagic1) return "magic";
+  if (bytes[2] != kWireVersion) return "version";
   const Kind kind = Kind(bytes[3]);
-  if (kind < Kind::Beacon || kind > Kind::Genome || len != wireBytes(kind)) return std::nullopt;
+  if (kind < Kind::Beacon || kind > Kind::Genome) return "kind";
+  if (len != wireBytes(kind)) return "short";
   In crc{bytes + len - 4, 4};
-  if (crc.u32() != crc32(bytes, len - 4)) return std::nullopt;
+  if (crc.u32() != crc32(bytes, len - 4)) return "bad crc";
+  return nullptr;
+}
+}  // namespace
+
+std::optional<Packet> decode(const uint8_t* bytes, size_t len) {
+  if (envelopeFault(bytes, len)) return std::nullopt;
+  const Kind kind = Kind(bytes[3]);
   In in{bytes + 4, len - kFrameOverhead};
   switch (kind) {
     case Kind::Beacon: return body<BeaconPacket>(in);
@@ -156,6 +168,27 @@ std::optional<Packet> decode(const uint8_t* bytes, size_t len) {
     case Kind::Genome: return body<GenomePacket>(in);
   }
   return std::nullopt;
+}
+
+WireText describe(const uint8_t* bytes, size_t len) {
+  WireText t{};
+  static constexpr const char* kTier[] = {"Spar", "Scrap", "Mortal"};
+  const std::optional<Packet> p = decode(bytes, len);
+  if (!p) {
+    const char* why = envelopeFault(bytes, len);
+    std::snprintf(t.s, sizeof t.s, "%s", why ? why : "bad body");
+  } else if (const BeaconPacket* b = std::get_if<BeaconPacket>(&*p)) {
+    std::snprintf(t.s, sizeof t.s, "beacon%s%s", b->wants.none() ? "" : " wants", b->knockAgoTicks < 255 ? " knock" : "");
+  } else if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
+    std::snprintf(t.s, sizeof t.s, "state t%u h%u %s%s%s", st->moveCount, st->heard, kTier[uint8_t(st->battle.stakes)],
+                  st->leaving ? " bye" : "", st->hugged ? " hug" : "");
+  } else {
+    const GenomePacket& g = std::get<GenomePacket>(*p);
+    uint8_t have = 0;
+    for (uint64_t v = g.have; v; v &= v - 1) ++have;
+    std::snprintf(t.s, sizeof t.s, "genome %u have %u", g.index, have);
+  }
+  return t;
 }
 
 }  // namespace blorb

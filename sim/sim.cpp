@@ -22,6 +22,7 @@
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
+//   @0 DEBUG found <slug|id>            found the pet as that species (before boot; later, refused)
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
 
@@ -176,6 +177,10 @@ static void debug(const char* verb, const char* a, const char* b) {
     if (const char* why = debugverbs::growTo(*dish, a, warp)) fprintf(stderr, "sim: DEBUG stage %s: %s\n", a, why);
     return;
   }
+  if (!strcmp(verb, "found")) {
+    if (const char* why = debugverbs::found(dishStore, a)) fprintf(stderr, "sim: DEBUG found %s: %s\n", a, why);
+    return;
+  }
   blorb::Creature* c = creature();
   if (!c) { fprintf(stderr, "sim: DEBUG %s needs a creature in the dish\n", verb); return; }
   if (!strcmp(verb, "inject")) {
@@ -218,6 +223,13 @@ static uint32_t recordEveryMs = 50;
 static uint32_t recordForMs = 6000;
 
 static int run(bool* running) {
+  // A pin is for a device not yet booted, so `@0 DEBUG found <id>` lands
+  // before setup() and the pet is founded as that species.
+  for (auto it = script.begin(); it != script.end() && it->at == 0;) {
+    if (it->text.rfind("DEBUG found ", 0) != 0) { ++it; continue; }
+    simLine(it->text);
+    it = script.erase(it);
+  }
   setup();
   const uint32_t started = millis();
   uint32_t nextFrameAt = 0, frameNo = 0;

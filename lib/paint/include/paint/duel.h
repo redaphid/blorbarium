@@ -16,6 +16,7 @@
 #include <cstdint>
 #include "blorb/appearance.h"
 #include "blorb/duel.h"
+#include "blorb/duel_session.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
 #include "paint/canvas.h"
@@ -38,10 +39,10 @@ enum class Side : uint8_t { Me, Them, Neither };
 
 struct Fighter {
   blorb::Appearance look;           // mine: my live Appearance; theirs: their CardLook as one
+  int16_t power = -1;               // PowerId from his card (a hybrid's); -1: his species' own
   uint8_t hearts = 5, maxHearts = 5;
   uint8_t assist = 0;               // of maxHearts, the ones the fairness rule gave: drawn with the pet's cheer
   uint8_t sparks = 0;               // 0..kMeterMax
-  bool armed = false;               // the power is called for this turn
   // Staking
   blorb::Stakes chose = blorb::Stakes::Spar;
   blorb::Stakes ceiling = blorb::Stakes::Mortal;   // tiers above it are struck through
@@ -106,6 +107,14 @@ struct DuelScene {
 // lock, the holds) come from the session's view, not from here.
 void fromOutcome(DuelScene&, const blorb::Outcome&, blorb::Side me);
 
+// The session's view of the duel (D8) as the screen draws it, with my pet's
+// live Appearance: the phase as the act, both fighters from the cards and the
+// side states, the last turn as the clash, the holds, the mercy clock, the
+// verdict. What main.cpp and the sim draw every frame:
+//   paint::drawDuel(paint::sceneOf(view, a), paint::packFor(a.species),
+//                   paint::packFor(view.them.species), canvas, now);
+DuelScene sceneOf(const blorb::DuelView&, const blorb::Appearance& mine);
+
 // ---- the display list -------------------------------------------------------------
 
 // One pet as the duel stands him: where, how big, his procedural motion (the
@@ -135,7 +144,7 @@ enum class PropKind : uint8_t {
   Trophy,     // variant: SpeciesId
   Debt,
   Plaster,    // the Scrap risk, stuck on his head
-  Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), COUNTER, OOF (a stagger), WHIFF
+  Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), NOPE (a riposte), OOF (a stagger), WHIFF
   Aura,       // a special winding up: light in its power's colour behind him; variant: PowerGlyph
   Countdown,  // the turns until it lands, as pips under its glyph; variant: how many
   Arrow,      // "beats": from (x, y) toward (x2, y2)
@@ -158,9 +167,13 @@ struct Prop {
   uint8_t fill = 255;
 };
 
+// A rectangle on the canvas, px, inclusive; empty when x0 > x1.
+struct Box { int16_t x0 = 1, y0 = 1, x1 = 0, y1 = 0; };
+
 struct DuelStaging {
   static constexpr int kMaxProps = 48;
   Figure fig[2];                    // [me, them]
+  Box face[2];                      // where each pet's face is: a burst never covers one
   Prop props[kMaxProps];
   uint8_t propCount = 0;
 };
@@ -171,5 +184,7 @@ DuelStaging stageDuel(const DuelScene&, const SpritePack& mine, const SpritePack
 
 // Pure over (scene, nowMs) like draw(): the same scene is the same bytes.
 void drawDuel(const DuelScene&, const SpritePack& mine, const SpritePack& theirs, Canvas240&, uint32_t nowMs);
+// The same, from a staging already made (what a test holds the staging to).
+void drawStaged(const DuelScene&, const DuelStaging&, const SpritePack& mine, const SpritePack& theirs, Canvas240&);
 
 }  // namespace paint

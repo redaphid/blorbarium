@@ -13,7 +13,7 @@
 #include "blorb/friend_egg.h"
 #include "blorb/species.h"
 #include "blorb/starter_duel.h"
-#include "paint/duel_view.h"
+#include "paint/duel.h"
 #include "paint/sprite_pack.h"
 #include "fake_air.h"
 #include "links.h"
@@ -790,7 +790,7 @@ TEST(Scene, EveryPhaseOfALiveDuelDrawsItsAct) {
       for (Device* d : {&bout.a, &bout.b}) {
         if (!d->dish->duelActive()) continue;
         const DuelView v = d->dish->duelView();
-        if (!paint::hasScene(v.phase)) continue;
+        if (v.phase == DuelPhase::Lobby) continue;   // the dish stays up until a friend is matched
         const Appearance me = d->dish->appearance();
         scene = paint::sceneOf(v, me);
         paint::drawDuel(scene, paint::packFor(me.species), paint::packFor(v.them.species), cv, d->ms);
