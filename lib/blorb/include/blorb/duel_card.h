@@ -33,8 +33,8 @@ Mood cardMood(const Chemistry&);
 
 // Why not, as a picture on both screens (ART3). Empathy, not an error, and the
 // session limit parents want, made of the pet's own state rather than a timer.
-// readiness() gives the first seven; ceilingFor() gives the last four, one per
-// tier he may not enter.
+// readiness() gives the first seven; ceilingFor() gives the next four, one per
+// tier he may not enter; the session adds Unfair to the same Ceiling::why.
 enum class Decline : uint8_t {
   None,
   NotACreature,   // an egg, a clutch or a pet already gone: nothing to duel with
@@ -47,6 +47,7 @@ enum class Decline : uint8_t {
   Wounded,        // a bandage: injury 0.5 or more; he still plays, he just does not fight
   Fragile,        // a skull: the tier's worst case would take all his woundRoom
   DeviceCeiling,  // a lock: a grown-up lowered this device's ceiling (TWIST stakes)
+  Unfair,         // a balance: not a fair fight (the assist, too few picked turns, a lopsided head-to-head, or today's for-keeps duel already fought)
 };
 
 inline constexpr Fx kDeclineSleepy = Fx::ratio(8, 10);
