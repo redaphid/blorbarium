@@ -128,22 +128,12 @@ static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 static orient::Up up{ORIENT_R0};
 
-// The "tap me with your phone" marquee asks for the time. Until the website
-// exists nothing can answer, and with no battery every replug forgets the
-// time, so the board does not ask. The sim keeps it for its golden.
-#if defined(BADGE_BOARD_SIM)
-static constexpr bool kAskForTime = true;
-#else
-static constexpr bool kAskForTime = false;
-#endif
-
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
 
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
-  if (!kAskForTime) a.timeUnknown = false;
   if (pinnedSpecies) a.species = *pinnedSpecies;
   return a;
 }
@@ -337,6 +327,9 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
+  // With no battery every replug forgets the time, and a kid with no phone
+  // still gets a pet that talks. The sim keeps asking, for its golden.
+  options.askForTime = false;
 #else
   options.sealed = simSealed;
 #endif

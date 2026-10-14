@@ -168,9 +168,9 @@ class Thinker {
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
   // Fills the Appearance's line. While he prophesies he wears the foresee
   // face and glow, and the shake's hop does not show; while he says the
-  // phone's line he wears the croak face. Before wall time only the phone's
-  // line shows: the time-unknown marquee outranks his own.
-  void show(Appearance&, uint32_t tick, bool wallKnown) const;
+  // phone's line he wears the croak face. While a.timeUnknown only the
+  // phone's line shows: the time-unknown marquee outranks his own.
+  void show(Appearance&, uint32_t tick) const;
 
   static constexpr uint32_t kWarmUpTicks = 3 * kTicksPerMinute;        // a hatchling's first minutes are wordless
   static constexpr uint32_t kQuietTicks = kTicksPerMinute;             // after a line, at least this ...

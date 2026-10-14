@@ -300,8 +300,8 @@ void Thinker::say(std::string_view line, const Creature& c, const Lineage& linea
   now_ = s;
 }
 
-void Thinker::show(Appearance& a, uint32_t tick, bool wallKnown) const {
-  if (!now_ || tick - now_->since >= now_->ticks || (!wallKnown && now_->kind != Spoken::said)) return;
+void Thinker::show(Appearance& a, uint32_t tick) const {
+  if (!now_ || tick - now_->since >= now_->ticks || (a.timeUnknown && now_->kind != Spoken::said)) return;
   a.thinking = true;
   a.prophecy = now_->kind == Spoken::prophecy;
   a.thought = now_->id;

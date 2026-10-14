@@ -51,6 +51,9 @@ struct DishOptions {
   // The Dish reads nothing, writes nothing and runs no life, so a reset
   // finds the keepsake exactly as it was; the screen shows it sealed.
   bool sealed = false;
+  // A board nobody can answer (no phone, no battery) shows no time-unknown
+  // marquee and lets him think and prophesy without wall time.
+  bool askForTime = true;
 };
 
 class Dish {
@@ -106,6 +109,7 @@ class Dish {
 
  private:
   void runOneTick(Link&);
+  bool askingForTime() const { return askForTime_ && !wallKnown_; }   // the marquee shows and he keeps quiet
   void onDeath(Creature&);         // record death, lay the clutch, save
   void onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save
   void onHatch(Egg&);
@@ -130,7 +134,7 @@ class Dish {
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
-  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
+  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false, askForTime_ = true;
 };
 
 }  // namespace blorb

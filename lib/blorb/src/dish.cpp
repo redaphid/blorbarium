@@ -66,7 +66,7 @@ void copyName(char (&to)[16], const char* from) {
 }  // namespace
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), rtc_(options.rtc) {
+    : store_(store), keep_(store), rtc_(options.rtc), askForTime_(options.askForTime) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -140,7 +140,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-    else if (wallKnown_) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake));
+    else if (!askingForTime()) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake));
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -231,8 +231,8 @@ Appearance Dish::appearance() const {
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
-  a.timeUnknown = !wallKnown_;
-  if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_, wallKnown_);
+  a.timeUnknown = askingForTime();
+  if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
 }
 

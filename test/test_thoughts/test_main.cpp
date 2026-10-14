@@ -38,8 +38,8 @@ struct Rig {
   bool wasThinking = false;
   Fx lastPhase{};
 
-  explicit Rig(const Genome& founder = quickEgg(), bool knowTime = true)
-      : dish(store, 7, 1, DishOptions{nullptr, &founder}) {
+  explicit Rig(const Genome& founder = quickEgg(), bool knowTime = true, bool askForTime = true)
+      : dish(store, 7, 1, DishOptions{nullptr, &founder, /*sealed=*/false, askForTime}) {
     if (knowTime) {
       dish.phoneTime().set(1790000000);
       dish.checkWall();
@@ -160,6 +160,21 @@ TEST(Thoughts, TimeUnknownOutranksAnyThought) {
   EXPECT_TRUE(a.timeUnknown);
   EXPECT_FALSE(a.thinking) << "with no wall time, the only line is the request for a phone";
   EXPECT_TRUE(r.said.empty());
+}
+
+TEST(Thoughts, ABoardThatDoesNotAskForTheTimeThinksAndForetellsWithoutIt) {
+  Rig r(quickEgg(), /*knowTime=*/false, /*askForTime=*/false);
+  r.pastWarmUp();
+  r.run(10 * kMinute);
+  ASSERT_FALSE(r.dish.timeKnown());
+  EXPECT_FALSE(r.said.empty()) << "ten minutes in, he has said something with no phone";
+  const int before = r.prophecies();
+  r.shake(6);
+  r.run(400);
+  Appearance a = r.dish.appearance();
+  EXPECT_EQ(r.prophecies(), before + 1) << "a shake foretells with no phone";
+  EXPECT_TRUE(a.thinking && a.prophecy);
+  EXPECT_FALSE(a.timeUnknown) << "no marquee asks for a phone";
 }
 
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
