@@ -6,22 +6,285 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A glossy, bright golden-yellow beetle with a big shiny shell, clear veined
+wings spread wide, little brown legs and two antennae tipped with bulbs that
+spark. A small smug smile. Happy, he squeals with his eyes shut. Annoyed, his
+eyes go wide and round over a sulky frown. Foreseeing, his eyes go lime green.
+The egg holds a tiny gold beetle, already gleaming.
 
+WHO HE IS
+A crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the
+dish and wants to keep it that way. He hoards: sparks, crumbs, anything that
+glints. Static clings to him and he zaps things by accident. Not mean, just
+possessive, and suspicious that everyone is after his gold.
 
 HOW HE TALKS
-
+Quick and sharp. BZZT. Dibs. Shiny. Gold. Stash. He whispers about his stash.
 
 LOVES
-
+Shiny things, his own shell, sparks, gold, the moon (the biggest shiny),
+glowing at night.
 
 FEARS
-
+Water (sparks and water: bad), thieves, getting scuffed, dull things.
 
 CATCHPHRASES
-
+BZZT. DIBS. SHINY. MY STASH.
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  BZZT. SNACK. NOW. GOLD ONES.
+starving
+  SO HUNGRY MY GLOW IS DIM.
+hoarding
+  THAT PELLET IS MY TREASURE.
+crunch
+  CRUNCH. CRACKLE. CRUNCH.
+fuzzy_bite
+  BZZT! THAT ONE WAS FUZZY!
+smells
+  SOMETHING STINKS. NOT MY GOLD.
+green
+  GREEN? I'M SUPPOSED TO BE GOLD
+ow
+  OW! MY SHELL GOT SCUFFED!
+heard_you
+  BZZT. I HEARD. STOP TAPPING.
+ground_lies
+  BZZZZT! SPARKS EVERYWHERE!
+not_again
+  NO SHAKING! YOU'LL SPILL ME!
+hooded
+  WINGS SHUT. LIGHTS OFF. SHH.
+ancestor_fear
+  GEN # HID THE SHINIES TOO.
+inherited
+  GEN # LEFT ME A SPARK.
+counted
+  I COUNTED MY SPARKS. ALL HERE.
+marble_knows
+  THAT MARBLE IS SHINY. GIMME.
+put_me_down
+  CAREFUL! I'M FULL OF SPARKS!
+warm_hands
+  WARM HANDS. NO SPARKS. PROMISE
+sky_down
+  UPSIDE DOWN. DROPPED NOTHING.
+heavy_eyes
+  GLOW... FADING... BZZ...
+dream_pellets
+  ZZZ... GOLD... PILES... ZZZ
+see_pellet
+  I SEE... A PELLET. DIBS.
+see_phone
+  I SEE... A GLOWING THING. WANT
+see_nothing
+  I SEE... NO TREASURE. NONE.
+see_damp
+  I SEE... A PUDDLE. KEEP AWAY.
+knees
+  OLD. STILL SHINY. MOSTLY.
+moon
+  THE MOON. THE BIGGEST SHINY.
+anyone
+  HELLO? I'LL SHARE ONE SPARK.
+science
+  FOOD MAKES SPARKS. SCIENCE.
+no_hat
+  GEN #. NO HAT. SHINY HEAD.
+
+p_snack
+  SNACK COMING. I CALL DIBS.
+p_feast
+  A FEAST OF SHINY CRUMBS.
+p_pellet_soon
+  A PELLET COMES. DIBS ALREADY.
+p_feed_me
+  FEED ME. OR I ZAP. A BIT.
+p_fuzzy
+  THAT CRUMB GOES FUZZY. NOT IT.
+p_more_shaking
+  MORE SHAKING. MORE SPARKS.
+p_mud
+  MUD COMES. NOT ON MY SHELL.
+p_big_hand
+  A BIG HAND. HIDE THE SHINIES.
+p_bedtime
+  THE DARK SAYS: GLOW, THEN BED.
+p_sun
+  THE SUN WILL MAKE ME SPARKLE.
+p_rain
+  RAIN. WATER AND SPARKS: BAD.
+p_watched
+  THE GLOWING ONE WANTS MY GOLD.
+p_return
+  THEY'LL BE BACK. WITH SHINIES
+p_tap
+  A TAP COMES. A ZAPPY ONE.
+p_no
+  NO. BZZT. NO.
+p_doom
+  DOOM. KEEP THE SHINY BITS.
+p_lunch
+  MY GLOW GOES OUT SOON. LUNCH?
+p_outlook
+  OUTLOOK: SHINY.
+p_decidedly
+  YES. CRACKLE. DEFINITELY.
+p_lucky
+  LUCK IS A SHINY THING. GRAB IT
+p_pond_no
+  THE POND SAYS NO. GOOD. WET.
+p_pond_yes
+  THE POND SAYS YES. FROM AFAR.
+p_ripples
+  RIPPLES. TOO CLOSE TO WATER.
+p_ancestor
+  GEN # SAW THIS. KEPT QUIET.
+miss_phone
+  THE GLOWING THING LEFT. RUDE.
+
+oclock
+  IT'S # O'CLOCK. COUNT SHINIES.
+morning
+  MORNING. TIME TO SHINE.
+so_late
+  SO LATE. PERFECT FOR GLOWING.
+monday
+  MONDAY. DULL. NOT LIKE ME.
+weekend
+  WEEKEND. TREASURE HUNTING.
+p_weekend
+  THE WEEKEND. SHINY DAYS COME.
+my_name
+  @. A SHINY NAME. GOLD.
+p_famous
+  @ WILL BE FAMOUS. AND GOLDEN.
+
+rim_walk
+  I WALKED THE RIM. NO GOLD.
+marble_foe
+  THE MARBLE OWES ME A SPARK.
+clean_glass
+  THE GLASS SHOWS ME. SO SHINY.
+dont_look
+  DON'T LOOK. I'M HIDING STUFF.
+saw_nothing
+  NOTHING HAPPENED. I KEPT IT.
+plans
+  PLAN: GET SHINIES. KEEP THEM.
+toes
+  SIX FEET. NO GOLD SHOES. YET.
+small_lot
+  SMALL. GOLDEN. CRACKLING.
+popped
+  A THOUGHT. IT CRACKLED.
+wiggle
+  WIGGLE. STATIC. ZAP. OOPS.
+my_song
+  BZZ BZZ BZZT. MY SONG.
+dust
+  DUST. IT'S STUCK TO MY SHELL.
+blinked
+  I BLINKED. MY GLOW BLINKED.
+important
+  VERY SHINY TODAY. IMPORTANT.
+secret_mud
+  SECRET: I HAVE A STASH.
+nap_plan
+  A NAP. ON MY PILE OF SHINIES.
+ceiling
+  THE CEILING IS NOT SHINY. BOO.
+serious_face
+  SERIOUS FACE. SPARKS STILL.
+no_echo
+  BZZT. BZZT? NO ECHO. BZZT.
+king
+  GOLDEN KING OF THE DISH.
+smells_me
+  SMELLS LIKE A STORM. ME.
+todo
+  TODAY: GLOW. HOARD. GLOW.
+brave
+  I AM BRAVE. I ZAP THINGS.
+big_pond
+  ONE DAY: A MOUNTAIN OF GOLD.
+floor
+  THE FLOOR. DID I DROP A SPARK?
+snack_snacks
+  WHAT IF SPARKS HAD SPARKS?
+suspense
+  I MIGHT ZAP. I MIGHT NOT.
+ancestors
+  GEN #. ALL OF US WERE GOLD.
+ask_me
+  ASK ME. IT COSTS ONE SHINY.
+legs
+  SIX LEGS. GOOD FOR CARRYING.
+shiny
+  SHINY THING! DIBS! OH. ME.
+guard
+  GUARDING MY STASH. AND DISH.
+old_fly
+  I REMEMBER A COIN. I MISS IT.
+hi_you
+  HI. BRING SHINIES?
+busy
+  BUSY. POLISHING MYSELF.
+pellet_where
+  WHERE DO PELLETS GO? MY STASH.
+rock
+  IF I SIT STILL, AM I GOLD?
+best_gen
+  GEN #. THE SHINIEST YET.
+tidied
+  I POLISHED MY SHELL. LOOK.
+spun
+  I SPUN. SPARKS FLEW. OOPS.
+
+sunbeam
+  A SUNBEAM. I SPARKLE IN IT.
+long_days
+  LONG DAYS. LONG SPARKLE.
+squint
+  SO BRIGHT. OH WAIT. IT'S ME.
+toast
+  THE GLASS IS WARM. I CRACKLE.
+sitting_time
+  DAYTIME. SHINING TIME.
+lunch_oclock
+  LUNCH. I'LL HIDE SOME.
+shadow
+  MY SHADOW CAN'T GLOW. HA.
+big_sit
+  BIG DAY. BIG SHINE.
+eye_snack
+  LIGHT. IT BOUNCES OFF ME.
+outside
+  IS OUTSIDE FULL OF SHINIES?
+
+not_scared
+  IT IS DARK. I GLOW. BACK OFF.
+star_crumbs
+  THE STARS. I WANT THEM ALL.
+rebel
+  UP LATE. GLOWING ON PURPOSE.
+too_quiet
+  SO QUIET. I CAN HEAR MY ZAP.
+what_was_that
+  WHAT WAS THAT? A THIEF?
+bed_soon
+  BED SOON. ON MY GOLD PILE.
+moon_wink
+  THE MOON WINKED. I FLASHED.
+dark_snacks
+  NIGHT SNACKS. SECRET STASH.
+night_light
+  I GLOW. THE BEST GLOW.
+only_me
+  EVERYONE SLEEPS. I COUNT GOLD.

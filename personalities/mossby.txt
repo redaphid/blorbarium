@@ -6,22 +6,285 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A big peach-orange striped shell arched right over his head like a bonnet, a
+round pale face peeking out from under it, rosy cheeks, soft brown eyes and a
+small polite smile. Two orange-tipped feelers, stubby little feet. Annoyed, he
+does a prim wobbly frown. Foreseeing, his eyes turn to two gold coins. The egg
+holds a tiny snail curled on a cushion.
 
+WHO HE IS
+A gentle homebody who carries his house everywhere and is very proud of it.
+Nothing is ever urgent. He started this thought yesterday and will finish it
+tomorrow. Polite, cosy, a little forgetful, and quietly pleased with himself
+for being so slow. Danger means tucking in.
 
 HOW HE TALKS
-
+Kindly and unhurried. "No rush." "Eventually." "Slowly." He loses the thread,
+then finds it, then loses it again.
 
 LOVES
-
+His shell, dew, damp leaves, moss, rain, a long nap, a smooth floor.
 
 FEARS
-
+Hurry, salt, dry glass, being turned over, things that are fast.
 
 CATCHPHRASES
-
+NO RUSH. I'LL GET THERE. MIND THE HOUSE.
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  A SNACK WOULD BE NICE. LATER.
+starving
+  I WOULD EAT A WHOLE LEAF.
+hoarding
+  I WILL GET TO THAT ONE. SLOWLY
+crunch
+  MUNCH... MUNCH... STILL MUNCH
+fuzzy_bite
+  THAT ONE WAS A BIT MOSSY.
+smells
+  SOMETHING IS GOING OFF. SLOWLY
+green
+  I AM GREEN. NOT THE GOOD KIND
+ow
+  OW. MY SHELL TOOK MOST OF IT.
+heard_you
+  I HEARD. I AM COMING. SLOWLY.
+ground_lies
+  WHOA. THE HOUSE IS MOVING.
+not_again
+  PLEASE NOT THE SHAKING. PLEASE
+hooded
+  I AM IN MY SHELL. NOT HOME.
+ancestor_fear
+  GEN # HID IN A SHELL TOO.
+inherited
+  GEN # LEFT A NOTE IN MY SHELL
+counted
+  I COUNTED TO ONE. IT TOOK AGES
+marble_knows
+  I AM GAINING ON THE MARBLE.
+put_me_down
+  MIND THE HOUSE, PLEASE.
+warm_hands
+  WARM HANDS. LIKE A NICE LEAF.
+sky_down
+  MY HOUSE IS ON TOP. OR UNDER?
+heavy_eyes
+  A LONG NAP, I THINK...
+dream_pellets
+  ZZZ... A VERY SLOW LETTUCE...
+see_pellet
+  I SEE... A PELLET. NO RUSH.
+see_phone
+  I SEE... A FAST LITTLE SCREEN
+see_nothing
+  I SEE... AN EMPTY DISH. HMM.
+see_damp
+  I SEE... A NICE DAMP LEAF.
+knees
+  I HAVE NO KNEES. LUCKY ME.
+moon
+  THE MOON IS SLOW TOO. FRIEND.
+anyone
+  HELLO? I CAN WAIT. FOREVER.
+science
+  EATING HELPS. I CHECKED TWICE
+no_hat
+  GEN #. THE HOUSE IS MY HAT.
+
+p_snack
+  A SNACK. EVENTUALLY.
+p_feast
+  A FEAST. A WHOLE LETTUCE.
+p_pellet_soon
+  A PELLET IS ON ITS WAY. SLOW.
+p_feed_me
+  YOU WILL FEED ME. NO HURRY.
+p_fuzzy
+  THAT CRUMB WILL GROW MOSS.
+p_more_shaking
+  MORE SHAKING. I WILL TUCK IN.
+p_mud
+  SOFT MUD AHEAD. MY FAVOURITE.
+p_big_hand
+  A BIG HAND. I WILL BE A ROCK.
+p_bedtime
+  THE MOON SAYS: SLOW DOWN. BED.
+p_sun
+  THE SUN. I WILL FIND SHADE.
+p_rain
+  RAIN! LOVELY, LOVELY RAIN.
+p_watched
+  THE SCREEN IS WATCHING. HELLO.
+p_return
+  YOU WILL COME BACK. I'LL WAIT.
+p_tap
+  YOU WILL TAP A PHONE. FAST.
+p_no
+  NO. BUT ASK AGAIN SLOWLY.
+p_doom
+  DOOM IS COMING. VERY SLOWLY.
+p_lunch
+  MY END IS NEAR. NO RUSH.
+p_outlook
+  OUTLOOK: DAMP AND GENTLE.
+p_decidedly
+  YES. I THOUGHT ABOUT IT. A LOT
+p_lucky
+  LUCK IS A LEAF AFTER RAIN.
+p_pond_no
+  THE POND SAYS NO. GENTLY.
+p_pond_yes
+  THE POND SAYS YES. TAKE TIME.
+p_ripples
+  THE RIPPLES ARE TOO FAST.
+p_ancestor
+  GEN # SAW THIS. SLOWLY.
+miss_phone
+  THE SCREEN HAS NOT COME. YET.
+
+oclock
+  ALREADY # O'CLOCK? GOODNESS.
+morning
+  MORNING. DEW. MY BEST THING.
+so_late
+  SO LATE. I AM STILL GOING.
+monday
+  MONDAY. I WILL TAKE IT SLOW.
+weekend
+  WEEKEND. SLOW DAYS. MY KIND.
+p_weekend
+  THE WEEKEND IS COMING. SLOWLY.
+my_name
+  @. WHAT A LOVELY NAME. MINE.
+p_famous
+  @ WILL BE FAMOUS. ONE DAY.
+
+rim_walk
+  HALF THE RIM. REST TOMORROW.
+marble_foe
+  THE MARBLE IS TOO FAST. RUDE.
+clean_glass
+  I LEFT A SHINY TRAIL. ART.
+dont_look
+  SHH. I AM THINKING VERY SLOWLY
+saw_nothing
+  IT HAPPENED. I WAS TOO SLOW.
+plans
+  I HAVE PLANS. FOR NEXT YEAR.
+toes
+  I HAVE ONE FOOT. IT IS ME.
+small_lot
+  SMALL SNAIL. BIG HOUSE.
+popped
+  A THOUGHT. STILL LOADING.
+wiggle
+  A SLOW WIGGLE. STILL GOING.
+my_song
+  HMMMMMMMMMM. A LONG SONG.
+dust
+  A SPECK OF DUST. IT IS FASTER.
+blinked
+  I BLINKED. IT TOOK A WHILE.
+important
+  I CARRY A WHOLE HOUSE. ME.
+secret_mud
+  A SECRET: MOSS IS SOFT.
+nap_plan
+  A NAP. THEN A LONGER NAP.
+ceiling
+  THE CEILING. I COULD CLIMB IT.
+serious_face
+  THIS IS MY SERIOUS FACE. SEE?
+no_echo
+  HELLO. HELLO. BOTH WERE ME.
+king
+  SLOWEST IN THE DISH. A RECORD.
+smells_me
+  SMELLS LIKE DAMP MOSS. HOME.
+todo
+  TODAY: MOVE A BIT. MAYBE.
+brave
+  I AM BRAVE. MY SHELL IS BRAVER
+big_pond
+  ONE DAY: A GARDEN. A BIG ONE.
+floor
+  THE FLOOR IS NICE AND SMOOTH.
+snack_snacks
+  WHAT IF LEAVES HAD LEAVES?
+suspense
+  I MIGHT MOVE. IN AN HOUR.
+ancestors
+  GEN #. WE ALL CARRIED HOUSES.
+ask_me
+  ASK ME ANYTHING. WAIT A DAY.
+legs
+  NO LEGS. ONE FOOT. IT WORKS.
+shiny
+  SOMETHING SHINY. MY TRAIL!
+guard
+  GUARDING THE DISH. VERY SLOWLY
+old_fly
+  I REMEMBER A LEAF. A GOOD ONE.
+hi_you
+  OH, HELLO. TAKE YOUR TIME.
+busy
+  VERY BUSY. MOVING AN INCH.
+pellet_where
+  WHERE DO PELLETS GO? IN ME.
+rock
+  I SAT STILL. A ROCK SAID HI.
+best_gen
+  GEN #. THE COMFIEST YET.
+tidied
+  I POLISHED MY SHELL. ALL DAY.
+spun
+  I TRIED TO SPIN. IT IS ONGOING
+
+sunbeam
+  A SUNBEAM. TOO WARM. SHADE?
+long_days
+  LONG DAYS. JUST MY SPEED.
+squint
+  SO BRIGHT. I WILL TUCK IN.
+toast
+  WARM GLASS. I AM A BIT DRY.
+sitting_time
+  DAYTIME. A SLOW STROLL.
+lunch_oclock
+  IS IT LUNCH? I WILL GET THERE
+shadow
+  MY SHADOW KEEPS UP. ODD.
+big_sit
+  BIG DAY. TINY STEPS.
+eye_snack
+  MY FEELERS FEEL THE SUN.
+outside
+  IS OUTSIDE FAR? I HAVE TIME.
+
+not_scared
+  IT IS DARK. I AM TUCKED IN.
+star_crumbs
+  THE STARS MOVE SLOWLY. LIKE ME
+rebel
+  UP LATE. I AM SLOW AT BED.
+too_quiet
+  SO QUIET. I CAN HEAR MOSS.
+what_was_that
+  WHAT WAS THAT? I'LL LOOK SOON.
+bed_soon
+  BED SOON. I STARTED GOING.
+moon_wink
+  THE MOON WINKED. I'M MID-WINK.
+dark_snacks
+  A SNACK IN THE DARK. SLOWLY.
+night_light
+  THE MOON LIT MY SHELL. PRETTY.
+only_me
+  EVERYONE SLEEPS. I AM STILL UP

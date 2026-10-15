@@ -209,7 +209,7 @@ class Book:
 
 
 def read_book(engine, problems, root=PERSONALITIES):
-    shared, own = {}, {}
+    shared, own, theirs = {}, {}, []
     for f in sorted(root.glob("*.txt")):
         rel = f.relative_to(ROOT).as_posix() if f.is_relative_to(ROOT) else f.name
         said = parse_source(rel, f.read_text(encoding="utf-8"), engine, problems)
@@ -222,6 +222,7 @@ def read_book(engine, problems, root=PERSONALITIES):
         elif f.stem in engine.species:
             for s in said:
                 own.setdefault(f.stem, {}).setdefault(s.row, []).append(s.text)
+                theirs.append((f.name, s))
         else:
             close = difflib.get_close_matches(f.stem, engine.species, n=1)
             problems.add(rel, 1, f"'{f.stem}' is not a species ({', '.join(engine.species)})."
@@ -229,6 +230,12 @@ def read_book(engine, problems, root=PERSONALITIES):
     for r in engine.rows:
         if r.name not in shared:
             problems.add(f"personalities/{SHARED}.txt", 1, f"'{r.name}' has no shared line")
+    # A species line is his own: one that repeats the shared line or another
+    # species' line says nothing the others don't.
+    first = {t: f"{SHARED}.txt" for t in shared.values()}
+    for name, s in theirs:
+        if first.setdefault(s.text, name) != name:
+            problems.add(s.path, s.line, f"\"{s.text}\" is already said in {first[s.text]}; give him his own")
     return Book(shared, own)
 
 

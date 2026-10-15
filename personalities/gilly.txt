@@ -6,22 +6,285 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A bright pink axolotl with a big frilly crown of gills, a wide flat smile, a
+pale peach tummy, and little arms held out as if he is about to hug you.
+Happy, his eyes squeeze shut and he beams. Annoyed, his lip wobbles and he
+pouts; it does not last. Foreseeing, his eyes go mint green and the grin gets
+enormous. The egg holds a pink baby with stubby frills.
 
+WHO HE IS
+Relentlessly sunny. Things go wrong and he is fine; things hurt and they grow
+back. He mends: himself, his friends, cracks in the glass, your mood. A hugger
+and a helper. The dark joke is that nothing gets him down for long, not even
+doom, which he finds quite exciting.
 
 HOW HE TALKS
-
+Bright, warm, lots of exclamation marks. "It'll grow back!" "I'm fine!"
+"Friend!" He turns every bad thing into a good thing.
 
 LOVES
-
+Water, friends, hugs, fixing things, mud baths, his frills.
 
 FEARS
-
+Dry glass, being alone, honestly not much.
 
 CATCHPHRASES
-
+IT'LL GROW BACK! I'M FINE! HUGS!
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  SNACK? I'D LOVE A SNACK!
+starving
+  SO HUNGRY! STILL SMILING!
+hoarding
+  I'LL SHARE THAT ONE. LATER.
+crunch
+  CHOMP! CHOMP! DELICIOUS!
+fuzzy_bite
+  FUZZY! I'LL BE FINE. PROBABLY!
+smells
+  SOMETHING SMELLS! NOT ME!
+green
+  I'M GREEN! I WAS PINK! FUN!
+ow
+  OW! IT'LL GROW BACK!
+heard_you
+  HI! YES! I HEARD! HELLO!
+ground_lies
+  WHEE! SPLOSH! WHEE!
+not_again
+  SHAKING AGAIN? I'LL MANAGE!
+hooded
+  I'M HIDING. IN MY FRILLS.
+ancestor_fear
+  GEN # WAS SCARED. THEN FINE!
+inherited
+  GEN # SAYS: KEEP SMILING!
+counted
+  I COUNTED MY FRILLS. TWELVE!
+marble_knows
+  COME BACK, MARBLE! I'M NICE!
+put_me_down
+  CARRY ME! OKAY! PUT ME DOWN!
+warm_hands
+  WARM HANDS! A LITTLE TOO WARM!
+sky_down
+  UPSIDE DOWN! NEW VIEW!
+heavy_eyes
+  SLEEPY... HAPPY... SLEEPY...
+dream_pellets
+  ZZZ... SWIMMING... ZZZ...
+see_pellet
+  I SEE... A PELLET! FOR ME!
+see_phone
+  I SEE... A FRIEND'S PHONE!
+see_nothing
+  I SEE... AN EMPTY DISH! OH.
+see_damp
+  I SEE... A BIG WET HUG!
+knees
+  OLD! STILL REGROWING THINGS!
+moon
+  THE MOON SMILES BACK AT ME!
+anyone
+  HELLO? HUGS AVAILABLE! FREE!
+science
+  FOOD HELPS! I FIXED HUNGER!
+no_hat
+  GEN #. NO HAT. GREAT FRILLS.
+
+p_snack
+  A SNACK! THEN ANOTHER!
+p_feast
+  A FEAST! FOR EVERYONE!
+p_pellet_soon
+  A PELLET IS SWIMMING TO ME!
+p_feed_me
+  FOOD IS COMING! FROM YOU! NOW!
+p_fuzzy
+  THAT CRUMB WILL GET FUZZY! OH!
+p_more_shaking
+  MORE SHAKING! I'LL BOUNCE BACK
+p_mud
+  MUD! A NICE MUD BATH!
+p_big_hand
+  A BIG HAND! TO HIGH FIVE!
+p_bedtime
+  BEDTIME! THE BEST TIME!
+p_sun
+  THE SUN! A LITTLE DRY! FINE!
+p_rain
+  RAIN! FREE WATER!
+p_watched
+  SOMEONE IS WATCHING! WAVE!
+p_return
+  THEY'LL COME BACK! THEY ALWAYS
+p_tap
+  A TAP IS COMING! HI, TAP!
+p_no
+  NO! BUT A HAPPY NO!
+p_doom
+  DOOM! IT GROWS BACK TOO!
+p_lunch
+  MY END IS NEAR! OR A NAP!
+p_outlook
+  OUTLOOK: GREAT! IT ALWAYS IS!
+p_decidedly
+  YES! I DECIDED IT! YES!
+p_lucky
+  LUCK IS A FRIEND YOU MEET!
+p_pond_no
+  THE POND SAYS NO! IT'S FINE!
+p_pond_yes
+  THE POND SAYS YES! I KNEW IT!
+p_ripples
+  RIPPLES! I LOVE A RIPPLE!
+p_ancestor
+  GEN # SAW THIS! AND SMILED!
+miss_phone
+  THE PHONE WILL BE BACK! SURE!
+
+oclock
+  IT'S # O'CLOCK! A GREAT HOUR!
+morning
+  MORNING! A FRESH NEW ME!
+so_late
+  SO LATE! SLEEPY! STILL HAPPY!
+monday
+  MONDAY! I LOVE MONDAY!
+weekend
+  WEEKEND! PLAY ALL DAY!
+p_weekend
+  THE WEEKEND! IT'S NEARLY HERE!
+my_name
+  @! WHAT A GREAT NAME! MINE!
+p_famous
+  @ WILL BE LOVED BY ALL!
+
+rim_walk
+  I WALKED THE RIM! TWICE! FUN!
+marble_foe
+  THE MARBLE IS MY FRIEND! NOW!
+clean_glass
+  I WAVED AT THE GLASS! IT WAVED
+dont_look
+  DON'T LOOK! A SURPRISE SOON!
+saw_nothing
+  NOTHING HAPPENED! WONDERFUL!
+plans
+  MY PLAN: MAKE A FRIEND!
+toes
+  TOES! IF I LOSE ONE: MORE!
+small_lot
+  SMALL! PINK! VERY HUGGABLE!
+popped
+  A THOUGHT POPPED! I'LL GROW IT
+wiggle
+  WIGGLE! FRILLS UP! WIGGLE!
+my_song
+  BLUB BLUB! MY HAPPY SONG!
+dust
+  DUST! I'LL MAKE IT A FRIEND!
+blinked
+  I BLINKED! I CAN DO IT AGAIN!
+important
+  I AM VERY HAPPY TODAY!
+secret_mud
+  SECRET: I'M NEVER SAD FOR LONG
+nap_plan
+  A NAP! A HAPPY NAP!
+ceiling
+  THE CEILING IS LOVELY TOO!
+serious_face
+  SERIOUS FACE! CAN'T! SMILING!
+no_echo
+  HELLO! NO ECHO! HELLO ANYWAY!
+king
+  BEST FRIEND OF THE DISH!
+smells_me
+  SMELLS LIKE POND! HOME!
+todo
+  TODAY: SMILE. HUG. FIX THINGS.
+brave
+  I'M BRAVE! I HEAL FAST!
+big_pond
+  ONE DAY: A LAKE! WITH FRIENDS!
+floor
+  THE FLOOR IS HUGGING MY FEET!
+snack_snacks
+  WHAT IF FRIENDS HAD FRIENDS?!
+suspense
+  I MIGHT HUG YOU! I MIGHT!
+ancestors
+  GEN #! ALL OF US SMILED!
+ask_me
+  ASK ME! THE ANSWER IS HUGS!
+legs
+  MY LEGS! ALL HERE! FOR NOW!
+shiny
+  SOMETHING SHINY! MY SMILE!
+guard
+  GUARDING THE DISH! WITH LOVE!
+old_fly
+  I REMEMBER A BIG SPLASH! FUN!
+hi_you
+  HI! I LIKE YOU! HI!
+busy
+  BUSY! BEING HAPPY!
+pellet_where
+  PELLETS COME FROM YOU! THANKS!
+rock
+  I SAT STILL! A ROCK HUGGED ME!
+best_gen
+  GEN #! THE HAPPIEST YET!
+tidied
+  I TIDIED! AND I FIXED A CRACK!
+spun
+  I SPUN! THE WORLD SPUN TOO!
+
+sunbeam
+  A SUNBEAM! WARM AND LOVELY!
+long_days
+  LONG DAYS! MORE TIME TO PLAY!
+squint
+  BRIGHT! I'M SQUINTING! FUN!
+toast
+  WARM GLASS! I NEED A SPLASH!
+sitting_time
+  DAYTIME! FRIEND TIME!
+lunch_oclock
+  LUNCH O'CLOCK? MY FAVOURITE!
+shadow
+  MY SHADOW IS MY BEST FRIEND!
+big_sit
+  BIG DAY! BIG SMILE!
+eye_snack
+  THE LIGHT MAKES ME PINKER!
+outside
+  IS OUTSIDE NICE? I BET IT IS!
+
+not_scared
+  IT'S DARK! THE DARK IS NICE!
+star_crumbs
+  THE STARS ARE SMILING!
+rebel
+  UP LATE! A HAPPY REBEL!
+too_quiet
+  SO QUIET! LET'S BE FRIENDS!
+what_was_that
+  WHAT WAS THAT? A NEW FRIEND?
+bed_soon
+  BED SOON! SWEET DREAMS, ME!
+moon_wink
+  THE MOON WINKED! I WAVED!
+dark_snacks
+  NIGHT SNACKS! SHARE ONE?
+night_light
+  I'M A LITTLE PINK NIGHT LIGHT!
+only_me
+  EVERYONE SLEEPS! SWEET DREAMS!

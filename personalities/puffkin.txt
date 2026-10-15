@@ -6,22 +6,284 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A round coral puffball, almost a perfect ball, with a huge cream fluffy face
+and belly, pink blush cheeks, stubby arms and little pink feet. Happy, he
+squeezes his eyes into delighted smiles. Annoyed, he does a furious tiny frown
+that is not scary at all. Foreseeing, his eyes go bright magenta. The egg is a
+red fluffball already grinning.
 
+WHO HE IS
+A bouncy, loud, delighted ball of fluff who thinks everything is wonderful,
+including the bad things. He sneezes spores (sparkly ones) when excited,
+startled or dusty, and goes POOF when scared. He loves hugs and does not
+understand personal space. Bad news is still news, and news is exciting.
 
 HOW HE TALKS
-
+Exclamation marks. ACHOO. POOF. BOUNCE. He repeats words when happy.
 
 LOVES
-
+Bouncing, hugs, his fluff, sneezing, sparkles, damp logs, snacks.
 
 FEARS
-
+Being squished, getting soggy, wind, combs.
 
 CATCHPHRASES
-
+ACHOO! BOUNCE! POOF! HUG ME!
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  SNACK TIME! ACHOO! SNACK TIME!
+starving
+  SO HUNGRY I'M DEFLATING.
+hoarding
+  I'LL HIDE THAT ONE IN MY FLUFF
+crunch
+  NOM! NOM! FLUFF IN IT! NOM!
+fuzzy_bite
+  IT WAS FUZZIER THAN ME!
+smells
+  SOMETHING STINKS. NOT ME. NO.
+green
+  I FEEL GREEN. AND STILL FLUFFY
+ow
+  OW! MY FLUFF IS FLAT!
+heard_you
+  KNOCK KNOCK! WHO IS IT? YOU!
+ground_lies
+  WHEE! ACHOO! WHEEEE!
+not_again
+  NO SHAKING! I'LL GO POOF!
+hooded
+  I PUFFED UP. NOW I'M SCARY.
+ancestor_fear
+  GEN # WENT POOF AT THIS TOO.
+inherited
+  GEN # SNEEZES HELLO!
+counted
+  I COUNTED MY FLUFF. LOTS.
+marble_knows
+  GOT YOU, MARBLE! NO I DIDN'T.
+put_me_down
+  UP! UP! DOWN! NO, UP!
+warm_hands
+  WARM HANDS! MY FLUFF APPROVES.
+sky_down
+  UPSIDE DOWN! FLUFF FALLS UP!
+heavy_eyes
+  SO SLEEPY... SOFT... FLUFF...
+dream_pellets
+  ZZZ... ACHOO... ZZZ...
+see_pellet
+  I SEE... A SNACK! A SNACK!!
+see_phone
+  I SEE... A SHINY RECTANGLE!
+see_nothing
+  I SEE... NOTHING TO EAT!
+see_damp
+  I SEE... A LOVELY DAMP LOG!
+knees
+  OLD AND STILL FLUFFY. HA!
+moon
+  THE MOON IS A BIG PUFFBALL!
+anyone
+  HELLO? HUG? ANYONE? HUG?
+science
+  FOOD MAKES ME BIGGER. SCIENCE!
+no_hat
+  GEN #. TOO FLUFFY FOR HATS.
+
+p_snack
+  SNACKS SOON! SO MANY!
+p_feast
+  A FEAST! WE'LL ALL GET ROUND!
+p_pellet_soon
+  A BISCUIT IS BOUNCING OVER!
+p_feed_me
+  YOU WILL FEED ME. RIGHT NOW!
+p_fuzzy
+  THAT CRUMB WILL GROW FLUFF!
+p_more_shaking
+  MORE SHAKING! MORE SNEEZING!
+p_mud
+  MUD IS COMING. GOODBYE FLUFF!
+p_big_hand
+  A BIG HAND! IT MIGHT SQUISH!
+p_bedtime
+  BEDTIME SOON! FLUFFY DREAMS!
+p_sun
+  THE SUN WILL DRY MY FLUFF!
+p_rain
+  RAIN! I WILL BE A SOGGY PUFF!
+p_watched
+  THE PHONE IS WATCHING! WAVE!
+p_return
+  THEY'LL COME BACK! WITH HUGS!
+p_tap
+  YOU WILL TAP! TAP TAP TAP!
+p_no
+  NOPE! NOPE NOPE! ACHOO!
+p_doom
+  DOOM! BUT FLUFFY DOOM!
+p_lunch
+  MY END IS NEAR! ONE LAST POOF!
+p_outlook
+  OUTLOOK: SPARKLY!
+p_decidedly
+  YES! YES YES! DEFINITELY!
+p_lucky
+  LUCK IS A SNEEZE. BLESS YOU!
+p_pond_no
+  THE POND SAYS NO! SPLASH!
+p_pond_yes
+  THE POND SAYS YES! BUBBLES!
+p_ripples
+  RIPPLES! I CAN'T READ THEM!
+p_ancestor
+  GEN # SNEEZED THIS UP TOO.
+miss_phone
+  WHERE DID THE PHONE GO? SAD!
+
+oclock
+  IT'S # O'CLOCK! BOING!
+morning
+  MORNING! BOUNCE! BOUNCE!
+so_late
+  SO LATE! I'M STILL BOUNCY!
+monday
+  MONDAY! STILL FLUFFY!
+weekend
+  WEEKEND! EXTRA BOUNCING!
+p_weekend
+  THE WEEKEND! I SEE BOUNCING!
+my_name
+  I'M @! THE FLUFFIEST!
+p_famous
+  @ WILL BE A FLUFFY STAR!
+
+rim_walk
+  I ROLLED ROUND THE RIM! WHEE!
+marble_foe
+  THE MARBLE IS ROUND. LIKE ME!
+clean_glass
+  I SNEEZED ON THE GLASS. OOPS.
+dont_look
+  DON'T LOOK! I MIGHT SNEEZE!
+saw_nothing
+  NOTHING HAPPENED! SO EXCITING!
+plans
+  MY PLAN: BOUNCE. THEN BOUNCE.
+toes
+  I HAVE TOES! UNDER THE FLUFF!
+small_lot
+  SMALL BUT VERY FLUFFY!
+popped
+  I HAD A THOUGHT! IT WENT POOF!
+wiggle
+  WIGGLE! FLUFF EVERYWHERE!
+my_song
+  LA LA LA! ACHOO! LA LA!
+dust
+  DUST! IT MAKES ME SNEEZE!
+blinked
+  I BLINKED! DID YOU SEE? AGAIN!
+important
+  I AM VERY ROUND TODAY.
+secret_mud
+  SECRET: I'M MOSTLY AIR!
+nap_plan
+  A NAP! A FLUFFY NAP! SOON!
+ceiling
+  I COULD BOUNCE TO THE CEILING!
+serious_face
+  SERIOUS FACE! HEE HEE! NO!
+no_echo
+  HELLO! HELLO! ACHOO! BLESS ME!
+king
+  BOSS OF THE FLUFF! ME!
+smells_me
+  I SMELL LIKE A FOREST! YAY!
+todo
+  TODAY: BOUNCE. SNEEZE. HUG.
+brave
+  I'M BRAVE! I'M ALSO SQUISHY!
+big_pond
+  ONE DAY: A BIG FOREST!
+floor
+  THE FLOOR IS GREAT FOR BOUNCE!
+snack_snacks
+  WHAT IF FLUFF HAD FLUFF?!
+suspense
+  I MIGHT BOUNCE! I WILL! I AM!
+ancestors
+  GEN #! ALL OF US WERE FLUFFY!
+ask_me
+  ASK ME ANYTHING! IT'S YES!
+legs
+  MY LEGS ARE TINY! SO BOUNCY!
+shiny
+  SPARKLES! FROM MY SNEEZE!
+guard
+  GUARDING THE DISH! WITH FLUFF!
+old_fly
+  I REMEMBER MY BEST SNEEZE!
+hi_you
+  HI! HI! HI! HUG ME! HI!
+busy
+  BUSY! BOUNCING! VERY BUSY!
+pellet_where
+  WHERE DO SNACKS COME FROM?!
+rock
+  I SAT STILL! FOR ONE SECOND!
+best_gen
+  GEN #! THE FLUFFIEST YET!
+tidied
+  I FLUFFED MY FLUFF! LOOK!
+spun
+  I SPUN! NOW I'M DIZZY! WHEE!
+
+sunbeam
+  A SUNBEAM! I'M GLOWING!
+long_days
+  LONG DAYS! MORE BOUNCING!
+squint
+  SO BRIGHT! MY EYES ARE SMILES!
+toast
+  WARM GLASS! I'M A TOASTY PUFF!
+sitting_time
+  DAYTIME! BOUNCE TIME!
+lunch_oclock
+  LUNCH O'CLOCK! IT ALWAYS IS!
+shadow
+  MY SHADOW IS ROUND! LIKE ME!
+big_sit
+  BIG DAY! BIG BOUNCE!
+eye_snack
+  THE LIGHT TICKLES MY FLUFF!
+outside
+  IS OUTSIDE FLUFFY TOO?
+
+not_scared
+  IT'S DARK! I'M A BIT SCARED!
+star_crumbs
+  THE STARS ARE SPARKLY SNEEZES!
+rebel
+  UP LATE! I'M SO NAUGHTY!
+too_quiet
+  SO QUIET! I WANT TO YELL!
+what_was_that
+  WHAT WAS THAT?! I WENT POOF!
+bed_soon
+  BED SOON! ONE MORE BOUNCE!
+moon_wink
+  MOON WINKED! I WINKED BOTH!
+dark_snacks
+  NIGHT SNACKS! SECRET ONES!
+night_light
+  MY CHEEKS GLOW PINK! I THINK!
+only_me
+  EVERYONE SLEEPS! BUT ME! YAY!
