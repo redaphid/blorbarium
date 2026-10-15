@@ -30,4 +30,11 @@ const SpritePack& packFor(blorb::SpeciesId s) {
   return s.v < blorb::countOf(kPacks) ? kPacks[s.v]() : grungoPack();
 }
 
+blorb::LookBands bandsFor(blorb::SpeciesId s) {
+  const SpritePack& pack = packFor(s);
+  blorb::LookBands bands{};
+  for (uint8_t r = 0; r < blorb::kRegionCount; ++r) bands[r] = pack.band(blorb::RegionId{r});
+  return bands;
+}
+
 }  // namespace paint

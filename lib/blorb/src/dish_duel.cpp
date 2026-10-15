@@ -23,20 +23,6 @@ void drop(SenseOut& s, uint64_t bits) {
   s.remote &= ~bits;
 }
 
-constexpr bool isDuelStim(uint8_t id) {
-  for (const StimInfo& s : STIMULI) if (s.id.v == id) return s.source == StimSource::Duel;
-  return false;
-}
-
-// Reads a Duel-source stimulus: a line that already feels duels.
-bool feelsDuels(const Genome& g) {
-  bool any = false;
-  g.forEach([&](const GeneView& v) {
-    any = any || (v.header.type == GeneKindOf<StimulusGene>::value && v.header.len >= 1 && isDuelStim(v.body[0]));
-  });
-  return any;
-}
-
 }  // namespace
 
 bool graftDuelGenes(Creature& c, Lineage& lineage) {

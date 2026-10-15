@@ -376,6 +376,30 @@ TEST(Golden, TwistSay) {
   EXPECT_STREQ(r.dish.appearance().line, "HELLO, GRUNGO!");
 }
 
+TEST(Golden, TwistTeach) {
+  Rig r;
+  auto keepsake = [&r] {
+    auto files = r.store.files;
+    files.erase(Taught::kFile);
+    return files;
+  };
+  const auto before = keepsake();
+  Lines got;
+  for (const char* op : {"#70 TWIST teach I love you!", "#71 TWIST teach", "#72 TWIST teach @#$"}) {
+    Lines out = r.send(op);
+    got.insert(got.end(), out.begin(), out.end());
+  }
+  EXPECT_EQ(got, (Lines{"#70 OK teach", "#71 ERR 400 BAD_ARGS", "#72 ERR 400 BAD_ARGS"}));
+  EXPECT_TRUE(keepsake() == before) << "a teach writes its own file, not the keepsake";
+  ASSERT_EQ(r.dish.taught().count, 1) << "an egg can be taught too";
+  EXPECT_EQ(r.dish.taught().line(0), "I LOVE YOU!");
+  EXPECT_EQ(r.send("#73 TWIST teach " + std::string(40, 'a')), (Lines{"#73 OK teach"}));
+  EXPECT_EQ(r.dish.taught().line(1), std::string(30, 'A')) << "capped at 30";
+  EXPECT_EQ(r.send("#74 TWIST unteach now"), (Lines{"#74 ERR 400 BAD_ARGS"}));
+  EXPECT_EQ(r.send("#75 TWIST unteach"), (Lines{"#75 OK unteach"}));
+  EXPECT_EQ(r.dish.taught().count, 0);
+}
+
 TEST(Link, AConnectedLinkThatSendsNothingReceivesNothing) {
   Rig r;
   r.run(120000);
@@ -438,7 +462,7 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
 
 TEST(Golden, Hello) {
   Rig r;
-  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.6.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
+  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
 }
 
 TEST(Golden, State) {

@@ -182,6 +182,12 @@ template <class T, size_t N> constexpr size_t countOf(const T (&)[N]) { return N
 inline constexpr size_t kDriveCount = countOf(DRIVES);
 inline constexpr size_t kActionCount = countOf(ACTIONS);
 inline constexpr size_t kRegionCount = countOf(REGIONS);
+// How far genes may move a region, so he stays recognisably his species: hue
+// as a signed offset from the art (a palette gene's hue byte minus 128),
+// saturation and value as the bytes themselves. A sprite pack owns its bands
+// (paint::SpritePack::band); a founder's look is rolled across them (founding.h).
+struct RegionBand { int8_t hueMin, hueMax; uint8_t satMin, satMax, valMin, valMax; };
+using LookBands = std::array<RegionBand, kRegionCount>;
 inline constexpr size_t kReflexCount = countOf(REFLEXES);
 inline constexpr size_t kTopicCount = countOf(TOPICS);
 inline constexpr size_t kVoiceCount = countOf(VOICES);

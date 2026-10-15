@@ -399,6 +399,8 @@ void DuelSession::applyResolved(Battle& b, uint32_t tick, DuelEffects& fx) {
 // session left the Battle state (the caller must not touch `b` again).
 bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, DuelEffects& fx) {
   const uint8_t me = uint8_t(b.me);
+  const bool bootWasDown = b.bootWasDown;
+  b.bootWasDown = in.bootDown;
   b.outcome = resolveFor(b);
   applyResolved(b, tick, fx);
   if (b.revealing && tick - b.revealTick >= T::kRevealTicks) b.revealing = false;
@@ -443,6 +445,7 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       b.phase = DuelPhase::Mercy;
       b.phaseTick = tick;
       b.holdTicks = 0;
+      b.heldIntoMercy = bootWasDown;
     }
     if (o.downed[me]) {
       if (in.press || in.knock || in.doubleKnock) cheer(b, Emote::Plead, tick);
@@ -452,8 +455,9 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
     // A hold finishes, a knock or a press spares, and so does silence.
     Verdict v = Verdict::None;
     if (in.bootDown) {
-      if (++b.holdTicks >= kFinishHoldTicks) v = Verdict::Finish;
+      if (!b.heldIntoMercy && ++b.holdTicks >= kFinishHoldTicks) v = Verdict::Finish;
     } else {
+      b.heldIntoMercy = false;
       b.holdTicks = 0;
     }
     if (v == Verdict::None && (in.knock || in.press || tick - b.phaseTick >= kMercyTicks)) v = Verdict::Spare;

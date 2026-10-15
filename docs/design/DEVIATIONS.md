@@ -30,10 +30,8 @@ through a new seam (revised the same day: Wi-Fi NTP was dropped):
   build unit 23 (DESIGN section 10); only the seam and host fakes for both
   sources exist now.
 - With no source, he resumes as if no time passed, and catches up once a
-  source appears. While time is unknown on a Dish that asks for it
-  (`DishOptions::askForTime`, entry 11), `Appearance::timeUnknown` is set
-  and the renderer scrolls a marquee reading "TAP ME WITH YOUR PHONE". The
-  text is one constant, `kTimeUnknownMarquee` in `lib/paint/src/draw.cpp`.
+  source appears. Nothing on the screen asks for a phone, and his thoughts
+  and shake prophecies run on his own clock either way (entry 12).
 - The keepsake persists a wall anchor: the last known wall time and the pet
   tick it was read at. When wall time arrives, the unpowered gap is
   `wallNow - anchorWall - poweredSecondsSinceAnchor`. The Dish fast-forwards
@@ -297,11 +295,10 @@ which was backed up whole before the first write (two 16 MB reads, sha256
 - **The board does not ask for the time.** With no battery, every replug
   forgets wall time, so the "tap me" marquee would show until a phone
   visits, and a kid with no phone would have a pet that never thinks or
-  prophesies. The board builds its Dish with `DishOptions::askForTime =
-  false`: no marquee, and his thoughts and shake prophecies run as if the
-  time were known. The sim keeps `askForTime` true for its `time_unknown`
-  golden. With no time source the Dish resumes without a catch-up, and a
-  `TIME` from a phone still catches up and anchors as before.
+  prophesies. The board first turned the marquee off for itself
+  (`DishOptions::askForTime = false`); entry 12 removed it everywhere. With
+  no time source the Dish resumes without a catch-up, and a `TIME` from a
+  phone still catches up and anchors as before.
 - **Power cuts.** EN-pin resets at random moments, many during a save (a
   `TIME` line saves at once), brought the same pet back every time: 25 of
   25, 25 of 25, 13 of 13 and 11 of 11 boots across four builds. 47 of the cuts came
@@ -314,3 +311,64 @@ which was backed up whole before the first write (two 16 MB reads, sha256
   while the screen showed open eyes. `faceFor` now draws the asleep face
   whenever he is asleep, whatever his genes feel, after the glow and reflex
   rules.
+
+## 12. Thoughts need no phone; a phone makes them richer (2026-10-15)
+
+The primary badge never meets a phone, and with no battery every replug
+loses wall time. So:
+
+- **No marquee asks for a phone.** `DishOptions::askForTime`,
+  `Appearance::timeUnknown` and the "TAP ME WITH YOUR PHONE" marquee are
+  gone, on the board, in the sim and in tests. He thinks and foretells on
+  his own pet clock from the first boot. Only the `miss_phone` thought
+  (half a day of play with no phone) mentions one, in his own voice. The
+  sim's `time_unknown` golden became `no_phone`: no wall time, a real
+  shake, and the prophecy he drew.
+- **A phone makes his lines richer, never possible.** What a phone has given
+  him reaches his conditions as one struct, `FromPhone` (thoughts.h): how
+  long it has been away, the owner's local time, whether the owner named
+  him, and what the owner taught him. Each adds rows to thoughts.def; none
+  is needed for any other row. None is saved with him or hashed, so a
+  replay is unchanged.
+- **Wall-clock lines (rows 55 to 60).** They read `Dish::localNow()`: the
+  wall time plus TIME's `tzMinutes`. The zone is held in RAM only and is
+  set only by a TIME this boot, so after a replug (no battery, no wall
+  time) the rows stay silent instead of guessing. Hour, morning, late
+  night, Monday, weekend, and a Friday prophecy. Priorities sit with the
+  idle chatter (1 to 3) and cooldowns are 1 to 4 hours, so they flavour a
+  day rather than take it over.
+- **His name in a line ('@', rows 61 and 62).** A line may now hold one
+  mark: '#' a number as before, '@' his name, '*' a taught line.
+  `thoughts.h` checks at compile time that a line holds at most one, and
+  that '@' and '*' appear only on rows whose condition gives them
+  (conditions named `named...` and `taught`); `tools/personality.py check`
+  says the same in plain words, and its port of `thoughtLine` and the
+  parity fixture take the same marks. The name counts only when the owner
+  chose it: `Lineage::named()` is true once a Rename is on the log
+  (compaction keeps each generation's newest Rename), so the species' own
+  name never does. A rename's '_' reads as a space.
+- **Taught lines ('*', row 63, TWIST teach / unteach).** Stored in their
+  own petfs file, `taught.lines` (magic `BLTL`, version, count, length-
+  prefixed lines, crc32), written atomically, read once at boot. Not the
+  keepsake: the save format, its hash, `Keepsake::encode` and the
+  fixtures are unchanged, and a torn or foreign file reads as no lines.
+  The last 4 are kept, at most 30 characters each (a thought's length, so
+  his voice can frame one). In RAM only what the flash holds: a refused
+  write (the OTA trial's held storage, a sealed or newer-format pet)
+  changes nothing and answers `409 NOT_NOW`, and `ota::TrialGuard`
+  answers `409 TRIAL` before the write is tried. A terse voice says a
+  taught line whole rather than cutting it at its first sentence.
+- `kThoughtLineCap` grew from 57 to 82 bytes (a taught line in a voice's
+  frame); `kMaxSaidText` is pinned at 56 so `TWIST say` is unchanged.
+- **Idle talk with no phone (rows 64 to 123).** A content pet left alone
+  once had only a few rows that held with every drive low, so he could sit
+  silent for about 14 minutes. Sixty idle lines now hold whenever he is
+  awake (`always`), by day (`daytime`, new) or at night (`night`), at
+  priority 0 so any need or moment outranks them, each with a 90-minute
+  cooldown so a day rarely repeats one. The calm repeaters `moon` (1800 to
+  5400 s) and `marble_knows` (900 to 3600 s) were slowed to match.
+  `Idle.AContentPetWithNoPhoneIsNeverQuietLongAndRarelyRepeats` runs six
+  hours with no phone and every drive held at zero: 222 lines, 53 of them
+  different, never more than 3 minutes of awake silence (the quiet-gap
+  ceiling), and no calm line more than 4 times.
+

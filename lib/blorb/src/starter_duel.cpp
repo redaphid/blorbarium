@@ -83,4 +83,16 @@ GenomeBuilder& appendDuelGenes(GenomeBuilder& b) {
   return b;
 }
 
+bool feelsDuels(const Genome& g) {
+  auto isDuelStim = [](uint8_t id) {
+    for (const StimInfo& s : STIMULI) if (s.id.v == id) return s.source == StimSource::Duel;
+    return false;
+  };
+  bool any = false;
+  g.forEach([&](const GeneView& v) {
+    any = any || (v.header.type == GeneKindOf<StimulusGene>::value && v.header.len >= 1 && isDuelStim(v.body[0]));
+  });
+  return any;
+}
+
 }  // namespace blorb

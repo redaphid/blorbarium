@@ -22,6 +22,8 @@ peckish
 
 A pet with several lines for one name picks one each time. A line has at most
 30 characters, from `A-Z 0-9`, space and `. , ! ? - ' :`. Small letters are fine.
+Some situations let a line show a number (`#`), the name you gave him on the
+website (`@`) or a line you taught him there (`*`); `check` says which.
 To change the line every pet shares, edit it in `_shared.txt`.
 
 Python is already on this laptop and the tool needs nothing downloaded, so

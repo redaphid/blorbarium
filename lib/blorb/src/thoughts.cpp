@@ -1,9 +1,11 @@
 #include "blorb/thoughts.h"
 
+#include <cstring>
 #include <variant>
 #include "blorb/appearance.h"
 #include "blorb/genes.h"
 #include "blorb/lineage.h"
+#include "blorb/taught.h"
 
 namespace blorb {
 namespace {
@@ -54,6 +56,26 @@ bool datedHeirloom(const Observed& o, bool fearOnly, uint16_t& num) {
 
 Rng seededFor(uint32_t life, uint32_t tick, uint64_t salt = 0) { return Rng::seeded(((uint64_t(life) << 32) | tick) ^ salt); }
 
+// The owner's local clock, only once a phone's TIME has given it this boot:
+// a wall-clock line never guesses.
+constexpr uint32_t kSecondsPerDay = 86400;
+std::optional<uint32_t> hourNow(const Observed& o) {
+  if (!o.phone.localNow) return std::nullopt;
+  return *o.phone.localNow % kSecondsPerDay / 3600;
+}
+// 0 is Sunday; 1 January 1970 was a Thursday.
+std::optional<uint32_t> weekdayNow(const Observed& o) {
+  if (!o.phone.localNow) return std::nullopt;
+  return (*o.phone.localNow / kSecondsPerDay + 4) % 7;
+}
+
+// His name as the marquee draws it: a rename's '_' is a space.
+size_t nameInFont(const char* name, char (&out)[kMaxNameText + 1]) {
+  char spaced[kMaxNameText + 1]{};
+  for (size_t i = 0; i < kMaxNameText && name[i]; ++i) spaced[i] = name[i] == '_' ? ' ' : name[i];
+  return toFont(spaced, out, kMaxNameText);
+}
+
 }  // namespace
 
 // ---- conditions: one per `when` in thoughts.def -------------------------------------
@@ -92,10 +114,35 @@ bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_nea
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
 // No battery: the phone is his only clock, so after half a day of play without
 // one he asks for it, rarely, in his own voice rather than a nagging banner.
-bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phoneAwayTicks >= Thinker::kMissPhoneTicks; }
+bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phone.awayTicks >= Thinker::kMissPhoneTicks; }
+// What a phone adds. Each holds only once the phone has given it.
+bool wall_hour(const Observed& o, uint16_t& num) {
+  const std::optional<uint32_t> h = hourNow(o);
+  if (!h) return false;
+  num = uint16_t(*h % 12 ? *h % 12 : 12);
+  return awake(o);
+}
+bool wall_morning(const Observed& o, uint16_t&) {
+  const std::optional<uint32_t> h = hourNow(o);
+  return awake(o) && h && *h >= 6 && *h < 10;
+}
+bool wall_late(const Observed& o, uint16_t&) {
+  const std::optional<uint32_t> h = hourNow(o);
+  return awake(o) && h && *h < 5;
+}
+bool wall_monday(const Observed& o, uint16_t&) { return awake(o) && weekdayNow(o) == 1u; }
+bool wall_weekend(const Observed& o, uint16_t&) {
+  const std::optional<uint32_t> d = weekdayNow(o);
+  return awake(o) && d && (*d == 0 || *d == 6);
+}
+bool wall_friday(const Observed& o, uint16_t&) { return weekdayNow(o) == 5u; }
+bool named_awake(const Observed& o, uint16_t&) { return awake(o) && o.phone.named; }
+bool named(const Observed& o, uint16_t&) { return o.phone.named; }
+bool taught(const Observed& o, uint16_t&) { return awake(o) && o.phone.taught && o.phone.taught->count > 0; }
 bool elder(const Observed& o, uint16_t&) { return awake(o) && o.c.stage() == Stage::Elder; }
 bool old(const Observed& o, uint16_t&) { return o.c.stage() == Stage::Elder; }
 bool night(const Observed& o, uint16_t&) { return awake(o) && o.clock.night(); }
+bool daytime(const Observed& o, uint16_t&) { return awake(o) && !o.clock.night(); }
 bool dark(const Observed& o, uint16_t&) { return o.clock.night(); }
 bool light(const Observed& o, uint16_t&) { return !o.clock.night(); }
 bool lonely(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::loneliness) >= kHigh; }
@@ -120,7 +167,8 @@ const ThoughtInfo* thoughtInfo(ThoughtId id) {
   return nullptr;
 }
 
-size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out, SpeciesId species) {
+size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out, SpeciesId species,
+                   const Words& words) {
   const ThoughtInfo* t = thoughtInfo(id);
   const char* text = t ? t->text : "";
   uint8_t mine = 0;
@@ -154,15 +202,20 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   if (f) for (const char* s = f->prefix; *s; ++s) put(*s);
   const size_t body = n;
   for (const char* s = text; *s; ++s) {
-      if (*s != '#') { put(*s); continue; }
+      if (*s == kNameMark || *s == kTaughtMark) {
+        for (char c : *s == kNameMark ? words.name : words.taught) put(c);
+        continue;
+      }
+      if (*s != kNumberMark) { put(*s); continue; }
       char digits[5];
       int k = 0;
       uint16_t rest = num;
       do { digits[k++] = char('0' + rest % 10); rest = uint16_t(rest / 10); } while (rest);
       while (k) put(digits[--k]);
   }
-  // A terse voice stops at the first sentence's end (an ellipsis is not one).
-  if (v && v->firstOnly && !own)
+  // A terse voice stops at the first sentence's end (an ellipsis is not one),
+  // but says what the owner taught him whole.
+  if (v && v->firstOnly && !own && !std::strchr(text, kTaughtMark))
     for (size_t i = body; i + 1 < n; ++i)
       if ((out[i] == '.' || out[i] == '!' || out[i] == '?') && out[i + 1] == ' ' && (i == body || out[i - 1] != '.')) {
         n = i + 1;
@@ -176,6 +229,18 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
     for (; *s; ++s) put(*s);
   }
   out[n] = 0;
+  return n;
+}
+
+size_t toFont(std::string_view in, char* out, size_t cap) {
+  size_t n = 0;
+  for (char c : in) {
+    if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+    if (!inFont(c) || (c == ' ' && n == 0)) continue;
+    if (n == cap) break;
+    out[n++] = c;
+  }
+  while (n && out[n - 1] == ' ') --n;
   return n;
 }
 
@@ -243,21 +308,26 @@ void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
   now_.reset();
 }
 
-void Thinker::start(const Creature& c, ThoughtPick pick, uint32_t tick, Rng& rng) {
+void Thinker::start(const Creature& c, const Lineage& lineage, const FromPhone& phone, ThoughtPick pick, uint32_t tick,
+                    Rng& rng) {
   const ThoughtInfo* info = thoughtInfo(pick.id);
   Shown s{info->prophecy() ? Spoken::prophecy : Spoken::thought, pick.id, tick, 0, {}};
-  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line,
-                               c.phenotype().species.body);
+  const uint8_t frame = uint8_t(rng.below(256));
+  char name[kMaxNameText + 1]{};
+  Words words{std::string_view(name, nameInFont(lineage.currentName(), name)), {}};
+  if (phone.taught && phone.taught->count) words.taught = phone.taught->line(uint8_t(rng.below(phone.taught->count)));
+  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, frame, s.line,
+                                 c.phenotype().species.body, words);
   s.ticks = passTicks(len);
   now_ = s;
   readyAt_[info - THOUGHTS] = tick + uint32_t(info->cooldownS) * (1000 / kTickMs);
 }
 
 void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& clock, const Lineage& lineage,
-                   uint32_t tick, bool shook, uint32_t phoneAwayTicks) {
+                   uint32_t tick, bool shook, const FromPhone& phone) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
-  const Observed o{c, habitat, clock, heirlooms_, tick, phoneAwayTicks};
+  const Observed o{c, habitat, clock, heirlooms_, tick, phone};
   // Every shake foretells, and a new shake restarts the line rather than
   // queueing behind it. With every row on cooldown he repeats one. The
   // phone's said line is the one thing a shake does not cut short.
@@ -265,7 +335,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
     Rng rng = seededFor(life_, tick, kOracleSalt);
     std::optional<ThoughtPick> p = chooseProphecy(o, readyAt_, rng);
     if (!p) p = chooseProphecy(o, nullptr, rng);
-    if (p) return start(c, *p, tick, rng);
+    if (p) return start(c, lineage, phone, *p, tick, rng);
   }
   if (now_) {
     if (tick - now_->since < now_->ticks) return;
@@ -291,18 +361,18 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
   if (!n || (before(tick, quietUntil_) && THOUGHTS[top[0]].priority < kUrgentThought)) return;
   Rng rng = seededFor(life_, tick);
   const uint32_t pick = rng.below(uint32_t(n));
-  start(c, ThoughtPick{THOUGHTS[top[pick]].id, nums[pick]}, tick, rng);
+  start(c, lineage, phone, ThoughtPick{THOUGHTS[top[pick]].id, nums[pick]}, tick, rng);
 }
 
 void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, const PetClock& clock,
-                    const Lineage& lineage, uint32_t tick) {
+                    const Lineage& lineage, uint32_t tick, const FromPhone& phone) {
   const ThoughtInfo* info = thoughtInfo(id);
-  if (!info) return;
+  if (!info || (startsWith(info->whenName, "taught") && !(phone.taught && phone.taught->count))) return;
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   uint16_t num = 0;
-  info->when(Observed{c, habitat, clock, heirlooms_, tick}, num);
+  info->when(Observed{c, habitat, clock, heirlooms_, tick, phone}, num);
   Rng rng = seededFor(life_, tick);
-  start(c, ThoughtPick{id, num}, tick, rng);
+  start(c, lineage, phone, ThoughtPick{id, num}, tick, rng);
 }
 
 void Thinker::say(std::string_view line, const Creature& c, const Lineage& lineage, uint32_t tick) {
@@ -314,7 +384,7 @@ void Thinker::say(std::string_view line, const Creature& c, const Lineage& linea
 }
 
 void Thinker::show(Appearance& a, uint32_t tick) const {
-  if (!now_ || tick - now_->since >= now_->ticks || (a.timeUnknown && now_->kind != Spoken::said)) return;
+  if (!now_ || tick - now_->since >= now_->ticks) return;
   a.thinking = true;
   a.prophecy = now_->kind == Spoken::prophecy;
   a.thought = now_->id;

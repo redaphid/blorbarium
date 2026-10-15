@@ -1,5 +1,5 @@
 #!/bin/bash
-# Breaks each of unit D10's guards once and expects the named test to catch
+# Breaks each of the founding's guards (unit D10, then the badge table) once and expects the named test to catch
 # it. Works on a private WSL-local copy of the tree, so the checkout and its
 # build mirror are never touched; each mutated file is put back on exit,
 # whatever the build did.
@@ -34,37 +34,21 @@ mutant() {   # mutant <name> <file> <sed expression> <test that must catch it>
   restore
 }
 
-F=lib/blorb/src/founding.cpp C=lib/blorb/src/clutch.cpp V=src/debug_verbs.h
-mutant "a hold does not keep" $C 's/if (s == stim::button_hold || s == stim::double_knock) return cursor;/if (s == stim::double_knock) return cursor;/' \
-  "Chooser.APressLightsTheNextEggAndAHoldKeepsTheLitOne"
-mutant "a double knock does not keep" $C 's/if (s == stim::button_hold || s == stim::double_knock) return cursor;/if (s == stim::button_hold) return cursor;/' \
-  "Chooser.AKnockLightsTheNextEggAndADoubleKnockKeepsTheLitOne"
-mutant "a press does not light the next egg" $C 's/if (s == stim::button || s == stim::knock) cursor/if (s == stim::knock) cursor/' \
-  "Chooser.APressLightsTheNextEggAndAHoldKeepsTheLitOne"
-mutant "one egg waits for a choice" $C 's/if (count <= 1) return uint8_t(0);//' \
-  "Chooser.OneEggNeedsNoChoice"
-mutant "the timeout keeps the lit egg" $F 's/kept = 0;/kept = lit_;/' \
-  "Chooser.LightingAnotherEggStartsTheMinuteAgainAndTheTimeoutStillKeepsTheFirst"
-mutant "lighting an egg does not restart the minute" $F 's/if (lit_ != was) idleSinceMs_ = nowMs;//' \
-  "Chooser.LightingAnotherEggStartsTheMinuteAgainAndTheTimeoutStillKeepsTheFirst"
-mutant "the timeout comes early" $F 's/nowMs - idleSinceMs_ >= kTimeoutMs/nowMs - idleSinceMs_ + 1000 >= kTimeoutMs/' \
-  "Chooser.NobodyChoosingForAMinuteKeepsTheFirstEgg"
-mutant "a nest is chosen twice" $F 's/if (done_) return std::nullopt;//' \
-  "Chooser.APressLightsTheNextEggAndAHoldKeepsTheLitOne"
+F=lib/blorb/src/founding.cpp V=src/debug_verbs.h
+mutant "the table is ignored" $F 's/return tableSpecies(mac).value_or(kGrungo);/return kGrungo;/'   "Table.TheNineDevicesHoldTheNineSpeciesOnceEach"
+mutant "an unknown board is not a grungo" $F 's/return tableSpecies(mac).value_or(kGrungo);/return tableSpecies(mac).value_or(species::fizz);/'   "Table.AnyOtherBoardIsAGrungo"
 mutant "a rescued slot is no pet" $F 's/"rescue\/snap.a.0", //' \
   "NeedsFounding.AnyKeepsakeOrLineageMeansAPetLivesHere"
 mutant "the lineage alone is no pet" $F 's/"lineage.log",//' \
   "NeedsFounding.TheGiftDevicesGrungoIsNeverFoundedAgain"
-mutant "a pin re-founds a living pet" $F 's/if (!needsFounding(s)) return std::nullopt;//' \
-  "NeedsFounding.TheGiftDevicesGrungoIsNeverFoundedAgain"
-mutant "the pin is ignored" $F 's/if (std::optional<SpeciesId> pin = readFoundPin(s)) return Nest{{\*pin}, 1};//' \
-  "Pin.MakesTheNestOneEggAtAFreshFounding"
+mutant "the pin is ignored" $F 's/if (std::optional<SpeciesId> pin = readFoundPin(s)) return \*pin;//' \
+  "Founding.ThePinIsTheOwnersOverrideOverTheTable"
 mutant "a pin past the roster is read" $F 's/if (b\[5\] >= kSpeciesCount) return std::nullopt;//' \
   "Pin.AnythingButAWholePinIsNoPin"
 mutant "a pin of any length is read" $F 's/\*n != kPinLen || //' \
   "Pin.AnythingButAWholePinIsNoPin"
 mutant "off leaves the pin" $F 's/|| s.rename(kPinFile, kPinAside)/|| true/' \
-  "Pin.OffGivesTheThreeEggsBackAndDeletesNothing"
+  "Pin.OffGivesTheTableBackAndDeletesNothing"
 mutant "the verb writes on a pet's flash" $V 's/if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";//' \
   "NeedsFounding.TheGiftDevicesGrungoIsNeverFoundedAgain"
 mutant "the verb pins a species with no row" $V 's/ || s.v >= blorb::kSpeciesCount//' \

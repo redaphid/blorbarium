@@ -15,10 +15,33 @@ Nordic UART Service (NUS), from `src/hw/link_nus.h`.
 | RX characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | the page writes (write or write without response) |
 | TX characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | the board notifies |
 
-The board advertises the service UUID and puts its name, `blorb-xxxx` (the
-last two bytes of its MAC, lower-case hex), in the scan response. Filter on
-the service UUID or on the name prefix `blorb-`. There is no pairing and no
-owner token.
+The board advertises the service UUID and puts its name in the scan response.
+The name is its creature's species, as the lowercase slug from
+`species.def` (`mossby`, `hushwing`). It is the same whatever the owner named
+the pet. Each badge in `defs/badges.def` holds a different species, so the name
+also tells the badges apart. The advertisement carries the flags and the
+128-bit UUID (21 of its 31 bytes). The scan response holds the name, and the
+longest slug, 8 characters, takes 10 of its 31 bytes.
+
+Which species (`advertisedSpecies` in `founding.h`):
+
+- The pet's own species.
+- For a pet from 0.4.0, which has no species yet, the species the badge table
+  will adopt him as (`Dish::adoptSpecies`).
+- For a sealed board, whose pet was not read, the badge's table species, else
+  grungo.
+- An image on an OTA trial still advertises the old `blorb-xxxx` (the last
+  two bytes of its MAC, lower-case hex), so a trial looks the same as the
+  board the page updated. The page from rel-site keys its OTA token by the
+  Web Bluetooth `device.id`, which stays the same whatever the board
+  advertises. An older page keys it by the name, and when that page is
+  reloaded during the trial it must still find its token to send
+  `OTA CONFIRM`. The species name starts at the first boot after the trial
+  keeps the image.
+
+Filter on the service UUID. A `?d=<name>` link must use the current name: after
+the update, `?d=mossby`, not `?d=blorb-1b3c`. There is no pairing and no owner
+token.
 
 ## Framing
 
@@ -89,6 +112,11 @@ gap in seconds, 0 when there was none. `hurt=1` means the gap was three weeks
 or more: he woke starving and injured, and needs feeding now.
 A bad number or tz is `#7 ERR 400 BAD_ARGS`.
 
+TIME also gives his thoughts the owner's local time: until the board is next
+unplugged, some lines know the hour, the morning, late night, Monday, the
+weekend and Friday. Send the real `tzMinutes`, or they read UTC. Without a
+TIME he thinks and foretells all the same, just without those lines.
+
 ### TWIST rename
 
 ```
@@ -99,6 +127,9 @@ A bad number or tz is `#7 ERR 400 BAD_ARGS`.
 A name fits in 15 characters (the saved name is 16 bytes). A missing, too long
 (`Grungo_the_sixteenth`) or invalid name is
 `ERR 400 BAD_ARGS`, as in `TWIST rename bad!name`.
+
+Once he has a name from a rename, a few of his lines say it (a `_` reads as a
+space). His species' own name never counts as one.
 
 ### TWIST say
 
@@ -116,6 +147,36 @@ characters. An empty line, or one with nothing left (`TWIST say @#$`), is
 `ERR 400 BAD_ARGS`. During an egg or a clutch it is `ERR 409 NOT_NOW`. It
 works before `TIME`. It is never saved or hashed, and a reboot forgets it.
 If he is asleep he stays asleep and says it with his eyes shut.
+
+### TWIST teach
+
+```
+#70 TWIST teach I love you!
+#70 OK teach
+```
+
+He keeps the line and says it now and then as one of his own thoughts, in his
+own voice, long after the phone has gone. If he has hatched, he also says it
+once right away. The text is cleaned as for `say` and stops at 30
+characters. He keeps the last 4 lines taught; teaching one he already knows
+makes it the newest instead of a twin. It works in any phase, egg included.
+
+The lines live in their own file on the board (`taught.lines`), not in the
+pet's save: they survive a reboot and a new generation, and they never change
+the save or `HASH`. An empty line is `ERR 400 BAD_ARGS`. When the board cannot
+write (a sealed pet) it is `ERR 409 NOT_NOW`, and while a new firmware is on
+trial it is `ERR 409 TRIAL` (docs/ota.md, "The trial"). Either way nothing
+he knows changes.
+
+### TWIST unteach
+
+```
+#75 TWIST unteach
+#75 OK unteach
+```
+
+He forgets every taught line. It takes no arguments (`TWIST unteach now` is
+`ERR 400 BAD_ARGS`) and fails like `teach` when the board cannot write.
 
 ### HASH
 
@@ -143,4 +204,5 @@ runs fed the same lines give the same hash.
 | `ERR 416 OUT_OF_RANGE` | a number out of range |
 
 `DEBUG` lines are serial-only. Over Bluetooth one reaches the protocol, which
-answers it with an error and never runs it.
+answers it with an error and never runs it. Testing over Bluetooth has its
+own characteristic, gated by a press on the dish: `docs/debug-ble.md`.

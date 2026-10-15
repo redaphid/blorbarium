@@ -91,6 +91,8 @@ device, or "all different". Settle this before R3.
 - Agents flash only COM11 and COM12. The 8 gift devices and the first gift
   device need the owner's explicit OK in chat.
 - `tools/flash_board.sh` flashes one board (`--no-reset` to skip the reset).
+  `tools/flash_batch.py` flashes a batch and keeps each pet unless
+  `--wipe-pet`. **Flashing from a Linux laptop: [LINUX.md](LINUX.md).**
   `DEBUG shot` plus `tools/shot.py` is how an agent sees the screen.
 - **The OTA signing key** is
   `C:\Users\hypnodroid\.config\blorbarium\ota-signing-key.pem`, and its

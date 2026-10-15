@@ -524,10 +524,12 @@ TEST(BootHint, EveryStateDrawsItsGlyphAndReadsWithoutColour) {
 // scroll along (measured from the strip itself, not a copied number).
 TEST(BootHint, StaysOffTheMarqueeStrip) {
   Appearance a = blorbtest::duelLook(blorb::kGrungo, 7, 0);
-  a.timeUnknown = false;
+  a.thinking = false;
   Canvas240 plain{}, strip{};
   paint::draw(a, paint::packFor(a.species), plain, 0);
-  a.timeUnknown = true;
+  a.thinking = true;
+  std::snprintf(a.line, sizeof(a.line), "%s", "I SEE A MARBLE IN YOUR FUTURE");
+  a.thoughtPhase = blorb::Fx::ratio(1, 2);
   paint::draw(a, paint::packFor(a.species), strip, 0);
   int top = kSide;
   for (int i = 0; i < kSide * kSide; ++i)
