@@ -25,7 +25,7 @@ namespace blorb {
 
 // What HELLO says and what an update compares against (docs/ota.md). Bump it
 // with every firmware that changes; tools/ota_release.py reads it from here.
-inline constexpr const char* kFirmwareVersion = "0.7.0";
+inline constexpr const char* kFirmwareVersion = "0.7.1";
 
 class Dish;   // dish.h
 class Link;   // seams.h
