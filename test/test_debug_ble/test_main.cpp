@@ -97,7 +97,6 @@ struct Rig : debugble::Board {
     looked.reset();
     DishOptions o{&clock, &founder};
     o.sealed = sealed;
-    o.askForTime = false;   // as the firmware runs: no battery, so no time-unknown marquee
     dish.emplace(held, kSeed, kLineage, o);
     console.emplace(*this);
     dish->tick(ms, quiet);
