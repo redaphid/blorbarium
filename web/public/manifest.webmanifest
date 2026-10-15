@@ -1,0 +1,11 @@
+{
+  "name": "Blorbarium",
+  "short_name": "Blorbarium",
+  "description": "Talk to a blorb dish over Bluetooth, and update it.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef0e2",
+  "theme_color": "#2f3a1c",
+  "icons": [{ "src": "grungo.png", "sizes": "384x384", "type": "image/png", "purpose": "any" }]
+}
