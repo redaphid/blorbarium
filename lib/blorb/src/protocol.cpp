@@ -21,7 +21,14 @@ const char* const kPhases[] = {"egg", "creature", "clutch"};
 const char* const kStages[] = {"baby", "child", "adult", "elder"};
 const char* const kCauses[] = {"old_age", "starved", "injured", "poisoned", "unknown"};
 const char* const kDirs[] = {"sense", "act", "free"};
-const char* const kSources[] = {"body", "world", "self", "phone"};
+constexpr const char* kSources[] = {"body", "world", "self", "phone", "duel"};   // StimSource order
+// SCHEMA indexes it by each stimulus row's source, so a new source must bring its name.
+constexpr bool everySourceNamed() {
+  for (const StimInfo& s : STIMULI)
+    if (size_t(s.source) >= countOf(kSources)) return false;
+  return true;
+}
+static_assert(everySourceNamed(), "kSources needs a name for every StimSource a stimulus row uses");
 const char* const kClasses[] = {"body", "mind", "look", "life"};
 const char kRules[] = {'A', 'N', 'F', 'X'};   // MutRule: Any, Nudge, Flag, Fixed
 
@@ -517,7 +524,8 @@ void cmd_time(Dish& dish, const Request& req, Reply& r) {
   dish.checkWall();
   // After any catch-up the pet tick stands for this wall time, so the day snaps here.
   dish.clock().alignToWall(*unix, int16_t(*tz));
-  r.ok("caught_up=%u", unsigned(dish.lastCatchUp().ticks));
+  const CatchUp& c = dish.lastCatchUp();
+  r.ok("caught_up=%u away=%u hurt=%u", unsigned(c.ticks), unsigned(c.awaySeconds), unsigned(c.hurt));
 }
 
 void cmd_sub(Dish& dish, const Request& req, Reply& r) {

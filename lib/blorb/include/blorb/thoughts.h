@@ -40,6 +40,7 @@ struct Observed {
   const PetClock& clock;
   const Heirlooms& heirlooms;
   uint32_t tick;
+  uint32_t phoneAwayTicks = 0;   // powered ticks since a phone last gave the time
 };
 
 // A condition; it may set the number the text shows in place of its '#'.
@@ -75,6 +76,16 @@ inline constexpr VoicedLine VOICED_LINES[] = {
 #define BLORB_LINE(t, v, text) {thought::t, voice::v, text},
 #include "blorb/defs/thought_lines.def"
 #undef BLORB_LINE
+};
+
+// A species' own lines for a row (species_lines.def, written by
+// tools/personality.py from personalities/<species>.txt).
+struct SpeciesLine { SpeciesId species; ThoughtId thought; const char* text; };
+inline constexpr SpeciesLine SPECIES_LINES[] = {
+#define BLORB_SPECIES_LINE(sid, sp, t, text) {SpeciesId{sid}, thought::t, text},
+#include "blorb/defs/species_lines.def"
+#undef BLORB_SPECIES_LINE
+  {SpeciesId{0xFF}, ThoughtId{0xFF}, ""},   // keeps the array non-empty when no species has lines
 };
 
 // ---- the text ---------------------------------------------------------------------
@@ -113,11 +124,31 @@ constexpr bool thoughtsWritable() {
     const size_t n = textLen(l.text);
     if (n == 0 || n > kMaxVoicedText || marks > 1) return false;
   }
+  for (const SpeciesLine& l : SPECIES_LINES) {
+    if (l.species.v == 0xFF) continue;
+    size_t marks = 0;
+    for (const char* s = l.text; *s; ++s) {
+      if (!inFont(*s) && *s != '#') return false;
+      marks += *s == '#';
+    }
+    const size_t n = textLen(l.text);
+    if (n == 0 || n > kMaxThoughtText || marks > 1) return false;
+  }
   for (const FrameInfo& f : FRAMES) {
     for (const char* s = f.prefix; *s; ++s) if (!inFont(*s)) return false;
     for (const char* s = f.suffix; *s; ++s) if (!inFont(*s)) return false;
     if (textLen(f.prefix) + textLen(f.suffix) > kMaxFrameText) return false;
   }
+  return true;
+}
+constexpr bool sameName(const char* a, const char* b) {
+  while (*a && *a == *b) ++a, ++b;
+  return *a == *b;
+}
+constexpr bool speciesLinesNameTheirSpecies() {
+#define BLORB_SPECIES_LINE(sid, sp, t, text)   if (sid >= kSpeciesCount || !sameName(SPECIES[sid].name, #sp)) return false;
+#include "blorb/defs/species_lines.def"
+#undef BLORB_SPECIES_LINE
   return true;
 }
 constexpr bool everyVoiceFramed() {
@@ -132,13 +163,20 @@ static_assert(idsUnique(THOUGHTS), "thoughts.def has a duplicate id");
 static_assert(kThoughtCount <= 255, "the Thinker indexes rows by a byte");
 static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two '#' or a character the font lacks");
 static_assert(everyVoiceFramed(), "every voice needs at least one BLORB_FRAME");
+static_assert(speciesLinesNameTheirSpecies(), "species_lines.def: an id and a name disagree with species.def; rerun tools/personality.py build");
 
-// The line as said, with its '#' replaced by `num`: one of the voice's own
-// lines for the row (thought_lines.def) if it has any, else the row's text,
-// cut to the first sentence if the voice is terse, inside one of the voice's
-// frames. `pick` chooses among them, modulo their count. Returns the length.
+// The line as said, with its '#' replaced by `num`. If his species has its
+// own lines for the row (species_lines.def), one of them stands in for the
+// row's text and the voice's own lines. Otherwise: one of the voice's own lines
+// for the row (thought_lines.def) if it has any, else the row's text. Anything
+// but a voice's own line is cut to the first sentence if the voice is terse,
+// inside one of the voice's frames. `pick` chooses among them, modulo their
+// count. Returns the length.
 constexpr size_t kThoughtLineCap = kMaxVoicedText + 4 + 1;   // '#' can grow to 5 digits
-size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out);
+// kSharedOnly is no species: the shared and voiced lines alone, as tests and
+// previews want them whatever lines the species files hold.
+inline constexpr SpeciesId kSharedOnly{0xFE};
+size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out, SpeciesId = kSharedOnly);
 
 // How long a line holds: one pass of the marquee, which moves 3 px a tick
 // over the dish's chord (about 200 px) plus 12 px a character.
@@ -160,7 +198,8 @@ class Thinker {
   // Once per tick while a creature lives and wall time is known. `shook`: a
   // shake landed this tick. A new life (or a reboot) restarts it: fresh
   // cooldowns, heirlooms re-read, a quiet gap before the first thought.
-  void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook);
+  void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook,
+            uint32_t phoneAwayTicks = 0);
   // Sim scripts and tests: that line starts now, as if its condition held.
   void force(ThoughtId, const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick);
   // The phone's line (already in the font, at most kMaxSaidText): it starts
@@ -168,10 +207,11 @@ class Thinker {
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
   // Fills the Appearance's line. While he prophesies he wears the foresee
   // face and glow, and the shake's hop does not show; while he says the
-  // phone's line he wears the croak face. Before wall time only the phone's
-  // line shows: the time-unknown marquee outranks his own.
-  void show(Appearance&, uint32_t tick, bool wallKnown) const;
+  // phone's line he wears the croak face. While a.timeUnknown only the
+  // phone's line shows: the time-unknown marquee outranks his own.
+  void show(Appearance&, uint32_t tick) const;
 
+  static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one
   static constexpr uint32_t kWarmUpTicks = 3 * kTicksPerMinute;        // a hatchling's first minutes are wordless
   static constexpr uint32_t kQuietTicks = kTicksPerMinute;             // after a line, at least this ...
   static constexpr uint32_t kQuietJitterTicks = 2 * kTicksPerMinute;   // ... plus up to this, drawn

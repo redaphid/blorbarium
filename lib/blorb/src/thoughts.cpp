@@ -90,6 +90,9 @@ bool sees_famine(const Observed& o, uint16_t&) {
 }
 bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_near) >= kHalf; }
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
+// No battery: the phone is his only clock, so after half a day of play without
+// one he asks for it, rarely, in his own voice rather than a nagging banner.
+bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phoneAwayTicks >= Thinker::kMissPhoneTicks; }
 bool elder(const Observed& o, uint16_t&) { return awake(o) && o.c.stage() == Stage::Elder; }
 bool old(const Observed& o, uint16_t&) { return o.c.stage() == Stage::Elder; }
 bool night(const Observed& o, uint16_t&) { return awake(o) && o.clock.night(); }
@@ -117,11 +120,20 @@ const ThoughtInfo* thoughtInfo(ThoughtId id) {
   return nullptr;
 }
 
-size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out) {
+size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char* out, SpeciesId species) {
   const ThoughtInfo* t = thoughtInfo(id);
   const char* text = t ? t->text : "";
+  uint8_t mine = 0;
+  for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
+  if (mine) {
+    uint8_t want = uint8_t(pick % mine);
+    for (const SpeciesLine& l : SPECIES_LINES)
+      if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
+    pick = uint8_t(pick / mine);   // so the frame is not tied to which line was drawn
+  }
   uint8_t own = 0;
-  for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
+  if (!mine)
+    for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
   if (own) {
     uint8_t want = uint8_t(pick % own);
     for (const VoicedLine& l : VOICED_LINES)
@@ -234,17 +246,18 @@ void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
 void Thinker::start(const Creature& c, ThoughtPick pick, uint32_t tick, Rng& rng) {
   const ThoughtInfo* info = thoughtInfo(pick.id);
   Shown s{info->prophecy() ? Spoken::prophecy : Spoken::thought, pick.id, tick, 0, {}};
-  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line);
+  const size_t len = thoughtLine(pick.id, pick.num, c.phenotype().oracle.voice, uint8_t(rng.below(256)), s.line,
+                               c.phenotype().species.body);
   s.ticks = passTicks(len);
   now_ = s;
   readyAt_[info - THOUGHTS] = tick + uint32_t(info->cooldownS) * (1000 / kTickMs);
 }
 
 void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& clock, const Lineage& lineage,
-                   uint32_t tick, bool shook) {
+                   uint32_t tick, bool shook, uint32_t phoneAwayTicks) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
-  const Observed o{c, habitat, clock, heirlooms_, tick};
+  const Observed o{c, habitat, clock, heirlooms_, tick, phoneAwayTicks};
   // Every shake foretells, and a new shake restarts the line rather than
   // queueing behind it. With every row on cooldown he repeats one. The
   // phone's said line is the one thing a shake does not cut short.
@@ -300,8 +313,8 @@ void Thinker::say(std::string_view line, const Creature& c, const Lineage& linea
   now_ = s;
 }
 
-void Thinker::show(Appearance& a, uint32_t tick, bool wallKnown) const {
-  if (!now_ || tick - now_->since >= now_->ticks || (!wallKnown && now_->kind != Spoken::said)) return;
+void Thinker::show(Appearance& a, uint32_t tick) const {
+  if (!now_ || tick - now_->since >= now_->ticks || (a.timeUnknown && now_->kind != Spoken::said)) return;
   a.thinking = true;
   a.prophecy = now_->kind == Spoken::prophecy;
   a.thought = now_->id;

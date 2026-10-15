@@ -1,0 +1,182 @@
+Lines EVERY pet can say, one per line name.
+
+Each pet says these in his own voice: the voice wraps the line, for example
+mystic turns SNACK? into THE REEDS SAY: SNACK?
+
+A line name is followed by its situation (when he might say it). The meaning of
+every situation: .claude/skills/pet-personality/references/situations.md
+Lines starting with p_ are prophecies: what he foretells when the board is shaken.
+
+To give one species something different to say, write it in that species' file;
+it replaces the shared line for him alone.
+
+Rules for a line: CAPITALS (small letters are fine, they become capitals), digits,
+space and . , ! ? - ' : only. At most 30 characters. One '#' shows a number where
+the situation gives one. A line starting with # is a note, not a line.
+
+=== LINES ===
+
+peckish         hungry
+  SNACK? SNACK. THE GOOD BITS!
+
+starving        starving
+  I WOULD EAT THE MARBLE
+
+hoarding        hoarding
+  THAT ONE IS FOR LATER.
+
+crunch          chewing
+  BRRRUP. CRUNCH. CRONCH.
+
+fuzzy_bite      rotten_bite
+  THAT ONE WAS FUZZY
+
+smells          rotten_near
+  SOMETHING IN HERE SMELLS
+
+green           sick
+  I FEEL GREEN. GREENER.
+
+ow              hurt
+  OW. EVERYTHING. OW.
+
+heard_you       knocked
+  I HEARD YOU THE FIRST TIME
+
+ground_lies     shaken
+  EEP! THE GROUND IS A LIE
+
+not_again       dreads_shake
+  OH NO. NOT THE SHAKING.
+
+hooded          scared
+  I AM NOT HIDING. I AM HOODED.
+
+ancestor_fear   ancestor_fear
+  GEN # WAS SCARED OF THIS TOO
+
+inherited       heirloom
+  GEN # SAYS HI. FROM IN HERE.
+
+counted         bored
+  I HAVE COUNTED THE DISH: ONE
+
+marble_knows    chasing
+  THE MARBLE KNOWS WHAT IT DID
+
+put_me_down     held
+  PUT ME DOWN. NO, WAIT.
+
+warm_hands      cradled
+  WARM HANDS. ACCEPTABLE.
+
+sky_down        upside_down
+  WHY IS THE SKY DOWN THERE
+
+heavy_eyes      drowsy
+  EYES... HEAVY...
+
+dream_pellets   dreaming
+  ZZZ... LUNCH... ZZZ
+
+see_pellet      sees_pellet
+  I SEE... A MORSEL. MINE.
+
+see_phone       sees_phone
+  I SEE... A GLOWING RECTANGLE
+
+see_nothing     sees_famine
+  I SEE... NO CRUMBS. NONE.
+
+see_damp        foreseeing
+  BRRRUP. I SEE... DAMP.
+
+knees           elder
+  MY KNEES ARE MOSTLY RUMOUR
+
+moon            night
+  THE MOON IS A BIG CRUMB
+
+anyone          lonely
+  HELLO? IS THIS THING ON?
+
+science         learned_food
+  SNACKS FIX HUNGER. SCIENCE.
+
+no_hat          always
+  GEN #. STILL NO HAT.
+
+p_snack         prophecy: food, anytime
+  ASK AGAIN AFTER SNACK.
+
+p_feast         prophecy: food, anytime
+  FAT FLIES. IT IS WRITTEN.
+
+p_pellet_soon   prophecy: food, hungry
+  A BISCUIT APPROACHES. MAYBE.
+
+p_feed_me       prophecy: food, starving
+  YOU WILL FEED ME. NOW.
+
+p_fuzzy         prophecy: food, rotten_near
+  THAT CRUMB WILL GET FUZZY.
+
+p_more_shaking  prophecy: danger, dreads
+  I SEE MORE SHAKING. RUDE.
+
+p_mud           prophecy: danger, anytime
+  SIGNS POINT TO MUD.
+
+p_big_hand      prophecy: danger, anytime
+  RUN. TELL THE SPORE WARDENS.
+
+p_bedtime       prophecy: sky, dark
+  THE MOON SAYS: GO TO BED.
+
+p_sun           prophecy: sky, light
+  THE SUN RETURNS. PROBABLY.
+
+p_rain          prophecy: sky, anytime
+  RAIN. SOMEWHERE. ON SOMEONE.
+
+p_watched       prophecy: owner, phone_near
+  THE GLOWING ONE IS WATCHING.
+
+p_return        prophecy: owner, missing_you
+  BROTHER WILL RETURN. CROOOAK.
+
+p_tap           prophecy: owner, anytime
+  YOU WILL TAP A PHONE. SOON.
+
+p_no            prophecy: doom, anytime
+  CERTAINLY. PROBABLY. NO.
+
+p_doom          prophecy: doom, anytime
+  ALL IS DOOM. EXCEPT SNACKS.
+
+p_lunch         prophecy: doom, old
+  MY END IS NEAR. AS IS LUNCH.
+
+p_outlook       prophecy: luck, anytime
+  OUTLOOK GOOD. FOR ME.
+
+p_decidedly     prophecy: luck, anytime
+  IT IS DECIDEDLY SO. ISH.
+
+p_lucky         prophecy: luck, anytime
+  LUCK IS A CRACKER IN THE DARK
+
+p_pond_no       prophecy: pond, anytime
+  THE POND SAYS... NO.
+
+p_pond_yes      prophecy: pond, anytime
+  THE POND SAYS: YES. NO. YES.
+
+p_ripples       prophecy: pond, anytime
+  RIPPLES. ASK AGAIN LATER.
+
+p_ancestor      prophecy: pond, foreseen
+  GEN # FORESAW THIS TOO.
+
+miss_phone      phone_long_gone
+  I MISS THE GLOWING RECTANGLE

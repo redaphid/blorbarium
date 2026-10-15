@@ -1,0 +1,48 @@
+#!/bin/bash
+# Builds tools/duel_shot.cpp and holds the duel screen's frame goldens, in WSL survivor:
+#   wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/duel_film.sh [case ...]
+#   wsl -d survivor --exec env UPDATE_GOLDEN=1 bash /mnt/d/<this checkout>/tools/duel_film.sh
+#   wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/duel_film.sh --sheet [mine:theirs ...]
+#   wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/duel_film.sh --film mine:theirs
+# The tree is mirrored to WSL-local disk first, as sim_film.sh does. What the
+# run writes comes back: outputs/ always, test/golden/ when blessing. --film
+# leaves outputs/duel-film-<mine>-<theirs>.mp4 (and its frames) for a demo.
+set -euo pipefail
+src="$(cd "$(dirname "$0")/.." && pwd)"
+dst="$HOME/.cache/blorbarium-build/$(printf '%s' "$src" | md5sum | cut -c1-12)"
+mkdir -p "$dst"
+rsync -a --delete --exclude .pio --exclude .git --exclude outputs "$src/" "$dst/"
+cd "$dst"
+~/.platformio/penv/bin/pio run -e duelshot -s
+status=0
+case "${1:-}" in
+  --sheet) shift; python3 tools/duel_sheet.py "$@" || status=$? ;;
+  --film)
+    pair="${2:-gilly:fizz}"; mine="${pair%%:*}"; theirs="${pair##*:}"
+    dir="outputs/duel-film-$mine-$theirs"
+    rm -rf "$dir"; mkdir -p "$dir"
+    .pio/build/duelshot/program --film "$dir" --mine "$mine" --theirs "$theirs" || status=$?
+    # ffmpeg off PATH, else the one imageio-ffmpeg ships (uv fetches it), else a GIF.
+    ff="$(command -v ffmpeg || true)"
+    uv="$(command -v uv || echo "$HOME/.local/bin/uv")"
+    if [ -z "$ff" ] && [ -x "$uv" ]; then
+      ff="$("$uv" run -q --with imageio-ffmpeg python3 -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || true)"
+    fi
+    if [ -n "$ff" ]; then
+      "$ff" -loglevel error -y -framerate 10 -i "$dir/frame_%04d.bmp" -vf scale=480:480:flags=neighbor \
+        -pix_fmt yuv420p "outputs/duel-film-$mine-$theirs.mp4" || status=$?
+    else   # no ffmpeg: an animated GIF, which every phone and chat plays
+      python3 - "$dir" "outputs/duel-film-$mine-$theirs.gif" <<'PY' || status=$?
+import glob, sys
+from PIL import Image
+frames = [Image.open(f).convert("RGB").resize((480, 480), Image.NEAREST) for f in sorted(glob.glob(sys.argv[1] + "/frame_*.bmp"))]
+frames[0].save(sys.argv[2], save_all=True, append_images=frames[1:], duration=100, loop=0, optimize=True)
+print("wrote", sys.argv[2])
+PY
+    fi ;;
+  *) python3 tests/duel_frames.py "$@" || status=$? ;;
+esac
+mkdir -p "$src/outputs"
+rsync -a outputs/ "$src/outputs/"
+if [ -n "${UPDATE_GOLDEN:-}" ]; then rsync -a test/golden/ "$src/test/golden/"; fi
+exit $status

@@ -1,0 +1,24 @@
+// Signature powers, one per species, named as roster/roster.json names them.
+// A power is a queued special (duel.h): BOOT commits it with a hidden landing
+// stance and a wind-up, and it fires only if the special LANDS. One row plus
+// one handler power_<name>(PowerPhase, PowerCtx&) in src/duel_powers.cpp,
+// called once per phase of the landing turn.
+//
+// `cost` is the spark pips the commit spends (the meter holds kMeterMax = 6).
+// It is the tuning knob: tools/duel_balance.cpp measures it, and nothing else
+// in the rules is tuned per species. sketch/tools/special_probe.py moved
+// lantern from 4 to 3; tools/duel_balance.cpp's numbers are in BATTLES.md.
+//
+// "The next turn" is the turn after the landing. Stable ids: never renumber,
+// never reuse.
+//
+// BLORB_POWER(id, name, cost, glyph)
+BLORB_POWER(0, foresee, 5, eye)      // grungo: he SAW your move: a landing you counter whiffs instead of being riposted
+BLORB_POWER(1, shell,   5, shell)    // mossby: a glowing shell; the next hit that would land just bonks off (until used)
+BLORB_POWER(2, spores,  6, spore)    // puffkin: drowsy spores; the friend nods off next turn (no stance, no spark)
+BLORB_POWER(3, mend,    6, leaf)     // gilly: her gills glow; one heart grows back, never past full
+BLORB_POWER(4, lantern, 3, lamp)     // mothwick: dazzle; next turn the friend's winning hits miss half the time
+BLORB_POWER(5, dash,    3, wave)     // mudge: always first; next turn a head bonk goes his way
+BLORB_POWER(6, zap,     6, spark)    // fizz: a tickly zap; one more heart on top of the landing (a shell still stops one)
+BLORB_POWER(7, hush,    5, feather)  // hushwing: silent wings; next turn a clash she loses costs her nothing, and a special at her whiffs
+BLORB_POWER(8, gadget,  5, gear)     // tinker: a surprise gadget; one of the other eight powers, drawn from his own luck as it lands

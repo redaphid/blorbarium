@@ -1,0 +1,33 @@
+// Species: the shared facts of a kind of blorb, bound to roster/roster.json
+// (origin/roster-art d98055e). What one pet IS stays in its genome
+// (SpeciesGene names the row); this table says what the row means: its place
+// on the duel wheel, its signature power, and the starter genome's
+// species-specific bytes. Art and colours are the species' sprite pack
+// (paint::packFor), not columns here: a pack owns its palette.
+//
+// The wheel is a 3x3 Latin square: every (element, style) pair exactly once.
+// Element cycle (beats): Splash douses Spark, Spark singes Sprout, Sprout
+// drinks Splash. Style is the stance the species loves and leans toward,
+// which the other kid can learn to read. So every species has exactly three
+// good, three bad and three even matchups (static_asserts in species.h).
+//
+// Starter columns (128 = grungo's value where that applies):
+//   bold       adrenaline -> startle receptor gain: 0 timid .. 255 brash
+//   nocturnal  1: sleeps by day (grungo), 0: by night
+//   appetite   hunger tonic, permille of grungo's
+//   voice      voices.def row the oracle speaks in
+//
+// Stable ids: never renumber, never reuse (the roster says the battle code
+// may key on them). Slot 0 is grungo, and also what a genome with no
+// SpeciesGene expresses, so every save from before species reads as grungo.
+//
+// BLORB_SPECIES(id, name, Element, Style, power, bold, nocturnal, appetite, voice)
+BLORB_SPECIES(0, grungo,   Splash, Trick,  foresee, 128, 1, 1000, mystic)         // frog: a skittish oracle
+BLORB_SPECIES(1, mossby,   Sprout, Guard,  shell,    70, 0,  800, rambling)       // snail: no rush, ever
+BLORB_SPECIES(2, puffkin,  Sprout, Pounce, spores,  190, 0, 1100, cheerful_doom)  // puffball: sneezes sparkles
+BLORB_SPECIES(3, gilly,    Splash, Guard,  mend,    100, 0, 1000, cheerful_doom)  // axolotl: never down for long
+BLORB_SPECIES(4, mothwick, Spark,  Trick,  lantern, 110, 1,  900, rambling)       // glow-moth: hums to himself
+BLORB_SPECIES(5, mudge,    Splash, Pounce, dash,    230, 0, 1300, terse)          // mudskipper: races everything
+BLORB_SPECIES(6, fizz,     Spark,  Pounce, zap,     200, 0, 1200, hoarder)        // firefly beetle: crackles
+BLORB_SPECIES(7, hushwing, Sprout, Trick,  hush,     60, 1,  900, ominous)        // marsh owl: silent wings
+BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget,  150, 1, 1000, hoarder)        // raccoon: a scrap-pile gadget

@@ -13,6 +13,7 @@
 //   sim --shot out.bmp --after 3000      one frame, then quit
 //   sim --record dir/ --fps 20 --for 8000   every frame to dir/, then quit
 //   sim --sealed                         boot as a board whose keepsake would not open
+//   sim --species <slug|id>              draw the pet as that species (DEBUG species does it live)
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
@@ -20,7 +21,8 @@
 // Script and stdin lines:
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
-//   DEBUG stage <hatchling|child|adult|elder>
+//   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
+//   @0 DEBUG found <slug|id>            found the pet as that species (before boot; later, refused)
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
 
@@ -164,8 +166,19 @@ static void debug(const char* verb, const char* a, const char* b) {
     dish->clock().alignToWall(unix, int16_t(atoi(b)));
     return;
   }
+  if (!strcmp(verb, "species")) {
+    blorb::SpeciesId s;
+    if (!strcmp(a, "off")) pinnedSpecies.reset();
+    else if (debugverbs::speciesByName(a, s)) pinnedSpecies = s;
+    else fprintf(stderr, "sim: DEBUG species: %s is not a species.def name or 0..255\n", a);
+    return;
+  }
   if (!strcmp(verb, "stage")) {
     if (const char* why = debugverbs::growTo(*dish, a, warp)) fprintf(stderr, "sim: DEBUG stage %s: %s\n", a, why);
+    return;
+  }
+  if (!strcmp(verb, "found")) {
+    if (const char* why = debugverbs::found(dishStore, a)) fprintf(stderr, "sim: DEBUG found %s: %s\n", a, why);
     return;
   }
   blorb::Creature* c = creature();
@@ -210,6 +223,13 @@ static uint32_t recordEveryMs = 50;
 static uint32_t recordForMs = 6000;
 
 static int run(bool* running) {
+  // A pin is for a device not yet booted, so `@0 DEBUG found <id>` lands
+  // before setup() and the pet is founded as that species.
+  for (auto it = script.begin(); it != script.end() && it->at == 0;) {
+    if (it->text.rfind("DEBUG found ", 0) != 0) { ++it; continue; }
+    simLine(it->text);
+    it = script.erase(it);
+  }
   setup();
   const uint32_t started = millis();
   uint32_t nextFrameAt = 0, frameNo = 0;
@@ -256,6 +276,14 @@ int main(int argc, char** argv) {
     // a shot is the same frame, but nothing asks for a display.
     else if (!strcmp(a, "--headless")) setenv("SDL_VIDEODRIVER", "dummy", 1);
     else if (!strcmp(a, "--sealed")) simSealed = true;
+    else if (!strcmp(a, "--species") && i + 1 < argc) {
+      blorb::SpeciesId s;
+      if (!debugverbs::speciesByName(argv[++i], s)) {
+        fprintf(stderr, "sim: --species %s: not a species.def name or 0..255\n", argv[i]);
+        return 2;
+      }
+      pinnedSpecies = s;
+    }
     else if (!strcmp(a, "--clock") && i + 1 < argc) {
       const char* c = argv[++i];
       if (strcmp(c, "fixed") && strcmp(c, "wall")) { fprintf(stderr, "sim: --clock fixed|wall, not %s\n", c); return 2; }

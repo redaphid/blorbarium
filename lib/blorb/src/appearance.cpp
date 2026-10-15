@@ -29,11 +29,12 @@ uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) {
   return clampByte(100 * (128 + int(base)) / 256 + scaled(sizeLocus, kSizeLocusPct));
 }
 
-// Region tints and marks from the genes; the later gene for a region wins, so
-// a woken dormant colour shows. With no shell gene the egg's jelly takes the
+// The species, region tints and marks from the genes; the later gene for a
+// region wins, so a woken dormant colour shows. With no shell gene the egg's jelly takes the
 // skin's tint, so an egg shows the hatchling's colour. `chem` binds tints to
 // chemical levels; a portrait has none.
 void look(const Phenotype& p, const Chemistry* chem, Appearance& a) {
+  a.species = p.species.body;
   bool shellGene = false;
   for (const Phenotype::Paint& paint : p.palette) {
     Tint t = paint.tint;
@@ -122,6 +123,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
+  a.scars = c.scars();
   careHint(c, a);
   lastStimulus(chem, a);
 }
@@ -136,19 +138,25 @@ void presentEgg(const Egg& e, Appearance& a) {
   look(p, nullptr, a);
 }
 
+// The parent's mutants keep its species (no mutation changes one), but a
+// friend egg is a cross and can be another's: each preview carries the species
+// of the genome it shows, and the renderer draws that egg in that species' art.
+// a.species is the parent's, for the vigil's remains. One Phenotype on the stack.
 void presentClutch(const Clutch& k, Appearance& a) {
   a.lifeSeed = k.parent.hash();
-  if (k.sinceDeath < Clutch::kVigilTicks) {
+  const bool vigil = k.sinceDeath < Clutch::kVigilTicks;
+  Phenotype p{};
+  for (uint8_t s = 0; s <= uint8_t(vigil ? k.reached : Stage::Baby); ++s) expressStage(k.parent, Stage(s), 0, p);
+  if (vigil) {
     a.kind = Appearance::Kind::Remains;
     a.generation = uint16_t(k.generation - 1);
     a.stage = k.reached;
     a.remainsFade = Fx::ratio(int32_t(k.sinceDeath), int32_t(Clutch::kVigilTicks));
-    Phenotype p{};
-    for (uint8_t s = 0; s <= uint8_t(k.reached); ++s) expressStage(k.parent, Stage(s), 0, p);
     look(p, nullptr, a);
   } else {
     a.kind = Appearance::Kind::Clutch;
     a.generation = k.generation;
+    a.species = p.species.body;
   }
   a.eggCount = k.previewed;
   std::copy(k.previews, k.previews + k.previewed, a.eggs);

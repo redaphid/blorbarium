@@ -6,11 +6,14 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <variant>
 
 #include "blorb/dish.h"
+#include "blorb/founding.h"
 #include "blorb/registry.h"
+#include "blorb/species.h"
 
 namespace debugverbs {
 
@@ -35,6 +38,30 @@ inline bool chemByName(const char* name, blorb::ChemId& out) {
   for (const auto& d : blorb::DRIVES)
     if (!std::strcmp(d.name, name)) { out = blorb::driveChem(d.id); return true; }
   return false;
+}
+
+// A species by its species.def slug or its number. Any byte is accepted, so
+// the fallback for an id this firmware has no row for can be looked at too.
+inline bool speciesByName(const char* s, blorb::SpeciesId& out) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES)
+    if (!std::strcmp(r.name, s)) { out = r.id; return true; }
+  char* end = nullptr;
+  const long n = std::strtol(s, &end, 10);
+  if (end == s || *end || n < 0 || n > 255) return false;
+  out = blorb::SpeciesId{uint8_t(n)};
+  return true;
+}
+
+// `DEBUG found <slug|id|off>`, for an adult before a device is handed over:
+// the one egg a fresh founding offers, kept in found.pin (founding.h); `off`
+// gives the three-egg nest back. Refused once a pet lives here, so it never
+// writes to a keepsake's flash. nullptr on success, else why not.
+inline const char* found(blorb::Storage& store, const char* arg) {
+  if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";
+  if (!std::strcmp(arg, "off")) return blorb::clearFoundPin(store) ? nullptr : "found.pin would not move aside";
+  blorb::SpeciesId s;
+  if (!speciesByName(arg, s) || s.v >= blorb::kSpeciesCount) return "not a species.def name or 0..8";
+  return blorb::writeFoundPin(store, s) ? nullptr : "found.pin was not written";
 }
 
 struct StageName { const char* name; blorb::Stage stage; };

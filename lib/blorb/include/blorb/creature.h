@@ -18,6 +18,8 @@
 #include "blorb/habitat.h"
 #include "blorb/mutate.h"
 #include "blorb/senses.h"
+#include "blorb/species.h"
+#include "blorb/stakes.h"
 
 namespace blorb {
 
@@ -45,6 +47,7 @@ struct Phenotype {
   std::vector<Instinct> instincts;     // every instinct expressed so far
   Size size{};
   Oracle oracle{};
+  SpeciesTraits species{};             // body, power and knack (species.h); grungo until a species gene says otherwise
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
@@ -125,6 +128,24 @@ class Creature {
   // An owner edit of one body byte; the phenotype is re-expressed from the
   // edited genome. False if the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
+  // The one-time duel-gene graft (dish_duel.h): a genome that is his own with
+  // genes appended. False, and nothing changes, unless his genome is its prefix.
+  bool extendGenome(Genome grown);
+
+  // Duels (stakes.h), applied between ticks by the Dish from the agreed Outcome.
+  // The tier every Duel-source stimulus is filtered at (duelFilter). Spar, the
+  // narrowest, until a duel names its stakes; kept after it closes so the
+  // aftermath (spared, slew) lands at the tier that caused it.
+  void setDuelStakes(Stakes s) { duelStakes_ = s; }
+  // Adds injury, clamped by woundRoom so no wound kills. Returns what was added.
+  Fx wound(Fx injury);
+  // Keeps the scar for this life. A fifth replaces the faintest; false when it
+  // is itself fainter than every scar he has.
+  bool addScar(Scar);
+  // A Finish: writes the die and cause loci as Injured, and the Dish's next
+  // tick runs the ordinary death path (Death entry, remains, clutch). Once.
+  void fall();
+  const Scars& scars() const { return scars_; }
   // A prophecy: the belief (feature, action, drive) becomes `effect`. False if
   // an id is on no brain axis.
   bool prophesy(LocusId feature, ActionId, DriveId, Fx effect);
@@ -139,6 +160,8 @@ class Creature {
   Chemistry chem_;
   Brain brain_;
   Body body_;
+  Scars scars_;                        // saved in the Body chunk's trailing bytes (keepsake.cpp)
+  Stakes duelStakes_ = Stakes::Spar;   // not saved: a reboot ends any duel
   LifeStats stats_;
   FaceState face_;
   ActionId action_{};
@@ -169,8 +192,10 @@ class Egg {
   EggRules rules_;                     // decoded from the child's EggGene
 };
 
-// What the clutch screen shows per egg. Derived, never saved.
-struct EggPreview { Tint skin, cloak, shell; uint8_t lookChanges, mindChanges; };
+// What the clutch screen shows per egg. Derived, never saved. A friend egg
+// can be another species, so each egg names its own.
+struct EggPreview { Tint skin, cloak, shell; uint8_t lookChanges, mindChanges; SpeciesId species = kGrungo; };
+struct FriendEgg;   // friend_egg.h
 
 // After a death: the remains for the vigil, then 1..3 eggs. Seeds, not
 // genomes: egg i is mutate(parent, policy, heirlooms, Rng::seeded(seeds[i])).
@@ -189,6 +214,11 @@ struct Clutch {
   Stage reached = Stage::Baby;
   EggPreview previews[kMaxClutch]{};
   uint8_t previewed = 0;               // previews[0..previewed) are valid; derived, never saved
+  // A friend egg (friend_egg.h) takes one of the `count` slots: 0 = none, else
+  // slot friendSlot - 1, crossed with the friend's genome by friendSeed.
+  // Saved as the clutch record's trailing bytes (keepsake.cpp).
+  uint8_t friendSlot = 0;
+  uint32_t friendSeed = 0;
 
   Offspring child(uint8_t i) const;    // pure; runs mutate() with its viability retries
   // Body choice: Button or Knock moves the cursor, ButtonHold or DoubleKnock
@@ -196,8 +226,15 @@ struct Clutch {
   std::optional<uint8_t> tick(const SenseOut&);
   // One egg per call (one mutate and dry run, about 30 ms estimated), called
   // once per tick during the vigil, so death never stalls a frame. Idempotent.
-  void derivePreviewStep();
+  // The friend slot previews the cross only when given its friend egg;
+  // without it, the plain egg that slot would hatch.
+  void derivePreviewStep(const FriendEgg* = nullptr);
 };
+
+// The egg gestures, one rule for a clutch and the founding nest (founding.h):
+// Button or Knock moves the cursor, ButtonHold or DoubleKnock keeps the egg
+// under it. One egg needs no choice. The kept index, or nullopt.
+std::optional<uint8_t> pickEgg(const SenseOut&, uint8_t& cursor, uint8_t count);
 
 using Occupant = std::variant<Egg, Creature, Clutch>;
 

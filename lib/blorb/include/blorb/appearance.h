@@ -7,10 +7,13 @@
 // Plain fixed-size data, so golden tests compare it as a struct and the sim
 // renders it byte-identically run after run.
 #include <cstdint>
+#include "blorb/boot.h"
 #include "blorb/creature.h"
+#include "blorb/duel_card.h"
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
+#include "blorb/species.h"
 #include "blorb/thoughts.h"
 
 namespace blorb {
@@ -28,6 +31,9 @@ struct Appearance {
   uint16_t generation = 0;
   Stage stage = Stage::Baby;
   uint32_t lifeSeed = 0;            // genome hash: mottling layout, blink and bob jitter
+  // Whose art draws him (paint::packFor): the phenotype's body species, so
+  // grungo for a genome with no species gene.
+  SpeciesId species = kGrungo;
 
   // Where and how
   DishPos at{};
@@ -65,6 +71,15 @@ struct Appearance {
   Fx injury{}, wobble{};
   Fx night{};                       // 0..1 background tint from the pet clock
 
+  // Battles. The scars he carries this life, drawn into his skin where they
+  // landed; and what his line's duel book puts on the rim at home: the newest
+  // trophies (the fallen's species, newest first) and the debt and vendetta marks.
+  Scars scars{};
+  static constexpr uint8_t kRimTrophies = 3;
+  SpeciesId trophies[kRimTrophies]{};
+  uint8_t trophyCount = 0;
+  bool owesDebt = false, vendetta = false;
+
   // The dish
   struct Item { enum class What : uint8_t { Pellet, RottenPellet, Marble } what; DishPos at; };
   Item items[8]{};
@@ -88,6 +103,22 @@ struct Appearance {
   // Boot::Sealed: a keepsake is on the flash and could not be opened. Drawn as
   // the pet asleep in amber with a line for a grown-up, never as a new life.
   bool sealed = false;
+
+  // BOOT (boot.h): what a press does now, drawn on the rim beside the button
+  // in every state (paint::drawBootHint), so a kid never has to guess.
+  BootHint boot{};
+  // A press only for the eyes, `echoTicks` ago: an egg peeked into
+  // (PeekEgg), a flower laid on the remains (LayFlower).
+  BootAct echo = BootAct::Nothing;
+  uint16_t echoTicks = 0;
+  // A double press that opened no duel, `refusedTicks` ago: why, as a picture
+  // (zzz, a bowl, a hug), or None when the radio was the update's and he
+  // shakes his head.
+  bool refused = false;
+  Decline declined = Decline::None;
+  uint16_t refusedTicks = 0;
+  // A duel is open: the duel scene replaces the dish, drawn from Dish::duelView().
+  bool dueling = false;
 
   // A line scrolling once across the dish (thoughts.h): the row, the line as
   // his voice says it, and how far through its pass (0..1). The time-unknown

@@ -1,18 +1,19 @@
 #include "blorb/lineage.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include "blorb/genes.h"
 #include "blorb/protocol.h"
 #include "blorb/seams.h"
+#include "log_frames.h"
 
 namespace blorb {
 namespace {
 
 constexpr const char* kLog = "lineage.log";
 constexpr const char* kTmp = "lineage.tmp";   // a rewrite in progress; renamed over kLog when whole
-constexpr const char kSpecies[16] = "Grungo";
 constexpr uint32_t kDay = 24 * kTicksPerHour;
 constexpr uint32_t kWellFedMealsPerDay = 4;
 constexpr uint16_t kDreamerDreams = 2000;
@@ -21,43 +22,11 @@ constexpr Fx kWildPerFeat = Fx::ratio(2, 100);
 
 // Each entry: [kind u8][len u16 LE][payload][crc32 LE of kind, len and payload].
 enum class Kind : uint8_t { Founding = 1, Birth = 2, Checkpoint = 3, Death = 4, Rename = 5 };
-constexpr size_t kFrame = 1 + 2 + 4;
 
 // ---- byte codec -----------------------------------------------------------------------
 
-struct Out {
-  std::vector<uint8_t> b;
-  void u8(uint8_t v) { b.push_back(v); }
-  void u16(uint16_t v) { u8(uint8_t(v)), u8(uint8_t(v >> 8)); }
-  void u32(uint32_t v) { u16(uint16_t(v)), u16(uint16_t(v >> 16)); }
-  void u64(uint64_t v) { u32(uint32_t(v)), u32(uint32_t(v >> 32)); }
-  void raw(const void* p, size_t n) { b.insert(b.end(), static_cast<const uint8_t*>(p), static_cast<const uint8_t*>(p) + n); }
-  void blob(const std::vector<uint8_t>& v) { u16(uint16_t(v.size())), raw(v.data(), v.size()); }
-};
-
-// Reads past the end yield zeros and clear `ok`, so a short payload is one check.
-struct In {
-  const uint8_t* p;
-  size_t n, at = 0;
-  bool ok = true;
-  uint8_t u8() {
-    if (at >= n) { ok = false; return 0; }
-    return p[at++];
-  }
-  uint16_t u16() { uint16_t lo = u8(); return uint16_t(lo | u8() << 8); }
-  uint32_t u32() { uint32_t lo = u16(); return lo | uint32_t(u16()) << 16; }
-  uint64_t u64() { uint64_t lo = u32(); return lo | uint64_t(u32()) << 32; }
-  void raw(void* out, size_t len) {
-    if (n - at < len) { ok = false; std::memset(out, 0, len); return; }
-    std::memcpy(out, p + at, len);
-    at += len;
-  }
-  std::vector<uint8_t> blob() {
-    std::vector<uint8_t> v(u16());
-    raw(v.data(), v.size());
-    return v;
-  }
-};
+using logframes::In;
+using logframes::Out;
 
 void putGenome(Out& o, const Genome& g) { o.blob(g.bytes()); }
 std::optional<Genome> getGenome(In& in) {
@@ -142,14 +111,17 @@ void copyName(char (&to)[16], const char* from) {
   if (from) std::strncpy(to, from, sizeof to - 1);
 }
 
-std::vector<uint8_t> frame(Kind k, const Out& payload) {
-  Out o;
-  o.u8(uint8_t(k));
-  o.u16(uint16_t(payload.b.size()));
-  o.raw(payload.b.data(), payload.b.size());
-  o.u32(crc32(o.b.data(), o.b.size()));
-  return o.b;
+// The founding pick's species names the line until a rename: the slug,
+// capitalised. A genome with no species gene reads as grungo, so an ordinary
+// pet's Founding entry stays "Grungo", byte for byte.
+void copySpeciesName(char (&to)[16], const Genome& starter) {
+  Phenotype p;
+  expressStage(starter, Stage::Baby, 0, p);
+  copyName(to, speciesInfo(p.species.body).name);
+  to[0] = char(std::toupper(static_cast<unsigned char>(to[0])));
 }
+
+std::vector<uint8_t> frame(Kind k, const Out& payload) { return logframes::frame(uint8_t(k), payload); }
 
 std::vector<uint8_t> encode(const LineageEntry& e) {
   Out o;
@@ -221,28 +193,14 @@ std::optional<LineageEntry> decode(Kind k, In in) {
   return std::nullopt;
 }
 
-// Walks whole, CRC-valid frames in the first `limit` bytes of the log. Each
-// frame is read from flash on its own, so RAM holds one entry and never the
-// log. f(kind, payload, frame bytes, offset). Returns the valid prefix length.
+constexpr logframes::LogFile kFile{kLog, kTmp};
+
+// f(kind, payload, frame bytes, offset) per valid frame; returns the valid prefix length.
 template <class F>
 size_t walk(Storage& s, size_t limit, F&& f) {
-  const size_t size = std::min(limit, s.size(kLog));
-  std::vector<uint8_t> frame;
-  size_t at = 0;
-  while (size - at >= kFrame) {
-    uint8_t head[3];
-    if (s.read(kLog, at, head, sizeof head) != sizeof head) break;
-    const size_t len = size_t(head[1]) | size_t(head[2]) << 8;
-    if (size - at - kFrame < len) break;
-    frame.resize(kFrame + len);
-    if (s.read(kLog, at, frame.data(), frame.size()) != frame.size()) break;
-    const uint8_t* crcAt = &frame[3 + len];
-    uint32_t crc = uint32_t(crcAt[0]) | uint32_t(crcAt[1]) << 8 | uint32_t(crcAt[2]) << 16 | uint32_t(crcAt[3]) << 24;
-    if (crc32(frame.data(), 3 + len) != crc) break;
-    f(Kind(frame[0]), In{&frame[3], len}, frame, at);
-    at += frame.size();
-  }
-  return at;
+  return logframes::walk(s, kFile, limit, [&](uint8_t k, In in, const std::vector<uint8_t>& frame, size_t at) {
+    f(Kind(k), in, frame, at);
+  });
 }
 
 template <class F>
@@ -252,29 +210,12 @@ void entries(Storage& s, F&& f) {
   });
 }
 
-// Rewrites the log as the valid frames in its first `limit` bytes that
-// keep(kind, payload, offset) accepts. They stream into lineage.tmp, which is
-// renamed over the log once whole, so a power cut leaves the old log as it was.
 template <class Keep>
 bool rewrite(Storage& s, size_t limit, Keep&& keep) {
-  if (!s.writeAtomic(kTmp, nullptr, 0)) return false;
-  bool ok = true;
-  walk(s, limit, [&](Kind k, In in, const std::vector<uint8_t>& frame, size_t at) {
-    if (ok && keep(k, in, at)) ok = s.append(kTmp, frame.data(), frame.size());
-  });
-  return ok && s.rename(kTmp, kLog);
+  return logframes::rewrite(s, kFile, limit, [&](uint8_t k, In in, size_t at) { return keep(Kind(k), in, at); });
 }
 
-bool keepAll(Kind, In, size_t) { return true; }
-
-// All of `bytes` lands, or the log is put back as it was: a torn append left
-// in place would hide every later entry behind it.
-bool appendWhole(Storage& s, const std::vector<uint8_t>& bytes) {
-  size_t before = s.size(kLog);
-  if (s.append(kLog, bytes.data(), bytes.size())) return true;
-  rewrite(s, before, keepAll);
-  return false;
-}
+bool appendWhole(Storage& s, const std::vector<uint8_t>& bytes) { return logframes::appendWhole(s, kFile, bytes); }
 
 int popcount(uint32_t v) {
   int n = 0;
@@ -290,7 +231,7 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
   Lineage l;
   l.store_ = &store;
   l.id_ = lineageId;
-  copyName(l.name_, kSpecies);
+  copySpeciesName(l.name_, starter);
   size_t valid = walk(store, SIZE_MAX, [&](Kind k, In in, const std::vector<uint8_t>&, size_t) {
     std::optional<LineageEntry> e = decode(k, in);
     if (!e) return;
@@ -299,10 +240,10 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
     if (auto* d = std::get_if<Death>(&*e)) l.legacyFeats_ |= d->feats;
     if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name);
   });
-  if (valid < store.size(kLog)) rewrite(store, valid, keepAll);
+  logframes::truncateTorn(store, kFile, valid);
   if (valid == 0) {
     Founding f{lineageId, at, starter, {}};
-    copyName(f.species, kSpecies);
+    copySpeciesName(f.species, starter);
     appendWhole(store, encode(f));
   }
   return l;
@@ -321,13 +262,13 @@ void Lineage::recordBirth(const Egg& egg, const Clutch& clutch, uint8_t chosen, 
   if (append(bytes)) generation_ = gen;
 }
 
-void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at) {
+void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at, uint32_t duelFeats) {
   bool recorded = false;
   entries(*store_, [&](const LineageEntry& e) {
     if (auto* d = std::get_if<Death>(&e)) recorded = recorded || d->generation == c.generation();
   });
   if (recorded) return;
-  Death d{c.generation(), at, c.cause(), c.stats(), featsOf(c.stats(), c.generation()), {}};
+  Death d{c.generation(), at, c.cause(), c.stats(), featsOf(c.stats(), c.generation()) | duelFeats, {}};
   copyName(d.name, name);
   if (append(encode(d))) legacyFeats_ |= d.feats;
 }

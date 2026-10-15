@@ -48,13 +48,13 @@ TEST(Tables, EachDerivedCountMatchesItsRows) {
   EXPECT_EQ(kRegionCount, 7u);
   EXPECT_EQ(kReflexCount, 2u);
   EXPECT_EQ(kFeatureCount, 20u);
-  EXPECT_EQ(countOf(CHEMICALS), 9u);
+  EXPECT_EQ(countOf(CHEMICALS), 13u);
   EXPECT_EQ(countOf(LOCI), 34u);
-  EXPECT_EQ(countOf(STIMULI), 29u);
+  EXPECT_EQ(countOf(STIMULI), 38u);
   EXPECT_EQ(countOf(POSES), 10u);
   EXPECT_EQ(countOf(EXPRESSIONS), 10u);
   EXPECT_EQ(countOf(CARES), 5u);
-  EXPECT_EQ(countOf(FEATS), 6u);
+  EXPECT_EQ(countOf(FEATS), 7u);
 }
 
 // The brain, the face and the pack index these tables by id, so their ids

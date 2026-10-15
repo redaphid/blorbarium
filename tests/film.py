@@ -25,8 +25,8 @@ GOLDEN = os.path.join(ROOT, "test", "golden")
 FRAMES = os.path.join(ROOT, "outputs", "frames")
 MISSES = os.path.join(ROOT, "outputs", "misses")
 
-# Each case's feed is tests/feeds/<case>.txt; the number is when, on the
-# script's clock, the frame is shot.
+# Each case's feed is tests/feeds/<case>.txt unless FEED_OF names another;
+# the number is when, on the script's clock, the frame is shot.
 CASES = {
     "idle": 17600,          # the resting cases rest home first, to 16400
     "eating": 7600,         # the pellet is at his mouth from about 7200 to 8000
@@ -46,11 +46,23 @@ CASES = {
 
 # Cases that boot a different board, as the sim's own flags.
 FLAGS = {"sealed": ["--sealed"]}
+# Cases played on another case's feed.
+FEED_OF = {}
 
 # A case that must not look like another: a hop that drew as idle once passed
 # its golden because the golden was idle too. Share of the disc that must differ.
 UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01),
           "sealed": ("sleep", 0.2)}
+
+# One adult at rest per roster species, on idle's feed and clock with the
+# drawn species pinned (sim --species). Grungo's is idle itself. Each must not
+# look like him, so a pin that silently drew the frog fails here.
+ROSTER = ["mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker"]
+for slug in ROSTER:
+    CASES["species_" + slug] = CASES["idle"]
+    FEED_OF["species_" + slug] = "idle"
+    FLAGS["species_" + slug] = ["--species", slug]
+    UNLIKE["species_" + slug] = ("idle", 0.05)
 
 # A pixel has moved when a channel is further off than this; the panel is
 # RGB565, so neighbouring colours are 4 to 8 counts apart.
@@ -59,24 +71,26 @@ CHANNEL_TOL = 24
 SHARE_TOL = 0.002
 
 
+def frame(feed, after_ms, flags, bmp):
+    """Writes the frame `after_ms` into tests/feeds/<feed>.txt to `bmp`; returns its sha256."""
+    r = subprocess.run([PROGRAM, "--headless", "--clock", "fixed", "--script", os.path.join(FEEDS, feed + ".txt"),
+                        "--shot", bmp, "--after", str(after_ms)] + flags,
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                       env={k: v for k, v in os.environ.items() if k != "BLORB_SIM_MAC"})
+    if r.returncode != 0 or not os.path.exists(bmp):
+        raise RuntimeError("%s: the simulator exited %d: %s" % (feed, r.returncode, r.stderr[-800:]))
+    with open(bmp, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def shoot(case, after_ms):
     """The frame `after_ms` into the case's feed, and its sha256. Runs the sim twice."""
-    feed = os.path.join(FEEDS, case + ".txt")
-    digests = []
     with tempfile.TemporaryDirectory() as tmp:
-        for run in range(2):
-            bmp = os.path.join(tmp, "%d.bmp" % run)
-            r = subprocess.run([PROGRAM, "--headless", "--clock", "fixed", "--script", feed,
-                                "--shot", bmp, "--after", str(after_ms)] + FLAGS.get(case, []),
-                               stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                               env={k: v for k, v in os.environ.items() if k != "BLORB_SIM_MAC"})
-            if r.returncode != 0 or not os.path.exists(bmp):
-                raise RuntimeError("%s: the simulator exited %d: %s" % (case, r.returncode, r.stderr[-800:]))
-            with open(bmp, "rb") as f:
-                digests.append(hashlib.sha256(f.read()).hexdigest())
+        bmps = [os.path.join(tmp, "%d.bmp" % run) for run in range(2)]
+        digests = [frame(FEED_OF.get(case, case), after_ms, FLAGS.get(case, []), bmp) for bmp in bmps]
         if digests[0] != digests[1]:
             raise RuntimeError("%s: two runs of one feed differ: %s %s" % (case, digests[0], digests[1]))
-        img = Image.open(os.path.join(tmp, "0.bmp")).convert("RGB")
+        img = Image.open(bmps[0]).convert("RGB")
     return img, digests[0]
 
 
@@ -144,14 +158,14 @@ def main(names):
         try:
             got, digest = shoot(case, CASES[case])
         except RuntimeError as e:
-            print("FAIL %-13s %s" % (case, e))
+            print("FAIL %-17s %s" % (case, e))
             failed += 1
             continue
         shots[case] = got
         got.resize((got.width * 2, got.height * 2), Image.NEAREST).save(os.path.join(FRAMES, case + ".png"))
         why = unlike(case, got, shots) or check(case, got)
         verdict = ("FAIL " + why) if why else ("blessed" if os.environ.get("UPDATE_GOLDEN") else "ok")
-        print("%-13s sha256 %s x2  %s" % (case, digest, verdict))
+        print("%-17s sha256 %s x2  %s" % (case, digest, verdict))
         failed += why is not None
     print("%d of %d frames %s" % (len(names or CASES) - failed, len(names or CASES),
                                   "blessed" if os.environ.get("UPDATE_GOLDEN") else "match their goldens"))

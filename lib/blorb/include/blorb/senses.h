@@ -50,8 +50,12 @@ struct SenseOut {
   uint8_t lociCount = 0;
   StimId stimuli[16]{};
   uint8_t stimCount = 0;
+  // Bit s: stimulus s came from the phone (Dish::fire), not a detector. A duel
+  // reads only what the body did, so no verb or twist can open one or lock a move.
+  uint64_t remote = 0;
   void set(LocusId, Fx);   // the last write to a locus in a tick wins
   void fire(StimId);       // a repeat of the same id in one tick merges, so a doubled delivery is a no-op
+  void fireRemote(StimId); // fire, marked as the phone's
   void clear();
 };
 
@@ -82,9 +86,18 @@ struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: uint32_t last_ = 0;
 };
-struct ButtonDetector : DetectorBase {    // release < 1.2 s -> Button; reaching 1.2 s -> ButtonHold
+// A second short press that goes down within this of the first one's release
+// is ButtonDouble instead of Button: the duel's "ready" (BATTLES.md, "BOOT,
+// everywhere"). Where a double press means nothing, the Dish counts it as a
+// press again (boot.h), so tapping through a clutch is not slowed. v2's U3
+// replaces this detector with the game wheel's.
+inline constexpr uint32_t kDoublePressMs = 400;
+
+struct ButtonDetector : DetectorBase {    // release < 1.2 s -> Button (or ButtonDouble); reaching 1.2 s -> ButtonHold
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t downSince_ = 0; bool down_ = false, held_ = false;
+ private:
+  uint32_t downSince_ = 0, lastRelease_ = 0;
+  bool down_ = false, held_ = false, second_ = false, released_ = false;
 };
 struct LidDetector : DetectorBase {       // az < -0.8 g for 2 s -> lidded, LidDown; righting -> LidUp
   void sample(const BodySample&, uint32_t ms, SenseOut&);

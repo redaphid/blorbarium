@@ -1,131 +1,207 @@
 # HANDOFF
 
-blorbarium is a little artificial-life creature in a 3D-printed case, for a
-friend who does not program. It is a sibling of
-[redaphid/claude-notification-screen](https://github.com/redaphid/claude-notification-screen)
-(local clone at `D:\Projects\claude-notification-screen`, the `phone` worktree
-at `C:\Users\hypnodroid\Worktrees\claude-notification-screen-phone`). That
-project is a Claude Code status badge with a pet on it. This one keeps the pet
-and drops Claude.
+blorbarium is a little artificial-life creature on a round ESP32-S3 screen.
+It began as a single gift for a friend and is now a family of devices: the
+owner is giving **8** of them to the owner's niece and nephews (aged 6-13) and their
+parents, and their pets duel each other over ESP-NOW. It shares ancestry
+with [redaphid/claude-notification-screen](https://github.com/redaphid/claude-notification-screen)
+but must not depend on it at build or run time (owner, 2026-10-13: "Make
+sure this is independent of my claude code notification screen project").
 
-This file is where things stand. The design history is in `docs/design/`
-(DESIGN.md, DEVIATIONS.md) and in `docs/notes/` (being added by another
-session).
+The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
+SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
+and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
-## Where things stand (2026-10-03, end of the bring-up session)
+## Where things stand (2026-10-13, evening, paused)
 
-### On the device
+**Deadline: the owner flies out Thursday 2026-10-15 with the 8 devices.**
+Every agent was stopped with its work pushed. Nothing is running except a
+ComfyUI art queue (below).
 
-- **Board:** Waveshare ESP32-S3-LCD-1.28, CH343 `1A86:55D3`, usually COM10.
-  ESP32-S3 QFN56 rev v0.2, 16 MB flash, 2 MB PSRAM.
-- **Build:** `flash3` 2f8fd00, flashed at about 16:20. It boots
-  `boot=Resumed occupant=creature gen=0 genome=d30f00d1` and has passed 10
-  power cuts (11 of 11 boots good, 7 cuts during a save). Free heap with BLE
-  advertising is 136,244 B, and the loop stack high-water mark is 12,256 B
-  free of 16 KB.
-- **Pet:** an adult grungo, generation 0, genome hash `d30f00d1`. The user
-  chose him. Keep him. He lives in the `pet` NVS partition (`snap.a`,
-  `snap.b`) and on `petfs` (`lineage.log`). A cable flash of a merged
-  `.hex` never touches them.
-- **Bluetooth:** advertises as `blorb-237c` (Nordic UART). The protocol is in
-  `docs/ble.md`.
-- **Website:** https://blorb.hypnodroid.com (Android Chrome, Web Bluetooth),
-  from branch `web`. A Cloudflare Access bypass application keeps the site
-  public. This file does not record its name and settings, so check the
-  Cloudflare Zero Trust dashboard before changing Access.
-- **Serial (115200):** a `[hw] up=...` status line every 10 s (heap, stack,
-  IMU, rotation, button). `#n VERB` protocol lines work as they do over BLE.
-  `DEBUG stage <hatchling|child|adult|elder>` is serial-only. A tool that
-  toggles DTR/RTS on open resets the board.
-- **The cyber-puck badge daemon** (`badged.py`, which drives this same USB id)
-  was stopped for the bring-up. A detached keeper process holds it down
-  until the next reboot, and it comes back by itself after a restart.
-
-### Backup, fallbacks and restore
-
-All are in `D:\projects\bak\blorbarium\`:
-
-- `flash-backup-lcd128-2026-10-03.bin`: the whole 16 MB flash as it came
-  (cyber-puck badge firmware 1.4.0, pet "dragon"). It was read twice, and
-  both reads gave sha256
-  `b06cdfa43cafa6142a7980bd1bf3ce0469bb86cdde9e17431a6b4b1c8bd63dec`.
-- `gift-ble-e9a1689.hex`: the last build proven on the board with BLE.
-- `gift-2431fea.hex` (no BLE) and `fallback-d1336ad.hex` (first bootable):
-  older known-good images.
-- `flash3-2f8fd00.hex`: what is on the device now.
-
-To reflash a known-good build, which keeps the pet because the hex has gaps:
-
-    ~/.platformio/penv/Scripts/python.exe ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM10 -b 921600 write_flash 0x0 D:/projects/bak/blorbarium/gift-ble-e9a1689.hex
-
-To restore the original badge firmware, which **erases blorbarium and the
-pet**:
-
-    ~/.platformio/penv/Scripts/python.exe ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM10 -b 921600 write_flash 0x0 D:/projects/bak/blorbarium/flash-backup-lcd128-2026-10-03.bin
-
-### Branches (all pushed to origin)
+### Branches
 
 | Branch | Tip | State |
 |---|---|---|
-| `main` | a877d6f | The original handoff only. |
-| `engine` | a1cb726 | The creature engine, units 0 to 19, verified. The base of everything below. |
-| `hw` | e6dd6d4 | Unit 20 on the 1.28: partitions, storage, panel, IMU (the `word()` macro fix), rotation, the marquee widget, visual-center's framing and scaling, re-blessed goldens. Green. Flashed as 2431fea. |
-| `gift-ble` | e9a1689 | `hw` plus BLE (NusLink, TwoLinks, docs/ble.md). Green. Flashed and power-cut tested. |
-| `hw-next` | eda3a94 | `hw` plus the brisk marble physics (fb8af31), the glass marble art, thoughts and the shake 8-ball, foresee minTicks 15, and goldens. Green. |
-| `third` | 4034e1d | `hw-next` plus "asleep always shows shut eyes", and the measured budgets in DESIGN 8 and DEVIATIONS 11. Green: native 290 of 291 (1 skipped), sim 13 of 13. |
-| `flash3` | 2f8fd00 | `third` plus BLE with notify backpressure (hw-blefix), `TWIST say` (hw-say), and every shake foretells (hw-oracle). Green: native 302 of 303 (1 skipped), sim 13 of 13. **On the device.** This HANDOFF lives here. |
-| `hw-blefix`, `hw-say`, `hw-oracle` | 40cc28b, c589280, 5483391 | The slices merged into `flash3`. |
-| `hw-marble4` (also `hw-marble2`, `hw-marble3`) | 5b169ec | On `third`: rotation-correct tilt (TiltDetector re-expressed on a turn), kFlatG 0.6, faster tilt, a 900 ms crossing, render-time interpolation, and the replay re-bless. Native green. **Not merged:** sim_film 6 of 13. Rolling friction 1/100 alone shifts 7 frames slightly (breath phase or position; he still sleeps). Either re-bless them after looking, or keep 1/125 and re-measure the crossing. |
-| `hw-unit20`, `hw-ble`, `hw-rotate`, `hw-marquee`, `hw-marble` | | Delegate branches, already merged into the rows above. |
-| `visual-center` | ce97248 | Centring, the teal foresee face and scaling were taken into `hw`. Its later commits (the elder ageing look) are not taken. Its own goldens were not re-blessed. |
-| `depth` | 1f64dd1 | Learning-depth measurements (learnsim, e2e). Only the Foresee minTicks idea was taken (as 15, via 74ead86's actions.def). |
-| `depth-look`, `depth-u2`, `depth-u4` | | Newer depth work (mutate's forced-look floor, heirlooms, interrupting stimuli). Not reviewed here. |
-| `thoughts` | 47d4308 | Thoughts and the 8-ball. 28224e3 and d88ee93 were taken. 0b4dd21 (heritable oracle gene) is red. |
-| `dialogue` | 850fff5 | Regenerates `defs/thought_lines.def`. Not taken. |
-| `web` | 8772309 | The website. Note that it commits `web/.wrangler/` caches, which belong in `.gitignore`. |
-| `docs`, `e2e`, `video`, `art-flow` | | Docs, learning e2e harness, reel tooling, a ComfyUI art workflow. |
-| `engine-*` | | The engine's per-unit history. Superseded by `engine`. |
+| `main` | 045ad8a | Storage provisioning, the sealed screen, BLE OTA from the website. Proven on hardware. |
+| `battles` | 5aa2372 | The integration branch for duels: units D1-D8, D10, D11 and ART1-4 landed. Native 693/694 (1 skipped). The duel engine, wire, sessions, scenes and 9 species are here, but the duel is **not yet inside the pet**. Not merged into `main`. |
+| `battles-d11b` | 1da0659 | BOOT hint moved off the home marquee (test `BootHint.StaysOffTheMarqueeStrip`); duelists drop in on the greeting. Native 694/695. **Land first.** |
+| `battles-d9` | 60f2f1b | D9, the duel inside the pet: a double press opens a duel, BOOT routing from `kBoot` with a rim hint on every screen, wounds/scars/fall/meeting/friend egg saved at once, the one-Checkpoint duel-gene graft, friend.egg consumed before the Birth (power-cut tested), slayer feat, war paint, vendetta, the losing-streak cuddle. Already merges `battles` 5aa2372 (its own `sceneOf` dropped for D11's). **Owed before landing:** a full native run at this tip (the last full run, 711/715, predates its pickEgg fix) and the guard rerun (stopped at 5/14). Left: the 50 Hz nest loop in `setup()`. |
+| `battles-d13` | 4ebe148 | Film tooling: two simulators over `sim/serial_air.h` (a fake radio with loss, doubles and lateness), scripted kids in `sim/duel_bot.h`, `tools/duel_video.{py,sh}`, scripts in `tools/duels/`. |
+| `roster-art` | 455a897 | `tools/comfy_queue.py` and `tools/art_sheets.py`, the ComfyUI candidate queue. |
+| `flash3` | 2f8fd00 | What the first gift device (an adult Grungo, genome `d30f00d1`) runs. See "The first gift device" below. |
 
-The sprite expressions live in the separate `blorbarium-art` repo.
+### Delivery plan to Thursday
 
-**Merge order for the next build:** `third`, then `hw-blefix`, then
-`hw-say`, then `hw-oracle` (that is `flash3`), then a fixed marble branch,
-then `dialogue`'s `thought_lines.def` alone. Re-bless goldens only on the
-merged tip, and look at every re-blessed PNG.
+Each release is proven on the two test boards, then cut as a signed OTA
+image, before the next starts, so there is always something working to
+ship. Anything not ready by Thursday reaches the devices over the air later.
 
-### Bugs: fixed and open
+1. **R0, Wednesday morning, the floor.** Land `battles-d11b`. Put the
+   `battles` tip on both test boards and soak it for hours. Cut a signed
+   OTA release. This is 9 creatures, OTA and safe storage.
+2. **R1, Wednesday.** Run the full native suite and the guards on
+   `battles-d9`, then land it. Refilming a Mortal through the Dish path is
+   its acceptance test.
+3. **R2, Wednesday.** D12: a real ESP-NOW duel between COM11 and COM12.
+   This gates battles at the visit.
+4. **R3, Thursday morning.** Flash all 8 gift devices, one on the cable at a
+   time, with the newest release that soaked, then check OTA from the
+   phone. Never flash a build that did not soak. Write
+   `tools/flash_fleet.sh` first: it refuses COM11/COM12, flashes, waits for
+   the first boot's provisioning, saves the boot log, and records each
+   device's serial and MAC against the species it hatched.
+5. If R2 slips, ship R0/R1 and deliver battles over OTA during the visit.
+   After that, over OTA: the lobby fixes, D14 (the phone window), balance.
 
-- Fixed: IMU read zeros (`word()` macro, `hw`); asleep showing open eyes
-  (`third`); the stale tilt after a quarter turn (`hw-marble2`, not merged);
-  the marquee frozen on an egg (`hw`); thoughts scrolling twice (`hw-next`).
-- Fixed in `flash3`, needs the phone to confirm: GENOME over BLE was garbled
-  (1168/1528 bytes) because notifications were dropped. NotifyQueue now
-  retries. `DEBUG bletest <bytes>` on serial, with a central connected,
-  prints `[hw] ble tx chunks= retries=`.
-- Open: **the marble.** The device's marble is the old slow one, and its
-  tilt goes stale for about a second after a quarter turn. The fix is on
-  `hw-marble4`, which is native-green. Its rolling friction of 1/100 shifts 7
-  sim frames slightly. He is not woken (`marble_hit` cannot wake a sleeper).
-  Decide between re-blessing those frames after looking at each, and
-  keeping 1/125 and re-measuring the crossing. Then merge after `flash3`.
-- Open: **Foresee test regression.** Resolved on `third`, whose test counts
-  the pose only while he is still foreseeing. Recheck it on any marble
-  merge.
-- Open: **mutate's forced-look guarantee** (`depth-look`), not reviewed.
-- Open: **the oracle-gene re-bless** (`thoughts` 0b4dd21, red on
-  `Starter.CarriesEveryGeneKindAndExpressesEachAtSomeStage`). The every-shake
-  rule in `flash3` doesn't need the gene.
-- Open: the marble item near the rim is half-masked in `remains` (items are
-  placed with the figure's offset). Thoughts move in 10 Hz steps.
+Undecided: the creature is rolled from the MAC, so with 8 devices and 9
+species two kids may get the same one. The owner may want one pinned per
+device, or "all different". Settle this before R3.
 
-### Next steps
+### Proven on hardware
 
-1. Confirm `flash3` from the phone: GENOME reads whole, and `TWIST say`
-   shows on the marquee.
-2. Root-cause the marble's sleep-frame change, then merge the marble.
-3. Ask the friend's phone: Android or iPhone (Web Bluetooth), and whether
-   it keeps the board powered.
-4. BLE OTA (DESIGN unit 22), now that the partition table is OTA-ready.
+- **OTA over BLE from the website** (Web Bluetooth, Android Chrome): the
+  image is ECDSA P-256 signed over `blorbota2 board ver flags fmt size sha`,
+  confirmed by a BOOT press on the device, and kept only after `OTA
+  CONFIRM` plus 30 s, else it rolls back. 0.4.0 to 0.4.1 was kept at about
+  15 KB/s, and the 0.4.2 fail-trial build rolled back.
+- **Provisioning a factory board** (COM12): blank partitions are formatted,
+  the first boot is Fresh, the next is Resumed. Issue #1 is closed.
+- **All 9 species** draw on the real board.
+- **A Spar over ESP-NOW between COM11 and COM14** (D12, firmware 0.6.0):
+  `uv run tools/duel_hw.py COM11 COM14` plays it by DEBUG verbs (double,
+  lean, press), 12 turns, both boards logged `outcome_hash=8430b2b9`. Heap
+  with BLE and ESP-NOW up: 57 KB free, 49 KB largest block (from 95 KB);
+  after the first close Wi-Fi keeps about 16 KB, stable across reopens.
+  `src/hw/air_espnow.h` reads RSSI from promiscuous mode (IDF 4.4's ESP-NOW
+  callback has none).
+- **The body is sensed at 50 Hz on its own task** (`bodyq` in main.cpp): a
+  frame takes about 190 ms to draw, so sampling between frames ran at 5 Hz
+  and missed double presses and made aiming take 3 s. The draw itself is
+  still slow (on `main` too, since the envelope in 0885b2d); not fixed.
+- **Not yet proven:** Scrap and Mortal on hardware, OTA `ERR 409 BUSY`
+  mid-duel, the RSSI at 30 cm and 2 m for `kNearRssi`.
+
+### Boards and keys
+
+- **COM11**, CH343 serial 5C94095006, MAC d4:05:92:77:1b:34: a test board
+  holding Grungo `e045ab17` (blorb-1b34). Was a badge; its full backup is in
+  `D:\projects\bak\blorbarium\`.
+- **COM12**, CH343 serial 5C94094999: a test board holding an egg
+  `e1fe2f88` (blorb-1b44). Its factory image is backed up beside it.
+- Agents flash only COM11 and COM12. The 8 gift devices and the first gift
+  device need the owner's explicit OK in chat.
+- `tools/flash_board.sh` flashes one board (`--no-reset` to skip the reset).
+  `DEBUG shot` plus `tools/shot.py` is how an agent sees the screen.
+- **The OTA signing key** is
+  `C:\Users\hypnodroid\.config\blorbarium\ota-signing-key.pem`, and its
+  public half is `src/hw/ota_pubkey.h`. Lose the key and every device needs
+  a cable for its next update. Back it up before Thursday.
+- This PC has no Bluetooth adapter. BLE work is proven through the owner's
+  Android phone (`adb reverse` to a local site).
+
+### Battles, in one paragraph
+
+Three stakes: Spar (no harm), Scrap (wounds and scars), Mortal (the pet can
+die; both kids hold BOOT to agree, and the winner holds 3 s to Finish,
+while silence spares). Each turn is a stance from a wheel: Pounce beats
+Trick, Trick beats Guard, Guard beats Pounce. A BOOT press queues a quick
+special (one turn of wind-up, +1 heart) and a hold queues a heavy one (two
+turns, +2). A Trick staggers it, a counter ripostes it, and Hush dodges it.
+Afterwards there are friend eggs, a duel book, war paint for slayers and
+vendettas for the fallen's line. `resolve()` is pure, integer and
+mirror-symmetric, so both devices agree on the outcome hash. Packets:
+Beacon 77 B, State 111 B, Genome 224 B. Pets dying is the owner's decision
+(2026-10-13: "Pets should die. My family has a dark sense of humor.").
+
+### Films and art
+
+- Films are in `D:\projects\bak\blorbarium\duels\` and `reel\`. Only
+  `scrap-*.mp4` (Mossby v Tinker) shows the real duel screen. `mortal-*`
+  still shows the dish view and was one-sided (6-1). `spar-*` was cut off
+  mid-encode; `tools/duels/spar.txt` is ready to render. `reel-*` is the
+  sizzle reel.
+- **ComfyUI** (`127.0.0.1:8188`) holds a candidate queue submitted by
+  `tools/comfy_queue.py`, which renders into `D:/sync/Comfy/blorbarium/`.
+  The first expression jobs come out smiling, because they start from each
+  creature's smiling face. The fix (paint the expression in first, denoise
+  at 0.6, "smile" as a negative prompt) is in the script but not yet proven
+  on the GPU. `--cancel-mine` removes only this script's pending jobs, and
+  `--fuzz N` randomises and records the settings. `tools/art_sheets.py`
+  makes contact sheets. Candidates only: nothing goes into the firmware
+  until the owner picks.
+
+### Open bugs and questions
+
+- **Lobby drawing** (`sceneOf`/`drawDuel`): an unknown friend is drawn as
+  species 0 (Grungo), and the pet's own sprite is clipped by the rim. Fix it
+  in the shared drawing, not the sim.
+- **A turn-0 clash** in the Spar film: Guard lost to Pounce. `resolve()` is
+  correct for those cards. Suspects, in order: the D8 session commits a
+  special on an empty meter (playing its placeholder Pounce); the film swaps
+  A and B (A is the lower MAC); a caption shows the aimed stance rather
+  than the played one. Settle it from the raw `turns[0]`.
+- **Balance:** Mothwick 0.394 and Mudge 0.413 Queuer v Queuer; Mudge beats
+  Gilly 0.755 on autopilot. Move `kScarKinds` into `stakes.h`.
+- GitHub: #3 (rc=6 notify retries), #4 (the 0x228 drop), #5 (docs step 2).
+- For the owner: the layout defaults (42/54 sizes, stances at 9/3/6, strike
+  bar only, assist hearts lost first, NOPE! for a riposte), a word for the
+  "immortals" reversal, whether the new creatures are too cute next to
+  Grungo and whether Mudge reads as a bird, and whether to graft duel genes
+  into the first gift device's Grungo. Settled: BOOT is behind the screen,
+  so the rim hint stays at about 1 o'clock.
+
+### Rules for agents
+
+1. Work only in this repo; read claude-notification-screen, never write it.
+2. Flash only COM11 and COM12.
+3. Never rewrite history: no rebase, force-push, amend, `reset --hard` or
+   `branch -D` of unmerged work. Integrate by merging.
+4. After every commit, `git push -u origin HEAD`, WIP included.
+5. Opus or sonnet only, never fable, and never above high effort.
+6. The pet is a keepsake: say so in the report before changing the `pet` or
+   `petfs` partitions or the save format.
+7. Re-bless a golden only after looking at the changed PNG and saying why
+   it changed.
+8. These go to children aged 6-13, and pets can die, in battle too.
+9. Stop only processes you started, by PID or port, never by name.
+10. No pet art or mark may read as a piercing, tattoo or ornament. Scars go
+    on limbs, shoulders, sides or head, never the front of the chest or the
+    belly.
+
+**Landing on `battles`:** merge the unit branch into a fresh branch off
+`origin/battles`, run the native suite (`bash tools/wsl_test.sh` inside WSL
+from the `/mnt/...` path; git does not work in a worktree from WSL), and
+push `HEAD:battles` only if the suite's own exit status is 0 and its output
+has no `ERRORED` or `FAILED`. A merge was once pushed while its tests
+failed, because the push was chained after a `cat`. Each gtest suite needs
+its own `main()`. Scripts are mode 100644, so run them with `bash`.
+
+## The first gift device (bring-up, 2026-10-03)
+
+- **Board:** Waveshare ESP32-S3-LCD-1.28, usually COM10 on the owner's desk.
+  It runs `flash3` 2f8fd00 with an adult Grungo, generation 0, genome
+  `d30f00d1`, advertising as `blorb-237c`. Keep him. He lives in `pet`
+  (`snap.a`, `snap.b`) and on `petfs` (`lineage.log`). A cable flash of a
+  merged `.hex` never touches them.
+- **Website:** https://blorb.hypnodroid.com (branch `web`), public through a
+  Cloudflare Access bypass application. Check the Zero Trust dashboard
+  before changing Access.
+- **Backups** in `D:\projects\bak\blorbarium\`: the whole original 16 MB
+  flash (`flash-backup-lcd128-2026-10-03.bin`, sha256
+  `b06cdfa43cafa6142a7980bd1bf3ce0469bb86cdde9e17431a6b4b1c8bd63dec`),
+  `gift-ble-e9a1689.hex`, `gift-2431fea.hex`, `fallback-d1336ad.hex` and
+  `flash3-2f8fd00.hex`.
+- To reflash a known-good build, which keeps the pet because the hex has gaps:
+
+      ~/.platformio/penv/Scripts/python.exe ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM10 -b 921600 write_flash 0x0 D:/projects/bak/blorbarium/gift-ble-e9a1689.hex
+
+- To restore the original badge firmware, which **erases blorbarium and the
+  pet**:
+
+      ~/.platformio/penv/Scripts/python.exe ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM10 -b 921600 write_flash 0x0 D:/projects/bak/blorbarium/flash-backup-lcd128-2026-10-03.bin
+
+- The bring-up's branch table and its open marble questions are in this
+  file's history (`git log -p HANDOFF.md`).
 
 ## What it is meant to be
 
@@ -207,7 +283,7 @@ All paths below are in that repo.
 - **Waveshare ESP32-S3-Touch-LCD-1.46**: 412x412 SPD2010 over QSPI, 8MB
   octal PSRAM, native USB (`303A:1001`), and it has touch. Its PWR button is
   also its power switch (see `board_lcd146.h`).
-- Which board blorbarium uses is not decided.
+- blorbarium ships on the 1.28 (env `badge128`).
 - **A board's first boot formats what never held a pet** (issue #1,
   `lib/blorb/include/blorb/provision.h`). When `pet` or `petfs` will not
   open, boot reads it raw. One that holds a blorbarium mark is a damaged
@@ -279,7 +355,7 @@ All paths below are in that repo.
   on PATH. There is no native g++ or clang. WSL is installed, so the SDL
   simulator would have to run under WSL, or a sim harness would have to
   render frames to PNG in some other way.
-- No board was plugged in when this was written.
+- The native tests and the simulator run under WSL (`survivor`).
 
 ## Working rules carried over
 

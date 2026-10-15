@@ -9,7 +9,8 @@
 #include <string_view>
 
 #include "blorb/dish.h"
-#include "grungo_pack.h"
+#include "blorb/founding.h"
+#include "paint/duel.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
 
@@ -24,6 +25,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/board_lcd128.h"
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
+#include "hw/air_espnow.h"
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
@@ -117,10 +119,32 @@ static ota::Trial trial;
 static hw::EspTrialPort trialPort;
 static hw::TrialWatchdog trialWatchdog;
 static hw::TwoLinks links(phone, otaLink);   // DEBUG lines stay on the cable: only SerialLink holds them back
+
+// OTA's interlock, from the duel's side (docs/ota.md, "Other users of the
+// radio"): no duel opens while an update session is active or this image is
+// still on trial, so a trial image never writes a wound, a book entry or a
+// friend egg a rollback would meet. Every call runs on the loop task.
+struct RadioGate : blorb::Air {
+  blorb::Air& inner;
+  explicit RadioGate(blorb::Air& a) : inner(a) {}
+  bool open() override;
+  void close() override { inner.close(); }
+  bool isOpen() const override { return inner.isOpen(); }
+  blorb::PeerAddr self() const override { return inner.self(); }
+  void broadcast(const uint8_t* p, size_t n) override { inner.broadcast(p, n); }
+  void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner.send(to, p, n); }
+  std::optional<blorb::Datagram> receive() override { return inner.receive(); }
+};
+static hw::EspNowAir espNow;
+static RadioGate radioGate(espNow);
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
+// The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
+// RadioGate on the board; the simulator sets its own here before setup(),
+// since it includes this file whole.
+static blorb::Air* duelAir = nullptr;
 static BoardDisplay display;
 static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
@@ -128,56 +152,155 @@ static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 static orient::Up up{ORIENT_R0};
 
-// The "tap me with your phone" marquee asks for the time. Until the website
-// exists nothing can answer, and with no battery every replug forgets the
-// time, so the board does not ask. The sim keeps it for its golden.
-#if defined(BADGE_BOARD_SIM)
-static constexpr bool kAskForTime = true;
-#else
-static constexpr bool kAskForTime = false;
-#endif
+// `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
+// every pack on one board. RAM only: the pet and its save never see it.
+static std::optional<blorb::SpeciesId> pinnedSpecies;
 
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
-  if (!kAskForTime) a.timeUnknown = false;
+  if (pinnedSpecies) a.species = *pinnedSpecies;
+#if !defined(BADGE_BOARD_SIM)
+  // The update's question owns the button (readBody), so it owns the hint too.
+  if (updater.asking()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
+#endif
   return a;
 }
 
-// `DEBUG press [ms]` holds BOOT down from pressAt for pressMs, so a prompt
-// that waits on the button can be answered over the cable. 0 is no press.
-static uint32_t pressAt = 0, pressMs = 0;
+// One frame of the dish, or of the duel while one has a scene. In the common
+// path, not behind a board, because the simulator draws (and films) exactly
+// what this draws. The scene is static: it holds two Appearances, which the
+// loop task's stack should not carry every frame.
+static paint::DuelScene duelScene;
+static void drawFrame(const blorb::Appearance& a, uint32_t now) {
+  const blorb::BootHint& b = a.boot;
+  const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble};
+  if (a.dueling) {
+    // The lobby has no act of its own yet: the dish stays, with the friend hint.
+    const blorb::DuelView v = dish->duelView();
+    if (v.phase != blorb::DuelPhase::Lobby) {
+      duelScene = paint::sceneOf(v, a);
+      duelScene.boot = hint;
+      paint::drawDuel(duelScene, paint::packFor(a.species), paint::packFor(v.them.species), canvas, now);
+      return;
+    }
+  }
+  paint::draw(a, paint::packFor(a.species), canvas, now);
+  paint::drawBootHint(canvas, hint);   // what BOOT does now, in every state
+}
 
-static blorb::BodySample readBody(uint32_t now) {
+// The body is sensed at 50 Hz on a task of its own and replayed on the loop.
+// A frame takes about 190 ms to draw (measured on the board, 0.6.0), so a
+// loop that sampled between frames sensed at 5 Hz: a quick press or half a
+// double press fell between samples, and the tilt smoothing, tuned per
+// 50 Hz sample, took 3 s to aim. Each sample carries its own millis(), so
+// every detector times gestures as designed however long a frame takes.
+// The task is the IMU's only reader; the Dish is still only the loop's.
+namespace bodyq {
+struct Timed { blorb::BodySample s; uint32_t ms; };
+constexpr uint8_t kRing = 32;   // 640 ms of samples: a long save or a warp drops the newest, never blocks
+static Timed ring[kRing];
+static uint8_t head = 0, tail = 0;
+#if !defined(BADGE_BOARD_SIM)
+static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+#endif
+
+// `DEBUG press` and `DEBUG double` hold BOOT down over these windows, read by
+// the sense task, so the cable's presses are sampled like a thumb's.
+struct Window { volatile uint32_t at = 0, ms = 0; };
+static Window presses[2];
+static bool pressed(uint32_t ms) {
+  for (const Window& w : presses)
+    if (ms - w.at < w.ms) return true;
+  return false;
+}
+}  // namespace bodyq
+
+// `DEBUG lean <aim>` tilts the screen-space sample toward one rim edge, as a
+// hand would, from leanAt for leanMs.
+static uint32_t leanAt = 0, leanMs = 0;
+static int8_t leanAim = -1;
+
+// Half a g along the aimed axis, the rest down, so the tilt detector takes it
+// as steady: aim 0 raises +x, 1 raises -x, 2 lowers +y, 3 raises +y.
+static void applyLean(blorb::BodySample& s, uint32_t now) {
+  if (leanAim < 0 || now - leanAt >= leanMs) return;
+  s.ax = leanAim == 0 ? 500 : leanAim == 1 ? -500 : 0;
+  s.ay = leanAim == 2 ? -500 : leanAim == 3 ? 500 : 0;
+  s.az = 866;
+}
+
+static blorb::BodySample readBody(uint32_t ms) {
   blorb::BodySample s;
   if (!imuOk || !imu::read(s)) {
     s = blorb::BodySample{};
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
-  s.buttonDown = boardButtonDown() || now - pressAt < pressMs;
-#if !defined(BADGE_BOARD_SIM)
-  // While the dish asks about an update, the button answers it, and the pet
-  // feels neither that press nor the rest of that hold. A cable's DEBUG press
-  // answers too: the cable is a hand on the dish.
-  static bool wasDown = false, otaOwns = false;
-  if (updater.asking() && s.buttonDown && !wasDown) updater.press(millis());
-  otaOwns = updater.asking() || (otaOwns && s.buttonDown);
-  wasDown = s.buttonDown;
-  if (otaOwns) s.buttonDown = false;
-#endif
+  s.buttonDown = boardButtonDown() || bodyq::pressed(ms);
   return s;
 }
 
-// The engine's half of the loop: sense at 50 Hz, then run whatever 100 ms
-// ticks are due. The simulator's warp calls this with no frames between.
+#if !defined(BADGE_BOARD_SIM)
+namespace bodyq {
+static void sense(void*) {
+  TickType_t wake = xTaskGetTickCount();
+  for (;;) {
+    vTaskDelayUntil(&wake, pdMS_TO_TICKS(blorb::kSampleMs));
+    const uint32_t ms = millis();
+    const blorb::BodySample s = readBody(ms);
+    portENTER_CRITICAL(&mux);
+    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms};
+    portEXIT_CRITICAL(&mux);
+  }
+}
+
+static std::optional<Timed> take() {
+  std::optional<Timed> t;
+  portENTER_CRITICAL(&mux);
+  if (head != tail) t = ring[tail++ % kRing];
+  portEXIT_CRITICAL(&mux);
+  return t;
+}
+}  // namespace bodyq
+#endif
+
+// While the dish asks about an update, the button answers it, and the pet
+// feels neither that press nor the rest of that hold. A cable's DEBUG press
+// answers too: the cable is a hand on the dish.
+static bool petFeels(bool down) {
+#if !defined(BADGE_BOARD_SIM)
+  static bool wasDown = false, otaOwns = false;
+  if (updater.asking() && down && !wasDown) updater.press(millis());
+  otaOwns = updater.asking() || (otaOwns && down);
+  wasDown = down;
+  return down && !otaOwns;
+#else
+  return down;
+#endif
+}
+
+static void feel(const blorb::BodySample& body, uint32_t ms) {
+  lastBody = body;
+  // The panel and the engine turn together, so downhill is down on the glass.
+  const uint8_t rot = up.sample(body, ms);
+  if (rot != display.getRotation()) display.setRotation(rot);
+  blorb::BodySample screen = up.toScreen(body);
+  applyLean(screen, ms);
+  screen.buttonDown = petFeels(screen.buttonDown);
+  dish->sample(screen, ms);
+}
+
+// The engine's half of the loop: sense, then run whatever 100 ms ticks are
+// due. The simulator's warp calls this with no frames between.
 static void step(uint32_t now) {
+#if !defined(BADGE_BOARD_SIM)
+  const uint32_t ahead = now - millis();   // a DEBUG warp runs the loop's clock ahead of millis()
+  while (std::optional<bodyq::Timed> t = bodyq::take()) feel(t->s, t->ms + ahead);
+#else
   if (now - lastSample >= blorb::kSampleMs) {
-    lastBody = readBody(now);
-    // The panel and the engine turn together, so downhill is down on the glass.
-    const uint8_t rot = up.sample(lastBody, now);
-    if (rot != display.getRotation()) display.setRotation(rot);
-    dish->sample(up.toScreen(lastBody), now);
+    feel(readBody(now), now);
     lastSample = now;
   }
+#endif
   dish->tick(now, host);
 }
 
@@ -220,12 +343,15 @@ static ota::PetMark petMark() {
 bool DishOtaHost::busy() {
   // A clutch is chosen with the button, which the update's question would take.
   if (std::holds_alternative<blorb::Clutch>(dish->occupant())) return true;
-  // Anything else he must finish first (a battle, one day) refuses here too.
+  // A duel holds the radio and the button: BEGIN answers ERR 409 BUSY until it closes.
+  if (dish->duelActive()) return true;
+  // Anything else he must finish first refuses here too.
   // A board that cannot save is refused by the save before the transfer; a
   // sealed one may update, since a newer firmware is how a sealed pet wakes.
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
+bool RadioGate::open() { return !updater.active() && !trial.onTrial() && inner.open(); }
 bool DishOtaHost::onTrial() { return trial.onTrial(); }
 bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
   // A sealed or newer-format keepsake was never read: the Dish's egg is a stand-in, not the pet.
@@ -315,9 +441,28 @@ static void reportStatus(uint32_t now) {
 }
 #endif
 
+// A device that has never had a pet waits a moment on its first boot for
+// `DEBUG found <species>`: tools/flash_fleet.sh --species sends it, so each
+// gift hatches the creature chosen for its kid. The pin must land before the
+// founding below, and storage is blank until this boot formats it, so there
+// is no earlier moment to write it. A device with a pet never waits.
+[[maybe_unused]] static void awaitFoundPin() {
+  Serial.println("[hw] fresh: DEBUG found <species> in 5 s pins the egg");
+  for (const uint32_t t0 = millis(); millis() - t0 < 5000; delay(10)) {
+    phone.readLine();
+    const char* line = phone.takeDebug();
+    if (!line || std::strncmp(line, "found ", 6) != 0) continue;
+    const char* why = debugverbs::found(dishStore, line + 6);
+    Serial.printf("[hw] found pin %s: %s\n", line + 6, why ? why : "ok");
+    if (!why) return;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   boardButtonBegin();
+#if !defined(BADGE_BOARD_SIM)
+#endif
   imuOk = imu::begin(PIN_IMU_SDA, PIN_IMU_SCL, tapReady);
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -332,13 +477,30 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
-  // Each badge founds its own look; only a board with nothing stored uses it.
-  const blorb::Genome founder = blorb::foundingGenome(blorb::fnv1a(mac, sizeof(mac)));
-  options.founder = &founder;
+  // With no battery every replug forgets the time, and a kid with no phone
+  // still gets a pet that talks. The sim keeps asking, for its golden.
+  options.askForTime = false;
 #else
   options.sealed = simSealed;
 #endif
-  dish.emplace(dishStore, blorb::fnv1a(mac, sizeof(mac)), lineage, options);
+  // A fresh device's nest (founding.h). An owner's pin is one egg and needs no
+  // choice; three eggs wait for the kid once the nest is drawn here, and until
+  // then the Dish founds its default.
+  const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
+#if !defined(BADGE_BOARD_SIM)
+  if (!options.sealed && blorb::needsFounding(dishStore)) awaitFoundPin();
+#endif
+  std::optional<blorb::Genome> founder;
+  if (!options.sealed)
+    if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
+      if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
+        founder = blorb::starterGenomeOf(*pick, speciesSeed);
+  if (founder) options.founder = &*founder;
+#if !defined(BADGE_BOARD_SIM)
+  duelAir = &radioGate;
+#endif
+  options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
+  dish.emplace(dishStore, speciesSeed, lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
@@ -361,6 +523,7 @@ void setup() {
   const char* name = ble.begin(mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
 #endif
 }
 
@@ -413,9 +576,93 @@ static bool sendShotLine() {
 static void press(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 150;   // the sim's !button
   if (ms <= 0 || ms > 10000) return (void)Serial.printf("[hw] debug press: bad ms '%s'\n", a);
-  pressAt = millis() + warpMs;
-  pressMs = uint32_t(ms);
+  bodyq::presses[1].ms = 0;
+  bodyq::presses[0].ms = uint32_t(ms);
+  bodyq::presses[0].at = millis();
   Serial.printf("[hw] debug press %ld ms\n", ms);
+}
+
+// Two 100 ms presses 150 ms apart, inside the 400 ms window: the gesture that opens a duel.
+static void doublePress() {
+  const uint32_t t = millis();
+  bodyq::presses[0].ms = bodyq::presses[1].ms = 100;
+  bodyq::presses[0].at = t;
+  bodyq::presses[1].at = t + 250;
+  // A duel opens only from Awake (15); Asleep is 14 (boot.h's BootContext).
+  Serial.printf("[hw] debug double, boot context %u\n", unsigned(dish->bootContext()));
+}
+
+static void lean(const char* line) {
+  long aim = -1, ms = 3000;
+  if (std::sscanf(line, "%*s %ld %ld", &aim, &ms) < 1 || aim < 0 || aim > 3 || ms <= 0 || ms > 60000)
+    return (void)Serial.printf("[hw] debug lean: want <aim 0..3> [ms]\n");
+  leanAim = int8_t(aim);
+  leanAt = millis() + warpMs;
+  leanMs = uint32_t(ms);
+  Serial.printf("[hw] debug lean %ld for %ld ms\n", aim, ms);
+}
+
+// One line per duel event, so the two boards' logs alone prove a duel.
+static void reportDuel() {
+  static blorb::DuelPhase phase = blorb::DuelPhase::Closed;
+  static uint8_t peers = 0, turn = 0;
+  static uint32_t metHash = 0, refusedAt = 0;
+  if (const blorb::DishDuel::Refusal& r = dish->duelRefusal(); r.any && r.tick != refusedAt) {
+    refusedAt = r.tick;
+    Serial.printf("[duel] refused why=%u (0: the radio would not open) boot_context=%u\n", unsigned(r.why),
+                  unsigned(dish->bootContext()));
+  }
+  if (!dish->duelActive() && phase == blorb::DuelPhase::Closed) return;
+  constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
+                                    "revealing", "fainting", "mercy",    "fallen",  "friends"};
+  constexpr const char* kStance[] = {"pounce", "guard", "trick"};
+  constexpr const char* kStakes[] = {"spar", "scrap", "mortal"};
+  const blorb::DuelView v = dish->duelView();
+  if (v.phase != phase) {
+    Serial.printf("[duel] phase %s -> %s end=%u stakes=%s hearts %u-%u\n", kPhase[size_t(phase)],
+                  kPhase[size_t(v.phase)], unsigned(v.ended), kStakes[size_t(v.agreed)], unsigned(v.mine.hearts),
+                  unsigned(v.theirs.hearts));
+    phase = v.phase;
+    if (phase == blorb::DuelPhase::Closed) peers = 0, turn = 0;
+  }
+  if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
+    peers = v.peerCount;
+    Serial.printf("[duel] lobby hears %u friend(s)%s\n", unsigned(peers),
+                  peers && v.peers[0].wantsMe ? ", the first wants me" : "");
+  }
+  if (v.hasLast && v.lastTurn != turn) {
+    turn = v.lastTurn;
+    Serial.printf("[duel] turn %u me=%s%s them=%s%s lost %u/%u hearts %u-%u\n", unsigned(turn),
+                  kStance[size_t(v.last.move[0].stance)], v.last.move[0].byPet ? "(pet)" : "",
+                  kStance[size_t(v.last.move[1].stance)], v.last.move[1].byPet ? "(pet)" : "",
+                  unsigned(v.last.hit[0]), unsigned(v.last.hit[1]), unsigned(v.mine.hearts),
+                  unsigned(v.theirs.hearts));
+  }
+  if (const std::optional<blorb::Meeting>& m = dish->lastMeeting(); m && m->outcomeHash != metHash) {
+    metHash = m->outcomeHash;
+    constexpr const char* kEnding[] = {"ongoing", "A won", "B won", "draw"};
+    Serial.printf("[duel] met side=%c ending=%s turns=%u outcome_hash=%08x battle=%08x/%u\n",
+                  m->me == blorb::Side::A ? 'A' : 'B', kEnding[size_t(m->ending)], unsigned(m->turns),
+                  unsigned(m->outcomeHash), unsigned(m->battle.seed), unsigned(m->battle.rematch));
+  }
+}
+
+static void pinSpecies(const char* a) {
+  if (!std::strcmp(a, "off")) {
+    pinnedSpecies.reset();
+    return (void)Serial.printf("[hw] debug species off: drawn as the pet's own\n");
+  }
+  blorb::SpeciesId s;
+  if (!debugverbs::speciesByName(a, s))
+    return (void)Serial.printf("[hw] debug species: '%s' is not a species.def name or 0..255\n", a);
+  pinnedSpecies = s;
+  Serial.printf("[hw] debug species %u: drawn as %s until reset, not saved\n", unsigned(s.v),
+                blorb::speciesInfo(s).name);
+}
+
+static void pinFounding(const char* a) {
+  const char* why = debugverbs::found(dishStore, a);
+  Serial.printf("[hw] debug found %s: %s\n", a, why ? why : "ok, the next fresh founding's nest is this egg");
 }
 
 static void runDebug(const char* line) {
@@ -424,8 +671,13 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
+  if (std::strcmp(verb, "double") == 0) return doublePress();
+  if (std::strcmp(verb, "lean") == 0) return lean(line);
+  if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
+  if (std::strcmp(verb, "found") == 0) return pinFounding(a);
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, shot, press [ms], bletest <bytes>)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
+                  "double, lean <aim> [ms], bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -450,7 +702,7 @@ void loop() {
 #endif
   step(now);
   if (!holdFrame && now - lastFrame >= kFrameMs) {
-    paint::draw(shown(), grungoPack(), canvas, now);
+    drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
 #endif
@@ -462,6 +714,7 @@ void loop() {
   if (dish->timeKnown() && !hw::SystemClock::isSet())
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
+  reportDuel();
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();
