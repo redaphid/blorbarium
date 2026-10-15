@@ -31,10 +31,13 @@ Which species (`advertisedSpecies` in `founding.h`):
 - For a sealed board, whose pet was not read, the badge's table species, else
   its MAC's hash.
 - An image on an OTA trial still advertises the old `blorb-xxxx` (the last
-  two bytes of its MAC, lower-case hex). The page that sent the update keeps
-  its token under the name it chose the board by, and a page reloaded during
-  the trial must find that token to send `OTA CONFIRM`. The species name
-  starts at the first boot after the trial keeps the image.
+  two bytes of its MAC, lower-case hex), so a trial looks the same as the
+  board the page updated. The page from rel-site keys its OTA token by the
+  Web Bluetooth `device.id`, which stays the same whatever the board
+  advertises. An older page keys it by the name, and when that page is
+  reloaded during the trial it must still find its token to send
+  `OTA CONFIRM`. The species name starts at the first boot after the trial
+  keeps the image.
 
 Filter on the service UUID. A `?d=<name>` link must use the current name: after
 the update, `?d=mossby`, not `?d=blorb-1b3c`. There is no pairing and no owner
