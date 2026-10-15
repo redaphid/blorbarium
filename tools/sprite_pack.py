@@ -11,7 +11,9 @@ brown cloak. Any other pet names its framing and a few reference colours per reg
 pets/<pet>/art/pack.json; its pixels take the region of the nearest reference colour,
 and its eye anchors are measured from the eye pixels that labelling finds.
 
-Needs Pillow and numpy. Deterministic: no random numbers, stable sorts only, so two
+Needs Pillow, numpy and scipy (scipy for every pet but grungo):
+    uv run --with pillow --with numpy --with scipy python3 tools/sprite_pack.py --pet mossby
+Deterministic: no random numbers, stable sorts only, so two
 runs write the same bytes.
 
 Every frame, drawn or picked, is a Sprite: device-scale RGB cells, a region per cell

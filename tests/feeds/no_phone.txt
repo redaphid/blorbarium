@@ -7,5 +7,6 @@
 @400 DEBUG inject vision 0
 @400 DEBUG force rest
 # A shake and no line forced: the prophecy is his own draw.
-@500 !shake
+# Its fifth swing each way, the shake, lands at 680.
+@440 !shake
 @2400 DEBUG force rest

@@ -129,10 +129,17 @@ static_assert(knackOrderOf(KnackGene{9, 9, 9}) == 0, "a three-way tie ranks in s
 // Grungo's recipe with one species row's bytes written in (src/starter_genome.cpp).
 // Line n of the recipe owns uid n whether or not this build writes it, so a
 // block left out (the starvation genes, with neglectCanKill false) leaves its
-// uids empty rather than shifting the rest. With grungo's row it writes
-// exactly the genome starterGenome() always has.
+// uids empty rather than shifting the rest. With grungo's row and Recipe::Gift
+// it writes exactly the genome starterGenome() always has.
 inline constexpr bool kNeglectCanKill = true;   // decided by the user: sustained neglect can end the life
-void authorStarter(GenomeBuilder&, const SpeciesStarter&, uint32_t speciesSeed, bool neglectCanKill = kNeglectCanKill);
+// Which numbers the recipe writes. Gift is the recipe the gift device's grungo
+// was founded from, kept byte for byte by starterGenome(). FirstHours is what a
+// fresh founding gets (starterGenomeOf): a 15-minute egg, a hatchling peckish
+// within his first hours, a happy face when content, and sleepiness as pressure
+// that brings day naps (docs/notes/first-hours.md). Same genes, same uids.
+enum class Recipe : uint8_t { Gift, FirstHours };
+void authorStarter(GenomeBuilder&, const SpeciesStarter&, uint32_t speciesSeed, bool neglectCanKill = kNeglectCanKill,
+                   Recipe = Recipe::FirstHours);
 
 // O(1) by type byte. nullptr for an unknown type: carried and skipped.
 const GeneTypeInfo* geneType(uint8_t type);

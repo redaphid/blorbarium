@@ -83,10 +83,25 @@ TEST(Gift, NoSpeciesGeneIsAPureBredGrungoWhoForesees) {
   }
 }
 
-TEST(Gift, GrungosStarterIsTheOldStarterPlusOnlyTheSpeciesGenes) {
+// A fresh grungo is founded on the FirstHours recipe (genes.h): the old
+// starter's genes under the same uids, so a friend egg's cross still pairs
+// them, with five of them retuned, plus the species genes.
+TEST(Gift, GrungosStarterIsTheOldStarterRetunedPlusTheSpeciesGenes) {
   for (uint32_t seed : {0u, 7u, kGiftSeed}) {
-    Genome of = starterGenomeOf(kGrungo, seed);
-    EXPECT_EQ(without(of, kSpeciesGeneUid.v).bytes(), starterGenome(seed).bytes()) << "seed " << seed;
+    const Genome of = without(starterGenomeOf(kGrungo, seed), kSpeciesGeneUid.v), old = starterGenome(seed);
+    GenomeBuilder gift;
+    authorStarter(gift, speciesInfo(kGrungo).starter, seed, kNeglectCanKill, Recipe::Gift);
+    EXPECT_EQ(gift.build()->bytes(), old.bytes()) << "seed " << seed << ": the Gift recipe is starterGenome";
+    ASSERT_EQ(of.geneCount(), old.geneCount()) << "seed " << seed;
+    size_t retuned = 0;
+    old.forEach([&](const GeneView& v) {
+      const std::optional<GeneView> same = of.find(v.header.uid);
+      ASSERT_TRUE(same) << "uid " << v.header.uid.v;
+      ASSERT_EQ(same->header.type, v.header.type) << "uid " << v.header.uid.v;
+      ASSERT_EQ(same->header.len, v.header.len) << "uid " << v.header.uid.v;
+      retuned += !std::equal(v.body, v.body + v.header.len, same->body);
+    });
+    EXPECT_EQ(retuned, 5u) << "seed " << seed << ": sleepiness, its emitter, energy, the happy face and the egg";
   }
 }
 

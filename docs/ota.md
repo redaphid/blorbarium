@@ -75,7 +75,7 @@ also advertises whenever no connection is live by the host's table, and logs
 
 A central must speak the protocol (a known verb, with or without an id, or an
 `OTA` line) within 10 s of connecting, or it is dropped
-(`[hw] ble drop ... reason=idle`) and its address is refused for a minute
+(`[hw] ble drop ... reason=idle`) and its address is refused for 15 s
 (`[hw] ble refused`, said once). A page always sends TIME or an OTA line at
 once, and a connection with an update in progress is never dropped this way.
 This keeps another program that knows the board's address (on the test board,

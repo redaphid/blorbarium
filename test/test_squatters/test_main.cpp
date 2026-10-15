@@ -47,22 +47,24 @@ TEST(Squatters, AnEvictedAddressIsRefusedForAMinuteAndSaidOnce) {
   EXPECT_EQ(s.connected(kDaemon, out + 1800), Act::RefuseQuietly);
   EXPECT_EQ(s.poll(out + 30000, false), Act::None) << "a refused connection is not timed";
   EXPECT_EQ(s.connected(kPhone, out + 2000), Act::None) << "only that address";
-  EXPECT_EQ(s.connected(kDaemon, out + Squatters::kDenyMs), Act::None) << "a minute later it may try again";
+  EXPECT_EQ(s.connected(kDaemon, out + Squatters::kDenyMs), Act::None) << "once its refusal is up it may try again";
 }
 
 TEST(Squatters, ARefusalWindowIsKeptPerAddress) {
   Squatters s;
   const BleAddr a[5] = {{{1}, 0}, {{2}, 0}, {{3}, 0}, {{4}, 0}, {{5}, 0}};
+  const uint32_t step = Squatters::kDenyMs / 4;
   for (uint32_t i = 0; i < 4; ++i) {
-    s.connected(a[i], i * 20000);
-    ASSERT_EQ(s.poll(i * 20000 + Squatters::kSpeakWithinMs, false), Act::Evict);
+    s.connected(a[i], i * step);
+    ASSERT_EQ(s.poll(i * step + Squatters::kSpeakWithinMs, false), Act::Evict);
   }
   // A fifth takes the slot that lapses soonest: the first one's.
-  s.connected(a[4], 80000);
-  ASSERT_EQ(s.poll(80000 + Squatters::kSpeakWithinMs, false), Act::Evict);
-  EXPECT_EQ(s.connected(a[4], 91000), Act::Refuse);
-  EXPECT_EQ(s.connected(a[3], 91000), Act::Refuse);
-  EXPECT_EQ(s.connected(a[0], 91000), Act::None) << "its minute was up anyway";
+  s.connected(a[4], 4 * step);
+  const uint32_t out = 4 * step + Squatters::kSpeakWithinMs;
+  ASSERT_EQ(s.poll(out, false), Act::Evict);
+  EXPECT_EQ(s.connected(a[4], out + 1), Act::Refuse);
+  EXPECT_EQ(s.connected(a[3], out + 1), Act::Refuse);
+  EXPECT_EQ(s.connected(a[0], out + 1), Act::None) << "its refusal was up anyway";
 }
 
 int main(int argc, char** argv) {

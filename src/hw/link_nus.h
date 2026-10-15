@@ -65,6 +65,8 @@ class NusLink : public blorb::Link {
   bool connected() override { return up_; }
   // Before begin(): one more thing to add to the service, given it as it is built.
   void extend(std::function<void(NimBLEService*)> more) { extend_ = std::move(more); }
+  // A line another characteristic heard (the debug link): this phone speaks.
+  void spoke() { squatters_.spoke(); }
   // While this is true (an update in progress) a quiet connection is never dropped.
   void keepWhile(std::function<bool()> busy) { keep_ = std::move(busy); }
   uint16_t mtu() const { return mtu_; }
@@ -154,7 +156,7 @@ class NusLink : public blorb::Link {
       Serial.printf("[hw] ble conn h=%u addr=%02x:%02x:%02x:%02x:%02x:%02x type=%s\n", unsigned(conn_), a.b[5], a.b[4],
                     a.b[3], a.b[2], a.b[1], a.b[0], a.type & 1 ? "random" : "public");
       const blorb::Squatters::Act act = squatters_.connected(a, now);
-      if (act == blorb::Squatters::Act::Refuse) Serial.println("[hw] ble refused: it squatted; this address waits a minute");
+      if (act == blorb::Squatters::Act::Refuse) Serial.println("[hw] ble refused: it squatted; this address waits 15 s");
       if (act != blorb::Squatters::Act::None) server->disconnect(conn_);
     }
     if (lastDrop_ != loggedDrop_) {

@@ -187,6 +187,21 @@ The original gift device (`blorb-237c`) is the one grungo. It has no
 updater, so any update needs a cable. Each species appears once in the
 table, and any board that is not in it is a grungo.
 
+## Re-pack the art (optional)
+
+The sprite sources are committed under `pets/<species>/art/` (frames, masks,
+`eyes.json`, `pack.json`), and the packed headers beside them. The build
+needs only the headers. To re-pack from the sources:
+
+    python3 -m venv ~/pkvenv && ~/pkvenv/bin/pip install pillow numpy scipy
+    for p in grungo mossby puffkin gilly mothwick mudge fizz hushwing tinker; do
+      ~/pkvenv/bin/python tools/sprite_pack.py --pet $p
+    done
+    git status   # nothing changed: the packer writes the committed bytes
+
+This was checked on 2026-10-15 from a fresh clone of origin/main in WSL
+(Arch): all nine re-packed byte for byte, and `pio run -e badge128` built.
+
 ## Why a cable flash keeps the pet
 
 `merged.hex` is an Intel HEX file. It holds the bootloader, the partition

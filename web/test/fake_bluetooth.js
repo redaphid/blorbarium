@@ -5,7 +5,14 @@
 // (the first match if unset, none for a cancel). opens and connects are counted.
 "use strict";
 (function () {
-  const bt = (window.__fakeBt = { nearby: [], choose: undefined, opens: 0, connects: 0, offered: [], filters: [], radio: null });
+  // busy: the next N debug-characteristic operations fail as Android Chrome's
+  // do when they meet another operation in flight; noDebug: a firmware without it.
+  const bt = (window.__fakeBt = { nearby: [], choose: undefined, opens: 0, connects: 0, offered: [], filters: [], radio: null,
+    busy: 0, noDebug: false, debugHeard: [] });
+  const DBG = "6e400005-b5a3-f393-e0a9-e50e24dcca9e";
+  const busyCheck = () => {
+    if (bt.busy > 0) { bt.busy--; throw new DOMException("GATT operation already in progress.", "NetworkError"); }
+  };
   const encode = (text) => new TextEncoder().encode(text);
 
   class FakeChar extends EventTarget {
@@ -33,10 +40,24 @@
         const rx = new FakeChar((bytes) => link.write(new TextDecoder().decode(bytes)));
         const data = new FakeChar((bytes) => link.writeData(bytes));
         const chars = { [RX]: rx, [TX]: tx, [OTA_DATA]: data };
+        if (!bt.noDebug) {
+          const dbg = new FakeChar(async (bytes) => {
+            busyCheck();
+            for (const line of new TextDecoder().decode(bytes).split(String.fromCharCode(10)).filter(Boolean)) {
+              bt.debugHeard.push(line);
+              setTimeout(() => dbg.notify(ad.dish.debug(line).join(String.fromCharCode(10)) + String.fromCharCode(10)), 10);
+            }
+          });
+          dbg.startNotifications = async () => busyCheck();
+          chars[DBG] = dbg;
+        }
         gatt.connected = true;
         return { getPrimaryService: async (uuid) => {
           if (uuid !== NUS) throw new DOMException("no service", "NotFoundError");
-          return { getCharacteristic: async (c) => chars[c] };
+          return { device, getCharacteristic: async (c) => {
+            if (!chars[c]) throw new DOMException(`No Characteristics matching UUID ${c} found in Service.`, "NotFoundError");
+            return chars[c];
+          } };
         } };
       },
       disconnect() { if (gatt.connected) ad.dish.drop(); },

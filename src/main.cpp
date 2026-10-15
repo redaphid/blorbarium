@@ -536,6 +536,9 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
+  // No battery: no wall time is coming, so a fresh pet hatches into his
+  // morning, not into seven hours of pet night (docs/notes/first-hours.md).
+  options.foundingHour = blorb::kUnaskedFoundingHour;
 #else
   options.sealed = simSealed;
 #endif
