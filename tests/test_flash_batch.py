@@ -151,6 +151,11 @@ class BootLog(unittest.TestCase):
         got = fb.parse_boot(RESUMED[:3] + ["[hw] species=mudge (table)", "[hw] ble name=blorb-1b30 heap=1 big=1"])
         self.assertEqual((got["species"], got["ble_name"]), ("mudge", "blorb-1b30"))
 
+    def test_a_0_4_0_pet_adopting_his_badge_s_species_is_read(self):
+        got = fb.parse_boot(RESUMED + ["[hw] adopted species=gilly gen=0 genome=1a2b3c4d name=Pip "
+                                       "(the Bluetooth name follows at the next boot)"])
+        self.assertEqual((got["adopted"], got["species"], got["genome"]), ("gilly", "gilly", "8348e859"))
+
     def test_a_sealed_board_is_an_alarm(self):
         got = fb.parse_boot(BOOT + ["[hw] !!! SEALED: a pet is on the flash and would not open; ..."])
         self.assertEqual(len(got["alarms"]), 1)
@@ -260,7 +265,8 @@ class DryRun(unittest.TestCase):
         self.assertEqual([r["badge"] for r in rows], ["4", "5", "6"])
         self.assertTrue(all(r["result"] == "ok" and r["boot"] == "Resumed" and r["pet"] == "keep" for r in rows))
         self.assertEqual([r["species"] for r in rows], ["mossby", "puffkin", "gilly"])
-        self.assertTrue(all(r["note"] == "" for r in rows))
+        self.assertEqual([r["note"] for r in rows], ["the pet adopted species %s" % s for s in ("mossby", "puffkin", "gilly")])
+        self.assertNotIn("!!", text)
         self.assertEqual(len({r["port"] for r in rows}), 3)
         self.assertIn("KEEPING each badge's pet", text)
         for n in (4, 5, 6):

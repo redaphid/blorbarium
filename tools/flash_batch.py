@@ -75,7 +75,7 @@ BADGE_SPECIES = {
     "d4:05:92:77:22:40": "tinker",
 }
 PERMISSION_FIX = """this user may not open %s. Either join the serial group, then log out and back in:
-      sudo usermod -aG dialout $USER        (Arch and Fedora older than 37: uucp instead of dialout)
+      sudo usermod -aG dialout $USER        (on Arch: uucp instead of dialout)
   or let anyone open the badge's USB id with a udev rule, then unplug and replug it:
       echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", MODE="0666", ENV{ID_MM_DEVICE_IGNORE}="1"' | sudo tee /etc/udev/rules.d/99-blorbarium.rules
       sudo udevadm control --reload-rules && sudo udevadm trigger"""
@@ -140,6 +140,8 @@ def parse_boot(lines):
             got.update(boot=m.group(1), occupant=m.group(2), gen=int(m.group(3)), genome=m.group(4))
         elif m := re.search(r"\[hw\] ble name=(\S+)", line):
             got["ble_name"] = m.group(1)
+        elif m := re.search(r"\[hw\] adopted species=([a-z]+)", line):
+            got["adopted"] = m.group(1)     # a 0.4.0 pet taking his badge's species, just after the BLE name
         if "!!! SEALED" in line or "!!! the pet is not being saved" in line:
             got.setdefault("alarms", []).append(line.strip())
         if "[hw]" in line and (m := re.search(r"\bspecies=([a-z]+)\b", line)) and m.group(1) in SPECIES:
@@ -327,7 +329,8 @@ class Bench:
             raise Failed("flash_board.sh failed (exit %d): %s" % (r.returncode, " / ".join(out[-3:])))
 
     def boot(self, port):
-        """Boot it with the log open (tools/serial_log.py's RTS pulse) and read until the BLE name."""
+        """Boot it with the log open (tools/serial_log.py's RTS pulse) and read until the BLE name,
+        then up to 3 s more for a species adoption."""
         import serial
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = port, 115200, 0.2
@@ -340,12 +343,14 @@ class Bench:
             s.rts = True
             time.sleep(0.1)
             s.rts = False
-            lines, buf, t0 = [], b"", time.monotonic()
+            lines, buf, t0, named = [], b"", time.monotonic(), None
             while time.monotonic() - t0 < self.boot_seconds:
                 buf += s.read(4096)
                 *whole, buf = buf.split(b"\n")
                 lines += [w.decode("utf-8", "replace").rstrip("\r") for w in whole]
-                if any("[hw] ble name=" in line for line in lines):
+                if named is None and any("[hw] ble name=" in line for line in lines):
+                    named = time.monotonic()
+                if named and (time.monotonic() - named > 3 or any("[hw] adopted" in line for line in lines)):
                     break
             return lines
         finally:
@@ -387,14 +392,19 @@ class DryBench:
               % (" --wipe-pet" if wipe else "", port, serial, mac))
 
     def boot(self, port):
-        """0.7.0's boot lines; the genome stands in as its MAC seed (the real one is the board's)."""
+        """0.7.0's first boot: a fresh egg, or a 0.4.0 pet that resumes and adopts his badge's species.
+        The genome stands in as its MAC seed (the real one is the board's)."""
         raw = bytes.fromhex(self.last.replace(":", ""))
         species = BADGE_SPECIES.get(self.last) or SPECIES[fnv1a(raw) % len(SPECIES)]
         how = ("formatted: it was blank", "Fresh", "egg", 0) if self.wipe else ("ok", "Resumed", "creature", 86400)
-        return ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
-                "[hw] storage pet: %s" % how[0],
-                "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d" % (how[1], how[2], fnv1a(raw), how[3]),
-                "[hw] ble name=%s heap=0 big=0" % species]
+        lines = ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
+                 "[hw] storage pet: %s" % how[0],
+                 "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d" % (how[1], how[2], fnv1a(raw), how[3]),
+                 "[hw] ble name=%s heap=0 big=0" % species]
+        if not self.wipe and self.last in BADGE_SPECIES:
+            lines.append("[hw] adopted species=%s gen=0 genome=%08x name=Pip (the Bluetooth name follows at the next boot)"
+                         % (species, fnv1a(raw[::-1])))
+        return lines
 
 
 # ---- the loop ------------------------------------------------------------------------
@@ -457,12 +467,14 @@ def one_badge(bench, n, port, rows, wipe=False):
     if not ok:
         raise Failed("%s (genome %s)" % (why, got["genome"]))
     species = got.get("species", "")
-    notes = [why] if why else []
-    notes += clashes(rows, mac, species, got["ble_name"]) + [t for t in [table_note(mac, species)] if t]
+    info = [why] if why else []
+    if got.get("adopted"):
+        info.append("the pet adopted species %s" % got["adopted"])
+    warnings = clashes(rows, mac, species, got["ble_name"]) + [t for t in [table_note(mac, species)] if t]
     return {"time": datetime.now().isoformat(timespec="seconds"), "badge": n, "port": port, "usb_serial": serial,
             "mac": mac, "ble_name": got["ble_name"], "boot": got["boot"], "genome": got["genome"],
-            "fw": got.get("fw", ""), "result": "ok", "note": "; ".join(notes), "species": species,
-            "pet": "wipe" if wipe else "keep"}
+            "fw": got.get("fw", ""), "result": "ok", "note": "; ".join(info + warnings), "species": species,
+            "pet": "wipe" if wipe else "keep", "info": info, "warnings": warnings}
 
 
 def main(argv=None):
@@ -537,7 +549,7 @@ def main(argv=None):
             append_log(log, row)
             print("  OK badge %d: %s  mac %s  %s  species %s  genome %s  boot=%s  pet %s%s" % (
                 n, row["port"], row["mac"], row["ble_name"], row["species"] or "?", row["genome"], row["boot"],
-                row["pet"], ("  !! " + row["note"]) if row["note"] else ""))
+                row["pet"], "".join("  (%s)" % i for i in row["info"]) + "".join("  !! " + w for w in row["warnings"])))
         if port:
             print("Unplug badge %d" % n)
             if isinstance(bench, DryBench):
