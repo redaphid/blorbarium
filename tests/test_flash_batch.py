@@ -31,7 +31,7 @@ BOOT = [
 RESUMED = [
     "[hw] blorbarium 1234abc fw=0.7.0 fmt=1 badge128",
     "[hw] storage pet: ok",
-    "[hw] boot=Resumed occupant=creature gen=0 genome=8348e859 age=86400",
+    "[hw] boot=Resumed occupant=creature gen=0 genome=8348e859 age=86400 species=gilly",
     "[hw] ble name=gilly heap=136244 big=90100",
 ]
 
@@ -147,14 +147,25 @@ class BootLog(unittest.TestCase):
         got = fb.parse_boot(RESUMED)
         self.assertEqual((got["ble_name"], got["species"], got["boot"]), ("gilly", "gilly", "Resumed"))
 
-    def test_a_species_token_on_any_hw_line_is_read(self):
-        got = fb.parse_boot(RESUMED[:3] + ["[hw] species=mudge (table)", "[hw] ble name=blorb-1b30 heap=1 big=1"])
-        self.assertEqual((got["species"], got["ble_name"]), ("mudge", "blorb-1b30"))
+    def test_the_boot_line_s_species_wins_over_the_ble_name(self):
+        got = fb.parse_boot(RESUMED[:3] + ["[hw] ble name=blorb-1b34 heap=1 big=1"])   # an image on OTA trial
+        self.assertEqual((got["species"], got["boot_species"], got["ble_name"]), ("gilly", "gilly", "blorb-1b34"))
+
+    def test_a_sealed_board_s_species_none_is_no_species(self):
+        got = fb.parse_boot([RESUMED[2].replace("Resumed", "Sealed").replace("gilly", "none")])
+        self.assertNotIn("species", got)
 
     def test_a_0_4_0_pet_adopting_his_badge_s_species_is_read(self):
-        got = fb.parse_boot(RESUMED + ["[hw] adopted species=gilly gen=0 genome=1a2b3c4d name=Pip "
-                                       "(the Bluetooth name follows at the next boot)"])
-        self.assertEqual((got["adopted"], got["species"], got["genome"]), ("gilly", "gilly", "8348e859"))
+        lines = [RESUMED[0], RESUMED[1], RESUMED[2].replace("species=gilly", "species=grungo"), RESUMED[3]]
+        got = fb.parse_boot(lines + ["[hw] adopted species=gilly gen=0 genome=1a2b3c4d name=Pip "
+                                     "(the Bluetooth name follows at the next boot)"])
+        self.assertEqual((got["boot_species"], got["adopted"], got["species"], got["genome"]),
+                         ("grungo", "gilly", "gilly", "8348e859"))
+
+    def test_a_0_4_0_pet_with_no_adoption_seen_is_still_grungo(self):
+        got = fb.parse_boot([RESUMED[2].replace("species=gilly", "species=grungo"), RESUMED[3]])
+        self.assertEqual(got["species"], "grungo")
+        self.assertIn("is grungo, should be gilly", fb.table_note("d4:05:92:77:1b:34", got["species"]))
 
     def test_a_sealed_board_is_an_alarm(self):
         got = fb.parse_boot(BOOT + ["[hw] !!! SEALED: a pet is on the flash and would not open; ..."])
@@ -304,7 +315,7 @@ class OneBadge(unittest.TestCase):
         self.assertIn("PET NOT FOUND", str(e.exception))
 
     def test_a_duplicate_species_is_noted(self):
-        bench, p = self.bench([line.replace("gilly", "mossby") for line in RESUMED])
+        bench, p = self.bench([line.replace("gilly", "mossby") for line in RESUMED])   # badge 1, mossby
         rows = [{"badge": "9", "mac": "d4:05:92:00:00:09", "species": "mossby", "ble_name": "mossby", "result": "ok"}]
         with redirect_stdout(io.StringIO()):
             row = fb.one_badge(bench, 1, p, rows)

@@ -141,7 +141,7 @@ in. That puts it in download mode, and then it flashes the same way.
     [hw] blorbarium 1a2b3c4 fw=0.7.0 fmt=1 badge128
     [hw] storage pet: ok
     [hw] storage petfs: ok
-    [hw] boot=Resumed occupant=creature gen=0 genome=2ea98ea9 age=86400
+    [hw] boot=Resumed occupant=creature gen=0 genome=2ea98ea9 age=86400 species=grungo
     [hw] ble name=mossby heap=136244 big=90100
     [hw] adopted species=mossby gen=0 genome=5d0c11e2 name=Pip (the Bluetooth name follows at the next boot)
 
@@ -150,13 +150,17 @@ in. That puts it in download mode, and then it flashes the same way.
   `formatted: it was blank` means there was no pet to keep (a new board).
 - `boot=Resumed` means **the pet came back**. `occupant=creature` with its
   `age` shows it is the same creature. `boot=Fresh` means a new egg.
+  `species=` is what booted. A pet that 0.4.0 founded reads `grungo` here
+  until it adopts its badge's species.
 - `ble name=mossby` is the creature's species, which is also the name a
   phone sees over Bluetooth. Firmware 0.4.0 said `ble name=blorb-1b3c`
   instead. `flash_batch.py` reads both.
 - `adopted species=mossby` shows up once, on the first 0.7.0 boot of a pet
   that 0.4.0 founded. The same pet, with its name and age, becomes its
-  badge's species from the table below. The batch waits 3 s after the BLE
-  name for this line.
+  badge's species from the table below. The batch waits up to 5 s after the
+  BLE name for this line. If it never comes, the OK line says
+  `NOT THE TABLE'S SPECIES: ... is grungo, should be mossby`. Read the log
+  again with `serial_log.py` to see whether the adoption came later.
 - Any line with `!!!` is trouble. Leave that badge and say what it printed.
 
 ## 7. Which badge is which creature
@@ -179,7 +183,8 @@ what `pio device list` shows without touching the board. The MAC is what
 
 The original gift device (`blorb-237c`) is the one grungo. It has no
 updater, so any update needs a cable. A MAC that is not in the table gets a
-species from a hash of its MAC.
+species from a hash of its MAC (the gift device's MAC would give fizz, but
+its pet stays a grungo unless it is wiped).
 
 ## Why a cable flash keeps the pet
 

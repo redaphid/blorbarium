@@ -128,8 +128,9 @@ def choose_port(before, now):
 def parse_boot(lines):
     """What the boot log says: fw, pet_storage, boot, occupant, genome, gen, species, ble_name.
 
-    Reads 0.4.0's `ble name=blorb-1b34` and 0.7.0's `ble name=mossby` alike. The species is a
-    `species=` token on any [hw] line, else a BLE name that is a species."""
+    Reads 0.4.0's `ble name=blorb-1b34` and 0.7.0's `ble name=mossby` alike. The species is the one
+    an `[hw] adopted species=` line gives (a 0.4.0 pet taking his badge's), else the boot line's
+    `species=`, else a BLE name that is a species (rel-species 7b557a6, src/main.cpp)."""
     got = {}
     for line in lines:
         if m := re.search(r"\[hw\] blorbarium (\S+) fw=(\S+)", line):
@@ -144,10 +145,12 @@ def parse_boot(lines):
             got["adopted"] = m.group(1)     # a 0.4.0 pet taking his badge's species, just after the BLE name
         if "!!! SEALED" in line or "!!! the pet is not being saved" in line:
             got.setdefault("alarms", []).append(line.strip())
-        if "[hw]" in line and (m := re.search(r"\bspecies=([a-z]+)\b", line)) and m.group(1) in SPECIES:
-            got["species"] = m.group(1)
-    if "species" not in got and got.get("ble_name", "").lower() in SPECIES:
-        got["species"] = got["ble_name"].lower()
+        if m := re.search(r"\[hw\] boot=.* species=([a-z]+)", line):
+            got["boot_species"] = m.group(1)     # what booted (`none` when sealed)
+    name = got.get("ble_name", "")
+    species = got.get("adopted") or got.get("boot_species") or (name if name in SPECIES else "")
+    if species in SPECIES:
+        got["species"] = species             # what it is now
     return got
 
 
@@ -190,7 +193,7 @@ def table_note(mac, species):
     """A note when a badge in the MAC table came up as another species."""
     want = BADGE_SPECIES.get(mac)
     if want and species and species != want:
-        return "NOT THE TABLE'S SPECIES: %s should be %s" % (mac, want)
+        return "NOT THE TABLE'S SPECIES: %s is %s, should be %s" % (mac, species, want)
     return None
 
 
@@ -330,7 +333,7 @@ class Bench:
 
     def boot(self, port):
         """Boot it with the log open (tools/serial_log.py's RTS pulse) and read until the BLE name,
-        then up to 3 s more for a species adoption."""
+        then up to 5 s more for a species adoption."""
         import serial
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = port, 115200, 0.2
@@ -350,7 +353,7 @@ class Bench:
                 lines += [w.decode("utf-8", "replace").rstrip("\r") for w in whole]
                 if named is None and any("[hw] ble name=" in line for line in lines):
                     named = time.monotonic()
-                if named and (time.monotonic() - named > 3 or any("[hw] adopted" in line for line in lines)):
+                if named and (time.monotonic() - named > 5 or any("[hw] adopted" in line for line in lines)):
                     break
             return lines
         finally:
@@ -399,7 +402,8 @@ class DryBench:
         how = ("formatted: it was blank", "Fresh", "egg", 0) if self.wipe else ("ok", "Resumed", "creature", 86400)
         lines = ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
                  "[hw] storage pet: %s" % how[0],
-                 "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d" % (how[1], how[2], fnv1a(raw), how[3]),
+                 "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d species=%s"
+                 % (how[1], how[2], fnv1a(raw), how[3], species if self.wipe else "grungo"),
                  "[hw] ble name=%s heap=0 big=0" % species]
         if not self.wipe and self.last in BADGE_SPECIES:
             lines.append("[hw] adopted species=%s gen=0 genome=%08x name=Pip (the Bluetooth name follows at the next boot)"
