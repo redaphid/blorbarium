@@ -297,6 +297,8 @@ def main(argv=None):
     ap.add_argument("--daemonctl", default=str(DAEMONCTL), help="badge daemon control script to hold off ('' for none)")
     ap.add_argument("--dry-run", action="store_true", help="pretend boards; writes nothing, logs to a .dry-run.csv")
     args = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)   # each line shows at once, even through a pipe or tee
 
     if args.dry_run:
         bench, log = DryBench(), args.log.with_suffix(".dry-run.csv")
