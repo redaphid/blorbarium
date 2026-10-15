@@ -13,7 +13,10 @@ Per badge: "Plug in badge N, press Enter". It finds the CH343 port that
 appeared (or the one badge already attached), reads its USB serial and MAC,
 and writes merged.hex with tools/flash_board.sh --no-reset, which checks both
 again before writing. Then it boots the board with the log open and reads the
-firmware commit, how it booted, the genome and the BLE name. One line goes to
+firmware commit, how it booted, the genome and the BLE name. The BLE name is
+the badge's species: the one lib/blorb/include/blorb/defs/badges.def gives
+its MAC, else one of the nine from the MAC's hash (founding.h), and a badge
+that advertises another fails. One line goes to
 the screen and to flash_log.csv, then "Unplug badge N" waits for the port to
 go. A failure asks: retry, skip or quit. A board held in download mode
 (BOOT down while plugging in) flashes the same way.
@@ -21,9 +24,9 @@ go. A failure asks: retry, skip or quit. A board held in download mode
 Every badge is reset: its `pet` partition is first copied to
 pet_backups/<mac>-<time>.bin, then flash_board.sh --wipe-pet erases pet and
 petfs before writing, so the board boots boot=Fresh and founds its pet from
-its own MAC (foundingGenome in lib/blorb/src/starter_genome.cpp). A boot that
-is not Fresh fails the badge. The log refuses to stay quiet about a genome or
-BLE name that another MAC in it already has.
+its own MAC (foundingGenome in lib/blorb/src/founding.cpp). A boot that is
+not Fresh fails the badge. The log refuses to stay quiet about a species (BLE
+name) or a genome that another MAC in it already has.
 
 On this desk the Claude Code badge daemon grabs every CH343 board it sees;
 the script holds it off for as long as it runs (--daemonctl, docs/hardware-testing.md).
@@ -47,6 +50,8 @@ PENV = Path.home() / ".platformio/penv"
 ESPTOOL = Path.home() / ".platformio/packages/tool-esptoolpy/esptool.py"
 BACKUPS = ROOT / "pet_backups"
 PET_NVS = (0x810000, 0x40000)            # tools/partitions_16mb.csv `pet`
+BADGES_DEF = ROOT / "lib/blorb/include/blorb/defs/badges.def"
+SPECIES_DEF = ROOT / "lib/blorb/include/blorb/defs/species.def"
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note"]
 
 
@@ -93,16 +98,47 @@ def parse_boot(lines):
 
 
 def clashes(rows, mac, genome, ble_name):
-    """Notes for anything another MAC in the log already has (a genome, a BLE name)."""
+    """Notes for anything another MAC in the log already has: its species (the BLE name) or its genome.
+
+    The table promises one badge per species, so a second one means the table or the
+    firmware is not what this script thinks. Past the table, a hashed species can repeat."""
     notes = []
     for r in rows:
         if r.get("result") != "ok" or r.get("mac") == mac:
             continue
+        if ble_name and r.get("ble_name") == ble_name:
+            notes.append("DUPLICATE SPECIES %s (badge %s, %s)" % (ble_name, r.get("badge"), r.get("mac")))
         if genome and r.get("genome") == genome:
             notes.append("DUPLICATE GENOME %s (badge %s, %s)" % (genome, r.get("badge"), r.get("mac")))
-        if ble_name and r.get("ble_name") == ble_name:
-            notes.append("duplicate BLE name %s (badge %s, %s)" % (ble_name, r.get("badge"), r.get("mac")))
     return notes
+
+
+def species_rows(path=SPECIES_DEF):
+    """species.def's slugs in id order: BLORB_SPECIES(id, slug, ...)."""
+    rows = re.findall(r"^BLORB_SPECIES\((\d+),\s*(\w+)", path.read_text(), re.M)
+    names = [n for _, n in sorted(rows, key=lambda r: int(r[0]))]
+    if [int(i) for i, _ in rows] != list(range(len(rows))):
+        raise ValueError("%s: ids are not 0..n-1 in order" % path)
+    return names
+
+
+def badge_table(path=BADGES_DEF):
+    """badges.def as {mac "d4:05:...": species slug}: the firmware's table, read from its source."""
+    table = {}
+    for m in re.finditer(r"^BLORB_BADGE\(\s*\d+((?:\s*,\s*0x[0-9a-fA-F]{2}){6})\s*,\s*(\w+)\s*\)", path.read_text(), re.M):
+        mac = ":".join("%02x" % int(b, 16) for b in re.findall(r"0x([0-9a-fA-F]{2})", m.group(1)))
+        table[mac] = m.group(2)
+    return table
+
+
+def expected_name(mac, table=None, species=None):
+    """The BLE name a freshly founded board advertises: its table species, else species[fnv1a(mac) % 9]."""
+    table = badge_table() if table is None else table
+    species = species_rows() if species is None else species
+    mac = mac.lower()
+    if mac in table:
+        return table[mac]
+    return species[fnv1a(bytes.fromhex(mac.replace(":", ""))) % len(species)]
 
 
 def fnv1a(data, h=0x811C9DC5):
@@ -230,9 +266,9 @@ class DryBench:
     def boot(self, port):
         """A fresh board's boot lines; the genome stands in as its MAC seed (the real one is the board's)."""
         raw = bytes.fromhex(self.last.replace(":", ""))
-        return ["[hw] blorbarium dry-run fw=0.4.0 fmt=1 badge128",
+        return ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
                 "[hw] boot=Fresh occupant=egg gen=0 genome=%08x age=0" % fnv1a(raw),
-                "[hw] ble name=blorb-%02x%02x heap=0 big=0" % (raw[4], raw[5])]
+                "[hw] ble name=%s heap=0 big=0" % expected_name(self.last)]
 
 
 # ---- the loop ------------------------------------------------------------------------
@@ -297,6 +333,10 @@ def one_badge(bench, n, port, rows):
         raise Failed("flashed, but the boot log never showed %s; it may not have booted" % ", ".join(missing))
     if got["boot"] != "Fresh":
         raise Failed("booted %s (genome %s), not Fresh: the pet was not reset" % (got["boot"], got["genome"]))
+    want = expected_name(mac)
+    if got["ble_name"] != want:
+        raise Failed("advertises %s, but this MAC's species is %s (badges.def): is the image older than the table?"
+                     % (got["ble_name"], want))
     notes = clashes(rows, mac, got["genome"], got["ble_name"]) + got.get("alarms", [])
     return {"time": datetime.now().isoformat(timespec="seconds"), "badge": n, "port": port, "usb_serial": serial,
             "mac": mac, "ble_name": got["ble_name"], "boot": got["boot"], "genome": got["genome"],

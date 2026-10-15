@@ -19,10 +19,10 @@ import flash_batch as fb  # noqa: E402
 
 # What the firmware prints (src/main.cpp reportBoot, ble.begin), as captured from a board.
 BOOT = [
-    "[hw] blorbarium 045ad8a fw=0.4.0 fmt=1 badge128",
+    "[hw] blorbarium 045ad8a fw=0.7.0 fmt=1 badge128",
     "[hw] storage pet: formatted: it was blank",
     "[hw] boot=Fresh occupant=egg gen=0 genome=5c1e0a9b age=0",
-    "[hw] ble name=blorb-1b34 heap=136244 big=90100",
+    "[hw] ble name=gilly heap=136244 big=90100",
 ]
 
 
@@ -46,9 +46,9 @@ class Ports(unittest.TestCase):
 class BootLog(unittest.TestCase):
     def test_reads_fw_boot_genome_and_ble_name(self):
         got = fb.parse_boot(BOOT)
-        self.assertEqual(got["fw"], "0.4.0 045ad8a")
+        self.assertEqual(got["fw"], "0.7.0 045ad8a")
         self.assertEqual((got["boot"], got["occupant"], got["gen"], got["genome"]), ("Fresh", "egg", 0, "5c1e0a9b"))
-        self.assertEqual(got["ble_name"], "blorb-1b34")
+        self.assertEqual(got["ble_name"], "gilly")
         self.assertNotIn("alarms", got)
 
     def test_a_sealed_board_is_an_alarm(self):
@@ -60,17 +60,48 @@ class BootLog(unittest.TestCase):
 
 
 class Clashes(unittest.TestCase):
-    rows = [{"badge": "1", "mac": "d4:05:92:77:1b:34", "genome": "5c1e0a9b", "ble_name": "blorb-1b34", "result": "ok"},
-            {"badge": "2", "mac": "d4:05:92:77:1b:44", "genome": "deadbeef", "ble_name": "blorb-1b44", "result": "failed"}]
+    rows = [{"badge": "3", "mac": "d4:05:92:77:1b:34", "genome": "5c1e0a9b", "ble_name": "gilly", "result": "ok"},
+            {"badge": "2", "mac": "d4:05:92:77:1b:44", "genome": "deadbeef", "ble_name": "puffkin", "result": "failed"},
+            {"badge": "1", "mac": "d4:05:92:77:1b:3c", "genome": "2ea98ea9", "ble_name": "blorb-1b3c", "result": "ok"}]
 
-    def test_another_macs_genome_or_name_is_flagged(self):
-        notes = fb.clashes(self.rows, "d4:05:92:00:1b:34", "5c1e0a9b", "blorb-1b34")
-        self.assertEqual(len(notes), 2)
+    def test_another_macs_species_is_flagged(self):
+        notes = fb.clashes(self.rows, "d4:05:92:00:1b:34", "0badf00d", "gilly")
+        self.assertEqual(notes, ["DUPLICATE SPECIES gilly (badge 3, d4:05:92:77:1b:34)"])
+
+    def test_another_macs_genome_is_flagged_too(self):
+        notes = fb.clashes(self.rows, "d4:05:92:00:1b:34", "5c1e0a9b", "mudge")
+        self.assertEqual(len(notes), 1)
         self.assertIn("DUPLICATE GENOME", notes[0])
 
-    def test_the_same_board_again_and_failed_rows_are_not(self):
-        self.assertEqual(fb.clashes(self.rows, "d4:05:92:77:1b:34", "5c1e0a9b", "blorb-1b34"), [])
-        self.assertEqual(fb.clashes(self.rows, "d4:05:92:00:00:01", "deadbeef", "blorb-1b44"), [])
+    def test_the_same_board_again_failed_rows_and_old_names_are_not(self):
+        self.assertEqual(fb.clashes(self.rows, "d4:05:92:77:1b:34", "5c1e0a9b", "gilly"), [])
+        self.assertEqual(fb.clashes(self.rows, "d4:05:92:00:00:01", "deadbeef", "puffkin"), [])
+        self.assertEqual(fb.clashes(self.rows, "d4:05:92:77:1b:3c", "11111111", "mossby"), [],
+                         "badge 1 reflashed: its 0.4.0 row named it blorb-1b3c")
+
+
+class Species(unittest.TestCase):
+    """The table and the roster come from the firmware's own .def files."""
+
+    def test_the_table_is_the_eight_badges_one_species_each(self):
+        table = fb.badge_table()
+        self.assertEqual(table, {
+            "d4:05:92:77:1b:3c": "mossby", "d4:05:92:77:1b:44": "puffkin", "d4:05:92:77:1b:34": "gilly",
+            "d4:05:92:77:1c:b0": "mothwick", "d4:05:92:77:1b:30": "mudge", "d4:05:92:77:1b:40": "fizz",
+            "d4:05:92:77:22:58": "hushwing", "d4:05:92:77:22:40": "tinker"})
+        self.assertEqual(len(set(table.values())), 8)
+        self.assertNotIn("grungo", table.values())
+
+    def test_the_roster_is_the_nine_in_id_order(self):
+        self.assertEqual(fb.species_rows(), ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz",
+                                             "hushwing", "tinker"])
+
+    def test_a_table_mac_advertises_its_species_and_any_other_its_hash(self):
+        self.assertEqual(fb.expected_name("D4:05:92:77:1C:B0"), "mothwick")
+        # The same MAC test_founding pins: badgeSpecies(d4:05:92:77:23:7c) is fizz.
+        self.assertEqual(fb.expected_name("d4:05:92:77:23:7c"), "fizz")
+        names = {fb.expected_name("02:00:00:00:%02x:%02x" % (n >> 8, n & 255)) for n in range(2048)}
+        self.assertEqual(names, set(fb.species_rows()))
 
 
 class Seeds(unittest.TestCase):
@@ -98,11 +129,35 @@ class DryRun(unittest.TestCase):
         self.assertTrue(all(r["result"] == "ok" and r["boot"] == "Fresh" for r in rows))
         self.assertEqual(len({r["genome"] for r in rows}), 3)
         self.assertEqual(len({r["port"] for r in rows}), 3)
+        self.assertTrue(all(r["ble_name"] == fb.expected_name(r["mac"]) for r in rows))
         for n in (4, 5, 6):
             self.assertIn("Plug in badge %d, press Enter (q to quit)" % n, text)
             self.assertIn("Unplug badge %d" % n, text)
         self.assertIn("Plug in badge 7", text)
         self.assertFalse(log.exists())
+
+
+class WrongSpecies(unittest.TestCase):
+    def test_a_board_advertising_another_name_fails(self):
+        bench = fb.DryBench()
+        bench.plug()
+        port = next(iter(bench.badges()))
+        bench.mac = lambda port: "d4:05:92:77:1b:34"
+        bench.last = "d4:05:92:77:1b:34"
+        bench.boot = lambda port: [line.replace("ble name=gilly", "ble name=blorb-1b34") for line in BOOT]
+        with redirect_stdout(io.StringIO()), self.assertRaises(fb.Failed) as e:
+            fb.one_badge(bench, 3, port, [])
+        self.assertIn("advertises blorb-1b34, but this MAC's species is gilly", str(e.exception))
+
+    def test_the_right_name_passes(self):
+        bench = fb.DryBench()
+        bench.plug()
+        port = next(iter(bench.badges()))
+        bench.mac = lambda port: "d4:05:92:77:1b:34"
+        bench.boot = lambda port: BOOT
+        with redirect_stdout(io.StringIO()):
+            row = fb.one_badge(bench, 3, port, [])
+        self.assertEqual((row["ble_name"], row["result"], row["note"]), ("gilly", "ok", ""))
 
 
 class NotFresh(unittest.TestCase):
