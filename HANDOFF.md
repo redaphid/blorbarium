@@ -12,6 +12,63 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
+## Where things stand (2026-10-15, owner on a plane with all 9 badges)
+
+**Live:** firmware **0.7.1** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
+(manifest a6421b8, firmware commit 01b19c8, image sha256
+`MGDbGjLlC8xhm4bJJXG47Zhnt9t1evkKCkc211enZTQ`, 2,218,256 B). 0.7.0
+(daf4f19) went out first. `main` = `release-0.7`. Every decision is in
+`docs/notes/decisions-2026-10-15.md`.
+
+What 0.7.x is: main + `battles` (nine species, ESP-NOW duels) + one species
+per badge from `lib/blorb/include/blorb/defs/badges.def` (the 8 batch
+badges take the 8 non-grungo species; the gift `blorb-237c` and any
+unknown MAC are grungo) + adoption of the 0.4.0 grungo pets after the OTA
+trial keeps the image + species BLE names (`blorb-xxxx` only while on
+trial) + thoughts with no phone (TAP ME removed, idle talk; a phone adds
+wall-clock, name and taught lines) + debug link 6E400005 with a
+`?debug=true` panel + an offline site (service worker caches the latest
+image) + Linux flashing (`LINUX.md`) + first-hours tuning (0.7.1: pet
+morning at founding, 40 min naps, 15 min egg) + the Android GATT fixes
+(0.7.1: debug subscribe and page writes retry when Android says
+"GATT operation failed"; a debug session is never evicted as a squatter;
+a squatter's refusal is 15 s).
+
+Gates at 0.7.1: native 777/779 (2 skipped) exit 0, sim 22/22, page tests
+all green (node 16/16, ota_page, offline_page, debug_page 4/4). A fresh
+clone of origin/main in WSL builds badge128 and re-packs all nine species
+byte for byte.
+
+**Not proven on hardware by this session:** no badge was on USB. Nothing in
+0.7.x was cable-flashed or updated here. The owner is updating badges
+from the phone.
+
+### Open work, in order
+
+1. **0.7.2: car-proof senses + personalities.** `rel-senses` (worktree
+   `D:/Projects/_wt/blorb-senses`) never pushed: its agent reported a
+   green merge with main at c3f96c6 (lid-on needs ~30 s face down and
+   still; vibration gating), but no branch reached origin. `rel-persona`
+   9b96768: full lines for all nine species from their art. Merge both,
+   run the gates, release.
+2. **0.7.3: death rework** (owner: "Death should not be a choice, and I've
+   repeatedly talked about how I want them to die"). `rel-death` 5c10132 is
+   WIP: Mortal, Mercy, Finish and debug DIE removed. Still to do: quote
+   the owner's own words on how pets die (mindmeld, user-asks.md, branch
+   `notes`), implement exactly that, check a 0.7.x/0.7.3 mixed duel pair
+   cannot kill, then release. Never ship it half-done.
+3. Known from the first-hours run: at 25-30 h, night BOOT presses leave
+   pellets that rot and a starving pet eats them (injury up to 0.85).
+   Levers are `rotMinutes` (90) and fed_bad's toxin (0.4).
+
+### How the owner updates a badge (phone only)
+
+Open https://blorb.hypnodroid.com in Android Chrome (works offline after
+one visit), tap Connect, pick the badge (`blorb-xxxx` on 0.4.0, its
+species name after), tap Update, press the badge's button when asked,
+keep the phone close about 3 minutes until "Updated". Then "Connect
+another badge" for the next one.
+
 ## Where things stand (2026-10-13, evening, paused)
 
 **Deadline: the owner flies out Thursday 2026-10-15 with the 8 devices.**
