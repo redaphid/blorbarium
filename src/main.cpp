@@ -139,6 +139,9 @@ static hw::EspNowAir espNow;
 static RadioGate radioGate(espNow);
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
+// The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
+static bool debugAsks();
+static bool debugPress(uint32_t ms);
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 // The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
@@ -161,7 +164,7 @@ static blorb::Appearance shown() {
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
+  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
 #endif
   return a;
 }
@@ -269,8 +272,10 @@ static std::optional<Timed> take() {
 static bool petFeels(bool down) {
 #if !defined(BADGE_BOARD_SIM)
   static bool wasDown = false, otaOwns = false;
-  if (updater.asking() && down && !wasDown) updater.press(millis());
-  otaOwns = updater.asking() || (otaOwns && down);
+  const bool edge = down && !wasDown;
+  if (updater.asking() && edge) updater.press(millis());
+  const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
+  otaOwns = updater.asking() || debugAsks() || debugTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
@@ -740,6 +745,8 @@ static void runDebug(const char* line) {
                 why ? why : "ok", c ? kStage[size_t(c->stage())] : "-", o.kind, unsigned(o.gen), unsigned(o.genome),
                 unsigned(o.age), unsigned(store.writes()), unsigned(millis() - t0));
 }
+
+#include "debug_ble.h"
 #endif
 
 void loop() {
@@ -752,10 +759,14 @@ void loop() {
   constexpr bool holdFrame = false;
 #endif
   step(now);
+#if !defined(BADGE_BOARD_SIM)
+  dbgfw::poll();
+#endif
   if (!holdFrame && now - lastFrame >= kFrameMs) {
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
+    else dbgfw::draw(canvas);
 #endif
     boardPresent(display, canvas);
     lastFrame = now;

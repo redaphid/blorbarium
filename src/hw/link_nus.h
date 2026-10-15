@@ -50,6 +50,7 @@ class NusLink : public blorb::Link {
     nus->createCharacteristic(kRx, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(&rxCb_);
     tx_ = nus->createCharacteristic(kTx, NIMBLE_PROPERTY::NOTIFY);
     if (otaData) nus->createCharacteristic(kOtaData, NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(otaData);
+    if (extend_) extend_(nus);   // the debug link's characteristic (src/hw/debug_char.h)
     nus->start();
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(kService);
@@ -62,6 +63,8 @@ class NusLink : public blorb::Link {
   }
 
   bool connected() override { return up_; }
+  // Before begin(): one more thing to add to the service, given it as it is built.
+  void extend(std::function<void(NimBLEService*)> more) { extend_ = std::move(more); }
   // While this is true (an update in progress) a quiet connection is never dropped.
   void keepWhile(std::function<bool()> busy) { keep_ = std::move(busy); }
   uint16_t mtu() const { return mtu_; }
@@ -247,6 +250,7 @@ class NusLink : public blorb::Link {
   bool firstLogged_ = false;
   blorb::Squatters squatters_;        // the loop's only
   std::function<bool()> keep_;
+  std::function<void(NimBLEService*)> extend_;
   bool advLogged_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;

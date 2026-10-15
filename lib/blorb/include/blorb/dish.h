@@ -147,6 +147,10 @@ class Dish {
   void setZone(int16_t tzMinutes) { zone_ = tzMinutes; }
   std::optional<uint32_t> localNow() const;          // wallNow() in that zone
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
+  // The debug link's WALL (docs/debug-ble.md): forget the wall time and its
+  // saved anchor, as a board that never met a phone. The next reading anchors
+  // afresh and lives no gap. A time source still set will be read again.
+  void forgetWall();
 
  private:
   void runOneTick(Link&);

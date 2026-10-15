@@ -424,6 +424,13 @@ void Dish::checkWall() {
   if (welcome) welcomePhone();
 }
 
+void Dish::forgetWall() {
+  wallKnown_ = false;
+  live_.wall.reset();
+  lastCatchUp_ = CatchUp{};
+  eventDirty_ = true;
+}
+
 // A phone came back after he had been asking for it: the visit is worth
 // making. He glows as the phone's treat makes him, the stimulus eases his
 // loneliness through his own genes, and he says so, sorer if it was weeks.

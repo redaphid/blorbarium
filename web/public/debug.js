@@ -1,0 +1,241 @@
+// ?debug=true (or debug=1): the debug link's panel (docs/debug-ble.md). One
+// control per command on the dish's debug characteristic, 6E400005. Without
+// the parameter nothing here runs and nothing is drawn. The page hands over
+// the NUS service once it is connected (attach), or the mock dish (attachMock).
+"use strict";
+(function () {
+  const CHAR = "6e400005-b5a3-f393-e0a9-e50e24dcca9e";
+  const value = new URLSearchParams(globalThis.location ? location.search : "").get("debug");
+  const enabled = value === "true" || value === "1";
+
+  // From the dish's own tables (species.def, drives.def, chemicals.def,
+  // stimuli.def), so the pickers offer real names; any other word still goes as typed.
+  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker"];
+  const CHEMS = ["hunger", "sleepiness", "boredom", "loneliness", "fear", "pain", "discomfort", "need_touch",
+    "life", "injury", "energy", "food", "adrenaline", "toxin", "warmth", "melatonin", "vision", "daze", "pluck", "mettle", "dread"];
+  const STIMULI = ["knock", "double_knock", "shake", "picked_up", "put_down", "dropped", "flipped", "righted", "button",
+    "button_hold", "cradle", "lid_down", "lid_up", "touched", "button_double", "pellet_dropped", "fed", "fed_bad",
+    "marble_hit", "dusk", "dawn", "owner_arrived", "owner_left", "petted", "played", "spoken_to"];
+  const THOUGHTS = ["peckish", "starving", "crunch", "fuzzy_bite", "green", "ow", "heard_you", "ground_lies", "hooded",
+    "counted", "put_me_down", "warm_hands", "sky_down", "heavy_eyes", "dream_pellets", "p_snack", "p_feast", "p_feed_me"];
+
+  // "#<id> VERB args" in, "#<id> + ..." then "#<id> OK|ERR ..." out, "! DEBUG ..." events.
+  class Channel {
+    constructor(write, onEvent) {
+      this.write = write; this.onEvent = onEvent; this.nextId = 1; this.pending = new Map(); this.buf = "";
+      this.chain = Promise.resolve();
+    }
+    feed(text) {
+      this.buf += text;
+      let nl;
+      while ((nl = this.buf.indexOf("\n")) >= 0) {
+        const line = this.buf.slice(0, nl).replace(/\r/g, "");
+        this.buf = this.buf.slice(nl + 1);
+        if (line) this.receive(line);
+      }
+    }
+    receive(line) {
+      if (line.startsWith("!")) return this.onEvent(line.slice(1).trim());
+      const m = /^#([0-9a-fA-F]+) (\+|OK|ERR)(?: (.*))?$/.exec(line);
+      if (!m) return;
+      let id = parseInt(m[1], 16);
+      if (id === 0 && m[2] === "ERR") id = this.pending.keys().next().value;
+      const p = this.pending.get(id);
+      if (!p) return;
+      if (m[2] === "+") return void p.lines.push(m[3] || "");
+      this.pending.delete(id);
+      clearTimeout(p.timer);
+      p.resolve({ ok: m[2] === "OK", text: `${m[2]} ${m[3] || ""}`.trim(), lines: p.lines });
+    }
+    // One at a time, as the protocol's page does. A long jump (a whole egg) takes seconds.
+    send(cmd, timeoutMs = 60000) {
+      const run = () => new Promise((resolve, reject) => {
+        const id = this.nextId;
+        this.nextId = this.nextId >= 0xffffff ? 1 : this.nextId + 1;
+        const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("TIMEOUT")); }, timeoutMs);
+        this.pending.set(id, { lines: [], resolve, timer });
+        this.write(`#${id.toString(16)} ${cmd}\n`).catch((e) => { this.pending.delete(id); clearTimeout(timer); reject(e); });
+      });
+      const result = this.chain.then(run, run);
+      this.chain = result.catch(() => {});
+      return result;
+    }
+    failAll(reason) {
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ok: false, text: reason, lines: [] }); }
+      this.pending.clear();
+    }
+  }
+
+  let channel = null, panel = null, mock = null;
+
+  function el(tag, props = {}, ...kids) {
+    const e = Object.assign(document.createElement(tag), props);
+    e.append(...kids);
+    return e;
+  }
+  function options(list) { return list.map((v) => el("option", { value: v, textContent: v })); }
+  function datalist(id, list) { return el("datalist", { id }, ...options(list)); }
+
+  function log(text, tone = "") {
+    const li = el("li", { textContent: text });
+    if (tone) li.dataset.tone = tone;
+    const ol = panel.querySelector("#dbgLog");
+    ol.prepend(li);
+    while (ol.children.length > 80) ol.lastChild.remove();
+  }
+
+  async function run(cmd) {
+    if (!channel) return log(`${cmd}: not connected`, "err");
+    log(`→ ${cmd}`);
+    try {
+      const r = await channel.send(cmd);
+      for (const l of r.lines) log(`  ${l}`);
+      log(`← ${r.text}`, r.ok ? "ok" : "err");
+      if (/^ERR 423/.test(r.text)) say("Locked: press Unlock, then BOOT on the dish.");
+      if (/^(UNLOCK|LOCK|SCALE|LOOK|WALL)/.test(cmd) || !r.ok) refresh();
+      return r;
+    } catch (e) {
+      log(`← ${e.message}`, "err");
+    }
+  }
+
+  function say(text) { panel.querySelector("#dbgSay").textContent = text; }
+
+  async function refresh() {
+    if (!channel) return;
+    const r = await channel.send("STATUS").catch(() => null);
+    if (!r || !r.ok) return;
+    panel.querySelector("#dbgStatus").textContent = r.text.replace(/^OK /, "");
+    const unlock = (/unlock=(\w+)/.exec(r.text) || [])[1];
+    panel.dataset.unlock = unlock;
+    if (unlock === "asking") say("Press BOOT on the dish now (after 1.5 s, within 30 s).");
+    else if (unlock === "open") say("Unlocked for this connection.");
+    if (mock) panel.querySelector("#dbgMockPress").hidden = unlock !== "asking";
+  }
+
+  function onEvent(text) {
+    log(`! ${text}`);
+    if (/^DEBUG unlock=/.test(text)) refresh();
+  }
+
+  function row(label, ...controls) {
+    return el("div", { className: "dbg-row" }, el("span", { className: "dbg-label", textContent: label }), ...controls);
+  }
+  function button(text, cmd, extra = {}) {
+    const b = el("button", { type: "button", textContent: text, className: extra.className || "ghost" });
+    b.dataset.cmd = typeof cmd === "string" ? cmd : "";
+    b.addEventListener("click", () => {
+      const c = typeof cmd === "function" ? cmd() : cmd;
+      if (c && (!extra.confirm || confirm(extra.confirm))) run(c);
+    });
+    return b;
+  }
+
+  function build() {
+    const stage = el("select", { id: "dbgStage" }, ...options(["baby", "child", "adult", "elder"]));
+    const species = el("select", { id: "dbgSpecies" }, ...options(SPECIES));
+    const look = el("select", { id: "dbgLook" }, ...options(SPECIES));
+    const wipe = el("select", { id: "dbgWipe" }, el("option", { value: "", textContent: "the nest (3 eggs)" }), ...options(SPECIES));
+    const chem = el("input", { id: "dbgChem", placeholder: "hunger", value: "hunger", size: 10 });
+    chem.setAttribute("list", "dbgChems");
+    const level = el("input", { id: "dbgLevel", type: "number", min: 0, max: 1000, value: 0, style: "width:6em" });
+    const stim = el("input", { id: "dbgStim", value: "knock", size: 12 });
+    stim.setAttribute("list", "dbgStims");
+    const thought = el("input", { id: "dbgThought", value: "crunch", size: 12 });
+    thought.setAttribute("list", "dbgThoughts");
+    const minutes = el("input", { id: "dbgMinutes", type: "number", min: 1, max: 120, value: 30, style: "width:5em" });
+    const wall = el("input", { id: "dbgWall", type: "datetime-local" });
+    const unix = () => Math.floor((wall.value ? new Date(wall.value) : new Date()).getTime() / 1000);
+    const tz = () => -new Date().getTimezoneOffset();
+    const mockPress = el("button", { id: "dbgMockPress", type: "button", className: "ghost", hidden: true, textContent: "Press BOOT (pretend)" });
+    mockPress.addEventListener("click", () => { if (mock) mock.debugPress(); setTimeout(refresh, 50); });
+
+    panel = el("section", { id: "debugPanel", className: "dbg" },
+      el("h2", { textContent: "Debug" }),
+      el("p", { className: "hint", id: "dbgSay", textContent: "Connect to the dish. Harmful commands need Unlock and a BOOT press." }),
+      el("p", { className: "dbg-status", id: "dbgStatus", textContent: "not connected" }),
+      datalist("dbgChems", CHEMS), datalist("dbgStims", STIMULI), datalist("dbgThoughts", THOUGHTS),
+      row("Unlock", button("Unlock", "UNLOCK", { className: "" }), button("Lock", "LOCK"), button("Status", "STATUS"), mockPress),
+      el("h3", { textContent: "No press needed" }),
+      row("Think", thought, button("Think", () => `THINK ${thought.value.trim()}`), button("Fortune", "FORTUNE")),
+      row("Fire", stim, button("Fire", () => `FIRE ${stim.value.trim()}`)),
+      row("Look as", look, button("Look", () => `LOOK ${look.value}`), button("Own look", "LOOK off")),
+      row("Wall time", wall, button("Set", () => `WALL ${unix()} ${tz()}`), button("Clear", "WALL clear")),
+      row("Speed", button("1x", "SCALE 1"), button("10x", "SCALE 10"), button("60x", "SCALE 60")),
+      el("h3", { textContent: "Needs the unlock" }),
+      row("Hatch", button("Hatch now", "HATCH")),
+      row("Stage", stage, button("Grow", () => `STAGE ${stage.value}`)),
+      row("Warp", minutes, button("Live minutes", () => `WARP ${minutes.value}`)),
+      row("Chemical", chem, level, button("Set", () => `CHEM ${chem.value.trim()} ${level.value}`)),
+      row("Die", button("Die, show eggs", "DIE eggs", { confirm: "He dies now. Continue?" }),
+        button("Die, at the remains", "DIE remains", { confirm: "He dies now. Continue?" })),
+      row("Species", species, button("Change", () => `SPECIES ${species.value}`, { confirm: "Change his species for good?" })),
+      row("Wipe", wipe, button("Wipe the pet", () => `WIPE ${wipe.value}`.trim(),
+        { className: "danger", confirm: "Erase this pet and its whole lineage, and restart as a fresh board?" })),
+      el("ol", { id: "dbgLog", className: "dbg-log" }));
+    panel.append(el("style", { textContent: `
+.dbg { background: var(--surface); border: 1px dashed var(--warn); border-radius: 14px; padding: 12px 16px; min-width: 0; }
+.dbg h3 { margin: 14px 0 4px; font-size: 0.95rem; color: var(--muted); }
+.dbg-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.dbg-label { min-width: 6.5em; color: var(--muted); font-size: 0.9rem; }
+.dbg-row input, .dbg-row select { font: inherit; max-width: 100%; min-width: 0; }
+.dbg-status { font: 0.75rem/1.4 var(--font-mono); overflow-wrap: anywhere; color: var(--teal); }
+.dbg-log { list-style: none; padding: 0; margin: 10px 0 0; font: 0.72rem/1.45 var(--font-mono); max-height: 40vh; overflow: auto; }
+.dbg-log li { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dbg-log li[data-tone="err"] { color: var(--warn); }
+.dbg-log li[data-tone="ok"] { color: var(--teal); }
+.dbg .danger { color: var(--warn); border-color: var(--warn); }` }));
+    const footer = document.getElementById("footer");
+    if (footer) footer.before(panel);
+    else document.body.append(panel);
+  }
+
+  function connected(write) {
+    if (channel) channel.failAll("disconnected");
+    channel = new Channel(write, onEvent);
+    say("Connected. Harmful commands need Unlock and a BOOT press.");
+    refresh();
+    return channel;
+  }
+
+  // The NUS service of a freshly opened connection. A firmware without the
+  // debug link has no such characteristic: the panel says so and stays idle.
+  async function attach(service) {
+    if (!enabled) return;
+    try {
+      const c = await service.getCharacteristic(CHAR);
+      const ch = connected((text) => {
+        const bytes = new TextEncoder().encode(text);
+        return c.writeValueWithResponse ? c.writeValueWithResponse(bytes) : c.writeValue(bytes);
+      });
+      c.addEventListener("characteristicvaluechanged", (e) => ch === channel && ch.feed(new TextDecoder().decode(e.target.value)));
+      await c.startNotifications();
+      service.device.addEventListener("gattserverdisconnected", () => {
+        if (ch !== channel) return;
+        channel.failAll("disconnected");
+        channel = null;
+        say("Disconnected: the unlock and any speed-up ended with the connection.");
+      }, { once: true });
+    } catch (e) {
+      channel = null;
+      say(`This firmware has no debug link (${e.message}).`);
+    }
+  }
+
+  // ?mock=1: the mock dish answers debug lines (ota-mock.js MockDish.debug).
+  function attachMock(dish) {
+    if (!enabled || !dish || !dish.debug) return;
+    mock = dish;
+    const ch = connected(async (text) => {
+      const lines = dish.debug(text.trim());
+      setTimeout(() => { for (const l of lines) ch.feed(l + "\n"); }, 20);
+    });
+    dish.debugEmit = (text) => ch.feed(`! ${text}\n`);
+  }
+
+  if (enabled && globalThis.document) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", build);
+    else build();
+  }
+  globalThis.BlorbDebug = { enabled, attach, attachMock, send: (cmd) => run(cmd) };
+})();
