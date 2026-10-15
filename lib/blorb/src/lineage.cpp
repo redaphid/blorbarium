@@ -117,8 +117,7 @@ void copyName(char (&to)[16], const char* from) {
 void copySpeciesName(char (&to)[16], const Genome& starter) {
   Phenotype p;
   expressStage(starter, Stage::Baby, 0, p);
-  copyName(to, speciesInfo(p.species.body).name);
-  to[0] = char(std::toupper(static_cast<unsigned char>(to[0])));
+  speciesLineName(p.species.body, to);
 }
 
 std::vector<uint8_t> frame(Kind k, const Out& payload) { return logframes::frame(uint8_t(k), payload); }
@@ -224,6 +223,12 @@ int popcount(uint32_t v) {
 }
 
 }  // namespace
+
+void speciesLineName(SpeciesId s, char (&to)[16]) {
+  std::memset(to, 0, sizeof to);
+  std::strncpy(to, speciesInfo(s).name, sizeof to - 1);
+  to[0] = char(std::toupper(static_cast<unsigned char>(to[0])));
+}
 
 // ---- the log ----------------------------------------------------------------------------
 

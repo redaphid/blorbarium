@@ -2,11 +2,13 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <set>
 #include <string>
 #include <vector>
 #include "blorb/founding.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/dish.h"
 #include "mem_storage.h"
+#include "paint/sprite_pack.h"
 #include "../../src/debug_verbs.h"
 
 using namespace blorb;
@@ -14,7 +16,6 @@ using namespace blorbtest;
 
 namespace {
 
-constexpr uint32_t kSeed = 0x00C0FFEEu;
 constexpr uint32_t kGiftSeed = 15048;
 constexpr uint32_t kGiftHash = 0xd30f00d1u;
 constexpr uint64_t kLineageId = 0x9f31c2d04a7bull;
@@ -31,152 +32,111 @@ std::string lineName(SpeciesId s) {
   return n;
 }
 
-// A kid's hand on a chooser at 50 Hz, the device lying flat.
-struct Hand {
-  FoundingChooser& chooser;
-  uint32_t ms = 1000;
-  std::vector<SpeciesId> kept;
+// A board by its MAC: one of the batch, or one off the same reel that is not.
+struct Board { uint8_t mac[6]; };
+constexpr Board kMossby{{0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3c}};
+constexpr Board kStranger{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c}};   // ends 23:7c, as the gift device does
 
-  void step(BodySample b) {
-    b.az = 1000;
-    if (std::optional<SpeciesId> s = chooser.sample(b, ms)) kept.push_back(*s);
-    ms += 20;
-  }
-  void idle(uint32_t forMs) { for (const uint32_t end = ms + forMs; ms < end;) step({}); }
-  void button(uint32_t downMs) {
-    BodySample b;
-    b.buttonDown = true;
-    for (const uint32_t end = ms + downMs; ms < end;) step(b);
-    idle(200);
-  }
-  void press() { button(150); }
-  void hold() { button(1300); }
-  void tap(uint8_t code) {
-    BodySample b;
-    b.tapCode = code;
-    step(b);
-    idle(500);
-  }
-};
-
-Nest threeEggs() {
-  MemStorage empty;
-  return *nestFor(empty, kSeed);
-}
-
-// What src/main.cpp's setup() does with the nest, for a nest that needs no hand.
-Dish boot(MemStorage& store, uint32_t seed) {
+// What src/main.cpp's setup() does with a board's storage before the Dish.
+Dish boot(MemStorage& store, const Board& board) {
+  const uint32_t seed = fnv1a(board.mac, 6);
   DishOptions o;
   std::optional<Genome> founder;
-  if (std::optional<Nest> nest = nestFor(store, seed))
-    if (std::optional<SpeciesId> pick = FoundingChooser(*nest).sample({}, 0)) founder = starterGenomeOf(*pick, seed);
-  if (founder) o.founder = &*founder;
+  if (needsFounding(store)) {
+    const SpeciesId s = foundingSpecies(store, board.mac);
+    founder = foundingGenome(s, seed, paint::bandsFor(s));
+    o.founder = &*founder;
+  }
   return Dish(store, seed, kLineageId, o);
+}
+
+// The gift device: its pet came from the starter, long before founders, and
+// is known by its seed. A board with a pet never reaches the founding.
+Dish bootGift(MemStorage& store) {
+  const uint8_t mac[6] = {0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c};
+  DishOptions o;
+  std::optional<Genome> founder;
+  if (needsFounding(store)) {
+    const SpeciesId s = foundingSpecies(store, mac);
+    founder = foundingGenome(s, kGiftSeed, paint::bandsFor(s));
+    o.founder = &*founder;
+  }
+  return Dish(store, kGiftSeed, kLineageId, o);
 }
 
 }  // namespace
 
-// ---- the nest ------------------------------------------------------------------------------------
+// ---- the table ------------------------------------------------------------------------------------
 
-TEST(Nest, AFreshDeviceOffersOneEggPerElementRolledFromItsSeed) {
-  MemStorage store;
-  ASSERT_TRUE(needsFounding(store));
-  std::optional<Nest> nest = nestFor(store, kSeed);
-  ASSERT_TRUE(nest);
-  ASSERT_EQ(nest->count, kCycle);
-  const FoundingNest rolled = foundingNest(kSeed);
-  for (uint8_t e = 0; e < kCycle; ++e) {
-    EXPECT_EQ(nest->eggs[e], rolled.eggs[e]);
-    EXPECT_EQ(uint8_t(speciesInfo(nest->eggs[e]).element), e);
+TEST(Table, EachBadgeIsItsSpeciesAndTheEightAreOneOfEach) {
+  const struct { uint8_t m4, m5; const char* species; } kBatch[] = {
+      {0x1b, 0x3c, "mossby"}, {0x1b, 0x44, "puffkin"}, {0x1b, 0x34, "gilly"},    {0x1c, 0xb0, "mothwick"},
+      {0x1b, 0x30, "mudge"},  {0x1b, 0x40, "fizz"},    {0x22, 0x58, "hushwing"}, {0x22, 0x40, "tinker"}};
+  std::set<uint8_t> seen;
+  for (const auto& b : kBatch) {
+    const uint8_t mac[6] = {0xd4, 0x05, 0x92, 0x77, b.m4, b.m5};
+    ASSERT_TRUE(tableSpecies(mac)) << b.species;
+    EXPECT_STREQ(speciesInfo(*tableSpecies(mac)).name, b.species);
+    EXPECT_EQ(badgeSpecies(mac), *tableSpecies(mac));
+    seen.insert(tableSpecies(mac)->v);
   }
-  EXPECT_TRUE(store.files.empty()) << "asking writes nothing";
+  EXPECT_EQ(seen.size(), 8u);
+  EXPECT_EQ(seen.count(kGrungo.v), 0u) << "grungo is the gift device's";
 }
 
-TEST(Chooser, APressLightsTheNextEggAndAHoldKeepsTheLitOne) {
-  FoundingChooser c(threeEggs());
-  Hand h{c};
-  h.idle(500);
-  EXPECT_EQ(c.lit(), 0);
-  h.press();
-  EXPECT_EQ(c.lit(), 1);
-  h.press();
-  EXPECT_EQ(c.lit(), 2);
-  h.press();
-  EXPECT_EQ(c.lit(), 0) << "past the last egg, the first again";
-  h.press();
-  ASSERT_TRUE(h.kept.empty()) << "a press only moves the glint";
-  h.hold();
-  ASSERT_EQ(h.kept.size(), 1u);
-  EXPECT_EQ(h.kept[0], c.nest().eggs[1]);
-  h.idle(FoundingChooser::kTimeoutMs * 2);
-  h.hold();
-  EXPECT_EQ(h.kept.size(), 1u) << "a nest is chosen once";
-}
-
-TEST(Chooser, AKnockLightsTheNextEggAndADoubleKnockKeepsTheLitOne) {
-  FoundingChooser c(threeEggs());
-  Hand h{c};
-  h.tap(1);
-  h.tap(1);
-  EXPECT_EQ(c.lit(), 2);
-  ASSERT_TRUE(h.kept.empty());
-  h.tap(2);
-  ASSERT_EQ(h.kept.size(), 1u);
-  EXPECT_EQ(h.kept[0], c.nest().eggs[2]);
-}
-
-TEST(Chooser, NobodyChoosingForAMinuteKeepsTheFirstEgg) {
-  FoundingChooser c(threeEggs());
-  Hand h{c};
-  h.idle(FoundingChooser::kTimeoutMs - 20);
-  ASSERT_TRUE(h.kept.empty()) << "not before the minute";
-  h.idle(40);
-  ASSERT_EQ(h.kept.size(), 1u);
-  EXPECT_EQ(h.kept[0], c.nest().eggs[0]);
-}
-
-TEST(Chooser, LightingAnotherEggStartsTheMinuteAgainAndTheTimeoutStillKeepsTheFirst) {
-  FoundingChooser c(threeEggs());
-  Hand h{c};
-  h.idle(50000);
-  h.press();
-  h.press();
-  const uint32_t lastPress = h.ms;
-  h.idle(FoundingChooser::kTimeoutMs - 1000);
-  ASSERT_TRUE(h.kept.empty()) << "a slow chooser is never hurried";
-  EXPECT_EQ(c.lit(), 2);
-  h.idle(2000);
-  ASSERT_EQ(h.kept.size(), 1u);
-  EXPECT_EQ(h.kept[0], c.nest().eggs[0]) << "the first egg, not the lit one";
-  EXPECT_GE(h.ms - lastPress, FoundingChooser::kTimeoutMs);
-}
-
-TEST(Chooser, OneEggNeedsNoChoice) {
-  FoundingChooser c(Nest{{SpeciesId{4}}, 1});
-  EXPECT_EQ(c.sample({}, 0), SpeciesId{4});
-  EXPECT_FALSE(c.sample({}, 20));
+TEST(Table, AnyOtherBoardTakesASpeciesFromItsMacsHashAcrossAllNine) {
+  EXPECT_FALSE(tableSpecies(kStranger.mac));
+  EXPECT_EQ(badgeSpecies(kStranger.mac).v, fnv1a(kStranger.mac, 6) % kSpeciesCount);
+  EXPECT_STREQ(speciesInfo(badgeSpecies(kStranger.mac)).name, "fizz") << "tests/test_flash_batch.py expects the same";
+  std::set<uint8_t> species;
+  for (uint32_t n = 0; n < 4096; ++n) {
+    const uint8_t mac[6] = {0x02, 0x00, 0x00, uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
+    const SpeciesId s = badgeSpecies(mac);
+    EXPECT_EQ(badgeSpecies(mac), s) << "the same board, the same species";
+    species.insert(s.v);
+  }
+  EXPECT_EQ(species.size(), kSpeciesCount);
+  const uint8_t nearMiss[6] = {0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3d};
+  EXPECT_FALSE(tableSpecies(nearMiss)) << "the whole MAC, not its tail";
 }
 
 // ---- who is founded --------------------------------------------------------------------------------
 
-TEST(Founding, ThePickIsThePetAndNamesTheLine) {
+TEST(Founding, AFreshBadgeFoundsItsTableSpeciesWithNoChoice) {
+  MemStorage store;
+  Dish d = boot(store, kMossby);
+  EXPECT_EQ(d.boot(), Boot::Fresh);
+  EXPECT_EQ(d.appearance().species, species::mossby);
+  EXPECT_EQ(std::string(d.lineage().currentName()), "Mossby");
+  const uint32_t seed = fnv1a(kMossby.mac, 6);
+  EXPECT_EQ(std::get<Egg>(d.occupant()).genome().bytes(),
+            foundingGenome(species::mossby, seed, paint::bandsFor(species::mossby)).bytes());
+  MemStorage again;
+  EXPECT_EQ(std::get<Egg>(boot(again, kMossby).occupant()).genome().hash(),
+            std::get<Egg>(d.occupant()).genome().hash())
+      << "a board founds the same pet every time";
+}
+
+TEST(Founding, ThePinIsTheOwnersOverrideOverTheTable) {
   for (const SpeciesInfo& row : SPECIES) {
     MemStorage store;
     ASSERT_TRUE(writeFoundPin(store, row.id));
-    Dish d = boot(store, kSeed);
+    EXPECT_EQ(foundingSpecies(store, kMossby.mac), row.id) << row.name;
+    Dish d = boot(store, kMossby);
     EXPECT_EQ(d.boot(), Boot::Fresh) << row.name;
     EXPECT_EQ(d.appearance().species, row.id) << row.name;
     EXPECT_EQ(std::string(d.lineage().currentName()), lineName(row.id)) << row.name;
-    Dish again = boot(store, kSeed);
+    Dish again = boot(store, kMossby);
     EXPECT_EQ(again.boot(), Boot::Resumed) << row.name;
     EXPECT_EQ(std::string(again.lineage().currentName()), lineName(row.id)) << "the Founding entry on the log";
   }
 }
 
-TEST(Founding, AnUnpinnedNestFoundsTheDefaultUntilAKidChooses) {
+TEST(Founding, ABoardNotInTheTableFoundsItsHashedSpecies) {
   MemStorage store;
-  Dish d = boot(store, kGiftSeed);
-  EXPECT_EQ(std::get<Egg>(d.occupant()).genome().hash(), kGiftHash) << "three eggs wait for a hand, so today's grungo";
+  Dish d = boot(store, kStranger);
+  EXPECT_EQ(d.appearance().species, badgeSpecies(kStranger.mac));
+  EXPECT_EQ(std::string(d.lineage().currentName()), lineName(badgeSpecies(kStranger.mac)));
 }
 
 // ---- an existing pet is never founded again ------------------------------------------------------
@@ -186,7 +146,6 @@ TEST(NeedsFounding, AnyKeepsakeOrLineageMeansAPetLivesHere) {
     MemStorage store;
     store.files[f] = {0xFF};
     EXPECT_FALSE(needsFounding(store)) << "one stray byte of " << f;
-    EXPECT_FALSE(nestFor(store, kSeed)) << f;
   }
   MemStorage store;
   store.files["friend.egg"] = {1, 2, 3};
@@ -208,9 +167,8 @@ TEST(NeedsFounding, TheGiftDevicesGrungoIsNeverFoundedAgain) {
   EXPECT_NE(debugverbs::found(store, "gilly"), nullptr);
   EXPECT_EQ(store.files, before) << "the verb writes nothing on a pet's flash";
   ASSERT_TRUE(writeFoundPin(store, SpeciesId{4}));
-  EXPECT_FALSE(nestFor(store, kGiftSeed)) << "a pin is ignored once a pet lives";
-  Dish again = boot(store, kGiftSeed);
-  EXPECT_EQ(std::get<Egg>(again.occupant()).genome().hash(), kGiftHash);
+  Dish again = bootGift(store);
+  EXPECT_EQ(std::get<Egg>(again.occupant()).genome().hash(), kGiftHash) << "a pin is ignored once a pet lives";
   EXPECT_EQ(std::string(again.lineage().currentName()), "Grungo");
 }
 
@@ -219,34 +177,30 @@ TEST(NeedsFounding, TheCommittedV1PetWithAPinStaysHimself) {
   store.files["snap.a"] = readFile(kV1);
   ASSERT_FALSE(store.files["snap.a"].empty()) << kV1 << " is missing (run from the project root)";
   ASSERT_TRUE(writeFoundPin(store, SpeciesId{7}));
-  EXPECT_FALSE(nestFor(store, kGiftSeed));
-  Dish d = boot(store, kGiftSeed);
+  Dish d = bootGift(store);
   EXPECT_EQ(d.boot(), Boot::Resumed);
   EXPECT_STREQ(d.settings().name, "Grungo_IV");
 }
 
 // ---- found.pin ---------------------------------------------------------------------------------------
 
-TEST(Pin, MakesTheNestOneEggAtAFreshFounding) {
+TEST(Pin, TheVerbPinsTheSpeciesAFreshFoundingFounds) {
   MemStorage store;
   ASSERT_EQ(debugverbs::found(store, "gilly"), nullptr);
   SpeciesId gilly;
   ASSERT_TRUE(debugverbs::speciesByName("gilly", gilly));
-  std::optional<Nest> nest = nestFor(store, kSeed);
-  ASSERT_TRUE(nest);
-  ASSERT_EQ(nest->count, 1);
-  EXPECT_EQ(nest->eggs[0], gilly);
+  EXPECT_EQ(foundingSpecies(store, kMossby.mac), gilly);
   EXPECT_EQ(store.files["found.pin"], (std::vector<uint8_t>{'B', 'F', 'P', 'N', 1, gilly.v})) << "the pin's bytes";
   ASSERT_EQ(debugverbs::found(store, "2"), nullptr) << "by number too";
-  EXPECT_EQ(nestFor(store, kSeed)->eggs[0], SpeciesId{2}) << "the last pin wins";
+  EXPECT_EQ(foundingSpecies(store, kMossby.mac), SpeciesId{2}) << "the last pin wins";
 }
 
-TEST(Pin, OffGivesTheThreeEggsBackAndDeletesNothing) {
+TEST(Pin, OffGivesTheTableBackAndDeletesNothing) {
   MemStorage store;
   ASSERT_EQ(debugverbs::found(store, "off"), nullptr) << "nothing pinned is already off";
   ASSERT_EQ(debugverbs::found(store, "gilly"), nullptr);
   ASSERT_EQ(debugverbs::found(store, "off"), nullptr);
-  EXPECT_EQ(nestFor(store, kSeed)->count, kCycle);
+  EXPECT_EQ(foundingSpecies(store, kMossby.mac), species::mossby);
   EXPECT_EQ(store.files.count("found.off"), 1u);
 }
 
@@ -269,7 +223,7 @@ TEST(Pin, AnythingButAWholePinIsNoPin) {
   for (const std::vector<uint8_t>& b : bad) {
     store.files["found.pin"] = b;
     EXPECT_FALSE(readFoundPin(store)) << b.size() << " bytes";
-    EXPECT_EQ(nestFor(store, kSeed)->count, kCycle);
+    EXPECT_EQ(foundingSpecies(store, kMossby.mac), species::mossby);
   }
 }
 

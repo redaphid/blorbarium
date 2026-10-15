@@ -53,8 +53,8 @@ inline bool speciesByName(const char* s, blorb::SpeciesId& out) {
 }
 
 // `DEBUG found <slug|id|off>`, for an adult before a device is handed over:
-// the one egg a fresh founding offers, kept in found.pin (founding.h); `off`
-// gives the three-egg nest back. Refused once a pet lives here, so it never
+// the species a fresh founding founds over the badge table's, kept in
+// found.pin (founding.h); `off` gives the table back. Refused once a pet lives here, so it never
 // writes to a keepsake's flash. nullptr on success, else why not.
 inline const char* found(blorb::Storage& store, const char* arg) {
   if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";

@@ -34,10 +34,12 @@ class NusLink : public blorb::Link {
   static constexpr const char* kTx = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";   // the badge notifies
   static constexpr const char* kOtaData = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";   // update images (docs/ota.md)
 
-  // Name "blorb-xxxx" from the MAC's last two bytes. `otaData` takes the
-  // update's image writes, when the firmware has updates.
-  const char* begin(const uint8_t mac[6], NimBLECharacteristicCallbacks* otaData = nullptr) {
-    std::snprintf(name_, sizeof name_, "blorb-%02x%02x", mac[4], mac[5]);
+  // `name` goes in the scan response, which has room for 29 characters; the
+  // advertisement itself carries the flags and the service UUID (21 of its
+  // 31 bytes). `otaData` takes the update's image writes, when the firmware
+  // has updates.
+  const char* begin(const char* name, NimBLECharacteristicCallbacks* otaData = nullptr) {
+    std::snprintf(name_, sizeof name_, "%s", name);
     NimBLEDevice::init(name_);
     NimBLEDevice::setMTU(247);
     NimBLEDevice::setPower(21);

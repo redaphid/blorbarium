@@ -83,6 +83,9 @@ template <class F> void Lineage::forEach(F&& f) const {
         const_cast<void*>(static_cast<const void*>(&f)));
 }
 
+// A line's name until a rename: its founder's species slug, capitalised ("Mossby").
+void speciesLineName(SpeciesId, char (&)[16]);
+
 // ---- feats and unlocks ---------------------------------------------------------
 #define BLORB_FEAT(bit, name) bool feat_##name(const LifeStats&, uint16_t generation);
 #include "blorb/defs/feats.def"

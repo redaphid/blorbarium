@@ -42,7 +42,6 @@ plant "a row out of order" defs/species.def 's/BLORB_SPECIES(8, tinker/BLORB_SPE
 plant "grungo without foresee" defs/species.def 's/Trick,  foresee,/Trick,  shell,  /; s/Guard,  shell,  /Guard,  foresee,/' "slot 0 is grungo, and grungo foresees"
 plant "a broken stance cycle" species.h 's/Pounce = 0, Guard = 1, Trick = 2/Pounce = 0, Guard = 2, Trick = 1/' "pounce beats trick beats guard beats pounce"
 plant "counterOf naming the loser" species.h 's/Stance((uint8_t(s) + 1) % kCycle)/Stance((uint8_t(s) + 2) % kCycle)/' "counterOf names the winner"
-plant "a nest out of element order" species.h 's/if (uint8_t(r.element) == e \&\& seen++/if (uint8_t(r.style) == e \&\& seen++/' "a nest holds one egg of each element, in element order"
 
 bin="$(mktemp -d)"
 printf '#include <cstdio>\n#include "blorb/species.h"\nint main() { std::printf("%%u\\n", unsigned(blorb::rosterHash())); }\n' > "$bin/hash.cpp"

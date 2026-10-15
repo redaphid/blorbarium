@@ -458,6 +458,52 @@ static void reportStatus(uint32_t now) {
   }
 }
 
+#if !defined(BADGE_BOARD_SIM)
+// The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
+// badge table will adopt him as (founding.h advertisedSpecies), whatever the
+// owner named him. An image on trial keeps the old image's blorb-xxxx: the
+// page that sent the update keeps its token under the name it chose the
+// board by, and a page reloaded mid-trial must find that token to CONFIRM.
+// The species name comes with the next boot.
+static const char* bleName(const uint8_t mac[6]) {
+  static char name[16];
+  if (trial.onTrial()) {
+    std::snprintf(name, sizeof name, "blorb-%02x%02x", mac[4], mac[5]);
+  } else {
+    const blorb::Occupant& o = dish->occupant();
+    const blorb::Genome* pet = dish->sealed()                         ? nullptr
+                               : std::holds_alternative<blorb::Creature>(o) ? &std::get<blorb::Creature>(o).genome()
+                               : std::holds_alternative<blorb::Egg>(o)      ? &std::get<blorb::Egg>(o).genome()
+                                                                            : &std::get<blorb::Clutch>(o).parent;
+    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(pet, mac)).name);
+  }
+  return name;
+}
+
+// A pet 0.4.0 founded becomes his badge's species (founding.h), once the
+// flash can be written: on an OTA trial, only after the trial keeps the
+// image, so the trial's pet check and a rollback both meet the pet the old
+// image saved. Asked once a second until the Dish says it is done.
+static void adoptTableSpecies(uint32_t now) {
+  static bool settled = false;
+  static uint32_t askedAt = 0;
+  if (settled || trial.onTrial() || now - askedAt < 1000) return;
+  askedAt = now;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
+  const blorb::Dish::Adoption a =
+      species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
+  if (a == blorb::Dish::Adoption::NotYet) return;
+  settled = true;
+  if (a == blorb::Dish::Adoption::Adopted) {
+    const OccupantSummary o = summarize(dish->occupant());
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+                  blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
+  }
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
   boardButtonBegin();
@@ -483,19 +529,19 @@ void setup() {
 #else
   options.sealed = simSealed;
 #endif
-  // A fresh device's nest (founding.h). An owner's pin is one egg and needs no
-  // choice; three eggs wait for the kid once the nest is drawn here, and until
-  // then the Dish founds its default.
+  // A fresh board founds its own species: found.pin's, else the badge
+  // table's, else its MAC's hash (founding.h). The sim founds the starter, as
+  // it always has, so its goldens hold.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
-#if !defined(BADGE_BOARD_SIM)
-  if (!options.sealed && blorb::needsFounding(dishStore)) awaitFoundPin();
-#endif
   std::optional<blorb::Genome> founder;
-  if (!options.sealed)
-    if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
-      if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
-        founder = blorb::starterGenomeOf(*pick, speciesSeed);
-  if (founder) options.founder = &*founder;
+#if !defined(BADGE_BOARD_SIM)
+  if (!options.sealed && blorb::needsFounding(dishStore)) {
+    awaitFoundPin();
+    const blorb::SpeciesId species = blorb::foundingSpecies(dishStore, mac);
+    founder = blorb::foundingGenome(species, speciesSeed, paint::bandsFor(species));
+    options.founder = &*founder;
+  }
+#endif
 #if !defined(BADGE_BOARD_SIM)
   duelAir = &radioGate;
 #endif
@@ -520,7 +566,7 @@ void setup() {
   }
   otaPackets.begin();
   ble.keepWhile([] { return updater.active(); });
-  const char* name = ble.begin(mac, &otaData);
+  const char* name = ble.begin(bleName(mac), &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
@@ -725,6 +771,7 @@ void loop() {
     dishStore.hold(false);
     dish->flush();
   }
+  adoptTableSpecies(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

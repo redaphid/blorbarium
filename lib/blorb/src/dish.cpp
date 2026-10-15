@@ -1,6 +1,7 @@
 #include "blorb/dish.h"
 
 #include <algorithm>
+#include "blorb/founding.h"
 #include "blorb/friend_egg.h"
 #include <cstring>
 #include <utility>
@@ -279,6 +280,29 @@ void Dish::rename(const char* name) {
   lineage_.rename(name);
   copyName(live_.settings.name, lineage_.currentName());
   eventDirty_ = true;
+}
+
+Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
+  if (readOnly_) return Adoption::NotNeeded;
+  Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (!c) {
+    const Genome& g = std::holds_alternative<Egg>(live_.occupant) ? std::get<Egg>(live_.occupant).genome()
+                                                                  : std::get<Clutch>(live_.occupant).parent;
+    return predatesSpecies(g) ? Adoption::NotYet : Adoption::NotNeeded;
+  }
+  if (!predatesSpecies(c->genome())) return Adoption::NotNeeded;
+  if (!store_.writable() || duel_.active()) return Adoption::NotYet;   // a duel plays a copy of his genome
+  if (!blorb::adoptSpecies(*c, species, live_.settings.speciesSeed, bands)) return Adoption::NotNeeded;
+  lineage_.recordEdit(c->generation(), c->genome());
+  char was[16], now[16];
+  speciesLineName(kGrungo, was);
+  speciesLineName(species, now);
+  if (std::strcmp(lineage_.currentName(), was) == 0) rename(now);
+  // A rerun after a power cut may find the Rename on the log and the old name in the save.
+  copyName(live_.settings.name, lineage_.currentName());
+  eventDirty_ = true;
+  save();
+  return Adoption::Adopted;
 }
 
 // Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.

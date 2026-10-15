@@ -20,8 +20,8 @@ namespace paint {
 // converter from the art's hue and the eye and mouth masks; 255 = invariant
 // (outline). A recolour costs one 256-entry LUT rebuild per life, no flash.
 struct PaletteEntry { uint8_t r, g, b; uint8_t region; };
-// How far genes may move a region, so he stays recognisably grungo.
-struct RegionBand { int8_t hueMin, hueMax; uint8_t satMin, satMax, valMin, valMax; };
+// How far genes may move a region (blorb/registry.h, so a founder rolls inside it).
+using RegionBand = blorb::RegionBand;
 
 // Eye centre and radius in frame pixels. Per frame, so the halo tracks the
 // eyes through the hop, the bob, scaling and a face patch that moves them.
@@ -62,6 +62,8 @@ void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowM
 // An id this firmware has no row for draws grungo, recoloured by the pet's own
 // genes like any pack, so a gap in the art is a frog in its colours, never a blank.
 const SpritePack& packFor(blorb::SpeciesId);
+// packFor(species)'s band for every region: what foundingGenome rolls across.
+blorb::LookBands bandsFor(blorb::SpeciesId);
 
 // A procedural stand-in (circles, a ring, two eyes with anchors) used by the
 // sim and tests until the grungo converter exists.

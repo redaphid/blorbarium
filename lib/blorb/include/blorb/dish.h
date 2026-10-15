@@ -108,6 +108,15 @@ class Dish {
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
   void rename(const char* name);
+  // A pet from before species becomes `species` (founding.h adoptSpecies),
+  // recorded as one lineage Checkpoint and saved at once; a line still named
+  // for grungo takes the species' name, and an owner's name stays. NotYet
+  // while nothing could be written (an OTA trial's held storage), a duel is
+  // open, or the pet is an egg or a clutch, so the caller asks again; NotNeeded once he has a
+  // species or the board is sealed. Running it again after a power cut finds
+  // the saved pet adopted, or adopts the unsaved one the same way.
+  enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
+  Adoption adoptSpecies(SpeciesId, const LookBands&);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
 
   // Duels (dish_duel.h). The view is plain data for the duel scene and the
