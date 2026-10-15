@@ -993,7 +993,8 @@ async function connect(wide = false) {
 }
 
 // What the page shows before any dish, so the next one starts from it.
-const FRESH = { name: $("name").textContent, meta: $("meta").textContent, nameHint: $("nameHint").textContent, sayHint: $("sayHint").textContent };
+// Every hint in a section, so one added later resets with the rest.
+const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
 
 // Let this dish go and put the page back as it loads. Its drop is ignored.
 function leave() {
@@ -1011,10 +1012,10 @@ function leave() {
   ui.show("doing", false);
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
-  for (const [id, text] of [["nameHint", FRESH.nameHint], ["sayHint", FRESH.sayHint]]) {
-    $(id).textContent = text;
-    $(id).dataset.tone = "";
-    delete $(id).dataset.trial;
+  for (const [el, text] of FRESH.hints) {
+    el.textContent = text;
+    el.dataset.tone = "";
+    delete el.dataset.trial;
   }
   nextDishFirst(false);
   ui.show("another", false);
