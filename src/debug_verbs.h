@@ -14,6 +14,7 @@
 #include "blorb/founding.h"
 #include "blorb/registry.h"
 #include "blorb/species.h"
+#include "debugble/jump.h"
 
 namespace debugverbs {
 
@@ -53,8 +54,8 @@ inline bool speciesByName(const char* s, blorb::SpeciesId& out) {
 }
 
 // `DEBUG found <slug|id|off>`, for an adult before a device is handed over:
-// the one egg a fresh founding offers, kept in found.pin (founding.h); `off`
-// gives the three-egg nest back. Refused once a pet lives here, so it never
+// the species a fresh founding founds over the badge table's, kept in
+// found.pin (founding.h); `off` gives the table back. Refused once a pet lives here, so it never
 // writes to a keepsake's flash. nullptr on success, else why not.
 inline const char* found(blorb::Storage& store, const char* arg) {
   if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";
@@ -72,38 +73,20 @@ inline constexpr StageName kStageNames[] = {
     {"elder", blorb::Stage::Elder},
 };
 
-// Hatches the egg if there is one, then ages him into `stage` by lowering
-// life a little at a time and letting his own genome's stage receptors fire,
-// whatever thresholds his genes carry. Then every drive is settled (fed,
-// rested, unhurt), a few ticks let his face catch up, and the Dish saves.
-// nullptr on success, else why not.
+// Hatches the egg if there is one, then ages him into `stage` through his own
+// stage receptors and settles his drives (debugble::growTo, which the debug
+// link's STAGE shares). nullptr on success, else why not.
 inline const char* growTo(blorb::Dish& dish, const char* name, Warp warp) {
-  using blorb::Fx;
   const StageName* want = nullptr;
   for (const StageName& s : kStageNames)
     if (!std::strcmp(s.name, name)) want = &s;
   if (!want) return "stage is one of hatchling, child, adult, elder";
-  for (uint32_t t = 0; std::holds_alternative<blorb::Egg>(dish.occupant()) && t < 100000; t += 100) warp(100);
-  auto* c = std::get_if<blorb::Creature>(&dish.occupant());
-  if (!c) return "no creature in the dish (a clutch waits for a pick)";
-  if (c->stage() > want->stage) return "he is already past that stage";
-  const Fx nudge = Fx::ratio(1, 50);
-  while (c->stage() < want->stage) {
-    const Fx life = c->chemistry().chem[blorb::chem::life.v];
-    if (life <= nudge) return "life ran out before the stage fired";
-    c->inject(blorb::chem::life, life - nudge);
-    warp(2);
-    c = std::get_if<blorb::Creature>(&dish.occupant());
-    if (!c) return "he died on the way";
+  switch (debugble::growTo(dish, want->stage, warp)) {
+    case debugble::Jump::Done: return nullptr;
+    case debugble::Jump::PastStage: return "he is already past that stage";
+    case debugble::Jump::Died: return "he died on the way";
+    default: return "no creature in the dish (a clutch waits for a pick)";
   }
-  for (const auto& d : blorb::DRIVES) c->inject(blorb::driveChem(d.id), Fx::zero());
-  c->inject(blorb::chem::injury, Fx::zero());
-  c->inject(blorb::chem::toxin, Fx::zero());
-  c->inject(blorb::chem::adrenaline, Fx::zero());
-  c->inject(blorb::chem::energy, Fx::one());
-  warp(20);
-  dish.flush();
-  return nullptr;
 }
 
 }  // namespace debugverbs

@@ -1,8 +1,9 @@
 #pragma once
-// The protocol's link with the lineage-writing twists held back while this
-// image is on trial. Its storage refuses every write then (held_storage.h),
-// so a rename or a gene edit would be answered OK and quietly lost; a page is
-// told to wait instead (docs/ota.md "The trial").
+// The protocol's link with the twists that write the flash (the lineage, or
+// the taught lines) held back while this image is on trial. Its storage
+// refuses every write then (held_storage.h), so a rename or a gene edit would
+// be answered OK and quietly lost; a page is told to wait instead (docs/ota.md
+// "The trial").
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -27,7 +28,7 @@ class TrialGuard : public blorb::Link {
   }
 
  private:
-  // The id of `#<id> TWIST <kind>` when that kind writes the lineage. In
+  // The id of `#<id> TWIST <kind>` when that kind writes the flash. In
   // trial_guard.cpp: Arduino.h's word() macro would rewrite it in a header.
   static std::optional<uint32_t> lineageTwist(std::string_view line);
 

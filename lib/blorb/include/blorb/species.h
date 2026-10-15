@@ -86,6 +86,11 @@ inline constexpr SpeciesInfo SPECIES[] = {
 #include "blorb/defs/species.def"
 #undef BLORB_SPECIES
 };
+namespace species {
+#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc) inline constexpr SpeciesId name{id};
+#include "blorb/defs/species.def"
+#undef BLORB_SPECIES
+}  // namespace species
 inline constexpr size_t kSpeciesCount = countOf(SPECIES);
 inline constexpr size_t kPowerCount = countOf(POWERS);
 inline constexpr SpeciesId kGrungo{0};
@@ -176,25 +181,7 @@ struct SpeciesTraits {
   constexpr bool hybrid() const { return speciesInfo(body).power != power; }
 };
 
-// ---- founding ---------------------------------------------------------------------
-// The founding nest (founding.h): three eggs, one of each element, rolled
-// from the MAC, so a family of devices spreads across the wheel while each kid
-// still chooses. A nest is a pure function of the seed, so it replays.
-struct FoundingNest { SpeciesId eggs[kCycle]; };
-constexpr FoundingNest foundingNest(uint32_t speciesSeed) {
-  FoundingNest n{};
-  for (uint8_t e = 0; e < kCycle; ++e) {
-    const uint8_t pick = uint8_t((speciesSeed >> (8 * e)) % kCycle);   // which of the element's three styles
-    uint8_t seen = 0;
-    for (const SpeciesInfo& r : SPECIES)
-      if (uint8_t(r.element) == e && seen++ == pick) n.eggs[e] = r.id;
-  }
-  return n;
-}
-static_assert(speciesInfo(foundingNest(0).eggs[0]).element == Element::Splash &&
-                  speciesInfo(foundingNest(0).eggs[2]).element == Element::Spark,
-              "a nest holds one egg of each element, in element order");
-
+// ---- starters ---------------------------------------------------------------------
 // Grungo's recipe with the row's bytes, plus a SpeciesGene, a PowerGene and a
 // KnackGene ranked toward the row's style, plus the duel feeling genes
 // (stakes.h names the stimuli). starterGenome(seed) stays grungo's base

@@ -8,6 +8,18 @@
   const TRIAL_WAIT_MS = 90000;  // the dish keeps itself 30 s after CONFIRM; past this, it is unconfirmed
   const TRIAL_POLL_MS = 2000;
 
+  // The chooser's filters (docs/ble.md). Every dish advertises the UART service
+  // in its advertising packet and its name in the scan response: blorb-xxxx up
+  // to 0.6.x, its species from 0.7.0. Once chosen, the name never matters again:
+  // a reconnect, even after an update renames the dish, is to the same device.
+  const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker"];
+  function chooserFilters(want, wide = false) {
+    if (want) return [{ name: want }];
+    if (wide) return [{ services: [NUS] }];
+    return ["blorb-", ...SPECIES].map((namePrefix) => ({ services: [NUS], namePrefix }));
+  }
+
   function kv(text) {
     const out = {};
     for (const m of String(text).matchAll(/([A-Za-z_]+)=(\S*)/g)) out[m[1]] = m[2];
@@ -348,7 +360,7 @@
     }
   }
 
-  const api = { Updater, fetchRelease, tokenStore, checkTrial, isNewer, sha256, imageId };
+  const api = { Updater, fetchRelease, tokenStore, checkTrial, isNewer, sha256, imageId, chooserFilters, NUS, SPECIES };
   globalThis.BlorbOta = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

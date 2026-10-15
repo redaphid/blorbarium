@@ -7,6 +7,7 @@
 <meta name="description" content="Talk to grungo's dish over Bluetooth.">
 <meta name="theme-color" content="#2f3a1c">
 <link rel="icon" href="grungo.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -42,6 +43,8 @@
   --cloak: #a58a6c; --line: #343c26; --warn: #e3875a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+/* The page hides and shows whole sections by the attribute; a display rule must not undo it. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--fg);
@@ -130,6 +133,22 @@ input {
 .update-text[data-tone="ok"] { color: var(--teal); }
 .update-text[data-tone="err"] { color: var(--warn); }
 #updateBar { height: 14px; border-radius: 7px; }
+#updateBox { border: 2px solid var(--teal); }
+.update-text { font-weight: 700; }
+.update-text[data-tone="ask"] { font: 800 1.35rem/1.25 var(--font-display); color: var(--fg); }
+button.big { width: 100%; font-size: 1.2rem; padding: 18px 22px; }
+/* The update's five steps; the one under way is filled, the ones behind ticked. */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 0.75rem; line-height: 1.2; color: var(--muted); }
+.steps li::before {
+  content: counter(step); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  border: 2px solid var(--line); font: 700 0.85rem var(--font-body);
+}
+.steps li[data-s="now"] { color: var(--fg); font-weight: 700; }
+.steps li[data-s="now"]::before { border-color: var(--teal); background: var(--teal); color: var(--surface); }
+.steps li[data-s="done"]::before { content: "\2713"; border-color: var(--teal); color: var(--teal); }
+.steps li[data-s="err"] { color: var(--warn); font-weight: 700; }
+.steps li[data-s="err"]::before { content: "!"; border-color: var(--warn); color: var(--warn); }
 #updateBar > i { background: var(--teal); }
 #sayInput { text-transform: uppercase; }
 .debug { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
@@ -159,10 +178,29 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <p class="meta" id="meta">Bring your phone close to the dish and connect.</p>
     <p class="doing" id="doing" hidden></p>
     <div class="actions">
-      <button id="connect" type="button">Connect to grungo</button>
+      <button id="connect" type="button">Connect to a dish</button>
       <button id="reconnect" type="button" class="ghost" hidden>Reconnect</button>
+      <button id="another" type="button" class="ghost" hidden>Connect another dish</button>
+      <button id="wider" type="button" class="ghost" hidden>Can't find it? Search wider</button>
     </div>
   </div>
+
+  <section id="mockChooser" hidden>
+    <h2>Choose a dish (pretend)</h2>
+    <div class="actions" id="mockChoices"></div>
+  </section>
+
+  <section id="updateBox" hidden>
+    <h2>Update</h2>
+    <p class="hint" id="updateFw"></p>
+    <ol class="steps" id="updateSteps" hidden><li>Get ready</li><li>Press the button</li><li>Send</li><li>Restart</li><li>Check</li></ol>
+    <p class="update-text" id="updateText" role="status" aria-live="polite">Checking for updates…</p>
+    <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
+    <div class="actions">
+      <button id="updateGo" type="button" class="big" hidden>Update</button>
+      <button id="mockPress" type="button" class="ghost" hidden>Press the dish's button (pretend)</button>
+    </div>
+  </section>
 
   <section id="drivesBox" hidden>
     <h2>How he feels</h2>
@@ -199,16 +237,50 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Say it</button>
     </form>
     <p class="hint" id="sayHint">Up to 56 characters. He shows it on his screen.</p>
-  </section>
 
-  <section id="updateBox" hidden>
-    <h2>Update</h2>
-    <p class="update-text" id="updateText" role="status" aria-live="polite">Checking for updates…</p>
-    <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
-    <div class="actions">
-      <button id="updateGo" type="button" hidden>Update</button>
-      <button id="mockPress" type="button" class="ghost" hidden>Press the dish's button (pretend)</button>
-    </div>
+    <!-- Teach: lines he keeps on the dish and says now and then, phone or not
+         (TWIST teach / unteach, docs/ble.md). Self-contained: it shows with this
+         box and reads the page's `link` only when a button is pressed. -->
+    <h2>Teach him a line</h2>
+    <form id="teachForm" autocomplete="off">
+      <input id="teachInput" name="teach" maxlength="30" placeholder="I LOVE YOU" aria-label="A line for him to keep" required>
+      <button type="submit">Teach it</button>
+    </form>
+    <p class="hint" id="teachHint">Up to 30 characters. He keeps the last 4 and says them now and then, even after your phone has gone.</p>
+    <button id="unteach" type="button" class="ghost">Forget taught lines</button>
+    <script>
+    (() => {
+      const el = (id) => document.getElementById(id);
+      const tell = (tone, text) => { el("teachHint").dataset.tone = tone; el("teachHint").textContent = text; };
+      const refused = (err) => err.code === 404 ? "This needs the next firmware."
+        : err.code === 409 && /TRIAL/.test(err.message) ? "The new version is still checking itself. Try again in a few minutes."
+        : `The dish said no (${err.message}).`;
+      el("teachInput").addEventListener("input", (e) => {
+        const at = e.target.selectionStart;
+        e.target.value = e.target.value.toUpperCase();
+        e.target.setSelectionRange(at, at);
+      });
+      el("teachForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = el("teachInput").value.toUpperCase().trim().slice(0, 30);
+        if (!text || !link) return;
+        tell("", "Sending…");
+        try {
+          await link.send(`TWIST teach ${text}`);
+          tell("ok", `He learned "${text}". He will say it now and then.`);
+          el("teachInput").value = "";
+        } catch (err) { tell("err", refused(err)); }
+      });
+      el("unteach").addEventListener("click", async () => {
+        if (!link || !confirm("Forget every line you taught him?")) return;
+        tell("", "Sending…");
+        try {
+          await link.send("TWIST unteach");
+          tell("ok", "He forgot every line you taught him.");
+        } catch (err) { tell("err", refused(err)); }
+      });
+    })();
+    </script>
   </section>
 
   <details id="debugBox" class="debug" hidden>
@@ -220,6 +292,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
 </main>
 
 <script src="ota.js"></script>
+<script src="debug.js"></script>
 <script>
 "use strict";
 const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -349,12 +422,13 @@ class BleTransport {
     // One handler for the life of the device, so a reconnect never feeds a line twice.
     this.notify = (e) => this.feed(new TextDecoder().decode(e.target.value));
   }
-  async pick() {
-    const want = params.get("d");
-    const filters = want ? [{ name: want }] : [{ services: [NUS] }];
+  // The only chooser: every later open() is to this same device, whatever it advertises then.
+  async pick(wide) {
+    const filters = BlorbOta.chooserFilters(params.get("d"), wide);
     this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS] });
-    this.device.addEventListener("gattserverdisconnected", () => this.onDrop());
+    this.device.addEventListener("gattserverdisconnected", () => this.onDrop(this));
   }
+  close() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
   async open() {
     const server = await this.device.gatt.connect();
     const svc = await server.getPrimaryService(NUS);
@@ -364,6 +438,7 @@ class BleTransport {
     this.feed = lineReader((line) => this.onLine(line));
     tx.addEventListener("characteristicvaluechanged", this.notify);
     await tx.startNotifications();
+    globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js)
   }
   // Back to the same device after a drop, with no chooser, for about two minutes.
   async reopen(ms = 120000) {
@@ -390,25 +465,69 @@ class BleTransport {
     for (let i = 0; i < bytes.length; i += 20) await put(bytes.slice(i, i + 20));
   }
   get name() { return this.device ? this.device.name : ""; }
+  // The same for this dish on this site whatever it advertises: an update renames it.
+  get id() { return this.device ? this.device.id : ""; }
 }
 
 // ?mock=1: a fake board with a canned grungo, so the page can be checked without the badge.
+function mockDish(name = "blorb-7a3f", renamed = null) {
+  const faults = (params.get("faults") ?? "drop,gaps,lostAck").split(",");
+  return new BlorbOtaMock.MockDish({
+    board: "lcd128", fw: params.get("fw") || "0.3.0", name, renamed,
+    onTrial: params.has("trial_from") ? { from: params.get("trial_from"), token: params.get("trial_token") } : null,
+    confirmMs: Number(params.get("confirm_ms")) || 30000,
+    trialMs: Number(params.get("trial_ms")) || 3000,
+    faults: Object.fromEntries(faults.map((k) => [k, true])),
+  });
+}
+
+// &nearby=blorb-1b3c>mossby,uart-thing:uart,fizzbox:plain is what the pretend radio
+// hears: dishes (a name, and the name it takes once updated), another device with
+// the UART service, one without it. Without nearby there is one dish and no chooser.
+let mockAds = null, mockChooserOpens = 0;
+function mockRadio() {
+  mockAds ||= (params.get("nearby") || "").split(",").filter(Boolean).map((entry) => {
+    const [names, kind = "dish"] = entry.split(":");
+    const [name, renamed] = names.split(">");
+    const dish = kind === "dish" ? mockDish(name, renamed) : null;
+    return { dish, services: kind === "plain" ? [] : [NUS], get name() { return dish ? dish.name : name; } };
+  });
+  return mockAds;
+}
+
+// Chrome's chooser, as a list of buttons: what matches the filters, by the name it advertises now.
+function mockChoose(filters) {
+  mockChooserOpens++;
+  const ads = mockRadio().filter((ad) => BlorbOtaMock.chooserMatches(filters, ad));
+  return new Promise((resolve, reject) => {
+    const choice = (text, ad) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      if (!ad) b.className = "ghost";
+      b.addEventListener("click", () => {
+        ui.show("mockChooser", false);
+        if (ad) resolve(ad);
+        else reject(Object.assign(new Error("cancelled"), { name: "NotFoundError" }));
+      });
+      return b;
+    };
+    $("mockChoices").replaceChildren(...ads.map((ad) => choice(ad.name, ad)), choice("Cancel", null));
+    ui.show("mockChooser", true);
+  });
+}
+
 class MockTransport {
-  constructor(onDrop) {
+  constructor(onDrop, dish = mockDish()) {
     this.onLine = () => {};
     this.onDrop = onDrop;
     this.epoch = 0;
-    const faults = (params.get("faults") ?? "drop,gaps,lostAck").split(",");
-    this.dish = new BlorbOtaMock.MockDish({
-      board: "lcd128", fw: params.get("fw") || "0.3.0",
-      onTrial: params.has("trial_from") ? { from: params.get("trial_from"), token: params.get("trial_token") } : null,
-      confirmMs: Number(params.get("confirm_ms")) || 30000,
-      trialMs: Number(params.get("trial_ms")) || 3000,
-      faults: Object.fromEntries(faults.map((k) => [k, true])),
-      emit: (text) => this.deliver([`! ${text}`]),
-      onDrop: () => { this.epoch++; this.onDrop(); },
-    });
-    this.name = "blorb-7a3f";
+    this.dish = dish;
+    dish.emit = (text) => this.deliver([`! ${text}`]);
+    dish.onDrop = () => { this.epoch++; this.onDrop(this); };
+    // As Chrome keeps it: the name the dish had when it was chosen.
+    this.name = dish.name;
+    this.id = `mock:${dish.shipped.name}`;
     this.petName = "grungo";
     const genes = [[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
       [0x12,4,0],[0x13,5,0],[0x20,6,0],[0x20,6,2],[0x21,2,0],[0x22,4,2],[0x30,3,0],[0x31,4,2],[0x32,4,0],[0x7f,8,0]];
@@ -424,13 +543,14 @@ class MockTransport {
     const m = /^#([0-9a-f]+) (\S+) ?(.*)\n$/.exec(text);
     const id = m[1], verb = m[2], args = m[3];
     const lines = [];
-    if (verb === "TIME") lines.push("OK caught_up=0 away=0 hurt=0");
+    if (verb === "TIME" && params.has("time_refused")) lines.push("ERR 400 BAD_ARGS");
+    else if (verb === "TIME") { this.dish.timeKnown = true; lines.push("OK caught_up=0 away=0 hurt=0"); }
     else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
     else if (verb === "STATE") lines.push(
       "+ phase=creature gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0",
       "+ drives hunger=412 sleepiness=180 boredom=655 loneliness=290 fear=40 pain=0 discomfort=120 need_touch=520",
       "+ body life=930 injury=0 glow=610 dreaming=0",
-      "+ dish pantry=3 pellets=1 night=0 time=known", "OK");
+      `+ dish pantry=3 pellets=1 night=0 time=${this.dish.timeKnown ? "known" : "unknown"}`, "OK");
     else if (verb === "GENOME") {
       for (let at = 0; at < this.genome.length; at += 120) {
         lines.push(`+ ${at} ${btoa(String.fromCharCode(...this.genome.subarray(at, at + 120)))}`);
@@ -464,6 +584,7 @@ class MockTransport {
   }
   async reopen() { await this.dish.reconnect(); this.epoch++; }
   open() { return this.reopen(); }
+  close() { this.dish.drop(); }
 }
 
 function loadScript(src) {
@@ -567,6 +688,7 @@ async function refreshHello() {
   $("nameInput").placeholder = h.name || "grungo";
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
   $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
+  $("updateFw").textContent = `${transport.name || "This dish"} runs version ${h.fw || "?"}.`;
   return h;
 }
 
@@ -611,22 +733,27 @@ function genomeUnavailable(text) {
 }
 
 async function session({ offer = true } = {}) {
+  const here = transport;
   ui.status("connecting", "Saying hello…");
   const now = Math.floor(Date.now() / 1000);
   const tz = -new Date().getTimezoneOffset();
-  await link.send(`TIME ${now} ${tz}`);
+  // TIME sets the clock a dish with no battery has lost. An update never needs it,
+  // so a refusal, like an unreadable STATE, still leaves the update on offer.
+  await link.send(`TIME ${now} ${tz}`).catch((e) => debugLog("err", `TIME: ${e.message}`));
   await refreshHello();
-  await refreshState();
-  ui.status("connected", "Connected");
+  await refreshState().catch((e) => debugLog("err", `STATE: ${e.message}`));
+  ui.status("connected", connectedTo());
   ui.show("connect", false);
   ui.show("reconnect", false);
+  ui.show("another", true);
   ui.show("nameBox", true);
   ui.show("sayBox", true);
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
     debugLog("err", `GENOME failed: ${e.message}`);
-    genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
+    if (transport === here) genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
   });
+  if (transport !== here) return;
   link.send("SUB state stage hatched died").catch(() => {});
   clearInterval(poll);
   poll = setInterval(() => refreshState().catch(() => {}), 10000);
@@ -641,11 +768,13 @@ let trialTimer = null, awaitingTrial = null;
 const TRIAL_POLL_MS = 2000;
 
 const petName = () => { const n = $("name").textContent || "grungo"; return n[0].toUpperCase() + n.slice(1); };
+const connectedTo = () => `Connected to ${transport.name || "the dish"}`;
 
 // This page's update tokens, one store per dish for as long as the page is open.
+// Keyed by the device, not its name: the update that needs the token renames the dish.
 const tokenStores = new Map();
 function pageTokens() {
-  const name = transport.name || "badge";
+  const name = transport.id || transport.name || "badge";
   if (!tokenStores.has(name)) tokenStores.set(name, BlorbOta.tokenStore(name));
   return tokenStores.get(name);
 }
@@ -661,6 +790,17 @@ const UPDATE_STEP = {
   verifying: "Saying hello to the dish…",
   trial: "Checking that the new version works…",
 };
+
+// Which of the five steps on the card each state is.
+const STEP_OF = { checking: 0, begin: 0, confirm: 1, sending: 2, resuming: 2, finishing: 3, rebooting: 3, verifying: 3, trial: 4 };
+let stepAt = 0;
+function showSteps(at, failed = false) {
+  stepAt = at;
+  ui.show("updateSteps", true);
+  [...$("updateSteps").children].forEach((li, i) => {
+    li.dataset.s = i < at ? "done" : i === at ? (failed ? "err" : "now") : "";
+  });
+}
 
 // Why an update stopped, by the dish's last= or ERR text. Nothing here changes the pet.
 const UPDATE_FAILED = {
@@ -694,13 +834,13 @@ const updatePort = {
   async reconnect() {
     await transport.reopen();
     link = new Link(transport, onEvent);
-    ui.status("connected", "Connected");
+    ui.status("connected", connectedTo());
   },
 };
 
 async function getRelease(board) {
   if (!params.has("mock")) return BlorbOta.fetchRelease(board, location.href);
-  mockRelease ||= await BlorbOtaMock.mockRelease({ board });
+  mockRelease ||= await BlorbOtaMock.mockRelease({ board, version: params.get("release") || undefined });
   return mockRelease;
 }
 
@@ -746,27 +886,36 @@ async function watchTrial() {
 
 // Ask the dish what it runs and the site what it has, and offer the difference.
 async function offerUpdate() {
+  const here = transport;
   ui.show("updateBox", true);
   ui.show("updateGo", false);
   ui.show("updateBar", false);
+  ui.show("updateSteps", false);
+  delete $("updateGo").dataset.check;
   updateSay("Checking for updates…");
   let st, confirm;
   try { ({ status: st, confirm } = await readOtaStatus()); } catch (e) {
-    return updateSay(e.code === 404
-      ? "This dish needs one update over a cable first. After that it can update by Bluetooth."
-      : "Couldn't ask the dish about updates.");
+    if (transport !== here) return;
+    if (e.code === 404) return updateSay("This dish needs one update over a cable first. After that it can update by Bluetooth.");
+    return checkAgain("Couldn't ask the dish about updates.");
   }
+  if (transport !== here) return;
   if (st.trial === "1") return sayOnTrial(st, confirm);
   const kept = awaitingTrial && awaitingTrial === st.fw;
   awaitingTrial = null;
   if (kept) return updateSay(`Updated to ${st.fw}. ${petName()} is fine.`, "ok");
   try { release = await getRelease(st.board); } catch (e) {
     debugLog("err", `release: ${e.message}`);
-    return updateSay("Couldn't check for updates right now.");
+    if (transport !== here) return;
+    return checkAgain("Couldn't check for updates right now. Check the phone's internet.");
   }
+  if (transport !== here) return;
   const v = release.manifest.version;
   const halfway = st.state !== "idle" && st.id === BlorbOta.imageId(release.manifest.sha256);
-  if (!halfway && !BlorbOta.isNewer(v, st.fw)) return updateSay(`Up to date (${st.fw}).`, "ok");
+  if (!halfway && !BlorbOta.isNewer(v, st.fw)) {
+    nextDishFirst(true);
+    return updateSay(`Up to date (${st.fw}).`, "ok");
+  }
   // A version that went back is offered by name, so it is never retried in a silent loop.
   const failedBefore = !halfway && st.rolledback === v;
   updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.`
@@ -774,19 +923,34 @@ async function offerUpdate() {
     : `Version ${v} is ready for the dish.`);
   $("updateGo").textContent = halfway ? `Finish updating to ${v}` : failedBefore ? "Try again" : `Update to ${v}`;
   ui.show("updateGo", true);
+  showSteps(-1);
 }
+
+function checkAgain(text) {
+  updateSay(text, "err");
+  $("updateGo").dataset.check = "1";
+  $("updateGo").textContent = "Check again";
+  ui.show("updateGo", true);
+}
+
+// Once this dish needs nothing more, the next one is the button to press.
+function nextDishFirst(on) { $("another").classList.toggle("ghost", !on); }
 
 function showUpdateStep({ state, at, size }) {
   ui.show("mockPress", params.has("mock") && state === "confirm");
+  if (state in STEP_OF) showSteps(STEP_OF[state]);
   ui.show("updateBar", ["sending", "resuming", "finishing", "rebooting", "verifying", "trial"].includes(state));
   if (state === "sending") return updateSay(`${UPDATE_STEP.sending} ${updateProgress(at / size)}%`);
   if (state === "finishing") updateProgress(1);
   if (state === "trial") lockRename(true);
-  if (UPDATE_STEP[state]) updateSay(UPDATE_STEP[state]);
+  if (UPDATE_STEP[state]) updateSay(UPDATE_STEP[state], state === "confirm" ? "ask" : "");
 }
 
 function showUpdateOutcome(o) {
   const fine = `${petName()} is fine.`;
+  if (o.ok && o.kind !== "rolled_back") showSteps(o.kind === "unconfirmed" ? 4 : 5);
+  else showSteps(stepAt, true);
+  nextDishFirst(o.ok && o.kind !== "unconfirmed" && o.kind !== "rolled_back");
   if (o.ok && o.kind === "updated") return updateSay(`Updated to ${o.fw}. ${fine}`, "ok");
   if (o.ok && o.kind === "unconfirmed") return updateSay(`The new version ${o.fw} is still checking itself. ${fine} Keep this page open, or come back within five minutes.`);
   if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the dish went back to ${o.fw}. ${fine}`, "err");
@@ -797,6 +961,7 @@ function showUpdateOutcome(o) {
 
 async function runUpdate() {
   ui.show("updateGo", false);
+  ui.show("another", false);
   clearInterval(poll);
   const trialWaitMs = (params.has("mock") && Number(params.get("trial_wait_ms"))) || undefined;
   updater = new BlorbOta.Updater({ port: updatePort, release, tokens: pageTokens(), trialWaitMs, onChange: showUpdateStep });
@@ -804,6 +969,7 @@ async function runUpdate() {
   updater = null;
   ui.show("mockPress", false);
   ui.show("updateBar", false);
+  ui.show("another", true);
   if (outcome.reason === "unreachable") {
     ui.status("lost", "Lost connection");
     ui.show("reconnect", true);
@@ -825,7 +991,8 @@ function onEvent(text) {
   else if (/^(STAGE|HATCHED|DIED|PICKED|CLUTCH)/.test(text)) refreshState().catch(() => {});
 }
 
-function onDrop() {
+function onDrop(from) {
+  if (from !== transport) return;   // a dish this page has let go
   clearInterval(poll);
   clearTimeout(trialTimer);
   // The updater hears first, so the requests failing next read as a drop and not an error.
@@ -834,17 +1001,30 @@ function onDrop() {
   ui.status("lost", "Lost connection");
   // An update reconnects by itself.
   ui.show("reconnect", !updater);
+  ui.show("another", !updater);
 }
 
-async function connect() {
+// wide: every device with the UART service, for a dish whose name the filters miss.
+async function connect(wide = false) {
+  let mine = null;
+  ui.show("wider", false);
   try {
-    if (params.has("mock")) {
-      if (!globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
-      transport = new MockTransport(onDrop);
-    } else {
-      transport = new BleTransport(onDrop);
+    if (params.has("mock") && !globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
+    if (params.has("mock") && !params.has("nearby")) {
+      mine = transport = new MockTransport(onDrop);
+      globalThis.BlorbDebug?.attachMock(transport.dish);
+    } else if (params.has("mock")) {
       ui.status("connecting", "Choose the dish…");
-      await transport.pick();
+      const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide));
+      if (!ad.dish) throw new Error("no UART service");
+      mine = transport = new MockTransport(onDrop, ad.dish);
+      globalThis.BlorbDebug?.attachMock(transport.dish);
+      ui.status("connecting", "Connecting…");
+      await transport.open();
+    } else {
+      mine = transport = new BleTransport(onDrop);
+      ui.status("connecting", "Choose the dish…");
+      await transport.pick(wide);
       ui.status("connecting", "Connecting…");
       await transport.open();
     }
@@ -852,12 +1032,48 @@ async function connect() {
     await session();
   } catch (e) {
     console.error(e);
-    if (e.name === "NotFoundError") ui.status("idle", "No dish chosen");
-    else { ui.status("lost", "Couldn't connect"); ui.show("reconnect", !!(transport && transport.device)); }
+    if (mine && mine !== transport) return;
+    if (e.name === "NotFoundError") {
+      ui.status("idle", "No dish chosen");
+      ui.show("wider", !wide && !params.get("d"));
+    } else { ui.status("lost", "Couldn't connect"); ui.show("reconnect", !!(transport && (transport.device || transport.dish))); }
   }
 }
 
+// What the page shows before any dish, so the next one starts from it.
+// Every hint in a section, so one added later resets with the rest.
+const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
+
+// Let this dish go and put the page back as it loads. Its drop is ignored.
+function leave() {
+  const old = transport;
+  transport = null;
+  clearInterval(poll);
+  clearTimeout(trialTimer);
+  if (link) link.failAll("left");
+  link = null;
+  awaitingTrial = null;
+  if (old) old.close();
+  for (const el of document.querySelectorAll("main > section")) el.hidden = true;
+  $("name").textContent = FRESH.name;
+  $("meta").textContent = FRESH.meta;
+  ui.show("doing", false);
+  $("nameInput").disabled = false;
+  $("nameForm").querySelector("button").disabled = false;
+  for (const [el, text] of FRESH.hints) {
+    el.textContent = text;
+    el.dataset.tone = "";
+    delete el.dataset.trial;
+  }
+  nextDishFirst(false);
+  ui.show("another", false);
+  ui.show("reconnect", false);
+  ui.show("connect", true);
+  ui.status("idle", "Not connected");
+}
+
 async function reconnect() {
+  const here = transport;
   try {
     ui.status("connecting", "Reconnecting…");
     await transport.open();
@@ -865,7 +1081,7 @@ async function reconnect() {
     await session();
   } catch (e) {
     console.error(e);
-    ui.status("lost", "Still out of reach. Move closer and try again");
+    if (transport === here) ui.status("lost", "Still out of reach. Move closer and try again");
   }
 }
 
@@ -913,10 +1129,13 @@ $("sayForm").addEventListener("submit", async (e) => {
   }
 });
 
-$("connect").addEventListener("click", connect);
+$("connect").addEventListener("click", () => connect());
+$("wider").addEventListener("click", () => connect(true));
+// The chooser opens in this same tap, as Chrome asks.
+$("another").addEventListener("click", () => { leave(); connect(); });
 if (DEBUG) ui.show("debugBox", true);
 $("reconnect").addEventListener("click", reconnect);
-$("updateGo").addEventListener("click", () => runUpdate().catch((e) => {
+$("updateGo").addEventListener("click", () => $("updateGo").dataset.check ? offerUpdate() : runUpdate().catch((e) => {
   console.error(e);
   updater = null;
   updateSay(`Something went wrong (${e.message}). ${petName()} is fine.`, "err");
@@ -925,11 +1144,16 @@ $("mockPress").addEventListener("click", () => transport.dish.press());
 
 if (params.has("mock")) {
   $("footer").textContent = "Mock mode: a pretend dish, nothing is sent over Bluetooth.";
-  connect();
+  if (!params.has("nearby")) connect();
 } else if (!navigator.bluetooth) {
   ui.show("unsupported", true);
   $("connect").disabled = true;
   ui.status("idle", "Bluetooth unavailable");
+}
+
+// After one visit the page, and the latest update, work with no network (sw.js).
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch((e) => debugLog("err", `offline copy: ${e.message}`));
 }
 </script>
 </body>

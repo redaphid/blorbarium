@@ -117,8 +117,7 @@ void copyName(char (&to)[16], const char* from) {
 void copySpeciesName(char (&to)[16], const Genome& starter) {
   Phenotype p;
   expressStage(starter, Stage::Baby, 0, p);
-  copyName(to, speciesInfo(p.species.body).name);
-  to[0] = char(std::toupper(static_cast<unsigned char>(to[0])));
+  speciesLineName(p.species.body, to);
 }
 
 std::vector<uint8_t> frame(Kind k, const Out& payload) { return logframes::frame(uint8_t(k), payload); }
@@ -225,6 +224,12 @@ int popcount(uint32_t v) {
 
 }  // namespace
 
+void speciesLineName(SpeciesId s, char (&to)[16]) {
+  std::memset(to, 0, sizeof to);
+  std::strncpy(to, speciesInfo(s).name, sizeof to - 1);
+  to[0] = char(std::toupper(static_cast<unsigned char>(to[0])));
+}
+
 // ---- the log ----------------------------------------------------------------------------
 
 Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId, uint32_t at) {
@@ -238,7 +243,7 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
     if (auto* f = std::get_if<Founding>(&*e)) l.id_ = f->lineageId, copyName(l.name_, f->species);
     if (auto* b = std::get_if<Birth>(&*e)) l.generation_ = std::max(l.generation_, b->generation);
     if (auto* d = std::get_if<Death>(&*e)) l.legacyFeats_ |= d->feats;
-    if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name);
+    if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name), l.named_ = true;
   });
   logframes::truncateTorn(store, kFile, valid);
   if (valid == 0) {
@@ -277,7 +282,7 @@ void Lineage::rename(const char* name) {
   Rename r{generation_, {}};
   copyName(r.name, name);
   if (std::strcmp(r.name, name_) == 0) return;
-  if (append(encode(r))) copyName(name_, r.name);
+  if (append(encode(r))) copyName(name_, r.name), named_ = true;
 }
 
 void Lineage::recordEdit(uint16_t generation, const Genome& g) { append(encode(Checkpoint{generation, g})); }

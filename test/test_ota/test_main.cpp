@@ -1161,14 +1161,15 @@ TEST(OtaTrial, ASealedKeepsakeIsUntouchedAcrossATrial) {
   EXPECT_TRUE(disk.files == keepsake);
 }
 
-TEST(OtaTrialGuard, LineageTwistsWaitWhileOnTrial) {
+TEST(OtaTrialGuard, TwistsThatWriteTheFlashWaitWhileOnTrial) {
   ScriptedLink inner;
   bool trial = true;
   TrialGuard guard(inner, [&] { return trial; });
-  inner.inbound = {"#4 TWIST rename Bob", "#5 TWIST gene_edit 3 0 9", "#6 TWIST pick 1", "TWIST rename Bob",
-                   "#7 TWIST say HI", "#8 HELLO"};
+  inner.inbound = {"#4 TWIST rename Bob", "#5 TWIST gene_edit 3 0 9", "#6 TWIST pick 1", "#a TWIST teach HI",
+                   "#b TWIST unteach", "TWIST rename Bob", "#7 TWIST say HI", "#8 HELLO"};
   EXPECT_EQ(guard.readLine(), std::optional<std::string_view>("#7 TWIST say HI")) << "say writes nothing";
-  EXPECT_EQ(inner.sent, (Lines{"#4 ERR 409 TRIAL", "#5 ERR 409 TRIAL", "#6 ERR 409 TRIAL", "#0 ERR 409 TRIAL"}))
+  EXPECT_EQ(inner.sent, (Lines{"#4 ERR 409 TRIAL", "#5 ERR 409 TRIAL", "#6 ERR 409 TRIAL", "#a ERR 409 TRIAL",
+                               "#b ERR 409 TRIAL", "#0 ERR 409 TRIAL"}))
       << "a line with no id is id 0 to the protocol, so it is to the guard";
   EXPECT_EQ(guard.readLine(), std::optional<std::string_view>("#8 HELLO"));
   trial = false;

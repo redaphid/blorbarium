@@ -257,6 +257,10 @@ class DuelSession {
     bool confirmed = false, theyConfirmed = false;
     uint16_t holdTicks = 0;             // BOOT held: the Mortal confirm, or the Finish
     uint8_t theirHold = 0;
+    // BOOT's level last tick, and whether it was already down when the skull
+    // showed: a hold carried in (a heavy special held through the reveal) is
+    // no Finish until BOOT comes up once.
+    bool bootWasDown = false, heldIntoMercy = false;
     // The battle
     MoveLog mine, heard;                // per actor: I append to mine, I adopt into heard
     uint8_t theyHold = 0;               // their `heard`: how many of my moves they have
