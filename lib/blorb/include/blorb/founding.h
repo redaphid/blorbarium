@@ -1,9 +1,9 @@
 #pragma once
 // How a device gets its species (docs/notes/decisions-2026-10-15.md D3): one
 // per badge, from a fixed MAC table (defs/badges.def), so the eight badges
-// and the gift device hold the nine species once each. Any other board takes
-// a species from its MAC's hash. No chooser: a kid is handed the badge's
-// creature, and the same board always founds the same pet.
+// and the gift device hold the nine species once each. Any other board is a
+// grungo. No chooser: a kid is handed the badge's creature, and the same
+// board always founds the same pet.
 //
 // First boot only. A keepsake or a lineage, in any state, means no founding
 // ever, so the gift device's grungo is never founded again. The firmware
@@ -29,10 +29,9 @@ namespace blorb {
 
 class Creature;   // creature.h
 
-// The table's species for this MAC; nullopt for every board not in it,
-// the gift device among them.
+// The table's species for this MAC; nullopt for a board not in it.
 std::optional<SpeciesId> tableSpecies(const uint8_t mac[6]);
-// The table's species, else one of all nine from fnv1a(mac), the species seed.
+// The table's species, else grungo.
 SpeciesId badgeSpecies(const uint8_t mac[6]);
 
 // True when the Dish would found: no snapshot slot, no rescued slot and no
@@ -69,8 +68,10 @@ bool predatesSpecies(const Genome&);
 // species owns in the recipe are written: the founder's rolled look and the
 // row's starter bytes (boldness, sleep, appetite; the voice follows the
 // SpeciesGene). Age, chemistry, brain, scars and every other byte stay his.
-// False, and nothing changes, unless predatesSpecies. The caller records the
-// lineage Checkpoint and saves.
+// False, and nothing changes, unless predatesSpecies, or when `species` is
+// grungo: a genome from before species already is one, and the gift device's
+// grungo stays byte for byte as he is. The caller records the lineage
+// Checkpoint and saves.
 bool adoptSpecies(Creature&, SpeciesId, uint32_t speciesSeed, const LookBands&);
 
 // The species a board shows the world as (its Bluetooth name): its pet's, or

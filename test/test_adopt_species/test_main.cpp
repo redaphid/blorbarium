@@ -342,10 +342,33 @@ TEST(Adopt, ASealedBoardIsNeverTouched) {
   EXPECT_EQ(b.flash.files, files);
 }
 
-TEST(Adopt, TheGiftDeviceIsNotInTheTableSoItsGrungoStaysAGrungo) {
-  EXPECT_FALSE(tableSpecies(kGiftMac)) << "main.cpp adopts only a table MAC";
-  const Genome grungo = starterGenome(15048);
-  EXPECT_EQ(advertisedSpecies(&grungo, kGiftMac), kGrungo) << "and it advertises as the grungo it is";
+// The gift device's pet: the flash3 grungo (starterGenome(15048), d30f00d1),
+// and, were it ever founded by 0.4.0, that founder too. Neither predates
+// species any less than the batch did, and neither is ever touched.
+TEST(Adopt, TheGiftDevicesGrungoStaysByteForByteAndAdvertisesGrungo) {
+  ASSERT_EQ(tableSpecies(kGiftMac), kGrungo);
+  const uint32_t giftSeed = 15048;
+  ASSERT_EQ(starterGenome(giftSeed).hash(), 0xd30f00d1u);
+  for (const Genome& pet : {starterGenome(giftSeed), foundingGenome040(seedOf(kGiftMac))}) {
+    MemStorage store;
+    DishOptions o;
+    o.founder = &pet;
+    Dish d(store, giftSeed, kLineageId, o);
+    NullLink link;
+    uint32_t ms = 0;
+    while (!std::holds_alternative<Creature>(d.occupant()) && ms < 3600000) d.tick(ms += 1000, link);
+    ASSERT_TRUE(d.flush());
+    const auto files = store.files;
+    // What main.cpp does for this MAC.
+    EXPECT_EQ(d.adoptSpecies(kGrungo, paint::bandsFor(kGrungo)), Dish::Adoption::NotNeeded);
+    EXPECT_EQ(std::get<Creature>(d.occupant()).genome().bytes(), pet.bytes()) << "not a byte grafted";
+    EXPECT_EQ(store.files, files) << "nothing written";
+    EXPECT_FALSE(adoptSpecies(std::get<Creature>(d.occupant()), kGrungo, giftSeed, paint::bandsFor(kGrungo)));
+    EXPECT_EQ(std::get<Creature>(d.occupant()).genome().bytes(), pet.bytes());
+    EXPECT_EQ(std::string(d.settings().name), "Grungo");
+    EXPECT_EQ(advertisedSpecies(&pet, kGiftMac), kGrungo) << "it advertises as the grungo it is";
+    EXPECT_EQ(advertisedSpecies(nullptr, kGiftMac), kGrungo) << "sealed, too";
+  }
 }
 
 // ---- his eggs --------------------------------------------------------------------------------------
@@ -392,7 +415,9 @@ TEST(Advertised, APetIsHisOwnSpeciesWhateverTheTableSays) {
   const Genome gilly = foundingGenome(species::gilly, 1, paint::bandsFor(species::gilly));
   EXPECT_EQ(advertisedSpecies(&gilly, kBatch[0].mac), species::gilly) << "a pinned founding on a mossby badge";
   const uint8_t stranger[6] = {0x02, 0, 0, 0, 0, 9};
-  EXPECT_EQ(advertisedSpecies(nullptr, stranger), badgeSpecies(stranger));
+  EXPECT_EQ(advertisedSpecies(nullptr, stranger), kGrungo);
+  const Genome old = foundingGenome040(seedOf(stranger));
+  EXPECT_EQ(advertisedSpecies(&old, stranger), kGrungo) << "a 0.4.0 pet off the table stays the grungo he is";
 }
 
 TEST(Advertised, TheBootLinesSpeciesIsWhatThePetIsNow) {

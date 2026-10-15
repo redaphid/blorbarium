@@ -538,7 +538,7 @@ void setup() {
   options.sealed = simSealed;
 #endif
   // A fresh board founds its own species: found.pin's, else the badge
-  // table's, else its MAC's hash (founding.h). The sim founds the starter, as
+  // table's, else grungo (founding.h). The sim founds the starter, as
   // it always has, so its goldens hold.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
   std::optional<blorb::Genome> founder;

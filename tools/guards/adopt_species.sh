@@ -37,7 +37,7 @@ mutant() {   # mutant <name> <file> <sed expression> <test that must catch it>
 F=lib/blorb/src/founding.cpp D=lib/blorb/src/dish.cpp
 mutant "adopts while the storage is held" $D 's/if (!store_.writable() || duel_.active()) return Adoption::NotYet;//' \
   "Adopt.WaitsWhileTheStorageIsHeldAndTheTrialStillSeesThe040Pet"
-mutant "adopts a pet that has a species" $F '0,/if (!predatesSpecies(c.genome())) return false;/s///' \
+mutant "adopts a pet that has a species" $F 's/if (species == kGrungo || !predatesSpecies(c.genome())) return false;/if (species == kGrungo) return false;/' \
   "Adopt.APetWithASpeciesIsLeftAloneEvenIfHisLineLacksALaterGene"
 mutant "no Checkpoint on the lineage" $D 's/lineage_.recordEdit(c->generation(), c->genome());//' \
   "Adopt.EachBadgeBecomesItsTableSpeciesAndKeepsAgeChemistryAndBrain"
@@ -55,6 +55,8 @@ mutant "the look is not rolled" $F 's/if ((rollOf(f, i, bands) || base->body\[i\
   "Adopt.EachBadgeBecomesItsTableSpeciesAndKeepsAgeChemistryAndBrain"
 mutant "the egg is adopted unhatched" $D 's/return predatesSpecies(g) ? Adoption::NotYet : Adoption::NotNeeded;/return Adoption::NotNeeded;/' \
   "Adopt.AnEggWaitsAndTheCreatureItHatchesIsAdopted"
+mutant "a 0.4.0 pet advertises grungo until adopted" $F 's/    if (std::optional<SpeciesId> s = tableSpecies(mac)) return \*s;//'   "Advertised.ABadgeIsItsSpeciesBeforeAndAfterTheAdoption"
+mutant "the free adoption grafts into a grungo" $F 's/if (species == kGrungo || !predatesSpecies/if (!predatesSpecies/'   "Adopt.TheGiftDevicesGrungoStaysByteForByteAndAdvertisesGrungo"
 mutant "a sealed board is adopted" $D 's/  if (readOnly_) return Adoption::NotNeeded;//' \
   "Adopt.ASealedBoardIsNeverTouched"
 exit $failed

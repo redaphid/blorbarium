@@ -35,7 +35,7 @@ std::string lineName(SpeciesId s) {
 // A board by its MAC: one of the batch, or one off the same reel that is not.
 struct Board { uint8_t mac[6]; };
 constexpr Board kMossby{{0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3c}};
-constexpr Board kStranger{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c}};   // ends 23:7c, as the gift device does
+constexpr Board kStranger{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7d}};   // one past the gift device's
 
 // What src/main.cpp's setup() does with a board's storage before the Dish.
 Dish boot(MemStorage& store, const Board& board) {
@@ -68,34 +68,32 @@ Dish bootGift(MemStorage& store) {
 
 // ---- the table ------------------------------------------------------------------------------------
 
-TEST(Table, EachBadgeIsItsSpeciesAndTheEightAreOneOfEach) {
-  const struct { uint8_t m4, m5; const char* species; } kBatch[] = {
-      {0x1b, 0x3c, "mossby"}, {0x1b, 0x44, "puffkin"}, {0x1b, 0x34, "gilly"},    {0x1c, 0xb0, "mothwick"},
-      {0x1b, 0x30, "mudge"},  {0x1b, 0x40, "fizz"},    {0x22, 0x58, "hushwing"}, {0x22, 0x40, "tinker"}};
-  std::set<uint8_t> seen;
-  for (const auto& b : kBatch) {
-    const uint8_t mac[6] = {0xd4, 0x05, 0x92, 0x77, b.m4, b.m5};
-    ASSERT_TRUE(tableSpecies(mac)) << b.species;
-    EXPECT_STREQ(speciesInfo(*tableSpecies(mac)).name, b.species);
+TEST(Table, TheNineDevicesHoldTheNineSpeciesOnceEach) {
+  const struct { uint8_t m4, m5; const char* species; } kDevices[] = {
+      {0x23, 0x7c, "grungo"}, {0x1b, 0x3c, "mossby"}, {0x1b, 0x44, "puffkin"},
+      {0x1b, 0x34, "gilly"},  {0x1c, 0xb0, "mothwick"}, {0x1b, 0x30, "mudge"},
+      {0x1b, 0x40, "fizz"},   {0x22, 0x58, "hushwing"}, {0x22, 0x40, "tinker"}};
+  std::set<uint8_t> species;
+  std::set<std::vector<uint8_t>> macs;
+  for (const auto& d : kDevices) {
+    const uint8_t mac[6] = {0xd4, 0x05, 0x92, 0x77, d.m4, d.m5};
+    ASSERT_TRUE(tableSpecies(mac)) << d.species;
+    EXPECT_STREQ(speciesInfo(*tableSpecies(mac)).name, d.species);
     EXPECT_EQ(badgeSpecies(mac), *tableSpecies(mac));
-    seen.insert(tableSpecies(mac)->v);
+    species.insert(tableSpecies(mac)->v);
+    macs.insert(std::vector<uint8_t>(mac, mac + 6));
   }
-  EXPECT_EQ(seen.size(), 8u);
-  EXPECT_EQ(seen.count(kGrungo.v), 0u) << "grungo is the gift device's";
+  EXPECT_EQ(species.size(), kSpeciesCount) << "every species exactly once";
+  EXPECT_EQ(macs.size(), kSpeciesCount) << "no MAC twice";
 }
 
-TEST(Table, AnyOtherBoardTakesASpeciesFromItsMacsHashAcrossAllNine) {
+TEST(Table, AnyOtherBoardIsAGrungo) {
   EXPECT_FALSE(tableSpecies(kStranger.mac));
-  EXPECT_EQ(badgeSpecies(kStranger.mac).v, fnv1a(kStranger.mac, 6) % kSpeciesCount);
-  EXPECT_STREQ(speciesInfo(badgeSpecies(kStranger.mac)).name, "fizz") << "tests/test_flash_batch.py expects the same";
-  std::set<uint8_t> species;
+  EXPECT_EQ(badgeSpecies(kStranger.mac), kGrungo);
   for (uint32_t n = 0; n < 4096; ++n) {
     const uint8_t mac[6] = {0x02, 0x00, 0x00, uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
-    const SpeciesId s = badgeSpecies(mac);
-    EXPECT_EQ(badgeSpecies(mac), s) << "the same board, the same species";
-    species.insert(s.v);
+    EXPECT_EQ(badgeSpecies(mac), kGrungo);
   }
-  EXPECT_EQ(species.size(), kSpeciesCount);
   const uint8_t nearMiss[6] = {0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3d};
   EXPECT_FALSE(tableSpecies(nearMiss)) << "the whole MAC, not its tail";
 }
@@ -132,11 +130,11 @@ TEST(Founding, ThePinIsTheOwnersOverrideOverTheTable) {
   }
 }
 
-TEST(Founding, ABoardNotInTheTableFoundsItsHashedSpecies) {
+TEST(Founding, ABoardNotInTheTableFoundsAGrungo) {
   MemStorage store;
   Dish d = boot(store, kStranger);
-  EXPECT_EQ(d.appearance().species, badgeSpecies(kStranger.mac));
-  EXPECT_EQ(std::string(d.lineage().currentName()), lineName(badgeSpecies(kStranger.mac)));
+  EXPECT_EQ(d.appearance().species, kGrungo);
+  EXPECT_EQ(std::string(d.lineage().currentName()), "Grungo");
 }
 
 // ---- an existing pet is never founded again ------------------------------------------------------
