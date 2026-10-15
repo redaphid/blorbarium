@@ -7,6 +7,7 @@
 <meta name="description" content="Talk to grungo's dish over Bluetooth.">
 <meta name="theme-color" content="#2f3a1c">
 <link rel="icon" href="grungo.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -1099,6 +1100,11 @@ if (params.has("mock")) {
   ui.show("unsupported", true);
   $("connect").disabled = true;
   ui.status("idle", "Bluetooth unavailable");
+}
+
+// After one visit the page, and the latest update, work with no network (sw.js).
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch((e) => debugLog("err", `offline copy: ${e.message}`));
 }
 </script>
 </body>

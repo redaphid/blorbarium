@@ -229,7 +229,8 @@ def time_refused(browser, base):
 
 # The page's real BleTransport, with fake_bluetooth.js as the radio and the release served here.
 def ble_page(browser, base, query, nearby, version="0.7.0", manifest_fails=0):
-    page = browser.new_page()
+    # page.route serves the release; a service worker's fetches would go around it.
+    page = browser.new_context(service_workers="block").new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.add_init_script(path=str(FAKE_BT))

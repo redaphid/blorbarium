@@ -307,6 +307,29 @@ not committed (`.gitignore` refuses `web/public/fw/**/*.bin`).
 `tools/ota_release.py release` writes it, so a deploy follows a release from
 the same tree.
 
+## Offline
+
+After one visit the site works with no network, update included.
+`web/public/sw.js` is a service worker:
+
+- **The page's files.** `SHELL` lists every file in `web/public` except
+  `sw.js` and `fw/`, and `web/test/offline.test.mjs` fails when a new file is
+  not in it. They are kept at install and fetched network first, falling back
+  to the kept copy after 4 s.
+- **The release.** Each `fw/<board>/` release is kept as a pair in its own
+  cache: the image the manifest names, checked against the manifest's size and
+  SHA-256, and then the manifest. A cache without a manifest is an unfinished
+  download and is never served. The page always gets the kept pair's
+  manifest, so the image it asks for next is the one beside it. Online, the
+  worker first keeps the site's release. A new pair replaces the old one only
+  once it is whole, so a deploy caught between manifest and image keeps
+  serving the old pair. The release is kept at install and on every
+  page load, so opening the site once before a flight is enough.
+- **Install.** `manifest.webmanifest` makes it installable from Chrome.
+
+Google Fonts are kept the first time a controlled page loads them; until then,
+offline uses the system fonts.
+
 ## Signing
 
 The signature is ECDSA P-256 with SHA-256 over this exact ASCII line:
@@ -523,6 +546,7 @@ as the user's home directory.
 wsl -d survivor --exec bash -lc 'cd /mnt/d/Projects/_wt/blorb-ota && bash tools/wsl_test.sh test_ota'
 node --test web/test/*.test.mjs
 uv run --with playwright==1.63.0 python web/test/ota_page.py
+uv run --with playwright==1.63.0 python web/test/offline_page.py
 ```
 
 `test_ota` signs its images with a fresh OpenSSL key on each run. It covers:
@@ -602,6 +626,10 @@ case. Two cases run the page's real Bluetooth code against
 a `blorb-1b3c` dish that updates and comes back as `mossby` with the chooser
 opened once, and a second dish after the first. `chooser.test.mjs` checks the
 filters against `species.def`.
+
+`offline_page.py` visits once, then sets the browser offline and shuts down
+the server: the mock update, a real release over the fake radio, and a deploy
+caught halfway that keeps serving the old pair until the new image is up.
 
 ## Proving it on the test board
 
