@@ -199,6 +199,50 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Say it</button>
     </form>
     <p class="hint" id="sayHint">Up to 56 characters. He shows it on his screen.</p>
+
+    <!-- Teach: lines he keeps on the dish and says now and then, phone or not
+         (TWIST teach / unteach, docs/ble.md). Self-contained: it shows with this
+         box and reads the page's `link` only when a button is pressed. -->
+    <h2>Teach him a line</h2>
+    <form id="teachForm" autocomplete="off">
+      <input id="teachInput" name="teach" maxlength="30" placeholder="I LOVE YOU" aria-label="A line for him to keep" required>
+      <button type="submit">Teach it</button>
+    </form>
+    <p class="hint" id="teachHint">Up to 30 characters. He keeps the last 4 and says them now and then, even after your phone has gone.</p>
+    <button id="unteach" type="button" class="ghost">Forget taught lines</button>
+    <script>
+    (() => {
+      const el = (id) => document.getElementById(id);
+      const tell = (tone, text) => { el("teachHint").dataset.tone = tone; el("teachHint").textContent = text; };
+      const refused = (err) => err.code === 404 ? "This needs the next firmware."
+        : err.code === 409 && /TRIAL/.test(err.message) ? "The new version is still checking itself. Try again in a few minutes."
+        : `The dish said no (${err.message}).`;
+      el("teachInput").addEventListener("input", (e) => {
+        const at = e.target.selectionStart;
+        e.target.value = e.target.value.toUpperCase();
+        e.target.setSelectionRange(at, at);
+      });
+      el("teachForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = el("teachInput").value.toUpperCase().trim().slice(0, 30);
+        if (!text || !link) return;
+        tell("", "Sending…");
+        try {
+          await link.send(`TWIST teach ${text}`);
+          tell("ok", `He learned "${text}". He will say it now and then.`);
+          el("teachInput").value = "";
+        } catch (err) { tell("err", refused(err)); }
+      });
+      el("unteach").addEventListener("click", async () => {
+        if (!link || !confirm("Forget every line you taught him?")) return;
+        tell("", "Sending…");
+        try {
+          await link.send("TWIST unteach");
+          tell("ok", "He forgot every line you taught him.");
+        } catch (err) { tell("err", refused(err)); }
+      });
+    })();
+    </script>
   </section>
 
   <section id="updateBox" hidden>
