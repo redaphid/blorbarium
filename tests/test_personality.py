@@ -52,6 +52,19 @@ class Check(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertTrue(problems[0].startswith("grungo.txt:3: the screen cannot draw '\"'"), problems[0])
 
+    def test_a_line_another_pet_already_says_is_refused(self):
+        problems, _ = problems_for("=== LINES ===\nmoon\n  THE MOON IS A BIG CRUMB\n")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("grungo.txt:3: \"THE MOON IS A BIG CRUMB\" is already said in _shared.txt", problems[0])
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "_shared.txt").write_text(SHARED, encoding="utf-8")
+            (root / "grungo.txt").write_text("=== LINES ===\npeckish\n  FLIES\n", encoding="utf-8")
+            (root / "mossby.txt").write_text("=== LINES ===\nstarving\n  FLIES\n", encoding="utf-8")
+            problems = P.Problems()
+            P.read_book(ENGINE, problems, root)
+        self.assertEqual(problems, ["mossby.txt:3: \"FLIES\" is already said in grungo.txt; give him his own"])
+
     def test_too_long_says_by_how_much(self):
         problems, _ = problems_for("=== LINES ===\npeckish\n  " + "A" * 34 + "\n")
         self.assertIn("too long by 4", problems[0])

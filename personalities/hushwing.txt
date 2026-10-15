@@ -6,22 +6,287 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A round, snow-white owl, all fluffy chest feathers, with grey-brown wings and
+two stern grey ear tufts like eyebrows. Big orange eyes and a sharp little
+orange beak, orange talons peeking out underneath. His resting face is a
+stare. Happy, he closes his eyes serenely and blushes pink. Annoyed, he glares
+so hard the tufts tilt in. Foreseeing, his eyes go pale ice blue. The egg holds
+a tiny grey owlet with huge blue eyes.
 
+WHO HE IS
+The quiet one. Solemn, watchful, a librarian of the marsh who hushes everyone
+and sees everything at night. He speaks rarely and gravely, even about
+crumbs, and everything he says sounds like a warning. He is timid underneath
+and secretly soft: that blush gives him away. Daytime is loud and too bright.
 
 HOW HE TALKS
-
+Short, grave, quiet. Shh. Heed. Noted. Silence, the marsh, the dark, watching.
+Never shouts. A hoot is a big event.
 
 LOVES
-
+Silence, night, the marsh, mist, a good perch, preening, warm hands (he will
+allow it).
 
 FEARS
-
+Noise, daylight, being startled, crunchy food (too loud).
 
 CATCHPHRASES
-
+SHH. NOTED. I SAW. HOO.
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  HUNGER STIRS. QUIETLY.
+starving
+  THE HUNGER IS VERY LOUD NOW.
+hoarding
+  THAT PELLET WAITS. AS DO I.
+crunch
+  CRUNCH. SORRY. TOO LOUD.
+fuzzy_bite
+  IT WAS FUZZY. I SAID NOTHING.
+smells
+  A SMELL. IT HAS BEEN NOTED.
+green
+  I AM GREEN. I WILL NOT HOOT.
+ow
+  OW. QUIETLY. OW.
+heard_you
+  SHH. YES. I HEARD. SHH.
+ground_lies
+  THE WORLD SHAKES. I DO NOT.
+not_again
+  NOT THE SHAKING. I FORBID IT.
+hooded
+  I AM A WHITE LUMP. UNSEEN.
+ancestor_fear
+  GEN # FEARED THIS. IN SILENCE.
+inherited
+  GEN # WATCHES THROUGH ME.
+counted
+  I COUNTED THE QUIET. ALL OF IT
+marble_knows
+  THE MARBLE CANNOT HEAR ME COME
+put_me_down
+  PUT ME DOWN. GENTLY. SILENTLY.
+warm_hands
+  WARM HANDS. I WILL ALLOW IT.
+sky_down
+  THE SKY IS BELOW. CURIOUS.
+heavy_eyes
+  MY EYES CLOSE. SLOWLY. HOO.
+dream_pellets
+  ZZZ... SILENT FIELDS... ZZZ
+see_pellet
+  I SEE... A PELLET. IT SEES ME.
+see_phone
+  I SEE... A LOUD LIGHT.
+see_nothing
+  I SEE... AN EMPTY DISH. GRAVE.
+see_damp
+  I SEE... MIST ON THE MARSH.
+knees
+  OLD. I HAVE SEEN MANY NIGHTS.
+moon
+  THE MOON AND I DO NOT BLINK.
+anyone
+  HOO? HOO IS THERE? NO ONE.
+science
+  FOOD ENDS HUNGER. I OBSERVED.
+no_hat
+  GEN #. NO HAT. ONLY TUFTS.
+
+p_snack
+  A SNACK WILL COME. QUIETLY.
+p_feast
+  A FEAST, IN THE DEEP NIGHT.
+p_pellet_soon
+  A PELLET DESCENDS. HUSH.
+p_feed_me
+  YOU WILL FEED ME. I HAVE SEEN.
+p_fuzzy
+  THAT CRUMB WILL TURN. I KNOW.
+p_more_shaking
+  THE SHAKING WILL RETURN.
+p_mud
+  THE MARSH RISES. MUD FOLLOWS.
+p_big_hand
+  A HAND FROM ABOVE. BE STILL.
+p_bedtime
+  THE DARK HAS COME. I WAKE.
+p_sun
+  THE SUN WILL RISE. I WILL HIDE
+p_rain
+  RAIN WILL FALL. SOFTLY.
+p_watched
+  THE GLOWING ONE OBSERVES US.
+p_return
+  THEY WILL RETURN. AT DUSK.
+p_tap
+  A TAP WILL BREAK THE SILENCE.
+p_no
+  NO. SAY NOTHING MORE.
+p_doom
+  DOOM. QUIET DOOM. THE BEST.
+p_lunch
+  MY NIGHTS ARE FEW. LUNCH, TOO.
+p_outlook
+  OUTLOOK: MISTY.
+p_decidedly
+  IT IS SO. I SAW IT AT NIGHT.
+p_lucky
+  LUCK FLIES SILENT. LIKE ME.
+p_pond_no
+  THE MARSH SAYS NO. HUSH.
+p_pond_yes
+  THE MARSH SAYS YES. SOFTLY.
+p_ripples
+  THE MARSH IS RESTLESS. LATER.
+p_ancestor
+  GEN # SAW THIS. FROM A BRANCH.
+miss_phone
+  THE GLOWING ONE IS LONG GONE.
+
+oclock
+  I HEARD # O'CLOCK PASS BY.
+morning
+  MORNING. TOO LOUD. TOO BRIGHT.
+so_late
+  LATE. THE HOUR OF OWLS.
+monday
+  MONDAY. A HEAVY DAY.
+weekend
+  WEEKEND. THE HOUSE IS LOUD.
+p_weekend
+  THE WEEKEND COMES ON SOFT FEET
+my_name
+  @. I HAVE HEARD IT WHISPERED.
+p_famous
+  @ WILL BE WHISPERED OF.
+
+rim_walk
+  I WALKED THE RIM. NO SOUND.
+marble_foe
+  THE MARBLE IS TOO NOISY.
+clean_glass
+  THE GLASS. AN OWL STARES BACK.
+dont_look
+  DO NOT LOOK. I AM WATCHING.
+saw_nothing
+  NOTHING HAPPENED. I SAW ALL.
+plans
+  I HAVE PLANS. THEY ARE QUIET.
+toes
+  EIGHT TALONS. ALL ACCOUNTED.
+small_lot
+  SMALL OWL. LARGE STARE.
+popped
+  A THOUGHT. I KEPT IT.
+wiggle
+  A WIGGLE. NO ONE SAW. GOOD.
+my_song
+  HOO. HOO. THE WHOLE SONG.
+dust
+  THE DUST SETTLES. I WATCH IT.
+blinked
+  I BLINKED. SLOWLY. ON PURPOSE.
+important
+  I AM WATCHING. IT IS IMPORTANT
+secret_mud
+  I KNOW ALL SECRETS. ALL.
+nap_plan
+  DAY SLEEP. IN SILENCE. PLEASE
+ceiling
+  THE CEILING. A FINE PERCH.
+serious_face
+  THIS IS MY ONLY FACE.
+no_echo
+  HOO. HOO? THE ECHO IS SHY.
+king
+  WARDEN OF THE QUIET DISH.
+smells_me
+  SMELLS LIKE MARSH. LIKE HOME.
+todo
+  TODAY: SIT. WATCH. SAY LITTLE
+brave
+  I AM BRAVE. SILENTLY.
+big_pond
+  ONE DAY: A MARSH. VERY STILL.
+floor
+  THE FLOOR. I PREFER BRANCHES.
+snack_snacks
+  WHAT DO SILENCES DREAM OF?
+suspense
+  I MAY HOOT. I HAVE NOT. YET.
+ancestors
+  GEN #. ALL OF US STARED.
+ask_me
+  ASK ME. I KNOW. I WON'T SAY.
+legs
+  MY LEGS ARE UNDER THE FLUFF.
+shiny
+  SOMETHING SHINY. NOTED.
+guard
+  I GUARD THE DISH. UNBLINKING.
+old_fly
+  I REMEMBER A MOONLESS NIGHT.
+hi_you
+  I SEE YOU. HELLO. SHH.
+busy
+  BUSY. STARING.
+pellet_where
+  PELLETS COME FROM THE DARK.
+rock
+  I SAT STILL. A ROCK ENVIED ME.
+best_gen
+  GEN #. THE QUIETEST YET.
+tidied
+  I PREENED. EVERY FEATHER.
+spun
+  I TURNED MY HEAD ALL THE WAY.
+
+sunbeam
+  A SUNBEAM. I CLOSE MY EYES.
+long_days
+  DAYS ARE LONG. NIGHTS ARE MINE
+squint
+  SO BRIGHT. I SQUINT. GRAVELY.
+toast
+  WARM GLASS. I DOZE.
+sitting_time
+  DAYTIME. OWLS SHOULD BE ABED.
+lunch_oclock
+  LUNCH. I WILL EAT AT DUSK.
+shadow
+  MY SHADOW IS SILENT TOO. GOOD
+big_sit
+  BIG DAY. BIGGER SILENCE.
+eye_snack
+  MY EYES ARE FOR THE DARK.
+outside
+  OUTSIDE IS A MARSH. I REMEMBER
+
+not_scared
+  IT IS DARK. I AM AT HOME.
+star_crumbs
+  THE STARS ARE OLD OWLS' EYES.
+rebel
+  AWAKE ALL NIGHT. AS IS RIGHT.
+too_quiet
+  SO QUIET. AT LAST. PERFECT.
+what_was_that
+  WHAT WAS THAT? I HEARD IT.
+bed_soon
+  I ROOST AT FIRST LIGHT.
+moon_wink
+  THE MOON WINKED. I DID NOT.
+dark_snacks
+  NIGHT SNACKS. I HUNT QUIETLY.
+night_light
+  MY EYES ARE THE NIGHT LIGHT.
+only_me
+  ALL SLEEP. I KEEP WATCH.

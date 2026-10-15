@@ -6,22 +6,286 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A round sky-blue fish standing up on two flippers, a little curl of fin on top
+of his head like a cowlick, big fins flung out wide like a goalkeeper, and a
+cream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,
+deeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a
+tiny blue fish already mid-wiggle.
 
+WHO HE IS
+A sporty, competitive, can't-sit-still racer. Everything is a race: the
+marble, the dish, the dust, his own shadow, the moon. He is always warming up,
+always on his last lap, always winning (by his count). Big appetite, big
+energy, no patience. Mud is the best track there is.
 
 HOW HE TALKS
-
+Terse voice keeps only his first sentence, so every line is one sentence, the
+punch first, joined by commas. Short words. Coach energy.
 
 LOVES
-
+Racing, winning, mud, laps, snacks as fuel, a slippy track.
 
 FEARS
-
+Sitting still, losing, being held back.
 
 CATCHPHRASES
-
+RACE YOU! LAST LAP! GO GO GO!
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# His terse voice keeps only the first sentence: one sentence per line.
+
+peckish
+  RACE YOU TO THE SNACK!
+starving
+  I'D EAT THE FINISH LINE!
+hoarding
+  SAVING IT FOR AFTER THE RACE.
+crunch
+  FASTEST CHEWER ALIVE!
+fuzzy_bite
+  BLEH, THAT ONE WAS FUZZY!
+smells
+  STINKY CORNER, SKIP IT!
+green
+  FEEL GREEN, STILL RACING!
+ow
+  OW, BUT I'M STILL FASTER!
+heard_you
+  YEAH, YEAH, I HEARD!
+ground_lies
+  WHOA, EARTHQUAKE LAP!
+not_again
+  NO SHAKING, I'M TRAINING!
+hooded
+  NOT SCARED, JUST WARMING UP!
+ancestor_fear
+  GEN # RAN FROM THIS TOO!
+inherited
+  GEN # SAYS GO FASTER!
+counted
+  BORED, SOMEBODY RACE ME!
+marble_knows
+  CATCHING THAT MARBLE, WATCH!
+put_me_down
+  PUT ME DOWN, I WANNA RUN!
+warm_hands
+  WARM HANDS, GOOD HALFTIME!
+sky_down
+  UPSIDE DOWN, STILL WINNING!
+heavy_eyes
+  SO TIRED... ONE MORE LAP...
+dream_pellets
+  ZZZ... WINNING... ZZZ...
+see_pellet
+  I SEE A PELLET, RACE YOU!
+see_phone
+  I SEE A PHONE, IT'S SLOW!
+see_nothing
+  I SEE AN EMPTY DISH, NOT FAIR!
+see_damp
+  I SEE MUD, FAST MUD!
+knees
+  OLD, BUT STILL QUICK!
+moon
+  THE MOON IS A FINISH LINE!
+anyone
+  ANYONE WANNA RACE?
+science
+  FOOD MEANS FAST, FACT!
+no_hat
+  GEN #, NO HAT, MORE SPEED!
+
+p_snack
+  SNACK FIRST, THEN SPRINT!
+p_feast
+  BIG FEAST, EAT IT FAST!
+p_pellet_soon
+  PELLET INCOMING, GET READY!
+p_feed_me
+  FEED ME NOW, NO DAWDLING!
+p_fuzzy
+  THAT CRUMB GOES FUZZY SOON!
+p_more_shaking
+  MORE SHAKING COMING, BRACE!
+p_mud
+  MUD AHEAD, FULL SPEED!
+p_big_hand
+  BIG HAND COMING, DODGE IT!
+p_bedtime
+  BEDTIME SOON, SPRINT TO BED!
+p_sun
+  SUN'S UP SOON, WARM UP!
+p_rain
+  RAIN COMING, SLIPPY TRACK!
+p_watched
+  PHONE'S WATCHING, SHOW OFF!
+p_return
+  THEY'RE COMING BACK, FAST!
+p_tap
+  A TAP, QUICK AS ME!
+p_no
+  NOPE, NOT A CHANCE!
+p_doom
+  DOOM, BUT I'LL OUTRUN IT!
+p_lunch
+  LAST LAP COMING, THEN LUNCH!
+p_outlook
+  OUTLOOK: FIRST PLACE!
+p_decidedly
+  YES, DEFINITELY, GO!
+p_lucky
+  LUCK IS FOR SLOW ONES!
+p_pond_no
+  POND SAYS NO, POND IS SLOW!
+p_pond_yes
+  POND SAYS YES, LET'S GO!
+p_ripples
+  TOO MANY RIPPLES, ASK LATER!
+p_ancestor
+  GEN # SAW THIS COMING TOO!
+miss_phone
+  WHERE'S THE PHONE, IT'S LATE!
+
+oclock
+  IT'S # O'CLOCK, TIME TO RUN!
+morning
+  MORNING LAPS, LET'S GO!
+so_late
+  LATE, BUT STILL RUNNING!
+monday
+  MONDAY, FRESH START, GO!
+weekend
+  WEEKEND, RACE DAY!
+p_weekend
+  WEEKEND'S COMING, GET SET!
+my_name
+  @, FASTEST NAME AROUND!
+p_famous
+  @ WINS GOLD, I SEE IT!
+
+rim_walk
+  RIM LAP, NEW RECORD!
+marble_foe
+  THE MARBLE THINKS IT'S FAST!
+clean_glass
+  GLASS IS CLEAN, FAST TRACK!
+dont_look
+  DON'T LOOK, I'M STRETCHING!
+saw_nothing
+  NOTHING HAPPENED, TOO SLOW!
+plans
+  PLAN: WIN, THEN WIN AGAIN!
+toes
+  NO TOES, ALL FINS!
+small_lot
+  SMALL, FAST, THE BEST!
+popped
+  HAD A THOUGHT, OUTRAN IT!
+wiggle
+  WIGGLE WARM UP, DONE!
+my_song
+  HUP HUP HUP, MY SONG!
+dust
+  DUST SPECK, I LAPPED IT!
+blinked
+  FASTEST BLINK EVER!
+important
+  CHAMPION TODAY, AND ALWAYS!
+secret_mud
+  SECRET: MUD MAKES ME FAST!
+nap_plan
+  POWER NAP, TWO SECONDS!
+ceiling
+  I COULD JUMP THAT CEILING!
+serious_face
+  GAME FACE ON!
+no_echo
+  HELLO, ECHO, TOO SLOW!
+king
+  CHAMPION OF THE DISH!
+smells_me
+  SMELLS LIKE MUD, PERFECT!
+todo
+  TODAY: RUN, EAT, RUN!
+brave
+  BRAVE AND FAST, BOTH!
+big_pond
+  ONE DAY, A BIG MUDFLAT!
+floor
+  FLOOR'S GRIPPY, GOOD!
+snack_snacks
+  WHAT IF RACES HAD RACES?!
+suspense
+  READY, SET... NOT YET!
+ancestors
+  GEN #, ALL OF US WERE FAST!
+ask_me
+  ASK ME, I'LL ANSWER FAST!
+legs
+  FINS ARE BETTER THAN LEGS!
+shiny
+  SOMETHING SHINY, RACE YOU!
+guard
+  DISH GUARD, ON DUTY!
+old_fly
+  REMEMBER MY FIRST RACE, WON!
+hi_you
+  HI, RACE YOU!
+busy
+  BUSY, TRAINING!
+pellet_where
+  PELLETS COME FROM THE TOP, GO!
+rock
+  SITTING STILL IS SO HARD!
+best_gen
+  GEN #, FASTEST GEN YET!
+tidied
+  TIDIED IN THREE SECONDS!
+spun
+  SPUN SO FAST, DIZZY, WON!
+
+sunbeam
+  SUNBEAM, WARM UP TIME!
+long_days
+  LONG DAYS, MORE LAPS!
+squint
+  BRIGHT, CAN'T SEE THE TRACK!
+toast
+  WARM GLASS, HOT TRACK!
+sitting_time
+  DAYTIME, RUNNING TIME!
+lunch_oclock
+  LUNCH, THEN SPRINTS!
+shadow
+  MY SHADOW IS ALMOST AS FAST!
+big_sit
+  BIG DAY, BIG RACE!
+eye_snack
+  SUN IN MY EYES, STILL GOING!
+outside
+  IS OUTSIDE A RACETRACK?
+
+not_scared
+  DARK, BUT I'M NOT SCARED!
+star_crumbs
+  STARS ARE RACING TOO!
+rebel
+  NIGHT LAPS, NO ONE WATCHING!
+too_quiet
+  QUIET, PERFECT FOR SPRINTS!
+what_was_that
+  WHAT WAS THAT, A RIVAL?
+bed_soon
+  BED SOON, LAST LAP!
+moon_wink
+  MOON WINKED, I WINKED FASTER!
+dark_snacks
+  MIDNIGHT FUEL!
+night_light
+  NIGHT RUN, NO LIGHTS!
+only_me
+  EVERYONE SLEEPS, I TRAIN!
