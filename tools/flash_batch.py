@@ -64,19 +64,18 @@ MIN_ESPTOOL = (4, 7)                     # the first to write a .hex by its segm
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note",
           "species", "pet"]               # pet: the mode, keep or wipe
 SPECIES = ("grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker")
-# The firmware's badges.def (decisions-2026-10-15.md D3): each species once. Any other MAC is a grungo.
-BADGE_SPECIES = {
-    "d4:05:92:77:1b:3c": "mossby",
-    "d4:05:92:77:1b:44": "puffkin",
-    "d4:05:92:77:1b:34": "gilly",
-    "d4:05:92:77:1c:b0": "mothwick",
-    "d4:05:92:77:1b:30": "mudge",
-    "d4:05:92:77:1b:40": "fizz",
-    "d4:05:92:77:22:58": "hushwing",
-    "d4:05:92:77:22:40": "tinker",
-    "d4:05:92:77:23:7c": "grungo",       # the gift device, blorb-237c (MAC assumed from that name)
-}
-OTHER_SPECIES = "grungo"
+BADGES_DEF = ROOT / "lib/blorb/include/blorb/defs/badges.def"
+OTHER_SPECIES = "grungo"                 # founding.h badgeSpecies: a MAC not in the table
+
+
+def read_badges(path=BADGES_DEF):
+    """{mac: species} from the firmware's own table, rows `BLORB_BADGE(n, 0xd4, ..., species)`."""
+    rows = re.findall(r"^BLORB_BADGE\(\s*\d+\s*,((?:\s*0x[0-9a-fA-F]{2}\s*,){6})\s*(\w+)\s*\)",
+                      path.read_text(), re.M)
+    return {":".join(b.strip()[2:].lower() for b in macs.split(",")[:6]): species for macs, species in rows}
+
+
+BADGE_SPECIES = read_badges()            # each species once: the 8 badges and the gift device (row 0)
 PERMISSION_FIX = """this user may not open %s. Either join the serial group, then log out and back in:
       sudo usermod -aG dialout $USER        (on Arch: uucp instead of dialout)
   or let anyone open the badge's USB id with a udev rule, then unplug and replug it:
@@ -373,7 +372,7 @@ class DryBench:
         self.attached = {}
         self.rng = random.SystemRandom()
         self.n = 0
-        self.known = list(BADGE_SPECIES)
+        self.known = sorted(BADGE_SPECIES, key=lambda m: BADGE_SPECIES[m] == OTHER_SPECIES)   # badges 1-8, then the gift
 
     def badges(self):
         return dict(self.attached)

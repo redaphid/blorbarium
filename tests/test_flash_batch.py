@@ -235,6 +235,7 @@ class MacTable(unittest.TestCase):
         rows = re.findall(r"^\s*\| \d \| ([0-9a-f:]{17}) \| blorb-\w+ \| (\w+) \|", text, re.M)
         self.assertEqual(len(rows), 8)
         self.assertEqual(dict(rows), {m: s for m, s in fb.BADGE_SPECIES.items() if s != "grungo"})
+        self.assertEqual(len(fb.BADGE_SPECIES), 9)                               # read from badges.def
         self.assertEqual(fb.BADGE_SPECIES["d4:05:92:77:23:7c"], "grungo")     # the gift, badges.def row 0
         self.assertEqual(sorted(fb.BADGE_SPECIES.values()), sorted(fb.SPECIES))   # each species once
 
