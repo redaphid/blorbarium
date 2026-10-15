@@ -82,6 +82,7 @@ static void poll() {
   console.tick(millis(), live, link);
   while (std::optional<blorb::RxLines<hw::DebugChar::kRxMax>::Line> line = link.take()) {
     if (line->connection != live) continue;   // its phone is gone: nobody to answer
+    ble.spoke();   // a debug session is a page talking: never evict it as a squatter
     Serial.printf("[hw] debug ble: %.60s\n", std::string(line->text).c_str());
     console.handle(line->text, line->connection, millis(), *dish, link);
   }

@@ -159,6 +159,40 @@ known devices hold nine different species. A `static_assert` in
   personalities, because the owner was already on the plane. Those follow
   in 0.7.1.
 
+## Personalities from the art
+
+The owner: "Fill in the personalities yourself for now" and "Base the
+personality on the image for each creature". Each species' sheet in
+`personalities/<species>.txt` now starts from its frames (neutral, happy,
+annoyed, foresee, sleep, egg), and each has its own line for every row except
+`parrot`, which stays the owner's taught line word for word. Grungo keeps
+"I FORESEE FLIES. IN MY MOUTH." beside a second peckish line.
+
+- grungo: a squat frog in a brown hooded cloak, flat red-eyed stare, eyes glowing cyan when he foresees -> a nervous hooded pond-monk oracle who announces flies and damp as prophecy and is never hiding, only "hooded".
+- mossby: a huge peach shell arched over a sweet round face like a bonnet, rosy cheeks, prim little frown -> a polite, unhurried homebody, proud of carrying his house, who never finishes anything today.
+- puffkin: a near-perfect coral puffball, cream fluff, blush, a tiny fury face that isn't scary -> a loud, bouncy hugger who sneezes sparkles, goes POOF, and finds doom exciting.
+- gilly: a pink axolotl with a frilly gill crown, a wide smile and arms held out for a hug, a lip-wobble pout that never lasts -> relentlessly sunny mender: it'll grow back, I'm fine, hugs.
+- mothwick: a plump fuzzy lavender moth with a white gentleman's ruff, lamp-yellow eyes and the grumpiest squint -> a dreamy humming night creature drawn to every lamp, grumpy by day, and he did not eat the sock.
+- mudge: a round blue fish on flippers with a cowlick fin and goalkeeper fins flung wide, beaming or flatly unimpressed -> a can't-sit-still racer who makes everything a race; one-sentence lines for his terse voice.
+- fizz: a glossy gold beetle with spark-tipped antennae and a smug little smile -> a crackly, possessive collector of shiny things who calls dibs and zaps by accident.
+- hushwing: a round snow-white owl with stern ear tufts, an orange stare and a secret blush -> the grave, quiet marsh librarian who hushes everyone, sees everything at night, and is soft underneath.
+- tinker: a raccoon in an aviator cap and goggles, work overalls and a bandit mask -> a scrappy night-shift inventor with pockets full of bin treasure: I can fix that, nice parts.
+
+- **Checks:** `tools/personality.py check` now refuses a species line that
+  repeats the shared line or another species' line. A line that starts with
+  `#` is a note, so an `oclock` line must not open with the number (eight
+  drafts did and vanished silently until counted).
+- **Tests touched:** `ASpeciesLineIsHisAlone` reads the shared peckish line
+  through `kSharedOnly`, since mossby now has his own. `AShakeDuringAProphecy
+  ReplacesItFromTheStart` waits for the first line to be a tenth across
+  instead of a fixed 1.5 s, because a longer line crosses slower (`passTicks`).
+- **Goldens re-blessed:** `thought`, `prophecy`, `no_phone`. Each frame
+  differs only in grungo's marquee text: his own bored line and his own
+  `p_pond_no` in place of the shared ones, and in `no_phone` the same frame
+  scrolled to a slightly different place by a different-length line.
+- **Flash:** badge128 firmware.bin 2,217,968 -> 2,256,992 bytes (+39,024,
+  read-only data only; bss unchanged).
+
 ## D13. Death, as the owner described it
 
 The owner, on the plane, after 0.7.0 shipped with Mortal duels and a Finish:

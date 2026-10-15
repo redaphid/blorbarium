@@ -416,6 +416,19 @@ function lineReader(onLine) {
 }
 
 // Nordic UART over Web Bluetooth. Notifications can split a line, so buffer to "\n".
+// Android Chrome runs one GATT operation at a time and does not queue across
+// characteristics: an operation that meets another in flight is refused
+// ("GATT operation already in progress" / "failed for unknown reason").
+// Retried with backoff; a missing characteristic or a dropped link fails at once.
+async function gattRetry(device, op, tries = 8) {
+  for (let i = 1; ; i++) {
+    try { return await op(); } catch (e) {
+      if ((e && e.name === "NotFoundError") || (device && !device.gatt.connected) || i >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 120 * i));
+    }
+  }
+}
+
 class BleTransport {
   constructor(onDrop) {
     this.onDrop = onDrop; this.device = null; this.rx = null; this.data = null; this.onLine = () => {};
@@ -431,14 +444,20 @@ class BleTransport {
   close() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
   async open() {
     const server = await this.device.gatt.connect();
-    const svc = await server.getPrimaryService(NUS);
-    this.rx = await svc.getCharacteristic(RX);
-    this.data = await svc.getCharacteristic(OTA_DATA).catch(() => null);
-    const tx = await svc.getCharacteristic(TX);
-    this.feed = lineReader((line) => this.onLine(line));
-    tx.addEventListener("characteristicvaluechanged", this.notify);
-    await tx.startNotifications();
-    globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js)
+    try {
+      const svc = await server.getPrimaryService(NUS);
+      this.rx = await svc.getCharacteristic(RX);
+      this.data = await svc.getCharacteristic(OTA_DATA).catch(() => null);
+      const tx = await svc.getCharacteristic(TX);
+      this.feed = lineReader((line) => this.onLine(line));
+      tx.addEventListener("characteristicvaluechanged", this.notify);
+      await gattRetry(this.device, () => tx.startNotifications());
+      globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js); it waits its turn
+    } catch (e) {
+      // Never leave a half-open link holding the dish's one connection.
+      if (this.device.gatt.connected) this.device.gatt.disconnect();
+      throw e;
+    }
   }
   // Back to the same device after a drop, with no chooser, for about two minutes.
   async reopen(ms = 120000) {
@@ -452,13 +471,13 @@ class BleTransport {
   }
   async writeData(bytes) {
     if (!this.data) throw new Error("no OTA data characteristic");
-    await this.data.writeValueWithoutResponse(bytes);
+    await gattRetry(this.device, () => this.data.writeValueWithoutResponse(bytes));
   }
   // The board asks for MTU 247, so a whole request usually fits one write. If the
   // write is refused (MTU stuck at 23), fall back to 20-byte chunks for this link.
   async write(text) {
     const bytes = new TextEncoder().encode(text);
-    const put = (part) => this.rx.writeValueWithResponse ? this.rx.writeValueWithResponse(part) : this.rx.writeValue(part);
+    const put = (part) => gattRetry(this.device, () => this.rx.writeValueWithResponse ? this.rx.writeValueWithResponse(part) : this.rx.writeValue(part));
     if (!this.smallWrites) {
       try { return await put(bytes); } catch (e) { console.warn("whole-line write refused, chunking", e); this.smallWrites = true; }
     }
@@ -1081,7 +1100,11 @@ async function reconnect() {
     await session();
   } catch (e) {
     console.error(e);
-    if (transport === here) ui.status("lost", "Still out of reach. Move closer and try again");
+    if (transport !== here) return;
+    // Say what failed, and offer the chooser too: a fresh pick never reuses a stale link.
+    const why = e && e.message ? ` (${e.message})` : "";
+    ui.status("lost", `Couldn't reconnect${why}. Try again, or tap Connect to choose the dish afresh.`);
+    ui.show("connect", true);
   }
 }
 

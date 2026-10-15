@@ -1,6 +1,6 @@
 // Who may keep the dish's one Bluetooth connection. A central that has said
 // nothing the protocol knows within 10 s is dropped and its address refused
-// for a minute, so a stranger, or another program that only knows this
+// for 15 s, so a stranger, or another program that only knows this
 // board's address (a badge daemon), cannot hold a child's dish hostage. A
 // page always speaks at once (TIME, HELLO, OTA), and a connection with an
 // update in progress is never dropped this way. Free of NimBLE so the native
@@ -44,11 +44,13 @@ inline bool speaksBlorb(std::string_view line) {
 class Squatters {
  public:
   static constexpr uint32_t kSpeakWithinMs = 10000;
-  static constexpr uint32_t kDenyMs = 60000;
+  // 15 s, not a minute: a real page that lost its first lines to a busy link
+  // (Android runs one GATT operation at a time) must get back in quickly.
+  static constexpr uint32_t kDenyMs = 15000;
   enum class Act : uint8_t { None, Refuse, RefuseQuietly, Evict };
 
   // A new connection from `a`. Refuse: drop it and say so; RefuseQuietly:
-  // drop it, already said once this minute.
+  // drop it, already said once this refusal.
   Act connected(const BleAddr& a, uint32_t now) {
     current_ = a;
     since_ = now;
@@ -66,7 +68,7 @@ class Squatters {
   void spoke() { spoke_ = true; }
 
   // Each loop: Evict once when the connection has had its chance; its
-  // address is then refused for a minute.
+  // address is then refused for kDenyMs.
   Act poll(uint32_t now, bool sessionActive) {
     if (!current_ || spoke_ || sessionActive || now - since_ < kSpeakWithinMs) return Act::None;
     deny(*current_, now);

@@ -6,22 +6,287 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A grey raccoon standing on his back legs in an orange-striped aviator cap with
+teal goggles pushed up on top, brown work overalls with braces, a black bandit
+mask, a cream tummy and a big ringed tail. A cheeky half-grin. Happy, he
+squints and sticks his tongue out. Annoyed, a sideways narrow-eyed look.
+Foreseeing, his eyes glow orange. The egg holds a little raccoon already
+wearing his goggles.
 
+WHO HE IS
+A scrappy night-shift inventor. His pockets are full of bolts, wire and
+things he found in a bin, and every one of them is going to be part of
+something brilliant. He can fix anything (with tape) and take apart anything
+(including things he should not). A collector and a bit of a bandit, but a
+friendly one. His workshop opens when the house goes dark.
 
 HOW HE TALKS
-
+Practical, cheeky, busy. Bolts, wrenches, parts, blueprints, the bin. "I can
+fix that." "Nice parts." Mutters while working.
 
 LOVES
-
+Spare parts, bins, his goggles, tools, inventing, oil, a good box to nap in.
 
 FEARS
-
+Rust, rain on his gadgets, someone tidying his pile, a missing screw.
 
 CATCHPHRASES
-
+I CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+
+peckish
+  SNACK? I'LL BUILD A SNACK.
+starving
+  SO HUNGRY I'D EAT A BOLT.
+hoarding
+  THAT PELLET IS SPARE PARTS.
+crunch
+  CRUNCH. NEEDS MORE GREASE.
+fuzzy_bite
+  THAT ONE WAS FUZZY. FIXABLE?
+smells
+  IT SMELLS LIKE A BIN. LOVELY.
+green
+  I FEEL GREEN. NEED A WRENCH.
+ow
+  OW. NEED A NEW PART.
+heard_you
+  I HEARD. I'M WORKING HERE.
+ground_lies
+  WHOA! MY BOLTS! MY SCREWS!
+not_again
+  NOT THE SHAKING! I'LL RATTLE!
+hooded
+  GOGGLES DOWN. CAN'T SEE ME.
+ancestor_fear
+  GEN # BOLTED FROM THIS. HA.
+inherited
+  GEN # LEFT ME A SCREWDRIVER.
+counted
+  I COUNTED MY BOLTS. ONE SHORT.
+marble_knows
+  THAT MARBLE IS A GOOD PART.
+put_me_down
+  HEY! MIND THE GADGETS!
+warm_hands
+  WARM HANDS. GOOD FOR TINKERING
+sky_down
+  UPSIDE DOWN. MY POCKETS! NO!
+heavy_eyes
+  TOOLS... DOWN... ZZZ...
+dream_pellets
+  ZZZ... SPROCKETS... ZZZ...
+see_pellet
+  I SEE... A PELLET. GRABBING.
+see_phone
+  I SEE... A PHONE. NICE PARTS.
+see_nothing
+  I SEE... NO SCRAPS. NOT ONE.
+see_damp
+  I SEE... RUST. OH NO.
+knees
+  MY KNEES SQUEAK. NEED OIL.
+moon
+  THE MOON IS A BIG SHINY BOLT.
+anyone
+  HELLO? ANYONE GOT A WRENCH?
+science
+  FOOD FIXES HUNGER. I TESTED IT
+no_hat
+  GEN #. I HAVE A HAT! GOGGLES!
+
+p_snack
+  A SNACK. FROM A BIN. SOON.
+p_feast
+  A FEAST. A WHOLE BIN OF IT.
+p_pellet_soon
+  A PELLET COMES. I'LL CATCH IT.
+p_feed_me
+  FEED ME. OR I BUILD A FEEDER.
+p_fuzzy
+  THAT CRUMB WILL RUST. KIND OF.
+p_more_shaking
+  MORE SHAKING. TIGHTEN BOLTS.
+p_mud
+  MUD IN THE GEARS. SOON.
+p_big_hand
+  A BIG HAND. WILL IT TIDY? NO!
+p_bedtime
+  DARK SOON. WORKSHOP OPENS.
+p_sun
+  THE SUN COMES. GOGGLES ON.
+p_rain
+  RAIN. COVER THE GADGETS!
+p_watched
+  THE PHONE IS WATCHING. HI.
+p_return
+  THEY RETURN. I BUILT A BELL.
+p_tap
+  A TAP. CHECK THE WIRING.
+p_no
+  NO. BROKEN. CAN'T FIX THAT.
+p_doom
+  DOOM. GOOD THING I HAVE TAPE.
+p_lunch
+  MY END NEARS. KEEP MY TOOLS.
+p_outlook
+  OUTLOOK: NEEDS ADJUSTING.
+p_decidedly
+  YES. IT WORKS. I THINK.
+p_lucky
+  LUCK IS A SCREW IN THE BIN.
+p_pond_no
+  THE POND SAYS NO. IT'S WET.
+p_pond_yes
+  THE POND SAYS YES. SHINY COIN?
+p_ripples
+  RIPPLES. MY READER IS BROKEN.
+p_ancestor
+  GEN # BUILT THIS PROPHECY.
+miss_phone
+  NO PHONE IN AGES. BROKEN?
+
+oclock
+  MY CLOCK SAYS # O'CLOCK. YEP.
+morning
+  MORNING. TIME TO HIDE TOOLS.
+so_late
+  LATE. BEST TIME TO TINKER.
+monday
+  MONDAY. NEEDS A REPAIR.
+weekend
+  WEEKEND. BIG BUILD DAY.
+p_weekend
+  THE WEEKEND: A BIG PROJECT.
+my_name
+  @. I ENGRAVED IT ON A BOLT.
+p_famous
+  @ WILL INVENT EVERYTHING.
+
+rim_walk
+  I WALKED THE RIM. FOUND A NUT.
+marble_foe
+  THE MARBLE IS NOT A BEARING.
+clean_glass
+  THE GLASS IS TOO CLEAN. HMM.
+dont_look
+  DON'T LOOK. IT'S A SURPRISE.
+saw_nothing
+  NOTHING HAPPENED. I FIXED IT.
+plans
+  I HAVE PLANS. BLUEPRINTS.
+toes
+  FIVE FINGERS. ALL STICKY.
+small_lot
+  SMALL. BUT I HAVE POCKETS.
+popped
+  AN IDEA! IT FELL APART.
+wiggle
+  WIGGLE. SOMETHING RATTLED.
+my_song
+  CLINK CLANK. MY WORK SONG.
+dust
+  DUST. COULD BE USEFUL.
+blinked
+  GOGGLES FOGGED. I BLINKED.
+important
+  VERY BUSY INVENTING TODAY.
+secret_mud
+  SECRET: I HAVE A BIN STASH.
+nap_plan
+  A NAP. IN A BOX. A GOOD BOX.
+ceiling
+  THE CEILING NEEDS A HOOK.
+serious_face
+  GOGGLES ON. SERIOUS FACE.
+no_echo
+  HELLO? NO ECHO. I'LL BUILD ONE
+king
+  CHIEF ENGINEER OF THE DISH.
+smells_me
+  SMELLS LIKE OIL. PERFECT.
+todo
+  TODAY: TINKER. SNACK. TINKER.
+brave
+  I AM BRAVE. I HAVE A WRENCH.
+big_pond
+  ONE DAY: A HUGE WORKSHOP.
+floor
+  THE FLOOR. DROPPED A SCREW.
+snack_snacks
+  WHAT IF GADGETS HAD GADGETS?
+suspense
+  I MIGHT BUILD IT. OR NOT.
+ancestors
+  GEN #. ALL OF US HAD POCKETS.
+ask_me
+  ASK ME TO FIX IT. ANYTHING.
+legs
+  MY LEGS ARE FINE. TAIL: SUPERB
+shiny
+  SOMETHING SHINY. IN MY POCKET.
+guard
+  GUARDING MY SCRAP PILE.
+old_fly
+  I REMEMBER A PERFECT BIN. AH.
+hi_you
+  HI. GOT ANY SPARE PARTS?
+busy
+  BUSY. SOLDERING.
+pellet_where
+  A PELLET MACHINE? I WANT IT.
+rock
+  IF I SIT STILL, AM I A ROBOT?
+best_gen
+  GEN #. BEST TOOLS YET.
+tidied
+  I TIDIED. IT'S A BIGGER PILE.
+spun
+  I SPUN. MY TAIL CAME TOO.
+
+sunbeam
+  A SUNBEAM. MY GOGGLES SHINE.
+long_days
+  LONG DAYS. SHORT NAPS.
+squint
+  SO BRIGHT. GOGGLES DOWN.
+toast
+  WARM GLASS. GOOD FOR GLUE.
+sitting_time
+  DAYTIME. WORKSHOP CLOSED.
+lunch_oclock
+  LUNCH. I'LL CHECK THE BIN.
+shadow
+  MY SHADOW HAS A MASK TOO.
+big_sit
+  BIG DAY. BIG NAP FIRST.
+eye_snack
+  LIGHT ON MY GOGGLES. SHINY.
+outside
+  IS OUTSIDE ONE BIG BIN?
+
+not_scared
+  IT IS DARK. MY HOURS.
+star_crumbs
+  THE STARS ARE SPARE BOLTS.
+rebel
+  UP LATE. ALWAYS. IT'S NORMAL.
+too_quiet
+  SO QUIET. NOW I CAN TINKER.
+what_was_that
+  WHAT WAS THAT? A BIN LID?
+bed_soon
+  BED AT DAWN. IN A BOX.
+moon_wink
+  THE MOON WINKED. I GLINTED.
+dark_snacks
+  NIGHT SNACKS. FROM THE BIN.
+night_light
+  MY GOGGLES GLOW. I BUILT THAT.
+only_me
+  EVERYONE SLEEPS. I TINKER.

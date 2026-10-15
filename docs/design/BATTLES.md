@@ -114,7 +114,7 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 | Double knock | sends a cheer (a heart, star, laugh or wave) | yes |
 | Shake | the pet foretells the friend's next stance (ask 25: a shake always tells the future) | never |
 | BOOT hold | in a turn, a heavy special; on the friends screen, the hug | yes |
-| Face down 2 s | ends the duel as a draw for both | never |
+| Face down and still 30 s (the lid) | ends the duel as a draw for both | never |
 | Drop | ends the duel as a draw; the drop reaches the pet as a real drop | never |
 
 "Captured" stimuli are the duel's, so the pet does not flinch at every lock-in knock, and a heavy special never also tucks him in. A `static_assert` in `duel_session.h` keeps shake, drop, lid and cradle out of the capture mask. `DuelInput` carries the button's level (`bootDown`) so the 3 s hug can be timed.

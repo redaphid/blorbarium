@@ -6,26 +6,285 @@ Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
 reaches the screen. Claude reads it when it writes his lines.
 
-WHO HE IS
+WHAT HE LOOKS LIKE
+A squat green frog in a brown hooded cloak, the cowl pulled up round his face.
+Heavy-lidded red eyes, a flat unimpressed mouth, big folded legs. When he
+foresees, his eyes go glowing cyan and his mouth opens. Even in the egg he is
+a tiny frog in a tiny hood. He looks like a pond monk who has seen things.
 
+WHO HE IS
+A hooded hermit oracle. He sees the future, and the future is mostly flies,
+damp and doom, in that order. He is nervous, and the hood is how he copes: he
+is never hiding, he is "hooded". Up all night with the moon, which he treats
+as an old colleague. Daylight is too bright and too dry.
 
 HOW HE TALKS
-
+Grave and certain about tiny things. Omens, signs, the reeds, the pond. He
+announces snacks as prophecy and treats every knock as foreseen.
 
 LOVES
-
+Flies, damp, mud, the moon, his hood, a good omen.
 
 FEARS
-
+Shaking, dry glass, the sun, being looked at without his hood up.
 
 CATCHPHRASES
-
+I FORESAW THIS. HOOD UP. THE REEDS KNOW.
 
 === LINES ===
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
 
-# EXAMPLE, delete it whenever you like: a frog-only line for when he is peckish.
 peckish
   I FORESEE FLIES. IN MY MOUTH.
+  MY HOOD HOLDS NO SNACKS.
+starving
+  I WOULD EAT MY OWN HOOD.
+hoarding
+  I HIDE IT IN MY HOOD. SHH.
+crunch
+  CRONCH. THE SPIRITS APPROVE.
+fuzzy_bite
+  THAT ONE HAD A BEARD.
+smells
+  A FOUL OMEN. ALSO A SMELL.
+green
+  GREENER THAN USUAL. BAD SIGN.
+ow
+  I FORESAW THIS. STILL OW.
+heard_you
+  I FORESAW THAT KNOCK.
+ground_lies
+  THE EARTH SPEAKS! IT YELLS!
+not_again
+  THE VISIONS SAID SHAKING. NO.
+hooded
+  HOOD UP. I AM NOT HERE.
+ancestor_fear
+  GEN # HID IN A HOOD TOO.
+inherited
+  GEN # WHISPERS IN MY HOOD.
+counted
+  I FORESAW BOREDOM. HERE IT IS
+marble_knows
+  THE MARBLE CANNOT HIDE.
+put_me_down
+  THE GROUND IS SAFER. MOSTLY.
+warm_hands
+  WARM HANDS. A GOOD OMEN.
+sky_down
+  THE POND IS ON THE CEILING?
+heavy_eyes
+  THE VISIONS GROW BLURRY...
+dream_pellets
+  ZZZ... FLIES... SO MANY...
+see_pellet
+  I SEE... A PELLET. IN THE DISH
+see_phone
+  I SEE... THE GLOWING SLAB.
+see_nothing
+  I SEE... AN EMPTY BELLY. MINE.
+see_damp
+  I SEE... MORE DAMP. GOOD.
+knees
+  MY HOOD HAS SEEN THINGS.
+moon
+  THE MOON IS MY OLD FRIEND.
+anyone
+  IS ANYONE IN THE REEDS?
+science
+  FLIES FIX HUNGER. FORESEEN.
+no_hat
+  GEN #. A HOOD. NEVER A HAT.
+
+p_snack
+  SNACK FIRST. FATE AFTER.
+p_feast
+  A FEAST OF FLIES COMES.
+p_pellet_soon
+  A PELLET FALLS FROM ABOVE.
+p_feed_me
+  THE SIGNS SAY: FEED THE FROG.
+p_fuzzy
+  THAT CRUMB GROWS A COAT.
+p_more_shaking
+  MORE SHAKING. I HATE THIS ONE.
+p_mud
+  MUD. DEEP MUD. LOVELY MUD.
+p_big_hand
+  A BIG HAND COMES. HOOD UP.
+p_bedtime
+  THE MOON SAYS: YOU, TO BED.
+p_sun
+  THE SUN COMES. I WILL HIDE.
+p_rain
+  RAIN COMES. FROGS REJOICE.
+p_watched
+  THE GLOWING ONE SEES ALL.
+p_return
+  THE ONE WHO LEFT WILL RETURN.
+p_tap
+  A FINGER WILL TAP GLASS. SOON.
+p_no
+  NO. THE FLIES AGREE.
+p_doom
+  DOOM. BUT A DAMP DOOM. NICE.
+p_lunch
+  MY END IS NEAR. MY HOOD STAYS.
+p_outlook
+  OUTLOOK DAMP. THAT IS GOOD.
+p_decidedly
+  IT IS SO. THE FLIES SAID.
+p_lucky
+  LUCK HIDES UNDER A LILY PAD.
+p_pond_no
+  THE POND FROWNS. NO.
+p_pond_yes
+  THE POND BUBBLES. YES.
+p_ripples
+  TOO MANY RIPPLES. ASK LATER.
+p_ancestor
+  GEN # SAW THIS IN A PUDDLE.
+miss_phone
+  THE GLOWING ONE HAS GONE DARK
+
+oclock
+  AS FORETOLD, # O'CLOCK.
+morning
+  MORNING. TOO BRIGHT. HOOD UP.
+so_late
+  LATE. THE BEST HOUR FOR OMENS.
+monday
+  MONDAY. I FORESAW THIS. SADLY.
+weekend
+  WEEKEND. THE FLIES REST TOO.
+p_weekend
+  THE WEEKEND APPROACHES. HOP.
+my_name
+  @. THE REEDS WHISPER IT.
+p_famous
+  @ WILL BE SUNG BY FROGS.
+
+rim_walk
+  I WALKED THE RIM. NO OMENS.
+marble_foe
+  THE MARBLE IS A BAD OMEN.
+clean_glass
+  I SEE MY HOOD IN THE GLASS.
+dont_look
+  DO NOT LOOK. I AM VISIONING.
+saw_nothing
+  I FORESAW NOTHING. IT CAME.
+plans
+  MY PLANS ARE FLIES. ALL FLIES.
+toes
+  COUNTING TOES. 18. I THINK.
+small_lot
+  SMALL FROG. BIG HOOD.
+popped
+  A VISION CAME. IT POPPED.
+wiggle
+  A RITUAL WIGGLE. DONE.
+my_song
+  CROAK. CROAK. MY BEST SONG.
+dust
+  A SPECK OF DUST. AN OMEN.
+blinked
+  I BLINKED. THE FUTURE MOVED.
+important
+  TODAY I AM AN ORACLE. AGAIN.
+secret_mud
+  THE SECRET IS DAMP.
+nap_plan
+  A NAP IS FORETOLD. SOON.
+ceiling
+  THE CEILING HOLDS NO FLIES.
+serious_face
+  MY ORACLE FACE. VERY GRAVE.
+no_echo
+  ECHO? THE GLASS SAYS NOTHING.
+king
+  MY HOOD IS A CROWN. KIND OF.
+smells_me
+  SMELLS LIKE POND. GOOD.
+todo
+  TODAY: FORESEE. SIT. FORESEE.
+brave
+  I AM BRAVE. MY HOOD IS UP.
+big_pond
+  I DREAM OF A POND. A DEEP ONE.
+floor
+  THE FLOOR IS DRY. A SHAME.
+snack_snacks
+  WHAT DO FLIES EAT? FLIES?
+suspense
+  I MIGHT HOP. THE OMENS SAY NO.
+ancestors
+  GEN #. ALL OF US HAD HOODS.
+ask_me
+  ASK ME THE FUTURE. OR A FLY.
+legs
+  MY LEGS ARE FOLDED. FOR LATER.
+shiny
+  SOMETHING SHINY. MY EYES.
+guard
+  I GUARD THE DISH. I FORESAW IT
+old_fly
+  I REMEMBER A FLY. IT WAS FAT.
+hi_you
+  HELLO. I FORESAW YOU.
+busy
+  VERY BUSY. SEEING THINGS.
+pellet_where
+  PELLETS FALL FROM THE BEYOND.
+rock
+  STILL AS A STONE. A WISE ONE.
+best_gen
+  GEN #. THE WISEST HOOD YET.
+tidied
+  I TIDIED MY HOOD. LOOK.
+spun
+  I SPUN. NOW I SEE THREE FATES.
+
+sunbeam
+  A SUNBEAM. I STEP OUT OF IT.
+long_days
+  DAYS ARE LONG. AND DRY.
+squint
+  SO BRIGHT. HOOD DOWN. LOW.
+toast
+  WARM GLASS. A FROG MAY BAKE.
+sitting_time
+  DAYTIME. I SIT IN MY HOOD.
+lunch_oclock
+  THE SUN SAYS LUNCH. I AGREE.
+shadow
+  MY SHADOW WEARS A HOOD TOO.
+big_sit
+  BIG DAY. THE FROG SITS.
+eye_snack
+  THE LIGHT HURTS MY RED EYES.
+outside
+  OUTSIDE IS A POND, SURELY.
+
+not_scared
+  IT IS DARK. MY TIME.
+star_crumbs
+  THE STARS ARE FLIES. FAR ONES.
+rebel
+  UP ALL NIGHT. AS FROGS DO.
+too_quiet
+  NIGHT. THE REEDS ARE LISTENING
+what_was_that
+  WHAT WAS THAT? AN OMEN? A FLY?
+bed_soon
+  BED AT DAWN. AS IS PROPER.
+moon_wink
+  THE MOON WINKED. IT KNOWS.
+dark_snacks
+  NIGHT FLIES TASTE BEST.
+night_light
+  MY EYES GLOW. JUST A LITTLE.
+only_me
+  ALL SLEEP. THE FROG WATCHES.

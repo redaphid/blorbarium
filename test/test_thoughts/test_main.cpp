@@ -65,7 +65,7 @@ struct Rig {
   void shake(int jolts) {
     for (int i = 0; i < jolts; ++i) {
       BodySample j = still();
-      j.az = i % 2 == 0 ? 2000 : 400;
+      j.az = i % 2 == 0 ? 2000 : 0;
       for (uint32_t t = 0; t < 80; t += kSampleMs, ms += kSampleMs) {
         dish.sample(t == 0 ? j : still(), ms);
         dish.tick(ms, link);
@@ -293,9 +293,11 @@ TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
   r.pastWarmUp();
   r.shake(6);
   r.run(1500);
+  // A longer line crosses slower (passTicks), so wait on the phase, not the clock.
+  for (int i = 0; i < 30 && r.dish.appearance().thoughtPhase <= Fx::ratio(1, 10); ++i) r.run(100);
   const Appearance first = r.dish.appearance();
   ASSERT_TRUE(first.thinking && first.prophecy);
-  ASSERT_GT(first.thoughtPhase, Fx::ratio(1, 10)) << "the first line is partway across";
+  ASSERT_GT(first.thoughtPhase, Fx::ratio(1, 10)) << "the first line is partway across: " << first.line;
   r.shake(6);
   r.run(100);
   const Appearance second = r.dish.appearance();
@@ -409,7 +411,9 @@ TEST(Personality, ASpeciesLineIsHisAlone) {
   EXPECT_TRUE(says(heard(kGrungo), "I FORESEE FLIES. IN MY MOUTH."));
   EXPECT_FALSE(says(heard(kGrungo), "THE GOOD BITS")) << "his own line replaces the shared one";
   EXPECT_FALSE(says(heard(mossby), "FORESEE FLIES"));
-  EXPECT_TRUE(says(heard(mossby), "SNACK? SNACK. THE GOOD BITS!"));
+  EXPECT_TRUE(says(heard(mossby), "A SNACK WOULD BE NICE. LATER."));
+  EXPECT_FALSE(says(heard(mossby), "THE GOOD BITS"));
+  EXPECT_TRUE(says(heard(kSharedOnly), "SNACK? SNACK. THE GOOD BITS!")) << "no species: the shared line";
 }
 
 // ---- what a phone adds -------------------------------------------------------------

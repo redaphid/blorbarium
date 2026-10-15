@@ -34,7 +34,9 @@ PeerAddr addr(uint8_t n) { return PeerAddr{{2, 0, 0, 0, 0, n}}; }
 // One 100 ms tick of a hand: five samples at 50 Hz.
 struct Frame {
   int8_t aim = -1;
-  bool down = false, tap = false, shake = false, cradle = false, lid = false;
+  bool down = false, tap = false;
+  int8_t shake = 0;   // a hand's swing this tick: 1 up, -1 down
+  bool cradle = false, lid = false;
 };
 
 BodySample sampleOf(const Frame& f, uint8_t i) {
@@ -43,7 +45,7 @@ BodySample sampleOf(const Frame& f, uint8_t i) {
   if (f.aim >= 0) s.ax = kAimTilt[f.aim].ax, s.ay = kAimTilt[f.aim].ay, s.az = kAimTilt[f.aim].az;
   if (f.cradle) s.ax = 450, s.ay = 0, s.az = 893;
   if (f.lid) s.ax = 0, s.ay = 0, s.az = -1000;
-  if (f.shake) s.ax = 0, s.ay = 0, s.az = i % 2 ? 1700 : 1000;   // a jolt of 0.7 g every other sample
+  if (f.shake) s.ax = 0, s.ay = 0, s.az = i == 2 ? int16_t(1000 + 1000 * f.shake) : 1000;   // 1 g off gravity
   s.tapCode = f.tap && i == 0 ? 1 : 0;
   s.buttonDown = f.down;
   return s;
@@ -87,7 +89,8 @@ struct Kid {
         if (v.locked) return hold(-1, 1, Frame{});
         if (shakeOnce && !shook && v.lastTurn >= 1) {
           shook = true;
-          return hold(-1, 8, Frame{-1, false, false, true}), hold(-1, 4, Frame{});
+          for (int8_t k = 0; k < 8; ++k) hold(-1, 1, Frame{-1, false, false, int8_t(k % 2 ? -1 : 1)});
+          return hold(-1, 4, Frame{});
         }
         {
           const int8_t a = int8_t(rng.below(3));

@@ -34,7 +34,7 @@ inline blorb::BodySample cradled() {
   return s;
 }
 
-// Face down on the table: lidded after 2 s.
+// Face down on the table: lidded after 30 s still.
 inline blorb::BodySample faceDown() {
   blorb::BodySample s;
   s.az = -1000;
