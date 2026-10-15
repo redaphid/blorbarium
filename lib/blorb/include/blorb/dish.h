@@ -117,8 +117,9 @@ class Dish {
   // recorded as one lineage Checkpoint and saved at once; a line still named
   // for grungo takes the species' name, and an owner's name stays. NotYet
   // while nothing could be written (an OTA trial's held storage), a duel is
-  // open, or the pet is an egg or a clutch, so the caller asks again; NotNeeded once he has a
-  // species or the board is sealed. Running it again after a power cut finds
+  // open, or the pet is an egg or a clutch, so the caller asks again.
+  // NotNeeded once he has a species, when `species` is grungo (he already is
+  // one), and on a sealed board. Running it again after a power cut finds
   // the saved pet adopted, or adopts the unsaved one the same way.
   enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
   Adoption adoptSpecies(SpeciesId, const LookBands&);

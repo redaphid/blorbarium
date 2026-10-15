@@ -35,8 +35,8 @@ mutant() {   # mutant <name> <file> <sed expression> <test that must catch it>
 }
 
 F=lib/blorb/src/founding.cpp V=src/debug_verbs.h
-mutant "the table is ignored" $F '0,/if (std::optional<SpeciesId> s = tableSpecies(mac)) return \*s;/s///'   "Table.EachBadgeIsItsSpeciesAndTheEightAreOneOfEach"
-mutant "the hash leaves out a species" $F 's/% kSpeciesCount)/% (kSpeciesCount - 1))/'   "Table.AnyOtherBoardTakesASpeciesFromItsMacsHashAcrossAllNine"
+mutant "the table is ignored" $F 's/return tableSpecies(mac).value_or(kGrungo);/return kGrungo;/'   "Table.TheNineDevicesHoldTheNineSpeciesOnceEach"
+mutant "an unknown board is not a grungo" $F 's/return tableSpecies(mac).value_or(kGrungo);/return tableSpecies(mac).value_or(species::fizz);/'   "Table.AnyOtherBoardIsAGrungo"
 mutant "a rescued slot is no pet" $F 's/"rescue\/snap.a.0", //' \
   "NeedsFounding.AnyKeepsakeOrLineageMeansAPetLivesHere"
 mutant "the lineage alone is no pet" $F 's/"lineage.log",//' \

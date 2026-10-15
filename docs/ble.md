@@ -29,7 +29,7 @@ Which species (`advertisedSpecies` in `founding.h`):
 - For a pet from 0.4.0, which has no species yet, the species the badge table
   will adopt him as (`Dish::adoptSpecies`).
 - For a sealed board, whose pet was not read, the badge's table species, else
-  its MAC's hash.
+  grungo.
 - An image on an OTA trial still advertises the old `blorb-xxxx` (the last
   two bytes of its MAC, lower-case hex), so a trial looks the same as the
   board the page updated. The page from rel-site keys its OTA token by the

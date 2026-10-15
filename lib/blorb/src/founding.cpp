@@ -33,14 +33,15 @@ constexpr bool sameMac(const uint8_t (&a)[6], const uint8_t (&b)[6]) {
   return true;
 }
 constexpr bool oneOfEach() {
+  if (countOf(kBadges) != kSpeciesCount) return false;
   for (size_t i = 0; i < countOf(kBadges); ++i) {
-    if (kBadges[i].species == kGrungo || kBadges[i].species.v >= kSpeciesCount) return false;
+    if (kBadges[i].species.v >= kSpeciesCount) return false;
     for (size_t j = i + 1; j < countOf(kBadges); ++j)
       if (kBadges[i].species == kBadges[j].species || sameMac(kBadges[i].mac, kBadges[j].mac)) return false;
   }
   return true;
 }
-static_assert(oneOfEach(), "badges.def: one badge per species, never grungo (the gift device's), no MAC twice");
+static_assert(oneOfEach(), "badges.def: every species exactly once, no MAC twice");
 
 // The byte range a founder rolls body byte i of gene v across, if it rolls it.
 struct Roll { uint8_t lo, hi; };
@@ -69,10 +70,7 @@ std::optional<SpeciesId> tableSpecies(const uint8_t mac[6]) {
   return std::nullopt;
 }
 
-SpeciesId badgeSpecies(const uint8_t mac[6]) {
-  if (std::optional<SpeciesId> s = tableSpecies(mac)) return *s;
-  return SpeciesId{uint8_t(fnv1a(mac, 6) % kSpeciesCount)};
-}
+SpeciesId badgeSpecies(const uint8_t mac[6]) { return tableSpecies(mac).value_or(kGrungo); }
 
 bool needsFounding(Storage& s) {
   for (const char* f : kPetFiles)
@@ -123,7 +121,7 @@ bool predatesSpecies(const Genome& g) {
 }
 
 bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const LookBands& bands) {
-  if (!predatesSpecies(c.genome())) return false;
+  if (species == kGrungo || !predatesSpecies(c.genome())) return false;
   const Genome founder = foundingGenome(species, speciesSeed, bands);
   const Genome grungo = starterGenome(speciesSeed);
 
