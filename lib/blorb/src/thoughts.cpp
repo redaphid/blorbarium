@@ -314,7 +314,7 @@ void Thinker::say(std::string_view line, const Creature& c, const Lineage& linea
 }
 
 void Thinker::show(Appearance& a, uint32_t tick) const {
-  if (!now_ || tick - now_->since >= now_->ticks || (a.timeUnknown && now_->kind != Spoken::said)) return;
+  if (!now_ || tick - now_->since >= now_->ticks) return;
   a.thinking = true;
   a.prophecy = now_->kind == Spoken::prophecy;
   a.thought = now_->id;

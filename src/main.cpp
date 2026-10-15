@@ -477,9 +477,6 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
-  // With no battery every replug forgets the time, and a kid with no phone
-  // still gets a pet that talks. The sim keeps asking, for its golden.
-  options.askForTime = false;
 #else
   options.sealed = simSealed;
 #endif

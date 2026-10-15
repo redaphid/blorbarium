@@ -1,0 +1,11 @@
+# No phone ever, so no wall time: he still talks, and a shake still foretells.
+# The 30-minute egg hatches; life falls to an adult's; four minutes more
+# carry him past a hatchling's wordless first three.
+@100 DEBUG warp 18000
+@200 DEBUG inject life 0.5
+@300 DEBUG warp 2400
+@400 DEBUG inject vision 0
+@400 DEBUG force rest
+# A shake and no line forced: the prophecy is his own draw.
+@500 !shake
+@2400 DEBUG force rest

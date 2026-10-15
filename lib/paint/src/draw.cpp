@@ -52,12 +52,11 @@ constexpr uint8_t kPipColour[3] = {214, 150, 70};
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-constexpr char kTimeUnknownMarquee[] = "TAP ME WITH YOUR PHONE";   // any printable ASCII
 // The empty band above his head, under the pantry pips: the sibling's label
 // strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
 // over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
-constexpr Marquee kTimeUnknownStrip = {-76, 0, 20, 38, kMarqueeFeather};
+constexpr Marquee kMarqueeStrip = {-76, 0, 20, 38, kMarqueeFeather};
 
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
 constexpr int ceilDiv(int64_t a, int64_t b) { return -floorDiv(-a, b); }
@@ -851,7 +850,7 @@ void hint(Canvas240& cv, const Appearance& a) {
   }
 }
 
-// "Time unknown": a scrolling line across the dish above his head, on a dim
+// The marquee: a scrolling line across the dish above his head, on a dim
 // band that runs rim to rim, each row to its own chord, and fades out toward
 // the glass, so neither the band nor a letter ends on a straight edge.
 int chordHalf(int y) { return int(isqrt(uint64_t(kSide * kSide - (2 * y + 1 - kSide) * (2 * y + 1 - kSide)) / 4)); }
@@ -869,9 +868,9 @@ void dimBand(Canvas240& cv, const Marquee& strip) {
 }
 
 // A thought crosses once: thoughtPhase 0..1 carries it in from the right rim
-// and out past the left, on the same strip the time-unknown line uses.
+// and out past the left, on the strip above his head.
 void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
-  Marquee strip = kTimeUnknownStrip;
+  Marquee strip = kMarqueeStrip;
   if (low) strip.dy = -strip.dy;
   dimBand(cv, strip);
   const int width = 2 * marqueeHalf(strip);
@@ -881,15 +880,6 @@ void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
   // strip short of the crossing, and would bring the line back in from the right.
   drawMarqueeRing(cv, strip, kFreeSans9pt7b, a.line, "", to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
                   width - off, 0);
-}
-
-// Low when he stands high in the dish, so the line never crosses his face.
-void timeUnknown(Canvas240& cv, uint32_t nowMs, bool low) {
-  Marquee strip = kTimeUnknownStrip;
-  if (low) strip.dy = -strip.dy;
-  dimBand(cv, strip);
-  drawMarqueeAt(cv, strip, kFreeSans9pt7b, kTimeUnknownMarquee,
-                to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
 // Boot::Sealed: a keepsake is on the flash and this boot could not open it.
@@ -923,7 +913,7 @@ void sealedInAmber(Canvas240& cv, uint32_t nowMs) {
   const Clip all{0, 0, kSide, kSide, 0};
   drawString(cv, kFreeSans9pt7b, "z", 158, 60 - rise, light, all);
   drawString(cv, kFreeSans9pt7b, "Z", 172, 42 - rise, light, all);
-  Marquee strip = kTimeUnknownStrip;
+  Marquee strip = kMarqueeStrip;
   strip.dy = -strip.dy;
   dimBand(cv, strip);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, kSealedMarquee, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
@@ -1036,8 +1026,8 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   pips(cv, a.pantry);
   rimTokens(cv, a);
   hint(cv, a);
-  if (a.timeUnknown) timeUnknown(cv, nowMs, a.at.y < Fx::zero());
-  else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
+  // Low when he stands high in the dish, so the line never crosses his face.
+  if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   mask(cv);
 }
 

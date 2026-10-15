@@ -57,9 +57,6 @@ struct DishOptions {
   // The Dish reads nothing, writes nothing and runs no life, so a reset
   // finds the keepsake exactly as it was; the screen shows it sealed.
   bool sealed = false;
-  // A board nobody can answer (no phone, no battery) shows no time-unknown
-  // marquee and lets him think and prophesy without wall time.
-  bool askForTime = true;
   // The duel radio (air.h). Null: this board has no duel radio, and a double
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
@@ -132,7 +129,6 @@ class Dish {
 
  private:
   void runOneTick(Link&);
-  bool askingForTime() const { return askForTime_ && !wallKnown_; }   // the marquee shows and he keeps quiet
   // Powered ticks since a phone last gave the time. Across a replug the saved
   // anchor stands in: with no battery only a phone can have set it.
   uint32_t phoneAwayTicks() const;
@@ -172,7 +168,7 @@ class Dish {
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
-  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false, askForTime_ = true;
+  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
 };
 
 }  // namespace blorb

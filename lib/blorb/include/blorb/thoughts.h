@@ -195,7 +195,7 @@ std::optional<ThoughtPick> chooseProphecy(const Observed&, const uint32_t* ready
 
 class Thinker {
  public:
-  // Once per tick while a creature lives and wall time is known. `shook`: a
+  // Once per tick while a creature lives, wall time or not. `shook`: a
   // shake landed this tick. A new life (or a reboot) restarts it: fresh
   // cooldowns, heirlooms re-read, a quiet gap before the first thought.
   void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook,
@@ -207,8 +207,7 @@ class Thinker {
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
   // Fills the Appearance's line. While he prophesies he wears the foresee
   // face and glow, and the shake's hop does not show; while he says the
-  // phone's line he wears the croak face. While a.timeUnknown only the
-  // phone's line shows: the time-unknown marquee outranks his own.
+  // phone's line he wears the croak face.
   void show(Appearance&, uint32_t tick) const;
 
   static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one

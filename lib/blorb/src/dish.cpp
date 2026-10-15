@@ -86,7 +86,7 @@ void copyName(char (&to)[16], const char* from) {
 }  // namespace
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air), askForTime_(options.askForTime) {
+    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -171,8 +171,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-    else if (!askingForTime()) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake),
-                        phoneAwayTicks());
+    else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), phoneAwayTicks());
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -303,7 +302,6 @@ Appearance Dish::appearance() const {
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
-  a.timeUnknown = askingForTime();
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
