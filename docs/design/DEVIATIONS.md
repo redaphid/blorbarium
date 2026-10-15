@@ -121,6 +121,14 @@ Each was reported by the unit that made it and reviewed at integration.
 - **Senses (unit 6).** `PetClock::entrainedTicks` budgets entrainment, so a
   3-hour misalignment corrects in days rather than months while the bound
   stays one hour per pet day.
+- **Senses in a car (0.7).** The owner: kids play with the badges in the car,
+  and two seconds face down was far too short a bedtime. The lid now needs 30 s
+  face down and still (50 mg off gravity), and any jostle restarts it. A shake
+  leaves `orient.h`'s 4 jolts of 0.55 g off 1 g for 5 jolts of 0.8 g off a
+  tracked gravity, each reversing the last, in 1 s, because one pothole made
+  three of the old jolts. A free fall needs 200 ms, not 100. A tap reported
+  just after the whole body was pushed 0.2 g up along gravity on two samples
+  running is the road, not a knock. DESIGN.md, "Senses in a car", has the table and the reasons.
 - **Creature (unit 9).** A rotten bite fires `fed` as well as `fed_bad`;
   without it he ate every rotten pellet and died of injury within a pet day.
   `age` is 1 - Life. Death and its cause are read from the loci, never stored.

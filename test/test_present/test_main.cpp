@@ -165,8 +165,8 @@ TEST(Golden, Hop) {
   Rig r;
   r.hatch();
   r.run(5000);
-  for (int i = 0; i < 8; ++i, r.ms += 80) {   // four up-jolts: jolt(false) is under the 0.55 g threshold
-    r.dish.sample(jolt(i % 2 == 0), r.ms);
+  for (int i = 0; i < 8; ++i, r.ms += 80) {   // the fifth jolt each way in turn, at i = 6, is the shake
+    r.dish.sample(i < 2 ? still() : jolt(i % 2 == 0), r.ms);
     r.dish.tick(r.ms, r.link);
   }
   r.runUntil([&] { return r.dish.appearance().reflexActive; }, 3000);

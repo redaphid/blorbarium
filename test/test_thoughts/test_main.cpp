@@ -62,7 +62,7 @@ struct Rig {
   void shake(int jolts) {
     for (int i = 0; i < jolts; ++i) {
       BodySample j = still();
-      j.az = i % 2 == 0 ? 2000 : 400;
+      j.az = i % 2 == 0 ? 2000 : 0;
       for (uint32_t t = 0; t < 80; t += kSampleMs, ms += kSampleMs) {
         dish.sample(t == 0 ? j : still(), ms);
         dish.tick(ms, link);
@@ -298,7 +298,7 @@ TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
   Rig r;
   r.pastWarmUp();
   r.shake(6);
-  r.run(1500);
+  r.run(2500);   // this line runs 24 s, so a tenth of it is 2.4 s
   const Appearance first = r.dish.appearance();
   ASSERT_TRUE(first.thinking && first.prophecy);
   ASSERT_GT(first.thoughtPhase, Fx::ratio(1, 10)) << "the first line is partway across";

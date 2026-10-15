@@ -140,13 +140,27 @@ Any question crosses at most three files. "Why did he curl up?" is `dish.h`, `cr
 
 ### Senses become stimuli
 
-Hardware thresholds are constants in `senses.cpp`, taken from the measured `orient.h`: a shake is 4 jolts of at least 0.55 g within 900 ms, at least 60 ms apart, which is why detectors sample at 50 Hz, not at the 10 Hz tick. What a knock means to this creature is its stimulus gene, so one firmware with two genomes gives two temperaments.
+Hardware thresholds are constants in `senses.cpp`, first taken from the measured `orient.h` and then made to survive a car (below): a shake is 5 jolts of at least 0.8 g off gravity within 1 s, at least 60 ms apart and each the other way from the last, which is why detectors sample at 50 Hz, not at the 10 Hz tick. What a knock means to this creature is its stimulus gene, so one firmware with two genomes gives two temperaments.
+
+### Senses in a car
+
+Kids carry the badges in cars. A road buzzes along the car's vertical at up to about 0.3 g (5-30 Hz). A pothole makes the body 1.5-2.5 g for 50-150 ms, front axle then rear 150-400 ms later, with a softer rebound. Turns and braking lean gravity by 0.2-0.4 g for seconds. None of that may read as play or as bedtime, and none of the deliberate gestures may stop working. Each detector that needs it keeps a `Gravity`: an average of the samples near 1 g and near the average, so what a sample has beyond it is a hand or the road.
+
+| Sense | Rule | Why it survives the road |
+|---|---|---|
+| Shake | 5 jolts of 0.8 g off gravity, each reversing the last, in 1 s | A road pushes up hard but pulls down past 0.6 g only by throwing him off the seat; a hand pulls both ways. Two axles are two jolts the same way, one jolt. |
+| Knock | the tap engine's report, unless the body was pushed 0.2 g up along gravity on two samples running in the 300 ms before | A knuckle lands in a few milliseconds, on one 50 Hz sample at most; a pothole the tap engine hears lifts the whole body for 50 ms or more. A clink swings across gravity, so it never counts |
+| Drop | 200 ms weightless (about 20 cm), then an impact of 0.55 g | A pothole can throw him off a seat for up to 150 ms; a lap is 30 cm or more above the floor |
+| Lid | face down (az below -0.8 g) and within 50 mg of gravity on every sample for 30 s; any jostle restarts the wait | A table reads under 5 mg off gravity; the smoothest road passes 50 mg every second or so |
+| Flip, tilt, held, cradle | unchanged | Flip needs a 1.2 g swing of z on steady samples, which only turning him over gives. Held and cradle can read a long turn on a tilted seat as a gentle pick-up or a cuddle, which is harmless |
+
+`test_senses`' `Road` cases replay seeded rides (`test/support/road.h`) face up, face down and in a hand, and assume the worst of the tap engine: every pothole lift of 0.75 g reports a knock.
 
 ### Drives, reward, learning, instincts, sleep, dreaming
 
 Drives are chemicals with half-lives, so they move whether anyone looks. Tonic production is an emitter on the `always` locus. Reward is the observed fall of a pressing drive over an action, so the same action is good when a drive is high and worthless when it is low. Decide: `score[a] = sum_d drive[d] * (-sum_f feat[f] * W[f][a][d]) - habit[a] + noise * (explore + arousal)`, argmax, held for `minTicks`. Learn: `W += learnRate * startFeat * trace * (observed - predicted)`. Instinct genes are `(cues, action, drive, level)`, queued when they switch on and replayed in dreams through the same update, which is also how the hatch burst gives a newborn reflexes before its first decision.
 
-Sleep is an action. At pet night an emitter on low `light` makes melatonin, which reacts into sleepiness, and a `sleep_gate` receptor keeps Sleep running until it falls. Laying him face down (lid) makes `light` 0, so the owner can put him to bed with no phone. Asleep, the brain only dreams: one instinct or episode per dream tick, then `W` decays by `forgetRate`. The presentation shows the dream.
+Sleep is an action. At pet night an emitter on low `light` makes melatonin, which reacts into sleepiness, and a `sleep_gate` receptor keeps Sleep running until it falls. Laying him face down and leaving him still for 30 s (lid) makes `light` 0, so the owner can put him to bed with no phone. Asleep, the brain only dreams: one instinct or episode per dream tick, then `W` decays by `forgetRate`. The presentation shows the dream.
 
 ### Shake, startle and the hop (ask 8)
 
@@ -174,7 +188,7 @@ Every egg has at least one Look change of at least `minVisibleDelta` and at leas
 | Feeding | Press BOOT: a pellet drops from the pantry (refills on the pet clock). Tilt rolls pellets to him; he learns to eat. Old pellets rot and make him ill. | Read hunger and pantry. No plain food: `TWIST stimulus button` and `stimulus fed` are refused `403 BODY_ONLY` (ask 15). Special treats only, each a `defs/twists.def` row with an effect no pellet has: `prophecy_treat` raises vision, so he glows as if foreseeing, and feeds him nothing. Camera-colour and weather treats are future rows. |
 | Comfort | Hold him still and upright (cradle). Righting him after a flip. | `STIM petted`, `STIM spoken_to` |
 | Play | Knock and double knock; tilt to roll the marble, he chases it; shake (a hop, rough play, his genes decide if he likes it) | `STIM played` |
-| Sleep | Pet night on his own clock; lay him face down to tuck him in; a long dark stretch entrains his night to yours | `TIME` snaps his day to the real one |
+| Sleep | Pet night on his own clock; lay him face down for 30 s to tuck him in; a long dark stretch entrains his night to yours | `TIME` snaps his day to the real one |
 | Ageing | Life chemical and stage receptors | Stage, age, drives, chemicals, beliefs |
 | Death | Automatic, remains shown for the vigil | Cause and the life summary |
 | Choosing the next egg | Button or knock = next, hold or double knock = pick, timeout picks | `CLUTCH` previews, `PICK i` |
@@ -295,7 +309,7 @@ gtest, seeded, no hardware, no wall clock. `test/support/` holds MemStorage (wit
 | registry | compile-time id checks (already static); `FEATURES` order; recent-locus mapping; `SCHEMA` lists every row | a table drifting from the wire |
 | genome | parse round trip; every byte value of every body decodes; unknown kind carried byte for byte; duplicate uid rejected; `featGate` gating | a decoder that is not total |
 | chemistry | receptors on one locus sum then clamp; an act locus clears when its receptor stops; reactions conserve ratios; `stepCoarse` within epsilon of stepping | wrong order, stuck effects |
-| senses | 50 Hz traces give shake, knock, double knock, held, cradle, flip, free fall, lid, button and hold; rate limits; a 10 Hz sampling of the same shake is NOT detected (the reason for 50 Hz); `PetClock` entrainment moves night by at most an hour a day | gesture regressions |
+| senses | 50 Hz traces give shake, knock, double knock, held, cradle, flip, free fall, lid, button and hold; rate limits; a 10 Hz sampling of the same shake is NOT detected (the reason for 50 Hz); seeded car rides fire no shake, knock, drop, flip or lid, and the deliberate gestures still fire on them; `PetClock` entrainment moves night by at most an hour a day | gesture regressions |
 | habitat | pantry refills on the clock; a rotten pellet fires `fed_bad`; tilt rolls pellets; bite reach | feeding loop breaks |
 | brain | hungry plus pellets: eat probability rises; full: it does not; habituation; an instinct makes a newborn act with no experience; the remap keeps weights when an action row is added | missing urgency weighting |
 | reflex | shake gives hop with alarmed face; a second shake while adrenaline is high gives no second hop; a genome with doubled receptor gain hops higher | ask 8 regressing |

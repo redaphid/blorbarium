@@ -115,7 +115,7 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 | Double knock | sends a cheer (a heart, star, laugh or wave) | yes |
 | Shake | the pet foretells the friend's next stance (ask 25: a shake always tells the future) | never |
 | BOOT hold | outside Staking and Mercy, what it always means (today a tuck-in; under v2 a pellet). In Staking it is the Mortal confirm and in Mercy the Finish, and only there is it captured | Staking and Mercy only |
-| Face down 2 s | ends the duel as a draw for both | never |
+| Face down and still 30 s (the lid) | ends the duel as a draw for both | never |
 | Drop | ends the duel as a draw; the drop reaches the pet as a real drop | never |
 
 "Captured" stimuli are the duel's, so the pet does not flinch at every lock-in knock. A `static_assert` in `duel_session.h` keeps shake, BOOT hold, drop and lid out of the turn's capture mask. The one exception is the BOOT hold in Staking and Mercy, where the hold is the confirm or the Finish. Taking it there means a mortal confirm does not also tuck the pet in. `DuelInput` carries the button's level (`bootDown`) so a 3 s hold can be timed.

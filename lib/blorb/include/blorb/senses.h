@@ -71,20 +71,37 @@ struct TiltDetector : DetectorBase {      // EMA tilt -> tilt_x/tilt_y, upside_d
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: Fx sx_, sy_; bool upside_ = false;
 };
-struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 4 jolts >= 0.55 g in 900 ms; free fall then impact -> Dropped
+// Gravity as the body feels it at rest: an average of the samples within
+// 0.25 g of 1 g and near the average, so a jolt or a swing never drags it.
+// What a sample has beyond it (d) is a hand or the road. A detector that
+// needs it keeps its own.
+struct Gravity {
+  void sample(const BodySample&);
+  int32_t dx = 0, dy = 0, dz = 0;   // the last sample minus gravity, milli-g; 0 until a steady sample
+  int32_t squared() const { return dx * dx + dy * dy + dz * dz; }
+ private:
+  int32_t gx_ = 0, gy_ = 0, gz_ = 0;   // milli-g x 16
+  int16_t px_ = 0, py_ = 0, pz_ = 0;   // the sample before
+  uint8_t rest_ = 0;                   // samples running that barely moved
+  bool primed_ = false;
+};
+
+struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 5 jolts >= 0.8 g off gravity, each the other way, in 1 s; free fall 200 ms then impact -> Dropped
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private:
   enum class Fall : uint8_t { None, Falling, Free, Landing };
-  uint32_t jolts_[4]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
+  Gravity grav_;
+  uint32_t jolts_[5]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
+  int32_t lastX_ = 0, lastY_ = 0, lastZ_ = 0;   // the last jolt's d
   bool rattled_ = false; Fall fall_ = Fall::None; uint32_t fallSince_ = 0;
 };
 struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> held; PickedUp/PutDown; Cradle when still 3 s
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: uint32_t heldSince_ = 0, stillSince_ = 0, lastCradle_ = 0; bool held_ = false, cradled_ = false;
 };
-struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit
+struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit; not just after the road pushed the whole body up
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t last_ = 0;
+ private: Gravity grav_; uint32_t last_ = 0, bumpAt_ = 0; bool heavy_ = false, bumped_ = false;
 };
 // A second short press that goes down within this of the first one's release
 // is ButtonDouble instead of Button: the duel's "ready" (BATTLES.md, "BOOT,
@@ -99,10 +116,10 @@ struct ButtonDetector : DetectorBase {    // release < 1.2 s -> Button (or Butto
   uint32_t downSince_ = 0, lastRelease_ = 0;
   bool down_ = false, held_ = false, second_ = false, released_ = false;
 };
-struct LidDetector : DetectorBase {       // az < -0.8 g for 2 s -> lidded, LidDown; righting -> LidUp
+struct LidDetector : DetectorBase {       // az < -0.8 g and still for 30 s -> lidded, LidDown; righting -> LidUp
   void sample(const BodySample&, uint32_t ms, SenseOut&);
   bool lidded() const { return lidded_; }
- private: uint32_t since_ = 0; bool lidded_ = false;
+ private: Gravity grav_; uint32_t since_ = 0; bool lidded_ = false;
 };
 struct WarmthDetector : DetectorBase {    // die temperature vs a slow baseline -> warmth; unknown -> 0
   void sample(const BodySample&, uint32_t ms, SenseOut&);

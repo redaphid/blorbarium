@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 #include "blorb/senses.h"
+#include "road.h"
 
 using namespace blorb;
 
@@ -32,10 +35,10 @@ class Gesture {
     emit(s);
     return *this;
   }
-  // Jolts alternate up and down, one sample each, periodMs apart.
+  // A hand's jolts: 1 g up and 1 g down in turn, one sample each, periodMs apart.
   Gesture& shake(int jolts, uint32_t periodMs) {
     for (int i = 0; i < jolts; ++i) {
-      jolt(i % 2 == 0 ? 1000 : -600);
+      jolt(i % 2 == 0 ? 1000 : -1000);
       still(periodMs - kSampleMs);
     }
     return *this;
@@ -56,6 +59,8 @@ class Gesture {
     for (uint32_t t = 0; t < durMs; t += kSampleMs) emit(BodySample{});
     return *this;
   }
+  Gesture& raw(const BodySample& s) { emit(s); return *this; }
+  Gesture& raw(const std::vector<BodySample>& v) { for (const BodySample& s : v) emit(s); return *this; }
   Gesture& temp(int16_t cx10) { rest_.tempCx10 = cx10; return *this; }
   Gesture& touch(bool down) { rest_.touchDown = down; return *this; }
   uint32_t now() const { return ms_; }
@@ -146,6 +151,34 @@ TEST(Shake, SamplesOfOneBumpCloserThanTheGapAreOneJolt) {
   EXPECT_EQ(play(g.still(1000)).count(stim::shake), 0);
 }
 
+// Potholes in a row, each a hard lift and a softer rebound: the old shake
+// (any 4 jolts off 1 g) fired on these, and a car is full of them.
+TEST(Shake, BumpsThatOnlyLiftAreNotAShake) {
+  Gesture g;
+  g.still(500);
+  for (int i = 0; i < 8; ++i) g.jolt(1400).jolt(1000).jolt(-600).still(120);
+  EXPECT_EQ(play(g.still(1000)).count(stim::shake), 0);
+}
+
+TEST(Shake, JoltsAreMeasuredFromGravitySoASidewaysShakeCounts) {
+  Gesture g;
+  g.still(500);
+  for (int i = 0; i < 6; ++i) {
+    BodySample s;
+    s.ax = i % 2 == 0 ? 900 : -900;
+    s.az = 1000;
+    g.raw(s).still(60);
+  }
+  EXPECT_EQ(play(g.still(1000)).count(stim::shake), 1);
+}
+
+TEST(Shake, AGentleWobbleIsNotAShake) {
+  Gesture g;
+  g.still(500);
+  for (int i = 0; i < 10; ++i) g.jolt(i % 2 == 0 ? 600 : -600).still(60);
+  EXPECT_EQ(play(g.still(1000)).count(stim::shake), 0);
+}
+
 TEST(Shake, KeptUpForSecondsIsOneShakeUntilItRests) {
   EXPECT_EQ(play(Gesture().still(500).shake(40, 80).still(1000)).count(stim::shake), 1);
   EXPECT_EQ(play(Gesture().still(500).shake(6, 80).still(700).shake(6, 80).still(500)).count(stim::shake), 2);
@@ -161,6 +194,32 @@ TEST(Knock, TapCodesBecomeKnockAndDoubleKnock) {
 TEST(Knock, TapsInside400MsAreOneKnock) {
   EXPECT_EQ(play(Gesture().still(200).tap(1).still(200).tap(1).still(200)).count(stim::knock), 1);
   EXPECT_EQ(play(Gesture().still(200).tap(1).still(420).tap(1).still(200)).count(stim::knock), 2);
+}
+
+// The tap engine hears a pothole too, and reports it after its quiet window.
+TEST(Knock, ATapJustAfterTheWholeBodyLiftedIsTheRoad) {
+  EXPECT_EQ(play(Gesture().still(200).jolt(600).jolt(800).jolt(300).still(100).tap(1).still(200)).count(stim::knock), 0);
+  EXPECT_EQ(play(Gesture().still(200).jolt(600).jolt(800).still(320).tap(1).still(200)).count(stim::knock), 1)
+      << "a third of a second after the bump, a knock is heard";
+}
+
+// A brisk clink (BATTLES.md, matching) swings the badge 1 g sideways for a
+// tenth of a second: 1.5 g in all, but across gravity, so the knock counts.
+TEST(Knock, AClinksSwingIsNotTheRoad) {
+  Gesture g;
+  g.still(200);
+  BodySample swing;
+  swing.ax = 1100;
+  swing.az = 1000;
+  for (int i = 0; i < 5; ++i) g.raw(swing);
+  EXPECT_EQ(play(g.still(100).tap(1).still(200)).count(stim::knock), 1);
+}
+
+// At 50 Hz a knuckle lands on one sample at most, and only sometimes.
+TEST(Knock, AKnuckleCaughtOnOneSampleIsStillAKnock) {
+  EXPECT_EQ(play(Gesture().still(200).jolt(2000).still(120).tap(1).still(200)).count(stim::knock), 1);
+  EXPECT_EQ(play(Gesture().still(200).jolt(-900).jolt(-400).still(100).tap(2).still(200)).count(stim::double_knock), 1)
+      << "pushed down and away is lighter, not a bump";
 }
 
 TEST(Held, TiltedFor400MsIsPickedUpAndFlatFor1500MsIsPutDown) {
@@ -214,8 +273,9 @@ TEST(Flip, AJoltWhileFaceDownIsNotARighting) {
   EXPECT_EQ(r.at(locus::upside_down), 1.0);
 }
 
+// 300 ms in the air is a fall of 44 cm: a lap to a car's floor.
 TEST(Drop, FreeFallThenImpactIsDroppedAndItsBounceIsNotAShake) {
-  Heard r = play(Gesture().still(300).fall(200).jolt(1000).still(60).jolt(-600).still(500));
+  Heard r = play(Gesture().still(300).fall(300).jolt(1000).still(60).jolt(-600).still(500));
   EXPECT_EQ(r.count(stim::dropped), 1);
   EXPECT_EQ(r.count(stim::shake), 0);
 }
@@ -228,26 +288,73 @@ TEST(Drop, ABriefDipIsNotAFall) {
   EXPECT_EQ(play(Gesture().still(300).fall(60).jolt(1000).still(500)).count(stim::dropped), 0);
 }
 
-TEST(Drop, AFallCaughtSoftlyIsNotDropped) {
-  EXPECT_EQ(play(Gesture().still(300).fall(200).still(1000).jolt(1000).still(300)).count(stim::dropped), 0);
+// A pothole can throw him off the seat for up to 150 ms (3 cm up and back).
+TEST(Drop, AHopOffASeatIsNotAFall) {
+  EXPECT_EQ(play(Gesture().still(300).fall(160).jolt(1500).still(500)).count(stim::dropped), 0);
+  EXPECT_EQ(play(Gesture().still(300).fall(220).jolt(1500).still(500)).count(stim::dropped), 1) << "20 cm is";
 }
 
-TEST(Lid, FaceDownFor2SecondsIsLidDownAndDarkensLight) {
-  Heard r = play(Gesture().still(300).flip().still(1900));
+TEST(Drop, AFallCaughtSoftlyIsNotDropped) {
+  EXPECT_EQ(play(Gesture().still(300).fall(300).still(1000).jolt(1000).still(300)).count(stim::dropped), 0);
+}
+
+TEST(Lid, FaceDownAndStillFor30SecondsIsLidDownAndDarkensLight) {
+  Heard r = play(Gesture().still(300).flip().still(30000));
   EXPECT_EQ(r.count(stim::lid_down), 0);
   EXPECT_EQ(r.at(locus::light), 1.0);
 
-  r = play(Gesture().still(300).flip().still(2100));
+  r = play(Gesture().still(300).flip().still(32000));
   EXPECT_EQ(r.count(stim::lid_down), 1);
   EXPECT_EQ(r.at(locus::light), 0.0);
 
-  r = play(Gesture().still(300).flip().still(2100).right().still(400));
+  r = play(Gesture().still(300).flip().still(32000).right().still(400));
   EXPECT_EQ(r.count(stim::lid_up), 1);
   EXPECT_EQ(r.at(locus::light), 1.0);
 }
 
+// A table: the sensor's own noise, and the time it takes is 30 s and a bit.
+TEST(Lid, FaceDownOnATableSleepsAfterAboutThirtySeconds) {
+  for (uint64_t seed = 1; seed <= 8; ++seed) {
+    blorbtest::Rand n(seed);
+    auto table = [&](int16_t az, uint32_t ms) {
+      std::vector<BodySample> v;
+      for (uint32_t t = 0; t < ms; t += kSampleMs)
+        v.push_back(blorbtest::toSample({0.003 * n.gauss(), 0.003 * n.gauss(), az / 1000.0 + 0.003 * n.gauss()}));
+      return v;
+    };
+    Gesture g;
+    g.raw(table(1000, 2000));
+    uint32_t flippedAt = g.now();
+    Heard r = play(g.raw(table(-1000, 40000)));
+    ASSERT_EQ(r.count(stim::lid_down), 1) << "seed " << seed;
+    EXPECT_GE(r.firstAt(stim::lid_down) - flippedAt, 30000u) << "seed " << seed;
+    EXPECT_LE(r.firstAt(stim::lid_down) - flippedAt, 32000u) << "seed " << seed;
+  }
+}
+
+TEST(Lid, AJostleStartsTheWaitAgain) {
+  Gesture g = Gesture().still(300).flip().still(20000);
+  BodySample bump;
+  bump.ax = 60;
+  bump.az = -1000;
+  uint32_t jostledAt = g.now();
+  Heard r = play(g.raw(bump).still(25000));
+  EXPECT_EQ(r.count(stim::lid_down), 0) << "45 s face down, but 25 s since the jostle";
+  r = play(g.still(7000));
+  ASSERT_EQ(r.count(stim::lid_down), 1);
+  EXPECT_GE(r.firstAt(stim::lid_down) - jostledAt, 30000u);
+}
+
 TEST(Lid, AKnockOnALiddedDishIsNotLidUp) {
-  Heard r = play(Gesture().still(300).flip().still(2100).jolt(1500).still(500));
+  Heard r = play(Gesture().still(300).flip().still(32000).jolt(1500).still(500));
+  EXPECT_EQ(r.count(stim::lid_down), 1);
+  EXPECT_EQ(r.count(stim::lid_up), 0);
+}
+
+TEST(Lid, JostledOnceLiddedStaysLidded) {
+  Gesture g = Gesture().still(300).flip().still(32000);
+  for (int i = 0; i < 50; ++i) g.jolt(i % 2 == 0 ? 300 : -300).still(80);
+  Heard r = play(g.still(500));
   EXPECT_EQ(r.count(stim::lid_down), 1);
   EXPECT_EQ(r.count(stim::lid_up), 0);
 }
@@ -443,6 +550,167 @@ TEST(Owner, ArrivalAndLeavingAreEdges) {
   ASSERT_EQ(fired.size(), 2u);
   EXPECT_EQ(fired[0], stim::owner_arrived);
   EXPECT_EQ(fired[1], stim::owner_left);
+}
+
+// ---- in a car (support/road.h) ----------------------------------------------------
+
+namespace {
+
+using blorbtest::Lying;
+using blorbtest::Road;
+using blorbtest::Vec;
+
+struct Tally {
+  int shake = 0, dropped = 0, knocks = 0, flipped = 0, righted = 0, lid = 0, pickedUp = 0, cradle = 0;
+  uint32_t taps = 0, throws = 0, seconds = 0;
+  void add(const Heard& r) {
+    shake += r.count(stim::shake), dropped += r.count(stim::dropped);
+    knocks += r.count(stim::knock) + r.count(stim::double_knock);
+    flipped += r.count(stim::flipped), righted += r.count(stim::righted), lid += r.count(stim::lid_down);
+    pickedUp += r.count(stim::picked_up), cradle += r.count(stim::cradle);
+  }
+  void print(const char* name) const {
+    std::printf("[road] %s, %u s, %u throws: shake %d, dropped %d, knocks %d of %u taps, flipped %d, righted %d, lid %d, picked_up %d, cradle %d\n",
+                name, unsigned(seconds), unsigned(throws), shake, dropped, knocks, unsigned(taps), flipped, righted, lid, pickedUp, cradle);
+  }
+};
+
+constexpr uint64_t kSeeds = 8;
+
+Tally rides(Lying lying, const Road& road, uint32_t seconds) {
+  Tally t;
+  for (uint64_t seed = 1; seed <= kSeeds; ++seed) {
+    blorbtest::Ride ride = blorbtest::ride(lying, road, seed, seconds);
+    t.add(play(Gesture().raw(ride.samples)));
+    t.taps += ride.taps;
+    t.throws += ride.throws;
+    t.seconds += seconds;
+  }
+  return t;
+}
+
+// A hand's acceleration added to a ride, clipped like the IMU.
+void add(std::vector<BodySample>& v, size_t i, Vec d) {
+  auto axis = [](int32_t a, double dg) {
+    long r = std::lround(a + dg * 1000);
+    return int16_t(r > 1999 ? 1999 : r < -1999 ? -1999 : r);
+  };
+  v[i].ax = axis(v[i].ax, d.x), v[i].ay = axis(v[i].ay, d.y), v[i].az = axis(v[i].az, d.z);
+}
+
+constexpr size_t kAt10s = 10000 / kSampleMs;
+
+}  // namespace
+
+TEST(Road, ABumpyRideOnTheSeatTroublesHimNot) {
+  Tally t = rides(Lying::FaceUp, Road{}, 180);
+  t.print("face up on the seat");
+  EXPECT_GT(t.taps, 100u) << "the road offered a knock storm";
+  EXPECT_EQ(t.shake, 0);
+  EXPECT_EQ(t.dropped, 0);
+  EXPECT_EQ(t.knocks, 0);
+  EXPECT_EQ(t.flipped + t.righted, 0);
+  EXPECT_EQ(t.lid, 0);
+}
+
+TEST(Road, ARoughRideThatThrowsHimOffTheSeatTroublesHimLittle) {
+  Tally t = rides(Lying::FaceUp, Road{100, 4, 10, 20}, 180);
+  t.print("face up, rough, thrown");
+  EXPECT_LE(t.shake * 50, int(t.throws)) << "thrown twice in a second is shaken, but rarely";
+  EXPECT_EQ(t.dropped, 0);
+  EXPECT_EQ(t.knocks, 0);
+  EXPECT_EQ(t.flipped + t.righted, 0);
+  EXPECT_EQ(t.lid, 0);
+}
+
+TEST(Road, HeldInAHandOnABumpyRide) {
+  Tally t = rides(Lying::InHand, Road{}, 180);
+  t.print("in a hand");
+  EXPECT_EQ(t.shake, 0);
+  EXPECT_EQ(t.dropped, 0);
+  EXPECT_EQ(t.knocks, 0);
+  EXPECT_EQ(t.flipped + t.righted, 0);
+}
+
+// Face down on the seat, from the smoothest highway to a rough lane: never a bedtime.
+TEST(Road, FaceDownInAMovingCarHeNeverSleeps) {
+  for (double buzz : {20.0, 60.0, 100.0}) {
+    Tally t = rides(Lying::FaceDown, Road{buzz, 8, 12, 0}, 300);
+    t.print(buzz < 30 ? "face down, smooth highway" : buzz < 80 ? "face down, town" : "face down, rough");
+    EXPECT_EQ(t.lid, 0) << buzz;
+    EXPECT_EQ(t.flipped, int(kSeeds)) << "once each, as he is laid down";
+    EXPECT_EQ(t.righted, 0);
+    EXPECT_EQ(t.shake + t.dropped + t.knocks, 0);
+  }
+}
+
+// A kid's shake, 3 to 6 swings a second at 1 to 2 g, for two and a half
+// swings or half a second, along any axis: one shake on a table and one in a moving car.
+TEST(Road, AHandShakeStillFiresInACar) {
+  uint64_t seed = 100;
+  for (double hz : {3.0, 4.0, 5.0, 6.0})
+    for (double g : {1.0, 1.5, 2.0})
+      for (int axis = 0; axis < 3; ++axis)
+        for (bool car : {false, true}) {
+          std::vector<BodySample> v = car ? blorbtest::ride(Lying::InHand, Road{}, ++seed, 20).samples
+                                          : std::vector<BodySample>(20000 / kSampleMs, blorbtest::toSample({0, -0.5, 0.866}));
+          const double dur = std::max(0.5, 2.5 / hz);
+          for (size_t i = 0; i * kSampleMs < dur * 1000; ++i) {
+            const double a = g * std::sin(2 * M_PI * hz * i * kSampleMs / 1000.0);
+            add(v, kAt10s + i, Vec{axis == 0 ? a : 0, axis == 1 ? a : 0, axis == 2 ? a : 0});
+          }
+          EXPECT_EQ(play(Gesture().raw(v)).count(stim::shake), 1)
+              << hz << " Hz, " << g << " g, axis " << axis << (car ? ", in a car" : ", at rest");
+        }
+}
+
+// Knocks every 2-6 s in a hand on a bumpy ride. A knuckle lands on a sample a
+// quarter of the time; the tap engine reports it 100-160 ms later. Every one
+// is heard but those reported with a pothole's lift, from 0.2 s before to 0.5 s after.
+TEST(Road, KnocksStillLandInACar) {
+  int clear = 0, clearHeard = 0, nearBump = 0, nearHeard = 0, heard = 0;
+  for (uint64_t seed = 1; seed <= kSeeds; ++seed) {
+    blorbtest::Ride ride = blorbtest::ride(Lying::InHand, Road{}, seed, 180);
+    std::vector<BodySample>& v = ride.samples;
+    for (BodySample& s : v) s.tapCode = 0;   // only the knuckle's taps this time
+    blorbtest::Rand r(seed + 1000);
+    std::vector<size_t> reports;
+    for (size_t i = size_t(r.in(2, 6) * 50); i + 10 < v.size(); i += size_t(r.in(2, 6) * 50)) {
+      if (r.unit() < 0.25) add(v, i, Vec{0, 0, -r.in(1, 2.5)});
+      reports.push_back(i + size_t(r.in(5, 8)));
+      v[reports.back()].tapCode = 1;
+    }
+    Gesture g;
+    const uint32_t start = g.now();
+    Heard h = play(g.raw(v));
+    heard += h.count(stim::knock);
+    for (size_t at : reports) {
+      const uint32_t ms = start + uint32_t(at) * kSampleMs;
+      bool got = false;
+      for (const Fired& f : h.fired) got |= f.stim == stim::knock && f.ms >= ms && f.ms <= ms + kTickMs;
+      bool bumped = false;
+      for (double lift : ride.lifts) bumped |= at * kSampleMs / 1000.0 - lift >= -0.2 && at * kSampleMs / 1000.0 - lift <= 0.5;
+      (bumped ? nearBump : clear) += 1;
+      (bumped ? nearHeard : clearHeard) += got;
+    }
+  }
+  std::printf("[road] knocks in a hand on a bumpy ride: %d of %d heard away from potholes, %d of %d with one\n",
+              clearHeard, clear, nearHeard, nearBump);
+  EXPECT_EQ(clearHeard, clear);
+  EXPECT_EQ(heard, clearHeard + nearHeard) << "no knock the kid did not make";
+  EXPECT_GE(clearHeard + nearHeard, (clear + nearBump) * 9 / 10);
+}
+
+// From a lap to the floor, 30 to 80 cm, mid-ride.
+TEST(Road, ADropStillLandsInACar) {
+  for (uint64_t seed = 1; seed <= 16; ++seed) {
+    std::vector<BodySample> v = blorbtest::ride(Lying::InHand, Road{}, seed, 20).samples;
+    blorbtest::Rand r(seed + 2000);
+    const size_t air = size_t(r.in(250, 400) / kSampleMs);
+    for (size_t i = 0; i < air; ++i) v[kAt10s + i] = blorbtest::toSample({0.01 * r.gauss(), 0.01 * r.gauss(), 0.01 * r.gauss()});
+    v[kAt10s + air] = blorbtest::toSample({0, 0, r.in(2, 4)});
+    EXPECT_EQ(play(Gesture().raw(v)).count(stim::dropped), 1) << "seed " << seed << ", " << air * kSampleMs << " ms";
+  }
 }
 
 int main(int argc, char** argv) {
