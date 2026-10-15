@@ -233,10 +233,10 @@ class MacTable(unittest.TestCase):
     def test_it_is_the_decisions_d3_table(self):
         text = (Path(ROOT) / "docs/notes/decisions-2026-10-15.md").read_text()
         rows = re.findall(r"^\s*\| \d \| ([0-9a-f:]{17}) \| blorb-\w+ \| (\w+) \|", text, re.M)
-        self.assertEqual(dict(rows), fb.BADGE_SPECIES)
-        self.assertEqual(len(set(fb.BADGE_SPECIES.values())), 8)
-        self.assertNotIn("grungo", fb.BADGE_SPECIES.values())
-        self.assertTrue(set(fb.BADGE_SPECIES.values()) < set(fb.SPECIES))
+        self.assertEqual(len(rows), 8)
+        self.assertEqual(dict(rows), {m: s for m, s in fb.BADGE_SPECIES.items() if s != "grungo"})
+        self.assertEqual(fb.BADGE_SPECIES["d4:05:92:77:23:7c"], "grungo")     # the gift, badges.def row 0
+        self.assertEqual(sorted(fb.BADGE_SPECIES.values()), sorted(fb.SPECIES))   # each species once
 
 
 class Log(unittest.TestCase):

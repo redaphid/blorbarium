@@ -63,7 +63,7 @@ skipped this step, the tools stop with "this user may not open
 
 ## 4. Flash the batch (keeps each pet)
 
-Rehearse first. The dry run walks the 8 badges of the MAC table on
+Rehearse first. The dry run walks the 9 boards of the MAC table on
 pretend boards and writes nothing:
 
     ~/.platformio/penv/bin/python tools/flash_batch.py --dry-run
@@ -165,8 +165,9 @@ in. That puts it in download mode, and then it flashes the same way.
 
 ## 7. Which badge is which creature
 
-From firmware 0.7.0 the 8 badges each get their own species from a fixed
-MAC table (`docs/notes/decisions-2026-10-15.md`, D3). The USB serial is
+From firmware 0.7.0 the 8 badges and the gift device each get their own
+species from a fixed MAC table (`lib/blorb/include/blorb/defs/badges.def`,
+from `docs/notes/decisions-2026-10-15.md` D3). The USB serial is
 what `pio device list` shows without touching the board. The MAC is what
 `read_mac` and the batch print.
 
@@ -180,11 +181,11 @@ what `pio device list` shows without touching the board. The MAC is what
 | 6 | 5C94095002 | d4:05:92:77:1b:40 | blorb-1b40 | fizz |
 | 7 | 5C94094576 | d4:05:92:77:22:58 | blorb-2258 | hushwing |
 | 8 | 5C94094581 | d4:05:92:77:22:40 | blorb-2240 | tinker |
+| gift | | d4:05:92:77:23:7c (assumed from its name) | blorb-237c | grungo |
 
 The original gift device (`blorb-237c`) is the one grungo. It has no
-updater, so any update needs a cable. A MAC that is not in the table gets a
-species from a hash of its MAC (the gift device's MAC would give fizz, but
-its pet stays a grungo unless it is wiped).
+updater, so any update needs a cable. Each species appears once in the
+table, and any board that is not in it is a grungo.
 
 ## Why a cable flash keeps the pet
 

@@ -29,8 +29,9 @@ fails the badge. --wipe-pet resets instead: flash_board.sh --wipe-pet erases
 pet and petfs after the backup, and the board must boot Fresh, founding its
 pet from its own MAC.
 
-The firmware gives the 8 known badges one species each from a fixed MAC
-table (docs/notes/decisions-2026-10-15.md D3, BADGE_SPECIES below) and
+The firmware gives the 8 badges and the gift device one species each from a
+fixed MAC table (lib/blorb/include/blorb/defs/badges.def, BADGE_SPECIES
+below); any other board is a grungo. It
 advertises the species as its BLE name. The log refuses to stay quiet about a
 species or BLE name that another MAC in it already has, or a known badge that
 comes up as another species than the table's.
@@ -63,7 +64,7 @@ MIN_ESPTOOL = (4, 7)                     # the first to write a .hex by its segm
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note",
           "species", "pet"]               # pet: the mode, keep or wipe
 SPECIES = ("grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker")
-# docs/notes/decisions-2026-10-15.md D3, which the firmware's MAC table follows. The gift device is the one grungo.
+# The firmware's badges.def (decisions-2026-10-15.md D3): each species once. Any other MAC is a grungo.
 BADGE_SPECIES = {
     "d4:05:92:77:1b:3c": "mossby",
     "d4:05:92:77:1b:44": "puffkin",
@@ -73,7 +74,9 @@ BADGE_SPECIES = {
     "d4:05:92:77:1b:40": "fizz",
     "d4:05:92:77:22:58": "hushwing",
     "d4:05:92:77:22:40": "tinker",
+    "d4:05:92:77:23:7c": "grungo",       # the gift device, blorb-237c (MAC assumed from that name)
 }
+OTHER_SPECIES = "grungo"
 PERMISSION_FIX = """this user may not open %s. Either join the serial group, then log out and back in:
       sudo usermod -aG dialout $USER        (on Arch: uucp instead of dialout)
   or let anyone open the badge's USB id with a udev rule, then unplug and replug it:
@@ -363,7 +366,7 @@ class Bench:
 class DryBench:
     """Pretend boards: a port turns up a moment after Enter and leaves when asked. Nothing is written.
 
-    The first eight are the MAC table's badges, in order; later ones get made-up MACs."""
+    The first nine are the MAC table's boards, in order; later ones get made-up MACs."""
 
     def __init__(self, wipe=False):
         self.wipe = wipe
@@ -398,14 +401,14 @@ class DryBench:
         """0.7.0's first boot: a fresh egg, or a 0.4.0 pet that resumes and adopts his badge's species.
         The genome stands in as its MAC seed (the real one is the board's)."""
         raw = bytes.fromhex(self.last.replace(":", ""))
-        species = BADGE_SPECIES.get(self.last) or SPECIES[fnv1a(raw) % len(SPECIES)]
+        species = BADGE_SPECIES.get(self.last, OTHER_SPECIES)
         how = ("formatted: it was blank", "Fresh", "egg", 0) if self.wipe else ("ok", "Resumed", "creature", 86400)
         lines = ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
                  "[hw] storage pet: %s" % how[0],
                  "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d species=%s"
                  % (how[1], how[2], fnv1a(raw), how[3], species if self.wipe else "grungo"),
                  "[hw] ble name=%s heap=0 big=0" % species]
-        if not self.wipe and self.last in BADGE_SPECIES:
+        if not self.wipe and species != "grungo":
             lines.append("[hw] adopted species=%s gen=0 genome=%08x name=Pip (the Bluetooth name follows at the next boot)"
                          % (species, fnv1a(raw[::-1])))
         return lines
@@ -459,7 +462,7 @@ def one_badge(bench, n, port, rows, wipe=False):
     mac = bench.mac(port)
     want = BADGE_SPECIES.get(mac)
     print("  %s  usb %s  mac %s  (%s)" % (port, serial, mac, "the table's %s" % want if want else
-                                          "not in the MAC table: seed %08x" % fnv1a(bytes.fromhex(mac.replace(":", "")))))
+                                          "not in the MAC table, so a %s" % OTHER_SPECIES))
     print("  pet backed up to %s" % bench.backup(port, mac))
     bench.flash(port, serial, mac, wipe)
     print("  booting it with the log open ...")
