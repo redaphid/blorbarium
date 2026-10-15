@@ -143,4 +143,5 @@ runs fed the same lines give the same hash.
 | `ERR 416 OUT_OF_RANGE` | a number out of range |
 
 `DEBUG` lines are serial-only. Over Bluetooth one reaches the protocol, which
-answers it with an error and never runs it.
+answers it with an error and never runs it. Testing over Bluetooth has its
+own characteristic, gated by a press on the dish: `docs/debug-ble.md`.

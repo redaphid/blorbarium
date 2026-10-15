@@ -50,6 +50,21 @@ class NvsFsStorage : public blorb::Storage {
     slotsWrite_ = slotsUp_ && slots.writable();
     filesWrite_ = filesUp_ && files.writable();
   }
+  // The debug link's WIPE (docs/debug-ble.md): `pet` erased whole and
+  // `petfs`'s superblocks erased, then provisioned again by the rule boot
+  // uses, which finds them blank and foreign beside no pet and formats both,
+  // as on a board fresh from the factory. The default `nvs`, where the OTA
+  // trial keeps its records, is not touched. The caller restarts at once:
+  // the Dish in RAM still holds the old pet and must never save it here.
+  blorb::Provisioned wipe() {
+    nvs_close(nvs_);
+    LittleFS.end();
+    nvs_flash_erase_partition("pet");   // deinits it first (nvs_api.cpp)
+    if (const esp_partition_t* fs =
+            esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "petfs"))
+      esp_partition_erase_range(fs, 0, 2 * kBlock);
+    return begin(false);
+  }
   uint32_t writes() const { return writes_; }
   bool writable() override { return slotsWrite_ || filesWrite_; }
 
