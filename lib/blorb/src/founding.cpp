@@ -160,13 +160,17 @@ bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const Lo
   return true;
 }
 
+SpeciesId speciesOf(const Genome& g) {
+  Phenotype p;
+  expressStage(g, Stage::Baby, 0, p);
+  return p.species.body;
+}
+
 SpeciesId advertisedSpecies(const Genome* pet, const uint8_t mac[6]) {
   if (!pet) return badgeSpecies(mac);
   if (predatesSpecies(*pet))
     if (std::optional<SpeciesId> s = tableSpecies(mac)) return *s;
-  Phenotype p;
-  expressStage(*pet, Stage::Baby, 0, p);
-  return p.species.body;
+  return speciesOf(*pet);
 }
 
 }  // namespace blorb

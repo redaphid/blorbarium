@@ -395,6 +395,14 @@ TEST(Advertised, APetIsHisOwnSpeciesWhateverTheTableSays) {
   EXPECT_EQ(advertisedSpecies(nullptr, stranger), badgeSpecies(stranger));
 }
 
+TEST(Advertised, TheBootLinesSpeciesIsWhatThePetIsNow) {
+  for (const FieldBadge& f : kBatch) {
+    EXPECT_EQ(speciesOf(foundingGenome040(seedOf(f.mac))), kGrungo) << "a 0.4.0 pet until adopted";
+    const SpeciesId s = tableOf(f);
+    EXPECT_EQ(speciesOf(foundingGenome(s, seedOf(f.mac), paint::bandsFor(s))), s);
+  }
+}
+
 TEST(Advertised, EverySpeciesNameFitsTheScanResponse) {
   // The scan response's 31 bytes hold the name as one AD structure: 2 bytes of header.
   for (const SpeciesInfo& row : SPECIES) {

@@ -55,6 +55,9 @@ bool clearFoundPin(Storage&);   // moved aside to found.off: nothing on petfs is
 // and one seed (the board's MAC hash) founds the same pet every time.
 Genome foundingGenome(SpeciesId, uint32_t speciesSeed, const LookBands&);
 
+// The species a genome expresses: its first SpeciesGene's row, else grungo.
+SpeciesId speciesOf(const Genome&);
+
 // True for a genome from before species: no SpeciesGene, so it expresses as grungo.
 bool predatesSpecies(const Genome&);
 

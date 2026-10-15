@@ -335,6 +335,15 @@ static OccupantSummary summarize(const blorb::Occupant& o) {
   return std::visit(Visit{}, o);
 }
 
+// The pet's genome, whatever he is now; null when a sealed board never read him.
+static const blorb::Genome* petGenome() {
+  const blorb::Occupant& o = dish->occupant();
+  if (dish->sealed()) return nullptr;
+  if (const blorb::Creature* c = std::get_if<blorb::Creature>(&o)) return &c->genome();
+  if (const blorb::Egg* e = std::get_if<blorb::Egg>(&o)) return &e->genome();
+  return &std::get<blorb::Clutch>(o).parent;
+}
+
 static ota::PetMark petMark() {
   const OccupantSummary o = summarize(dish->occupant());
   return {o.gen, o.genome};
@@ -419,8 +428,12 @@ static void reportBoot() {
   if (dish->boot() == blorb::Boot::ReadOnlyNewer)
     Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
                    "Update the firmware to wake him");
-  Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
-                unsigned(o.gen), unsigned(o.genome), unsigned(o.age));
+  // species= is what the pet is now (a 0.4.0 pet reads grungo until adopted);
+  // none when a sealed board never read him.
+  const blorb::Genome* pet = petGenome();
+  Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u species=%s\n", bootName(dish->boot()), o.kind,
+                unsigned(o.gen), unsigned(o.genome), unsigned(o.age),
+                pet ? blorb::speciesInfo(blorb::speciesOf(*pet)).name : "none");
 }
 
 // From the last BodySample the loop took: no second I2C read.
@@ -470,12 +483,7 @@ static const char* bleName(const uint8_t mac[6]) {
   if (trial.onTrial()) {
     std::snprintf(name, sizeof name, "blorb-%02x%02x", mac[4], mac[5]);
   } else {
-    const blorb::Occupant& o = dish->occupant();
-    const blorb::Genome* pet = dish->sealed()                         ? nullptr
-                               : std::holds_alternative<blorb::Creature>(o) ? &std::get<blorb::Creature>(o).genome()
-                               : std::holds_alternative<blorb::Egg>(o)      ? &std::get<blorb::Egg>(o).genome()
-                                                                            : &std::get<blorb::Clutch>(o).parent;
-    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(pet, mac)).name);
+    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(petGenome(), mac)).name);
   }
   return name;
 }
