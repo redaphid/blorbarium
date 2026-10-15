@@ -30,10 +30,16 @@ bool enumIn(In& in, E last, E& out) {
   return v <= uint8_t(last);
 }
 
+// 0.7.0's Mortal (2) reads as Scrap (stakes.h); past it, refused.
+bool stakesIn(In& in, Stakes& out) { return stakesFromByte(in.u8(), out); }
+
+// The bytes 0.7.0 gave its third tier and its Mortal hold.
+constexpr size_t kRetiredTierBytes = 3 - kStakesTiers;
+
 void putBattle(Out& o, BattleId b) { o.u32(b.seed), o.u8(b.rematch), o.u8(uint8_t(b.stakes)); }
 bool getBattle(In& in, BattleId& b) {
   b.seed = in.u32(), b.rematch = in.u8();
-  return enumIn(in, Stakes::Mortal, b.stakes);
+  return stakesIn(in, b.stakes);
 }
 
 void putCard(Out& o, const BattleCard& c, bool withLineage) {
@@ -68,7 +74,7 @@ void put(Out& o, const BeaconPacket& p) {
 bool get(In& in, BeaconPacket& p) {
   p.roster = in.u16(), p.nonce = in.u32(), in.raw(p.wants.mac, 6), p.knockAgoTicks = in.u8();
   bool ok = enumIn(in, Decline::Unfair, p.decline);
-  ok &= enumIn(in, Stakes::Mortal, p.ceiling);
+  ok &= stakesIn(in, p.ceiling);
   return getCard(in, p.card) && ok;
 }
 
@@ -76,8 +82,10 @@ void put(Out& o, const StatePacket& p) {
   o.u16(p.roster), putBattle(o, p.battle), o.u32(p.nonce);
   o.u8(uint8_t(p.chosen)), o.u8(p.confirmed), o.u8(uint8_t(p.ceiling));
   for (Decline d : p.why) o.u8(uint8_t(d));
+  for (size_t i = 0; i < kRetiredTierBytes; ++i) o.u8(0);
   for (uint8_t s : p.skull) o.u8(s);
-  o.u8(p.hold);
+  for (size_t i = 0; i < kRetiredTierBytes; ++i) o.u8(0);
+  o.u8(0);   // the hold
   putCard(o, p.card, true);
   o.u8(p.moveCount), o.raw(p.moves, DuelRules::kLogSlots), o.u8(p.heard);
   o.u8(p.emoteSeq), o.u8(uint8_t(p.emote));
@@ -88,19 +96,21 @@ bool get(In& in, StatePacket& p) {
   p.roster = in.u16();
   bool ok = getBattle(in, p.battle);
   p.nonce = in.u32();
-  ok &= enumIn(in, Stakes::Mortal, p.chosen);
+  ok &= stakesIn(in, p.chosen);
   const uint8_t confirmed = in.u8();
   ok &= confirmed <= 1;
   p.confirmed = confirmed;
-  ok &= enumIn(in, Stakes::Mortal, p.ceiling);
+  ok &= stakesIn(in, p.ceiling);
   for (Decline& d : p.why) ok &= enumIn(in, Decline::Unfair, d);
+  for (size_t i = 0; i < kRetiredTierBytes; ++i) in.u8();
   for (uint8_t& s : p.skull) s = in.u8();
-  p.hold = in.u8();
+  for (size_t i = 0; i < kRetiredTierBytes; ++i) in.u8();
+  in.u8();   // the hold
   ok &= getCard(in, p.card);
   p.moveCount = in.u8(), in.raw(p.moves, DuelRules::kLogSlots), p.heard = in.u8();
   ok &= p.moveCount <= DuelRules::kLogSlots && p.heard <= DuelRules::kLogSlots;
   p.emoteSeq = in.u8();
-  ok &= enumIn(in, Emote::Plead, p.emote);
+  ok &= enumIn(in, Emote::Wave, p.emote);
   const uint8_t flags = in.u8();
   ok &= flags < 8;
   p.leaving = flags & 1, p.rematch = flags & 2, p.hugged = flags & 4;
@@ -172,7 +182,7 @@ std::optional<Packet> decode(const uint8_t* bytes, size_t len) {
 
 WireText describe(const uint8_t* bytes, size_t len) {
   WireText t{};
-  static constexpr const char* kTier[] = {"Spar", "Scrap", "Mortal"};
+  static constexpr const char* kTier[] = {"Spar", "Scrap"};
   const std::optional<Packet> p = decode(bytes, len);
   if (!p) {
     const char* why = envelopeFault(bytes, len);

@@ -672,10 +672,10 @@ static void reportDuel() {
                   unsigned(dish->bootContext()));
   }
   if (!dish->duelActive() && phase == blorb::DuelPhase::Closed) return;
-  constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
-                                    "revealing", "fainting", "mercy",    "fallen",  "friends"};
+  constexpr const char* kPhase[] = {"closed",    "lobby",    "greeting", "staking", "choosing", "waiting",
+                                    "revealing", "fainting", "friends"};
   constexpr const char* kStance[] = {"pounce", "guard", "trick"};
-  constexpr const char* kStakes[] = {"spar", "scrap", "mortal"};
+  constexpr const char* kStakes[] = {"spar", "scrap"};
   const blorb::DuelView v = dish->duelView();
   if (v.phase != phase) {
     Serial.printf("[duel] phase %s -> %s end=%u stakes=%s hearts %u-%u\n", kPhase[size_t(phase)],

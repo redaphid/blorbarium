@@ -169,7 +169,6 @@ constexpr Outcome resolveCore(const BattleCard& a, const BattleCard& b, uint32_t
   Outcome o{};
   o.stakes = stakes;
   const BattleCard* const card[2] = {&a, &b};
-  const MoveLog* const log[2] = {&movesA, &movesB};
   for (uint8_t i = 0; i < 2; ++i) {
     SideState& s = o.side[i];
     s.hearts = s.maxHearts = uint8_t(DuelRules::kHearts + Assist::hearts(card[i]->prowess, card[1 - i]->prowess));
@@ -183,20 +182,11 @@ constexpr Outcome resolveCore(const BattleCard& a, const BattleCard& b, uint32_t
     o.resolved = uint8_t(t + 1);
     const bool out0 = o.side[0].hearts == 0, out1 = o.side[1].hearts == 0;
     if (out0 && out1) o.ending = Ending::Draw;
-    else if (out0 || out1) {
-      o.ending = out1 ? Ending::AWon : Ending::BWon;
-      if (rule(stakes).downs) o.downed[out1 ? 1 : 0] = true;
-    }
+    else if (out0 || out1) o.ending = out1 ? Ending::AWon : Ending::BWon;
   }
   if (!o.over() && o.resolved == DuelRules::kMaxTurns) {
     const uint8_t h0 = o.side[0].hearts, h1 = o.side[1].hearts;
     o.ending = h0 == h1 ? Ending::Draw : h0 > h1 ? Ending::AWon : Ending::BWon;
-  }
-
-  // The verdict: only the winner's log, only the slot right after the downing.
-  if (o.downed[0] != o.downed[1]) {
-    const MoveLog& winner = *log[o.downed[0] ? 1 : 0];
-    if (winner.count() > o.resolved) o.verdict = winner.at(o.resolved).verdict;
   }
   return o;
 }

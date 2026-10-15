@@ -27,12 +27,10 @@ namespace paint {
 // The beat of the duel the screen is on.
 enum class DuelAct : uint8_t {
   Meeting,    // VS: both pets bounce into their corners
-  Staking,    // three tiers on the rim; each pet wears his risk: a feather, a plaster, a skull filled to his forecast
+  Staking,    // two tiers on the rim; each pet wears his risk: a feather (play) or a plaster (wounds)
   Choosing,   // stance glyphs at 9, 3 and 6 o'clock (tilt left, right, toward you); the rim ring is the timer
   Clash,      // the reveal: both stances pop, each pet plays his stance, the loser is hit (or heads bonk)
-  Mercy,      // Mortal: the loser is down; the skull over him fills with the winner's hold
-  Fallen,     // the verdict: finished (his remains) or spared (the debt heart between them)
-  Outcome,    // the end: the winner proud, the loser fainted, my new scars, the trophy
+  Outcome,    // the end: the winner proud, the loser fainted, my new scars
 };
 
 enum class Side : uint8_t { Me, Them, Neither };
@@ -45,9 +43,8 @@ struct Fighter {
   uint8_t sparks = 0;               // 0..kMeterMax
   // Staking
   blorb::Stakes chose = blorb::Stakes::Spar;
-  blorb::Stakes ceiling = blorb::Stakes::Mortal;   // tiers above it are struck through
+  blorb::Stakes ceiling = blorb::Stakes::Scrap;   // tiers above it are struck through
   bool confirmed = false;
-  uint8_t hold = 0;                 // 0..255: the Mortal confirm, BOOT held 3 s
   uint8_t skull = 0;                // 0..255: his forecast at the tier he aims (how full his skull is)
   // Clash
   int8_t stance = -1;               // as revealed (blorb::Stance), -1 dozed
@@ -87,14 +84,9 @@ struct DuelScene {
   int8_t lean = -1;                 // the stance my pet would pick; glows brighter with the assist
   uint8_t whisper = 0;              // 0..255 how bright
   uint16_t ticksLeft = 100, turnTicks = 100;
-  // Clash, Mercy, Fallen, Outcome: who won the clash, or the duel (Neither: a bonk of heads, a draw)
+  // Clash, Outcome: who won the clash, or the duel (Neither: a bonk of heads, a draw)
   Side won = Side::Neither;
   bool super = false;               // Clash: the winner's element beats the loser's
-  // Mercy and Fallen
-  uint8_t finishHold = 0;           // 0..255 the skull filling while the winner holds BOOT
-  uint16_t mercyLeft = 150, mercyTicks = 150;
-  blorb::Verdict verdict = blorb::Verdict::None;
-  bool pleading = false;            // the downed pet's kid sent a cheer: it floats up
   // Outcome
   uint8_t newScars = 0;             // my last n scars are new: drawn coming in
   RimHint boot;                     // every act shows what BOOT does now
@@ -102,15 +94,15 @@ struct DuelScene {
 
 // What D4's Outcome says, from my side: hearts and meters, the last resolved
 // turn as the clash plays it (stances shown, hearts lost, powers fired, who
-// won it, SUPER), and, once it has ended, who won the duel, its stakes and the
-// verdict. The act, the clock and everything a kid is doing right now (aim,
-// lock, the holds) come from the session's view, not from here.
+// won it, SUPER), and, once it has ended, who won the duel and its stakes. The
+// act, the clock and everything a kid is doing right now (aim, lock) come from
+// the session's view, not from here.
 void fromOutcome(DuelScene&, const blorb::Outcome&, blorb::Side me);
 
 // The session's view of the duel (D8) as the screen draws it, with my pet's
 // live Appearance: the phase as the act, both fighters from the cards and the
-// side states, the last turn as the clash, the holds, the mercy clock, the
-// verdict. What main.cpp and the sim draw every frame:
+// side states, the last turn as the clash. What main.cpp and the sim draw
+// every frame:
 //   paint::drawDuel(paint::sceneOf(view, a), paint::packFor(a.species),
 //                   paint::packFor(view.them.species), canvas, now);
 DuelScene sceneOf(const blorb::DuelView&, const blorb::Appearance& mine);
@@ -118,7 +110,7 @@ DuelScene sceneOf(const blorb::DuelView&, const blorb::Appearance& mine);
 // ---- the display list -------------------------------------------------------------
 
 // One pet as the duel stands him: where, how big, his procedural motion (the
-// lunge, the curl, the sidestep, the downed slump) and the face the act gives him.
+// lunge, the curl, the sidestep, the fainted slump) and the face the act gives him.
 struct Figure {
   int16_t x = 0, y = 0;             // the stand point (his feet), canvas px
   uint8_t scalePct = 100;           // of his size at home
@@ -127,7 +119,6 @@ struct Figure {
   int8_t leanPct = 0;               // shear toward +x, percent of his height
   uint8_t flash = 0;                // 0..255 toward white: just hit
   uint8_t alpha = 255;
-  uint8_t remainsIn = 0;            // 0..255 his remains fading in as he fades out: a pet finished
   bool hasFace = false;
   blorb::ExprId face{};
   uint8_t newScars = 0;             // his last n scars coming in (0..255 each through `scarIn`)
@@ -139,10 +130,8 @@ enum class PropKind : uint8_t {
   Pip,        // spark meter: variant 0 full, 1 hollow
   Stance,     // variant: blorb::Stance
   Power,      // variant: blorb::PowerGlyph
-  Tier,       // variant: blorb::Stakes; `fill` is how full a Mortal skull is
+  Tier,       // variant: blorb::Stakes
   Element,    // variant: blorb::Element
-  Trophy,     // variant: SpeciesId
-  Debt,
   Plaster,    // the Scrap risk, stuck on his head
   Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), NOPE (a riposte), OOF (a stagger), WHIFF
   Aura,       // a special winding up: light in its power's colour behind him; variant: PowerGlyph
@@ -152,10 +141,9 @@ enum class PropKind : uint8_t {
   Dots,       // still choosing
   Strike,     // a bar across a forbidden tier
   Timer,      // the rim timer: `fill` of the circle left
-  Stars,      // dizzy stars orbiting a downed or fainted head
+  Stars,      // dizzy stars orbiting a fainted head
   Glow,       // the lean: soft light under a glyph
-  Button,     // gesture hint: hold BOOT (variant 0), knock (variant 1)
-  Plea,       // a cheer heart floating up from the downed pet
+  Plea,       // a heart floating up: a lost heart leaving its arc
 };
 
 struct Prop {

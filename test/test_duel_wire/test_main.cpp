@@ -28,23 +28,20 @@ BattleCard card(uint8_t salt) {
 StatePacket state() {
   StatePacket p;
   p.roster = rosterHash();
-  p.battle = BattleId{duelSeed(11, 22, 1, Stakes::Mortal), 1, Stakes::Mortal};
+  p.battle = BattleId{duelSeed(11, 22, 1, Stakes::Scrap), 1, Stakes::Scrap};
   p.nonce = 11;
-  p.chosen = Stakes::Mortal;
+  p.chosen = Stakes::Scrap;
   p.confirmed = true;
-  p.ceiling = Stakes::Mortal;
+  p.ceiling = Stakes::Scrap;
   p.why[1] = Decline::Wounded;
-  p.why[2] = Decline::Unfair;
-  p.skull[0] = 0, p.skull[1] = 80, p.skull[2] = 200;
-  p.hold = 128;
+  p.skull[0] = 0, p.skull[1] = 80;
   p.card = card(5);
-  // A downing on turn 15 and the winner's verdict in slot 15: the log is full.
+  // Every slot full, the spare one too: the longest log a frame carries.
   p.moveCount = DuelRules::kLogSlots;
-  for (uint8_t i = 0; i < DuelRules::kMaxTurns; ++i) p.moves[i] = Move{Stance(i % 3), i == 7, i % 2 == 0}.pack();
-  p.moves[DuelRules::kMaxTurns] = Move{Stance::Pounce, false, false, Verdict::Finish}.pack();
+  for (uint8_t i = 0; i < DuelRules::kLogSlots; ++i) p.moves[i] = Move{Stance(i % 3), i == 7, i % 2 == 0}.pack();
   p.heard = 15;
   p.emoteSeq = 9;
-  p.emote = Emote::Plead;
+  p.emote = Emote::Wave;
   p.rematch = true;
   p.hugged = true;
   p.genomeBytes = 1528;
@@ -89,16 +86,55 @@ TEST(DuelWire, EveryKindFitsOneFrameAtItsMeasuredSize) {
   EXPECT_LE(kGenomeWireBytes, kDatagramMax);
 }
 
-TEST(DuelWire, StateRoundTripsWithAVerdictAfterATurn15Downing) {
+TEST(DuelWire, StateRoundTripsWithEverySlotFull) {
   const StatePacket p = state();
   const StatePacket q = roundTrip(p);
   EXPECT_EQ(q.battle, p.battle);
   EXPECT_EQ(q.moveCount, DuelRules::kLogSlots);
-  EXPECT_EQ(Move::unpack(q.moves[DuelRules::kMaxTurns]).verdict, Verdict::Finish);
   EXPECT_EQ(q.card.lineageId, p.card.lineageId);
-  EXPECT_EQ(q.why[2], Decline::Unfair);
-  EXPECT_EQ(q.emote, Emote::Plead);
+  EXPECT_EQ(q.why[1], Decline::Wounded);
+  EXPECT_EQ(q.skull[1], 80);
+  EXPECT_EQ(q.emote, Emote::Wave);
   EXPECT_TRUE(q.confirmed && q.rematch && q.hugged && !q.leaving);
+}
+
+// Body offsets: [4] roster 2, battle 6 (its stakes last), nonce 4, chosen,
+// confirmed, ceiling, why 3, skull 3, hold, card...
+constexpr size_t kBattleStakes = 4 + 2 + 5, kChosen = 4 + 2 + 6 + 4, kCeiling = kChosen + 2, kWhy = kChosen + 3,
+                 kSkull = kWhy + 3, kHold = kSkull + 3, kCard = kHold + 1;
+
+// A 0.7.0 badge, the same size of frame: its Mortal (2) in every stakes byte,
+// a third tier's picture and skull, its Mortal hold, and a Finish verdict in
+// the spare slot. This firmware hears a Scrap and nothing more, so a mixed
+// pair agrees on a Scrap at most and never downs anyone.
+TEST(DuelWire, A070MortalStateIsHeardAsAScrap) {
+  Frame f{Packet{state()}};
+  f.b[kBattleStakes] = f.b[kChosen] = f.b[kCeiling] = 2;
+  f.b[kWhy + 2] = uint8_t(Decline::Unfair);
+  f.b[kSkull + 2] = 200;
+  f.b[kHold] = 128;
+  const size_t kSpareSlot = kCard + kCardWireBytes + 1 + DuelRules::kMaxTurns;
+  f.b[kSpareSlot] = uint8_t(2 << 4);   // 0.7.0's Finish
+  f.reseal();
+  const std::optional<Packet> back = f.decoded();
+  ASSERT_TRUE(back && std::holds_alternative<StatePacket>(*back)) << "a 0.7.0 frame is not refused";
+  const StatePacket& q = std::get<StatePacket>(*back);
+  EXPECT_EQ(q.battle.stakes, Stakes::Scrap);
+  EXPECT_EQ(q.chosen, Stakes::Scrap);
+  EXPECT_EQ(q.ceiling, Stakes::Scrap);
+  EXPECT_EQ(q.why[1], Decline::Wounded);
+  EXPECT_EQ(q.skull[1], 80);
+  EXPECT_EQ(q.card.lineageId, state().card.lineageId) << "the card still sits where it did";
+  EXPECT_EQ(agreedStakes(Stakes::Scrap, q.chosen), Stakes::Scrap);
+
+  BeaconPacket b;
+  b.card = card(3);
+  Frame bf{Packet{b}};
+  bf.b[4 + 2 + 4 + 6 + 1 + 1] = 2;   // the ceiling a 0.7.0 badge beacons by default
+  bf.reseal();
+  const std::optional<Packet> heard = bf.decoded();
+  ASSERT_TRUE(heard && std::holds_alternative<BeaconPacket>(*heard));
+  EXPECT_EQ(std::get<BeaconPacket>(*heard).ceiling, Stakes::Scrap);
 }
 
 TEST(DuelWire, ABeaconNeverBroadcastsTheLineage) {
@@ -142,10 +178,8 @@ TEST(DuelWire, TheBoundaryRefusesEachMalformedFrame) {
   EXPECT_TRUE(refused([](Frame& f) { f.b[2] = kWireVersion + 1, f.reseal(); }));   // newer version
   EXPECT_TRUE(refused([](Frame& f) { f.b[3] = 9, f.reseal(); }));         // unknown kind
   EXPECT_TRUE(refused([](Frame& f) { f.b[20] ^= 1; }));                   // bad crc
-  // Body offsets: [4] roster 2, battle 6, nonce 4, chosen, confirmed, ceiling, why 3, skull 3, hold, card...
-  constexpr size_t kChosen = 4 + 2 + 6 + 4, kWhy = kChosen + 3, kCard = kWhy + 3 + 3 + 1;
   constexpr size_t kMoveCount = kCard + kCardWireBytes;
-  EXPECT_TRUE(refused([](Frame& f) { f.b[kChosen] = 3, f.reseal(); }));   // a fourth tier
+  EXPECT_TRUE(refused([](Frame& f) { f.b[kChosen] = 3, f.reseal(); }));   // past 0.7.0's Mortal
   EXPECT_TRUE(refused([](Frame& f) { f.b[kWhy] = 99, f.reseal(); }));     // an unknown picture
   EXPECT_TRUE(refused([](Frame& f) { f.b[kCard] = DuelRules::kCardVersion + 1, f.reseal(); }));
   EXPECT_TRUE(refused([](Frame& f) { f.b[kMoveCount] = DuelRules::kLogSlots + 1, f.reseal(); }));
@@ -162,7 +196,7 @@ TEST(DuelWire, TheBoundaryRefusesEachMalformedFrame) {
 
 TEST(DuelWire, DescribeNamesEachFrameAndEachRefusal) {
   Frame st{Packet{state()}};
-  EXPECT_STREQ(describe(st.b, st.n).s, "state t16 h15 Mortal hug");
+  EXPECT_STREQ(describe(st.b, st.n).s, "state t16 h15 Scrap hug");
   BeaconPacket bp;
   bp.wants = PeerAddr{{2, 0, 0, 0, 0, 1}};
   Frame b{Packet{bp}};

@@ -267,13 +267,13 @@ void Lineage::recordBirth(const Egg& egg, const Clutch& clutch, uint8_t chosen, 
   if (append(bytes)) generation_ = gen;
 }
 
-void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at, uint32_t duelFeats) {
+void Lineage::recordDeath(const Creature& c, const char* name, uint32_t at) {
   bool recorded = false;
   entries(*store_, [&](const LineageEntry& e) {
     if (auto* d = std::get_if<Death>(&e)) recorded = recorded || d->generation == c.generation();
   });
   if (recorded) return;
-  Death d{c.generation(), at, c.cause(), c.stats(), featsOf(c.stats(), c.generation()) | duelFeats, {}};
+  Death d{c.generation(), at, c.cause(), c.stats(), featsOf(c.stats(), c.generation()), {}};
   copyName(d.name, name);
   if (append(encode(d))) legacyFeats_ |= d.feats;
 }

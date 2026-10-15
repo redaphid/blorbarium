@@ -316,15 +316,6 @@ bool Creature::addScar(Scar scar) {
   return true;
 }
 
-// Both loci are receptor-owned and cleared at each chemistry step, but a dead
-// creature never steps again, so the Dish's next tick reads them and runs
-// onDeath once.
-void Creature::fall() {
-  if (dead()) return;
-  chem_.set(locus::die, Fx::one());
-  chem_.set(locus::cause, Fx::ratio(1 << uint8_t(DeathCause::Injured), 16));
-}
-
 bool Creature::prophesy(LocusId feature, ActionId a, DriveId d, Fx effect) {
   return brain_.setWeight(feature, a, d, effect);
 }

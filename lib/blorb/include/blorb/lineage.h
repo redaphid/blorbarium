@@ -49,9 +49,7 @@ class Lineage {
 
   // Idempotent by (entry kind, generation): a repeat after a crash is a no-op.
   void recordBirth(const Egg&, const Clutch&, uint8_t chosen, uint32_t at);
-  // duelFeats: what the duel book says this life earned (DuelBook::featsThisLife),
-  // ORed into the LifeStats feats, so LifeStats and its save format stay as they are.
-  void recordDeath(const Creature&, const char* name, uint32_t at, uint32_t duelFeats = 0);
+  void recordDeath(const Creature&, const char* name, uint32_t at);
   void rename(const char* name);
   // An owner edit changed this generation's genome mid-life: a Checkpoint of
   // it, so genomeOf(generation) and every later diff replay from the edit.

@@ -37,8 +37,8 @@ BLORB_STIM(33, self_foresaw,   Self,  0)
 BLORB_STIM(34, woke,           Self,  0)
 BLORB_STIM(35, hatched,        Self,  0)
 BLORB_STIM(40, duel_mourned,    Duel, 0)  // a pet I knew fell (heard from the book at the next duel)
-BLORB_STIM(41, duel_slew,       Duel, 0)  // I finished a friend's pet: pride or remorse, by his genes
-BLORB_STIM(42, duel_spared,     Duel, 0)  // downed, and spared: relief, a debt
+BLORB_STIM(41, duel_slew,       Duel, 0)  // retired with 0.7.0's Finish: nothing fires it; the id stays for the genes that name it
+BLORB_STIM(42, duel_spared,     Duel, 0)  // retired with 0.7.0's Mercy: nothing fires it; the id stays for the genes that name it
 BLORB_STIM(43, duel_bonked,     Duel, 0)  // I lost a heart this turn
 BLORB_STIM(44, duel_landed,     Duel, 0)  // I bonked them
 BLORB_STIM(45, duel_won,        Duel, 0)

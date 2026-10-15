@@ -19,7 +19,6 @@ Outcome play(const BattleCard& a, const BattleCard& b, const char* ma, const cha
 Outcome mirrored(const Outcome& o) {
   Outcome m = o;
   std::swap(m.side[0], m.side[1]);
-  std::swap(m.downed[0], m.downed[1]);
   if (o.ending == Ending::AWon) m.ending = Ending::BWon;
   if (o.ending == Ending::BWon) m.ending = Ending::AWon;
   for (TurnReport& r : m.turns) {
@@ -71,11 +70,10 @@ TEST(Mirror, TenThousandRandomBattlesMirror) {
   for (int k = 0; k < 10000; ++k) {
     const BattleCard a = r.card(), b = r.card();
     const uint32_t seed = r.rng.next();
-    const Stakes s = Stakes(r.rng.below(3));
+    const Stakes s = Stakes(r.rng.below(kStakesTiers));
     const MoveLog ma = r.log(uint8_t(r.rng.below(17))), mb = r.log(uint8_t(r.rng.below(17)));
     const Outcome ab = resolve(a, b, seed, s, ma, mb), ba = resolve(b, a, seed, s, mb, ma);
     ASSERT_EQ(mirrored(ab).hash(), ba.hash()) << "battle " << k;
-    ASSERT_EQ(ab.verdict, ba.verdict) << "battle " << k;
   }
 }
 
@@ -365,50 +363,38 @@ TEST(Powers, GadgetDrawsEachOfTheOtherEightAndNeverItself) {
   }
 }
 
-// ---- endings, downed and the verdict --------------------------------------------------
+// ---- endings ------------------------------------------------------------------------------
 
-TEST(Verdict, AMortalLoserIsDownedAndTheWinnersSlotDecides) {
-  const BattleCard mudge = cardOf(sp::mudge, 3), hushwing = cardOf(sp::hushwing, 4);
-  const Outcome pending = play(mudge, hushwing, "PPPPP", "TTTTT", Stakes::Mortal);
-  EXPECT_EQ(pending.ending, Ending::AWon);
-  EXPECT_TRUE(pending.downed[1]);
-  EXPECT_FALSE(pending.downed[0]);
-  EXPECT_EQ(pending.resolved, 5);
-  EXPECT_TRUE(pending.awaitingVerdict());
-  EXPECT_EQ(play(mudge, hushwing, "PPPPPF", "TTTTT", Stakes::Mortal).verdict, Verdict::Finish);
-  EXPECT_EQ(play(mudge, hushwing, "PPPPPS", "TTTTT", Stakes::Mortal).verdict, Verdict::Spare);
-  const Outcome loserSpeaks = play(mudge, hushwing, "PPPPP", "TTTTTF", Stakes::Mortal);
-  EXPECT_EQ(loserSpeaks.verdict, Verdict::None) << "only the winner's slot counts";
-  EXPECT_TRUE(loserSpeaks.awaitingVerdict());
-  const Outcome onTurnMove = play(mudge, hushwing, "PPPPF", "TTTTT", Stakes::Mortal);
-  EXPECT_TRUE(onTurnMove.downed[1]);
-  EXPECT_EQ(onTurnMove.verdict, Verdict::None) << "a verdict on a turn move means nothing";
-}
-
-TEST(Verdict, ReadFromTheSixteenthSlotAfterADowningOnTurnFifteen) {
-  const char* winner = "PPPPPPPPPPPPPPPF";
-  const char* loser = "PPPPPPPPPPTTTTTS";
-  const Outcome o = play(gillyCard, grungoCard, winner, loser, Stakes::Mortal);
-  EXPECT_EQ(o.resolved, DuelRules::kMaxTurns);
-  EXPECT_TRUE(o.downed[1]);
-  EXPECT_EQ(o.verdict, Verdict::Finish);
-  EXPECT_EQ(resolve(grungoCard, gillyCard, 1, Stakes::Mortal, logOf(loser), logOf(winner)).verdict, Verdict::Finish)
-      << "whichever side the winner is";
-}
-
-TEST(Verdict, NobodyIsDownedInASparOrAScrapOrOnPoints) {
+TEST(Ending, AtEveryTierALoserFaintsAndNothingIsPending) {
   for (Stakes s : {Stakes::Spar, Stakes::Scrap}) {
-    const Outcome o = play(gillyCard, grungoCard, "PPPPPF", "TTTTT", s);
+    const Outcome o = play(gillyCard, grungoCard, "PPPPP", "TTTTT", s);
     EXPECT_EQ(o.ending, Ending::AWon);
-    EXPECT_FALSE(o.downed[0] || o.downed[1]);
-    EXPECT_FALSE(o.awaitingVerdict());
-    EXPECT_EQ(o.verdict, Verdict::None);
+    EXPECT_EQ(o.resolved, 5);
+    EXPECT_EQ(o.side[1].hearts, 0) << "he fainted; the duel is over, with no verdict to wait for";
   }
-  const Outcome points = play(gillyCard, grungoCard, "PPPPPPPPPPPPPPPF", "TPPPPPPPPPPPPPP", Stakes::Mortal);
-  EXPECT_EQ(points.resolved, DuelRules::kMaxTurns);
-  EXPECT_EQ(points.ending, Ending::AWon);
-  EXPECT_FALSE(points.downed[0] || points.downed[1]);
-  EXPECT_EQ(points.verdict, Verdict::None);
+}
+
+// A 0.7.0 badge wrote a Mortal verdict as bits 4-5 of one more move after the
+// downing. A mixed pair never reaches Mortal, but its log bytes still mean
+// nothing here: not as a slot after the end, not as stray bits on a turn.
+TEST(Ending, A070VerdictInTheLogChangesNothing) {
+  constexpr uint8_t kSpare = 1 << 4, kFinish = 2 << 4;
+  for (Stakes s : {Stakes::Spar, Stakes::Scrap}) {
+    const uint32_t plain = play(gillyCard, grungoCard, "PPPPP", "TTTTT", s).hash();
+    for (uint8_t v : {kSpare, kFinish}) {
+      // As the bytes arrive from the air: adopted, not appended.
+      uint8_t wire[6];
+      for (uint8_t t = 0; t < 5; ++t) wire[t] = logOf("PPPPP").packed()[t];
+      wire[5] = v;
+      MoveLog slot;
+      ASSERT_EQ(slot.adopt(wire, 6), MoveLog::Merge::Grew);
+      EXPECT_EQ(resolve(gillyCard, grungoCard, 1, s, slot, logOf("TTTTT")).hash(), plain) << "a slot after the end";
+      for (uint8_t t = 0; t < 5; ++t) wire[t] = uint8_t(wire[t] | v);
+      MoveLog bits;
+      ASSERT_EQ(bits.adopt(wire, 5), MoveLog::Merge::Grew);
+      EXPECT_EQ(resolve(gillyCard, grungoCard, 1, s, bits, logOf("TTTTT")).hash(), plain) << "stray bits on a turn";
+    }
+  }
 }
 
 TEST(Ending, NoTurnIsReadPastTheEnd) {

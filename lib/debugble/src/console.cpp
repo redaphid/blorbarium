@@ -303,16 +303,6 @@ void verb_chem(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   r.ok("%u", unsigned(n));
 }
 
-void verb_die(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
-  const std::optional<std::string_view> w = a.word();
-  if (!a.done() || (w && *w != "eggs" && *w != "remains")) return r.err(400, "BAD_ARGS");
-  const Jump j = die(c.dish, !w || *w == "eggs", warpOf(c.board));
-  if (j != Jump::Done) return jumpErr(j, r);
-  const blorb::Occupant& o = c.dish.occupant();
-  const blorb::Clutch* k = std::get_if<blorb::Clutch>(&o);
-  r.ok("phase=%s eggs=%u vigil=%u", kPhases[o.index()], unsigned(k ? k->count : 0), unsigned(k ? k->sinceDeath : 0));
-}
-
 void verb_species(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   const std::optional<std::string_view> w = a.word();
   if (!w || !a.done()) return r.err(400, "BAD_ARGS");

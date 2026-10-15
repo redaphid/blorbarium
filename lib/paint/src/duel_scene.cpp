@@ -11,7 +11,6 @@ namespace {
 using blorb::Appearance;
 using blorb::Stakes;
 using blorb::Stance;
-using blorb::Verdict;
 namespace expr = blorb::expr;
 
 constexpr int kSide = 240;
@@ -81,7 +80,7 @@ constexpr int kTiltR = 92;
 constexpr P kLeft = {kSide / 2 - kTiltR, kSide / 2}, kRight = {kSide / 2 + kTiltR, kSide / 2},
             kNear = {kSide / 2, kSide / 2 + kTiltR};
 constexpr P kStanceAt[3] = {kLeft, kRight, kNear};   // Pounce, Guard, Trick
-constexpr P kTierAt[3] = {kLeft, kNear, kRight};     // Spar, Scrap, Mortal
+constexpr P kTierAt[blorb::kStakesTiers] = {kLeft, kRight};   // Spar, Scrap: the tilt that picks it
 
 constexpr int kGlyphPct = 125, kAimedPct = 170;
 constexpr int kTimerFillOf = 255;
@@ -135,7 +134,7 @@ void clearOfFaces(Prop& p, const Box* face) {
 // A little margin, so a burst's ink edge stays off his cheek too.
 Box faceBox(const Figure& g, const Body& b, int homePct) {
   Box r;
-  if (g.remainsIn == 255 || g.alpha < 64) return r;
+  if (g.alpha < 64) return r;
   constexpr int kMargin = 3;
   const int k = g.scalePct * 100 / homePct;   // percent of his home size
   const int wide = g.widePct * k / 100, tall = g.tallPct * k / 100;
@@ -257,20 +256,19 @@ void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
 void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
   const Fighter* f[2] = {&sc.me, &sc.them};
-  // The rim: the three tiers, mine big, a struck bar over any above my ceiling.
-  for (int tier = 0; tier < 3; ++tier) {
+  // The rim: the tiers, mine big, a struck bar over any above my ceiling.
+  for (int tier = 0; tier < blorb::kStakesTiers; ++tier) {
     const bool aimed = tier == int(sc.me.chose);
     const bool barred = tier > int(sc.me.ceiling);
     const int scale = aimed ? kAimedPct : kGlyphPct;
     const P at = {kTierAt[tier].x + (aimed ? (kSide / 2 - kTierAt[tier].x) / 8 : 0),
                   kTierAt[tier].y + (aimed ? (kSide / 2 - kTierAt[tier].y) / 8 : 0)};
-    const int fill = tier == int(Stakes::Mortal) && aimed ? sc.me.hold : 255;
-    add(s, prop(PropKind::Tier, tier, at, scale, barred ? 110 : 255, fill));
+    add(s, prop(PropKind::Tier, tier, at, scale, barred ? 110 : 255));
     if (barred) add(s, prop(PropKind::Strike, 0, at, scale));
     if (aimed && sc.me.confirmed) add(s, prop(PropKind::Tick, 0, {at.x + 14, at.y - 14}, 100));
   }
-  // Each pet wears the risk of the tier his kid aims at: a feather (play), a
-  // plaster on his head (wounds), or a skull over him filled to his forecast.
+  // Each pet wears the risk of the tier his kid aims at: a feather (play) or a
+  // plaster on his head (wounds).
   for (int side = 0; side < 2; ++side) {
     const Fighter& x = *f[side];
     const P head = headOf(s.fig[side], b[side]);
@@ -282,10 +280,6 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
       case Stakes::Scrap:
         add(s, prop(PropKind::Plaster, 0, {head.x + (side ? -6 : 8), head.y + 14}, side ? 90 : 120));
         face(s.fig[side], expr::annoyed);
-        break;
-      case Stakes::Mortal:
-        add(s, prop(PropKind::Tier, 2, {over.x, over.y - bob}, side ? 120 : 140, 255, imax(x.skull, 1)));
-        face(s.fig[side], expr::alarmed);
         break;
     }
     if (side == kThem && x.confirmed) add(s, prop(PropKind::Tick, 0, {head.x + 26, head.y + 12}, 90));
@@ -433,72 +427,12 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       s.fig[side].alpha = uint8_t(255 - bump(t, kMoveAt, kSettle) * 170 / 256);
 }
 
-// The downed pet: slumped, leaning away, eyes shut, stars round his head.
+// The fainted pet: slumped, leaning away, eyes shut, stars round his head.
 void slump(Figure& f, int awayX) {
   f.tallPct = 64;
   f.widePct = 124;
   f.leanPct = int8_t(awayX < 0 ? -20 : 20);
   face(f, expr::asleep);
-}
-
-// The skull over the downed pet, clear of both pets and the rim: [me down, them down].
-constexpr P kMercySkull[2] = {{100, 64}, {108, 58}};
-
-void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
-  const int t = sc.ticks;
-  const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
-  slump(s.fig[down], s.fig[down].x - s.fig[win].x);
-  add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 64 / 100, b[down].h, b[down].w}), down ? 80 : 100));
-  // The winner stands over him: a little bigger, leaning in, grim once the thumb is down.
-  s.fig[win].scalePct = uint8_t(s.fig[win].scalePct + 6);
-  face(s.fig[win], sc.finishHold ? expr::annoyed : expr::neutral);
-  add(s, prop(PropKind::Timer, 0, {120, 120}, 100, 255, sc.mercyTicks ? sc.mercyLeft * kTimerFillOf / sc.mercyTicks : 0));
-  // The skull over the downed pet fills from the bottom while the winner holds BOOT.
-  add(s, prop(PropKind::Tier, 2, kMercySkull[down], 190, 255, imax(sc.finishHold, 1)));
-  if (sc.won == Side::Me) {
-    // Mine to decide, in the empty lower right: hold BOOT for the skull, or knock for the heart.
-    add(s, prop(PropKind::Button, 0, {150, 164}, 100, 230));
-    add(s, prop(PropKind::Tier, 2, {178, 164}, 75));
-    add(s, prop(PropKind::Button, 1, {150, 198}, 100, 230));
-    add(s, prop(PropKind::Plea, 0, {178, 198}, 130));
-  }
-  // The downed pet's kid can only plead: a heart floats up toward the winner.
-  if (sc.pleading) {
-    const int up = (t * 256 / 20) % 256;
-    const P from = headOf(s.fig[down], b[down]), to = headOf(s.fig[win], b[win]);
-    add(s, prop(PropKind::Plea, 0, {from.x + (to.x - from.x) * up / 256, from.y + (to.y - from.y) * up / 256 - 10}, 130,
-                255 - up * 200 / 256));
-  }
-}
-
-void fallen(const DuelScene& sc, DuelStaging& s, const Body* b) {
-  const int t = sc.ticks;
-  const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
-  face(s.fig[win], expr::happy);
-  if (sc.verdict == Verdict::Finish) {
-    // He is gone: his body fades to his remains, the full skull fades over him.
-    Figure& g = s.fig[down];
-    slump(g, g.x - s.fig[win].x);
-    g.remainsIn = uint8_t(ramp(t, 2, 14) * 255 / 256);
-    const P head = headOf(s.fig[down], b[down]);
-    add(s, prop(PropKind::Tier, 2, {(head.x + 120) / 2, imax(52, head.y - 22) - ramp(t, 0, 20) * 20 / 256}, 200,
-                255 - ramp(t, 10, 24) * 255 / 256));
-    // The victor's kid takes the fallen's token: it floats to the victor's rim.
-    const int fly = ramp(t, 14, 30);
-    const P from = {s.fig[down].x, s.fig[down].y - b[down].h / 2}, to = rim(kHeartArc + 4 + win * kFlip, 82);
-    if (t >= 14)
-      add(s, prop(PropKind::Trophy, int(f(sc, down).look.species.v),
-                  {from.x + (to.x - from.x) * fly / 256, from.y + (to.y - from.y) * fly / 256 - bump(t, 14, 30) * 20 / 256}, 120));
-  } else {
-    // Spared: he sits up, still dazed, and his line owes the victor's a life.
-    Figure& g = s.fig[down];
-    const int up = ramp(t, 0, 10);
-    g.tallPct = uint8_t(72 + 20 * up / 256);
-    g.widePct = uint8_t(118 - 12 * up / 256);
-    g.leanPct = int8_t((g.x < s.fig[win].x ? -20 : 20) * (256 - up) / 256);
-    face(g, t < 10 ? expr::asleep : expr::sleepy);
-    add(s, prop(PropKind::Debt, 0, {120, 120 - ramp(t, 4, 16) * 16 / 256}, 100 + ramp(t, 4, 10) * 60 / 256, ramp(t, 4, 8)));
-  }
 }
 
 void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
@@ -514,16 +448,10 @@ void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
     w.widePct = uint8_t(ph < 1 || ph > 8 ? 112 : 100);
     w.tallPct = uint8_t(ph < 1 || ph > 8 ? 88 : 100);
     face(w, expr::happy);
-    if (sc.stakes == Stakes::Mortal && sc.verdict == Verdict::Finish) {
-      s.fig[down].remainsIn = 255;
-      add(s, prop(PropKind::Trophy, int(f(sc, down).look.species.v), rim(kHeartArc + 4 + win * kFlip, 82), 120));
-    } else {
-      slump(s.fig[down], s.fig[down].x - w.x);
-      s.fig[down].tallPct = 82;
-      add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 82 / 100, b[down].h, b[down].w}),
-                  down ? 80 : 100));
-    }
-    if (sc.stakes == Stakes::Mortal && sc.verdict == Verdict::Spare) add(s, prop(PropKind::Debt, 0, {120, 104}, 140));
+    slump(s.fig[down], s.fig[down].x - w.x);
+    s.fig[down].tallPct = 82;
+    add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 82 / 100, b[down].h, b[down].w}),
+                down ? 80 : 100));
   }
   // My new scars come in, darkening into his skin.
   s.fig[kMe].newScars = sc.newScars;
@@ -580,8 +508,6 @@ DuelAct actOf(blorb::DuelPhase p) {
     case P::Staking: return DuelAct::Staking;
     case P::Choosing: case P::Waiting: return DuelAct::Choosing;
     case P::Revealing: return DuelAct::Clash;
-    case P::Mercy: return DuelAct::Mercy;
-    case P::Fallen: return DuelAct::Fallen;
     case P::Fainting: case P::Friends: return DuelAct::Outcome;
     case P::Closed: case P::Lobby: case P::Greeting: return DuelAct::Meeting;
   }
@@ -611,8 +537,8 @@ DuelScene sceneOf(const blorb::DuelView& v, const blorb::Appearance& mine) {
   sc.them.ceiling = v.ceiling[1];
   sc.me.confirmed = v.confirmed;
   sc.them.confirmed = v.theyConfirmed;
-  sc.me.skull = v.skull[0][uint8_t(v.chosen) % 3];
-  sc.them.skull = v.skull[1][uint8_t(v.theyChose) % 3];
+  sc.me.skull = v.skull[0][uint8_t(v.chosen) % blorb::kStakesTiers];
+  sc.them.skull = v.skull[1][uint8_t(v.theyChose) % blorb::kStakesTiers];
   sc.stakes = v.agreed;
   // Choosing
   sc.aim = v.aim;
@@ -623,19 +549,7 @@ DuelScene sceneOf(const blorb::DuelView& v, const blorb::Appearance& mine) {
   sc.ticksLeft = v.chooseTicksLeft;
   sc.turnTicks = blorb::DuelTimings::kChooseTicks;
   if (v.hasLast && sc.act == DuelAct::Clash) turnOnto(sc, v.last, 0);   // the view mirrors it: index 0 is me
-  // Mercy and the end: the downed side lost; in Mercy the hold is the winner's Finish.
   if (sc.act != DuelAct::Clash) sc.won = v.draw ? Side::Neither : (v.iWon ? Side::Me : Side::Them);
-  if (v.iAmDown) sc.won = Side::Them;
-  if (v.theyAreDown) sc.won = Side::Me;
-  if (sc.act == DuelAct::Staking) {
-    sc.me.hold = v.confirmHold;
-    sc.them.hold = v.theirHold;
-  }
-  sc.finishHold = v.iAmDown ? v.theirHold : v.confirmHold;
-  sc.mercyLeft = v.mercyTicksLeft;
-  sc.mercyTicks = blorb::kMercyTicks;
-  sc.verdict = v.verdict;
-  sc.pleading = v.emoteIn == blorb::Emote::Plead;
   sc.newScars = v.newScars;
   return sc;
 }
@@ -649,7 +563,6 @@ void fromOutcome(DuelScene& sc, const blorb::Outcome& o, blorb::Side me) {
   if (o.resolved) turnOnto(sc, o.turns[o.resolved - 1], m);
   if (o.ending != blorb::Ending::Ongoing)
     sc.won = o.ending == blorb::Ending::Draw ? Side::Neither : sideOf(o.ending == blorb::Ending::AWon ? 0 : 1);
-  sc.verdict = o.verdict;
 }
 
 DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs) {
@@ -662,8 +575,6 @@ DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpriteP
     case DuelAct::Staking: staking(sc, s, b); break;
     case DuelAct::Choosing: choosing(sc, s, b); break;
     case DuelAct::Clash: clash(sc, s, b); break;
-    case DuelAct::Mercy: mercy(sc, s, b); break;
-    case DuelAct::Fallen: fallen(sc, s, b); break;
     case DuelAct::Outcome: outcome(sc, s, b); break;
   }
   // Hearts and the meter stay on the rim through the fight itself.
@@ -753,12 +664,6 @@ struct Bits { int w, h; const char* const* rows; };
 constexpr const char* kHeartRows[] = {".XXX...XXX.", "XXXXX.XXXXX", "XXXXXXXXXXX", "XXXXXXXXXXX", "XXXXXXXXXXX",
                                       ".XXXXXXXXX.", "..XXXXXXX..", "...XXXXX...", "....XXX....", ".....X....."};
 constexpr Bits kHeart{11, 10, kHeartRows};
-// The two gestures a kid's hands make in Mercy: hold BOOT, or knock.
-constexpr const char* kButtonRows[] = {"..XXXXX..", ".X.....X.", "X..XXX..X", "X..XXX..X", "X..XXX..X",
-                                       ".X.....X.", "..XXXXX..", ".........", "XXXXXXXXX"};
-constexpr const char* kKnockRows[] = {"X...X...X", ".X..X..X.", ".........", "XX.....XX", ".........",
-                                      "..XXXXX..", ".XXXXXXX.", ".XXXXXXX.", "..XXXXX.."};
-constexpr Bits kButton{9, 9, kButtonRows}, kKnock{9, 9, kKnockRows};
 
 bool bitAt(const Bits& b, int x, int y) { return x >= 0 && y >= 0 && x < b.w && y < b.h && b.rows[y][x] == 'X'; }
 
@@ -999,16 +904,8 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
     case PropKind::Pip: return pip(cv, p);
     case PropKind::Stance: backed(cv, p, 15); return art(cv, duel_art::kStances[p.variant % 3], p);
     case PropKind::Power: backed(cv, p, 14); return art(cv, duel_art::kPowers[p.variant % 9], p);
-    case PropKind::Tier:
-      backed(cv, p, 15);
-      if (p.variant == 2 && p.fill < 255) {
-        drawArt(cv, duel_art::kSkullEmpty, p.x, p.y, p.scalePct, p.alpha + 1);
-        return drawArt(cv, duel_art::kTiers[2], p.x, p.y, p.scalePct, p.alpha + 1, p.fill);
-      }
-      return art(cv, duel_art::kTiers[p.variant % 3], p);
+    case PropKind::Tier: backed(cv, p, 15); return art(cv, duel_art::kTiers[p.variant % blorb::kStakesTiers], p);
     case PropKind::Element: backed(cv, p, 14); return art(cv, duel_art::kElements[p.variant % 3], p);
-    case PropKind::Trophy: return art(cv, duel_art::kTrophies[p.variant % 9], p);
-    case PropKind::Debt: return art(cv, duel_art::kDebt, p);
     case PropKind::Plaster: return art(cv, duel_art::kWounded, p);
     case PropKind::Burst: return burst(cv, p, ticks);
     case PropKind::Arrow: return arrow(cv, p);
@@ -1023,9 +920,6 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
     case PropKind::Glow: return glow(cv, p);
     case PropKind::Aura: return aura(cv, p);
     case PropKind::Countdown: return countdown(cv, p);
-    case PropKind::Button:
-      disc(cv, p.x, p.y, 13, kInk, 170);
-      return bits(cv, p.variant ? kKnock : kButton, p.x, p.y, 200 * p.scalePct / 100, kCream, p.alpha + 1, false);
     case PropKind::Plea: return bits(cv, kHeart, p.x, p.y, p.scalePct, {255, 120, 150}, p.alpha + 1, false);
   }
 }
@@ -1073,7 +967,7 @@ Appearance lookFor(const Fighter& f, const Figure& g, uint16_t ticks) {
 namespace {
 
 // boot.h's BootGlyph values that ART4 leaves to ART3 (their kBootGlyphs slots are empty).
-constexpr uint8_t kGlyphTier = 12, kGlyphSkull = 13, kGlyphQuick = 14, kGlyphHeavy = 15, kGlyphCountdown = 21;
+constexpr uint8_t kGlyphTier = 12, kGlyphQuick = 14, kGlyphHeavy = 15, kGlyphCountdown = 21;
 constexpr int kBootGlyphCount = int(sizeof(duel_art::kBootGlyphs) / sizeof(duel_art::kBootGlyphs[0]));
 static_assert(kBootGlyphCount == kGlyphCountdown + 1, "kBootGlyphs is indexed by boot.h's BootGlyph");
 
@@ -1089,8 +983,7 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
   const P at = kBootAt;
   disc(cv, at.x, at.y, 15, kInk, 190);
   const int alpha = h.greyed ? 150 : 256;
-  if (h.glyph == kGlyphTier) drawArt(cv, duel_art::kTiers[h.art % 3], at.x, at.y, 70, alpha);
-  else if (h.glyph == kGlyphSkull) drawArt(cv, duel_art::kTiers[2], at.x, at.y, 70, alpha);
+  if (h.glyph == kGlyphTier) drawArt(cv, duel_art::kTiers[h.art % blorb::kStakesTiers], at.x, at.y, 70, alpha);
   else if (h.glyph == kGlyphQuick || h.glyph == kGlyphHeavy) drawArt(cv, duel_art::kPowers[h.art % 9], at.x, at.y, 70, alpha);
   else drawArt(cv, (h.greyed ? duel_art::kBootGlyphsGrey : duel_art::kBootGlyphs)[h.glyph], at.x, at.y, kHintPct, 256);
   // A hold that means something else: the ring round it, filling clockwise from the top.

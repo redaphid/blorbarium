@@ -80,8 +80,8 @@ Danger forecast(const Creature& c, Stakes s) {
   return d;
 }
 
-// The slayer feat is awarded at death from duels.log (the Dish ORs the book's
-// feats into the Death entry), so no LifeStats ever earns it.
+// The slayer feat was 0.7.0's, for a duel's Finish. Nothing earns it now; the
+// row stays so the lineages that hold it keep it (and their war paint).
 bool feat_slayer(const LifeStats&, uint16_t) { return false; }
 
 }  // namespace blorb

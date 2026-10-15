@@ -70,7 +70,7 @@ Decline readiness(const Occupant&, uint8_t lossesInARow, uint32_t ticksSinceLast
 // need both cards and are the session's.
 struct Ceiling {
   Stakes top = Stakes::Spar;
-  Decline why[3]{};   // by Stakes
+  Decline why[kStakesTiers]{};   // by Stakes
 };
 Ceiling ceilingFor(const Creature&, Stakes deviceCeiling);
 

@@ -20,8 +20,8 @@ namespace blorb {
 // The tilts that aim, as one IMU reading held still (milli-g, the device frame
 // the Dish is handed, after the panel's rotation): what DuelInput::from reads
 // as aim 0 Pounce (tilt left), 1 Guard (right), 2 Trick (toward the kid) and
-// 3 the lobby's fourth friend (away). In Staking the first three are Spar,
-// Scrap and Mortal. A bot or a tool holds one of these to aim;
+// 3 the lobby's fourth friend (away). In Staking the first two are Spar and
+// Scrap. A bot or a tool holds one of these to aim;
 // test_two_dishes holds each through the real detectors and checks the aim.
 struct AimTilt { int8_t aim; int16_t ax, ay, az; };
 inline constexpr AimTilt kAimTilt[4] = {
@@ -75,7 +75,7 @@ class DishDuel {
   // The newest battle this boot recorded, for a log line that two boards'
   // logs can be compared by (its outcomeHash).
   const std::optional<Meeting>& lastMeeting() const { return lastMet_; }
-  // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Mortal: every tier.
+  // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Scrap: every tier.
   void setDeviceCeiling(Stakes s) { deviceCeiling_ = s; }
 
   // The last double press that did not open a duel, for the screen: why
@@ -90,13 +90,13 @@ class DishDuel {
   Storage* store_ = nullptr;
   DuelSession session_;
   DuelBook book_;
-  // The session reads my genome after both hugs, maybe after he has fallen, so
-  // it points at this copy, never at the creature.
+  // The session reads my genome after both hugs, so it points at this copy,
+  // never at the creature.
   Genome genome_;
-  Stakes deviceCeiling_ = Stakes::Mortal;
+  Stakes deviceCeiling_ = Stakes::Scrap;
   uint32_t opens_ = 0;
   uint32_t lastEndTick_ = 0;
-  bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false, battled_ = false;
+  bool dueledThisBoot_ = false, faintedLast_ = false, battled_ = false;
   Refusal refusal_;
   std::optional<uint32_t> heldPress_;
   std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows

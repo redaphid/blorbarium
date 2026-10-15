@@ -272,20 +272,12 @@ reports them. Every pair is read before one is set, so a line with one bad
 pair changes nothing. The dish saves at the next tick. `CHEM life 0` lets
 his genes end the life as they would.
 
-### DIE `[eggs|remains]` (harm)
-
-```
-#15 DIE
-#15 OK phase=clutch eggs=2 vigil=18000
-#16 DIE remains
-#16 OK phase=clutch eggs=2 vigil=1
-```
-
-He dies of his injuries now, by the same path as a duel's finish: the Death
-entry in the lineage, the remains, the clutch. With `eggs` (the default),
-the 30-minute vigil runs to its end so the eggs are shown, waiting for the
-pick. With `remains`, it stops at the start of the vigil. Then the dish
-saves.
+There is no DIE verb. 0.7.0 had one; it went with the duel's Finish (owner,
+2026-10-15: "Death should not be a choice"). A pet dies only the ways the
+owner described: of old age, of neglect, or of wounds left untended, each by
+his own chemistry over time. To test a death, bring him there and let time
+finish it: `WARP` an elder through his last minutes, or `CHEM` him to the
+brink (`life 0`, `hunger 1000`) and let the next ticks run his genes.
 
 ### SPECIES `<species>` (harm)
 
@@ -328,10 +320,11 @@ the OTA trial keeps its records, is not touched. A sealed board refuses
 
 ## What is gated, and why
 
-- **Harm needs the unlock**: `HATCH`, `STAGE`, `WARP`, `CHEM`, `DIE`,
+- **Harm needs the unlock**: `HATCH`, `STAGE`, `WARP`, `CHEM`,
   `SPECIES`, `WIPE`. Each changes the saved pet in a way he cannot undo or
-  live back from: it ages him, kills him, rewrites his genome or erases him,
-  and `CHEM` can do all of those (`life 0`, `injury 1000`). Hatching early
+  live back from: it ages him, rewrites his genome or erases him, and
+  `CHEM` can bring him to the edge of death (`life 0`, `injury 1000`), where
+  his own genes take it from there. Hatching early
   takes a moment the child was waiting for. One press per connection is
   cheap for the person holding the dish and impossible for a phone across
   the room.
@@ -412,7 +405,7 @@ identical), during an update, and on a sealed dish; each jump; that WALL
 lives no gap; that SCALE 60 lives 60 times the ticks with no clock jump and
 ends with its connection; and that a whole debug session, then a reboot,
 resumes the same pet (same hash, stage, age, species) and lives on, and
-that a clutch left by DIE resumes and hatches the next generation.
+that a clutch left by a death resumes and hatches the next generation.
 
 `debug_page.py` checks that the panel is absent without the parameter
 (`debug` missing, `0` or `false`), and that with `debug=true` and `debug=1`

@@ -142,9 +142,6 @@ class Creature {
   // Keeps the scar for this life. A fifth replaces the faintest; false when it
   // is itself fainter than every scar he has.
   bool addScar(Scar);
-  // A Finish: writes the die and cause loci as Injured, and the Dish's next
-  // tick runs the ordinary death path (Death entry, remains, clutch). Once.
-  void fall();
   const Scars& scars() const { return scars_; }
   // A prophecy: the belief (feature, action, drive) becomes `effect`. False if
   // an id is on no brain axis.

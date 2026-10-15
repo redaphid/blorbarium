@@ -27,9 +27,5 @@ Jump hatch(blorb::Dish&, const Warp&);
 // genes carry. Then every drive is settled (fed, rested, unhurt), a few ticks
 // let his face catch up, and the Dish saves.
 Jump growTo(blorb::Dish&, blorb::Stage, const Warp&);
-// He dies of his injuries now, the ordinary death a duel's finish takes: the
-// Death entry, the remains, the clutch. With `eggs`, the vigil runs to its end
-// so the eggs are shown, waiting for the pick. Then the Dish saves.
-Jump die(blorb::Dish&, bool eggs, const Warp&);
 
 }  // namespace debugble

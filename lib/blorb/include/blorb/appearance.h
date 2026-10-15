@@ -71,14 +71,8 @@ struct Appearance {
   Fx injury{}, wobble{};
   Fx night{};                       // 0..1 background tint from the pet clock
 
-  // Battles. The scars he carries this life, drawn into his skin where they
-  // landed; and what his line's duel book puts on the rim at home: the newest
-  // trophies (the fallen's species, newest first) and the debt and vendetta marks.
+  // Battles: the scars he carries this life, drawn into his skin where they landed.
   Scars scars{};
-  static constexpr uint8_t kRimTrophies = 3;
-  SpeciesId trophies[kRimTrophies]{};
-  uint8_t trophyCount = 0;
-  bool owesDebt = false, vendetta = false;
 
   // The dish
   struct Item { enum class What : uint8_t { Pellet, RottenPellet, Marble } what; DishPos at; };

@@ -216,7 +216,7 @@
   // BOOT press, debugPress here), and writes wait out a trial or an update.
   const DEBUG_REACH = { HELP: "look", STATUS: "look", UNLOCK: "look", LOCK: "look", THINK: "show", FORTUNE: "show",
     LOOK: "show", FIRE: "write", WALL: "write", SCALE: "write", HATCH: "harm", STAGE: "harm", WARP: "harm",
-    CHEM: "harm", DIE: "harm", SPECIES: "harm", WIPE: "harm" };
+    CHEM: "harm", SPECIES: "harm", WIPE: "harm" };
   const STAGES = ["baby", "child", "adult", "elder"];
 
   MockDish.prototype.debugState = function () {
@@ -268,7 +268,6 @@
       }
       case "WARP": d.age += Number(args[0]) * 600; return out(where());
       case "CHEM": return d.phase === "creature" ? out(`OK ${args.length / 2}`) : out("ERR 409 NO_CREATURE");
-      case "DIE": if (d.phase !== "creature") return out("ERR 409 NO_CREATURE"); Object.assign(d, { phase: "clutch", stage: "-" }); return out(`OK phase=clutch eggs=3 vigil=${args[0] === "remains" ? 1 : 18000}`);
       case "SPECIES": if (d.phase !== "creature") return out("ERR 409 NO_CREATURE"); d.species = args[0]; return out(`OK species=${d.species}`);
       case "WIPE":
         setTimeout(() => { Object.assign(d, { unlock: "locked", phase: "egg", stage: "-", age: 0, species: args[0] || "grungo" }); this.boot(this.fw, false); }, 500);

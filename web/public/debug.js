@@ -167,8 +167,6 @@
       row("Stage", stage, button("Grow", () => `STAGE ${stage.value}`)),
       row("Warp", minutes, button("Live minutes", () => `WARP ${minutes.value}`)),
       row("Chemical", chem, level, button("Set", () => `CHEM ${chem.value.trim()} ${level.value}`)),
-      row("Die", button("Die, show eggs", "DIE eggs", { confirm: "He dies now. Continue?" }),
-        button("Die, at the remains", "DIE remains", { confirm: "He dies now. Continue?" })),
       row("Species", species, button("Change", () => `SPECIES ${species.value}`, { confirm: "Change his species for good?" })),
       row("Wipe", wipe, button("Wipe the pet", () => `WIPE ${wipe.value}`.trim(),
         { className: "danger", confirm: "Erase this pet and its whole lineage, and restart as a fresh board?" })),

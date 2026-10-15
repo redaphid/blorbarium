@@ -18,6 +18,5 @@ DEBUG_VERB(HATCH,   hatch,   Harm,  "")
 DEBUG_VERB(STAGE,   stage,   Harm,  "<baby|child|adult|elder>")
 DEBUG_VERB(WARP,    warp,    Harm,  "<minutes 1..120>")         // that much of his life now
 DEBUG_VERB(CHEM,    chem,    Harm,  "<chem> <permille> ...")    // chemicals and drives, by name
-DEBUG_VERB(DIE,     die,     Harm,  "[eggs|remains]")
 DEBUG_VERB(SPECIES, species, Harm,  "<species>")                // his body and power genes, in place; recorded in the lineage
 DEBUG_VERB(WIPE,    wipe,    Harm,  "[species]")                // erase, provision as a fresh board, restart

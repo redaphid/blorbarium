@@ -1,7 +1,7 @@
 #pragma once
 // One canonical DuelScene for each moment of a duel, for any two species: what
 // the struct goldens, the PNG goldens, tools/duel_sheet.py and the demo film
-// all draw, so they agree on what "the mercy screen" is.
+// all draw, so they agree on what "the staking screen" is.
 #include <cstring>
 #include <string>
 #include "blorb/appearance.h"
@@ -15,15 +15,11 @@ struct DuelMoment { const char* name; paint::DuelAct act; uint16_t ticks; };
 inline constexpr DuelMoment kDuelMoments[] = {
     {"meeting", paint::DuelAct::Meeting, 14},
     {"staking", paint::DuelAct::Staking, 6},
-    {"staking_mortal", paint::DuelAct::Staking, 6},
     {"choosing", paint::DuelAct::Choosing, 30},
     {"locked", paint::DuelAct::Choosing, 52},
     {"clash", paint::DuelAct::Clash, 6},
     {"hit", paint::DuelAct::Clash, 14},
     {"bonk", paint::DuelAct::Clash, 16},
-    {"mercy", paint::DuelAct::Mercy, 20},
-    {"fallen", paint::DuelAct::Fallen, 30},
-    {"spared", paint::DuelAct::Fallen, 20},
     {"outcome", paint::DuelAct::Outcome, 24},
     // The queued special (BATTLES.md, "Amendment"): a telegraph and its four fates.
     {"windup_quick", paint::DuelAct::Choosing, 30},
@@ -37,8 +33,8 @@ inline constexpr DuelMoment kDuelMoments[] = {
 // boot.h's BootGlyph values the scenes use (D9 owns the enum).
 namespace glyph {
 inline constexpr uint8_t Pellet = 1, Moon = 2, Peek = 4, Flower = 5, Arrow = 6, Check = 7, Lock = 8, Download = 9,
-                         Friend = 10, Door = 11, Tier = 12, Skull = 13, SpecialQuick = 14, SpecialHeavy = 15,
-                         OpenHand = 16, Plead = 17, Candle = 18, Rematch = 19, Heart = 20, Countdown = 21;
+                         Friend = 10, Door = 11, Tier = 12, SpecialQuick = 14, SpecialHeavy = 15, Rematch = 19,
+                         Heart = 20, Countdown = 21;
 }
 
 // Each kBoot row's hint, as boot.h's table draws it: one per BootContext, in order.
@@ -46,12 +42,9 @@ struct HintRow { const char* context; paint::RimHint hint; };
 inline const HintRow kHintRows[] = {
     {"ota", {glyph::Download, 0, false, 0, false, 0, false}},
     {"sealed", {glyph::Lock, 0, false, 0, false, 0, false}},
-    {"staking", {glyph::Tier, 1, false, 0, true, 0, false}},
+    {"staking", {glyph::Tier, 1, false, 0, false, 0, false}},
     {"turn", {glyph::SpecialQuick, 3, false, 0, true, 0, false}},
     {"winding", {glyph::Countdown, 0, false, 2, false, 0, false}},
-    {"mercy_winner", {glyph::OpenHand, 0, false, 0, true, 120, false}},
-    {"mercy_loser", {glyph::Plead, 0, false, 0, false, 0, false}},
-    {"fallen", {glyph::Candle, 0, false, 0, false, 0, false}},
     {"outcome", {glyph::Rematch, 0, false, 0, true, 0, true}},
     {"lobby", {glyph::Friend, 0, false, 0, false, 0, true}},
     {"nest", {glyph::Arrow, 0, false, 0, true, 0, false}},
@@ -105,24 +98,21 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
   using G = paint::RimHint;
   switch (s.act) {
     case DuelAct::Meeting: s.boot = G{glyph::Friend, 0, false, 0, false, 0, true}; break;
-    case DuelAct::Staking: s.boot = G{glyph::Tier, 1, false, 0, true, 0, false}; break;
+    case DuelAct::Staking: s.boot = G{glyph::Tier, 1, false, 0, false, 0, false}; break;
     case DuelAct::Choosing: s.boot = G{glyph::SpecialQuick, power, false, 0, true, 0, false}; break;
     case DuelAct::Clash: s.boot = G{glyph::SpecialQuick, power, true, 1, true, 0, false}; break;
-    case DuelAct::Mercy: s.boot = G{glyph::OpenHand, 0, false, 0, true, 0, false}; break;
-    case DuelAct::Fallen: s.boot = G{glyph::Candle, 0, false, 0, false, 0, false}; break;
     case DuelAct::Outcome: s.boot = G{glyph::Rematch, 0, false, 0, true, 0, true}; break;
   }
 
-  if (n == "staking" || n == "staking_mortal") {
-    s.me.chose = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
-    s.them.chose = Stakes::Mortal;
+  if (n == "staking") {
+    s.me.chose = Stakes::Scrap;
+    s.them.chose = Stakes::Scrap;
     s.me.skull = 70;
     s.them.skull = 150;
-    s.me.hold = n == "staking" ? 0 : 140;
     s.them.confirmed = true;
-    s.me.ceiling = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
-    s.me.confirmed = n == "staking";
-    s.stakes = n == "staking" ? Stakes::Scrap : Stakes::Mortal;   // the lower of the two
+    s.me.ceiling = Stakes::Scrap;
+    s.me.confirmed = true;
+    s.stakes = Stakes::Scrap;   // the lower of the two
   } else if (n == "choosing" || n == "locked") {
     s.aim = int8_t(blorb::Stance::Guard);
     s.lean = int8_t(blorb::Stance::Trick);
@@ -137,17 +127,6 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.them.hit = n == "bonk" ? 0 : 1;
     s.me.fired = n == "clash";
     s.super = n == "hit";
-  } else if (n == "mercy") {
-    s.stakes = Stakes::Mortal;
-    s.won = Side::Me;
-    s.them.hearts = 0;
-    s.finishHold = 120;
-    s.mercyLeft = 90;
-  } else if (n == "fallen" || n == "spared") {
-    s.stakes = Stakes::Mortal;
-    s.won = Side::Me;
-    s.them.hearts = 0;
-    s.verdict = n == "fallen" ? blorb::Verdict::Finish : blorb::Verdict::Spare;
   } else if (n == "windup_quick" || n == "windup_heavy") {
     // My kid queued a special; the friend's is landing this turn: both telegraphs at once.
     const bool heavy = n == "windup_heavy";

@@ -78,7 +78,7 @@ Ceiling pairCeiling(const Ceiling& pet, const BattleCard& mine, const BattleCard
   const uint8_t assist = std::max(Assist::hearts(mine.prowess, theirs.prowess), Assist::hearts(theirs.prowess, mine.prowess));
   const uint16_t lower = std::min(h2h.myWins, h2h.theirWins);
   const bool lopsided = h2h.duels >= kHeadToHeadMin && uint32_t(lower) * 1000 < uint32_t(kHeadToHeadFloor) * h2h.duels;
-  for (uint8_t tier = u8(Stakes::Scrap); tier <= u8(Stakes::Mortal) && tier <= u8(c.top); ++tier) {
+  for (uint8_t tier = u8(Stakes::Scrap); tier < kStakesTiers && tier <= u8(c.top); ++tier) {
     const StakesRule& r = rule(Stakes(tier));
     if (assist > r.maxAssistHearts || myManualTurns < r.minManualTurns || (r.headToHead && lopsided) ||
         forKeepsToday >= kForKeepsPerPairPerDay) {
@@ -86,7 +86,7 @@ Ceiling pairCeiling(const Ceiling& pet, const BattleCard& mine, const BattleCard
       break;
     }
   }
-  for (uint8_t tier = uint8_t(u8(c.top) + 1); tier <= u8(Stakes::Mortal); ++tier)
+  for (uint8_t tier = uint8_t(u8(c.top) + 1); tier < kStakesTiers; ++tier)
     if (c.why[tier] == Decline::None) c.why[tier] = Decline::Unfair;
   return c;
 }
@@ -249,10 +249,9 @@ void DuelSession::onState(Battle& b, const StatePacket& st, uint32_t tick) {
     b.theyChose = st.chosen;
     b.theyConfirmed = st.confirmed;
     b.theirCeiling = st.ceiling;
-    std::copy(st.why, st.why + 3, b.theirWhy);
-    std::copy(st.skull, st.skull + 3, b.theirSkull);
+    std::copy(st.why, st.why + kStakesTiers, b.theirWhy);
+    std::copy(st.skull, st.skull + kStakesTiers, b.theirSkull);
   }
-  b.theirHold = st.hold;
   b.theyLeft = b.theyLeft || st.leaving;
   if (!b.emoteSeqKnown) {
     b.emoteSeqKnown = true;
@@ -277,9 +276,8 @@ void DuelSession::sendState(Battle& b, Air& air, uint32_t tick, const Farewell* 
   st.chosen = b.chosen;
   st.confirmed = b.confirmed;
   st.ceiling = b.pair.top;
-  std::copy(b.pair.why, b.pair.why + 3, st.why);
-  std::copy(setup_.skull, setup_.skull + 3, st.skull);
-  st.hold = fill(b.holdTicks, kFinishHoldTicks);
+  std::copy(b.pair.why, b.pair.why + kStakesTiers, st.why);
+  std::copy(setup_.skull, setup_.skull + kStakesTiers, st.skull);
   st.card = setup_.card;
   st.moveCount = b.mine.count();
   std::memcpy(st.moves, b.mine.packed(), DuelRules::kLogSlots);
@@ -309,8 +307,7 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
   }
   if (b.conflict) return finish(b, air, fx, EndReason::Conflict, false);
   if (b.theyLeft) return finish(b, air, fx, EndReason::Left, true);
-  if ((in.lid || in.dropped) && !holdsVerdict(b))
-    return finish(b, air, fx, in.lid ? EndReason::LidDown : EndReason::Dropped, false);
+  if (in.lid || in.dropped) return finish(b, air, fx, in.lid ? EndReason::LidDown : EndReason::Dropped, false);
   if (tick - b.lastHeard >= T::kSilentTicks) return finish(b, air, fx, EndReason::WanderedOff, true);
 
   if (b.phase == DuelPhase::Greeting) {
@@ -323,11 +320,10 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
     if (tick - b.phaseTick >= T::kStakingTicks) return enterLobby(air, tick);
     stake(b, in, tick);
   } else {
-    if (!play(b, air, in, tick, fx)) return;
+    if (!play(b, in, tick, fx)) return;
   }
 
-  const bool hurry = b.phase == DuelPhase::Greeting || b.phase == DuelPhase::Staking || b.phase == DuelPhase::Mercy ||
-                     b.phase == DuelPhase::Fallen || b.theyHold < b.mine.count() ||
+  const bool hurry = b.phase == DuelPhase::Greeting || b.phase == DuelPhase::Staking || b.theyHold < b.mine.count() ||
                      tick - b.heardGrew < T::kIdleEvery || tick - b.emoteOutTick < T::kIdleEvery;
   if (tick - b.lastSent >= (hurry ? T::kHurryEvery : T::kIdleEvery)) sendState(b, air, tick, nullptr, false);
 }
@@ -335,19 +331,13 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
 void DuelSession::stake(Battle& b, const DuelInput& in, uint32_t tick) {
   if (!b.confirmed) {
     if (in.aim >= 0 && in.aim <= u8(b.pair.top)) b.chosen = Stakes(in.aim);
-    if (b.chosen == Stakes::Mortal && in.bootDown) {
-      if (++b.holdTicks >= kFinishHoldTicks) b.confirmed = true;
-    } else {
-      b.holdTicks = 0;
-      if ((in.knock && b.chosen == Stakes::Spar) || (in.press && b.chosen != Stakes::Mortal)) b.confirmed = true;
-    }
+    if ((in.knock && b.chosen == Stakes::Spar) || in.press) b.confirmed = true;
   }
   if (!b.confirmed || !b.theyConfirmed) return;
   const Stakes agreed = agreedStakes(b.chosen, b.theyChose);
   b.battle = BattleId{duelSeed(setup_.nonce, b.theirNonce, b.battle.rematch, agreed), b.battle.rematch, agreed};
   b.phase = DuelPhase::Choosing;
   b.phaseTick = tick;
-  b.holdTicks = 0;
   b.outcome = resolveFor(b);
 }
 
@@ -387,20 +377,12 @@ void DuelSession::applyResolved(Battle& b, uint32_t tick, DuelEffects& fx) {
     if (won(o, me)) addStim(fx, stim::duel_won);
     else if (o.side[me].hearts == 0) addStim(fx, stim::duel_fainted);
   }
-  if (o.downed[me] && !b.downedSent) {
-    b.downedSent = true;
-    fx.downed = true;
-    fx.battle = b.battle;
-    fx.victor = b.theirs.lineageId;
-  }
 }
 
 // The battle proper, from turn 0 to the friends screen. False when the
 // session left the Battle state (the caller must not touch `b` again).
-bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, DuelEffects& fx) {
+bool DuelSession::play(Battle& b, const DuelInput& in, uint32_t tick, DuelEffects& fx) {
   const uint8_t me = uint8_t(b.me);
-  const bool bootWasDown = b.bootWasDown;
-  b.bootWasDown = in.bootDown;
   b.outcome = resolveFor(b);
   applyResolved(b, tick, fx);
   if (b.revealing && tick - b.revealTick >= T::kRevealTicks) b.revealing = false;
@@ -440,64 +422,9 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
   }
   if (b.revealing) return true;
 
-  if (o.awaitingVerdict()) {
-    if (b.phase != DuelPhase::Mercy) {
-      b.phase = DuelPhase::Mercy;
-      b.phaseTick = tick;
-      b.holdTicks = 0;
-      b.heldIntoMercy = bootWasDown;
-    }
-    if (o.downed[me]) {
-      if (in.press || in.knock || in.doubleKnock) cheer(b, Emote::Plead, tick);
-      return true;
-    }
-    // Only the winner's device decides, in the slot right after the downing.
-    // A hold finishes, a knock or a press spares, and so does silence.
-    Verdict v = Verdict::None;
-    if (in.bootDown) {
-      if (!b.heldIntoMercy && ++b.holdTicks >= kFinishHoldTicks) v = Verdict::Finish;
-    } else {
-      b.heldIntoMercy = false;
-      b.holdTicks = 0;
-    }
-    if (v == Verdict::None && (in.knock || in.press || tick - b.phaseTick >= kMercyTicks)) v = Verdict::Spare;
-    if (v != Verdict::None && b.mine.count() == o.resolved) {
-      b.mine.append(Move{Stance::Pounce, false, false, v});
-      b.outcome = resolveFor(b);
-    }
-    return true;
-  }
-
-  if (o.verdict == Verdict::Finish) {
-    if (b.phase != DuelPhase::Fallen) {
-      b.phase = DuelPhase::Fallen;
-      b.phaseTick = tick;
-      if (o.downed[me]) {
-        fx.fall = true;
-        fx.met = meetingOf(b);
-        b.metSent = true;
-      }
-    }
-    // The victor takes the slaying only once the fallen side's ack covers
-    // the verdict: then both devices know the same death.
-    if (!o.downed[me] && !b.metSent && b.theyHold > o.resolved) {
-      b.slain = true;
-      addStim(fx, stim::duel_slew);
-      fx.met = meetingOf(b);
-      b.metSent = true;
-      b.phaseTick = tick;
-    }
-    if (b.metSent && tick - b.phaseTick >= T::kFallenTicks) {
-      closeWith(air, EndReason::Finished, false);
-      return false;
-    }
-    return true;
-  }
-
   if (b.phase != DuelPhase::Fainting) {
     b.phase = DuelPhase::Fainting;
     b.phaseTick = tick;
-    if (o.verdict == Verdict::Spare && o.downed[me]) addStim(fx, stim::duel_spared);
   }
   const bool someoneDown = o.side[0].hearts == 0 || o.side[1].hearts == 0;
   if (!someoneDown || tick - b.phaseTick >= T::kFaintTicks) {
@@ -517,11 +444,6 @@ void DuelSession::cheer(Battle& b, Emote e, uint32_t tick) {
   ++b.emoteSeqOut;
   b.emoteOut = e;
   b.emoteOutTick = tick;
-}
-
-bool DuelSession::holdsVerdict(const Battle& b) const {
-  const Outcome& o = b.outcome;
-  return o.over() && !o.downed[uint8_t(b.me)] && o.downed[1 - uint8_t(b.me)] && b.mine.count() > o.resolved;
 }
 
 Meeting DuelSession::meetingOf(const Battle& b) const {
@@ -549,19 +471,14 @@ Meeting DuelSession::meetingOf(const Battle& b) const {
   }
   m.performance = of ? uint8_t(got * 255 / of) : 128;
   m.skillAfter = b.skill;
-  m.verdict = o.verdict;
-  m.iFell = o.downed[me] && o.verdict == Verdict::Finish;
-  m.iSlew = b.slain;
-  m.iSpared = o.downed[them] && o.verdict == Verdict::Spare;
-  m.wasSpared = o.downed[me] && o.verdict == Verdict::Spare;
   m.scarsTaken = b.scarsTaken;
   return m;
 }
 
 // The battle ended outside the rules' own ending: a lid, a drop, silence, a
 // goodbye or a conflict. Before turn 0 nothing was applied, so nothing is
-// recorded. After it, the side that left while behind in a Scrap or Mortal
-// duel fled and forfeits; otherwise it is a fizzle.
+// recorded. After it, the side that left while behind in a Scrap fled and
+// forfeits; otherwise it is a fizzle.
 void DuelSession::finish(Battle& b, Air& air, DuelEffects& fx, EndReason why, bool theyLeft) {
   if (b.phase == DuelPhase::Greeting || b.phase == DuelPhase::Staking) return closeWith(air, why, !theyLeft);
   if (!b.metSent) {
@@ -581,10 +498,6 @@ void DuelSession::finish(Battle& b, Air& air, DuelEffects& fx, EndReason why, bo
         m.ending = Ending::Draw;
         m.fizzled = true;
       }
-    } else if (o.awaitingVerdict()) {
-      // A downed pet who leaves before the verdict lives, and fled. The
-      // victor leaving instead spares him, and nobody fled.
-      m.fled = !theyLeft && o.downed[me];
     }
     fx.met = m;
     b.metSent = true;
@@ -747,17 +660,14 @@ DuelView DuelSession::view(uint32_t tick) const {
   v.me = setup_.card;
   v.them = b.theirs;
   v.ceiling[0] = b.pair.top, v.ceiling[1] = b.theirCeiling;
-  for (uint8_t t = 0; t < 3; ++t) {
+  for (uint8_t t = 0; t < kStakesTiers; ++t) {
     v.why[0][t] = b.pair.why[t], v.why[1][t] = b.theirWhy[t];
     v.skull[0][t] = setup_.skull[t], v.skull[1][t] = b.theirSkull[t];
   }
   v.chosen = b.chosen, v.theyChose = b.theyChose, v.agreed = b.battle.stakes;
   v.confirmed = b.confirmed, v.theyConfirmed = b.theyConfirmed;
-  v.confirmHold = fill(b.holdTicks, kFinishHoldTicks), v.theirHold = b.theirHold;
   v.mine = o.side[me], v.theirs = o.side[them];
   v.assistHearts[0] = assistFor(b, me), v.assistHearts[1] = assistFor(b, them);
-  v.iAmDown = o.downed[me], v.theyAreDown = o.downed[them];
-  v.verdict = o.verdict;
   v.ending = o.ending;
   v.iWon = won(o, me), v.draw = o.ending == Ending::Draw;
   v.newScars = b.scarsTaken;
@@ -790,10 +700,6 @@ DuelView DuelSession::view(uint32_t tick) const {
     }
   }
   v.aim = aim_;
-  if (b.phase == DuelPhase::Mercy) {
-    const uint32_t spent = tick - b.phaseTick;
-    v.mercyTicksLeft = uint16_t(spent >= kMercyTicks ? 0 : kMercyTicks - spent);
-  }
   if (f) {
     v.phase = DuelPhase::Friends;
     v.phaseTicks = uint16_t(tick - f->since);

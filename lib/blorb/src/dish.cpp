@@ -218,7 +218,7 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
 }
 
 void Dish::onDeath(Creature& c) {
-  lineage_.recordDeath(c, lineage_.currentName(), tick_, duel_.book().featsThisLife(c.generation()));
+  lineage_.recordDeath(c, lineage_.currentName(), tick_);
   Unlocks u = unlocksFor(lineage_.legacyFeats());
   Clutch k = c.layClutch(u.clutchSize, u.wildBonus, tick_);
   // A hug's egg waits in friend.egg for this clutch (friend_egg.h).
@@ -350,14 +350,6 @@ Appearance Dish::appearance() const {
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
-  const DuelBook& book = duel_.book();
-  book.forEachTrophy([&](const Trophy& t) {
-    if (a.trophyCount < Appearance::kRimTrophies) a.trophies[a.trophyCount++] = t.fallen;
-  });
-  const uint16_t gen = std::holds_alternative<Creature>(live_.occupant) ? std::get<Creature>(live_.occupant).generation()
-                                                                         : lineage_.currentGeneration();
-  a.vendetta = book.vendetta(gen).has_value();
-  book.forEachFriend([&](const FriendSummary& f) { a.owesDebt = a.owesDebt || f.weOwe > 0; });
   if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
 }

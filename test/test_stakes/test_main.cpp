@@ -16,7 +16,7 @@ namespace {
 
 constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr uint8_t kTurns = 15;   // DuelRules::kMaxTurns (duel.h, unit D4)
-constexpr Stakes kTiers[] = {Stakes::Spar, Stakes::Scrap, Stakes::Mortal};
+constexpr Stakes kTiers[] = {Stakes::Spar, Stakes::Scrap};
 constexpr StimId kDuelStimuli[] = {stim::duel_mourned, stim::duel_slew,  stim::duel_spared, stim::duel_bonked,
                                    stim::duel_landed,  stim::duel_won,   stim::duel_fainted, stim::duel_befriended};
 
@@ -165,7 +165,7 @@ TEST(Guards, PlantedDazeAndPainToDieReceptorsAreInert) {
   for (ChemId reads : {chem::daze, driveChem(drive::pain)}) {
     const Genome g = withReceptor(duelStarter(), ReceptorGene{reads.v, locus::die.v, 0, 255, 128, 1});
     Rig r(g);
-    r.c.setDuelStakes(Stakes::Mortal);
+    r.c.setDuelStakes(Stakes::Scrap);
     for (int i = 0; i < 20; ++i) r.fire(i % 2 ? stim::duel_fainted : stim::duel_bonked);
     EXPECT_FALSE(r.c.dead()) << "chem " << int(reads.v);
   }
@@ -186,7 +186,7 @@ TEST(Wounds, ASparWoundsNothing) {
 TEST(Wounds, EachHeartCostsTheTiersInjuryUpToItsCapPerDuel) {
   TurnHit hits[kTurns]{};
   for (TurnHit& h : hits) h.hearts = 1;
-  for (Stakes s : {Stakes::Scrap, Stakes::Mortal}) {
+  for (Stakes s : {Stakes::Scrap}) {
     Fx total{};
     for (uint8_t t = 0; t < kTurns; ++t) {
       const TurnWound w = woundFor(s, hits, t, Fx::one());
@@ -200,8 +200,8 @@ TEST(Wounds, EachHeartCostsTheTiersInjuryUpToItsCapPerDuel) {
 TEST(Wounds, AWoundNeverExceedsTheRoomGiven) {
   TurnHit hits[kTurns]{};
   hits[0].hearts = 3;
-  EXPECT_EQ(woundFor(Stakes::Mortal, hits, 0, Fx::ratio(1, 100)).injury, Fx::ratio(1, 100));
-  EXPECT_EQ(woundFor(Stakes::Mortal, hits, 0, -Fx::one()).injury, Fx::zero());
+  EXPECT_EQ(woundFor(Stakes::Scrap, hits, 0, Fx::ratio(1, 100)).injury, Fx::ratio(1, 100));
+  EXPECT_EQ(woundFor(Stakes::Scrap, hits, 0, -Fx::one()).injury, Fx::zero());
 }
 
 TEST(Wounds, TheFirstTwoTurnsThatCostHeartsLeaveScarsOfWhatHitHim) {
@@ -247,7 +247,7 @@ TEST(Wounds, NoWoundsPlusADropKillAStarterOrAThousandDescendants) {
   int checked = 0;
   for (int gen = 0; gen <= 1000; ++gen) {
     if (gen > 0) g = mutate(g, policyOf(g, Fx::ratio(1, 4)), {}, rng).genome;
-    for (Stakes s : {Stakes::Scrap, Stakes::Mortal})
+    for (Stakes s : {Stakes::Scrap})
       for (int start : {0, 30, 60, 85}) {
         Rig hurt(g), twin(g);
         for (Rig* r : {&hurt, &twin}) r->c.inject(chem::injury, Fx::ratio(start, 100));
@@ -274,10 +274,9 @@ TEST(Wounds, NoWoundsPlusADropKillAStarterOrAThousandDescendants) {
 TEST(Forecast, ASparForecastsOnlyTheWoundsHeAlreadyHas) {
   Rig r(duelStarter());
   EXPECT_EQ(forecast(r.c, Stakes::Spar).skull, 0);
-  const Danger scrap = forecast(r.c, Stakes::Scrap), mortal = forecast(r.c, Stakes::Mortal);
+  const Danger scrap = forecast(r.c, Stakes::Scrap);
   EXPECT_GT(scrap.skull, 0);
-  EXPECT_GT(mortal.skull, scrap.skull);
-  EXPECT_LT(mortal.skull, 255) << "a fresh pet has room past a mortal duel's cap";
+  EXPECT_LT(scrap.skull, 255) << "a fresh pet has room past a scrap's cap";
 }
 
 TEST(Forecast, AWoundedPetsSkullIsFull) {
@@ -285,7 +284,7 @@ TEST(Forecast, AWoundedPetsSkullIsFull) {
   r.c.inject(chem::injury, Fx::ratio(3, 4));
   EXPECT_EQ(woundRoom(r.c), Fx::zero());
   EXPECT_EQ(forecast(r.c, Stakes::Scrap).skull, 255);
-  EXPECT_LT(forecast(r.c, Stakes::Mortal).worstInjury, Fx::ratio(9, 10)) << "the clamp holds the worst short of death";
+  EXPECT_LT(forecast(r.c, Stakes::Scrap).worstInjury, Fx::ratio(9, 10)) << "the clamp holds the worst short of death";
 }
 
 // ---- scars --------------------------------------------------------------------------------
@@ -301,46 +300,122 @@ TEST(Scars, AFifthReplacesTheFaintestAndAFainterOneIsRefused) {
   for (const Scar& m : r.c.scars().mark) EXPECT_NE(m.fade, 150) << "the faintest went";
 }
 
-// ---- the fall -----------------------------------------------------------------------------
+// ---- after the duel: how he dies, if he dies -------------------------------------------
+// The owner: "Death should not be a choice" (2026-10-15), and "Close to dead
+// + time = dead" (2026-10-14). No duel kills him. His wounds heal on their
+// own and cost him a little of his life; what ends it is what ends any pet's:
+// neglect, or old age.
 
-TEST(Fall, AFallRunsTheOrdinaryDeathPathOnce) {
-  MemStorage store;
-  const Genome g = duelStarter();
-  GenomeBuilder quick = GenomeBuilder::from(g);   // a one-minute egg
-  g.forEach([&](const GeneView& v) {
-    if (v.header.type == GeneKindOf<EggGene>::value) quick.setByte(v.header.uid, 0, 1);
-  });
-  const Genome founder = *quick.build();
-  Dish dish(store, 7, 0x5eedull, DishOptions{nullptr, &founder});
-  NullLink link;
-  uint32_t ms = 0;
-  for (int s = 0; !std::holds_alternative<Creature>(dish.occupant()); ++s) {
-    ASSERT_LT(s, 24 * 3600) << "no hatch within a pet day";
-    runFor(dish, link, ms, 1000);
-  }
-  Creature& c = std::get<Creature>(dish.occupant());
-  c.fall();
-  ASSERT_TRUE(c.dead());
-  EXPECT_EQ(c.cause(), DeathCause::Injured);
-  c.fall();   // a second Finish is a no-op
-  runFor(dish, link, ms, 5000);
+namespace {
 
-  ASSERT_TRUE(std::holds_alternative<Clutch>(dish.occupant())) << "the remains, then the clutch";
-  EXPECT_EQ(std::get<Clutch>(dish.occupant()).cause, DeathCause::Injured);
-  int deaths = 0;
-  dish.lineage().forEach([&](const LineageEntry& e) {
-    if (const Death* d = std::get_if<Death>(&e)) {
-      ++deaths;
-      EXPECT_EQ(d->cause, DeathCause::Injured);
+constexpr uint32_t kStride = 5 * kTicksPerMinute;
+constexpr uint32_t kFeedEvery = 2 * kTicksPerHour;
+constexpr uint32_t kTicksPerDay = 24 * kTicksPerHour;
+
+// creature.cpp's reading of the cause locus: the highest bit set.
+DeathCause causeOf(Fx level) {
+  int code = std::min(15, (level.raw + (Fx::kOne >> 5)) >> (Fx::kFrac - 4));
+  for (int bit = 3; bit >= 0; --bit)
+    if (code & (1 << bit)) return DeathCause(bit);
+  return DeathCause::Unknown;
+}
+
+struct Aftermath {
+  double died = -1;   // pet days after the duel, or -1: alive at the end
+  DeathCause cause = DeathCause::Unknown;
+  Fx injuryAfterADay{};
+};
+
+// His own chemistry from where the duel left him, in the five-minute strides
+// the catch-up uses, for `days`: fed every two hours, or never.
+Aftermath afterTheDuel(const Creature& c, bool fed, uint32_t days) {
+  Chemistry ch = c.chemistry();
+  const Phenotype& p = c.phenotype();
+  Aftermath out;
+  for (uint32_t tick = 0; tick < days * kTicksPerDay; tick += kStride) {
+    if (fed && tick % kFeedEvery == 0) ch.add(chem::food, p.habitat.biteSize);
+    ch.set(locus::always, Fx::one());
+    ch.set(locus::light, (tick / kTicksPerHour) % 24 >= 16 ? Fx::zero() : Fx::one());
+    ch.stepCoarse(p.chem, kStride, tick);
+    if (tick + kStride == kTicksPerDay) out.injuryAfterADay = ch.chem[chem::injury.v];
+    if (ch.locus[locus::die.v] >= Fx::ratio(1, 2)) {
+      out.died = double(tick + kStride) / kTicksPerDay;
+      out.cause = causeOf(ch.locus[locus::cause.v]);
+      break;
     }
-  });
-  EXPECT_EQ(deaths, 1);
+  }
+  return out;
+}
+
+// Scraps lost heart after heart until the clamp leaves no more room: as near
+// death as any duel can bring him, and still alive.
+void beatenToTheClamp(Rig& r) {
+  TurnHit hits[kTurns]{};
+  for (TurnHit& h : hits) h.hearts = 1;
+  for (int duel = 0; duel < 8 && woundRoom(r.c) > Fx::zero(); ++duel)
+    for (uint8_t t = 0; t < kTurns; ++t) r.c.wound(woundFor(Stakes::Scrap, hits, t, woundRoom(r.c)).injury);
+}
+
+}  // namespace
+
+TEST(AfterTheDuel, AsNearDeathAsADuelLeavesHimHeIsStillAlive) {
+  Rig r(duelStarter());
+  beatenToTheClamp(r);
+  ASSERT_EQ(woundRoom(r.c), Fx::zero());
+  EXPECT_GT(r.chem(chem::injury), Fx::ratio(1, 2)) << "badly hurt";
+  for (int i = 0; i < 10; ++i) r.step();
+  EXPECT_FALSE(r.c.dead()) << "the duel itself never kills";
+}
+
+TEST(AfterTheDuel, CaredForHeHeals) {
+  Rig r(duelStarter());
+  beatenToTheClamp(r);
+  const Fx hurt = r.chem(chem::injury);
+  const Aftermath fed = afterTheDuel(r.c, true, 3);
+  EXPECT_LT(fed.died, 0) << "fed, he lives through the next three days";
+  EXPECT_LT(fed.injuryAfterADay, hurt * Fx::ratio(1, 4)) << "and his wounds close";
+}
+
+// Wounds heal on their own within the day, fed or not, so what kills a
+// beaten pet nobody looks after is what kills any pet nobody looks after.
+TEST(AfterTheDuel, LeftUntendedHeDiesOfNeglectAsAnyPetWould) {
+  Rig hurt(duelStarter()), whole(duelStarter());
+  beatenToTheClamp(hurt);
+  const Aftermath wounded = afterTheDuel(hurt.c, false, 6), neglected = afterTheDuel(whole.c, false, 6);
+  ASSERT_GT(wounded.died, 0) << "nobody fed him: he dies";
+  ASSERT_GT(neglected.died, 0);
+  EXPECT_EQ(wounded.cause, DeathCause::Starved) << "of neglect, not of the duel";
+  EXPECT_EQ(neglected.cause, DeathCause::Starved);
+  EXPECT_LE(wounded.died, neglected.died) << "the duel never buys him time";
+}
+
+// Injury speeds his ageing while it lasts, so a hard life is a shorter one:
+// fed, the beaten pet still dies of old age, a little sooner (measured
+// 2026-10-15: 9.6 pet days against 10.0).
+TEST(AfterTheDuel, CaredForHeStillDiesOfOldAgeALittleSooner) {
+  Rig hurt(duelStarter()), whole(duelStarter());
+  beatenToTheClamp(hurt);
+  const Aftermath beaten = afterTheDuel(hurt.c, true, 14), spared = afterTheDuel(whole.c, true, 14);
+  ASSERT_GT(beaten.died, 0);
+  ASSERT_GT(spared.died, 0);
+  EXPECT_EQ(beaten.cause, DeathCause::OldAge);
+  EXPECT_EQ(spared.cause, DeathCause::OldAge);
+  EXPECT_LT(beaten.died, spared.died);
 }
 
 TEST(Stakes, TheDuelRunsAtTheLowerChoice) {
-  EXPECT_EQ(agreedStakes(Stakes::Mortal, Stakes::Scrap), Stakes::Scrap);
-  EXPECT_EQ(agreedStakes(Stakes::Spar, Stakes::Mortal), Stakes::Spar);
-  EXPECT_EQ(agreedStakes(Stakes::Mortal, Stakes::Mortal), Stakes::Mortal);
+  EXPECT_EQ(agreedStakes(Stakes::Spar, Stakes::Scrap), Stakes::Spar);
+  EXPECT_EQ(agreedStakes(Stakes::Scrap, Stakes::Spar), Stakes::Spar);
+  EXPECT_EQ(agreedStakes(Stakes::Scrap, Stakes::Scrap), Stakes::Scrap);
+}
+
+// 0.7.0's Mortal byte is a Scrap here, on the air and in duels.log; past it is refused.
+TEST(Stakes, A070MortalByteReadsAsAScrap) {
+  Stakes s = Stakes::Spar;
+  EXPECT_TRUE(stakesFromByte(0, s) && s == Stakes::Spar);
+  EXPECT_TRUE(stakesFromByte(1, s) && s == Stakes::Scrap);
+  EXPECT_TRUE(stakesFromByte(kLegacyMortal, s) && s == Stakes::Scrap);
+  EXPECT_FALSE(stakesFromByte(3, s));
 }
 
 int main(int argc, char** argv) {

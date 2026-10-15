@@ -1,7 +1,7 @@
 // The duel screen without a duel: draws test/support/duel_scenes.h's moments
 // for any two species, or plays a whole scripted duel as frames for a film.
 //
-//   duel_shot --moment mercy --mine gilly --theirs fizz --out mercy.bmp [--ticks 12]
+//   duel_shot --moment staking --mine gilly --theirs fizz --out staking.bmp [--ticks 12]
 //   duel_shot --film outputs/duel-film --mine gilly --theirs fizz        frame_0000.bmp ... at 10 fps
 //
 // Built by `pio run -e duelshot` (tools/duel_film.sh does it in WSL). The same
@@ -53,20 +53,19 @@ bool species(const char* name, blorb::SpeciesId& out) {
   return false;
 }
 
-// A whole mortal duel, beat by beat, for a film: they meet, both kids take the
-// skull, a guard that holds, a bonk of heads, my kid winds up a heavy special
-// (the friend's own quick one telegraphed beside it), it lands with a WHAM, my pet stands over the friend's, the thumb goes down, he falls,
-// and mine takes his token.
+// A whole Scrap, beat by beat, for a film: they meet, both kids take the
+// plaster, a guard that holds, a bonk of heads, my kid winds up a heavy special
+// (the friend's own quick one telegraphed beside it), it lands with a WHAM, and
+// the friend's pet faints while mine hops for joy.
 struct Beat { const char* moment; uint16_t frames; void (*tweak)(DuelScene&, int turn); };
 
 void noTweak(DuelScene&, int) {}
-void stakeHold(DuelScene& s, int t) {
-  s.me.chose = s.them.chose = blorb::Stakes::Mortal;
-  s.me.ceiling = blorb::Stakes::Mortal;
-  s.me.hold = uint8_t(t * 255 / 30 < 255 ? t * 255 / 30 : 255);
-  s.me.confirmed = t >= 30;
+void stakePress(DuelScene& s, int t) {
+  s.me.chose = s.them.chose = blorb::Stakes::Scrap;
+  s.me.ceiling = blorb::Stakes::Scrap;
+  s.me.confirmed = t >= 24;
   s.them.confirmed = t >= 12;
-  s.stakes = blorb::Stakes::Mortal;
+  s.stakes = blorb::Stakes::Scrap;
 }
 void turn1Choose(DuelScene& s, int t) {
   s.them.hearts = 5;
@@ -86,17 +85,11 @@ void turn2Clash(DuelScene& s, int) {
   s.me.hearts = 5;
   s.them.hearts = 4;
 }
-void mercyHold(DuelScene& s, int t) {
-  s.finishHold = uint8_t(t < 10 ? 0 : (t - 10) * 255 / 30 < 255 ? (t - 10) * 255 / 30 : 255);
-  s.mercyLeft = uint16_t(150 - t * 2);
-  s.pleading = true;
-}
 
 constexpr Beat kFilm[] = {
-    {"meeting", 24, noTweak},   {"staking_mortal", 36, stakeHold}, {"choosing", 30, turn1Choose},
-    {"hit", 30, turn1Clash},    {"bonk", 30, turn2Clash},          {"windup_heavy", 30, noTweak},
-    {"landing", 30, noTweak},
-    {"mercy", 44, mercyHold},   {"fallen", 34, noTweak},           {"outcome", 30, noTweak},
+    {"meeting", 24, noTweak},   {"staking", 36, stakePress}, {"choosing", 30, turn1Choose},
+    {"hit", 30, turn1Clash},    {"bonk", 30, turn2Clash},    {"windup_heavy", 30, noTweak},
+    {"landing", 30, noTweak},   {"outcome", 30, noTweak},
 };
 
 int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs) {
@@ -107,9 +100,8 @@ int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs)
       DuelScene s = blorbtest::duelScene(b.moment, mine, theirs);
       s.ticks = uint16_t(t);
       b.tweak(s, t);
-      if (!std::strcmp(b.moment, "outcome")) {   // the film's ending is the mortal one
-        s.stakes = blorb::Stakes::Mortal;
-        s.verdict = blorb::Verdict::Finish;
+      if (!std::strcmp(b.moment, "outcome")) {   // the film ends with the friend's pet fainted
+        s.stakes = blorb::Stakes::Scrap;
         s.won = Side::Me;
         s.me.hearts = 5;
         s.them.hearts = 0;

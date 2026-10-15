@@ -16,11 +16,10 @@
 // read the same inputs. test_duel_resolve checks that resolve(B, A, mB, mA)
 // is the mirror of resolve(A, B, mA, mB) over 10,000 random battles.
 //
-// Stakes (stakes.h) are agreed before turn 0 and are an input like the cards:
-// resolve() knows whether a side at 0 hearts faints (Spar, Scrap) or is downed
-// and waits for the winner's verdict (Mortal). Nothing in here touches a
-// creature: each device applies its OWN pet's wounds, scars and fate from the
-// shared Outcome (turnHits, then stakes.h's woundFor).
+// Stakes (stakes.h) are agreed before turn 0 and are an input like the cards.
+// At any tier a side at 0 hearts faints. Nothing in here touches a creature:
+// each device applies its OWN pet's wounds and scars from the shared Outcome
+// (turnHits, then stakes.h's woundFor).
 #include <cstddef>
 #include <cstdint>
 #include "blorb/fixed.h"
@@ -35,7 +34,9 @@ struct DuelRules {
   static constexpr uint8_t kMaxAssistHearts = 2;
   static constexpr uint8_t kElementHeadStart = 1;   // the side whose element wins starts with a pip lit
   static constexpr uint8_t kMaxTurns = 15;          // then whoever has more hearts wins; equal is a draw
-  static constexpr uint8_t kLogSlots = kMaxTurns + 1;   // one more for the winner's verdict on a downed pet
+  // One spare slot: 0.7.0 wrote a Mortal verdict there. The State frame carries
+  // kLogSlots move bytes, so it stays to keep that frame one size for both.
+  static constexpr uint8_t kLogSlots = kMaxTurns + 1;
   static constexpr uint8_t kMaxLevel = 12;          // display only: level never changes a number in resolve()
   static constexpr uint8_t kCardVersion = 1;
 };
@@ -65,27 +66,20 @@ struct SpecialRules {
 // rather than scolds. A dozing side's move is appended at once by the session,
 // so the logs keep marching; resolve() ignores its stance and power.
 //
-// After a Mortal downing, the WINNER appends one more Move at index
-// Outcome::resolved (the slot right after the downing turn) whose `verdict` is
-// Spare or Finish. resolve() reads a verdict only there and only from the
-// winner's log; the loser's log at that index, and any verdict bits on a turn
-// move, mean nothing. kLogSlots leaves room for it after a downing on turn 15.
+// Bits 4 and 5 were 0.7.0's Mortal verdict. They are written as 0 and never read.
 struct Move {
   Stance stance = Stance::Pounce;
   bool power = false;
   bool byPet = false;
-  Verdict verdict = Verdict::None;
   Windup windup = Windup::None;
   constexpr uint8_t pack() const {
-    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(verdict) << 4) |
-                   (uint8_t(windup) << 6));
+    return uint8_t(uint8_t(stance) | (power ? 4 : 0) | (byPet ? 8 : 0) | (uint8_t(windup) << 6));
   }
   static constexpr Move unpack(uint8_t b) {
-    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Verdict(((b >> 4) & 3) % 3),
-                Windup(((b >> 6) & 3) % 3)};
+    return Move{Stance((b & 3) % kCycle), (b & 4) != 0, (b & 8) != 0, Windup(((b >> 6) & 3) % 3)};
   }
 };
-static_assert(Move::unpack(Move{Stance::Trick, true, false, Verdict::None, Windup::Heavy}.pack()).windup == Windup::Heavy,
+static_assert(Move::unpack(Move{Stance::Trick, true, false, Windup::Heavy}.pack()).windup == Windup::Heavy,
               "the wind-up survives the wire");
 
 // One side's moves: append-only, and the only state either device writes
@@ -94,8 +88,7 @@ static_assert(Move::unpack(Move{Stance::Trick, true, false, Verdict::None, Windu
 // so far, so a lost, doubled or late packet is a stale prefix, adopt() keeps
 // the longest, and both ends converge.
 //
-// The session must not let a side append turn t+1 before turn t resolves:
-// after a downing, the winner's next slot is the verdict's.
+// The session must not let a side append turn t+1 before turn t resolves.
 class MoveLog {
  public:
   constexpr uint8_t count() const { return count_; }
@@ -113,7 +106,7 @@ class MoveLog {
   constexpr bool appendSpecial(Windup w, Stance landing, bool byPet = false) {
     const uint8_t turns = uint8_t(w);
     if (turns == 0 || count_ + turns >= DuelRules::kMaxTurns) return false;
-    append(Move{Stance::Pounce, false, byPet, Verdict::None, w});
+    append(Move{Stance::Pounce, false, byPet, w});
     if (w == Windup::Heavy) append(Move{Stance::Pounce, false, byPet});
     return append(Move{landing, true, byPet});
   }
@@ -232,18 +225,15 @@ struct Outcome {
   TurnReport turns[DuelRules::kMaxTurns]{};
   uint8_t resolved = 0;    // turns with both moves known; turns past it are unreadable by design
   Ending ending = Ending::Ongoing;
-  bool downed[2]{};        // Mortal: fell to 0 hearts (Spar and Scrap: fainted, nothing pending)
-  Verdict verdict = Verdict::None;   // Mortal: the winner's, once it arrives; None while pending
-  constexpr bool awaitingVerdict() const {
-    return stakes == Stakes::Mortal && downed[0] != downed[1] && verdict == Verdict::None;
-  }
   constexpr bool over() const { return ending != Ending::Ongoing; }
   // Both devices log it, so the two books can be compared. Field by field, in
-  // a fixed order, so padding and the compiler's layout never reach it.
+  // a fixed order, so padding and the compiler's layout never reach it. The
+  // three zeros after `ending` are where 0.7.0 hashed a Mortal downing and its
+  // verdict: always 0 below Mortal, so a Spar or a Scrap hashes as 0.7.0's does.
   constexpr uint32_t hash() const {
     uint32_t h = 2166136261u;
     h = fnvByte(h, uint8_t(stakes)); h = fnvByte(h, resolved); h = fnvByte(h, uint8_t(ending));
-    h = fnvByte(h, downed[0]); h = fnvByte(h, downed[1]); h = fnvByte(h, uint8_t(verdict));
+    h = fnvByte(h, 0); h = fnvByte(h, 0); h = fnvByte(h, 0);
     for (const SideState& s : side) {
       const uint8_t b[] = {s.hearts,    s.maxHearts,    s.spark,     s.shell,           s.dozing,
                            s.bonkTurns, s.dazzledTurns, s.hushTurns, uint8_t(s.queued), s.landsOn};
@@ -331,9 +321,8 @@ static_assert(Assist::hearts(128, 140) == 0 && Assist::hearts(100, 140) == 1 && 
 //   5 sparks: +1 to each side not dozing, +1 more to a side that took hits
 //     while the other took none (the rally), capped at kMeterMax; the turn
 //     counters tick down. Nothing rewards the winner
-//   6 a side at 0 hearts faints (Spar, Scrap) or is downed (Mortal) and the
-//     battle ends; both at 0 is a draw and nobody is downed. After kMaxTurns,
-//     more hearts wins
+//   6 a side at 0 hearts faints and the battle ends; both at 0 is a draw.
+//     After kMaxTurns, more hearts wins
 Outcome resolve(const BattleCard& a, const BattleCard& b, uint32_t seed, Stakes, const MoveLog& movesA,
                 const MoveLog& movesB);
 

@@ -933,20 +933,6 @@ const Colours& artColours() {
   return c;
 }
 
-// What his line's duel book puts on the rim at home: the newest trophies down
-// the lower right, the debt and vendetta marks down the lower left, clear of
-// the care hint at the bottom.
-constexpr int kTokenPct = 75;
-constexpr int kTokenAt[3][2] = {{207, 170}, {191, 191}, {170, 207}};
-constexpr int kDebtAt[2] = {33, 170}, kVendettaAt[2] = {49, 191};
-
-void rimTokens(Canvas240& cv, const Appearance& a) {
-  for (int i = 0; i < imin(a.trophyCount, Appearance::kRimTrophies); ++i)
-    drawArt(cv, duel_art::kTrophies[a.trophies[i].v % blorb::kSpeciesCount], kTokenAt[i][0], kTokenAt[i][1], kTokenPct, 256);
-  if (a.owesDebt) drawArt(cv, duel_art::kDebt, kDebtAt[0], kDebtAt[1], kTokenPct, 256);
-  if (a.vendetta) drawArt(cv, duel_art::kVendetta, kVendettaAt[0], kVendettaAt[1], kTokenPct, 256);
-}
-
 }  // namespace
 
 void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int alpha, int fillRows) {
@@ -989,8 +975,6 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
   p.x = fig.x;
   p.y = fig.y;
   p.xf = base;
-  if (fig.remainsIn) blit(cv, pack.remains(), p, col, (fig.alpha + 1) * (fig.remainsIn + 1) / 256, nullptr);
-  if (fig.remainsIn == 255) return;
 
   const FrameRef body = pack.body(a.pose, a.stage, a.poseTick);
   shadow(cv, p, footHalfW(body, base.kx), fig.lift, kHopMaxPx * base.ky / kOne);
@@ -998,7 +982,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
   if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
   const Mottle* spots = mottle.density ? &mottle : nullptr;
   const ScarLayer scars = scarsOn(a, pack, base.kx, fig.newScars, fig.scarIn);
-  const int alpha = (fig.alpha + 1) * (256 - fig.remainsIn) / 256;
+  const int alpha = fig.alpha + 1;
   blit(cv, body, p, col, alpha, spots, &scars);
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer != 0) blit(cv, pack.mark(a.marks[i].layer, a.marks[i].variant), p, col, alpha, nullptr);
@@ -1024,7 +1008,6 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutch(a, cv); break;
   }
   pips(cv, a.pantry);
-  rimTokens(cv, a);
   hint(cv, a);
   // Low when he stands high in the dish, so the line never crosses his face.
   if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());

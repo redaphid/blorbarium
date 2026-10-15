@@ -49,8 +49,6 @@ BootContext bootContext(const Occupant& o, const DuelView* v) {
       case DuelPhase::Choosing:
       case DuelPhase::Waiting:
       case DuelPhase::Revealing: return v->mine.queued != Windup::None ? BootContext::WindingUp : BootContext::DuelTurn;
-      case DuelPhase::Mercy: return v->iAmDown ? BootContext::MercyLoser : BootContext::MercyWinner;
-      case DuelPhase::Fallen: return BootContext::Fallen;
       case DuelPhase::Fainting:
       case DuelPhase::Friends:
       case DuelPhase::Closed: return BootContext::DuelOutcome;
@@ -115,7 +113,7 @@ bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId,
     setup.card = cardOf(*c, lineageId, book_.level(c->generation()), book_.prowess());
     setup.skill = book_.skill(c->generation());
     setup.ceiling = ceilingFor(*c, deviceCeiling_);
-    for (Stakes s : {Stakes::Spar, Stakes::Scrap, Stakes::Mortal}) setup.skull[uint8_t(s)] = forecast(*c, s).skull;
+    for (Stakes s : {Stakes::Spar, Stakes::Scrap}) setup.skull[uint8_t(s)] = forecast(*c, s).skull;
   }
   // A pet who declines still opens: his picture beacons to a friend nearby,
   // and he is never matched (duel_session.h). Only a pet who is no creature stays shut.
@@ -188,21 +186,11 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       c->force(action::sleep);   // daze holds the sleep gate open; this starts the nap
       faintedLast_ = true;
     }
-  if (fx.downed) {
-    book_.recordDowned(fx.battle, fx.victor, tick);
-    out.save = true;
-  }
-  if (fx.fall && c) {
-    c->fall();
-    fell_ = true;
-    out.save = true;
-  }
   if (fx.met) {
     battled_ = true;
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();
     book_.record(*fx.met, gen, tick, petDay);
     lastMet_ = fx.met;
-    fell_ = fell_ || fx.met->iFell || fx.met->iSlew;
     out.save = true;
   }
   if (fx.egg && store_) {
@@ -216,9 +204,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     dueledThisBoot_ = true;
     battled_ = false;
   }
-  if (fx.rematch && !fell_ && std::holds_alternative<Creature>(o))
-    open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
-  if (!session_.active()) fell_ = false;
+  if (fx.rematch && std::holds_alternative<Creature>(o)) open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
   return out;
 }
 

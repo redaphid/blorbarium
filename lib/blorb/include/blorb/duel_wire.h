@@ -26,9 +26,9 @@ namespace blorb {
 
 inline constexpr uint8_t kWireMagic0 = 'b', kWireMagic1 = 'D', kWireVersion = 1;
 
-// Cheers: pictures only, all kind. A double knock sends one of the first
-// four; Plead is the downed kid's only voice in Mercy.
-enum class Emote : uint8_t { None, Heart, Star, Laugh, Wave, Plead };
+// Cheers: pictures only, all kind. A double knock sends one. (0.7.0's Plead,
+// 5, came only in Mercy, which a duel with this firmware never reaches.)
+enum class Emote : uint8_t { None, Heart, Star, Laugh, Wave };
 
 struct BeaconPacket {
   uint16_t roster = 0;           // rosterHash(): a mismatch greys the friend out
@@ -52,9 +52,11 @@ struct StatePacket {
   Stakes chosen = Stakes::Spar;
   bool confirmed = false;
   Stakes ceiling = Stakes::Spar;   // the highest tier I may enter against YOU (my pet, my device, my book)
-  Decline why[3]{};                // by tier: the picture for why I may not enter it
-  uint8_t skull[3]{};              // by tier: my pet's forecast, drawn in my corner of your screen too
-  uint8_t hold = 0;                // 0..255: my Mortal confirm hold (Staking) or my Finish hold (Mercy)
+  // By tier: the picture for why I may not enter it, and my pet's forecast,
+  // drawn in my corner of your screen too. The frame has room for three tiers
+  // and a hold byte (0.7.0's Mortal); this firmware writes them as 0 and skips them.
+  Decline why[kStakesTiers]{};
+  uint8_t skull[kStakesTiers]{};
   BattleCard card{};
   uint8_t moveCount = 0;
   uint8_t moves[DuelRules::kLogSlots]{};   // Move::pack() each

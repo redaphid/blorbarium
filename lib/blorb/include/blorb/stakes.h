@@ -6,16 +6,19 @@
 //   Spar    play-fighting. No wounds, nothing lasting. A faint is a nap.
 //   Scrap   real wounds: injury per heart lost, scars, and the long trait
 //           chemicals drift (mettle from wins, dread from losses).
-//   Mortal  bigger wounds, and the loser is DOWNED, not dead. The winner's kid
-//           decides: holding BOOT for 3 s while a skull fills finishes; a knock,
-//           or 15 s of nothing, spares.
 //
-// The one rule that makes death a choice: NO WOUND EVER KILLS. Every wound is
-// clamped so his injury stays below his own lethal level, less a margin as big
-// as his own drop injury (woundRoom), whatever the tier, the turn, his genes or
-// a fumble mid-duel. The only death a duel causes is a Finish someone chose
-// with their hands (Creature::fall). A wounded pet left untended can still die
-// days later of the engine's ordinary causes, which is how wounds work.
+// Death is never a choice (the owner, 2026-10-15: "Death should not be a
+// choice"). No duel, gesture or verb kills a pet, and NO WOUND EVER KILLS:
+// every wound is clamped so his injury stays below his own lethal level, less
+// a margin as big as his own drop injury (woundRoom), whatever the turn, his
+// genes or a fumble mid-duel. A badly wounded pet who is then neglected can
+// die days later of the engine's ordinary causes, as any neglected pet can
+// ("close to dead + time = dead"); one who is fed and rested heals.
+//
+// 0.7.0 had a third tier, Mortal, whose loser could be finished by the
+// winner's kid. It is gone. Its byte (2) still arrives from a 0.7.0 badge,
+// and the wire and the book read it as Scrap (kLegacyMortal), so a mixed pair
+// duels at Scrap at most and never downs anyone.
 //
 // Wounds are not gene-driven: the engine applies them from the agreed Outcome
 // by these tables, turn by turn. Genes decide only how a duel FEELS, behind
@@ -29,31 +32,38 @@ namespace blorb {
 
 class Creature;
 
-enum class Stakes : uint8_t { Spar = 0, Scrap = 1, Mortal = 2 };
+enum class Stakes : uint8_t { Spar = 0, Scrap = 1 };
+inline constexpr uint8_t kStakesTiers = 2;
 constexpr Stakes agreedStakes(Stakes a, Stakes b) { return uint8_t(a) < uint8_t(b) ? a : b; }
+// A stakes byte from the air or duels.log. 0.7.0's Mortal (2) is a Scrap here;
+// past it, nullopt (the wire refuses the packet).
+inline constexpr uint8_t kLegacyMortal = 2;
+constexpr bool stakesFromByte(uint8_t b, Stakes& out) {
+  out = b == 0 ? Stakes::Spar : Stakes::Scrap;
+  return b <= kLegacyMortal;
+}
 
 // Per tier, as data for the owner to tune. The confirm gesture grows with the
-// stakes, so nobody agrees to a mortal duel by tapping through a screen.
+// stakes.
 struct StakesRule {
   Fx injuryPerHeart;        // engine-applied per heart lost, as each turn resolves
   Fx injuryCapPerDuel;      // the most one duel can add (before the woundRoom clamp)
-  bool scars, traits, downs;
+  bool scars, traits;
   Stage youngestStage;      // both pets must be at least this old
   uint8_t maxAssistHearts;  // the fight must be this fair (Assist::hearts) or the tier is refused
   uint16_t minManualTurns;  // both kids must have picked this many turns themselves
   bool headToHead;          // the two lines' record must not be lopsided (kHeadToHeadFloor)
-  enum class Confirm : uint8_t { Knock, Press, Hold3s } confirm;
+  enum class Confirm : uint8_t { Knock, Press } confirm;
 };
 inline constexpr StakesRule kStakes[] = {
-    /* Spar   */ {Fx::zero(), Fx::zero(), false, false, false, Stage::Baby, 2, 0, false, StakesRule::Confirm::Knock},
-    /* Scrap  */ {Fx::ratio(6, 100), Fx::ratio(35, 100), true, true, false, Stage::Child, 2, 0, true,
+    /* Spar   */ {Fx::zero(), Fx::zero(), false, false, Stage::Baby, 2, 0, false, StakesRule::Confirm::Knock},
+    /* Scrap  */ {Fx::ratio(6, 100), Fx::ratio(35, 100), true, true, Stage::Child, 2, 0, true,
                   StakesRule::Confirm::Press},
-    /* Mortal */ {Fx::ratio(9, 100), Fx::ratio(60, 100), true, true, true, Stage::Adult, 1, 30, true,
-                  StakesRule::Confirm::Hold3s},
 };
-constexpr const StakesRule& rule(Stakes s) { return kStakes[uint8_t(s) % 3]; }
+static_assert(sizeof kStakes / sizeof kStakes[0] == kStakesTiers, "one rule per tier");
+constexpr const StakesRule& rule(Stakes s) { return kStakes[uint8_t(s) % kStakesTiers]; }
 
-// Mortal's fairness gate also reads the two lineages' head-to-head record in
+// Scrap's fairness gate also reads the two lineages' head-to-head record in
 // duels.log: with at least kHeadToHeadMin duels between them, the lower side's
 // win share must be at least kHeadToHeadFloor permille. Prowess is a win share
 // against whoever each kid usually plays, which does not compare across a
@@ -61,7 +71,7 @@ constexpr const StakesRule& rule(Stakes s) { return kStakes[uint8_t(s) % 3]; }
 inline constexpr uint8_t kHeadToHeadMin = 3;
 inline constexpr uint16_t kHeadToHeadFloor = 250;
 
-// No farming: at most this many for-keeps duels (Scrap or Mortal) between the
+// No farming: at most this many for-keeps duels (Scraps) between the
 // same two lineages per pet-day, counted from duels.log on both devices.
 inline constexpr uint8_t kForKeepsPerPairPerDay = 1;
 
@@ -85,9 +95,9 @@ constexpr Fx duelFilter(Stakes s, ChemId c, Fx delta) {
   }
   return Fx::zero();
 }
-static_assert(duelFilter(Stakes::Mortal, chem::injury, Fx::one()) == Fx::zero(), "wounds are the engine's, never a gene's");
-static_assert(duelFilter(Stakes::Mortal, chem::life, -Fx::one()) == Fx::zero(), "no stimulus shortens a life");
-static_assert(duelFilter(Stakes::Mortal, chem::toxin, Fx::one()) == Fx::zero(), "no stimulus poisons");
+static_assert(duelFilter(Stakes::Scrap, chem::injury, Fx::one()) == Fx::zero(), "wounds are the engine's, never a gene's");
+static_assert(duelFilter(Stakes::Scrap, chem::life, -Fx::one()) == Fx::zero(), "no stimulus shortens a life");
+static_assert(duelFilter(Stakes::Scrap, chem::toxin, Fx::one()) == Fx::zero(), "no stimulus poisons");
 static_assert(duelFilter(Stakes::Spar, driveChem(drive::pain), Fx::one()) == Fx::zero(), "a spar never hurts");
 static_assert(duelFilter(Stakes::Scrap, driveChem(drive::pain), Fx::one()) == kDuelDriveRiseCap, "a scrap stings");
 static_assert(duelFilter(Stakes::Spar, chem::dread, Fx::one()) == Fx::zero(), "a spar leaves nothing lasting");
@@ -169,15 +179,5 @@ TurnWound woundFor(Stakes, const TurnHit* hits, uint8_t turn, Fx roomNow);
 // kill", because no wound can.
 struct Danger { Fx worstInjury{}; uint8_t skull = 0; };
 Danger forecast(const Creature&, Stakes);
-
-// ---- the verdict ----------------------------------------------------------------------
-// The verdict on a downed pet is the winner's kid's, and it travels as ONE
-// MORE entry in the winner's MoveLog, at index `Outcome::resolved` (the slot
-// right after the downing turn). Only the winner's device decides it: a 3 s
-// hold writes Finish, a knock writes Spare, and after kMercyTicks with neither
-// the winner's device writes Spare itself.
-enum class Verdict : uint8_t { None = 0, Spare = 1, Finish = 2 };
-inline constexpr uint16_t kMercyTicks = 150;      // 15 s on the winner's device
-inline constexpr uint16_t kFinishHoldTicks = 30;  // BOOT held 3 s while the skull fills
 
 }  // namespace blorb

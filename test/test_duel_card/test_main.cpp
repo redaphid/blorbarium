@@ -9,7 +9,7 @@ using namespace blorb;
 namespace {
 
 constexpr Fx kHalf = Fx::ratio(1, 2);
-constexpr Stakes kTiers[] = {Stakes::Spar, Stakes::Scrap, Stakes::Mortal};
+constexpr Stakes kTiers[] = {Stakes::Spar, Stakes::Scrap};
 
 // The Dish's part around one occupant, held level with no hand on it.
 struct Rig {
@@ -290,21 +290,20 @@ TEST(Readiness, ThreeLossesInARowAndHeWantsACuddle) {
 // ---- the ceiling ------------------------------------------------------------------------------
 
 TEST(Ceiling, EachStageMayEnterTheTiersItIsOldEnoughFor) {
-  struct Row { Stage stage; Stakes top; Decline scrap, mortal; };
-  const Row rows[] = {{Stage::Baby, Stakes::Spar, Decline::TooYoung, Decline::TooYoung},
-                      {Stage::Child, Stakes::Scrap, Decline::None, Decline::TooYoung},
-                      {Stage::Adult, Stakes::Mortal, Decline::None, Decline::None},
-                      {Stage::Elder, Stakes::Mortal, Decline::None, Decline::None}};
+  struct Row { Stage stage; Stakes top; Decline scrap; };
+  const Row rows[] = {{Stage::Baby, Stakes::Spar, Decline::TooYoung},
+                      {Stage::Child, Stakes::Scrap, Decline::None},
+                      {Stage::Adult, Stakes::Scrap, Decline::None},
+                      {Stage::Elder, Stakes::Scrap, Decline::None}};
   for (const Row& row : rows) {
     Rig r = starter(kGrungo);
     r.growTo(row.stage);
     r.c().inject(chem::injury, Fx::zero());
     ASSERT_EQ(r.c().stage(), row.stage);
-    const Ceiling k = ceilingFor(r.c(), Stakes::Mortal);
+    const Ceiling k = ceilingFor(r.c(), Stakes::Scrap);
     EXPECT_EQ(k.top, row.top) << int(row.stage);
     EXPECT_EQ(k.why[0], Decline::None) << "a Spar is always on offer";
     EXPECT_EQ(k.why[1], row.scrap) << int(row.stage);
-    EXPECT_EQ(k.why[2], row.mortal) << int(row.stage);
     EXPECT_TRUE(topIsTheFirstRefusal(k));
   }
 }
@@ -313,14 +312,13 @@ TEST(Ceiling, AWoundedPetStillSparsButDoesNotFight) {
   Rig r = starter(kGrungo);
   r.growTo(Stage::Adult);
   r.c().inject(chem::injury, kWoundedInjury);
-  const Ceiling k = ceilingFor(r.c(), Stakes::Mortal);
+  const Ceiling k = ceilingFor(r.c(), Stakes::Scrap);
   EXPECT_EQ(k.top, Stakes::Spar);
   EXPECT_EQ(k.why[0], Decline::None);
   EXPECT_EQ(k.why[1], Decline::Wounded);
-  EXPECT_EQ(k.why[2], Decline::Wounded);
   EXPECT_TRUE(topIsTheFirstRefusal(k));
   r.c().inject(chem::injury, kWoundedInjury - Fx::ratio(1, 100));
-  EXPECT_NE(ceilingFor(r.c(), Stakes::Mortal).why[1], Decline::Wounded) << "the bandage comes off at 0.5";
+  EXPECT_NE(ceilingFor(r.c(), Stakes::Scrap).why[1], Decline::Wounded) << "the bandage comes off at 0.5";
 }
 
 // The forecast's skull full: the tier's worst case would take all the room
@@ -330,25 +328,23 @@ TEST(Ceiling, ATierWhoseForecastSkullIsFullIsRefused) {
   r.growTo(Stage::Adult);
   r.c().inject(chem::injury, Fx::zero());
   const Fx healthyRoom = woundRoom(r.c());
-  ASSERT_GT(healthyRoom, rule(Stakes::Mortal).injuryCapPerDuel) << "a healthy adult has room for a mortal duel";
-  EXPECT_LT(forecast(r.c(), Stakes::Mortal).skull, 255);
-  EXPECT_EQ(ceilingFor(r.c(), Stakes::Mortal).top, Stakes::Mortal);
+  ASSERT_GT(healthyRoom, rule(Stakes::Scrap).injuryCapPerDuel) << "a healthy adult has room for a scrap";
+  EXPECT_LT(forecast(r.c(), Stakes::Scrap).skull, 255);
+  EXPECT_EQ(ceilingFor(r.c(), Stakes::Scrap).top, Stakes::Scrap);
 
-  // Hurt him until the room is between the two tiers' caps.
-  const Fx between = (rule(Stakes::Scrap).injuryCapPerDuel + rule(Stakes::Mortal).injuryCapPerDuel) * kHalf;
-  r.c().inject(chem::injury, healthyRoom - between);
+  // Hurt him until a Scrap's worst case would take all the room he has left.
+  r.c().inject(chem::injury, healthyRoom - (rule(Stakes::Scrap).injuryCapPerDuel - Fx::ratio(1, 100)));
   ASSERT_LT(r.c().chemistry().chem[chem::injury.v], kWoundedInjury) << "not yet a bandage";
-  ASSERT_EQ(forecast(r.c(), Stakes::Mortal).skull, 255);
-  ASSERT_LT(forecast(r.c(), Stakes::Scrap).skull, 255);
-  Ceiling k = ceilingFor(r.c(), Stakes::Mortal);
-  EXPECT_EQ(k.top, Stakes::Scrap);
-  EXPECT_EQ(k.why[2], Decline::Fragile);
+  ASSERT_EQ(forecast(r.c(), Stakes::Scrap).skull, 255);
+  Ceiling k = ceilingFor(r.c(), Stakes::Scrap);
+  EXPECT_EQ(k.top, Stakes::Spar);
+  EXPECT_EQ(k.why[1], Decline::Fragile);
   EXPECT_TRUE(topIsTheFirstRefusal(k));
 
   // No room at all: only the Spar, which wounds nobody, is left.
   r.c().inject(chem::injury, healthyRoom);
   ASSERT_EQ(woundRoom(r.c()), Fx::zero());
-  k = ceilingFor(r.c(), Stakes::Mortal);
+  k = ceilingFor(r.c(), Stakes::Scrap);
   EXPECT_EQ(k.top, Stakes::Spar);
   EXPECT_EQ(k.why[0], Decline::None) << "a spar never wounds, so it is never too much";
 }
@@ -367,11 +363,12 @@ TEST(Ceiling, TheDevicesCeilingHoldsAHealthyAdultDown) {
 }
 
 TEST(Ceiling, ThePetsOwnReasonIsShownBeforeTheDevices) {
-  Rig r = starter(kGrungo);
-  r.growTo(Stage::Child);
-  const Ceiling k = ceilingFor(r.c(), Stakes::Spar);
-  EXPECT_EQ(k.why[1], Decline::DeviceCeiling);
-  EXPECT_EQ(k.why[2], Decline::TooYoung);
+  Rig baby = starter(kGrungo);
+  baby.growTo(Stage::Baby);
+  EXPECT_EQ(ceilingFor(baby.c(), Stakes::Spar).why[1], Decline::TooYoung) << "his own reason, not the lock";
+  Rig child = starter(kGrungo);
+  child.growTo(Stage::Child);
+  EXPECT_EQ(ceilingFor(child.c(), Stakes::Spar).why[1], Decline::DeviceCeiling) << "old enough: then the lock";
 }
 
 int main(int argc, char** argv) {

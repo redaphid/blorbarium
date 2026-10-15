@@ -94,7 +94,7 @@ Ceiling ceilingFor(const Creature& c, Stakes deviceCeiling) {
   Ceiling out;
   const bool wounded = c.chemistry().chem[chem::injury.v] >= kWoundedInjury;
   bool open = true;
-  for (Stakes s : {Stakes::Spar, Stakes::Scrap, Stakes::Mortal}) {
+  for (Stakes s : {Stakes::Spar, Stakes::Scrap}) {
     const StakesRule& r = rule(s);
     Decline& why = out.why[uint8_t(s)];
     if (uint8_t(c.stage()) < uint8_t(r.youngestStage)) why = Decline::TooYoung;

@@ -27,9 +27,6 @@ enum class BootContext : uint8_t {
   Staking,       // duel: choosing the stakes
   DuelTurn,      // duel: choosing this turn's stance
   WindingUp,     // duel: my special is queued; my stance is locked
-  MercyWinner,   // duel: I downed them in a Mortal duel
-  MercyLoser,    // duel: I am down
-  Fallen,        // duel: a pet fell (either side)
   DuelOutcome,   // duel: the friends screen
   Lobby,         // duel: looking for a friend
   FoundingNest,  // first boot: three eggs
@@ -53,19 +50,17 @@ enum class BootAct : uint8_t {
   PickFriend,        // the aimed friend, as a knock does
   CloseDuel,         // radio off, back to the dish
   ConfirmTier,       // Spar or Scrap under the tilt
-  ConfirmMortal,     // a 3 s hold while the skull fills
   QueueQuick,        // lock the aimed stance as a quick special's hidden landing (1 turn wind-up)
   QueueHeavy,        // the same, held 1.2 s: a heavy special (2 turns wind-up)
-  Spare,             // the winner's mercy
-  Finish,            // a 3 s hold while the skull fills: the winner ends him
-  Plead,             // the downed side's only voice: a cheer floats up on the winner's screen
   AskRematch,
   Hug,               // a 3 s hold: yes to a friend egg (a cradle still works)
 };
 
 // The rim glyph for each act (art unit ART4; the tier, stance and power glyphs
 // come from ART3). A greyed glyph means "not now" and says why with its pips
-// (the meter short of the power's cost, an empty pantry).
+// (the meter short of the power's cost, an empty pantry). Values index the
+// packed glyph art, so a retired glyph keeps its slot: Swords, and 0.7.0's
+// Skull, OpenHand, Plead and Candle (the Mortal confirm and Mercy).
 enum class BootGlyph : uint8_t {
   None, Pellet, Moon, Swords, Peek, Flower, Arrow, Check, Lock, Download, Friend, Door, Tier, Skull,
   SpecialQuick, SpecialHeavy, OpenHand, Plead, Candle, Rematch, Heart, Countdown,
@@ -81,12 +76,9 @@ struct BootMeaning {
 inline constexpr BootMeaning kBoot[] = {
     {BootContext::OtaQuestion, BootAct::OtaYes, BootAct::OtaYes, BootAct::OtaYes, BootGlyph::Download, 0},
     {BootContext::Sealed, BootAct::Nothing, BootAct::Nothing, BootAct::Nothing, BootGlyph::Lock, 0},
-    {BootContext::Staking, BootAct::ConfirmTier, BootAct::ConfirmMortal, BootAct::Nothing, BootGlyph::Tier, 3000},
+    {BootContext::Staking, BootAct::ConfirmTier, BootAct::Nothing, BootAct::Nothing, BootGlyph::Tier, 0},
     {BootContext::DuelTurn, BootAct::QueueQuick, BootAct::QueueHeavy, BootAct::Nothing, BootGlyph::SpecialQuick, 1200},
     {BootContext::WindingUp, BootAct::Nothing, BootAct::Nothing, BootAct::Nothing, BootGlyph::Countdown, 0},
-    {BootContext::MercyWinner, BootAct::Spare, BootAct::Finish, BootAct::Nothing, BootGlyph::OpenHand, 3000},
-    {BootContext::MercyLoser, BootAct::Plead, BootAct::Plead, BootAct::Nothing, BootGlyph::Plead, 0},
-    {BootContext::Fallen, BootAct::Nothing, BootAct::Nothing, BootAct::Nothing, BootGlyph::Candle, 0},
     {BootContext::DuelOutcome, BootAct::AskRematch, BootAct::Hug, BootAct::CloseDuel, BootGlyph::Rematch, 3000},
     {BootContext::Lobby, BootAct::PickFriend, BootAct::Nothing, BootAct::CloseDuel, BootGlyph::Friend, 0},
     {BootContext::FoundingNest, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
@@ -104,20 +96,11 @@ constexpr bool everyContextOnce() {
     if (size_t(kBoot[i].context) != i) return false;
   return true;
 }
-constexpr bool deathIsAlwaysAHold() {
-  for (const BootMeaning& m : kBoot) {
-    if (m.press == BootAct::Finish || m.doublePress == BootAct::Finish) return false;
-    if (m.press == BootAct::ConfirmMortal || m.doublePress == BootAct::ConfirmMortal) return false;
-    if ((m.hold == BootAct::Finish || m.hold == BootAct::ConfirmMortal) && m.holdMs < 3000) return false;
-  }
-  return true;
-}
 constexpr bool everyStateShowsAHint() {
   for (const BootMeaning& m : kBoot) if (m.hint == BootGlyph::None) return false;
   return true;
 }
 static_assert(everyContextOnce(), "boot.h: one row per BootContext, in order");
-static_assert(deathIsAlwaysAHold(), "a press can never finish a pet or agree to a mortal duel: only a 3 s hold");
 static_assert(everyStateShowsAHint(), "every state draws a hint: a kid never has to guess");
 
 constexpr const BootMeaning& bootMeaning(BootContext c) { return kBoot[size_t(c)]; }

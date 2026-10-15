@@ -11,8 +11,7 @@ using namespace blorb;
 
 // 'P' 'G' 'T' lock a stance. A special is 'q' (quick) or 'h' (heavy) for the
 // commit, '_' for a heavy's placeholder, then lower case 'p' 'g' 't' for the
-// landing entry. '.' is a turn the pet slept through; 'S' and 'F' are a
-// verdict, Spare and Finish.
+// landing entry. '.' is a turn the pet slept through.
 constexpr MoveLog logOf(const char* s) {
   MoveLog l{};
   for (; *s; ++s) {
@@ -21,7 +20,6 @@ constexpr MoveLog logOf(const char* s) {
     m.stance = (c == 'G' || c == 'g') ? Stance::Guard : (c == 'T' || c == 't') ? Stance::Trick : Stance::Pounce;
     m.power = c == 'p' || c == 'g' || c == 't';
     m.byPet = c == '.';
-    m.verdict = c == 'S' ? Verdict::Spare : c == 'F' ? Verdict::Finish : Verdict::None;
     m.windup = c == 'q' ? Windup::Quick : c == 'h' ? Windup::Heavy : Windup::None;
     l.append(m);
   }
@@ -60,10 +58,6 @@ inline constexpr Golden kGoldens[] = {
      Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0xb01a435au},
     {"specials on both sides, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD),
      0xD4D40003u, Stakes::Spar, "PPPPPqpTGh_tPG", "PPPqtGPh_gTqpP", 0x1ab43fc2u},
-    {"a mortal downing and a finish, mudge v hushwing", cardOf(sp::mudge, 0x3), cardOf(sp::hushwing, 0x4),
-     0xD4D40004u, Stakes::Mortal, "PPPPPF", "TTTTT", 0x4bcd6224u},
-    {"downed on the last turn, spared in slot 16, gilly v grungo", cardOf(sp::gilly, 0x7), cardOf(sp::grungo, 0x8),
-     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPTTTTTF", 0xa1f5b1c7u},
     {"a riposte and a stagger, mudge v gilly", cardOf(sp::mudge, 0x9), cardOf(sp::gilly, 0xA), 0xD4D40006u,
      Stakes::Scrap, "PPPqpPPh_pTqg", "PPPGGPTPGPPTG", 0x88df67a4u},
 };

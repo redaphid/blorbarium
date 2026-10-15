@@ -45,20 +45,4 @@ Jump growTo(blorb::Dish& dish, blorb::Stage stage, const Warp& warp) {
   return Jump::Done;
 }
 
-Jump die(blorb::Dish& dish, bool eggs, const Warp& warp) {
-  auto* c = std::get_if<blorb::Creature>(&dish.occupant());
-  if (!c) return Jump::NoCreature;
-  c->fall();
-  warp(1);
-  const auto* k = std::get_if<blorb::Clutch>(&dish.occupant());
-  if (!k) return Jump::NoCreature;   // the next tick runs the death; nothing else can stand here
-  while (eggs && (k->sinceDeath < blorb::Clutch::kVigilTicks || k->previewed < k->count)) {
-    warp(100);
-    k = std::get_if<blorb::Clutch>(&dish.occupant());
-    if (!k) break;   // the pick's timeout outran the vigil: an egg is laid, which is still a valid dish
-  }
-  dish.flush();
-  return Jump::Done;
-}
-
 }  // namespace debugble
