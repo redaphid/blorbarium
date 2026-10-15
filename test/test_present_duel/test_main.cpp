@@ -52,7 +52,7 @@ std::string dump(const DuelStaging& st) {
     const paint::Figure& f = st.fig[i];
     o << (i ? " them " : "me ") << f.x << ',' << f.y << " s" << int(f.scalePct) << ' ' << int(f.widePct) << '/'
       << int(f.tallPct) << " l" << int(f.leanPct) << " up" << int(f.lift) << " fl" << int(f.flash) << " a"
-      << int(f.alpha) << " r" << int(f.remainsIn) << " face" << (f.hasFace ? int(f.face.v) : -1) << " new"
+      << int(f.alpha) << " face" << (f.hasFace ? int(f.face.v) : -1) << " new"
       << int(f.newScars) << '@' << int(f.scarIn);
   }
   for (int i = 0; i < st.propCount; ++i) {
@@ -289,7 +289,7 @@ TEST(Legibility, NoStateIsColourOnly) {
   }
   {
     DuelScene a = base("staking"), b = a;
-    b.me.ceiling = blorb::Stakes::Mortal;
+    b.me.ceiling = blorb::Stakes::Spar;
     pairs.push_back({"a forbidden tier", a, b});
   }
   {
@@ -301,21 +301,6 @@ TEST(Legibility, NoStateIsColourOnly) {
     DuelScene a = base("staking"), b = a;
     b.them.confirmed = false;
     pairs.push_back({"the friend's tier confirmed", a, b});
-  }
-  {
-    DuelScene a = base("staking_mortal"), b = a;
-    b.me.hold = 250;
-    pairs.push_back({"the mortal confirm filling", a, b});
-  }
-  {
-    DuelScene a = base("mercy"), b = a;
-    b.finishHold = 250;
-    pairs.push_back({"the finish skull filling", a, b});
-  }
-  {
-    DuelScene a = base("mercy"), b = a;
-    b.mercyLeft = 20;
-    pairs.push_back({"the mercy clock", a, b});
   }
   {
     DuelScene a = base("choosing"), b = a;
@@ -566,24 +551,6 @@ TEST(FromOutcome, CarriesTheSpecialInFlightAndItsFate) {
   EXPECT_EQ(b.me.special, blorb::TurnReport::Special::Riposted);
 }
 
-// ---- the rim at home ------------------------------------------------------------------
-
-TEST(Rim, TrophiesAndMarksSitOnTheRimAtHome) {
-  Appearance a = blorbtest::duelLook(blorb::kGrungo, 7, 0);
-  Canvas240 plain{}, decorated{};
-  paint::draw(a, paint::packFor(a.species), plain, 0);
-  a.trophies[0] = byName("fizz");
-  a.trophies[1] = byName("mudge");
-  a.trophyCount = 2;
-  a.owesDebt = a.vendetta = true;
-  paint::draw(a, paint::packFor(a.species), decorated, 0);
-  int lower = 0, upper = 0;
-  for (int i = 0; i < kSide * kSide; ++i)
-    if (plain.px[i] != decorated.px[i]) (i / kSide > 150 ? lower : upper)++;
-  EXPECT_GT(lower, 200) << "the tokens did not show";
-  EXPECT_EQ(upper, 0) << "a token strayed off the lower rim";
-}
-
 // ---- from D8's DuelView ----------------------------------------------------------------
 
 namespace {
@@ -630,27 +597,14 @@ TEST(SceneOf, TheViewBecomesTheScreen) {
   v.phase = blorb::DuelPhase::Choosing;
   EXPECT_EQ(paint::sceneOf(v, mine).them.landsIn, 1) << "choosing turn 5";
 
-  v = viewOf(blorb::DuelPhase::Mercy);
-  v.iAmDown = true;
-  v.theirHold = 200;
-  v.confirmHold = 9;
-  v.emoteIn = blorb::Emote::Plead;
-  s = paint::sceneOf(v, mine);
-  EXPECT_EQ(s.act, paint::DuelAct::Mercy);
-  EXPECT_EQ(s.won, paint::Side::Them) << "I am the one down";
-  EXPECT_EQ(s.finishHold, 200) << "the skull fills with the winner's thumb, not mine";
-  EXPECT_TRUE(s.pleading);
-
   v = viewOf(blorb::DuelPhase::Staking);
   v.chosen = blorb::Stakes::Scrap;
-  v.theyChose = blorb::Stakes::Mortal;
+  v.theyChose = blorb::Stakes::Spar;
   v.skull[0][1] = 77;
-  v.skull[1][2] = 190;
-  v.confirmHold = 120;
+  v.skull[1][0] = 190;
   s = paint::sceneOf(v, mine);
   EXPECT_EQ(s.me.skull, 77);
   EXPECT_EQ(s.them.skull, 190) << "each skull at the tier that side aims";
-  EXPECT_EQ(s.me.hold, 120);
 }
 
 TEST(SceneOf, EveryPhaseDrawsBothPets) {
@@ -726,18 +680,6 @@ blorb::DuelView viewFrom(const DuelScene& fx, blorb::DuelPhase phase) {
   if (fx.won != paint::Side::Neither) v.last.super[fx.won == paint::Side::Me ? 0 : 1] = fx.super;
   v.iWon = fx.won == paint::Side::Me;
   v.draw = fx.won == paint::Side::Neither;
-  const bool fate = phase == blorb::DuelPhase::Mercy || phase == blorb::DuelPhase::Fallen;
-  v.theyAreDown = fate && fx.won == paint::Side::Me;
-  v.iAmDown = fate && fx.won == paint::Side::Them;
-  if (phase == blorb::DuelPhase::Staking) {
-    v.confirmHold = fx.me.hold;
-    v.theirHold = fx.them.hold;
-  } else if (phase == blorb::DuelPhase::Mercy) {
-    (v.iAmDown ? v.theirHold : v.confirmHold) = fx.finishHold;
-  }
-  v.mercyTicksLeft = fx.mercyLeft;
-  v.verdict = fx.verdict;
-  v.emoteIn = fx.pleading ? blorb::Emote::Plead : blorb::Emote::None;
   v.newScars = fx.newScars;
   return v;
 }
@@ -749,12 +691,11 @@ blorb::DuelView viewFrom(const DuelScene& fx, blorb::DuelPhase phase) {
 TEST(SceneOf, EachPhaseDrawsLikeItsFixture) {
   using P = blorb::DuelPhase;
   struct Case { const char* moment; P phase; };
-  const Case cases[] = {{"meeting", P::Greeting},   {"staking", P::Staking},       {"staking_mortal", P::Staking},
-                        {"choosing", P::Choosing},  {"locked", P::Waiting},        {"windup_quick", P::Choosing},
-                        {"windup_heavy", P::Choosing}, {"clash", P::Revealing},   {"hit", P::Revealing},
-                        {"bonk", P::Revealing},     {"landing", P::Revealing},     {"riposte", P::Revealing},
-                        {"stagger", P::Revealing},  {"whiff", P::Revealing},       {"mercy", P::Mercy},
-                        {"fallen", P::Fallen},      {"spared", P::Fallen},         {"outcome", P::Fainting}};
+  const Case cases[] = {{"meeting", P::Greeting},      {"staking", P::Staking},     {"choosing", P::Choosing},
+                        {"locked", P::Waiting},        {"windup_quick", P::Choosing}, {"windup_heavy", P::Choosing},
+                        {"clash", P::Revealing},       {"hit", P::Revealing},       {"bonk", P::Revealing},
+                        {"landing", P::Revealing},     {"riposte", P::Revealing},   {"stagger", P::Revealing},
+                        {"whiff", P::Revealing},       {"outcome", P::Fainting}};
   for (const Pairing& pr : kPairings)
     for (const Case& c : cases) {
       const DuelScene fx = duelScene(c.moment, byName(pr.mine), byName(pr.theirs));

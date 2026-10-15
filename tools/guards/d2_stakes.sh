@@ -41,8 +41,10 @@ mutant "wound ignores woundRoom" $C 's/fxMin(fxMax(injury, Fx::zero()), woundRoo
   "Wounds.CreatureWoundIsClampedByWoundRoom"
 mutant "addScar keeps a fainter scar" $C '/if (scar.fade < faintest->fade) return false;/d' \
   "Scars.AFifthReplacesTheFaintestAndAFainterOneIsRefused"
-mutant "fall records old age" $C 's/DeathCause::Injured)/DeathCause::OldAge)/' \
-  "Fall.AFallRunsTheOrdinaryDeathPathOnce"
+mutant "a 0.7.0 Mortal byte is refused" $H 's/  return b <= kLegacyMortal;/  return b <= 1;/' \
+  "Stakes.A070MortalByteReadsAsAScrap"
+mutant "a 0.7.0 Mortal byte reads as Spar" $H 's/  out = b == 0 ? Stakes::Spar : Stakes::Scrap;/  out = b == 1 ? Stakes::Scrap : Stakes::Spar;/' \
+  "Stakes.A070MortalByteReadsAsAScrap"
 mutant "woundRoom forgets the drop" $S 's/lethalInjury(c) - dropInjury(c) - kWoundMargin - now/lethalInjury(c) - kWoundMargin - now/' \
   "Wounds.NoWoundsPlusADropKillAStarterOrAThousandDescendants"
 mutant "woundRoom forgets the margin" $S 's/lethalInjury(c) - dropInjury(c) - kWoundMargin - now/lethalInjury(c) - dropInjury(c) - now/' \

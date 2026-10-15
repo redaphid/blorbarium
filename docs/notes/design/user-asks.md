@@ -26,3 +26,4 @@
 23. Lightly bias his wording and phrases toward the new SOUL.md in the claude-notification-screen-frog worktree, which references interactions between the user and Peter. Voice only, about 1 in 8 to 10 lines.
 24. The word clouds need more variety: mine unusual words from D:\Projects\sporefall-art, using the futurama-string-generator method, as a light flavour layer.
 25. Shaking him ALWAYS makes him tell the future (an 8-ball every time). Genetics varies what he predicts and how he says it, never whether he answers.
+26. Death is never a choice (2026-10-15: "Death should not be a choice, and I've repeatedly talked about how I want them to die."). Pets die of old age, neglect or injury, by their own chemistry over time, then lay a clutch. No duel, gesture, phone or debug verb kills one. See decisions-2026-10-15.md D13.

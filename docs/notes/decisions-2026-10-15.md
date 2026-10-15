@@ -158,3 +158,153 @@ known devices hold nine different species. A `static_assert` in
   first, without the car-proof senses, the first-hours tuning or the full
   personalities, because the owner was already on the plane. Those follow
   in 0.7.1.
+
+## D13. Death, as the owner described it
+
+The owner, on the plane, after 0.7.0 shipped with Mortal duels and a Finish:
+
+> "Death should not be a choice, and I've repeatedly talked about how I want them to die. But finish the release first"
+> (2026-10-15 22:53 UTC, the release session, `D--Projects-blorbarium/e9822a01`)
+
+### What they said before, in their own words
+
+Every owner message about death, from the Claude Code transcripts of
+blorbarium and the badge repo (`C:/Users/hypnodroid/.claude/projects/`),
+user turns and question answers only. Times are UTC. The relay-queue store
+(`D:/projects/relay-queue/data/events.jsonl`, through 2026-10-12) holds no
+owner message about a pet's death, and the mindmeld hits were agent briefs
+quoting `docs/notes/design/user-asks.md`.
+
+1. **2026-10-03 03:28** (session `5a48df13`, blorbarium). Asked "Can blorb
+   die?", they chose **"Can die, then lays an egg"**, whose text was "A dead
+   blorb leaves an egg with a mutated copy of its genome. The lineage
+   continues and the stakes are real." The safer "Never dies" was the
+   recommended option, and they declined it.
+2. **2026-10-03 03:49** (same session). Asked how a life should end, given
+   Grungo's SOUL.md "never dies" rule: **"Ignore that part. It was
+   overfitting."**
+3. **2026-10-03 04:41** (same session), in answer to "Can neglect kill
+   grungo?" (recommended: no) and "When unplugged, what happens?"
+   (recommended: paused): **"Also I want it to 'catch up' over time, not
+   freeze. So if you haven't seem him in a while, he might die. This is for
+   adults who love video games; death is fine"**.
+4. **2026-10-13 11:16** (session `d9cc3960`, the battles coordinator). Asked
+   whether neglect death should hold on the kids' devices, with the default
+   "kids' pets getting sick and recovering instead of dying": **"Pets should
+   die. My family has a dark sense of humor. They want something more
+   complex. It's fine"**.
+5. **2026-10-14 06:31** (session `40b60ff7`). Asked what a phone's clock
+   should do to a pet unplugged with no battery (options: frozen; capped and
+   never fatal; the whole gap): **"It shouldn't _prevent_ death. Close to
+   dead + time = dead"**.
+6. **2026-10-14 06:36** (same session): **"We should have negative effects
+   to the pet if it's been neglected for a while. Like, 3+ weeks. Once it
+   has the latest time."**
+
+Nothing they said asks for a duel death or for any death a person picks.
+The "Pets should die" ruling answered a question about neglect on the
+kids' devices. The battles design read it as a call for duel deaths, and
+the Finish came from that reading. The lifespan question (2026-10-03 04:26,
+"about 10 powered days") was interrupted and never answered, so the
+default of about 10 powered days is the design's choice, not the owner's.
+
+### How a pet dies now
+
+These are the deaths the owner described, and the engine already had all
+of them. None of their code changed.
+
+- **Old age:** life halves every 3 days, and the old-age receptor ends him
+  at about day 10 (`test_chemistry` "FedEveryTwoHoursHeLivesAboutTenDaysAndDiesOfOldAge").
+- **Neglect:** a pet nobody feeds starves to death within 4 pet days
+  (`kNeglectCanKill`, DEVIATIONS 2; "NeverFedHeDiesOfNeglectWithinFourDays").
+- **Time catching up:** a phone's clock lives up to 12 h of an unplugged
+  gap, and a pet already near death dies inside it ("close to dead + time =
+  dead"; DEVIATIONS 3; `test_dish` "AfterALongAbsenceNeglectStillKillsHim").
+  Three weeks or more away hurts him once ("ThreeWeeksAwayHeWakesStarvingAndHurtOnce").
+- **Then an egg:** every death leaves the remains, the vigil and a clutch
+  of mutated eggs ("Can die, then lays an egg").
+
+### What changed
+
+- **No player action can kill a pet.** The Mortal tier, the Mercy and
+  Fallen phases, the verdict (`Verdict`, `Move::verdict`,
+  `Outcome::downed/verdict`), `Creature::fall()`, and the BOOT rows for the
+  Mortal confirm, Spare, Finish and Plead are gone. So is everything that
+  only followed a duel death: the `Downed` book entry, the dark ledger
+  (fell to, slew, owes us, we owe), trophies, vendettas, the `slayer` feat's
+  award and the rim tokens. `lib/blorb`, `lib/paint`, `src/main.cpp`,
+  `tools/duel_shot.cpp`.
+- **What replaces Mortal: nothing. It is folded into Scrap.** A Scrap keeps
+  its wounds, scars and trait drift, clamped by `woundRoom()` so no duel
+  kills. I weighed keeping a tier with Mortal's bigger wounds and no death,
+  and refused it. A tier picked because it is more dangerous is still a
+  choice to risk a life, and "Mortal" would promise what it no longer does.
+- **The debug link's DIE is gone** (verbs.def, console, jump, the page,
+  the mock, docs/debug-ble.md). It sat behind the BOOT-press unlock, and it
+  was clearly a test tool, but its one purpose was a death on demand, and it
+  ran through the Finish path. The owner's ruling covers a death anyone
+  chooses, and a tester can still reach every death the owner's way:
+  `WARP` an elder through his last minutes, or `CHEM` him to the brink and
+  let the next ticks run his genes. `test_debug_ble`
+  "ThereIsNoDieVerbButHisGenesFinishWhatChemStarts".
+- **The staking screen** shows two tiers. Spar is on the left and Scrap on
+  the right, the tilts that pick them. 0.7.0 drew Scrap at 6 o'clock while a
+  right tilt chose it.
+
+### A mixed pair: 0.7.0 and this firmware
+
+The badges carry 0.7.0 now, and they meet before each one is updated.
+
+- **The frames are unchanged:** 77, 111 and 224 bytes, the same layout,
+  and wire version 1. The tier bytes, the third tier's picture and skull,
+  the hold byte and the spare log slot are all still there. This firmware
+  writes them as 0 and skips them on read.
+- **A Mortal byte (2) from a 0.7.0 badge reads as Scrap** (`stakesFromByte`).
+  A 0.7.0 badge beacons Mortal as its ceiling by default. This firmware
+  never sends more than Scrap, and both firmwares run the lower of the two
+  choices. So a mixed pair agrees on a Scrap at most, nobody is downed,
+  and neither side crashes or refuses the other. `test_duel_session`
+  "A070BadgeStakingMortalDuelsAScrapAndNobodyIsDowned" rewrites one side's
+  frames in flight into a 0.7.0 Mortal stake (40 seeds, 30% loss), and
+  `test_duel_wire` "A070MortalStateIsHeardAsAScrap" decodes such a frame.
+- **0.7.0's verdict bits are never read.** A verdict in a log, after the
+  end or as stray bits on a turn, changes nothing in the Outcome
+  (`test_duel_resolve` "A070VerdictInTheLogChangesNothing").
+- **The Outcome hash is 0.7.0's for every Spar and Scrap.** It still
+  hashes three zeros where 0.7.0 hashed its downing and verdict. The four
+  Spar and Scrap resolve goldens kept their pinned hashes byte for byte, so
+  the two books of a mixed pair still compare.
+- **What remains:** two 0.7.0 badges can still Finish each other until
+  they are updated. Update them all before they meet.
+
+### Save formats
+
+None change. The keepsake and `lineage.log` are untouched. `duels.log`
+keeps 0.7.0's layout. The Met entry still carries its verdict and flag
+bytes. The Self and Friend summaries still carry their feats and ledger
+bytes. 0.7.0's Downed, Trophy and Vendetta entries are read past, and their
+kind numbers are never reused, so a book either firmware wrote opens in the
+other (`test_duel_book` "A070BookWithItsDarkLedgerOpensAndReadsItPast").
+Registry ids stay put: stimuli 41 and 42 are retired but still name genes,
+and the `slayer` feat row stays, so a lineage that earned it keeps its war
+paint. The BootGlyph slots Skull, OpenHand, Plead and Candle stay too,
+because they index the packed glyph art.
+
+### What I measured and left alone
+
+A duel's wounds heal on their own, with a 6-hour half-life, fed or not.
+A pet beaten as close to death as a duel allows (injury 0.70) and then
+left unfed dies at the same moment as an unhurt pet left the same way:
+2.65 pet days, of starvation. If he is fed, he dies of old age at 9.6 pet
+days instead of 10.0, because injury speeds ageing. So a duel never causes
+a death, and a hard life is a slightly shorter one (`test_stakes`
+"AfterTheDuel"). The owner never asked for wounds that kill when they are
+left untended, so I did not add any. **For the owner:** if a wounded pet
+nobody looks after should die of those wounds, the change is one gene:
+let starvation slow his healing.
+
+### Superseded
+
+D8's "death needs two deliberate 3 s holds on Mortal stakes" and D10's
+"die" among the unlocked verbs describe 0.7.0. This section replaces both
+for the next release.

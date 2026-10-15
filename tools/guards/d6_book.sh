@@ -43,22 +43,10 @@ mutant "a pet-played battle moves prowess" $B 's/if (m.manualTurns > 0) st.prowe
   "Fold.ProwessStepsAnEighthTowardEachBattlesPerformanceAndAPetPlayedBattleMovesItNot"
 mutant "the skill is never saved" $B '/    st.skill = m.skillAfter;/d' \
   "Fold.SkillIsTheLifesNewestFrameAndANewLifeHatchesBlank"
-mutant "a spared life is not owed" $B '/  if (m.wasSpared) sat(f.s.weOwe);/d' \
-  "Fold.TheDarkLedgerCountsFallsSlayingsAndSparedLivesAcrossGenerations"
-mutant "trophies pile up" $B '/  if (v.size() > BookState::kTrophies) v.erase(v.begin());/d' \
-  "Fold.TrophiesAreTheNewestThreeSlainSpeciesNewestFirstAndSlayerIsThatLifesFeat"
-mutant "a slaying earns no feat" $B '/    if (m.iSlew) st.feats |= feat::slayer;/d' \
-  "Fold.TrophiesAreTheNewestThreeSlainSpeciesNewestFirstAndSlayerIsThatLifesFeat"
-mutant "a vendetta never lapses" $B 's/ \&\& generation - it->sinceGeneration <= kVendettaGenerations//' \
-  "Vendetta.AFallSwearsOneForTheNextThreeGenerationsAndNoLonger"
-mutant "a spar avenges" $B 's/if (won \&\& forKeeps)/if (won)/' \
-  "Vendetta.AScrapOrMortalWinAgainstThatLineAvengesItAndNothingElseDoes"
-mutant "any line avenges" $B 's/return v.against == them;/return true;/' \
-  "Vendetta.AScrapOrMortalWinAgainstThatLineAvengesItAndNothingElseDoes"
-mutant "the newborn leans to the foe's own stance" $B 's/counterOf(foe.style)/foe.style/' \
-  "Vendetta.ANewbornsSkillLeansToTheCounterOfTheVictorsKindAndOnlyAgainstItsElement"
-mutant "a boot forgets the fled" $B '/  settleAll(b.state_);/d' \
-  "Downed.ABootWithNoVerdictAfterADowningReadsItAsFled"
+mutant "0.7.0's feats are not read past" $B '/      in.u32();   \/\/ 0.7.0.s feats/d' \
+  "Log.CompactionKeepsOneSummaryPerFriendAndTheSameBook"
+mutant "0.7.0's verdict byte is not read past" $B '/  in.u8();   \/\/ 0.7.0.s verdict/d' \
+  "Log.A070BookWithItsDarkLedgerOpensAndReadsItPast"
 mutant "record repeats a battle" $B '/  if (logged(\*store_, Kind::Met, m.battle)) return;/d' \
   "Log.RecordIsIdempotentByBattleIdAcrossABoot"
 mutant "open keeps a torn tail" $B '/  logframes::truncateTorn(store, kFile, valid);/d' \
@@ -67,14 +55,12 @@ mutant "compaction keeps every Meeting too" $B 's/return at >= cut; },/return tr
   "Log.CompactionKeepsOneSummaryPerFriendAndTheSameBook"
 mutant "compaction drops the friends" $B '/    add(Kind::Friend, o);/d' \
   "Log.CompactionKeepsOneSummaryPerFriendAndTheSameBook"
-mutant "compaction drops the vendettas" $B '/    add(Kind::Vendetta, o);/d' \
-  "Log.CompactionKeepsOneSummaryPerFriendAndTheSameBook"
 mutant "compaction keeps no recent Meeting" $B 's/mets\[mets.size() - kKeepRecent\]/mets.back() + 1/' \
   "Log.CompactionKeepsOneSummaryPerFriendAndTheSameBook"
 mutant "the line is named in lower case" $L '/  to\[0\] = char(std::toupper/d' \
   "Founding.TheFoundingPicksSpeciesNamesTheLine"
 mutant "every line founds as Grungo" $L 's/    copySpeciesName(f.species, starter);/    copyName(f.species, "Grungo");/' \
   "Founding.TheFoundingPicksSpeciesNamesTheLine"
-mutant "a grungo founds as grungo" $L 's/copyName(to, speciesInfo(p.species.body).name);/copyName(to, speciesInfo(p.species.body).name); if (p.species.body == kGrungo) to[1] = 0;/' \
+mutant "a grungo founds as grungo" $L 's/  speciesLineName(p.species.body, to);/  speciesLineName(p.species.body, to); if (p.species.body == kGrungo) to[1] = 0;/' \
   "Founding.AnOrdinaryPetsFoundingIsByteForByteWhatItWasBeforeSpecies"
 exit $failed

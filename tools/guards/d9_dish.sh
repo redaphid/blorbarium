@@ -45,8 +45,8 @@ mutant "the graft runs at every open" $U 's/  if (feelsDuels(c.genome())) return
   $T "Graft.APreDuelLineGetsTheDuelGenesOnceAsOneCheckpoint"
 mutant "friend.egg outlives the birth" $D 's/  if (friendEgg \&\& !FriendEggStore::consume(store_)) return false;//' \
   $T "FriendEgg.APowerCutAtAnyStepNeverHatchesItTwice"
-mutant "the slayer feat never reaches the Death entry" $D 's/duel_.book().featsThisLife(c.generation())/0u/' \
-  $T "TwoDishes.AFinishKillsOnceAndCrownsTheVictor"
+mutant "a duel's wound skips the clamp" lib/blorb/src/creature.cpp 's/fxMin(fxMax(injury, Fx::zero()), woundRoom(\*this))/fxMax(injury, Fx::zero()) * Fx::ratio(4, 1)/' \
+  $T "TwoDishes.NoDuelEndsALifeAtAnyTier"
 mutant "the swoon never naps" $U 's/      c->force(action::sleep);.*/      (void)0;/' \
   $T "TwoDishes.TheLoserOfASparSwoonsNapsAndWakes"
 mutant "no double press" $B 's/out.fire(second_ ? stim::button_double : stim::button);/out.fire(stim::button);/' \
@@ -55,8 +55,6 @@ mutant "leaving the friends screen asks a rematch" $U 's/    if (both \&\& fromB
   $T "BootRows.LeavingTheFriendsScreenNeverAsksARematch"
 mutant "a cuddle is never written" $U 's/book_.recordCuddle(tick);/(void)0;/' \
   $T "Readiness.ThreeLossesInARowWantACuddleAndACuddleIsEnough"
-mutant "a downing is never written" $U 's/    book_.recordDowned(fx.battle, fx.victor, tick);/    (void)0;/' \
-  $T "AtOnce.ADownedPetWhoseCableComesOutBeforeTheVerdictLivesAndFled"
 mutant "a double where it means nothing is lost" $D 's/  if (m.doublePress == BootAct::Nothing \&\& fired(out, stim::button_double)) {/  if (false) {/' \
   $T "BootRows.AsleepADoublePressIsTwoPellets"
 mutant "a lobby that found nobody starts the rest" $U 's/  if (fx.radioClosed \&\& battled_) {/  if (fx.radioClosed) {/' \

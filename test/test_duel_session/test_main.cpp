@@ -19,10 +19,6 @@ namespace {
 PeerAddr addr(uint8_t n) { return PeerAddr{{2, 0, 0, 0, 0, n}}; }
 constexpr Weather kStorm{300, 100, 200, 8};   // BATTLES.md testing item 4: 30% lost, 10% doubled, 20% up to 0.8 s late
 
-// HeldIn: BOOT held from the downing's reveal on and never let go.
-// Regrip: the same, let go once in Mercy, then held again.
-enum class Mercy : uint8_t { Spare, Finish, Wait, HeldIn, Regrip };
-
 // How one scripted kid plays. Everything it does it reads off the view, as a
 // kid reads the screen.
 struct Policy {
@@ -30,19 +26,17 @@ struct Policy {
   uint16_t confirmAfter = 4;         // ticks into Staking before confirming
   uint16_t pickPermille = 700;       // turns the kid picks; the rest run out and the pet picks
   uint16_t queuePermille = 300;      // of picked turns with the meter full: a special (half of them heavy)
-  Mercy mercy = Mercy::Spare;
   bool hug = false, rematch = false;
   std::optional<uint32_t> clinkAt;   // lobby: knock at this tick and aim at nobody
-  bool lidWhenBehind = false;        // a Scrap or Mortal: put the lid down while losing
+  bool lidWhenBehind = false;        // a Scrap: put the lid down while losing
 };
 
 Policy randomPolicy(Rng& r) {
   Policy p;
-  p.tier = Stakes(r.below(3));
+  p.tier = Stakes(r.below(kStakesTiers));
   p.confirmAfter = uint16_t(2 + r.below(30));
   p.pickPermille = uint16_t(r.below(1001));
   p.queuePermille = uint16_t(r.below(600));
-  p.mercy = Mercy(r.below(3));
   p.hug = r.below(4) == 0;
   return p;
 }
@@ -59,8 +53,7 @@ struct Device {
   std::vector<Meeting> meetings;
   std::vector<DuelView> lastViews;   // the view on the tick each Meeting arrived
   uint32_t woundTurns = 0, phases = 0, specials = 0, closedAt = 0;
-  bool downed = false, fell = false, sawEggFizzle = false;
-  std::optional<bool> mercyLocked;
+  bool sawEggFizzle = false;
   std::optional<FriendEgg> egg;
   EndReason ended = EndReason::None;
   // This turn's plan: when to act, at what, how.
@@ -75,8 +68,8 @@ struct Device {
     setup.card.knack.order = uint8_t(n % 6);
     setup.card.lineageId = 0x51ed000000ull + seed * 8 + n;
     setup.genome = &genome;
-    setup.ceiling.top = Stakes::Mortal;
-    setup.skull[1] = 60, setup.skull[2] = 140;
+    setup.ceiling.top = Stakes::Scrap;
+    setup.skull[1] = 60;
     setup.manualTurns = 100;
     setup.nonce = seed * 2654435761u + n;
   }
@@ -84,11 +77,6 @@ struct Device {
 
   DuelInput kid(const DuelView& v, uint32_t tick) {
     DuelInput in;
-    if ((policy.mercy == Mercy::HeldIn || policy.mercy == Mercy::Regrip) && v.theyAreDown && !v.iAmDown &&
-        (v.phase == DuelPhase::Revealing || v.phase == DuelPhase::Mercy)) {
-      in.bootDown = !(policy.mercy == Mercy::Regrip && v.phase == DuelPhase::Mercy && v.phaseTicks == 5);
-      return in;
-    }
     switch (v.phase) {
       case DuelPhase::Lobby:
         if (policy.clinkAt) {
@@ -102,8 +90,7 @@ struct Device {
         const Stakes tier = Stakes(std::min(uint8_t(policy.tier), uint8_t(v.ceiling[0])));
         in.aim = int8_t(tier);
         if (v.phaseTicks >= policy.confirmAfter) {
-          if (tier == Stakes::Mortal) in.bootDown = true;
-          else if (tier == Stakes::Scrap) in.press = v.phaseTicks % 4 == 0;
+          if (tier == Stakes::Scrap) in.press = v.phaseTicks % 4 == 0;
           else in.knock = v.phaseTicks % 4 == 0;
         }
         break;
@@ -128,15 +115,6 @@ struct Device {
         if (rng.below(200) == 0) in.doubleKnock = true;
         if (rng.below(100) == 0) in.shake = true;
         break;
-      case DuelPhase::Mercy:
-        if (v.iAmDown) {
-          in.press = v.phaseTicks == 5;
-        } else if (policy.mercy == Mercy::Finish) {
-          in.bootDown = true;
-        } else if (policy.mercy == Mercy::Spare) {
-          in.knock = v.phaseTicks == 10;
-        }
-        break;
       case DuelPhase::Friends:
         if (policy.hug) in.bootDown = true;
         if (policy.rematch && bouts < maxBouts) in.press = v.phaseTicks == 3;
@@ -152,19 +130,9 @@ struct Device {
     phases |= 1u << uint8_t(v.phase);
     if (v.hasLast)
       for (const Special sp : v.last.special) specials |= 1u << uint8_t(sp);
-    // Only the winner's device writes the verdict, in the slot right after
-    // the downing: while the skull waits the winner's log stops there, and
-    // the downed side's log (which a special may have run ahead) never grows.
-    if (v.phase == DuelPhase::Mercy && v.verdict == Verdict::None) {
-      if (!v.iAmDown) EXPECT_FALSE(v.locked);
-      if (v.iAmDown && !mercyLocked) mercyLocked = v.locked;
-      if (v.iAmDown) EXPECT_EQ(v.locked, *mercyLocked);
-    }
     if (v.eggFizzled) sawEggFizzle = true;
     DuelEffects fx = s.tick(air, kid(v, tick), tick);
     woundTurns += fx.woundCount;
-    downed |= fx.downed;
-    fell |= fx.fall;
     if (fx.met) meetings.push_back(*fx.met), lastViews.push_back(v);
     if (fx.egg) egg = std::move(fx.egg);
     if (fx.radioClosed && !closedAt) closedAt = tick, ended = s.view(tick).ended;
@@ -197,7 +165,6 @@ void expectSameBattle(const Meeting& a, const Meeting& b) {
   EXPECT_EQ(a.outcomeHash, b.outcomeHash);
   EXPECT_EQ(a.ending, b.ending);
   EXPECT_EQ(a.turns, b.turns);
-  EXPECT_EQ(a.verdict, b.verdict);
   EXPECT_NE(a.me, b.me);
   EXPECT_EQ(a.friendCard.lineageId == b.friendCard.lineageId, false);
 }
@@ -207,14 +174,13 @@ void expectSameBattle(const Meeting& a, const Meeting& b) {
 // BATTLES.md testing item 4: over a thousand seeds of bad weather, both
 // devices finish with the same battle, byte for byte, whatever each kid did.
 TEST(DuelSession, AThousandSeedsOfBadWeatherAgreeOnEveryByte) {
-  uint32_t phases = 0, specials = 0, spared = 0, finished = 0, timedOut = 0, mortal = 0, eggs = 0;
+  uint32_t phases = 0, specials = 0, scraps = 0, eggs = 0;
   for (uint32_t seed = 1; seed <= 1000; ++seed) {
     Ether ether(seed, kStorm);
     Rng r = Rng::seeded(seed);
     Device a(ether, 1, SpeciesId{uint8_t(r.below(kSpeciesCount))}, seed);
     Device b(ether, 2, SpeciesId{uint8_t(r.below(kSpeciesCount))}, seed + 5000);
     a.policy = randomPolicy(r), b.policy = randomPolicy(r);
-    if (seed % 3 == 0) a.policy.tier = b.policy.tier = Stakes::Mortal;
     ASSERT_TRUE(a.open(0) && b.open(0));
     runOut(ether, a, b);
     ASSERT_EQ(a.meetings.size(), 1u) << "seed " << seed;
@@ -225,33 +191,18 @@ TEST(DuelSession, AThousandSeedsOfBadWeatherAgreeOnEveryByte) {
     EXPECT_EQ(ma.battle.stakes, agreedStakes(a.policy.tier, b.policy.tier)) << "seed " << seed;
     EXPECT_EQ(ma.friendCard.lineageId, b.setup.card.lineageId);
     if (ma.battle.stakes == Stakes::Spar) EXPECT_EQ(a.woundTurns + b.woundTurns, 0u);
-    if (ma.verdict == Verdict::Finish) {
-      ++finished;
-      EXPECT_NE(a.fell, b.fell) << "seed " << seed;
-      EXPECT_EQ(ma.iSlew, !a.fell) << "seed " << seed;   // the ack arrived: the victor took the slaying
-      EXPECT_EQ(mb.iSlew, !b.fell) << "seed " << seed;
-    }
-    if (ma.verdict == Verdict::Spare) {
-      ++spared;
-      const Mercy w = a.downed ? b.policy.mercy : a.policy.mercy;
-      timedOut += w == Mercy::Wait;
-      if (w == Mercy::Finish) ADD_FAILURE() << "a held Finish spared, seed " << seed;
-    }
-    mortal += ma.battle.stakes == Stakes::Mortal;
+    scraps += ma.battle.stakes == Stakes::Scrap;
     eggs += a.egg.has_value() && b.egg.has_value();
     if (a.egg) EXPECT_EQ(a.egg->genome.hash(), b.genome.hash());
     phases |= a.phases | b.phases;
     specials |= a.specials | b.specials;
   }
   for (DuelPhase p : {DuelPhase::Lobby, DuelPhase::Greeting, DuelPhase::Staking, DuelPhase::Choosing, DuelPhase::Waiting,
-                      DuelPhase::Revealing, DuelPhase::Fainting, DuelPhase::Mercy, DuelPhase::Fallen, DuelPhase::Friends})
+                      DuelPhase::Revealing, DuelPhase::Fainting, DuelPhase::Friends})
     EXPECT_TRUE(phases >> uint8_t(p) & 1) << "phase " << int(p) << " never shown";
   for (Special s : {Special::Committed, Special::Landed, Special::Riposted, Special::Whiffed, Special::Staggered})
     EXPECT_TRUE(specials >> uint8_t(s) & 1) << "special fate " << int(s) << " never seen";
-  EXPECT_GT(mortal, 100u);
-  EXPECT_GT(spared, 0u);
-  EXPECT_GT(finished, 0u);
-  EXPECT_GT(timedOut, 0u);   // the winner's own clock spared
+  EXPECT_GT(scraps, 100u);
   EXPECT_GT(eggs, 0u);
 }
 
@@ -388,60 +339,75 @@ TEST(DuelSession, ThreeDevicesKnockingAtOnceMatchNobody) {
   for (Device* d : {&a, &b, &c}) EXPECT_EQ(d->phases & (1u << uint8_t(DuelPhase::Greeting)), 0u);
 }
 
-TEST(PairCeiling,MortalNeedsAFairFightPickedTurnsAndAnEvenRecord) {
+TEST(PairCeiling, AScrapNeedsAnEvenRecordAndNoScrapYetToday) {
   Ceiling all;
-  all.top = Stakes::Mortal;
+  all.top = Stakes::Scrap;
   BattleCard me, them;
-  EXPECT_EQ(pairCeiling(all, me, them, 30, {}, 0).top, Stakes::Mortal);
+  EXPECT_EQ(pairCeiling(all, me, them, 0, {}, 0).top, Stakes::Scrap);
 
-  me.prowess = 20, them.prowess = 250;   // two assist hearts
-  Ceiling c = pairCeiling(all, me, them, 100, {}, 0);
-  EXPECT_EQ(c.top, Stakes::Scrap);
-  EXPECT_EQ(c.why[2], Decline::Unfair);
-  EXPECT_EQ(pairCeiling(all, them, me, 100, {}, 0).top, Stakes::Scrap);   // and from the stronger side too
+  me.prowess = 20, them.prowess = 250;   // two assist hearts: still a Scrap, the assist evens it
+  EXPECT_EQ(pairCeiling(all, me, them, 0, {}, 0).top, Stakes::Scrap);
 
   me.prowess = them.prowess = 128;
-  EXPECT_EQ(pairCeiling(all, me, them, 29, {}, 0).top, Stakes::Scrap);    // under 30 picked turns
   EXPECT_EQ(pairCeiling(all, me, them, 100, {4, 0, 4}, 0).top, Stakes::Spar);   // a lopsided record
-  EXPECT_EQ(pairCeiling(all, me, them, 100, {4, 1, 3}, 0).top, Stakes::Mortal); // one in four is enough
-  c = pairCeiling(all, me, them, 100, {}, 1);                             // today's for-keeps duel was fought
+  EXPECT_EQ(pairCeiling(all, me, them, 100, {4, 1, 3}, 0).top, Stakes::Scrap);  // one in four is enough
+  const Ceiling c = pairCeiling(all, me, them, 100, {}, 1);               // today's for-keeps duel was fought
   EXPECT_EQ(c.top, Stakes::Spar);
   EXPECT_EQ(c.why[1], Decline::Unfair);
-  EXPECT_EQ(c.why[2], Decline::Unfair);
 
   Ceiling young;
   young.top = Stakes::Spar;
-  young.why[1] = young.why[2] = Decline::TooYoung;
-  EXPECT_EQ(pairCeiling(young, me, them, 100, {}, 0).why[2], Decline::TooYoung);   // the pet's own reason stands
+  young.why[1] = Decline::TooYoung;
+  EXPECT_EQ(pairCeiling(young, me, them, 100, {}, 0).why[1], Decline::TooYoung);   // the pet's own reason stands
 }
 
 // Staking runs at the lower tier, and both screens show both pets' skulls.
 TEST(DuelSession, StakingAgreesOnTheLowerTierAndShowsBothSkulls) {
   Ether ether(9, kStorm);
   Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-  a.policy.tier = Stakes::Mortal, b.policy.tier = Stakes::Scrap;
-  b.setup.skull[2] = 222;
+  a.policy.tier = Stakes::Scrap, b.policy.tier = Stakes::Spar;
+  b.setup.skull[1] = 222;
   ASSERT_TRUE(a.open(0) && b.open(0));
   run(ether, {&a, &b}, 1, 3000, [&](uint32_t t) { return a.s.view(t).phase == DuelPhase::Choosing; });
   const DuelView v = a.s.view(3000);
-  EXPECT_EQ(v.agreed, Stakes::Scrap);
-  EXPECT_EQ(v.skull[0][2], 140);
-  EXPECT_EQ(v.skull[1][2], 222);
-  EXPECT_EQ(v.theyChose, Stakes::Scrap);
+  EXPECT_EQ(v.agreed, Stakes::Spar);
+  EXPECT_EQ(v.skull[0][1], 60);
+  EXPECT_EQ(v.skull[1][1], 222);
+  EXPECT_EQ(v.theyChose, Stakes::Spar);
 }
 
-TEST(DuelSession, MortalIsRefusedAtTwoAssistHearts) {
-  Ether ether(10, {});
-  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-  a.setup.card.prowess = 20, b.setup.card.prowess = 250;
-  a.policy.tier = b.policy.tier = Stakes::Mortal;
-  ASSERT_TRUE(a.open(0) && b.open(0));
-  run(ether, {&a, &b}, 1, 3000, [&](uint32_t t) { return a.s.view(t).phase == DuelPhase::Choosing; });
-  for (Device* d : {&a, &b}) {
-    const DuelView v = d->s.view(3000);
-    EXPECT_EQ(v.ceiling[0], Stakes::Scrap);
-    EXPECT_EQ(v.why[0][2], Decline::Unfair);
-    EXPECT_EQ(v.agreed, Stakes::Scrap);
+// B stands in for a 0.7.0 badge whose kid held BOOT for Mortal: every frame it
+// sends says Mortal (2) for its choice and its ceiling, with a third tier's
+// picture and skull and a Mortal hold. A 0.7.0 badge runs the lower of the two
+// choices, as this one does, so both run a Scrap: one battle, nobody downed,
+// both books the same, and the radio closes on the friends screen.
+void as070Mortal(uint8_t* f, size_t n) {
+  constexpr size_t kBeaconCeiling = 4 + 2 + 4 + 6 + 1 + 1, kChosen = 4 + 2 + 6 + 4;
+  if (f[3] == 1) f[kBeaconCeiling] = 2;
+  if (f[3] == 2) {
+    f[kChosen] = f[kChosen + 2] = 2;                           // chosen, ceiling
+    f[kChosen + 5] = uint8_t(Decline::None), f[kChosen + 8] = 200;   // the third tier's why and skull
+    f[kChosen + 9] = 128;                                       // the Mortal hold
+  }
+  const uint32_t c = crc32(f, n - 4);
+  for (int i = 0; i < 4; ++i) f[n - 4 + i] = uint8_t(c >> (8 * i));
+}
+
+TEST(DuelSession, A070BadgeStakingMortalDuelsAScrapAndNobodyIsDowned) {
+  for (uint32_t seed = 1; seed <= 40; ++seed) {
+    Ether ether(seed, kStorm);
+    Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 3);
+    a.policy.tier = b.policy.tier = Stakes::Scrap;
+    b.air.rewrite = as070Mortal;
+    ASSERT_TRUE(a.open(0) && b.open(0));
+    runOut(ether, a, b);
+    ASSERT_EQ(a.meetings.size(), 1u) << "seed " << seed;
+    ASSERT_EQ(b.meetings.size(), 1u) << "seed " << seed;
+    expectSameBattle(a.meetings[0], b.meetings[0]);
+    EXPECT_EQ(a.meetings[0].battle.stakes, Stakes::Scrap) << "seed " << seed;
+    EXPECT_FALSE(a.meetings[0].fizzled) << "seed " << seed;
+    EXPECT_NE(a.ended, EndReason::Conflict) << "seed " << seed;
+    EXPECT_TRUE(a.phases >> uint8_t(DuelPhase::Friends) & 1) << "seed " << seed;
   }
 }
 
@@ -498,100 +464,6 @@ TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {
   EXPECT_FALSE(b.meetings[1].fizzled);
   EXPECT_EQ(a.meetings[1].battle.rematch, 1);
   EXPECT_NE(a.meetings[1].battle.seed, a.meetings[0].battle.seed);
-}
-
-// The verdict is the winner's alone, and its own 15 s spare when nobody acts.
-// A Finish is the victor's to take only once the fallen side has heard it.
-TEST(DuelSession, TheWinnersSilenceSparesAndAFinishNeedsTheAck) {
-  uint32_t waited = 0, acked = 0;
-  for (uint32_t seed = 1; seed <= 60; ++seed) {
-    for (Mercy mercy : {Mercy::Wait, Mercy::Finish}) {
-      Ether ether(seed, kStorm);
-      Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 3);
-      a.policy.tier = b.policy.tier = Stakes::Mortal;
-      a.policy.mercy = b.policy.mercy = mercy;
-      ASSERT_TRUE(a.open(0) && b.open(0));
-      runOut(ether, a, b);
-      if (!a.downed && !b.downed) continue;
-      ASSERT_EQ(a.meetings.size(), 1u);
-      ASSERT_EQ(b.meetings.size(), 1u);
-      expectSameBattle(a.meetings[0], b.meetings[0]);
-      Device& winner = a.downed ? b : a;
-      Device& loser = a.downed ? a : b;
-      if (mercy == Mercy::Wait) {
-        ++waited;
-        EXPECT_EQ(winner.meetings[0].verdict, Verdict::Spare);
-        EXPECT_TRUE(winner.meetings[0].iSpared && loser.meetings[0].wasSpared);
-        EXPECT_FALSE(loser.fell);
-      } else {
-        ++acked;
-        EXPECT_TRUE(loser.fell);
-        EXPECT_TRUE(loser.meetings[0].iFell);
-        EXPECT_TRUE(winner.meetings[0].iSlew);
-      }
-    }
-  }
-  EXPECT_GT(waited, 5u);
-  EXPECT_GT(acked, 5u);
-}
-
-// A BOOT hold that began before the skull showed (a heavy special held
-// through the reveal) never finishes: the kid must let go and hold again.
-TEST(DuelSession, AHoldCarriedIntoMercyIsNoFinish) {
-  uint32_t heldIn = 0, regripped = 0;
-  for (uint32_t seed = 1; seed <= 60; ++seed) {
-    for (Mercy mercy : {Mercy::HeldIn, Mercy::Regrip}) {
-      Ether ether(seed, {});
-      Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 3);
-      a.policy.tier = b.policy.tier = Stakes::Mortal;
-      a.policy.mercy = b.policy.mercy = mercy;
-      ASSERT_TRUE(a.open(0) && b.open(0));
-      runOut(ether, a, b);
-      if (!a.downed && !b.downed) continue;
-      Device& winner = a.downed ? b : a;
-      Device& loser = a.downed ? a : b;
-      ASSERT_EQ(winner.meetings.size(), 1u);
-      if (mercy == Mercy::HeldIn) {
-        ++heldIn;
-        EXPECT_FALSE(loser.fell) << "seed " << seed;
-        EXPECT_EQ(winner.meetings[0].verdict, Verdict::Spare) << "seed " << seed;
-      } else {
-        ++regripped;
-        EXPECT_TRUE(loser.fell) << "seed " << seed;
-        EXPECT_TRUE(winner.meetings[0].iSlew) << "seed " << seed;
-      }
-    }
-  }
-  EXPECT_GT(heldIn, 5u);
-  EXPECT_GT(regripped, 5u);
-}
-
-TEST(DuelSession, AFinishTheFallenSideNeverHeardSlaysNobody) {
-  bool seen = false;
-  for (uint32_t seed = 1; seed <= 60 && !seen; ++seed) {
-    Ether ether(seed, {});
-    Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 3);
-    a.policy.tier = b.policy.tier = Stakes::Mortal;
-    a.policy.mercy = b.policy.mercy = Mercy::Finish;
-    ASSERT_TRUE(a.open(0) && b.open(0));
-    run(ether, {&a, &b}, 1, 30000, [&](uint32_t t) {
-      // From the moment the skull waits, nothing the victor sends arrives.
-      for (Device* d : {&a, &b})
-        if (d->s.view(t).phase == DuelPhase::Mercy && !d->s.view(t).iAmDown) d->air.muted = 1000;
-      return !a.s.active() && !b.s.active();
-    });
-    if (!a.downed && !b.downed) continue;
-    seen = true;
-    Device& winner = a.downed ? b : a;
-    Device& loser = a.downed ? a : b;
-    ASSERT_EQ(winner.meetings.size(), 1u);
-    ASSERT_EQ(loser.meetings.size(), 1u);
-    EXPECT_FALSE(winner.meetings[0].iSlew);   // "they left before the verdict": no kill
-    EXPECT_FALSE(loser.fell);                 // he never heard it, so he lives
-    EXPECT_FALSE(loser.meetings[0].fled);     // the victor went quiet: nobody fled
-    EXPECT_EQ(loser.meetings[0].verdict, Verdict::None);
-  }
-  EXPECT_TRUE(seen);
 }
 
 TEST(DuelSession, TheGenomeSwapCompletesAtThirtyPercentLoss) {

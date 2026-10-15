@@ -1,8 +1,10 @@
 # Battles
 
-Two kids bring their devices together and their pets have a duel. Each turn, each kid secretly picks a stance with the body: tilt to aim, knock to lock in. Both devices compute the same battle from the same inputs, so they never disagree. Before it starts, both kids choose the stakes on their own device: a Spar is play, a Scrap leaves wounds and scars, and a Mortal duel can end a life. A death is never luck. A mortal loser is downed, and the winner's kid has to hold BOOT for three seconds while a skull fills to finish him. When a pet falls, its line remembers: remains, a clutch, a vendetta. The victor keeps a trophy, a scar and a feat. Pets also make friends, and if both kids hug their pets after a duel, a friend egg joins the next clutch.
+Two kids bring their devices together and their pets have a duel. Each turn, each kid secretly picks a stance with the body: tilt to aim, knock to lock in. Both devices compute the same battle from the same inputs, so they never disagree. Before it starts, both kids choose the stakes on their own device: a Spar is play, and a Scrap leaves wounds and scars. No duel ends a life. The loser faints and naps. Pets also make friends, and if both kids hug their pets after a duel, a friend egg joins the next clutch.
 
-The owner's ruling (2026-10-13) replaced the brief's "a battle never kills, injures or permanently weakens a pet": "Pets should die. My family has a dark sense of humor. They want something more complex." Neglect death stays as the engine has it, on every device. What is kept is consent on each device, with the stakes shown before anyone agrees, and a handicap that keeps a 6-year-old against a parent a real game.
+**Death is never a choice (owner, 2026-10-15): "Death should not be a choice, and I've repeatedly talked about how I want them to die."** Their words on how pets die, from 2026-10-02 to 2026-10-14, are about neglect and time: "So if you haven't seen him in a while, he might die", "Pets should die. My family has a dark sense of humor", "It shouldn't _prevent_ death. Close to dead + time = dead". A pet dies of old age, of starvation, or of injury, by his own chemistry over time, as the engine already has it, on every device. Then he lays a clutch. Firmware 0.7.0 had a third tier, Mortal, whose loser the winner's kid could Finish with a 3 s hold. It is gone, with the Mercy and Fallen phases, the verdict, `Creature::fall`, the debug link's `DIE`, and everything that followed a duel death (the dark ledger, trophies, vendettas, the `slayer` feat). The full record is `docs/notes/decisions-2026-10-15.md`, "Death, as the owner described it". Sections below that are dated 2026-10-13 (the synthesis, the alternatives, the units, the open questions) are the design record and still speak of Mortal; this paragraph supersedes them.
+
+The owner's earlier ruling (2026-10-13) replaced the brief's "a battle never kills, injures or permanently weakens a pet": "Pets should die. My family has a dark sense of humor. They want something more complex." That ruling stands as the owner meant it: pets die, kids' devices included, of neglect and time. A duel wounds and scars, and wounds cost him a little of his life (injury speeds ageing), but a duel is never the death. What is kept is consent on each device, with the stakes shown before anyone agrees, and a handicap that keeps a 6-year-old against a parent a real game.
 
 This is a design, not a build. The species it uses are in `SPECIES.md`. The interface sketches are in `docs/design/sketch/`. `sketch/check.sh` compiles them with `-Werror` against this branch's engine headers, plants three bad registry rows that must fail, and prints the measured sizes quoted below. The unit table for builders is in "Units".
 
@@ -13,18 +15,18 @@ Labels used throughout: **measured** (a command run on 2026-10-13, or a number f
 1. **Species** are `species.def` rows plus three genes: SpeciesGene (body), PowerGene (power) and KnackGene (taste). No gene means grungo, so every pet alive today is unchanged.
 2. **A device gets its species** from a founding nest of three eggs, one per element, rolled from the MAC and picked by the kid. The owner can pin one over the cable first.
 3. **To duel,** each kid presses BOOT twice on their own device. That press is the only way the radio turns on, and only a detector's press counts, never the phone's.
-4. **Stakes,** chosen by both kids on their own devices, each tier confirmed by a bigger gesture. Spar is play. Scrap brings wounds, scars and trait drift. Mortal can end a life. The duel runs at the lower choice, and each pet's forecast is shown as a skull before anyone confirms.
+4. **Stakes,** chosen by both kids on their own devices, each tier confirmed by its gesture. Spar is play (a knock). Scrap brings wounds, scars and trait drift (a BOOT press). The duel runs at the lower choice, and each pet's forecast is shown before anyone confirms. No tier can end a life.
 5. **A turn:** tilt to Pounce, Guard or Trick, then knock to lock. BOOT fires the power when the meter holds its cost, a shake makes the pet foretell the friend's move, and a double knock sends a cheer. After 10 s the pet picks.
 6. **Resolution** is one pure function, `resolve(cardA, cardB, seed, stakes, movesA, movesB)`. It is integer and mirror-symmetric, and it replays from turn 0 every time.
-7. **Each device writes only its own move log.** Every packet carries the whole log, and the receiver keeps the longest consistent prefix. The mortal verdict rides as the winner's last log entry. Loss, duplicates and reordering only delay a turn. The stakes and the rematch number are part of the battle id.
+7. **Each device writes only its own move log.** Every packet carries the whole log, and the receiver keeps the longest consistent prefix. Loss, duplicates and reordering only delay a turn. The stakes and the rematch number are part of the battle id. A 0.7.0 badge's Mortal byte (2) is read as Scrap, so a mixed pair duels at Scrap at most.
 8. **The wheel** is two rock-paper-scissors cycles. Stances: Pounce > Trick > Guard. Elements: Splash > Spark > Sprout. Nine powers are tuned by one cost column. Measured in a model where powers fire as soon as the meter is full: every species wins 0.450 to 0.546.
-9. **Death is a choice, never luck.** No wound ever kills: every wound is clamped below the pet's own lethal level, less a margin as big as his own drop injury. A mortal loser is downed. Only the winner's kid decides, by holding BOOT 3 s to finish, or knocking (or letting 15 s pass on their own device) to spare.
-10. **Death means something.** The fallen leaves remains and a clutch, and its line swears a vendetta: newborns seeded to fight the victor's kind, and the debt on the hatch marquee. The victor takes a trophy, a scar and the `slayer` feat. A spared pet owes a life, and the book keeps the dark ledger across generations.
-11. **Fairness** is skill-based. The kid who has been playing worse gets up to two extra hearts and a brighter "whisper" of what the pet has read. Level, age and breeding add no strength. Mortal duels are refused unless the two kids are close in skill.
+9. **Death is never a choice.** No duel, gesture or verb kills a pet. No wound ever kills: every wound is clamped below the pet's own lethal level, less a margin as big as his own drop injury. The loser faints. A pet dies only of old age, neglect or injury, by his own chemistry over time.
+10. **Wounds mean something.** Scars last his life, `mettle` and `dread` drift for days, and injury speeds his ageing while it heals, so a hard life is a slightly shorter one (measured: a pet beaten to the clamp and fed dies of old age at 9.6 pet days, against 10.0).
+11. **Fairness** is skill-based. The kid who has been playing worse gets up to two extra hearts and a brighter "whisper" of what the pet has read. Level, age and breeding add no strength. A Scrap is refused on a lopsided head-to-head record, and between the same two lines at most once a pet-day.
 12. **Feelings and lasting change:** duel stimuli go through the pet's genes behind a per-tier code allowlist. Wounds are engine-applied from the agreed Outcome, never from genes. Scars last a life. `mettle` and `dread` drift for days.
-13. **Learning:** a 12 x 3 duel Skill table learns which stance works against which kind of friend, and drives the 10 s autopilot and the lean. A vendetta seeds it in the next generation.
+13. **Learning:** a 12 x 3 duel Skill table learns which stance works against which kind of friend, and drives the 10 s autopilot and the lean. Each life starts it blank.
 14. **Radio:** ESP-NOW v1 on fixed channel 1 at 10 dBm, with Wi-Fi up only while a duel is open. Packets are 77 to 224 B, under the 250 B frame (measured). BLE stays up through IDF software coexistence. Duels bind to OTA's own interlock: no duel while an update session is active or the image is on trial, and no update while a duel holds the radio.
-15. **Save formats:** trailing bytes on the saved clutch (friend egg) and on the Body chunk (scars), three gene kinds, four petfs files. `lineage.log` and `kFormatVersion` are unchanged, because a battle death is recorded as `Injured`, which it is. One expression rule changes for every pet: only vital chemicals may write the die locus.
+15. **Save formats:** trailing bytes on the saved clutch (friend egg) and on the Body chunk (scars), three gene kinds, four petfs files. `lineage.log` and `kFormatVersion` are unchanged. `duels.log` keeps 0.7.0's byte layout; its dark-ledger entries and bytes are read past. One expression rule changes for every pet: only vital chemicals may write the die locus.
 
 ## Usage
 
@@ -38,7 +40,7 @@ Labels used throughout: **measured** (a command run on 2026-10-13, or a number f
 >
 > Dad fires Static Spark. Fizz's tail crackles and Gilly jumps, losing a heart whatever the clash. Gilly's meter fills, Maya presses BOOT, and Gilly's gills glow as a heart grows back. Eleven turns later Fizz swoons with spiral eyes. It was a Spar, so Fizz naps for three minutes and wakes up happy. Both pets sit side by side under a heart. "Hug your pet!" Maya cradles Gilly and Dad cradles Fizz, two hearts fill, and a speckled egg rolls onto both rims.
 
-> A week later, Maya (now 8) and her cousin Theo (11) are close in skill. Both of their pets are adults. On the stakes screen Theo tilts to the skull and holds BOOT until it fills. Maya hesitates, then does the same. Both screens show the skulls: Gilly's is a sliver, and Theo's Mothwick's is half full, because Mothwick is still wounded from yesterday. Mothwick loses. She is down, wings crumpled. On Maya's screen a skull waits for her thumb, and on Theo's, Mothwick looks up at him. Maya knocks. **SPARED.** Mothwick limps home with a scar across one wing and a debt glyph in Theo's book. Three days later Mothwick wins the rematch, downs Gilly, and Theo holds BOOT. Gilly falls. Maya's clutch hatches two days after that, and the hatch marquee reads "GEN 2 REMEMBERS THE MOTH". A tiny wing-scale trophy sits on Theo's rim.
+> A week later, Maya (now 8) and her cousin Theo (11) tilt to the plaster and press BOOT: a Scrap. Mothwick is still sore from yesterday, and the forecast over her shows it. Mothwick loses, swoons, and wakes with a scar across one wing. Theo forgets her for a weekend at his dad's. She was already hurt, nobody fed her, and on Sunday night she dies. Theo's clutch hatches two days later.
 
 ### The callers (compiled in `sketch/usage.cpp`)
 
@@ -62,7 +64,7 @@ EXPECT_EQ(metA->battle, metB->battle); EXPECT_EQ(metA->outcomeHash, metB->outcom
 
 // the pure core
 Outcome o = resolve(cardA, cardB, duelSeed(nonceA, nonceB, rematch, stakes), stakes, movesA, movesB);
-if (o.awaitingVerdict()) { /* Mercy: the skull waits for the winner's thumb */ }
+if (o.over()) { /* the loser faints; then the friends screen */ }
 ```
 
 
@@ -70,18 +72,15 @@ if (o.awaitingVerdict()) { /* Mercy: the skull waits for the winner's thumb */ }
 
 Owner (2026-10-13): "People should be able to push the 'boot' button to do contextual things." BOOT is the toy's one button, so it means something in every state, and a small **hint glyph** on the rim beside the physical button always shows what a press will do now. When a hold means something else, a thin ring around the glyph fills while the button is held. When a double press means something, two dots sit under the glyph. A greyed glyph means "not now", and its pips say why (the meter short of a cost, an empty pantry). A kid never has to guess.
 
-The table is data, `sketch/blorb/boot.h` (`kBoot`), one row per state in precedence order. The Dish routes the button by it, and `Appearance::boot` carries the hint from it, so the glyph cannot drift from what the button does. Compile-time checks hold three rules: every state has a row, every state shows a hint, and no press can ever finish a pet or agree to a mortal duel (only a 3 s hold can). Rows marked "today" are what the firmware already does on `origin/battles`.
+The table is data, `sketch/blorb/boot.h` (`kBoot`), one row per state in precedence order. The Dish routes the button by it, and `Appearance::boot` carries the hint from it, so the glyph cannot drift from what the button does. Compile-time checks hold two rules: every state has a row, and every state shows a hint. No row has an act that ends a life: there is none to give it. Rows marked "today" are what the firmware already does on `origin/battles`.
 
 | State (first match wins) | Press | Hold | Double press | Hint glyph |
 |---|---|---|---|---|
 | OTA question (`ota::Session` asking) | yes, update (today: `Session::press`, after 1.5 s) | the same | the same | download |
 | Sealed keepsake | nothing (today) | nothing | nothing | lock |
-| Duel: staking | confirm the tier under the tilt (Spar or Scrap) | 3 s: confirm Mortal, the skull filling | nothing | the tier's glyph |
+| Duel: staking | confirm the tier under the tilt (Spar or Scrap) | nothing | nothing | the tier's glyph |
 | Duel: my turn | lock the aimed stance as a quick special | 1.2 s: as a heavy special | nothing | the species' power glyph, one pip (quick) or two (heavy) |
 | Duel: my special winding up | nothing: the stance is committed | nothing | nothing | the power glyph with its countdown |
-| Duel: mercy, I won | spare | 3 s: finish, the skull filling | nothing | open hand, skull ring |
-| Duel: mercy, I am down | plead (a cheer floats up on the winner's screen) | the same | nothing | pleading hands |
-| Duel: a pet fell | nothing | nothing | nothing | candle |
 | Duel: the friends screen | ask a rematch | 3 s: hug, yes to a friend egg (a cradle still works) | leave | rematch arrows, heart ring |
 | Duel: lobby | pick the aimed friend | nothing | close the lobby | friend |
 | Founding nest | next egg | 1.2 s: keep this egg | nothing | arrow, check ring |
@@ -102,7 +101,7 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 3. **The lobby.** Ready friends appear as their species' faces on the rim, up to four. Only friends heard at -62 dBm or louder count (about arm's length, an estimate that unit D12 sets on a desk). A different roster greys the friend out ("they speak another frog").
 4. **Matching needs both kids, and each device decides alone.** Either each kid tilts toward the other's face and knocks, so each beacon's `wants` names the other. Or the kids **clink**: they knock the two devices together, both knocks land within 300 ms, and each is the other's only coincident knocker. Both devices apply the same rule to the same beacons, so no "accept" message exists.
 5. **Greeting.** The VS splash plays until the friend's first State packet arrives. A one-sided match falls back to the lobby within 2 s. After 60 s in the lobby with no match, the radio goes off.
-6. **Stakes.** Both kids tilt to a tier on the rim and see both pets' skulls (each pet's forecast at that tier). Tiers a pet or the fairness rule forbids are greyed, with the reason as a picture: a cradle for "too young", a balance for "not a fair fight", a skull for "a scrap could kill him". Each pet's risk is drawn on its own device as pictures, not words: the pet itself on the tier glyph, a bandage over him for Scrap, and for Mortal a skull that fills as far as the worst case would bring him. The friend's pet gets the same pictures in the friend's corner. Each kid confirms with their tier's gesture. Spar is a knock, Scrap a BOOT press, and Mortal a BOOT hold of 3 s while a skull fills. The duel runs at `agreedStakes(mine, theirs)`, the lower of the two, which both screens show before turn 0. Either kid can always pull it down to a Spar. A choice is frozen once confirmed. Until turn 0 the pair is matched without the stakes in its id, and from turn 0 the id carries them. A State that already names the agreed tier's id counts as the peer's confirm, so a lost confirm packet cannot strand the step. Each side's hold progress travels in its State, so both screens show both skulls filling. Nothing is applied to either pet without this step.
+6. **Stakes.** Both kids tilt to a tier on the rim: Spar on the left, Scrap on the right, the same tilts that aim Pounce and Guard. (0.7.0 drew Scrap at 6 o'clock while a right tilt picked it; the two now agree.) Tiers a pet or the fairness rule forbids are greyed, with the reason as a picture: a cradle for "too young", a bandage for "wounded", a balance for "not a fair fight", a skull for "a scrap would take all the room his wounds leave". Each pet's risk is drawn on its own device as pictures, not words: a feather over him for Spar, a plaster on his head for Scrap. The friend's pet gets the same pictures in the friend's corner. Each kid confirms with their tier's gesture: Spar is a knock, Scrap a BOOT press. The duel runs at `agreedStakes(mine, theirs)`, the lower of the two, which both screens show before turn 0. Either kid can always pull it down to a Spar. A choice is frozen once confirmed. Until turn 0 the pair is matched without the stakes in its id, and from turn 0 the id carries them. A State that already names the agreed tier's id counts as the peer's confirm, so a lost confirm packet cannot strand the step. Nothing is applied to either pet without this step.
 
 ### One turn
 
@@ -114,22 +113,22 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 | BOOT hold 1.2 s | instead of the knock: locks the aimed stance as a **heavy special** | yes |
 | Double knock | sends a cheer (a heart, star, laugh or wave) | yes |
 | Shake | the pet foretells the friend's next stance (ask 25: a shake always tells the future) | never |
-| BOOT hold | outside Staking and Mercy, what it always means (today a tuck-in; under v2 a pellet). In Staking it is the Mortal confirm and in Mercy the Finish, and only there is it captured | Staking and Mercy only |
+| BOOT hold | in a turn, a heavy special; on the friends screen, the hug | yes |
 | Face down 2 s | ends the duel as a draw for both | never |
 | Drop | ends the duel as a draw; the drop reaches the pet as a real drop | never |
 
-"Captured" stimuli are the duel's, so the pet does not flinch at every lock-in knock. A `static_assert` in `duel_session.h` keeps shake, BOOT hold, drop and lid out of the turn's capture mask. The one exception is the BOOT hold in Staking and Mercy, where the hold is the confirm or the Finish. Taking it there means a mortal confirm does not also tuck the pet in. `DuelInput` carries the button's level (`bootDown`) so a 3 s hold can be timed.
+"Captured" stimuli are the duel's, so the pet does not flinch at every lock-in knock, and a heavy special never also tucks him in. A `static_assert` in `duel_session.h` keeps shake, drop, lid and cradle out of the capture mask. `DuelInput` carries the button's level (`bootDown`) so the 3 s hug can be timed.
 
 The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill and its lean, and the screen celebrates it ("Gilly picked!"). A 6-year-old who only watches still plays a whole battle. Once both stances are known the turn reveals: both stances pop up, the "beats" arrow shows, and the bonk plays with hearts flying, which takes 3 s. A full battle is a median of 12 turns (measured in the probe), so about 2 to 3 minutes (arithmetic).
 
 ### Ending, friends, rematch and the friend egg
 
-- In a Spar or a Scrap, a side at 0 hearts faints: spiral eyes, then a nap. In a Mortal duel it is **downed**, and the Mercy phase begins ("When a pet falls"). After 15 turns, more hearts wins, and equal hearts is a draw, with nobody downed.
-- Each device applies its own pet's wounds from the shared Outcome, turn by turn as each turn resolves, and saves at once. In a Scrap or a Mortal duel, each heart lost adds injury, capped by the tier and clamped below his lethal level, and the two hardest turns leave scars.
+- At either tier, a side at 0 hearts faints: spiral eyes, then a nap. After 15 turns, more hearts wins, and equal hearts is a draw.
+- Each device applies its own pet's wounds from the shared Outcome, turn by turn as each turn resolves, and saves at once. In a Scrap, each heart lost adds injury, capped by the tier and clamped below his lethal level, and the two hardest turns leave scars.
 - The friends screen shows both pets side by side under a heart. Each side records the Meeting in its duel book (idempotent by battle id).
-- **Rematch:** both kids knock. That closes the session and reopens it pinned to the same friend, with fresh nonces, a fresh card, readiness, ceiling and forecast, and a full Staking step. So a wounded pet cannot be rushed back in at yesterday's forecast, and a mortal rematch needs the 3 s hold again. A rematch is refused if either pet has fallen. Fresh nonces give a fresh battle id, so a late packet from the last bout never feeds the next one.
+- **Rematch:** both kids knock. That closes the session and reopens it pinned to the same friend, with fresh nonces, a fresh card, readiness, ceiling and forecast, and a full Staking step. So a wounded pet cannot be rushed back in at yesterday's forecast. Fresh nonces give a fresh battle id, so a late packet from the last bout never feeds the next one.
 - **Friend egg:** "hug your pet". Each kid cradles their own pet for 3 s within 10 s. When both State packets say `hugged`, the devices swap genomes (below) and each stores a friend egg for its next clutch. `SPECIES.md` has the genetics.
-- The lid, face down, a drop or 20 s of silence ends the duel. In a Spar it is a draw. In a Scrap or a Mortal duel, the side that left while behind **fled**: it forfeits and keeps every wound already applied. Wounds land turn by turn and are saved at once, so pulling the cable undoes nothing. The tick a Mortal duel downs a pet, its device writes a "downed, pending" entry to `duels.log`. If the kid pulls the cable before the verdict, the pet lives, and the next boot folds the entry into "fled" forever. If instead the winner's side leaves during Mercy, the downed pet lives, the book says "the victor left", and nobody is marked fled. A log conflict is a draw for both. A drop during a duel reaches the pet as the real drop it is, and the wound clamp leaves room for it ("Stakes").
+- The lid, face down, a drop or 20 s of silence ends the duel. In a Spar it is a draw. In a Scrap, the side that left while behind **fled**: it forfeits and keeps every wound already applied. Wounds land turn by turn and are saved at once, so pulling the cable undoes nothing. A log conflict is a draw for both. A drop during a duel reaches the pet as the real drop it is, and the wound clamp leaves room for it ("Stakes").
 
 
 
@@ -187,7 +186,7 @@ Two other Foresee rules were measured and rejected: an always-counter landing (G
 - **Stances.** A special is a stance with stakes on it. It still loses to its counter, and that is the riposte.
 - **The element wheel.** Unchanged: a head-start pip and "SUPER!" stay display and tempo, never damage. A special's extra hearts do not depend on elements, so the wheel cannot snowball through them.
 - **Assist hearts.** Unchanged in number. Measured with specials, a reading parent beats a habit-bound kid 0.838 with no help and 0.761 with two hearts (0.923 and 0.801 without specials), because the telegraph gives the weaker kid something to read. Against a kid who follows the pet's whisper half the time, the parent wins 0.534 and 0.367. The whisper now also glows the stagger and the expected landing for the assisted side, brighter as the assist rises.
-- **Stakes and Mortal.** A special's hearts are hearts: in a Scrap or Mortal duel each one wounds, clamped by `woundRoom()` as always. A heavy landing or a riposte can down a pet, and the verdict is still the winner's 3 s hold. Battles are shorter, so the per-duel wound caps matter less often.
+- **Stakes.** A special's hearts are hearts: in a Scrap each one wounds, clamped by `woundRoom()` as always. A heavy landing or a riposte can make a pet faint sooner. Battles are shorter, so the per-duel wound caps matter less often.
 - **The balance gate.** Unchanged bounds (species 430 to 570 permille, pairs 300 to 700). D4 re-measures with specials through the real `resolve()`, adding a **Queuer** player (queues whenever it can, heavy half the time, staggers a bracing friend) to the Random, Habit, Reader and Pet players. That includes the autopilot: `petChoice` decides whether the pet queues on a timed-out turn, from its Skill and its mood (high pluck or mettle queues heavy).
 - **The prowess fold.** A kid-picked special counts as a picked turn. A landed special counts as a won turn, a riposted one as a lost turn.
 
@@ -195,77 +194,33 @@ Two other Foresee rules were measured and rejected: an always-counter landing (G
 
 ### The ladder
 
-| | Spar | Scrap | Mortal |
-|---|---|---|---|
-| Wound per heart lost | none | injury +0.06 | injury +0.09 |
-| Most injury one duel can add | none | +0.35 | +0.60 |
-| Scars | no | up to 2 a duel | up to 2 a duel |
-| `mettle` and `dread` drift | no | yes | yes |
-| A side at 0 hearts | faints, naps | faints, naps | **downed**: the winner's verdict |
-| Can this duel kill? | no | no: every wound is clamped | only by the winner's Finish |
-| Youngest pet allowed | Baby | Child | Adult |
-| Fairness gate (assist hearts at most) | 2 | 2 | **1** |
-| Kids' own picked turns, each, at least | 0 | 0 | **30** |
-| Head-to-head (3 or more duels between the lines) | any | the lower side won at least 1 in 4 | the lower side won at least 1 in 4 |
-| For-keeps duels between the same two lines | any | 1 a pet-day (Scrap and Mortal together) | 1 a pet-day (Scrap and Mortal together) |
-| Confirm gesture | knock | BOOT press | BOOT hold 3 s |
-
-All numbers are starting values in `stakes.h` (`kStakes`), one row per tier, for the owner to tune. The starter genome has a receptor that kills the instant injury reaches 0.9 (`starter_genome.cpp`; it is digital, not sustained), plus the slower chain of injury, ageing and pain. A pet already at 0.4 would therefore not survive an unclamped Mortal loss. So **no wound ever kills**. Every wound is clamped by `woundRoom()`: the injury at which this pet's own expressed receptors write `die`, less the injury his own `dropped` genes give, less 0.05, less what he has now. That covers a spared loser, a battered winner and a fumble mid-duel alike. The forecast on the stakes screen (`forecast()`) shows how close the worst clamped case would bring him: every heart lost, plus a drop.
-
-**Wounds are the engine's, not the genes'.** The amounts come from the tier table, applied from the agreed Outcome by `woundFor()` turn by turn. Stimulus genes still decide what a duel feels like, but `duelFilter()` refuses any stimulus write to injury, life, toxin or an unnamed chemical at every tier. Two expression-time guards (unit D3) cover the second step. A gene reading daze or pluck may write only `sleep_gate`. And a receptor writing the die or cause locus is inert unless it reads a vital chemical (life, injury, toxin, starvation). The second guard is a rule for every pet, duel or not. It closes a mutation that wires pain, adrenaline, a drive, mettle or dread to `die`, which would otherwise fire mid-Scrap. So a duel ends a life in exactly two ways: a Finish someone chose, and the pet's own ordinary chemistry over the following days if he is badly hurt and neglected. The second is how wounds work, and the engine already has it.
-
-**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, stitches for Splash, a bite for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap or Mortal duel. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
-
-### How lethal by default (recommendation, and the alternatives)
-
-**Recommended: every device allows all three tiers, and the stakes screen starts on Scrap each time.** A mortal duel needs both kids to hold for the skull, two adult pets, a fair fight (assist at most one heart, 30 turns each picked by the kids themselves, and a head-to-head record that is not lopsided), and then the winner's own 3-second Finish. That makes death available and serious, and it never happens to a kid who did not choose the tier on their own device. A parent can lower a device's ceiling from the website (`TWIST stakes spar|scrap|mortal`, kept in `duel.cfg`).
-
-How often would a mortal duel even reach a verdict? In the probe, random players end 0.687 of battles with a pet down before turn 15 (measured, 24,300 battles). A reading parent against a habit-bound kid downs the kid's pet 0.882 of the time with no help and 0.686 with two assist hearts (measured). That second pair is why Mortal needs a fair fight. Without the gate, a mortal duel between a parent and a 6-year-old would mostly be the parent deciding the fate of the child's pet. Prowess alone cannot be the gate. A new device starts at 128, and so does a kid who lets the pet pick every turn, and prowess is a win share within each kid's usual pool. So Mortal also needs 30 picked turns on each side and, once the two lines have met three times, a lower side that won at least one in four.
-
-| Alternative | What it does | Why not the default |
+| | Spar | Scrap |
 |---|---|---|
-| Spar only (this design before the ruling) | nothing lasting | the owner asked for death and complexity |
-| Scrap ceiling | wounds and scars, death only by later neglect | death never comes from a duel itself; less drama than asked for |
-| Mortal without mercy | a downed pet dies | death becomes the turn game's luck, not a choice; "cheap" |
-| Death by accumulation | no Finish; injury simply kills if it crosses the line | a kid's pet dies by arithmetic nobody chose; the forecast would have to refuse most duels |
-| **Recommended ladder** | Spar, Scrap, Mortal with mercy | death is real, consented to on both devices, and always someone's decision |
+| Wound per heart lost | none | injury +0.06 |
+| Most injury one duel can add | none | +0.35 |
+| Scars | no | up to 2 a duel |
+| `mettle` and `dread` drift | no | yes |
+| A side at 0 hearts | faints, naps | faints, naps |
+| Can this duel kill? | no | no: every wound is clamped |
+| Youngest pet allowed | Baby | Child |
+| Fairness gate (assist hearts at most) | 2 | 2 |
+| Head-to-head (3 or more duels between the lines) | any | the lower side won at least 1 in 4 |
+| For-keeps duels between the same two lines | any | 1 a pet-day |
+| Confirm gesture | knock | BOOT press |
 
+All numbers are starting values in `stakes.h` (`kStakes`), one row per tier, for the owner to tune. The starter genome has a receptor that kills the instant injury reaches 0.9 (`starter_genome.cpp`; it is digital, not sustained), plus the slower chain of injury, ageing and pain. A pet already at 0.6 would therefore not survive an unclamped Scrap loss. So **no wound ever kills**. Every wound is clamped by `woundRoom()`: the injury at which this pet's own expressed receptors write `die`, less the injury his own `dropped` genes give, less 0.05, less what he has now. That covers a spared loser, a battered winner and a fumble mid-duel alike. The forecast on the stakes screen (`forecast()`) shows how close the worst clamped case would bring him: every heart lost, plus a drop.
 
-## When a pet falls
+**Wounds are the engine's, not the genes'.** The amounts come from the tier table, applied from the agreed Outcome by `woundFor()` turn by turn. Stimulus genes still decide what a duel feels like, but `duelFilter()` refuses any stimulus write to injury, life, toxin or an unnamed chemical at every tier. Two expression-time guards (unit D3) cover the second step. A gene reading daze or pluck may write only `sleep_gate`. And a receptor writing the die or cause locus is inert unless it reads a vital chemical (life, injury, toxin, starvation). The second guard is a rule for every pet, duel or not. It closes a mutation that wires pain, adrenaline, a drive, mettle or dread to `die`, which would otherwise fire mid-Scrap. So no duel ends a life. What a Scrap leaves is the pet's own chemistry's: injury heals with a half-life of 6 hours, fed or not, and while it lasts it speeds his ageing. A beaten pet nobody feeds dies of neglect when an unhurt one would (measured, `test_stakes`, "AfterTheDuel"); a fed one dies of old age, a little sooner.
 
-### Mercy
+**Lasting change.** Scars last a life. They are drawn over the body by kind: a claw for a Pounce, a scorch for Spark, a notch for Sprout, stitches for Splash, a bite for a zap. They fade toward, but never to, nothing. Two trait chemicals with a half-life of about six pet-days move with every Scrap. `mettle` comes from wins, and `dread` from losses and scars. Both are read into the card's Mood (nerve), so a battle-hardened pet leans bolder and a beaten one leans to Guard. Both are ordinary chemicals that his genes can wire further. Once v2's Imprint (A6) lands, a child starts nudged toward its parent's final mettle and dread.
 
-When a mortal duel downs a pet, both screens show it lying in the dish. The winner's kid decides:
+### Why no tier kills (2026-10-15)
 
-- **Spare:** a knock, or 15 s of nothing on the winner's device. The downed pet keeps the wounds he took (clamped, so he lives) and his scars. The `duel_spared` stimulus (relief, fondness) goes to him, and his line now owes the victor's line a life. A debt glyph sits in both books.
-- **Finish:** hold BOOT for 3 s while a skull fills, and both screens show it filling. Letting go early stops the fill and decides nothing.
+The owner: "Death should not be a choice." Every way a duel could end a life was a choice: a Finish is a kid's, and a tier that can kill is agreed to by two kids. So Mortal is folded into Scrap, and Scrap keeps its wounds, scars and trait drift, clamped so no duel kills. Keeping Mortal's bigger wounds without a death was weighed and refused: a tier picked for being more dangerous is still a choice to risk his life, and its name would promise what it no longer does.
 
-The verdict is one more entry in the winner's move log, in the slot right after the downing turn. Only the winner's device ever writes it, including the Spare when its own 15 s run out. The downed side never times out by itself. It waits for that slot, for up to 20 s of silence, after which the victor has left and the downed pet lives. So both devices read one verdict, and a lost packet only delays it. The winner's device takes the slaying (trophy, feat, `duel_slew`) only once the downed side's acknowledgement covers the verdict. If no acknowledgement arrives, it records "they left before the verdict" and no kill. The fallen side keeps sending from its last scene so the acknowledgement arrives. A device that holds a verdict never cancels it for a lid.
+A pet dies the ways the owner described: of old age, of neglect (`kNeglectCanKill`, DEVIATIONS 2), and through time catching up when a phone brings the clock back (DEVIATIONS 3: "close to dead + time = dead"). Each ends in the remains, the vigil and a clutch of mutated eggs.
 
-The downed pet's kid can only plead, with a cheer that floats up on the winner's screen. That is the moment the design is built around.
-
-### The fallen
-
-Each device applies its own pet's fate from the shared Outcome, so nothing reaches into another kid's device. A finished pet's device calls `Creature::fall()`, which writes the die and cause loci as `Injured`. Then the ordinary death path runs: the Death entry, the remains (the converter's settled sleeping frame, with his scars), the 30-minute vigil and the clutch. It is a full roguelite death, the same as old age.
-
-What his line keeps:
-
-- **A vendetta.** For up to three generations, or until avenged (a Scrap or Mortal win against the victor's lineage), every newborn's duel Skill is seeded against the victor's element. The victor's lineage is marked on the rim in the lobby, and the hatch marquee names the debt ("GEN 5 REMEMBERS THE FIZZ"). It lives in `duels.log`, which outlives every death, so it needs no genome change.
-- **Heirlooms as usual.** His strongest beliefs become heirloom instincts, as at any death.
-- **The book** records "fell to a Fizz of <the friend's line>, turn 9, spared once before" in the dark ledger.
-
-### The victor
-
-- **A trophy:** the fallen species' token (a shell, a spore cap, a gill frond, a wing scale, a fin, a lamp, a feather, a gear, a hood) on the rim, the newest three shown.
-- **The `duel_slew` stimulus,** which his genes turn into pride or remorse. The starter gives pride, a little `dread` and a night of uneasy dreams, so some lines will be haunted.
-- **The `slayer` feat** (`feats.def`). It is lineage meta-progression, so it opens feat-gated genes forever. The starters carry a dormant war-paint mark gated on it. It is awarded at the victor's death from `duels.log` (the Dish ORs `book.featsThisLife()` into the Death entry), so `LifeStats` and its save format do not change. It is one bit per line, so it cannot be farmed.
-- **The wound** of whatever hearts he lost, and often a scar.
-
-### The survivor's memory and the bystanders
-
-- The brain keeps the duel as one of its 16 episodes (the largest drive change), so he dreams it.
-- Once v2's oracle lands, the friend's arrival becomes an omen he braces for or looks forward to.
-- At their next duel with any friend whose book knew the fallen pet, devices exchange the news, and pets that knew him get `duel_mourned`: loneliness, and a little dread.
+**A mixed pair (0.7.0 and this firmware).** The frames did not change size or layout, so the two still meet. A 0.7.0 badge beacons Mortal as its ceiling by default and may choose Mortal; this firmware reads that byte (2) as Scrap (`stakesFromByte`), sends at most Scrap itself, and both run `agreedStakes`, the lower choice. So the pair agrees on a Scrap at most, and nobody is downed. Two 0.7.0 badges can still Finish each other until they are updated. `test_duel_session` "A070BadgeStakingMortalDuelsAScrapAndNobodyIsDowned" rewrites one side's frames into a 0.7.0 Mortal stake in flight and checks the battle.
 
 ## Resolution and convergence
 
@@ -325,7 +280,7 @@ All measured in the probe, with instant powers and the caveat above. The lesson 
 2. **Assist hearts, by skill and not by level** (graft from candidate C). The card carries the kid's **prowess**, a running mean (1/8 step) of how well that kid has picked: the share of turns the kid chose (not the pet) that won or bonked. Inside a 24-point dead band nobody gets help. Past it, the weaker side gets one heart per 32 points, at most two. The stronger side loses nothing. A kid who starts following the lean plays better, their prowess rises, and the help backs off by itself, so the 0.311 and 0.172 cells do not persist.
 3. **Nothing makes a pet stronger.** Level, age, generation and breeding change no number in `resolve()`. Level is a badge on the rim. A parent's ten-generation line is no tougher than a newborn.
 4. **The shake.** A shake reads the friend's habit aloud ("HE WILL POUNCE"). It is the same reading as the whisper, said in the pet's voice and judged when the turn reveals.
-5. **The stakes follow the fairness.** Each kid can always pull a duel down to a Spar. Mortal is refused while the assist would exceed one heart, until both kids have picked 30 turns themselves, and when the two lines' head-to-head record is lopsided (the lower side under one win in four, over three or more duels). A parent cannot take a mortal duel against a much weaker kid. A 6-year-old who has learned to follow their pet earns their way in.
+5. **The stakes follow the fairness.** Each kid can always pull a duel down to a Spar. A Scrap is refused when the two lines' head-to-head record is lopsided (the lower side under one win in four, over three or more duels).
 6. **No farming.** A Scrap needs the head-to-head floor too, so after three lopsided Scraps between two lines only Spars are on offer between them until the weaker side wins one. At most one for-keeps duel (Scrap or Mortal) is allowed between the same two lines per pet-day, counted from `duels.log` on both devices. A pet with injury of 0.5 or more is offered only a Spar. Together these mean a stronger player cannot grind a weaker kid's pet down, whatever the stakes. The stakes do not change who wins a turn: wounds, scars and traits never enter `resolve()`, and mettle and dread move only the lean. So the probe's balance and fairness numbers stand for every tier, and no re-run was needed.
 
 Candidate A's level-based underdog hearts were rejected. Level counts battles, not skill, so a parent who rarely duels would get help against a kid who duels daily.
@@ -345,20 +300,19 @@ Duel outcomes reach the creature as stimuli through his own stimulus genes, so a
 
 | Stimulus | Starter gene effect | What you see |
 |---|---|---|
-| `duel_bonked` | adrenaline +0.2, fear +0.05; pain +0.1 in a Scrap or Mortal duel | a flinch (hood up), an alarmed blink |
+| `duel_bonked` | adrenaline +0.2, fear +0.05; pain +0.1 in a Scrap | a flinch (hood up), an alarmed blink |
 | `duel_landed` | pluck +0.3, boredom -0.2 | a happy bounce |
-| `duel_won` | pluck +0.5, boredom -0.4, loneliness -0.2; mettle +0.1 in a Scrap or Mortal duel | hop_circles |
-| `duel_fainted` | daze +1.0, fear -0.3; dread +0.1 in a Scrap or Mortal duel | spiral eyes, then a nap: daze (half-life 90 s) feeds `sleep_gate` |
+| `duel_won` | pluck +0.5, boredom -0.4, loneliness -0.2; mettle +0.1 in a Scrap | hop_circles |
+| `duel_fainted` | daze +1.0, fear -0.3; dread +0.1 in a Scrap | spiral eyes, then a nap: daze (half-life 90 s) feeds `sleep_gate` |
 | `duel_befriended` (both sides, always) | loneliness -0.5, need_touch -0.2, boredom -0.3, sleepiness +0.15 | content, a little sleepy |
-| `duel_spared` | fear -0.3, fondness up, dread +0.2 | he limps, then hides his face in the hood |
-| `duel_slew` | pluck +0.5, dread +0.1, and a dream episode | proud, then restless that night |
+| `duel_spared`, `duel_slew` | retired with Mortal: nothing fires them; their ids (42, 41) stay for the genes that name them | |
 | `duel_mourned` | loneliness +0.3, dread +0.05 | sits still at the rim for a while |
 
 `daze` is the faint, and it ends in a nap of about 3 to 4 minutes (arithmetic from its 90 s half-life and a receptor threshold). `pluck` is the battle high. `mettle` and `dread` are the lasting traits (see "Stakes"). `duel_befriended`'s small sleepiness rise means that after about five duels in an hour (an estimate from the gene amounts) the pets yawn, and at 0.8 sleepiness they decline. A pet with injury of 0.5 or more is offered only a Spar until he heals (a bandage on the tier screen). He still plays, he just does not fight.
 
-**`duelFilter()` is an allowlist in code, per tier** (`sketch/blorb/stakes.h`). Genes mutate and every body byte is legal. So genes may set how much a duel stirs him, but the code sets what a duel stimulus may touch at all. Drives may fall freely and rise by at most 0.3. Pain may rise only in a Scrap or Mortal duel. Adrenaline may rise by at most 0.3. Daze and pluck move freely. `mettle` and `dread` move only in a Scrap or Mortal duel. Injury, life, toxin and every unnamed chemical are refused at every tier, because wounds come from `woundFor()` and the tier table, never from genes. Six `static_assert`s hold this. Daze and pluck are guarded one step further: at expression, any receptor or reaction that reads them is inert unless it targets `sleep_gate` (`kDuelChemTargets`). So a mutation cannot wire a swoon to the die locus. The only death a duel itself can cause is a Finish.
+**`duelFilter()` is an allowlist in code, per tier** (`sketch/blorb/stakes.h`). Genes mutate and every body byte is legal. So genes may set how much a duel stirs him, but the code sets what a duel stimulus may touch at all. Drives may fall freely and rise by at most 0.3. Pain may rise only in a Scrap. Adrenaline may rise by at most 0.3. Daze and pluck move freely. `mettle` and `dread` move only in a Scrap. Injury, life, toxin and every unnamed chemical are refused at every tier, because wounds come from `woundFor()` and the tier table, never from genes. Six `static_assert`s hold this. Daze and pluck are guarded one step further: at expression, any receptor or reaction that reads them is inert unless it targets `sleep_gate` (`kDuelChemTargets`). So a mutation cannot wire a swoon to the die locus. No duel causes a death.
 
-**Lineages from before duels.** A genome founded before this design has no duel feeling genes, so its pet would feel nothing. On the first duel open (never at boot, and never for a pet that never duels), `graftDuelGenes` appends the missing genes once at `nextUid()` (no uid is ever reused, DEVIATIONS 6), idempotently by gene kind and stimulus id, and records a lineage Checkpoint, the path `TWIST gene_edit` already uses. Grafted genes never cross. That edits a living keepsake genome, so it is open question 7. Wounds, scars and the Finish need no genes and apply either way.
+**Lineages from before duels.** A genome founded before this design has no duel feeling genes, so its pet would feel nothing. On the first duel open (never at boot, and never for a pet that never duels), `graftDuelGenes` appends the missing genes once at `nextUid()` (no uid is ever reused, DEVIATIONS 6), idempotently by gene kind and stimulus id, and records a lineage Checkpoint, the path `TWIST gene_edit` already uses. Grafted genes never cross. That edits a living keepsake genome, so it is open question 7. Wounds and scars need no genes and apply either way.
 
 ## What each kid sees
 
@@ -369,22 +323,21 @@ The 240 px round screen uses the same layout on both devices, mirrored.
 - **Over the friend:** "..." while they choose, a tick once they lock, the prophecy bubble and incoming cheers.
 - **Centre:** the reveal (two glyphs and the "beats" arrow), BONK! or a bonk of heads, SUPER!, power glyphs and their effects (Grungo's Foresee reuses the existing halo code), the faint and the friends photo.
 - **Assist hearts** look like the pet cheering, never like a label.
-- **Stakes and fate:** the three tier glyphs (a feather for Spar, a bandage for Scrap, a skull for Mortal) with both pets' skulls; in Mercy, the downed pet, the skull filling under the winner's thumb, and the plea cheers floating up; after, the new scars drawn on, and the fallen pet's remains in the friend's dish.
-- **At home:** scars on the pet for the rest of his life, trophies and debt and vendetta marks on the rim.
-- **Where a scar goes:** on a limb, a shoulder, a side or the head, never on the front of the chest or the belly. A scar's x and y come from the hit's luck, so D11 maps them into those regions of each body rather than anywhere in its bounding box. No battle mark (scar, war paint, trophy or vendetta mark) may read as a piercing or a body ornament. The owner vetoed the ripple and ring scars for exactly that, which is why the kinds are claw, scorch, notch, stitches and bite.
+- **Stakes:** the two tier glyphs (a feather for Spar, a plaster for Scrap) with each pet's risk over him; after, the new scars drawn on.
+- **At home:** scars on the pet for the rest of his life.
+- **Where a scar goes:** on a limb, a shoulder, a side or the head, never on the front of the chest or the belly. A scar's x and y come from the hit's luck, so D11 maps them into those regions of each body rather than anywhere in its bounding box. No battle mark (scar or war paint) may read as a piercing or a body ornament. The owner vetoed the ripple and ring scars for exactly that, which is why the kinds are claw, scorch, notch, stitches and bite.
 - **No reading needed.** Text appears only as the pet's voice line on the existing marquee. Everything a 6-year-old needs is a picture, and no state is shown by colour alone.
 
 ## Consent, stakes and fairness
 
-The owner's ruling removed "never kills". What remains binding, and where each rule is enforced:
+What is binding, and where each rule is enforced:
 
 | Rule | Where it is enforced |
 |---|---|
 | No duel without consent on that device | the `LocalConsent` type; the Air is closed by default; only detector-fired stimuli open a duel or lock a move (`SenseOut::remote`); `TWIST stimulus` refuses the double-press and Duel stimuli; the `closedDeviceIsDeaf` test, and a test that fires every stimulus name over the phone |
 | The stakes are shown, and agreed, before anything is applied | the Staking phase; each tier's own confirm gesture; the duel runs at the lower choice; both forecasts on both screens; the stakes are in the battle id, so the two devices cannot run different tiers |
-| Death is never random or cheap | only a Finish kills (a 3 s hold, after the battle, by the winner's kid); every wound is clamped below the pet's own lethal level with room for a drop; wounds come from a code table, not mutable genes; only vital chemicals may write `die`; the winner's device alone decides the verdict, and silence spares |
-| Death means something | the ordinary death path (remains, vigil, clutch, heirlooms); the vendetta; the victor's trophy, feat and memory; the dark ledger |
-| A 6-year-old against a parent is a real game | the whisper, prowess assist hearts, no stats, the autopilot, the shake's reading; Mortal refused unless the fight is fair |
+| Death is never a choice | no tier, gesture or verb kills (`Creature::fall`, the verdict and `DIE` are gone); every wound is clamped below the pet's own lethal level with room for a drop; wounds come from a code table, not mutable genes; only vital chemicals may write `die`; a 0.7.0 badge's Mortal is read as Scrap |
+| A 6-year-old against a parent is a real game | the whisper, prowess assist hearts, no stats, the autopilot, the shake's reading |
 | No cross without consent on both devices | each kid's own hug, carried as a flag in their own State |
 | Never during an OTA | `EspNowAir::open()` refused while `ota::Session::active()` or `hw::Trial::onTrial()`; `DishOtaHost::busy()` true while a duel holds the radio, so BEGIN answers `ERR 409 BUSY` |
 | A parent never farms a kid's pet | for-keeps tiers need the fair-fight gates; at most one for-keeps duel per pair of lines per pet-day; a wounded pet is offered only a Spar; each kid can always pull a duel down to a Spar |
@@ -435,8 +388,8 @@ All in `pio test -e native` in WSL `survivor`, except the sim film.
 5. **`test_two_dishes`** (D9): two whole `Dish`es, each with `MemStorage` and a `FakeAir`, driven by scripted 50 Hz BodySamples (tilt, knock, shake, cradle). A full duel runs. The loser's daze rises, he naps and wakes. Both get `duel_befriended`. Both books hold the meeting. In a Spar, injury, toxin and life equal a control twin's; in a Scrap, injury rises by exactly `woundFor()`'s amount and nothing else moves. A shake mid-duel hops him and judges the prophecy. Both hugs give each side a `friend.egg`. `body_only_full_life` still passes.
 6. **`test_friend_egg`** (D7): the `SPECIES.md` list (replay without the friend's genome, both viability checks, the allowlist, the hybrid rate, a clutch of 3 giving up its last slot, the timeout never picks it, a reboot during the pick keeps the friend's genome, an old reader loads the clutch record).
 7. **`tools/duel_balance`** (D4): the 9 x 9 tournament through the real `resolve()`, gated on the bounds above.
-8. **Stakes.** Unit D2's `test_stakes`: `duelFilter`'s asserts; no sequence of wounds at any tier, from any starting injury, plus a drop, kills a starter or any of 1,000 mutated descendants (`woundRoom` holds); planted `pain -> die` and `daze -> die` receptors are inert; `fall()` runs the ordinary death path once (Death entry `Injured`, remains, clutch). Unit D8's session cases: only the winner's device writes the verdict, and its timeout writes Spare; a verdict lost, doubled or late gives the same fate on both devices; the verdict sits at index `resolved` and decodes after a downing on turn 15; the winner applies the slaying only after the acknowledgement; Mortal is refused at assist 2, under 30 picked turns, or on a lopsided head-to-head; a lost confirm does not strand Staking; a rematch reruns Staking. Unit D9's Dish cases: a cable pull mid-duel keeps every wound applied so far; a downed pet whose device reboots before the verdict boots "fled"; a slayer's line expresses the war-paint gene from the next generation; the vendetta seeds the next generation's Skill and lapses after three or on avenging.
-9. **The sim film** (D13; WSL, SDL headless): `sim --duel-bot` gives the simulator a FakeAir whose other end is an in-process `DuelSession` with a scripted kid, on the fixed clock, so two runs are byte-identical. The goldens are the lobby with a friend, VS, choosing with the lean, locked with the friend's tick, a reveal, SUPER!, each of the nine powers, a prophecy bubble, the faint, the friends photo, the hug and the friend egg rolling in, the stakes screen with both skulls, mercy (the skull filling), a fall, the trophy on the rim, scars on a pet, and the founding nest. Each is looked at before it is blessed.
+8. **Stakes.** Unit D2's `test_stakes`: `duelFilter`'s asserts; no sequence of wounds at any tier, from any starting injury, plus a drop, kills a starter or any of 1,000 mutated descendants (`woundRoom` holds); planted `pain -> die` and `daze -> die` receptors are inert; as near death as a duel can leave him he is alive, fed he heals and dies of old age a little sooner, unfed he dies of neglect as an unhurt pet would ("AfterTheDuel"). Unit D8's session cases: a 0.7.0 badge staking Mortal duels a Scrap; a Scrap is refused on a lopsided head-to-head; a lost confirm does not strand Staking; a rematch reruns Staking. Unit D9's Dish cases: no duel ends a life at either tier; a cable pull mid-duel keeps every wound applied so far.
+9. **The sim film** (D13; WSL, SDL headless): `sim --duel-bot` gives the simulator a FakeAir whose other end is an in-process `DuelSession` with a scripted kid, on the fixed clock, so two runs are byte-identical. The goldens are the lobby with a friend, VS, choosing with the lean, locked with the friend's tick, a reveal, SUPER!, each of the nine powers, a prophecy bubble, the faint, the friends photo, the hug and the friend egg rolling in, the stakes screen, scars on a pet, and the founding nest. Each is looked at before it is blessed.
 10. **What needs hardware** (D12): the Wi-Fi heap; coexistence loss with a phone connected; whether a device-to-device clink registers on both QMI8658 tap engines; the RSSI hook and the -62 dBm distance; range in a house; OTA refused mid-duel.
 
 ## Save-format changes (the pet is a keepsake)
@@ -444,10 +397,10 @@ All in `pio test -e native` in WSL `survivor`, except the sim film.
 - **Keepsake `snap.a/b`:** two additive changes, both trailing bytes that older decoders ignore (the Body chunk's mouth byte already relies on that, DEVIATIONS 8), so `kFormatVersion` stays 1. A committed fixture proves each one.
   - The clutch record inside `Chunk::Occupant` (`Kind::Clutch`) gains 5 bytes: the friend egg's slot and its cross seed. A friend egg lives within `kMaxClutch` (3), so the saved count and lineage's three seeds keep their shape.
   - The Body chunk gains scars. The existing optional mouth byte is written only while he holds a bite, and a reader takes any next byte as the mouth. So once he has a scar, the mouth byte is always written (0 for nothing), then a scar count, then up to 4 scars of 4 bytes. An older reader reads a correct mouth and ignores the rest. A fixture with scars and an empty mouth proves it.
-- **`lineage.log`: none.** A battle death is recorded as `DeathCause::Injured`, which is what he died of. The story of who felled him lives in `duels.log`. A friend egg's cross is MutPoint ops in an ordinary Birth. The one-time duel-gene graft is a Checkpoint, an entry kind that exists today.
+- **`lineage.log`: none.** No duel writes a death. A friend egg's cross is MutPoint ops in an ordinary Birth. The one-time duel-gene graft is a Checkpoint, an entry kind that exists today.
 - **New gene kinds** 0x24, 0x25 and 0x1A. Older firmware carries them unexpressed.
-- **New petfs files:** `duels.log` (the book, the dark ledger, vendettas, trophies), `friend.egg`, `found.pin` and `duel.cfg` (the stakes ceiling and the duels switch). Older firmware never opens them.
-- **Living pets' genomes are untouched**, except by the one-time graft (open question 7). A duel's wounds, scars and fall are state changes through ordinary saves, as any injury is.
+- **New petfs files:** `duels.log` (the book), `friend.egg`, `found.pin` and `duel.cfg` (the stakes ceiling and the duels switch). Older firmware never opens them. `duels.log` keeps 0.7.0's layout: the Met entry still carries its verdict and flag bytes (written 0, read past), the Self and Friend summaries their feats and ledger bytes, and 0.7.0's Downed, Trophy and Vendetta entries are read past. A book either firmware wrote opens in the other.
+- **Living pets' genomes are untouched**, except by the one-time graft (open question 7). A duel's wounds and scars are state changes through ordinary saves, as any injury is.
 - **One expression rule changes for every pet, duel or not:** a receptor writing the die or cause locus is inert unless it reads a vital chemical (life, injury, toxin, starvation). The starter's death receptors all read those, so no starter changes. A descendant carrying a mutated receptor from another chemical to `die` loses that way to die. It is open question 14.
 - **While an image is on trial, no duel runs**, so nothing new is written that a rollback could meet.
 
@@ -462,6 +415,8 @@ v2 is designed and unbuilt (`origin/notes`, `design/v2/final`). Duels fit it wit
 - **Bond (v2 U20):** a duel friend is not the owner, so duels do not touch the owner print.
 
 ## Synthesis decision
+
+*The sections from here down are the 2026-10-13 design record. Where they speak of Mortal, Mercy, the Finish, the fallen's vendetta, trophies or the dark ledger, the 2026-10-15 ruling at the top supersedes them: none of it is built any more.*
 
 The design came from the pstack architect skill: Phase A grounding, then three runners in an arena, each on a different whole shape. Panel: opus, opus, sonnet.
 

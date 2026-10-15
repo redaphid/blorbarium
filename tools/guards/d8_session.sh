@@ -35,7 +35,7 @@ mutant() {   # mutant <name> <file> <sed expression> <suite> <test that must cat
 }
 
 W=lib/blorb/src/duel_wire.cpp S=lib/blorb/src/duel_session.cpp
-mutant "decode trusts a frame without its crc" $W 's/if (crc.u32() != crc32(bytes, len - 4)) return std::nullopt;/(void)crc;/' \
+mutant "decode trusts a frame without its crc" $W 's/if (crc.u32() != crc32(bytes, len - 4)) return "bad crc";/(void)crc;/' \
   test_duel_wire "DuelWire.AMillionRandomBuffersNeverCrashDecode"
 mutant "decode takes a log longer than a battle" $W 's/ok \&= p.moveCount <= DuelRules::kLogSlots \&\& p.heard <= DuelRules::kLogSlots;/ok \&= true;/' \
   test_duel_wire "DuelWire.TheBoundaryRefusesEachMalformedFrame"
@@ -47,20 +47,14 @@ mutant "a declining friend is matched" $S 's/s.beacon.decline == Decline::None \
   test_duel_session "DuelSession.ADecliningFriendShowsWhyAndIsNeverMatched"
 mutant "a clink of three picks one" $S 's/return coincident == 1 ? found : std::nullopt;/return found;/' \
   test_duel_session "DuelSession.ThreeDevicesKnockingAtOnceMatchNobody"
-mutant "Mortal ignores the assist" $S 's/if (assist > r.maxAssistHearts || /if (/' \
-  test_duel_session "DuelSession.MortalIsRefusedAtTwoAssistHearts"
+mutant "a 0.7.0 badge's Mortal is refused on the air" $W 's/bool stakesIn(In\& in, Stakes\& out) { return stakesFromByte(in.u8(), out); }/bool stakesIn(In\& in, Stakes\& out) { return enumIn(in, Stakes::Scrap, out); }/' \
+  test_duel_session "DuelSession.A070BadgeStakingMortalDuelsAScrapAndNobodyIsDowned"
 mutant "a confirm counts only under the pair's first id" $S 's/  if (b.phase == DuelPhase::Staking) {/  if (b.phase == DuelPhase::Staking \&\& st.battle.stakes == Stakes::Spar) {/' \
   test_duel_session "DuelSession.ALostConfirmDoesNotStrandStaking"
 mutant "a packet from the last bout feeds this one" $S 's/return id.rematch == b.battle.rematch \&\& id.seed == .*;/return true;/; s/ || st.battle != b.battle) return;/) return;/' \
   test_duel_session "DuelSession.ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored"
-mutant "the downed side writes a verdict too" $S 's/^    if (o.downed\[me\]) {/    if (false) {/' \
-  test_duel_session "DuelSession.TheWinnersSilenceSparesAndAFinishNeedsTheAck"
-mutant "the victor slays before the fallen side hears" $S 's/!b.metSent \&\& b.theyHold > o.resolved/!b.metSent/' \
-  test_duel_session "DuelSession.AFinishTheFallenSideNeverHeardSlaysNobody"
 mutant "fleeing is a fizzle" $S 's/m.fled = !theyLeft;/m.fled = false;/' \
   test_duel_session "DuelSession.FleeingAScrapWhileBehindForfeitsAndKeepsTheWounds"
-mutant "silence never spares" $S 's/ || tick - b.phaseTick >= kMercyTicks))/))/' \
-  test_duel_session "DuelSession.TheWinnersSilenceSparesAndAFinishNeedsTheAck"
 mutant "a phone's knock locks a move" $S 's/if (s.v < 64 \&\& (remote \& duelStimBit(s))) continue;/(void)remote;/' \
   test_duel_session "DuelInput.APhonesStimuliAreNeverGestures"
 exit $failed

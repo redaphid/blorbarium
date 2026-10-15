@@ -117,4 +117,4 @@ The build unit's tests (`BATTLES.md`, units D1, D3, D7, D10):
 
 ### Why no stats
 
-Any reward for winning snowballs. Candidate A's probe measured one pair at 0.988 when winners earned sparks. A species or a bred line that is simply stronger breaks the rule that a 6-year-old's new pet must stand a chance against a parent's old one, and with real stakes (wounds, scars and death, `BATTLES.md`, "Stakes") a stronger line would also be a line that kills. So species, breeding and age change how a pet plays (its lean, its power, its knack, its mood), never how hard it hits.
+Any reward for winning snowballs. Candidate A's probe measured one pair at 0.988 when winners earned sparks. A species or a bred line that is simply stronger breaks the rule that a 6-year-old's new pet must stand a chance against a parent's old one, and with real stakes (wounds and scars, `BATTLES.md`, "Stakes") a stronger line would also be a line that hurts. So species, breeding and age change how a pet plays (its lean, its power, its knack, its mood), never how hard it hits.

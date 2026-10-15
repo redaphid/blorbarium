@@ -172,7 +172,7 @@ TEST(Grammar, StatusSaysWhereHeIs) {
 // ---- the unlock -----------------------------------------------------------------------
 
 // Every harm verb, each well formed, so only the gate can refuse it.
-const char* const kHarm[] = {"HATCH", "STAGE adult", "WARP 5", "CHEM hunger 900", "DIE", "SPECIES gilly", "WIPE"};
+const char* const kHarm[] = {"HATCH", "STAGE adult", "WARP 5", "CHEM hunger 900", "SPECIES gilly", "WIPE"};
 
 TEST(Unlock, EveryHarmVerbIsRefusedLockedAndChangesNothing) {
   Rig r;
@@ -324,26 +324,23 @@ TEST(Jumps, WarpLivesThatManyMinutes) {
   EXPECT_EQ(r.send("#4 WARP 121"), "#4 ERR 416 OUT_OF_RANGE");
 }
 
-TEST(Jumps, DieShowsTheClutchOrStopsAtTheRemains) {
-  for (bool eggs : {true, false}) {
-    Rig r;
-    r.boot();
-    r.unlock();
-    r.send("#1 STAGE adult");
-    const std::string reply = r.send(eggs ? "#2 DIE" : "#2 DIE remains");
-    const Clutch* k = std::get_if<Clutch>(&r.dish->occupant());
-    ASSERT_NE(k, nullptr) << reply;
-    EXPECT_EQ(k->cause, DeathCause::Injured);
-    EXPECT_EQ(k->sinceDeath >= Clutch::kVigilTicks, eggs);
-    if (eggs) {
-      EXPECT_EQ(k->previewed, k->count);
-    }
-    EXPECT_EQ(reply.substr(0, 18), "#2 OK phase=clutch");
-    EXPECT_EQ(r.send("#3 DIE"), "#3 ERR 409 NO_CREATURE");
-    bool died = false;
-    r.dish->lineage().forEach([&](const LineageEntry& e) { died = died || std::holds_alternative<Death>(e); });
-    EXPECT_TRUE(died);
-  }
+// No verb kills him (the owner, 2026-10-15: "Death should not be a choice").
+// A tester brings him to the brink and his own genes take it from there.
+TEST(Jumps, ThereIsNoDieVerbButHisGenesFinishWhatChemStarts) {
+  Rig r;
+  r.boot();
+  r.unlock();
+  r.send("#1 STAGE adult");
+  EXPECT_EQ(r.send("#2 DIE"), "#2 ERR 404 UNKNOWN_VERB");
+  EXPECT_TRUE(std::holds_alternative<Creature>(r.dish->occupant()));
+  EXPECT_EQ(r.send("#3 CHEM life 0").substr(0, 5), "#3 OK");
+  r.run(2000);
+  const Clutch* k = std::get_if<Clutch>(&r.dish->occupant());
+  ASSERT_NE(k, nullptr) << "his old-age receptors ended it";
+  EXPECT_EQ(k->cause, DeathCause::OldAge);
+  bool died = false;
+  r.dish->lineage().forEach([&](const LineageEntry& e) { died = died || std::holds_alternative<Death>(e); });
+  EXPECT_TRUE(died);
 }
 
 TEST(Jumps, ChemSetsEveryPairOrNone) {
@@ -573,7 +570,10 @@ TEST(Reboot, EveryJumpLeavesAPetTheNextBootResumes) {
   EXPECT_TRUE(std::holds_alternative<Creature>(r.dish->occupant()));
 
   r.unlock();
-  ASSERT_EQ(r.send("#b DIE").substr(0, 18), "#b OK phase=clutch");
+  ASSERT_EQ(r.send("#b CHEM life 0").substr(0, 5), "#b OK");
+  r.run(2000);
+  ASSERT_TRUE(std::holds_alternative<Clutch>(r.dish->occupant()));
+  r.dish->flush();
   const uint32_t clutchHash = r.dish->hash();
   r.boot();
   ASSERT_EQ(r.dish->boot(), Boot::Resumed);

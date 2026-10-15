@@ -103,17 +103,18 @@ device, or "all different". Settle this before R3.
 
 ### Battles, in one paragraph
 
-Three stakes: Spar (no harm), Scrap (wounds and scars), Mortal (the pet can
-die; both kids hold BOOT to agree, and the winner holds 3 s to Finish,
-while silence spares). Each turn is a stance from a wheel: Pounce beats
+Two stakes: Spar (no harm) and Scrap (wounds and scars). No duel kills:
+0.7.0's Mortal tier and its Finish are gone (owner, 2026-10-15: "Death
+should not be a choice"), and a 0.7.0 badge's Mortal reads as Scrap. Each turn is a stance from a wheel: Pounce beats
 Trick, Trick beats Guard, Guard beats Pounce. A BOOT press queues a quick
 special (one turn of wind-up, +1 heart) and a hold queues a heavy one (two
 turns, +2). A Trick staggers it, a counter ripostes it, and Hush dodges it.
-Afterwards there are friend eggs, a duel book, war paint for slayers and
-vendettas for the fallen's line. `resolve()` is pure, integer and
+Afterwards there are friend eggs and a duel book. `resolve()` is pure, integer and
 mirror-symmetric, so both devices agree on the outcome hash. Packets:
-Beacon 77 B, State 111 B, Genome 224 B. Pets dying is the owner's decision
-(2026-10-13: "Pets should die. My family has a dark sense of humor.").
+Beacon 77 B, State 111 B, Genome 224 B. Pets die of old age, neglect or
+injury, by their own chemistry over time (2026-10-13: "Pets should die.
+My family has a dark sense of humor."; 2026-10-14: "Close to dead + time =
+dead"). Death is never a choice: no gesture, tier or verb ends a life.
 
 ### Films and art
 
@@ -164,7 +165,9 @@ Beacon 77 B, State 111 B, Genome 224 B. Pets dying is the owner's decision
    `petfs` partitions or the save format.
 7. Re-bless a golden only after looking at the changed PNG and saying why
    it changed.
-8. These go to children aged 6-13, and pets can die, in battle too.
+8. These go to children aged 6-13, and pets can die: of old age, neglect or
+   injury over time. Death is never a choice (2026-10-15): nothing a kid,
+   a phone or a debug verb does kills a pet.
 9. Stop only processes you started, by PID or port, never by name.
 10. No pet art or mark may read as a piercing, tattoo or ornament. Scars go
     on limbs, shoulders, sides or head, never the front of the chest or the

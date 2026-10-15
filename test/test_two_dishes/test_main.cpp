@@ -49,16 +49,15 @@ BodySample sampleOf(const Frame& f, uint8_t i) {
   return s;
 }
 
-enum class Mercy : uint8_t { Spare, Finish };
+// His own genes end his life: injury past saving, and his injury receptor
+// writes die at the next step. A test's shortcut to the engine's own death.
+void endLife(Creature& c) { c.inject(chem::injury, Fx::one()); }
 
 // How one kid plays, everything read off the view.
 struct Kid {
   Stakes tier = Stakes::Spar;
-  Mercy mercy = Mercy::Spare;
   bool hug = false, shakeOnce = false, wantDuel = true, leave = true;
   bool special = false;          // a quick special whenever the meter holds it
-  bool pressForMortal = false;   // tries to agree to Mortal with a press (it must not count)
-  bool spareByPress = false;     // spares with BOOT, not a knock
   bool askRematch = false;       // the friends screen: BOOT once for another bout, then waits
   uint16_t leaveAfter = 0;       // the friends screen: ticks to look before leaving
   Rng rng = Rng::seeded(1);
@@ -81,8 +80,7 @@ struct Kid {
         const int8_t t = int8_t(std::min(uint8_t(tier), uint8_t(v.ceiling[0])));
         hold(t, 4, Frame{});
         if (t == 0) hold(t, 1, Frame{-1, false, true});
-        else if (t == 1 || pressForMortal) hold(t, 2, Frame{-1, true}), hold(t, 1, Frame{});
-        else hold(t, 33, Frame{-1, true}), hold(t, 1, Frame{});
+        else hold(t, 2, Frame{-1, true}), hold(t, 1, Frame{});
         return;
       }
       case DuelPhase::Choosing:
@@ -97,13 +95,6 @@ struct Kid {
           if (special && v.specialReady) hold(a, 2, Frame{-1, true}), hold(a, 1, Frame{});
           else hold(a, 1, Frame{-1, false, true});
           hold(-1, 2, Frame{});
-        }
-        return;
-      case DuelPhase::Mercy:
-        if (v.theyAreDown && v.verdict == Verdict::None) {
-          if (mercy == Mercy::Finish) hold(-1, 34, Frame{-1, true}), hold(-1, 1, Frame{});
-          else if (spareByPress) hold(-1, 2, Frame{-1, true}), hold(-1, 5, Frame{});
-          else hold(-1, 1, Frame{-1, false, true}), hold(-1, 5, Frame{});
         }
         return;
       case DuelPhase::Friends:
@@ -229,8 +220,8 @@ struct Bout {
   Genome ga, gb;
   uint32_t tick = 0;
 
-  // seasoned: each book has 40 picked turns against a stranger, so Mortal's
-  // fairness gate (30 picked turns each) opens and nothing else about the pair moves.
+  // seasoned: each book has 40 picked turns against a stranger, a kid with some
+  // history, and nothing else about the pair moves.
   Bout(uint64_t seed, SpeciesId sa, SpeciesId sb, bool seasoned = false, Weather w = {})
       : ether(seed, w), a(ether, 1), b(ether, 2), twin(ether, 9),
         ga(starterGenomeOf(sa, 11)), gb(starterGenomeOf(sb, 22)) {
@@ -394,73 +385,23 @@ TEST(TwoDishes, AScrapWoundsByExactlyTheHeartsHeLostAndNothingElse) {
   EXPECT_GE(me.scars().count, 1) << "the first turn that cost him hearts scars";
 }
 
-// ---- the acceptance: a Finish ---------------------------------------------------------
+// ---- the acceptance: no duel kills ---------------------------------------------------
+// The owner, 2026-10-15: "Death should not be a choice." Two real Dishes, at
+// both tiers, with specials, hugs and every gesture a duel takes: both pets
+// come home alive, and neither lineage holds a Death.
 
-TEST(TwoDishes, AFinishKillsOnceAndCrownsTheVictor) {
-  for (uint64_t seed = 1; seed < 30; ++seed) {
-    Bout bout(seed, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
-    bout.runDuel();
-    Device* fallen = !bout.a.alive() ? &bout.a : !bout.b.alive() ? &bout.b : nullptr;
-    if (!fallen) continue;   // nobody was downed by turn 15: another seed
-    Device* victor = fallen == &bout.a ? &bout.b : &bout.a;
-
-    EXPECT_EQ(deaths(fallen->dish->lineage()), 1u) << "one Death entry";
-    const Clutch* k = std::get_if<Clutch>(&fallen->dish->occupant());
-    ASSERT_NE(k, nullptr) << "a clutch on the fallen side";
-    EXPECT_EQ(k->cause, DeathCause::Injured) << "he died of his wounds";
-    EXPECT_EQ(fallen->dish->appearance().kind, Appearance::Kind::Remains);
-    for (int t = 0; t < 50; ++t) bout.step();
-    EXPECT_EQ(deaths(fallen->dish->lineage()), 1u) << "and only one";
-
-    const DuelBook& book = victor->dish->duels();
-    ASSERT_EQ(book.state().trophies.size(), 1u) << "a trophy";
-    EXPECT_EQ(book.state().trophies[0].fallen, fallen == &bout.a ? kGrungo : SpeciesId{6});
-    EXPECT_TRUE(book.featsThisLife(0) & feat::slayer) << "the slayer feat";
-    EXPECT_TRUE(victor->felt.count(stim::duel_slew.v)) << "and duel_slew";
-    EXPECT_EQ(deaths(victor->dish->lineage()), 0u);
-    EXPECT_EQ(victor->dish->appearance().trophyCount, 1) << "on the rim at home";
-
-    // A reboot right after the fall: he loads dead and dies once, not twice.
-    {
-      MemStorage cut;
-      cut.files = fallen->store.files;
-      const uint32_t s = fallen == &bout.a ? 11 : 22;
-      Dish back(cut, s, 0xD15400ull + s);
-      NullLink link;
-      for (uint32_t ms = 100; ms <= 500; ms += 100) back.tick(ms, link);
-      EXPECT_EQ(deaths(back.lineage()), 1u);
+TEST(TwoDishes, NoDuelEndsALifeAtAnyTier) {
+  for (uint64_t seed = 1; seed < 12; ++seed)
+    for (Stakes tier : {Stakes::Spar, Stakes::Scrap}) {
+      Bout bout(seed, kGrungo, SpeciesId{6}, true);
+      bout.a.kid.tier = bout.b.kid.tier = tier;
+      bout.a.kid.special = bout.b.kid.special = true;
+      bout.a.kid.hug = bout.b.kid.hug = seed % 2 == 0;
+      ASSERT_TRUE(bout.runDuel()) << "seed " << seed;
+      for (int t = 0; t < 50; ++t) bout.step();
+      EXPECT_TRUE(bout.a.alive() && bout.b.alive()) << "seed " << seed << " tier " << int(tier);
+      EXPECT_EQ(deaths(bout.a.dish->lineage()) + deaths(bout.b.dish->lineage()), 0u) << "seed " << seed;
     }
-
-    // Each line's next generation: the fallen's hatches seeded against the
-    // victor's element (the vendetta); the slayer's wears the war paint.
-    const auto nextGeneration = [&](Device& d) {
-      Clutch& k = std::get<Clutch>(d.dish->occupant());
-      k.sinceDeath = Clutch::kVigilTicks;
-      d.dish->pick(0);
-      for (int t = 0; t < 200000 && !d.alive(); t += 10) d.dish->tick(d.ms += 1000, d.link);
-      return d.alive();
-    };
-    victor->creature().fall();
-    for (int t = 0; t < 3; ++t) bout.step();
-    EXPECT_TRUE(victor->dish->lineage().legacyFeats() & feat::slayer) << "the feat reaches his Death entry";
-    ASSERT_TRUE(nextGeneration(*victor));
-    bool warPaint = false;
-    for (const auto& m : victor->creature().phenotype().marks) warPaint = warPaint || m.layer == 2;
-    EXPECT_TRUE(warPaint) << "the slayer's line wears the war paint from the next generation";
-
-    ASSERT_TRUE(nextGeneration(*fallen));
-    const uint16_t gen = fallen->creature().generation();
-    ASSERT_TRUE(fallen->dish->duels().vendetta(gen).has_value()) << "his line remembers";
-    const DuelSkill seeded = fallen->dish->duels().skill(gen);
-    bool nudged = false;
-    for (const auto& ctx : seeded.win)
-      for (Q15 q : ctx) nudged = nudged || q.v != 0;
-    EXPECT_TRUE(nudged) << "and the newborn's duel Skill is seeded against the victor";
-    return;
-  }
-  FAIL() << "no seed under 30 downed a pet";
 }
 
 // ---- the friend egg -------------------------------------------------------------------
@@ -565,31 +506,6 @@ TEST(AtOnce, ACablePulledMidScrapKeepsEveryWoundSoFar) {
   FAIL() << "grungo never lost a heart";
 }
 
-TEST(AtOnce, ADownedPetWhoseCableComesOutBeforeTheVerdictLivesAndFled) {
-  for (uint64_t seed = 1; seed < 30; ++seed) {
-    Bout bout(seed, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
-    for (int t = 0; t < 4000; ++t) {
-      bout.step();
-      for (Device* d : {&bout.a, &bout.b}) {
-        if (!d->dish->duelActive() || !d->dish->duelView().iAmDown) continue;
-        MemStorage cut;
-        cut.files = d->store.files;
-        const uint32_t mine = d == &bout.a ? 11 : 22, theirs = d == &bout.a ? 22 : 11;
-        Dish back(cut, mine, 0xD15400ull + mine);
-        EXPECT_TRUE(std::holds_alternative<Creature>(back.occupant())) << "he lives";
-        const std::optional<FriendSummary> f = back.duels().friendOf(0xD15400ull + theirs);
-        ASSERT_TRUE(f.has_value());
-        EXPECT_EQ(f->lost, 1) << "fled: a loss to the victor's line";
-        return;
-      }
-      if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
-    }
-  }
-  FAIL() << "no seed under 30 downed a pet";
-}
-
 // The friend egg's life, cut after every write from the death to the hatch:
 // whatever a power cut leaves, the friend's egg is used once or lost, never twice.
 TEST(FriendEgg, APowerCutAtAnyStepNeverHatchesItTwice) {
@@ -599,8 +515,8 @@ TEST(FriendEgg, APowerCutAtAnyStepNeverHatchesItTwice) {
   ASSERT_TRUE(FriendEggStore::load(bout.a.store));
   Device& a = bout.a;
   a.store.taping = true;
-  a.creature().fall();
-  for (int t = 0; t < 3; ++t) a.step();
+  endLife(a.creature());
+  for (int t = 0; t < 20 && !std::holds_alternative<Clutch>(a.dish->occupant()); ++t) a.step();
   Clutch& k = std::get<Clutch>(a.dish->occupant());
   ASSERT_NE(k.friendSlot, 0) << "the friend egg joined the clutch";
   k.sinceDeath = Clutch::kVigilTicks;
@@ -707,8 +623,9 @@ TEST(BootRows, AsleepADoublePressIsTwoPellets) {
 
 TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
   Alone a;
-  a.d.creature().fall();
-  a.tick(), a.tick();
+  endLife(a.d.creature());
+  for (int t = 0; t < 20 && !std::holds_alternative<Clutch>(a.d.dish->occupant()); ++t) a.tick();
+  a.tick();
   expectRow(*a.d.dish, BootContext::Vigil, "vigil");
   a.tick({-1, true}), a.tick();
   EXPECT_EQ(a.d.dish->appearance().echo, BootAct::LayFlower);
@@ -744,13 +661,12 @@ TEST(BootRows, ASealedDishShowsTheLockAndAPressMovesNothing) {
   EXPECT_TRUE(store.files.empty()) << "nothing written";
 }
 
-// The duel's rows, as a Mortal duel visits them: each context the screen is
-// in shows that row's hint, and the ones a duel must pass through all appear.
+// The duel's rows, as a Scrap visits them: each context the screen is in
+// shows that row's hint, and the ones a duel must pass through all appear.
 TEST(BootRows, EveryDuelRowShowsItsOwnHint) {
   for (uint64_t seed = 1; seed < 30; ++seed) {
     Bout bout(seed, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Scrap;
     bout.a.kid.special = bout.b.kid.special = true;
     std::set<uint8_t> seen;
     for (int t = 0; t < 6000; ++t) {
@@ -763,46 +679,13 @@ TEST(BootRows, EveryDuelRowShowsItsOwnHint) {
       }
       if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
     }
-    if (!seen.count(uint8_t(BootContext::Fallen)) || !seen.count(uint8_t(BootContext::WindingUp))) continue;
-    // A fall ends the duel on its last scene; the friends screen is the Spar test's.
+    if (!seen.count(uint8_t(BootContext::WindingUp))) continue;
     for (BootContext c : {BootContext::Lobby, BootContext::Staking, BootContext::DuelTurn, BootContext::WindingUp,
-                          BootContext::MercyWinner, BootContext::MercyLoser, BootContext::Fallen})
+                          BootContext::DuelOutcome})
       EXPECT_TRUE(seen.count(uint8_t(c))) << "never in context " << int(c);
     return;
   }
-  FAIL() << "no seed under 30 queued a special and finished a pet";
-}
-
-TEST(BootRows, APressNeverFinishesAPetNorAgreesToAMortalDuel) {
-  {
-    Bout bout(1, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.pressForMortal = true;
-    for (int t = 0; t < 400; ++t) {
-      bout.step();
-      ASSERT_FALSE(bout.a.dish->duelView().confirmed && bout.a.dish->duelView().chosen == Stakes::Mortal)
-          << "a press under the skull confirms nothing";
-    }
-  }
-  for (uint64_t seed = 1; seed < 30; ++seed) {
-    Bout bout(seed, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Spare;   // a knock
-    bout.a.kid.spareByPress = bout.b.kid.spareByPress = true;
-    bout.runDuel();
-    if (!bout.a.alive() || !bout.b.alive()) FAIL() << "a press finished a pet, seed " << seed;
-    const DuelBook& ab = bout.a.dish->duels();
-    const DuelBook& bb = bout.b.dish->duels();
-    const auto spared = [](const DuelBook& b) {
-      uint8_t n = 0;
-      b.forEachFriend([&](const FriendSummary& f) { n += f.owesUs + f.weOwe; });
-      return n;
-    };
-    if (spared(ab) + spared(bb) == 0) continue;   // nobody was downed: another seed
-    EXPECT_EQ(deaths(bout.a.dish->lineage()) + deaths(bout.b.dish->lineage()), 0u);
-    return;
-  }
-  FAIL() << "no seed under 30 downed a pet";
+  FAIL() << "no seed under 30 queued a special";
 }
 
 // ---- the duel scene, from a live view ---------------------------------------------------
@@ -829,8 +712,7 @@ TEST(Scene, EveryPhaseOfALiveDuelDrawsItsAct) {
   static paint::DuelScene scene;
   for (uint64_t seed = 1; seed < 30; ++seed) {
     Bout bout(seed, kGrungo, SpeciesId{6}, true);
-    bout.a.kid.tier = bout.b.kid.tier = Stakes::Mortal;
-    bout.a.kid.mercy = bout.b.kid.mercy = Mercy::Finish;
+    bout.a.kid.tier = bout.b.kid.tier = Stakes::Scrap;
     bout.a.kid.special = bout.b.kid.special = true;
     std::set<uint8_t> drawn;
     for (int t = 0; t < 6000; ++t) {
@@ -853,12 +735,13 @@ TEST(Scene, EveryPhaseOfALiveDuelDrawsItsAct) {
       }
       if (t > 50 && !bout.a.dish->duelActive() && !bout.b.dish->duelActive()) break;
     }
-    if (!drawn.count(uint8_t(DuelPhase::Fallen) * 2) && !drawn.count(uint8_t(DuelPhase::Fallen) * 2 + 1)) continue;
-    for (DuelPhase p : {DuelPhase::Greeting, DuelPhase::Staking, DuelPhase::Choosing, DuelPhase::Revealing, DuelPhase::Mercy})
+    if (!drawn.count(uint8_t(DuelPhase::Fainting) * 2) && !drawn.count(uint8_t(DuelPhase::Fainting) * 2 + 1)) continue;
+    for (DuelPhase p : {DuelPhase::Greeting, DuelPhase::Staking, DuelPhase::Choosing, DuelPhase::Revealing,
+                        DuelPhase::Fainting, DuelPhase::Friends})
       EXPECT_TRUE(drawn.count(uint8_t(p) * 2) || drawn.count(uint8_t(p) * 2 + 1)) << "never drew phase " << int(p);
     return;
   }
-  FAIL() << "no seed under 30 finished a pet";
+  FAIL() << "no seed under 30 ended in a faint";
 }
 
 TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {

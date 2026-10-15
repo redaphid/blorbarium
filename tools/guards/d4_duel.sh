@@ -44,10 +44,8 @@ mutant "hearts wrap below zero" $R 's/s\[i\].hearts = r.hit\[i\] >= s\[i\].heart
   "Hearts.StayWithinZeroAndMaxEveryTurn"
 mutant "a short meter commits anyway" $R 's/if (s.spark < cost || lands >= DuelRules::kMaxTurns) return false;/if (lands >= DuelRules::kMaxTurns) return false;/' \
   "Meter.AShortMeterPlaysPlain"
-mutant "the verdict read from the loser's log" $R 's/\*log\[o.downed\[0\] ? 1 : 0\]/*log[o.downed[0] ? 0 : 1]/' \
-  "Verdict.AMortalLoserIsDownedAndTheWinnersSlotDecides"
-mutant "the verdict slot one late" $R 's/if (winner.count() > o.resolved) o.verdict = winner.at(o.resolved).verdict;/if (winner.count() > o.resolved + 1) o.verdict = winner.at(uint8_t(o.resolved + 1)).verdict;/' \
-  "Verdict.ReadFromTheSixteenthSlotAfterADowningOnTurnFifteen"
+mutant "0.7.0's verdict bits are read" $H 's/return Move{Stance((b \& 3) % kCycle), (b \& 4) != 0, (b \& 8) != 0, Windup(((b >> 6) \& 3) % 3)};/return Move{Stance(((b \& 3) + (b >> 4 \& 3)) % kCycle), (b \& 4) != 0, (b \& 8) != 0, Windup(((b >> 6) \& 3) % 3)};/' \
+  "Ending.A070VerdictInTheLogChangesNothing"
 mutant "gadget can draw itself" $R 's/% (kPowerCount - 1)/% kPowerCount/; s/if (p.id != power::gadget \&\& pick-- == 0)/if (pick-- == 0)/' \
   "Powers.GadgetDrawsEachOfTheOtherEightAndNeverItself"
 mutant "a dazzle never misses" $R 's/(draw(luck\[w\], Purpose::Dazzle) \& 1) != 0/false/' \
@@ -84,6 +82,6 @@ mutant "a special lands in its sleep" $R '/else if (r.dozed\[i\]) s.queued = Win
   "Special.AsleepOnItsLandingTurnTheSpecialIsLost"
 mutant "foresee is riposted like the rest" $P 's/constexpr bool seesTheRiposte(PowerId p) { return p == power::foresee; }/constexpr bool seesTheRiposte(PowerId) { return false; }/' \
   "Powers.ForeseeWhiffsWhereOthersAreRiposted"
-mutant "the commit leaks its landing" $H 's/append(Move{Stance::Pounce, false, byPet, Verdict::None, w});/append(Move{landing, false, byPet, Verdict::None, w});/' \
+mutant "the commit leaks its landing" $H 's/append(Move{Stance::Pounce, false, byPet, w});/append(Move{landing, false, byPet, w});/' \
   "MoveLog.AppendSpecialWritesTheCommitAndRefusesALandingPastTheEnd"
 exit $failed

@@ -84,6 +84,7 @@ class FakeAir : public blorb::Air {
   bool refuseOpen = false;
   uint16_t muted = 0;         // permille of my frames lost on top of the weather: one direction of a link
   int8_t heardAt = -40;       // the dBm every other device hears me at: a test moves me away
+  void (*rewrite)(uint8_t* bytes, size_t len) = nullptr;   // my frames as they leave: an older firmware's
   uint32_t framesSent = 0, opens = 0;   // the consent test asserts 0 for a device that never opened
 
  private:
@@ -114,6 +115,7 @@ inline void Ether::post(const FakeAir& from, FakeAir* to, const uint8_t* p, size
     f.d.rssi = from.heardAt;
     f.d.len = uint8_t(n);
     std::memcpy(f.d.bytes, p, n);
+    if (from.rewrite) from.rewrite(f.d.bytes, n);
     held_.push_back(f);
   }
 }

@@ -49,7 +49,6 @@ Meeting meeting(Result r, uint64_t lineage = kFizzLine, SpeciesId s = kFizz, Sta
 void expectSameBook(const BookState& a, const BookState& b) {
   EXPECT_EQ(a.generation, b.generation);
   EXPECT_EQ(a.xp, b.xp);
-  EXPECT_EQ(a.feats, b.feats);
   EXPECT_EQ(std::memcmp(&a.skill, &b.skill, sizeof a.skill), 0);
   EXPECT_EQ(a.prowess, b.prowess);
   EXPECT_EQ(a.lossStreak, b.lossStreak);
@@ -65,28 +64,12 @@ void expectSameBook(const BookState& a, const BookState& b) {
     EXPECT_EQ(x.lost, y.lost) << i;
     EXPECT_EQ(x.drawn, y.drawn) << i;
     EXPECT_EQ(x.daysMet, y.daysMet) << i;
-    EXPECT_EQ(x.fellTo, y.fellTo) << i;
-    EXPECT_EQ(x.slew, y.slew) << i;
-    EXPECT_EQ(x.owesUs, y.owesUs) << i;
-    EXPECT_EQ(x.weOwe, y.weOwe) << i;
     EXPECT_EQ(x.firstGeneration, y.firstGeneration) << i;
     EXPECT_EQ(x.lastAt, y.lastAt) << i;
     EXPECT_EQ(a.friends[i].lastDay, b.friends[i].lastDay) << i;
     EXPECT_EQ(a.friends[i].forKeepsDay, b.friends[i].forKeepsDay) << i;
     EXPECT_EQ(a.friends[i].forKeepsThatDay, b.friends[i].forKeepsThatDay) << i;
   }
-  ASSERT_EQ(a.trophies.size(), b.trophies.size());
-  for (size_t i = 0; i < a.trophies.size(); ++i) {
-    EXPECT_EQ(a.trophies[i].fallen, b.trophies[i].fallen);
-    EXPECT_EQ(a.trophies[i].generation, b.trophies[i].generation);
-  }
-  ASSERT_EQ(a.vendettas.size(), b.vendettas.size());
-  for (size_t i = 0; i < a.vendettas.size(); ++i) {
-    EXPECT_EQ(a.vendettas[i].against, b.vendettas[i].against);
-    EXPECT_EQ(a.vendettas[i].species, b.vendettas[i].species);
-    EXPECT_EQ(a.vendettas[i].sinceGeneration, b.vendettas[i].sinceGeneration);
-  }
-  ASSERT_EQ(a.downed.size(), b.downed.size());
 }
 
 // The kinds of the frames in duels.log, in order.
@@ -158,57 +141,6 @@ TEST(Fold, SkillIsTheLifesNewestFrameAndANewLifeHatchesBlank) {
   EXPECT_EQ(fresh.win[5][2].v, 0) << "each life learns afresh";
 }
 
-TEST(Fold, TheDarkLedgerCountsFallsSlayingsAndSparedLivesAcrossGenerations) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  Meeting fell = meeting(Result::Lost, kFizzLine, kFizz, Stakes::Mortal);
-  fell.iFell = true;
-  fell.verdict = Verdict::Finish;
-  b.record(fell, 1, 10, 1);
-  Meeting spared = meeting(Result::Lost, kFizzLine, kFizz, Stakes::Mortal);
-  spared.wasSpared = true;
-  spared.verdict = Verdict::Spare;
-  b.record(spared, 2, 20, 3);
-  Meeting slew = meeting(Result::Won, kFizzLine, kFizz, Stakes::Mortal);
-  slew.iSlew = true;
-  slew.verdict = Verdict::Finish;
-  b.record(slew, 3, 30, 5);
-  Meeting mercy = meeting(Result::Won, kFizzLine, kFizz, Stakes::Mortal);
-  mercy.iSpared = true;
-  b.record(mercy, 3, 40, 6);
-  for (const DuelBook& book : {b, DuelBook::open(s)}) {
-    std::optional<FriendSummary> f = book.friendOf(kFizzLine);
-    ASSERT_TRUE(f);
-    EXPECT_EQ(f->fellTo, 1);
-    EXPECT_EQ(f->slew, 1);
-    EXPECT_EQ(f->weOwe, 1);
-    EXPECT_EQ(f->owesUs, 1);
-    EXPECT_EQ(f->met, 4);
-    EXPECT_EQ(f->won, 2);
-    EXPECT_EQ(f->lost, 2);
-    EXPECT_EQ(f->daysMet, 4);
-    EXPECT_EQ(f->firstGeneration, 1) << "the friendship began with great-grandma";
-  }
-}
-
-TEST(Fold, TrophiesAreTheNewestThreeSlainSpeciesNewestFirstAndSlayerIsThatLifesFeat) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  const SpeciesId slain[] = {kFizz, kGilly, kMossby, SpeciesId{8}};
-  uint16_t gen = 1;
-  for (SpeciesId sp : slain) {
-    Meeting m = meeting(Result::Won, 0x1000 + sp.v, sp, Stakes::Mortal);
-    m.iSlew = true;
-    b.record(m, gen++, 10 * gen, gen);
-  }
-  std::vector<SpeciesId> seen;
-  DuelBook::open(s).forEachTrophy([&](const Trophy& t) { seen.push_back(t.fallen); });
-  EXPECT_EQ(seen, (std::vector<SpeciesId>{SpeciesId{8}, kMossby, kGilly}));
-  EXPECT_EQ(b.featsThisLife(4), feat::slayer);
-  b.record(meeting(Result::Won), 5, 100, 9);
-  EXPECT_EQ(b.featsThisLife(5), 0u) << "the feat is the slayer's life's, then the lineage's through Death";
-}
-
 TEST(Fold, FriendsAreListedMostRecentFirst) {
   MemStorage s;
   DuelBook b = DuelBook::open(s);
@@ -249,115 +181,6 @@ TEST(Fold, HeadToHeadAndForKeepsPerDayComeFromTheLinesRecord) {
   EXPECT_EQ(b.headToHead(kGillyLine).duels, 0);
 }
 
-// ---- vendettas --------------------------------------------------------------------------
-
-Meeting fellTo(uint64_t lineage, SpeciesId s) {
-  Meeting m = meeting(Result::Lost, lineage, s, Stakes::Mortal);
-  m.iFell = true;
-  m.verdict = Verdict::Finish;
-  return m;
-}
-
-TEST(Vendetta, AFallSwearsOneForTheNextThreeGenerationsAndNoLonger) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  b.record(fellTo(kFizzLine, kFizz), 4, 10, 1);
-  for (const DuelBook& book : {b, DuelBook::open(s)}) {
-    EXPECT_FALSE(book.vendetta(4)) << "the fallen himself swears nothing";
-    for (uint16_t g : {5, 6, 7}) {
-      std::optional<Vendetta> v = book.vendetta(g);
-      ASSERT_TRUE(v) << g;
-      EXPECT_EQ(v->against, kFizzLine);
-      EXPECT_EQ(v->species, kFizz);
-      EXPECT_EQ(v->sinceGeneration, 4);
-    }
-    EXPECT_FALSE(book.vendetta(8)) << "three generations, then it lapses";
-  }
-}
-
-TEST(Vendetta, AScrapOrMortalWinAgainstThatLineAvengesItAndNothingElseDoes) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  b.record(fellTo(kFizzLine, kFizz), 1, 10, 1);
-  b.record(meeting(Result::Won, kFizzLine, kFizz, Stakes::Spar), 2, 20, 2);
-  EXPECT_TRUE(b.vendetta(2)) << "a spar is play, not vengeance";
-  b.record(meeting(Result::Won, kGillyLine, kGilly, Stakes::Scrap), 2, 30, 2);
-  EXPECT_TRUE(b.vendetta(2)) << "the wrong line";
-  b.record(meeting(Result::Lost, kFizzLine, kFizz, Stakes::Scrap), 2, 40, 3);
-  EXPECT_TRUE(b.vendetta(2));
-  b.record(meeting(Result::Won, kFizzLine, kFizz, Stakes::Scrap), 2, 50, 4);
-  EXPECT_FALSE(b.vendetta(2)) << "avenged";
-  EXPECT_FALSE(b.vendetta(3));
-  EXPECT_FALSE(DuelBook::open(s).vendetta(3)) << "and it stays avenged in the log";
-}
-
-TEST(Vendetta, ANewbornsSkillLeansToTheCounterOfTheVictorsKindAndOnlyAgainstItsElement) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  b.record(fellTo(kFizzLine, kFizz), 1, 10, 1);
-  const SpeciesInfo& fizz = speciesInfo(kFizz);
-  const uint8_t counter = uint8_t(counterOf(fizz.style));
-  const DuelSkill seeded = DuelBook::open(s).skillForNewLife(2);
-  int nudged = 0;
-  for (uint8_t ctx = 0; ctx < DuelSkill::kContexts; ++ctx)
-    for (uint8_t st = 0; st < kCycle; ++st) {
-      const bool theirElement = ctx / (kCycle + 1) == uint8_t(fizz.element);
-      if (theirElement && st == counter) {
-        EXPECT_GT(seeded.win[ctx][st].v, 0) << int(ctx);
-        ++nudged;
-      } else {
-        EXPECT_EQ(seeded.win[ctx][st].v, 0) << int(ctx) << " " << int(st);
-      }
-    }
-  EXPECT_EQ(nudged, kCycle + 1);
-  EXPECT_EQ(b.skill(2).win[uint8_t(fizz.element) * (kCycle + 1)][counter].v, seeded.win[uint8_t(fizz.element) * (kCycle + 1)][counter].v)
-      << "a life that has not dueled yet plays what it hatched with";
-  const DuelSkill lapsed = b.skillForNewLife(5);
-  for (const auto& ctx : lapsed.win)
-    for (Q15 q : ctx) EXPECT_EQ(q.v, 0);
-}
-
-// ---- downed, verdicts and fleeing ---------------------------------------------------------
-
-TEST(Downed, AMeetingAfterTheDowningIsTheOnlyRecordOfIt) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  Meeting m = meeting(Result::Lost, kFizzLine, kFizz, Stakes::Mortal);
-  m.wasSpared = true;
-  b.recordDowned(m.battle, kFizzLine, 10);
-  b.record(m, 1, 20, 1);
-  for (const DuelBook& book : {b, DuelBook::open(s)}) {
-    EXPECT_EQ(book.friendOf(kFizzLine)->met, 1);
-    EXPECT_EQ(book.friendOf(kFizzLine)->lost, 1);
-    EXPECT_EQ(book.lossesInARow(), 1);
-  }
-}
-
-TEST(Downed, ABootWithNoVerdictAfterADowningReadsItAsFled) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  b.record(meeting(Result::Won, kFizzLine, kFizz), 1, 10, 1);
-  b.recordDowned(BattleId{77, 1, Stakes::Mortal}, kFizzLine, 20);
-  DuelBook again = DuelBook::open(s);
-  EXPECT_EQ(again.friendOf(kFizzLine)->met, 2);
-  EXPECT_EQ(again.friendOf(kFizzLine)->lost, 1) << "walking away from the verdict is a loss";
-  EXPECT_EQ(again.lossesInARow(), 1);
-  EXPECT_EQ(again.xp(1), 3) << "and earns nothing";
-  EXPECT_EQ(DuelBook::open(s).friendOf(kFizzLine)->lost, 1) << "every boot reads it the same, once";
-}
-
-TEST(Downed, ALaterBattleSettlesAnUnansweredDowningAsFled) {
-  MemStorage s;
-  DuelBook b = DuelBook::open(s);
-  b.recordDowned(BattleId{77, 1, Stakes::Mortal}, kFizzLine, 20);
-  b.record(meeting(Result::Won, kGillyLine, kGilly), 1, 30, 1);
-  for (const DuelBook& book : {b, DuelBook::open(s)}) {
-    ASSERT_TRUE(book.friendOf(kFizzLine));
-    EXPECT_EQ(book.friendOf(kFizzLine)->lost, 1);
-    EXPECT_EQ(book.lossesInARow(), 0) << "the win came after";
-  }
-}
-
 // ---- the log ----------------------------------------------------------------------------
 
 TEST(Log, RecordIsIdempotentByBattleIdAcrossABoot) {
@@ -369,7 +192,6 @@ TEST(Log, RecordIsIdempotentByBattleIdAcrossABoot) {
   b.record(m, 1, 10, 1);
   DuelBook again = DuelBook::open(s);
   again.record(m, 1, 10, 1);
-  again.recordDowned(m.battle, kFizzLine, 11);
   EXPECT_EQ(s.size(kLog), size) << "a repeat after a crash writes nothing";
   EXPECT_EQ(again.xp(1), 3);
   EXPECT_EQ(again.friendOf(kFizzLine)->met, 1);
@@ -416,6 +238,52 @@ TEST(Log, AnUnknownKindIsSkippedSoANewerBookStillOpens) {
   EXPECT_EQ(DuelBook::open(s).xp(1), 5);
 }
 
+// A book 0.7.0 wrote: a Mortal the pet lost and was finished in (stakes 2,
+// verdict Finish, the fell flag), the downing before it, the victor's trophy
+// and the line's vendetta. It opens, its battle counts as the loss it was,
+// and the dark ledger is read past: nothing of it reaches the book.
+TEST(Log, A070BookWithItsDarkLedgerOpensAndReadsItPast) {
+  MemStorage s;
+  DuelBook b = DuelBook::open(s);
+  Meeting lost = meeting(Result::Lost, kFizzLine, kFizz, Stakes::Scrap);
+  lost.skillAfter.win[3][1].v = 1234;
+  b.record(lost, 2, 10, 1);
+  std::vector<uint8_t>& log = s.files[kLog];
+  const auto reseal = [&](size_t at) {
+    const size_t len = size_t(log[at + 1]) | size_t(log[at + 2]) << 8;
+    const uint32_t crc = crc32(log.data() + at, 3 + len);
+    for (int i = 0; i < 4; ++i) log[at + 3 + len + i] = uint8_t(crc >> (8 * i));
+  };
+  // The Met's payload ends: verdict, flags, scars taken, then the Skill.
+  const size_t len = size_t(log[1]) | size_t(log[2]) << 8, skill = 12 * 3 * 2 + 2;
+  log[3 + 8 + 5] = 2;                        // the battle's stakes: 0.7.0's Mortal
+  log[3 + len - skill - 3] = 2;              // verdict: Finish
+  log[3 + len - skill - 2] = 1;              // flags: I fell
+  reseal(0);
+  const auto append = [&](uint8_t kind, std::vector<uint8_t> body) {
+    const size_t at = log.size();
+    log.push_back(kind), log.push_back(uint8_t(body.size())), log.push_back(uint8_t(body.size() >> 8));
+    log.insert(log.end(), body.begin(), body.end());
+    log.resize(log.size() + 4);
+    reseal(at);
+  };
+  append(2, std::vector<uint8_t>(18, 7));    // Downed: battle, victor, at
+  append(5, {uint8_t(kFizz.v), 2, 0});       // Trophy
+  append(6, std::vector<uint8_t>(11, 3));    // Vendetta
+
+  DuelBook old = DuelBook::open(s);
+  EXPECT_EQ(old.xp(2), 2) << "the battle he lost";
+  ASSERT_TRUE(old.friendOf(kFizzLine).has_value());
+  EXPECT_EQ(old.friendOf(kFizzLine)->met, 1);
+  EXPECT_EQ(old.friendOf(kFizzLine)->lost, 1) << "the Downed entry adds no second loss";
+  EXPECT_EQ(old.lossesInARow(), 1);
+  EXPECT_EQ(old.skill(2).win[3][1].v, 1234) << "every byte after the retired ones still lines up";
+  const DuelSkill fresh = old.skill(3), zero{};
+  EXPECT_EQ(std::memcmp(&fresh, &zero, sizeof fresh), 0) << "no vendetta seeds the next life";
+  old.record(meeting(Result::Won, kFizzLine, kFizz, Stakes::Scrap), 3, 20, 2);
+  EXPECT_EQ(DuelBook::open(s).friendOf(kFizzLine)->met, 2) << "and it takes the next battle";
+}
+
 TEST(Log, CompactionKeepsOneSummaryPerFriendAndTheSameBook) {
   MemStorage s;
   DuelBook b = DuelBook::open(s);
@@ -423,15 +291,11 @@ TEST(Log, CompactionKeepsOneSummaryPerFriendAndTheSameBook) {
   std::vector<Meeting> recent;
   for (int i = 0; i < 700; ++i) {
     const uint64_t line = 0x5000 + uint64_t(i) % kFriends;
-    Meeting m = meeting(Result(i % 4), line, SpeciesId{uint8_t(line % kSpeciesCount)}, Stakes(i % 3));
+    Meeting m = meeting(Result(i % 4), line, SpeciesId{uint8_t(line % kSpeciesCount)}, Stakes(i % kStakesTiers));
     m.performance = uint8_t(i * 37);
     m.manualTurns = uint8_t(i % 5);
     m.skillAfter.win[i % 12][i % 3].v = int16_t(i);
-    m.iSlew = i % 97 == 0;
-    m.iFell = i % 89 == 0;
-    m.wasSpared = i % 13 == 0;
-    m.iSpared = i % 17 == 0;
-    if (i == 650) b.recordDowned(BattleId{55, 0, Stakes::Mortal}, 0x5003, uint32_t(i));
+    m.fled = i % 13 == 0;
     b.record(m, uint16_t(1 + i / 100), uint32_t(i * 10), uint16_t(i / 7));
     recent.push_back(m);
   }
