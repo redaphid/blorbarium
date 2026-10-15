@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <iostream>
 #include <iterator>
+#include <map>
 #include <cstring>
 #include <string>
 #include <variant>
@@ -612,6 +614,40 @@ TEST(Taught, ForcingTheParrotWithNothingTaughtSaysNothing) {
   r.dish.think(thought::parrot);
   r.run(100);
   EXPECT_EQ(r.said.size(), before);
+}
+
+// ---- offline, with nothing pressing --------------------------------------------------
+
+// The badge's main life: no phone, every need met. He talks every few minutes
+// while awake, and a long day rarely repeats a line.
+TEST(Idle, AContentPetWithNoPhoneIsNeverQuietLongAndRarelyRepeats) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.pastWarmUp();
+  constexpr uint32_t kHours = 6;
+  uint32_t lastSpoke = r.dish.tickCount(), longest = 0;
+  for (uint32_t s = 0; s < kHours * 3600; ++s) {
+    if (s % 10 == 0)
+      for (const DriveInfo& d : DRIVES) r.creature().inject(driveChem(d.id), Fx::zero());
+    r.run(kSecond);
+    const uint32_t now = r.dish.tickCount();
+    if (r.dish.appearance().thinking || r.creature().body().asleep) lastSpoke = now;
+    longest = std::max(longest, now - lastSpoke);
+  }
+  // Urgent rows (kUrgentThought and up) answer what he is doing this moment,
+  // so how often they come is that moment's business; the rest are his idle talk.
+  std::map<std::string, int> times;
+  int most = 0;
+  for (const Line& l : r.said)
+    if (thoughtInfo(l.id)->priority < kUrgentThought) most = std::max(most, ++times[thoughtInfo(l.id)->name]);
+  std::string top;
+  for (const auto& [name, n] : times) if (n == most) top += name + " ";
+  std::cout << "[ idle ] " << r.said.size() << " lines, " << times.size() << " distinct, longest awake silence "
+            << longest / 10 << " s, most said " << most << "x: " << top << "\n";
+
+  EXPECT_LE(longest, Thinker::kQuietTicks + Thinker::kQuietJitterTicks + 2 * (1000 / kTickMs))
+      << "awake and content, he is never quiet for more than the longest quiet gap";
+  EXPECT_GE(times.size(), 50u) << "a content day is varied";
+  EXPECT_LE(most, int(kHours)) << "no line comes back more than about once an hour: " << top;
 }
 
 int main(int argc, char** argv) {

@@ -142,6 +142,7 @@ bool taught(const Observed& o, uint16_t&) { return awake(o) && o.phone.taught &&
 bool elder(const Observed& o, uint16_t&) { return awake(o) && o.c.stage() == Stage::Elder; }
 bool old(const Observed& o, uint16_t&) { return o.c.stage() == Stage::Elder; }
 bool night(const Observed& o, uint16_t&) { return awake(o) && o.clock.night(); }
+bool daytime(const Observed& o, uint16_t&) { return awake(o) && !o.clock.night(); }
 bool dark(const Observed& o, uint16_t&) { return o.clock.night(); }
 bool light(const Observed& o, uint16_t&) { return !o.clock.night(); }
 bool lonely(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::loneliness) >= kHigh; }

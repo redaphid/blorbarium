@@ -352,4 +352,15 @@ loses wall time. So:
   taught line whole rather than cutting it at its first sentence.
 - `kThoughtLineCap` grew from 57 to 82 bytes (a taught line in a voice's
   frame); `kMaxSaidText` is pinned at 56 so `TWIST say` is unchanged.
+- **Idle talk with no phone (rows 64 to 123).** A content pet left alone
+  once had only a few rows that held with every drive low, so he could sit
+  silent for about 14 minutes. Sixty idle lines now hold whenever he is
+  awake (`always`), by day (`daytime`, new) or at night (`night`), at
+  priority 0 so any need or moment outranks them, each with a 90-minute
+  cooldown so a day rarely repeats one. The calm repeaters `moon` (1800 to
+  5400 s) and `marble_knows` (900 to 3600 s) were slowed to match.
+  `Idle.AContentPetWithNoPhoneIsNeverQuietLongAndRarelyRepeats` runs six
+  hours with no phone and every drive held at zero: 222 lines, 53 of them
+  different, never more than 3 minutes of awake silence (the quiet-gap
+  ceiling), and no calm line more than 4 times.
 

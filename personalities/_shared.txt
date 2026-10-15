@@ -213,3 +213,185 @@ p_famous        prophecy: owner, named
 
 parrot          taught
   *
+
+# Idle: what a content pet says with nothing pressing, phone or not.
+
+rim_walk        always
+  I WALKED THE RIM. IT IS ROUND.
+
+marble_foe      always
+  THE MARBLE IS NOT MY FRIEND.
+
+clean_glass     always
+  THE GLASS IS VERY CLEAN. HI.
+
+dont_look       always
+  I AM THINKING. DO NOT LOOK.
+
+saw_nothing     always
+  NOTHING HAPPENED. I SAW IT.
+
+plans           always
+  I HAVE PLANS. THEY ARE SNACKS.
+
+toes            always
+  COUNTING TOES. LOST COUNT.
+
+small_lot       always
+  I AM SMALL BUT I AM A LOT.
+
+popped          always
+  I HAD A THOUGHT. IT POPPED.
+
+wiggle          always
+  WIGGLE. WIGGLE. OKAY, DONE.
+
+my_song         always
+  HMM HMM HMMMM. MY OWN SONG.
+
+dust            always
+  A SPECK OF DUST. MY RIVAL.
+
+blinked         always
+  I BLINKED. DID YOU SEE IT?
+
+important       always
+  I AM VERY IMPORTANT TODAY.
+
+secret_mud      always
+  I KNOW A SECRET. IT IS MUD.
+
+nap_plan        always
+  PLANNING A NAP. PLANNING...
+
+ceiling         always
+  THE CEILING LOOKS LIKE LUNCH.
+
+serious_face    always
+  PRACTISING MY SERIOUS FACE.
+
+no_echo         always
+  HELLO. HELLO. ECHO? NO ECHO.
+
+king            always
+  KING OF THE DISH. ONLY ONE.
+
+smells_me       always
+  IT SMELLS LIKE ME. GOOD.
+
+todo            always
+  TODAY'S LIST: SIT. SIT MORE.
+
+brave           always
+  I AM BRAVE. NOTHING IS HERE.
+
+big_pond        always
+  ONE DAY: A POND. A BIG ONE.
+
+floor           always
+  THE FLOOR HOLDS ME UP. NICE.
+
+snack_snacks    always
+  WHAT IF SNACKS HAD SNACKS?
+
+suspense        always
+  MIGHT HOP. MIGHT NOT. TENSE.
+
+ancestors       always
+  MY ANCESTORS SAT LIKE THIS.
+
+ask_me          always
+  I AM WISE. ASK ME A SNACK.
+
+legs            always
+  ARE MY LEGS THE RIGHT SIZE?
+
+shiny           always
+  SOMETHING SHINY. OH. ME.
+
+guard           always
+  GUARDING THE DISH. FROM WHAT?
+
+old_fly         always
+  I REMEMBER A FLY. GOOD TIMES.
+
+hi_you          always
+  HI. YES, YOU. HI.
+
+busy            always
+  VERY BUSY. DOING NOTHING.
+
+pellet_where    always
+  WHERE DO PELLETS COME FROM?
+
+rock            always
+  IF I SIT STILL, AM I A ROCK?
+
+best_gen        always
+  GEN #. STILL THE BEST GEN.
+
+tidied          always
+  I TIDIED. YOU CAN'T TELL.
+
+spun            always
+  I SPUN AROUND. NOW I SEE TWO.
+
+sunbeam         daytime
+  A SUNBEAM. I AM IN IT. MINE.
+
+long_days       daytime
+  DAYS ARE LONG. I LIKE THEM.
+
+squint          daytime
+  SO BRIGHT. I AM SQUINTING.
+
+toast           daytime
+  THE GLASS IS WARM. LIKE TOAST.
+
+sitting_time    daytime
+  DAYTIME. TIME FOR SITTING.
+
+lunch_oclock    daytime
+  IT FEELS LIKE LUNCH O'CLOCK.
+
+shadow          daytime
+  MY SHADOW FOLLOWS ME. RUDE.
+
+big_sit         daytime
+  BIG DAY. BIG SIT.
+
+eye_snack       daytime
+  LIGHT IS A SNACK FOR EYES.
+
+outside         daytime
+  IS THERE AN OUTSIDE? ASKING.
+
+not_scared      night
+  IT IS DARK. I AM NOT SCARED.
+
+star_crumbs     night
+  THE STARS ARE CRUMBS. I KNOW.
+
+rebel           night
+  UP LATE. A REBEL.
+
+too_quiet       night
+  SO QUIET. TOO QUIET. NICE.
+
+what_was_that   night
+  WHAT WAS THAT? OH. ME.
+
+bed_soon        night
+  BED SOON. NOT YET. SOON.
+
+moon_wink       night
+  THE MOON WINKED. I WINKED.
+
+dark_snacks     night
+  NIGHT THOUGHTS: DARK SNACKS.
+
+night_light     night
+  I GLOW A BIT. A NIGHT LIGHT.
+
+only_me         night
+  EVERYONE SLEEPS BUT ME.

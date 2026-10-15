@@ -53,6 +53,7 @@ pet that never meets a phone never says them; he still says everything else.
 | elder | He is awake and an elder. |
 | old | He is an elder. |
 | night | He is awake at night. |
+| daytime | He is awake by day. |
 | dark | It is night. |
 | light | It is day. |
 | lonely | He is awake and very lonely. |
