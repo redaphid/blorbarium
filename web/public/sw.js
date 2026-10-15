@@ -6,7 +6,7 @@ importScripts("ota.js");
 // Every file under web/public the page can ask for, except this one and fw/
 // (a release is kept by what its manifest names). web/test/offline.test.mjs
 // fails when web/public gains a file that is not listed here.
-const SHELL = ["./", "index.html", "ota.js", "ota-mock.js", "grungo.png", "manifest.webmanifest"];
+const SHELL = ["./", "index.html", "ota.js", "ota-mock.js", "debug.js", "grungo.png", "manifest.webmanifest"];
 const BOARDS = ["lcd128"];
 const SHELL_CACHE = "blorb-shell";
 const FONT_CACHE = "blorb-fonts";
