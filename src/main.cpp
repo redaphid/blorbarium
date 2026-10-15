@@ -474,10 +474,10 @@ static void reportStatus(uint32_t now) {
 #if !defined(BADGE_BOARD_SIM)
 // The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
 // badge table will adopt him as (founding.h advertisedSpecies), whatever the
-// owner named him. An image on trial keeps the old image's blorb-xxxx: the
-// page that sent the update keeps its token under the name it chose the
-// board by, and a page reloaded mid-trial must find that token to CONFIRM.
-// The species name comes with the next boot.
+// owner named him. An image on trial keeps the old image's blorb-xxxx, so a
+// trial looks to the page exactly as the board it updated: the page served
+// before rel-site keys its OTA token by device name, and a reloaded one must
+// find that token to CONFIRM. The species name comes with the next boot.
 static const char* bleName(const uint8_t mac[6]) {
   static char name[16];
   if (trial.onTrial()) {
