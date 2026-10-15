@@ -117,6 +117,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   std::optional<Genome> latest = lineage_.genomeOf(generation);
   bool history = generation > 0 || lineage_.legacyFeats() != 0;
   boot_ = loaded == SlotState::Corrupt || history ? Boot::FromLineage : Boot::Fresh;
+  live_.clock.phaseOffsetTicks = int32_t(uint32_t(options.foundingHour % 24) * kTicksPerHour);
   copyName(live_.settings.name, lineage_.currentName());
   live_.occupant = latest ? Egg(Offspring{std::move(*latest), {}}, generation, 0) : Egg(Offspring{founder, {}}, 0, 0);
   save();

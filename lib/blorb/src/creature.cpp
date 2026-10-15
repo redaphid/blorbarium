@@ -8,6 +8,10 @@ namespace {
 constexpr Fx kHalf = Fx::ratio(1, 2);
 // A new face must beat the one shown by this much, so faces do not flicker.
 constexpr Fx kFaceHysteresis = Fx::ratio(1, 10);
+// A sleep he chooses starts only with sleep_gate open this far, and runs
+// until it falls below kHalf. The gap is the nap: without it a pet hovering
+// at the gate dozes off and wakes every minute (docs/notes/first-hours.md).
+constexpr Fx kSleepOnset = Fx::ratio(75, 100);
 // Sense loci only a behaviour writes; cleared each tick so they stop with it.
 constexpr LocusId kBehaviourLoci[] = {locus::eating, locus::foreseeing};
 constexpr uint8_t kRecentEnd = kRecentBase + 64;
@@ -187,6 +191,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
 
   // 5 brain
   const Temperament& t = pheno_.temperament;
+  bool choseSleep = false;
   if (forced_) {
     switchTo(*forced_);
     forced_.reset();
@@ -205,7 +210,10 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     for (size_t d = 0; d < kDriveCount; ++d) drives[d] = chem_.drive(DRIVES[d].id);
     Decision d = brain_.think(features, drives, chem_.locus[locus::arousal.v], t, actionDone_, rng_);
     bool held = !actionDone_ && stats_.ageTicks - actionStart_ < minTicksOf(action_);
-    if (!held && (actionDone_ || d.action != action_)) switchTo(d.action);
+    if (!held && (actionDone_ || d.action != action_)) {
+      switchTo(d.action);
+      choseSleep = d.action == action::sleep;
+    }
   }
 
   // 6 behaviour, unless a reflex owns the body
@@ -216,7 +224,8 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     if (++r.tick >= r.ticks) body_.reflex.reset();
   } else if (!actionDone_) {
     Status s = behaviours.step(action_, body_, ctx);
-    if (action_ == action::sleep && !fires(chem_.locus[locus::sleep_gate.v])) s = Status::Done;
+    const Fx gate = chem_.locus[locus::sleep_gate.v];
+    if (action_ == action::sleep && (!fires(gate) || (choseSleep && gate < kSleepOnset))) s = Status::Done;
     if (s == Status::Done) finish();
   }
   chem_.add(chem::food, ctx.foodEaten);

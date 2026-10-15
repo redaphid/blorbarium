@@ -261,7 +261,8 @@ TEST(Founding, TheMarbleStartsOnASeededSpotClearOfTheHatchling) {
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
 // The device prints its own from HASH after the same feed (unit 20).
 TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
-  constexpr uint32_t kCommitted = 0xdca5e44au;
+  // 0xdca5e44a until a chosen sleep needed the gate open past kSleepOnset (docs/notes/first-hours.md).
+  constexpr uint32_t kCommitted = 0x8a7f68fcu;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -272,7 +273,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=dca5e44a tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=8a7f68fc tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
