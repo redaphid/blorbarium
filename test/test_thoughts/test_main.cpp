@@ -65,7 +65,7 @@ struct Rig {
   void shake(int jolts) {
     for (int i = 0; i < jolts; ++i) {
       BodySample j = still();
-      j.az = i % 2 == 0 ? 2000 : 400;
+      j.az = i % 2 == 0 ? 2000 : 0;
       for (uint32_t t = 0; t < 80; t += kSampleMs, ms += kSampleMs) {
         dish.sample(t == 0 ? j : still(), ms);
         dish.tick(ms, link);

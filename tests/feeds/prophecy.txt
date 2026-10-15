@@ -8,5 +8,6 @@
 @400 DEBUG force rest
 # A shake, and instead of hopping he foretells: the foresee face and glow,
 # and the prophecy in his voice.
-@500 !shake
+# Its fifth swing each way, the shake, lands at 680.
+@440 !shake
 @1800 DEBUG think p_pond_no

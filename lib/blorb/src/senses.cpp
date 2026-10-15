@@ -5,10 +5,7 @@ namespace {
 
 // Measured on the 1.28 by claude-notification-screen's orient.h.
 constexpr int32_t kOneG = 1000;                    // milli-g
-constexpr int32_t kShakeJoltMg = 550;              // SHAKE_G
 constexpr uint32_t kShakeGapMs = 60;               // SHAKE_GAP_MS
-constexpr uint32_t kShakeWindowMs = 900;           // SHAKE_WINDOW_MS
-constexpr uint8_t kShakeJolts = 4;                 // SHAKE_JOLTS
 constexpr uint32_t kShakeRearmMs = 600;            // SHAKE_REARM_MS
 constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
@@ -16,19 +13,36 @@ constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
 constexpr int32_t kSteadyMg = 250;                 // TILT_MAX_SHAKE_G: further off 1 g is a jolt, not gravity
 constexpr uint32_t kKnockGapMs = 400;
 
-// Chosen here, not measured.
+// Chosen here, not measured. The badges ride in cars (DESIGN.md, "Senses in
+// a car"): a road buzzes at up to about 0.3 g, a pothole makes the body
+// 1.5-2.5 g for 50-150 ms, front axle then rear, and turns and braking lean
+// gravity by 0.2-0.4 g for seconds. test_senses' Road cases replay that.
+// A shake's jolts are off gravity and each the other way from the last: a
+// road pushes up that hard, but pulls down past 0.6 g only by throwing him
+// off the seat, and a hand pulls both ways. Five is two and a half swings; a
+// badge thrown off a seat leaves and lands about twice.
+constexpr int32_t kShakeJoltMg = 800;
+constexpr uint8_t kShakeJolts = 5;
+constexpr uint32_t kShakeWindowMs = 1000;          // two swings a second still count
+constexpr int32_t kNearMg = 400;                   // gravity follows a turn or a tilt from samples this close to it...
+constexpr int32_t kRestMg = 60;                    // ...or once samples move less than this, axes summed,
+constexpr uint8_t kRestSamples = 5;                // for 100 ms: a shake's peak never rests that long
 constexpr int32_t kStillMg = 120;                  // hand tremor still counts as still for a cradle
 constexpr uint32_t kCradleAfterMs = 3000;
 constexpr uint32_t kCradleEveryMs = 10000;
 constexpr int32_t kFaceDownMg = -600;              // flipped below this, righted above kFaceUpMg
 constexpr int32_t kFaceUpMg = 600;
 constexpr int32_t kLidMg = -800;
-constexpr uint32_t kLidDownMs = 2000;
+constexpr uint32_t kLidDownMs = 30000;             // face down in play is rarely still for 30 s; a bedtime always is
+constexpr int32_t kLidStillMg = 50;                // off gravity: a table reads under 5, the smoothest road past 50 every second or so
 constexpr int32_t kLidReleaseMg = -500;
 constexpr uint32_t kLidUpMs = 200;                 // a knock on a face-down dish is not a righting
 constexpr int32_t kFreeFallMg = 300;
-constexpr uint32_t kFreeFallMs = 100;              // about 5 cm of fall; a shorter dip is a shake jolt
+constexpr uint32_t kFreeFallMs = 200;              // about 20 cm of fall; a pothole throws him off a seat for less
 constexpr uint32_t kLandWindowMs = 500;
+constexpr int32_t kLandMg = 550;
+constexpr int32_t kBumpMg = 200;                   // pushed up along gravity on two samples running: the whole body moved, as a road moves it
+constexpr uint32_t kBumpMaskMs = 300;              // the tap engine reports 100-200 ms after the bump that set it off
 constexpr uint32_t kButtonHoldMs = 1200;
 constexpr int32_t kWarmSpanCx10 = 30;              // 3 C above the baseline is warmth 1
 constexpr int32_t kWarmBaselineSamples = 32768;    // about 11 minutes at 50 Hz
@@ -187,7 +201,27 @@ void TiltDetector::sample(const BodySample& s, uint32_t, SenseOut& out) {
   out.set(locus::upside_down, flag(upside_));
 }
 
+// A swing in the screen's plane passes through readings 1 g long, so being
+// near 1 g is not enough to be gravity: the sample must also be near the
+// estimate, or the body must have held still for a moment (turned over).
+void Gravity::sample(const BodySample& s) {
+  bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
+  int32_t moved = absMg(s.ax - px_) + absMg(s.ay - py_) + absMg(s.az - pz_);
+  rest_ = steady && moved < kRestMg ? uint8_t(rest_ < 255 ? rest_ + 1 : 255) : uint8_t(0);
+  px_ = s.ax, py_ = s.ay, pz_ = s.az;
+  if (steady && !primed_) { gx_ = s.ax * 16; gy_ = s.ay * 16; gz_ = s.az * 16; primed_ = true; }
+  if (!primed_) return;
+  dx = s.ax - gx_ / 16;
+  dy = s.ay - gy_ / 16;
+  dz = s.az - gz_ / 16;
+  if (!steady || (squared() >= kNearMg * kNearMg && rest_ < kRestSamples)) return;
+  gx_ += s.ax - gx_ / 16;   // kTiltSmooth: 1/16 a sample
+  gy_ += s.ay - gy_ / 16;
+  gz_ += s.az - gz_ / 16;
+}
+
 void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  grav_.sample(s);
   int32_t mag = magnitudeMg(s);
   int32_t dev = absMg(mag - kOneG);
   energy_ += (Fx::ratio(dev < kOneG ? dev : kOneG, kOneG) - energy_) * kMotionSmooth;
@@ -205,24 +239,32 @@ void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
     fallSince_ = ms;
   }
   if (fall_ == Fall::Landing) {
-    if (dev >= kShakeJoltMg) { out.fire(stim::dropped); fall_ = Fall::None; }
+    if (dev >= kLandMg) { out.fire(stim::dropped); fall_ = Fall::None; }
     else if (ms - fallSince_ > kLandWindowMs) fall_ = Fall::None;
   }
 
   // Once a shake fires it takes kShakeRearmMs without a jolt before another
   // can start, so a shake kept up for a second is one shake (orient.h).
-  if (dev < kShakeJoltMg) return;
-  if (joltCount_ > 0 && ms - quietSince_ < kShakeGapMs) return;
+  if (grav_.squared() < kShakeJoltMg * kShakeJoltMg) return;
   bool rested = ms - quietSince_ >= kShakeRearmMs;
   quietSince_ = ms;
   if (rattled_ && !rested) return;
   rattled_ = false;
-  if (joltCount_ == kShakeJolts) {
-    for (uint8_t i = 1; i < kShakeJolts; ++i) jolts_[i - 1] = jolts_[i];
-    --joltCount_;
+  uint8_t kept = 0;   // the jolts still inside the window
+  for (uint8_t i = 0; i < joltCount_; ++i)
+    if (ms - jolts_[i] <= kShakeWindowMs) jolts_[kept++] = jolts_[i];
+  joltCount_ = kept;
+  if (joltCount_ > 0) {
+    if (ms - jolts_[joltCount_ - 1] < kShakeGapMs) return;
+    // The same way as the last is the same swing, or the road's rear axle;
+    // a lone jolt that way (a bump just before a shake) gives way to this one.
+    bool reverses = lastX_ * grav_.dx + lastY_ * grav_.dy + lastZ_ * grav_.dz < 0;
+    if (!reverses && joltCount_ > 1) return;
+    if (!reverses) joltCount_ = 0;
   }
+  lastX_ = grav_.dx, lastY_ = grav_.dy, lastZ_ = grav_.dz;
   jolts_[joltCount_++] = ms;
-  if (joltCount_ == kShakeJolts && ms - jolts_[0] <= kShakeWindowMs) {
+  if (joltCount_ == kShakeJolts) {
     out.fire(stim::shake);
     rattled_ = true;
     joltCount_ = 0;
@@ -246,8 +288,18 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   out.set(locus::cradled, flag(cradled_));
 }
 
+// A knuckle lands in a few milliseconds, on one 50 Hz sample at most. A
+// pothole loud enough for the tap engine pushes the whole body up for 50 ms
+// or more, so a tap just after two heavy samples running is the road. Heavy
+// is along gravity: a hand swinging two badges together to clink is across it.
 void KnockDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  grav_.sample(s);
+  const int32_t gx = s.ax - grav_.dx, gy = s.ay - grav_.dy, gz = s.az - grav_.dz;
+  bool heavy = grav_.dx * gx + grav_.dy * gy + grav_.dz * gz >= kBumpMg * kOneG;
+  if (heavy && heavy_) { bumpAt_ = ms; bumped_ = true; }
+  heavy_ = heavy;
   if ((s.tapCode != 1 && s.tapCode != 2) || ms - last_ < kKnockGapMs) return;
+  if (bumped_ && ms - bumpAt_ <= kBumpMaskMs) return;
   last_ = ms;
   out.fire(s.tapCode == 2 ? stim::double_knock : stim::knock);
 }
@@ -270,9 +322,14 @@ void ButtonDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   }
 }
 
+// Lidding needs him face down and still for the whole wait, so a jostle in
+// a car starts it again. Once lidded only righting him lifts the lid.
 void LidDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  grav_.sample(s);
   bool faceDown = s.az < (lidded_ ? kLidReleaseMg : kLidMg);
-  if (settle(faceDown, lidded_, since_, ms, kLidDownMs, kLidUpMs)) out.fire(lidded_ ? stim::lid_down : stim::lid_up);
+  bool still = grav_.squared() < kLidStillMg * kLidStillMg;
+  if (settle(lidded_ ? faceDown : faceDown && still, lidded_, since_, ms, kLidDownMs, kLidUpMs))
+    out.fire(lidded_ ? stim::lid_down : stim::lid_up);
 }
 
 // Held in a hand, the IMU die warms above where it has been sitting.

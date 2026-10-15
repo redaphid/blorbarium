@@ -17,4 +17,5 @@
 @16400 DEBUG inject vision 0
 @16400 DEBUG force rest
 # A real shake through the fake IMU: the detectors count the jolts, adrenaline drives startle, startle the hop.
-@17000 !shake 1200
+# Its fifth swing each way, the shake, lands at 17180 (senses.cpp), so at 17600 he is in the air.
+@16940 !shake 1200
