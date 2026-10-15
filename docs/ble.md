@@ -15,10 +15,30 @@ Nordic UART Service (NUS), from `src/hw/link_nus.h`.
 | RX characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | the page writes (write or write without response) |
 | TX characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | the board notifies |
 
-The board advertises the service UUID and puts its name, `blorb-xxxx` (the
-last two bytes of its MAC, lower-case hex), in the scan response. Filter on
-the service UUID or on the name prefix `blorb-`. There is no pairing and no
-owner token.
+The board advertises the service UUID and puts its name in the scan response.
+The name is its creature's species, as the lowercase slug from
+`species.def` (`mossby`, `hushwing`). It is the same whatever the owner named
+the pet. Each badge in `defs/badges.def` holds a different species, so the name
+also tells the badges apart. The advertisement carries the flags and the
+128-bit UUID (21 of its 31 bytes). The scan response holds the name, and the
+longest slug, 8 characters, takes 10 of its 31 bytes.
+
+Which species (`advertisedSpecies` in `founding.h`):
+
+- The pet's own species.
+- For a pet from 0.4.0, which has no species yet, the species the badge table
+  will adopt him as (`Dish::adoptSpecies`).
+- For a sealed board, whose pet was not read, the badge's table species, else
+  its MAC's hash.
+- An image on an OTA trial still advertises the old `blorb-xxxx` (the last
+  two bytes of its MAC, lower-case hex). The page that sent the update keeps
+  its token under the name it chose the board by, and a page reloaded during
+  the trial must find that token to send `OTA CONFIRM`. The species name
+  starts at the first boot after the trial keeps the image.
+
+Filter on the service UUID. A `?d=<name>` link must use the current name: after
+the update, `?d=mossby`, not `?d=blorb-1b3c`. There is no pairing and no owner
+token.
 
 ## Framing
 
