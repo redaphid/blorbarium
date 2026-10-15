@@ -149,11 +149,14 @@
     const tz = () => -new Date().getTimezoneOffset();
     const mockPress = el("button", { id: "dbgMockPress", type: "button", className: "ghost", hidden: true, textContent: "Press BOOT (pretend)" });
     mockPress.addEventListener("click", () => { if (mock) mock.debugPress(); setTimeout(refresh, 50); });
+    const retry = el("button", { id: "dbgRetry", type: "button", hidden: true, textContent: "Retry debug link" });
+    retry.addEventListener("click", () => attach(lastService));
 
     panel = el("section", { id: "debugPanel", className: "dbg" },
       el("h2", { textContent: "Debug" }),
       el("p", { className: "hint", id: "dbgSay", textContent: "Connect to the dish. Harmful commands need Unlock and a BOOT press." }),
       el("p", { className: "dbg-status", id: "dbgStatus", textContent: "not connected" }),
+      retry,
       datalist("dbgChems", CHEMS), datalist("dbgStims", STIMULI), datalist("dbgThoughts", THOUGHTS),
       row("Unlock", button("Unlock", "UNLOCK", { className: "" }), button("Lock", "LOCK"), button("Status", "STATUS"), mockPress),
       el("h3", { textContent: "No press needed" }),
@@ -190,36 +193,73 @@
     else document.body.append(panel);
   }
 
-  function connected(write) {
+  // early: ask STATUS now (the mock); a real link asks once its notifications are on.
+  function connected(write, early = true) {
     if (channel) channel.failAll("disconnected");
     channel = new Channel(write, onEvent);
     say("Connected. Harmful commands need Unlock and a BOOT press.");
-    refresh();
+    if (early) refresh();
     return channel;
   }
 
+  // Android Chrome runs one Bluetooth operation at a time and does not queue
+  // across characteristics, so a debug write or subscribe that meets the
+  // page's own traffic fails ("GATT operation already in progress" / "failed
+  // for unknown reason"). Each debug GATT call is retried with backoff; only a
+  // missing characteristic (NotFoundError) or a dropped link gives up at once.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function retryGatt(service, op, tries = 10) {
+    for (let i = 1; ; i++) {
+      try {
+        return await op();
+      } catch (e) {
+        const gone = service.device && service.device.gatt && !service.device.gatt.connected;
+        if ((e && e.name === "NotFoundError") || gone || i >= tries) throw e;
+        await sleep(120 * i);
+      }
+    }
+  }
+
+  let lastService = null;
   // The NUS service of a freshly opened connection. A firmware without the
   // debug link has no such characteristic: the panel says so and stays idle.
   async function attach(service) {
-    if (!enabled) return;
+    if (!enabled || !service) return;
+    lastService = service;
+    showRetry(false);
+    say("Opening the debug link…");
+    await sleep(800);   // the page's first lines (TIME, HELLO, OTA STATUS) go first
+    if (service !== lastService) return;
     try {
-      const c = await service.getCharacteristic(CHAR);
+      const c = await retryGatt(service, () => service.getCharacteristic(CHAR));
       const ch = connected((text) => {
         const bytes = new TextEncoder().encode(text);
-        return c.writeValueWithResponse ? c.writeValueWithResponse(bytes) : c.writeValue(bytes);
-      });
+        return retryGatt(service, () => (c.writeValueWithResponse ? c.writeValueWithResponse(bytes) : c.writeValue(bytes)));
+      }, false);
       c.addEventListener("characteristicvaluechanged", (e) => ch === channel && ch.feed(new TextDecoder().decode(e.target.value)));
-      await c.startNotifications();
+      await retryGatt(service, () => c.startNotifications());
       service.device.addEventListener("gattserverdisconnected", () => {
         if (ch !== channel) return;
         channel.failAll("disconnected");
         channel = null;
         say("Disconnected: the unlock and any speed-up ended with the connection.");
       }, { once: true });
+      refresh();
     } catch (e) {
       channel = null;
-      say(`This firmware has no debug link (${e.message}).`);
+      showRetry(true);
+      if (e && e.name === "NotFoundError") {
+        say(`This dish shows no debug link (${e.message}). Firmware 0.7.0 and newer has one: update it first. ` +
+          "If it already runs 0.7.0, the phone may hold an old copy of its Bluetooth layout: in Android Settings, " +
+          "Apps, show system apps, Bluetooth, Storage, clear the cache; then connect again.");
+      } else {
+        say(`The debug link did not open (${e && e.name}: ${e && e.message}). Tap Retry debug link.`);
+      }
     }
+  }
+  function showRetry(on) {
+    const b = panel && panel.querySelector("#dbgRetry");
+    if (b) b.hidden = !on;
   }
 
   // ?mock=1: the mock dish answers debug lines (ota-mock.js MockDish.debug).

@@ -90,10 +90,52 @@ def sends_commands_with_it(browser, base):
         page.close()
 
 
+FAKE_BT = pathlib.Path(__file__).resolve().parent / "fake_bluetooth.js"
+
+
+def ble_debug_page(browser, base, setup):
+    page = browser.new_context(service_workers="block").new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.on("dialog", lambda d: d.accept())
+    page.add_init_script(path=str(FAKE_BT))
+    page.add_init_script("window.__fakeBt.nearby = [['mossby']];" + setup)
+    page.goto(f"{base}/index.html?debug=true")
+    page.click("#connect")
+    return page
+
+
+def say_has(page, text, timeout=15000):
+    page.wait_for_function("t => document.getElementById('dbgSay').textContent.includes(t)", arg=text, timeout=timeout)
+
+
+# Android Chrome refuses a GATT operation that meets another in flight: the
+# panel must ride those refusals out instead of calling the firmware debug-less.
+def opens_over_a_busy_android_link(browser, base):
+    page = ble_debug_page(browser, base, "window.__fakeBt.busy = 4;")
+    page.wait_for_function("() => document.getElementById('dbgStatus').textContent.includes('unlock=locked')", timeout=20000)
+    assert page.evaluate("__fakeBt.busy") == 0, "the busy refusals were never met"
+    click(page, "Fortune")
+    page.wait_for_function("() => __fakeBt.debugHeard.some(l => l.endsWith(' FORTUNE'))", timeout=10000)
+    assert "no debug link" not in page.locator("#dbgSay").text_content()
+    assert not page.errors, page.errors
+    page.context.close()
+
+
+def says_why_when_the_link_is_missing(browser, base):
+    page = ble_debug_page(browser, base, "window.__fakeBt.noDebug = true;")
+    say_has(page, "shows no debug link")
+    say_has(page, "0.7.0")
+    assert page.locator("#dbgRetry").is_visible(), "no Retry debug link button"
+    # The page's own panel still works: the update section came up.
+    page.locator("#updateGo, #upToDate, #updateStatus").first.wait_for(state="attached", timeout=10000)
+    page.context.close()
+
+
 def main():
     server = serve()
     base = f"http://127.0.0.1:{server.server_address[1]}"
-    cases = [hidden_without_the_param, sends_commands_with_it]
+    cases = [hidden_without_the_param, sends_commands_with_it, opens_over_a_busy_android_link, says_why_when_the_link_is_missing]
     failed = 0
     with sync_playwright() as p:
         browser = p.chromium.launch()
