@@ -197,6 +197,81 @@
     }
   }
 
+  // ---- the debug link (docs/debug-ble.md), for ?mock=1&debug=true ----
+  // Its gates as the dish has them: harm needs this connection's unlock (a
+  // BOOT press, debugPress here), and writes wait out a trial or an update.
+  const DEBUG_REACH = { HELP: "look", STATUS: "look", UNLOCK: "look", LOCK: "look", THINK: "show", FORTUNE: "show",
+    LOOK: "show", FIRE: "write", WALL: "write", SCALE: "write", HATCH: "harm", STAGE: "harm", WARP: "harm",
+    CHEM: "harm", DIE: "harm", SPECIES: "harm", WIPE: "harm" };
+  const STAGES = ["baby", "child", "adult", "elder"];
+
+  MockDish.prototype.debugState = function () {
+    return this.dbg ||= { unlock: "locked", phase: "egg", stage: "-", age: 0, species: "grungo", look: "own",
+      scale: 1, time: "unknown", heard: [] };
+  };
+
+  // One debug line, "#<id> VERB args"; the reply lines, each with its "#<id> ".
+  MockDish.prototype.debug = function (line) {
+    const d = this.debugState();
+    const m = /^#([0-9a-fA-F]{1,6}) (\S+) ?(.*)$/.exec(line);
+    if (!m) return ["#0 ERR 400 BAD_ID"];
+    const [, id, verb, rest] = m;
+    const args = rest.trim() ? rest.trim().split(/\s+/) : [];
+    d.heard.push(line);
+    const out = (...l) => l.map((x) => `#${id} ${x}`);
+    const reach = DEBUG_REACH[verb];
+    if (!reach) return out("ERR 404 UNKNOWN_VERB");
+    if (reach === "write" || reach === "harm") {
+      if (this.trial) return out("ERR 409 TRIAL");
+      if (this.state !== "idle") return out("ERR 409 OTA_ACTIVE");
+    }
+    if (reach === "harm" && d.unlock !== "open") return out("ERR 423 LOCKED");
+    const where = () => `OK phase=${d.phase} stage=${d.stage} age=${d.age}`;
+    switch (verb) {
+      case "HELP": return out(...Object.entries(DEBUG_REACH).map(([v, r]) => `+ ${v} ${r} `), `OK ${Object.keys(DEBUG_REACH).length}`);
+      case "STATUS": return out(`OK unlock=${d.unlock} scale=${d.scale} trial=${this.trial ? 1 : 0} ota=${this.state === "idle" ? 0 : 1} sealed=0 phase=${d.phase} stage=${d.stage} age=${d.age} species=${d.species} look=${d.look} time=${d.time} dropped=0`);
+      case "UNLOCK":
+        if (this.trial) return out("ERR 409 TRIAL");
+        if (d.unlock === "open") return out("OK unlock=open");
+        d.unlock = "asking";
+        this.timer("debugUnlock", 30000, () => { if (d.unlock === "asking") { d.unlock = "locked"; this.debugEmit?.("DEBUG unlock=lapsed"); } });
+        return out("OK unlock=asking ms=30000");
+      case "LOCK": d.unlock = "locked"; return out("OK unlock=locked");
+      case "THINK": return d.phase === "creature" ? out(`OK think=${args[0]} prophecy=${/^p_/.test(args[0]) ? 1 : 0}`) : out("ERR 409 NO_CREATURE");
+      case "FORTUNE": return d.phase === "creature" ? out(`OK fortune=${args[0] || "p_feast"}`) : out("ERR 409 NO_CREATURE");
+      case "LOOK": d.look = args[0] === "off" ? "own" : args[0]; return out(`OK look=${d.look}`);
+      case "FIRE": return out(`OK fire=${args[0]}`);
+      case "WALL": d.time = args[0] === "clear" ? "unknown" : "known"; return out(d.time === "known" ? `OK time=known wall=${args[0]} tz=${args[1] || 0} night=0` : "OK time=unknown");
+      case "SCALE": d.scale = Number(args[0]); return d.scale >= 1 && d.scale <= 60 ? out(`OK scale=${d.scale}`) : out("ERR 416 OUT_OF_RANGE");
+      case "HATCH": if (d.phase !== "egg") return out("ERR 409 NOT_EGG"); Object.assign(d, { phase: "creature", stage: "baby", age: 18000 }); return out(where());
+      case "STAGE": {
+        const s = STAGES.indexOf(args[0]);
+        if (s < 0) return out("ERR 400 BAD_ARGS");
+        if (d.phase === "clutch") return out("ERR 409 NO_CREATURE");
+        if (d.phase === "creature" && STAGES.indexOf(d.stage) > s) return out("ERR 409 PAST_STAGE");
+        Object.assign(d, { phase: "creature", stage: args[0], age: 18000 + s * 864000 });
+        return out(where());
+      }
+      case "WARP": d.age += Number(args[0]) * 600; return out(where());
+      case "CHEM": return d.phase === "creature" ? out(`OK ${args.length / 2}`) : out("ERR 409 NO_CREATURE");
+      case "DIE": if (d.phase !== "creature") return out("ERR 409 NO_CREATURE"); Object.assign(d, { phase: "clutch", stage: "-" }); return out(`OK phase=clutch eggs=3 vigil=${args[0] === "remains" ? 1 : 18000}`);
+      case "SPECIES": if (d.phase !== "creature") return out("ERR 409 NO_CREATURE"); d.species = args[0]; return out(`OK species=${d.species}`);
+      case "WIPE":
+        setTimeout(() => { Object.assign(d, { unlock: "locked", phase: "egg", stage: "-", age: 0, species: args[0] || "grungo" }); this.boot(this.fw, false); }, 500);
+        return out(`OK wiping found=${args[0] || "nest"}`);
+    }
+    return out("ERR 404 UNKNOWN_VERB");
+  };
+
+  // BOOT pressed while the unlock asks.
+  MockDish.prototype.debugPress = function () {
+    const d = this.debugState();
+    if (d.unlock !== "asking") return;
+    d.unlock = "open";
+    this.timer("debugUnlock");
+    this.debugEmit?.("DEBUG unlock=open");
+  };
+
   const api = { MockDish, mockRelease };
   globalThis.BlorbOtaMock = api;
   if (typeof module !== "undefined") module.exports = api;

@@ -220,6 +220,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
 </main>
 
 <script src="ota.js"></script>
+<script src="debug.js"></script>
 <script>
 "use strict";
 const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -364,6 +365,7 @@ class BleTransport {
     this.feed = lineReader((line) => this.onLine(line));
     tx.addEventListener("characteristicvaluechanged", this.notify);
     await tx.startNotifications();
+    globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js)
   }
   // Back to the same device after a drop, with no chooser, for about two minutes.
   async reopen(ms = 120000) {
@@ -841,6 +843,7 @@ async function connect() {
     if (params.has("mock")) {
       if (!globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
       transport = new MockTransport(onDrop);
+      globalThis.BlorbDebug?.attachMock(transport.dish);
     } else {
       transport = new BleTransport(onDrop);
       ui.status("connecting", "Choose the dish…");
