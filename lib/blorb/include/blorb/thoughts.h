@@ -5,7 +5,8 @@
 // stage, sickness, foresee, what his brain learned, the heirlooms in his
 // genome, the pet clock) plus a draw seeded by his genome and the tick. Every
 // shake brings a prophecy instead of a hop. His oracle weights its topics and
-// picks the voice (voices.def) every line is said in.
+// picks the voice (voices.def) every line is said in. He needs no phone; what
+// one gives him (FromPhone) only adds lines.
 //
 // Presentation, not life: no line changes him, and the Thinker is not saved
 // or hashed. A reboot starts it afresh, so a replay of the creature stays
@@ -22,6 +23,7 @@ namespace blorb {
 
 class Lineage;
 struct Appearance;
+struct Taught;   // taught.h
 
 // An heirloom instinct in his genome, and the generation whose brain learned
 // it (kUnknownGeneration when the lineage no longer says: founder-carried or compacted).
@@ -33,6 +35,15 @@ struct Heirlooms {
 };
 Heirlooms heirloomsOf(const Genome&, const Lineage&);
 
+// What a phone has given him. Each one adds lines; with none of them he
+// still thinks and foretells on his own clock. None is saved with him or hashed.
+struct FromPhone {
+  uint32_t awayTicks = 0;             // powered ticks since a phone last gave the time
+  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME this boot
+  bool named = false;                 // the owner chose his name (TWIST rename)
+  const Taught* taught = nullptr;     // what the owner taught him to say (TWIST teach)
+};
+
 // What a line's condition may look at.
 struct Observed {
   const Creature& c;
@@ -40,7 +51,7 @@ struct Observed {
   const PetClock& clock;
   const Heirlooms& heirlooms;
   uint32_t tick;
-  uint32_t phoneAwayTicks = 0;   // powered ticks since a phone last gave the time
+  FromPhone phone{};
 };
 
 // A condition; it may set the number the text shows in place of its '#'.
@@ -60,11 +71,12 @@ namespace thought {
 
 struct ThoughtInfo {
   ThoughtId id; const char* name; TopicId topic; ThoughtWhen when; uint8_t priority; uint16_t cooldownS; const char* text;
+  const char* whenName;
   constexpr bool prophecy() const { return topic != topic::none; }
 };
 inline constexpr ThoughtInfo THOUGHTS[] = {
 #define BLORB_THOUGHT(id, name, top, pred, priority, cooldownS, text) \
-  {ThoughtId{id}, #name, topic::top, when::pred, priority, cooldownS, text},
+  {ThoughtId{id}, #name, topic::top, when::pred, priority, cooldownS, text, #pred},
 #include "blorb/defs/thoughts.def"
 #undef BLORB_THOUGHT
 };
@@ -92,7 +104,15 @@ inline constexpr SpeciesLine SPECIES_LINES[] = {
 constexpr size_t kMaxThoughtText = 30;
 constexpr size_t kMaxFrameText = 22;          // a voice's prefix and suffix together
 constexpr size_t kMaxVoicedText = kMaxThoughtText + kMaxFrameText;   // a row of thought_lines.def
+constexpr size_t kMaxNameText = 15;           // the saved name's 16 bytes
+constexpr size_t kMaxTaughtText = kMaxThoughtText;
 constexpr uint8_t kUrgentThought = 7;
+
+// A line holds at most one mark, standing for what its condition gives: '#' a
+// number (a condition that sets one), '@' his name (a condition named
+// named...: the owner chose it), '*' a line the owner taught him (taught).
+constexpr char kNumberMark = '#', kNameMark = '@', kTaughtMark = '*';
+constexpr bool isMark(char c) { return c == kNumberMark || c == kNameMark || c == kTaughtMark; }
 
 constexpr bool inFont(char c) {
   if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return true;
@@ -105,35 +125,34 @@ constexpr size_t textLen(const char* s) {
   while (s[n]) ++n;
   return n;
 }
+constexpr bool startsWith(const char* s, const char* prefix) {
+  while (*prefix && *s == *prefix) ++s, ++prefix;
+  return !*prefix;
+}
+constexpr const char* whenOf(ThoughtId id) {
+  for (const ThoughtInfo& t : THOUGHTS)
+    if (t.id == id) return t.whenName;
+  return "";
+}
+// In the font, 1 to `max` characters, at most one mark, and only a mark its condition gives.
+constexpr bool writable(const char* text, size_t max, const char* when) {
+  size_t marks = 0;
+  for (const char* s = text; *s; ++s) {
+    if (!inFont(*s) && !isMark(*s)) return false;
+    if (*s == kNameMark && !startsWith(when, "named")) return false;
+    if (*s == kTaughtMark && !startsWith(when, "taught")) return false;
+    marks += isMark(*s);
+  }
+  const size_t n = textLen(text);
+  return n > 0 && n <= max && marks <= 1;
+}
 constexpr bool thoughtsWritable() {
-  for (const ThoughtInfo& t : THOUGHTS) {
-    size_t marks = 0;
-    for (const char* s = t.text; *s; ++s) {
-      if (!inFont(*s) && *s != '#') return false;
-      marks += *s == '#';
-    }
-    const size_t n = textLen(t.text);
-    if (n == 0 || n > kMaxThoughtText || marks > 1) return false;
-  }
-  for (const VoicedLine& l : VOICED_LINES) {
-    size_t marks = 0;
-    for (const char* s = l.text; *s; ++s) {
-      if (!inFont(*s) && *s != '#') return false;
-      marks += *s == '#';
-    }
-    const size_t n = textLen(l.text);
-    if (n == 0 || n > kMaxVoicedText || marks > 1) return false;
-  }
-  for (const SpeciesLine& l : SPECIES_LINES) {
-    if (l.species.v == 0xFF) continue;
-    size_t marks = 0;
-    for (const char* s = l.text; *s; ++s) {
-      if (!inFont(*s) && *s != '#') return false;
-      marks += *s == '#';
-    }
-    const size_t n = textLen(l.text);
-    if (n == 0 || n > kMaxThoughtText || marks > 1) return false;
-  }
+  for (const ThoughtInfo& t : THOUGHTS)
+    if (!writable(t.text, kMaxThoughtText, t.whenName)) return false;
+  for (const VoicedLine& l : VOICED_LINES)
+    if (!writable(l.text, kMaxVoicedText, whenOf(l.thought))) return false;
+  for (const SpeciesLine& l : SPECIES_LINES)
+    if (l.species.v != 0xFF && !writable(l.text, kMaxThoughtText, whenOf(l.thought))) return false;
   for (const FrameInfo& f : FRAMES) {
     for (const char* s = f.prefix; *s; ++s) if (!inFont(*s)) return false;
     for (const char* s = f.suffix; *s; ++s) if (!inFont(*s)) return false;
@@ -161,30 +180,42 @@ constexpr bool everyVoiceFramed() {
 }
 static_assert(idsUnique(THOUGHTS), "thoughts.def has a duplicate id");
 static_assert(kThoughtCount <= 255, "the Thinker indexes rows by a byte");
-static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two '#' or a character the font lacks");
+static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two marks, a mark its condition does not "
+                                  "give, or a character the font lacks");
 static_assert(everyVoiceFramed(), "every voice needs at least one BLORB_FRAME");
 static_assert(speciesLinesNameTheirSpecies(), "species_lines.def: an id and a name disagree with species.def; rerun tools/personality.py build");
 
-// The line as said, with its '#' replaced by `num`. If his species has its
-// own lines for the row (species_lines.def), one of them stands in for the
-// row's text and the voice's own lines. Otherwise: one of the voice's own lines
-// for the row (thought_lines.def) if it has any, else the row's text. Anything
-// but a voice's own line is cut to the first sentence if the voice is terse,
-// inside one of the voice's frames. `pick` chooses among them, modulo their
-// count. Returns the length.
-constexpr size_t kThoughtLineCap = kMaxVoicedText + 4 + 1;   // '#' can grow to 5 digits
+// What a line's '@' and '*' stand for: his name and one taught line, in the font.
+struct Words { std::string_view name, taught; };
+
+// The line as said, its mark replaced: '#' by `num`, '@' and '*' by `words`.
+// If his species has its own lines for the row (species_lines.def), one of
+// them stands in for the row's text and the voice's own lines. Otherwise: one
+// of the voice's own lines for the row (thought_lines.def) if it has any, else
+// the row's text. Anything but a voice's own line is cut to the first sentence
+// if the voice is terse, inside one of the voice's frames. `pick` chooses
+// among them, modulo their count. Returns the length.
+// The one mark grows a line most as a taught line ('#' is 5 digits, '@' a name).
+constexpr size_t kThoughtLineCap = kMaxVoicedText + (kMaxTaughtText - 1) + 1;
+static_assert(kMaxTaughtText >= kMaxNameText && kMaxTaughtText >= 5);
 // kSharedOnly is no species: the shared and voiced lines alone, as tests and
 // previews want them whatever lines the species files hold.
 inline constexpr SpeciesId kSharedOnly{0xFE};
-size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out, SpeciesId = kSharedOnly);
+size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out, SpeciesId = kSharedOnly,
+                   const Words& = {});
+// The phone's text as the marquee draws it: uppercased, kept to the font,
+// trimmed of spaces at either end, at most `cap` characters. Returns the
+// length; 0 when nothing is left.
+size_t toFont(std::string_view in, char* out, size_t cap);
 
 // How long a line holds: one pass of the marquee, which moves 3 px a tick
 // over the dish's chord (about 200 px) plus 12 px a character.
 constexpr uint16_t kThoughtLeadTicks = 70, kThoughtTicksPerChar = 4;
 constexpr uint16_t passTicks(size_t len) { return uint16_t(kThoughtLeadTicks + len * kThoughtTicksPerChar); }
 
-// What the phone has him say (TWIST say): the longest line the strip holds.
-constexpr size_t kMaxSaidText = kThoughtLineCap - 1;
+// What the phone has him say (TWIST say): a voiced line with room for a 5-digit number.
+constexpr size_t kMaxSaidText = kMaxVoicedText + 4;
+static_assert(kMaxSaidText < kThoughtLineCap);
 
 // ---- choosing ---------------------------------------------------------------------
 struct ThoughtPick { ThoughtId id; uint16_t num; };
@@ -199,9 +230,11 @@ class Thinker {
   // shake landed this tick. A new life (or a reboot) restarts it: fresh
   // cooldowns, heirlooms re-read, a quiet gap before the first thought.
   void step(const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick, bool shook,
-            uint32_t phoneAwayTicks = 0);
-  // Sim scripts and tests: that line starts now, as if its condition held.
-  void force(ThoughtId, const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick);
+            const FromPhone& = {});
+  // Sim scripts and tests: that line starts now, as if its condition held. A
+  // taught-line row with nothing taught stays silent.
+  void force(ThoughtId, const Creature&, const Habitat&, const PetClock&, const Lineage&, uint32_t tick,
+             const FromPhone& = {});
   // The phone's line (already in the font, at most kMaxSaidText): it starts
   // now over anything showing, and no thought or prophecy cuts it short.
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
@@ -219,7 +252,7 @@ class Thinker {
   enum class Spoken : uint8_t { thought, prophecy, said };   // his own line, a shake's foretelling, the phone's
   struct Shown { Spoken kind; ThoughtId id; uint32_t since; uint16_t ticks; char line[kThoughtLineCap]; };
   void meet(const Creature&, const Lineage&, uint32_t tick);
-  void start(const Creature&, ThoughtPick, uint32_t tick, Rng&);
+  void start(const Creature&, const Lineage&, const FromPhone&, ThoughtPick, uint32_t tick, Rng&);
 
   uint32_t life_ = 0, lifeGeneration_ = 0xFFFFFFFFu;   // whose lines these are
   Heirlooms heirlooms_;

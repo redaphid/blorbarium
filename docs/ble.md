@@ -89,6 +89,11 @@ gap in seconds, 0 when there was none. `hurt=1` means the gap was three weeks
 or more: he woke starving and injured, and needs feeding now.
 A bad number or tz is `#7 ERR 400 BAD_ARGS`.
 
+TIME also gives his thoughts the owner's local time: until the board is next
+unplugged, some lines know the hour, the morning, late night, Monday, the
+weekend and Friday. Send the real `tzMinutes`, or they read UTC. Without a
+TIME he thinks and foretells all the same, just without those lines.
+
 ### TWIST rename
 
 ```
@@ -99,6 +104,9 @@ A bad number or tz is `#7 ERR 400 BAD_ARGS`.
 A name fits in 15 characters (the saved name is 16 bytes). A missing, too long
 (`Grungo_the_sixteenth`) or invalid name is
 `ERR 400 BAD_ARGS`, as in `TWIST rename bad!name`.
+
+Once he has a name from a rename, a few of his lines say it (a `_` reads as a
+space). His species' own name never counts as one.
 
 ### TWIST say
 
@@ -116,6 +124,36 @@ characters. An empty line, or one with nothing left (`TWIST say @#$`), is
 `ERR 400 BAD_ARGS`. During an egg or a clutch it is `ERR 409 NOT_NOW`. It
 works before `TIME`. It is never saved or hashed, and a reboot forgets it.
 If he is asleep he stays asleep and says it with his eyes shut.
+
+### TWIST teach
+
+```
+#70 TWIST teach I love you!
+#70 OK teach
+```
+
+He keeps the line and says it now and then as one of his own thoughts, in his
+own voice, long after the phone has gone. If he has hatched, he also says it
+once right away. The text is cleaned as for `say` and stops at 30
+characters. He keeps the last 4 lines taught; teaching one he already knows
+makes it the newest instead of a twin. It works in any phase, egg included.
+
+The lines live in their own file on the board (`taught.lines`), not in the
+pet's save: they survive a reboot and a new generation, and they never change
+the save or `HASH`. An empty line is `ERR 400 BAD_ARGS`. When the board cannot
+write (a sealed pet) it is `ERR 409 NOT_NOW`, and while a new firmware is on
+trial it is `ERR 409 TRIAL` (docs/ota.md, "The trial"). Either way nothing
+he knows changes.
+
+### TWIST unteach
+
+```
+#75 TWIST unteach
+#75 OK unteach
+```
+
+He forgets every taught line. It takes no arguments (`TWIST unteach now` is
+`ERR 400 BAD_ARGS`) and fails like `teach` when the board cannot write.
 
 ### HASH
 

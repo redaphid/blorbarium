@@ -72,3 +72,15 @@ BLORB_THOUGHT(51, p_pond_yes,     pond,   anytime,       1,  300, "THE POND SAYS
 BLORB_THOUGHT(52, p_ripples,      pond,   anytime,       1,  300, "RIPPLES. ASK AGAIN LATER.")
 BLORB_THOUGHT(53, p_ancestor,     pond,   foreseen,      3,  300, "GEN # FORESAW THIS TOO.")
 BLORB_THOUGHT(54, miss_phone,     none,   phone_long_gone, 2, 3600, "I MISS THE GLOWING RECTANGLE")
+// What a phone adds. Wall-clock rows hold only once a TIME has given the
+// owner's local time this boot; named rows once the owner chose his name; the
+// parrot once the owner taught him a line (TWIST teach), which its '*' says.
+BLORB_THOUGHT(55, oclock,         none,   wall_hour,     1, 10800, "IT IS # O'CLOCK. I FEEL IT.")
+BLORB_THOUGHT(56, morning,        none,   wall_morning,  2, 10800, "MORNING. BEST TIME FOR FLIES.")
+BLORB_THOUGHT(57, so_late,        none,   wall_late,     3,  3600, "IT IS LATE. HUMANS SLEEP NOW.")
+BLORB_THOUGHT(58, monday,         none,   wall_monday,   2, 14400, "MONDAY. I CAN TELL. ROUGH.")
+BLORB_THOUGHT(59, weekend,        none,   wall_weekend,  2, 14400, "WEEKEND! NOTHING IS DUE. NAP.")
+BLORB_THOUGHT(60, p_weekend,      luck,   wall_friday,   3,  300, "THE WEEKEND IS NEAR. I SEE IT.")
+BLORB_THOUGHT(61, my_name,        none,   named_awake,   1,  3600, "@. THAT IS ME. I CHECKED.")
+BLORB_THOUGHT(62, p_famous,       owner,  named,         2,  300, "@ WILL BE FAMOUS. IT IS SEEN.")
+BLORB_THOUGHT(63, parrot,         none,   taught,        1,  2400, "*")

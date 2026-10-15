@@ -238,7 +238,7 @@ Lineage Lineage::open(Storage& store, const Genome& starter, uint64_t lineageId,
     if (auto* f = std::get_if<Founding>(&*e)) l.id_ = f->lineageId, copyName(l.name_, f->species);
     if (auto* b = std::get_if<Birth>(&*e)) l.generation_ = std::max(l.generation_, b->generation);
     if (auto* d = std::get_if<Death>(&*e)) l.legacyFeats_ |= d->feats;
-    if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name);
+    if (auto* r = std::get_if<Rename>(&*e)) copyName(l.name_, r->name), l.named_ = true;
   });
   logframes::truncateTorn(store, kFile, valid);
   if (valid == 0) {
@@ -277,7 +277,7 @@ void Lineage::rename(const char* name) {
   Rename r{generation_, {}};
   copyName(r.name, name);
   if (std::strcmp(r.name, name_) == 0) return;
-  if (append(encode(r))) copyName(name_, r.name);
+  if (append(encode(r))) copyName(name_, r.name), named_ = true;
 }
 
 void Lineage::recordEdit(uint16_t generation, const Genome& g) { append(encode(Checkpoint{generation, g})); }

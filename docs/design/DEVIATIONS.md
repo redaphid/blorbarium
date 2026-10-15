@@ -316,4 +316,40 @@ loses wall time. So:
   (half a day of play with no phone) mentions one, in his own voice. The
   sim's `time_unknown` golden became `no_phone`: no wall time, a real
   shake, and the prophecy he drew.
+- **A phone makes his lines richer, never possible.** What a phone has given
+  him reaches his conditions as one struct, `FromPhone` (thoughts.h): how
+  long it has been away, the owner's local time, whether the owner named
+  him, and what the owner taught him. Each adds rows to thoughts.def; none
+  is needed for any other row. None is saved with him or hashed, so a
+  replay is unchanged.
+- **Wall-clock lines (rows 55 to 60).** They read `Dish::localNow()`: the
+  wall time plus TIME's `tzMinutes`. The zone is held in RAM only and is
+  set only by a TIME this boot, so after a replug (no battery, no wall
+  time) the rows stay silent instead of guessing. Hour, morning, late
+  night, Monday, weekend, and a Friday prophecy. Priorities sit with the
+  idle chatter (1 to 3) and cooldowns are 1 to 4 hours, so they flavour a
+  day rather than take it over.
+- **His name in a line ('@', rows 61 and 62).** A line may now hold one
+  mark: '#' a number as before, '@' his name, '*' a taught line.
+  `thoughts.h` checks at compile time that a line holds at most one, and
+  that '@' and '*' appear only on rows whose condition gives them
+  (conditions named `named...` and `taught`); `tools/personality.py check`
+  says the same in plain words, and its port of `thoughtLine` and the
+  parity fixture take the same marks. The name counts only when the owner
+  chose it: `Lineage::named()` is true once a Rename is on the log
+  (compaction keeps each generation's newest Rename), so the species' own
+  name never does. A rename's '_' reads as a space.
+- **Taught lines ('*', row 63, TWIST teach / unteach).** Stored in their
+  own petfs file, `taught.lines` (magic `BLTL`, version, count, length-
+  prefixed lines, crc32), written atomically, read once at boot. Not the
+  keepsake: the save format, its hash, `Keepsake::encode` and the
+  fixtures are unchanged, and a torn or foreign file reads as no lines.
+  The last 4 are kept, at most 30 characters each (a thought's length, so
+  his voice can frame one). In RAM only what the flash holds: a refused
+  write (the OTA trial's held storage, a sealed or newer-format pet)
+  changes nothing and answers `409 NOT_NOW`, and `ota::TrialGuard`
+  answers `409 TRIAL` before the write is tried. A terse voice says a
+  taught line whole rather than cutting it at its first sentence.
+- `kThoughtLineCap` grew from 57 to 82 bytes (a taught line in a voice's
+  frame); `kMaxSaidText` is pinned at 56 so `TWIST say` is unchanged.
 

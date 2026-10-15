@@ -7,6 +7,7 @@
 #include <vector>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/lineage.h"
+#include "blorb/taught.h"
 #include "links.h"
 #include "mem_storage.h"
 #include "traces.h"
@@ -346,10 +347,11 @@ TEST(Heirloom, TheLineageNamesTheGenerationThatLearnedAFear) {
 
 TEST(Voice, EveryVoiceSaysEveryLineWithinTheFontAndTheCap) {
   char out[kThoughtLineCap];
+  const std::string name(kMaxNameText, 'N'), taught(kMaxTaughtText, 'T');   // the longest each can be
   for (const VoiceInfo& v : VOICES)
     for (const ThoughtInfo& t : THOUGHTS)
       for (uint8_t pick = 0; pick < 4; ++pick) {
-        size_t n = thoughtLine(t.id, 65535, v.id, pick, out);
+        size_t n = thoughtLine(t.id, 65535, v.id, pick, out, kSharedOnly, Words{name, taught});
         ASSERT_GT(n, 0u);
         ASSERT_LT(n, kThoughtLineCap);
         ASSERT_EQ(std::strlen(out), n);
@@ -380,9 +382,10 @@ TEST(Personality, PreviewSaysWhatTheDeviceSays) {
   static constexpr Case kCases[] = {
 #include "said_lines.inc"
   };
+  const Words kParityWords{"MOSS BOY", "I LOVE YOU, LITTLE ONE"};   // tools/personality.py PARITY_NAME, PARITY_TAUGHT
   char out[kThoughtLineCap];
   for (const Case& k : kCases) {
-    thoughtLine(ThoughtId{k.thought}, k.num, VoiceId{k.voice}, k.pick, out, SpeciesId{k.species});
+    thoughtLine(ThoughtId{k.thought}, k.num, VoiceId{k.voice}, k.pick, out, SpeciesId{k.species}, kParityWords);
     ASSERT_STREQ(out, k.text) << "tools/personality.py frames thought " << int(k.thought) << " differently; port the change";
   }
 }
@@ -405,6 +408,210 @@ TEST(Personality, ASpeciesLineIsHisAlone) {
   EXPECT_FALSE(says(heard(kGrungo), "THE GOOD BITS")) << "his own line replaces the shared one";
   EXPECT_FALSE(says(heard(mossby), "FORESEE FLIES"));
   EXPECT_TRUE(says(heard(mossby), "SNACK? SNACK. THE GOOD BITS!"));
+}
+
+// ---- what a phone adds -------------------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kMonday = 1791763200;   // 2026-10-12 00:00, read as local time
+constexpr uint32_t kHour = 3600, kDay = 24 * kHour;
+
+int saidWhere(const std::vector<Line>& lines, const char* whenPrefix) {
+  int n = 0;
+  for (const Line& l : lines) n += thoughtInfo(l.id) && startsWith(thoughtInfo(l.id)->whenName, whenPrefix);
+  return n;
+}
+
+// What the trial hold's storage looks like to the Dish: every write refused.
+struct HeldStore : MemStorage {
+  bool held = false;
+  bool writeAtomic(const char* f, const uint8_t* d, size_t n) override { return !held && MemStorage::writeAtomic(f, d, n); }
+  bool append(const char* f, const uint8_t* d, size_t n) override { return !held && MemStorage::append(f, d, n); }
+};
+
+}  // namespace
+
+TEST(FromPhone, TheWallClockConditionsReadTheOwnersLocalDayAndHour) {
+  Rig r;
+  r.pastWarmUp();
+  ASSERT_FALSE(r.creature().body().asleep);
+  const Heirlooms none;
+  auto holds = [&](ThoughtWhen when, std::optional<uint32_t> local, uint16_t* num = nullptr) {
+    FromPhone phone;
+    phone.localNow = local;
+    uint16_t n = 0;
+    const bool held = when(Observed{r.creature(), r.dish.habitat(), r.dish.clock(), none, r.dish.tickCount(), phone}, n);
+    if (num) *num = n;
+    return held;
+  };
+  for (const ThoughtInfo& t : THOUGHTS)
+    if (startsWith(t.whenName, "wall_")) EXPECT_FALSE(holds(t.when, std::nullopt)) << t.name << " guessed the time";
+  const uint32_t mondayMorning = kMonday + 7 * kHour + 1800;
+  EXPECT_TRUE(holds(when::wall_monday, mondayMorning));
+  EXPECT_TRUE(holds(when::wall_morning, mondayMorning));
+  EXPECT_FALSE(holds(when::wall_late, mondayMorning));
+  EXPECT_FALSE(holds(when::wall_weekend, mondayMorning));
+  EXPECT_TRUE(holds(when::wall_late, kMonday + 2 * kHour));
+  EXPECT_TRUE(holds(when::wall_weekend, kMonday - 2 * kDay + 12 * kHour)) << "Saturday";
+  EXPECT_TRUE(holds(when::wall_weekend, kMonday - 1)) << "Sunday's last second";
+  EXPECT_TRUE(holds(when::wall_friday, kMonday - 3 * kDay + 20 * kHour));
+  EXPECT_FALSE(holds(when::wall_friday, kMonday + 20 * kHour));
+  uint16_t hour = 0;
+  ASSERT_TRUE(holds(when::wall_hour, kMonday + 13 * kHour + 1800, &hour));
+  EXPECT_EQ(hour, 1);
+  ASSERT_TRUE(holds(when::wall_hour, kMonday + 1800, &hour));
+  EXPECT_EQ(hour, 12) << "half past midnight";
+}
+
+TEST(FromPhone, WithNoPhoneHeNeverSaysAWallClockNameOrTaughtLine) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.pastWarmUp();
+  r.run(6 * 60 * kMinute);
+  EXPECT_GT(r.said.size(), 6u) << "he talks all the same";
+  EXPECT_EQ(saidWhere(r.said, "wall_"), 0);
+  EXPECT_EQ(saidWhere(r.said, "named"), 0);
+  EXPECT_EQ(saidWhere(r.said, "taught"), 0);
+  EXPECT_FALSE(r.dish.localNow());
+}
+
+TEST(FromPhone, AfterAPhonesTimeHeKnowsTheOwnersDayUntilAReboot) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.pastWarmUp();
+  // Monday 10:30 in Phoenix (UTC-7), as the page sends it.
+  const uint32_t local = kMonday + 10 * kHour + 1800, utc = local + 7 * kHour;
+  r.dish.protocol().handle("#1 TIME " + std::to_string(utc) + " -420", r.dish, r.link);
+  ASSERT_TRUE(r.dish.localNow());
+  EXPECT_EQ(*r.dish.localNow(), local);
+  const uint32_t told = r.dish.tickCount();
+  const size_t before = r.said.size();
+  r.run(4 * 60 * kMinute);
+  const std::vector<Line> after(r.said.begin() + long(before), r.said.end());
+  EXPECT_GT(saidWhere(after, "wall_"), 0) << "a Monday morning with the phone's time brings a wall-clock line";
+  for (const Line& l : after) {
+    if (l.id == thought::oclock) {
+      const uint32_t hour = (local + (l.tick - told) * kTickMs / 1000) % kDay / kHour;
+      EXPECT_NE(l.text.find(std::to_string(hour % 12 ? hour % 12 : 12) + " O'CLOCK"), std::string::npos) << l.text;
+    }
+    EXPECT_NE(l.id, thought::weekend) << "Monday is not the weekend";
+  }
+  const Genome founder = quickEgg();
+  Dish rebooted(r.store, 7, 1, DishOptions{nullptr, &founder});
+  EXPECT_FALSE(rebooted.localNow()) << "a replug forgets the time, and his wall-clock lines with it";
+}
+
+TEST(FromPhone, OnlyANameTheOwnerGaveIsSaidAndItOutlivesAReboot) {
+  Rig r;
+  r.pastWarmUp();
+  EXPECT_FALSE(r.dish.lineage().named()) << "his species' name is not one the owner gave";
+  r.run(10 * kMinute);
+  EXPECT_EQ(saidWhere(r.said, "named"), 0);
+
+  r.dish.rename("Moss_Boy");
+  EXPECT_TRUE(r.dish.lineage().named());
+  const size_t before = r.said.size();
+  r.run(3 * 60 * kMinute);
+  bool saidIt = false;
+  for (size_t k = before; k < r.said.size(); ++k)
+    if (r.said[k].id == thought::my_name) {
+      saidIt = true;
+      EXPECT_NE(r.said[k].text.find("MOSS BOY"), std::string::npos) << r.said[k].text;
+    }
+  EXPECT_TRUE(saidIt) << "an afternoon after a rename he has said his name";
+
+  const Genome founder = quickEgg();
+  Dish rebooted(r.store, 7, 1, DishOptions{nullptr, &founder});
+  EXPECT_TRUE(rebooted.lineage().named()) << "the rename is on the lineage log";
+}
+
+TEST(Taught, ALineTaughtIsSaidNowThenNowAndThenAndKeptAcrossAReboot) {
+  Rig r;
+  r.pastWarmUp();
+  const uint32_t hash = r.dish.hash();
+  ASSERT_TRUE(r.dish.teach("I LOVE YOU. BE GOOD."));
+  EXPECT_EQ(r.dish.hash(), hash) << "taught lines are not in the save";
+  r.run(100);
+  EXPECT_STREQ(r.dish.appearance().line, "I LOVE YOU. BE GOOD.") << "he says it as soon as he learns it";
+  const size_t before = r.said.size();
+  r.run(3 * 60 * kMinute);
+  int parroted = 0;
+  for (size_t k = before; k < r.said.size(); ++k)
+    if (r.said[k].id == thought::parrot) {
+      ++parroted;
+      EXPECT_NE(r.said[k].text.find("I LOVE YOU. BE GOOD."), std::string::npos) << "whole, in his voice: " << r.said[k].text;
+    }
+  EXPECT_GE(parroted, 2) << "now and then";
+  EXPECT_LE(parroted, 5) << "but not every line";
+
+  const Genome founder = quickEgg();
+  Dish rebooted(r.store, 7, 1, DishOptions{nullptr, &founder});
+  ASSERT_EQ(rebooted.taught().count, 1);
+  EXPECT_EQ(rebooted.taught().line(0), "I LOVE YOU. BE GOOD.");
+}
+
+TEST(Taught, HeKeepsTheLastFourAndALineTaughtAgainMovesToNewest) {
+  Taught t;
+  for (const char* l : {"ONE", "TWO", "THREE", "FOUR"}) t = t.with(l);
+  t = t.with("TWO");
+  ASSERT_EQ(t.count, 4);
+  EXPECT_EQ(t.line(3), "TWO") << "taught again: no twin, now the newest";
+  t = t.with("FIVE");
+  ASSERT_EQ(t.count, 4);
+  EXPECT_EQ(t.line(0), "THREE") << "ONE, the oldest, went";
+  EXPECT_EQ(t.line(3), "FIVE");
+}
+
+TEST(Taught, AFileThatIsTornOrCorruptIsNoLines) {
+  MemStorage s;
+  ASSERT_TRUE(Taught{}.with("HELLO").with("BYE NOW").save(s));
+  ASSERT_EQ(Taught::load(s).count, 2);
+  const std::vector<uint8_t> good = s.files[Taught::kFile];
+  for (size_t cut = 0; cut < good.size(); ++cut) {
+    s.files[Taught::kFile].assign(good.begin(), good.begin() + long(cut));
+    EXPECT_EQ(Taught::load(s).count, 0) << "torn at " << cut;
+  }
+  for (size_t i = 0; i < good.size(); ++i) {
+    s.files[Taught::kFile] = good;
+    s.files[Taught::kFile][i] ^= 0x20;
+    EXPECT_EQ(Taught::load(s).count, 0) << "byte " << i << " flipped";
+  }
+  s.files.erase(Taught::kFile);
+  EXPECT_EQ(Taught::load(s).count, 0) << "no file";
+}
+
+TEST(Taught, WhenTheFlashRefusesWritesNothingIsTaughtOrForgotten) {
+  HeldStore store;
+  const Genome founder = quickEgg();
+  Dish dish(store, 7, 1, DishOptions{nullptr, &founder});
+  ASSERT_TRUE(dish.teach("KEEP ME"));
+  store.held = true;   // an image on trial
+  EXPECT_FALSE(dish.teach("LOST"));
+  EXPECT_FALSE(dish.unteach());
+  ASSERT_EQ(dish.taught().count, 1) << "what he says is what the flash holds";
+  EXPECT_EQ(dish.taught().line(0), "KEEP ME");
+  store.held = false;
+  ASSERT_TRUE(dish.unteach());
+  EXPECT_EQ(dish.taught().count, 0);
+  Dish rebooted(store, 7, 1, DishOptions{nullptr, &founder});
+  EXPECT_EQ(rebooted.taught().count, 0) << "forgotten on the flash too";
+}
+
+TEST(Taught, ATerseVoiceSaysATaughtLineWhole) {
+  char out[kThoughtLineCap];
+  thoughtLine(thought::parrot, 0, voice::terse, 0, out, kSharedOnly, Words{"", "HI. I MISS YOU."});
+  EXPECT_STREQ(out, "HI. I MISS YOU.");
+  thoughtLine(thought::my_name, 0, voice::terse, 0, out, kSharedOnly, Words{"PIP", ""});
+  EXPECT_STREQ(out, "PIP.") << "his own lines still stop at the first sentence";
+}
+
+TEST(Taught, ForcingTheParrotWithNothingTaughtSaysNothing) {
+  Rig r;
+  r.pastWarmUp();
+  r.run(10 * kMinute);
+  const size_t before = r.said.size();
+  r.dish.think(thought::parrot);
+  r.run(100);
+  EXPECT_EQ(r.said.size(), before);
 }
 
 int main(int argc, char** argv) {

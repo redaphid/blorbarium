@@ -60,6 +60,7 @@ class Lineage {
   uint16_t currentGeneration() const { return generation_; }
   uint32_t legacyFeats() const { return legacyFeats_; }   // union of every Death's feats
   const char* currentName() const { return name_; }
+  bool named() const { return named_; }   // an owner rename is on the log: the name is theirs, not the species'
 
   // Streaming reads for the phone: f(const LineageEntry&) per entry, oldest first.
   template <class F> void forEach(F&& f) const;
@@ -75,6 +76,7 @@ class Lineage {
   uint16_t generation_ = 0;
   uint32_t legacyFeats_ = 0;
   char name_[16] = {};
+  bool named_ = false;
 };
 
 template <class F> void Lineage::forEach(F&& f) const {

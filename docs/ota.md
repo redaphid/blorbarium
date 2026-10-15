@@ -348,10 +348,10 @@ pet, the record or the resume is wrong, and after 5 minutes with no CONFIRM.
 A hang longer than 20 s during the trial restarts the dish, which also rolls
 it back.
 
-While the image is on trial, `rename`, `gene_edit` and `pick` twists answer
-`ERR 409 TRIAL` (`ota::TrialGuard`), because nothing they change could be
-written; the page waits for `trial=0` before it offers a rename. `say`
-writes nothing and stays allowed.
+While the image is on trial, `rename`, `gene_edit`, `pick`, `teach` and
+`unteach` twists answer `ERR 409 TRIAL` (`ota::TrialGuard`), because nothing
+they change could be written; the page waits for `trial=0` before it offers a
+rename. `say` writes nothing and stays allowed.
 
 The Dish runs on `ota::HeldStorage`
 (`lib/ota/include/ota/held_storage.h`). It reads the real storage and refuses

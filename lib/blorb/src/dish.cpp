@@ -104,6 +104,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   }
   lineage_ = Lineage::open(store, founder, lineageId, 0);
   duel_.attach(store);
+  taught_ = Taught::load(store);
   if (loaded == SlotState::Resumed || loaded == SlotState::FellBack) {
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
@@ -171,7 +172,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-    else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), phoneAwayTicks());
+    else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -257,13 +258,27 @@ void Dish::fire(StimId s) { pending_.fireRemote(s); }
 
 void Dish::think(ThoughtId id) {
   if (const Creature* c = std::get_if<Creature>(&live_.occupant))
-    thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_);
+    thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_, fromPhone());
 }
 
 bool Dish::say(std::string_view line) {
   const Creature* c = std::get_if<Creature>(&live_.occupant);
   if (c) thinker_.say(line, *c, lineage_, tick_);
   return c != nullptr;
+}
+
+bool Dish::teach(std::string_view line) {
+  const Taught next = taught_.with(line);
+  if (readOnly_ || !next.save(store_)) return false;
+  taught_ = next;
+  say(line);
+  return true;
+}
+
+bool Dish::unteach() {
+  if (readOnly_ || !Taught{}.save(store_)) return false;
+  taught_ = Taught{};
+  return true;
 }
 
 bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
@@ -328,6 +343,14 @@ std::optional<uint32_t> Dish::wallNow() const {
   if (!wallKnown_ || !live_.wall) return std::nullopt;
   return live_.wall->wallSeconds + (tick_ - live_.wall->tick) / kTicksPerSecond;
 }
+
+std::optional<uint32_t> Dish::localNow() const {
+  const std::optional<uint32_t> wall = wallNow();
+  if (!wall || !zone_) return std::nullopt;
+  return uint32_t(int64_t(*wall) + int64_t(*zone_) * 60);
+}
+
+FromPhone Dish::fromPhone() const { return FromPhone{phoneAwayTicks(), localNow(), lineage_.named(), &taught_}; }
 
 uint32_t Dish::phoneAwayTicks() const {
   uint32_t since = live_.wall ? live_.wall->tick : 0;

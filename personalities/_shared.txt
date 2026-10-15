@@ -12,7 +12,9 @@ it replaces the shared line for him alone.
 
 Rules for a line: CAPITALS (small letters are fine, they become capitals), digits,
 space and . , ! ? - ' : only. At most 30 characters. One '#' shows a number where
-the situation gives one. A line starting with # is a note, not a line.
+the situation gives one; '@' shows the name the owner gave him and '*' a line
+the owner taught him from the phone, in the situations that have them. One of
+# @ * per line. A line starting with # is a note, not a line.
 
 === LINES ===
 
@@ -180,3 +182,34 @@ p_ancestor      prophecy: pond, foreseen
 
 miss_phone      phone_long_gone
   I MISS THE GLOWING RECTANGLE
+
+# What a phone adds. The wall-clock lines come only once a phone has told him
+# the real time this boot; @ is the name the owner gave him; * is a line the
+# owner taught him from the phone.
+
+oclock          wall_hour
+  IT IS # O'CLOCK. I FEEL IT.
+
+morning         wall_morning
+  MORNING. BEST TIME FOR FLIES.
+
+so_late         wall_late
+  IT IS LATE. HUMANS SLEEP NOW.
+
+monday          wall_monday
+  MONDAY. I CAN TELL. ROUGH.
+
+weekend         wall_weekend
+  WEEKEND! NOTHING IS DUE. NAP.
+
+p_weekend       prophecy: luck, wall_friday
+  THE WEEKEND IS NEAR. I SEE IT.
+
+my_name         named_awake
+  @. THAT IS ME. I CHECKED.
+
+p_famous        prophecy: owner, named
+  @ WILL BE FAMOUS. IT IS SEEN.
+
+parrot          taught
+  *
