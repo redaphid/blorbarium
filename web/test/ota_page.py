@@ -1,8 +1,12 @@
 # uv run --with playwright==1.63.0 python web/test/ota_page.py
 # The update section of web/public/index.html under ?mock=1, in headless Chromium.
+import base64
 import functools
+import hashlib
 import http.server
+import json
 import pathlib
+import random
 import sys
 import threading
 import time
@@ -10,6 +14,9 @@ import time
 from playwright.sync_api import sync_playwright
 
 PUBLIC = pathlib.Path(__file__).resolve().parent.parent / "public"
+FAKE_BT = pathlib.Path(__file__).resolve().parent / "fake_bluetooth.js"
+NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+PRESS = "Press the button on the dish to say yes."
 TOKEN = "Tq3vX9bLk2mWc8RfY1sJpA"
 FINE = "Grungo is fine."
 CHECKING = f"The new version 0.4.0 is still checking itself. {FINE} Keep this page open, or come back within five minutes."
@@ -131,7 +138,7 @@ def rolls_back(browser, base):
 
 def reload_on_own_trial(browser, base):
     page = open_page(browser, base, f"mock=1&faults=none&fw=0.4.0&trial_from=0.3.0&trial_token={TOKEN}&trial_ms=4000",
-                     before=f"localStorage.setItem('blorb-ota-token:blorb-7a3f:0.4.0', '{TOKEN}')")
+                     before=f"localStorage.setItem('blorb-ota-token:mock:blorb-7a3f:0.4.0', '{TOKEN}')")
     wait_text(page, CHECKING, timeout=15000)
     rename_locked(page)
     wait_text(page, f"Updated to 0.4.0. {FINE}", timeout=20000)
@@ -174,6 +181,151 @@ def unconfirmed_then_kept(browser, base):
     return page, page.evaluate(STATS)
 
 
+def chooser(page):
+    page.locator("#mockChooser").wait_for(state="visible", timeout=10000)
+    return page.locator("#mockChoices button").all_text_contents()
+
+
+def choose(page, name):
+    page.locator("#mockChoices").get_by_role("button", name=name, exact=True).click()
+
+
+NEARBY = "blorb-1b3c>mossby,mothwick,uart-thing:uart,fizzbox:plain,blorb-9z9z:plain"
+
+
+def chooser_lists_dishes(browser, base):
+    page = open_page(browser, base, f"mock=1&faults=none&nearby={NEARBY}")
+    page.click("#connect")
+    listed = chooser(page)
+    assert listed == ["blorb-1b3c", "mothwick", "Cancel"], f"chooser listed {listed}"
+    choose(page, "Cancel")
+    page.locator("#wider").wait_for(state="visible", timeout=5000)
+    assert page.text_content("#status") == "No dish chosen"
+    page.click("#wider")
+    listed = chooser(page)
+    assert listed == ["blorb-1b3c", "mothwick", "uart-thing", "Cancel"], f"wider listed {listed}"
+    choose(page, "mothwick")
+    page.locator("#updateGo").wait_for(state="visible", timeout=15000)
+    assert page.text_content("#status") == "Connected to mothwick", page.text_content("#status")
+    assert page.text_content("#updateFw") == "mothwick runs version 0.3.0.", page.text_content("#updateFw")
+    assert page.locator("#another").is_visible(), "no way on to the next dish"
+    for d in ("mothwick", "blorb-1b3c"):
+        named = open_page(browser, base, f"mock=1&nearby={NEARBY}&d={d}")
+        named.click("#connect")
+        listed = chooser(named)
+        assert listed == [d, "Cancel"], f"?d={d} listed {listed}"
+        named.close()
+    return page, {"opens": page.evaluate("mockChooserOpens")}
+
+
+def time_refused(browser, base):
+    page = open_page(browser, base, "mock=1&faults=none&time_refused=1")
+    update(page, press=True)
+    wait_text(page, f"Updated to 0.4.0. {FINE}")
+    s = page.evaluate(STATS)
+    assert s["fw"] == "0.4.0" and not page.evaluate("transport.dish.timeKnown"), s
+    return page, s
+
+
+# The page's real BleTransport, with fake_bluetooth.js as the radio and the release served here.
+def ble_page(browser, base, query, nearby, version="0.7.0", manifest_fails=0):
+    page = browser.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    page.add_init_script(path=str(FAKE_BT))
+    page.add_init_script(f"window.__fakeBt.nearby = {json.dumps(nearby)}")
+    image = random.Random(7).randbytes(256 * 1024)
+    name = f"blorbarium-lcd128-{version}.bin"
+    manifest = {"board": "lcd128", "version": version, "flags": 0, "fmt": 1, "size": len(image), "image": name,
+                "sha256": base64.urlsafe_b64encode(hashlib.sha256(image).digest()).rstrip(b"=").decode(), "sig": "A" * 86}
+    fails = [manifest_fails]
+
+    def serve_manifest(route):
+        if fails[0]:
+            fails[0] -= 1
+            return route.fulfill(status=503, body="busy")
+        route.fulfill(json=manifest)
+    page.route("**/fw/lcd128/manifest.json", serve_manifest)
+    page.route(f"**/fw/lcd128/{name}", lambda r: r.fulfill(body=image, content_type="application/octet-stream"))
+    page.goto(f"{base}/index.html?{query}")
+    page.evaluate(WATCH)
+    return page
+
+
+BT_STATS = """i => { const d = __fakeBt.radio[i].dish;
+  return { ...d.stats, fw: d.fw, name: d.name, trial: d.trial, connected: d.connected, timeKnown: d.timeKnown,
+           opens: __fakeBt.opens, connects: __fakeBt.connects }; }"""
+
+
+def update_over_ble(page, dish, version):
+    go = page.locator("#updateGo")
+    go.wait_for(state="visible", timeout=15000)
+    assert go.text_content() == f"Update to {version}", go.text_content()
+    go.click()
+    wait_text(page, PRESS, timeout=15000)
+    page.evaluate("i => __fakeBt.radio[i].dish.press()", dish)
+
+
+def old_name_to_species(browser, base):
+    page = ble_page(browser, base, "fw=0.4.0&faults=drop", [["blorb-1b3c", "mossby"]])
+    page.click("#connect")
+    page.locator("#updateGo").wait_for(state="visible", timeout=15000)
+    filters = page.evaluate("__fakeBt.filters[0]")
+    assert len(filters) == 10 and all(f["services"] == [NUS] for f in filters), filters
+    assert page.text_content("#updateFw") == "blorb-1b3c runs version 0.4.0.", page.text_content("#updateFw")
+    update_over_ble(page, 0, "0.7.0")
+    wait_text(page, f"Updated to 0.7.0. {FINE}")
+    s, seen = page.evaluate(BT_STATS, 0), page.evaluate("window.__seen")
+    assert s["name"] == "mossby", f"the dish advertises {s['name']}"
+    assert s["opens"] == 1, f"the chooser opened {s['opens']} times"
+    assert s["connects"] >= 3, f"gatt.connect {s['connects']} times: first, after the drop, after the restart"
+    assert s["drops"] == 1 and s["reboots"] == 1 and s["confirms"] >= 1, s
+    assert s["fw"] == "0.7.0" and not s["trial"], s
+    assert s["timeKnown"], "the restart lost the clock and the page set it again"
+    for text in (PRESS, "Moved out of reach, keep the phone close.", "Restarting the dish…", "Checking that the new version works…"):
+        assert text in seen, f"never said {text!r}"
+    assert page.evaluate("[...$('updateSteps').children].map((li) => li.dataset.s)") == ["done"] * 5
+    assert "ghost" not in page.get_attribute("#another", "class"), "the next dish is not the button to press"
+    return page, s
+
+
+def check_again(browser, base):
+    page = ble_page(browser, base, "fw=0.4.0&faults=none", [["blorb-1b3c", "mossby"]], manifest_fails=1)
+    page.click("#connect")
+    wait_text(page, "Couldn't check for updates right now. Check the phone's internet.", timeout=15000)
+    go = page.locator("#updateGo")
+    assert go.is_visible() and go.text_content() == "Check again", go.text_content()
+    go.click()
+    update_over_ble(page, 0, "0.7.0")
+    wait_text(page, f"Updated to 0.7.0. {FINE}")
+    return page, page.evaluate(BT_STATS, 0)
+
+
+def second_dish(browser, base):
+    page = ble_page(browser, base, "fw=0.4.0&faults=none", [["blorb-1b3c", "mossby"], ["blorb-1b44", "puffkin"]])
+    page.evaluate("__fakeBt.choose = 'blorb-1b3c'")
+    page.click("#connect")
+    update_over_ble(page, 0, "0.7.0")
+    wait_text(page, f"Updated to 0.7.0. {FINE}")
+    page.evaluate("__fakeBt.choose = 'blorb-1b44'")
+    page.click("#another")
+    page.locator("#updateGo").wait_for(state="visible", timeout=15000)
+    offered = page.evaluate("__fakeBt.offered[1]")
+    assert offered == ["mossby", "blorb-1b44"], f"the second chooser offered {offered}"
+    assert not page.evaluate(BT_STATS, 0)["connected"], "the first dish was not let go"
+    assert page.text_content("#status") == "Connected to blorb-1b44", page.text_content("#status")
+    assert page.text_content("#updateFw") == "blorb-1b44 runs version 0.4.0.", page.text_content("#updateFw")
+    update_over_ble(page, 1, "0.7.0")
+    wait_text(page, f"Updated to 0.7.0. {FINE}")
+    s, first = page.evaluate(BT_STATS, 1), page.evaluate(BT_STATS, 0)
+    assert s["name"] == "puffkin" and s["fw"] == "0.7.0" and not s["trial"] and s["confirms"] >= 1, s
+    assert s["opens"] == 2, f"the chooser opened {s['opens']} times for two dishes"
+    assert first["reboots"] == 1 and first["name"] == "mossby" and not first["connected"], first
+    keys = page.evaluate("Object.keys(localStorage).filter((k) => k.startsWith('blorb-ota-token:')).sort()")
+    assert keys == ["blorb-ota-token:fake-blorb-1b3c:0.7.0", "blorb-ota-token:fake-blorb-1b44:0.7.0"], keys
+    return page, s
+
+
 CASES = [
     ("update with a drop, lost writes and a lost at=", drop_gaps_lost_ack),
     ("nobody presses the button", nothing_written("mock=1&faults=none&confirm_ms=1500", False,
@@ -184,6 +336,11 @@ CASES = [
     ("a reload finds its own update on trial and confirms it", reload_on_own_trial),
     ("another phone's update on trial is not confirmed and goes back", anothers_trial),
     ("a trial outlasting the wait is unconfirmed; rename waits", unconfirmed_then_kept),
+    ("with no ?d= the chooser lists dishes by either name and nothing else", chooser_lists_dishes),
+    ("a dish that refuses TIME still updates", time_refused),
+    ("an old blorb- dish updates over Bluetooth and comes back as mossby, no second chooser", old_name_to_species),
+    ("connect another dish after the first, and update it too", second_dish),
+    ("a failed update check offers Check again", check_again),
 ]
 
 

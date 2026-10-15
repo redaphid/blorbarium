@@ -17,14 +17,26 @@
     return { manifest, image: async () => image.slice() };
   }
 
+  // Whether Chrome's chooser lists a device for these filters: any one filter
+  // whose every part matches (services AND name AND namePrefix).
+  function chooserMatches(filters, ad) {
+    return filters.some((f) => (!f.services || f.services.every((u) => ad.services.includes(u))) &&
+      (f.name === undefined || f.name === ad.name) &&
+      (f.namePrefix === undefined || (ad.name || "").startsWith(f.namePrefix)));
+  }
+
   // faults: drop (lose the link once near 40%), gaps (lose three data writes),
   // lostAck (swallow one at= event), corrupt (flip a byte on the way in),
   // rollback (the new image does not keep itself).
   // onTrial: { from, token } starts the dish already on trial with fw, as a page
   // that comes back after the restart finds it.
+  // name: what it advertises; renamed: what it advertises once it runs a newer
+  // firmware than it shipped with (blorb-1b3c becomes mossby), and back on a rollback.
   class MockDish {
-    constructor({ board = "lcd128", fw = "0.3.0", confirmMs = 30000, bootMs = 1200, trialMs = 3000, faults = {}, onTrial = null, emit = () => {}, onDrop = () => {} } = {}) {
-      Object.assign(this, { board, fw, confirmMs, bootMs, trialMs, faults, emit, onDrop });
+    constructor({ board = "lcd128", fw = "0.3.0", name = "blorb-7a3f", renamed = null, confirmMs = 30000, bootMs = 1200, trialMs = 3000, faults = {}, onTrial = null, emit = () => {}, onDrop = () => {} } = {}) {
+      Object.assign(this, { board, fw, name, renamed, confirmMs, bootMs, trialMs, faults, emit, onDrop });
+      this.shipped = { fw, name };
+      this.timeKnown = false;
       this.state = "idle";
       this.last = "none";
       this.rolledback = "none";
@@ -183,7 +195,9 @@
       this.stats.reboots++;
       this.drop();
       this.booting = new Promise((resolve) => setTimeout(() => {
-        Object.assign(this, { fw, trial, state: "idle", last: "none", s: null, booting: null });
+        // No battery: a restart forgets the wall time until a page sends TIME.
+        Object.assign(this, { fw, trial, state: "idle", last: "none", s: null, booting: null, timeKnown: false });
+        if (this.renamed) this.name = isNewer(fw, this.shipped.fw) ? this.renamed : this.shipped.name;
         then();
         resolve();
       }, this.bootMs));
@@ -197,7 +211,7 @@
     }
   }
 
-  const api = { MockDish, mockRelease };
+  const api = { MockDish, mockRelease, chooserMatches };
   globalThis.BlorbOtaMock = api;
   if (typeof module !== "undefined") module.exports = api;
 })();
