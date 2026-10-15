@@ -37,7 +37,7 @@ CASES = {
     "hatch": 2000,
     "clutch": 3000,
     "remains": 3000,
-    "time_unknown": 17600,
+    "no_phone": 4000,       # no wall time ever, and a shake still foretells: mid-line
     "elder": 17600,
     "thought": 9000,        # a thought, partway through its one pass
     "prophecy": 9000,       # a prophecy after a shake: foresee face, no hop
@@ -52,6 +52,7 @@ FEED_OF = {}
 # A case that must not look like another: a hop that drew as idle once passed
 # its golden because the golden was idle too. Share of the disc that must differ.
 UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01),
+          "no_phone": ("idle", 0.01),
           "sealed": ("sleep", 0.2)}
 
 # One adult at rest per roster species, on idle's feed and clock with the

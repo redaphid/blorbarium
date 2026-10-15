@@ -14,6 +14,12 @@ by his oracle's taste for the topic (food, danger, sky, owner, doom, luck,
 pond) times one plus the priority.
 
 A `#` in a line shows a number. Only the situations marked **#** give one.
+An `@` shows the name the owner gave him (only the `named...` situations), and
+a `*` a line the owner taught him from the phone (only `taught`). One of
+`#`, `@`, `*` per line.
+
+The `wall_...`, `named...` and `taught` situations are what a phone adds. A
+pet that never meets a phone never says them; he still says everything else.
 
 | situation | when it holds |
 |---|---|
@@ -47,6 +53,7 @@ A `#` in a line shows a number. Only the situations marked **#** give one.
 | elder | He is awake and an elder. |
 | old | He is an elder. |
 | night | He is awake at night. |
+| daytime | He is awake by day. |
 | dark | It is night. |
 | light | It is day. |
 | lonely | He is awake and very lonely. |
@@ -56,3 +63,12 @@ A `#` in a line shows a number. Only the situations marked **#** give one.
 | learned_food | He is awake and a little hungry, and has learned that eating fixes hunger. |
 | always | **#** Any time he is awake. # is his generation. |
 | anytime | **#** Any time at all. # is his generation. |
+| wall_hour | **#** He is awake and a phone has told him the real time since he was last plugged in. # is the hour on a 12-hour clock. |
+| wall_morning | He is awake, and the real time (from a phone) is 6 to 10 in the morning. |
+| wall_late | He is awake, and the real time (from a phone) is midnight to 5 in the morning. |
+| wall_monday | He is awake, and a phone says it is Monday. |
+| wall_weekend | He is awake, and a phone says it is Saturday or Sunday. |
+| wall_friday | A phone says it is Friday. |
+| named_awake | He is awake and the owner gave him a name on the website. @ is that name. |
+| named | The owner gave him a name on the website. @ is that name. |
+| taught | He is awake and the owner taught him a line from the website. * is one of those lines. |

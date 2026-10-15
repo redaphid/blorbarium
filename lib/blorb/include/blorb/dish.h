@@ -16,6 +16,7 @@
 #include "blorb/protocol.h"
 #include "blorb/seams.h"
 #include "blorb/senses.h"
+#include "blorb/taught.h"
 #include "blorb/thoughts.h"
 
 namespace blorb {
@@ -57,9 +58,6 @@ struct DishOptions {
   // The Dish reads nothing, writes nothing and runs no life, so a reset
   // finds the keepsake exactly as it was; the screen shows it sealed.
   bool sealed = false;
-  // A board nobody can answer (no phone, no battery) shows no time-unknown
-  // marquee and lets him think and prophesy without wall time.
-  bool askForTime = true;
   // The duel radio (air.h). Null: this board has no duel radio, and a double
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
@@ -104,6 +102,13 @@ class Dish {
   void fire(StimId);
   void think(ThoughtId);           // sim scripts and tests: he says that line now (thoughts.h)
   bool say(std::string_view line); // TWIST say: he croaks the phone's line now; false with no creature
+  // TWIST teach: the line (in the font, 1 to kMaxTaughtText) joins what he
+  // says now and then (taught.h), kept on the flash, and he says it now if he
+  // has hatched. False, with nothing changed, when it cannot be written: a
+  // sealed pet, or an image on trial.
+  bool teach(std::string_view line);
+  bool unteach();                  // TWIST unteach: he forgets every taught line; false as teach
+  const Taught& taught() const { return taught_; }
   // One body byte of the creature's genome, recorded in the lineage. False
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
@@ -137,14 +142,18 @@ class Dish {
   void checkWall();
   bool timeKnown() const { return wallKnown_; }      // a source has given wall time this boot
   std::optional<uint32_t> wallNow() const;           // the anchor plus powered time since
+  // TIME's zone. From then on this boot his wall-clock lines read the owner's
+  // local time; before it (or after a reboot) they stay silent.
+  void setZone(int16_t tzMinutes) { zone_ = tzMinutes; }
+  std::optional<uint32_t> localNow() const;          // wallNow() in that zone
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
 
  private:
   void runOneTick(Link&);
-  bool askingForTime() const { return askForTime_ && !wallKnown_; }   // the marquee shows and he keeps quiet
   // Powered ticks since a phone last gave the time. Across a replug the saved
   // anchor stands in: with no battery only a phone can have set it.
   uint32_t phoneAwayTicks() const;
+  FromPhone fromPhone() const;     // what his lines may use beyond his own clock
   void welcomePhone();
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
@@ -178,10 +187,12 @@ class Dish {
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;
   std::optional<uint32_t> lastPhoneTick_;
+  std::optional<int16_t> zone_;
+  Taught taught_;                  // its own file, read once at boot; never saved with him or hashed
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
-  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false, askForTime_ = true;
+  bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
 };
 
 }  // namespace blorb
