@@ -7,3 +7,4 @@ web/.wrangler/
 web/node_modules/
 *signing-key*
 web/public/fw/**/*.bin
+pet_backups/

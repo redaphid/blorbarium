@@ -105,5 +105,16 @@ class DryRun(unittest.TestCase):
         self.assertFalse(log.exists())
 
 
+class NotFresh(unittest.TestCase):
+    def test_a_resumed_boot_fails_the_badge(self):
+        bench = fb.DryBench()
+        bench.plug()
+        port = next(iter(bench.badges()))
+        bench.boot = lambda port: [line.replace("boot=Fresh", "boot=Resumed") for line in BOOT]
+        with redirect_stdout(io.StringIO()), self.assertRaises(fb.Failed) as e:
+            fb.one_badge(bench, 1, port, [])
+        self.assertIn("Resumed", str(e.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

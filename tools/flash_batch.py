@@ -18,12 +18,12 @@ the screen and to flash_log.csv, then "Unplug badge N" waits for the port to
 go. A failure asks: retry, skip or quit. A board held in download mode
 (BOOT down while plugging in) flashes the same way.
 
-Every badge founds its pet from its own MAC (foundingGenome in
-lib/blorb/src/starter_genome.cpp), so nothing is written per badge besides
-the firmware. A merged .hex leaves the pet's partitions alone: a badge that
-already has a pet keeps it (boot=Resumed), and a new one hatches
-(boot=Fresh). The log refuses to stay quiet about a genome or BLE name that
-another MAC in it already has.
+Every badge is reset: its `pet` partition is first copied to
+pet_backups/<mac>-<time>.bin, then flash_board.sh --wipe-pet erases pet and
+petfs before writing, so the board boots boot=Fresh and founds its pet from
+its own MAC (foundingGenome in lib/blorb/src/starter_genome.cpp). A boot that
+is not Fresh fails the badge. The log refuses to stay quiet about a genome or
+BLE name that another MAC in it already has.
 
 On this desk the Claude Code badge daemon grabs every CH343 board it sees;
 the script holds it off for as long as it runs (--daemonctl, docs/hardware-testing.md).
@@ -45,6 +45,8 @@ IMAGE = ROOT / ".pio/build/badge128/merged.hex"
 DAEMONCTL = Path("D:/Projects/claude-notification-screen/host/daemonctl.py")
 PENV = Path.home() / ".platformio/penv"
 ESPTOOL = Path.home() / ".platformio/packages/tool-esptoolpy/esptool.py"
+BACKUPS = ROOT / "pet_backups"
+PET_NVS = (0x810000, 0x40000)            # tools/partitions_16mb.csv `pet`
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note"]
 
 
@@ -140,12 +142,24 @@ class Bench:
         return {p.device: (p.serial_number or "") for p in list_ports.comports()
                 if USB_ID.lower() in (p.hwid or "").lower()}
 
-    def mac(self, port):
+    def esptool(self, port, *args):
         py = PENV / "Scripts/python.exe"
         if not py.exists():
             py = PENV / "bin/python"
-        r = subprocess.run([str(py), str(ESPTOOL), "--chip", "esp32s3", "--port", port, "read_mac"],
-                           capture_output=True, text=True)
+        return subprocess.run([str(py), str(ESPTOOL), "--chip", "esp32s3", "--port", port, *args],
+                              capture_output=True, text=True)
+
+    def backup(self, port, mac):
+        BACKUPS.mkdir(exist_ok=True)
+        out = BACKUPS / ("%s-%s.bin" % (mac.replace(":", ""), datetime.now().strftime("%Y%m%d-%H%M%S")))
+        r = self.esptool(port, "-b", "921600", "read_flash", hex(PET_NVS[0]), hex(PET_NVS[1]), str(out))
+        if r.returncode != 0 or not out.exists() or out.stat().st_size != PET_NVS[1]:
+            tail = (r.stdout + r.stderr).strip().splitlines()[-2:]
+            raise Failed("could not back up the pet partition, so it was not erased: %s" % " / ".join(tail))
+        return out
+
+    def mac(self, port):
+        r = self.esptool(port, "read_mac")
         m = re.search(r"^MAC:\s*([0-9a-f:]{17})", r.stdout, re.M)
         if not m:
             tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
@@ -153,7 +167,7 @@ class Bench:
         return m.group(1)
 
     def flash(self, port, serial, mac):
-        cmd = [git_bash(), str(ROOT / "tools/flash_board.sh"), "--no-reset", port, serial, mac, self.image.as_posix()]
+        cmd = [git_bash(), str(ROOT / "tools/flash_board.sh"), "--wipe-pet", "--no-reset", port, serial, mac, self.image.as_posix()]
         r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
         out = (r.stdout + r.stderr).strip().splitlines()
         for line in out:
@@ -207,8 +221,11 @@ class DryBench:
         self.last = ":".join("%02x" % b for b in [0xD4, 0x05, 0x92] + [self.rng.randrange(256) for _ in range(3)])
         return self.last
 
+    def backup(self, port, mac):
+        return BACKUPS / ("%s-dry-run.bin" % mac.replace(":", ""))
+
     def flash(self, port, serial, mac):
-        print("    (dry run) would run: tools/flash_board.sh --no-reset %s %s %s merged.hex" % (port, serial, mac))
+        print("    (dry run) would run: tools/flash_board.sh --wipe-pet --no-reset %s %s %s merged.hex" % (port, serial, mac))
 
     def boot(self, port):
         """A fresh board's boot lines; the genome stands in as its MAC seed (the real one is the board's)."""
@@ -271,17 +288,16 @@ def one_badge(bench, n, port, rows):
         raise Failed("%s has no USB serial number; flash_board.sh needs one to be sure of the board" % port)
     mac = bench.mac(port)
     print("  %s  usb %s  mac %s  (seed %08x)" % (port, serial, mac, fnv1a(bytes.fromhex(mac.replace(":", "")))))
+    print("  pet backed up to %s" % bench.backup(port, mac))
     bench.flash(port, serial, mac)
     print("  booting it with the log open ...")
     got = parse_boot(bench.boot(port))
     missing = [k for k in ("boot", "genome", "ble_name") if k not in got]
     if missing:
         raise Failed("flashed, but the boot log never showed %s; it may not have booted" % ", ".join(missing))
+    if got["boot"] != "Fresh":
+        raise Failed("booted %s (genome %s), not Fresh: the pet was not reset" % (got["boot"], got["genome"]))
     notes = clashes(rows, mac, got["genome"], got["ble_name"]) + got.get("alarms", [])
-    if got["boot"] == "Resumed":
-        notes.append("kept the pet it already had")
-    elif got["boot"] != "Fresh":
-        notes.append("booted %s" % got["boot"])
     return {"time": datetime.now().isoformat(timespec="seconds"), "badge": n, "port": port, "usb_serial": serial,
             "mac": mac, "ble_name": got["ble_name"], "boot": got["boot"], "genome": got["genome"],
             "fw": got.get("fw", ""), "result": "ok", "note": "; ".join(notes)}
