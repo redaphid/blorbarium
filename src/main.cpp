@@ -332,6 +332,9 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
+  // Each badge founds its own look; only a board with nothing stored uses it.
+  const blorb::Genome founder = blorb::foundingGenome(blorb::fnv1a(mac, sizeof(mac)));
+  options.founder = &founder;
 #else
   options.sealed = simSealed;
 #endif

@@ -102,4 +102,11 @@ constexpr bool expressedAt(const GeneHeader& h, Stage stage, uint32_t legacyFeat
 // feat-gated ones, so awakenings and unlocks surprise from generation 1.
 Genome starterGenome(uint32_t speciesSeed);
 
+// A badge's founder: the starter genome with its expressed look (skin, belly,
+// cloak, eyes, mottling) rolled across the sprite pack's colour bands from the
+// seed. starterGenome only nudges those bytes, so it has about 10^4 distinct
+// founders and two badges in one batch could hatch the same pet; this has about
+// 10^20, and one seed (the board's MAC hash) founds the same pet every time.
+Genome foundingGenome(uint32_t speciesSeed);
+
 }  // namespace blorb
