@@ -129,6 +129,10 @@ class Dish {
   bool timeKnown() const { return wallKnown_; }      // a source has given wall time this boot
   std::optional<uint32_t> wallNow() const;           // the anchor plus powered time since
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
+  // The debug link's WALL (docs/debug-ble.md): forget the wall time and its
+  // saved anchor, as a board that never met a phone. The next reading anchors
+  // afresh and lives no gap. A time source still set will be read again.
+  void forgetWall();
 
  private:
   void runOneTick(Link&);
