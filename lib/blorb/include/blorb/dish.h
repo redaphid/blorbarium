@@ -60,11 +60,20 @@ struct DishOptions {
   // A board nobody can answer (no phone, no battery) shows no time-unknown
   // marquee and lets him think and prophesy without wall time.
   bool askForTime = true;
+  // The pet hour a fresh founding's clock starts at. A clock that starts at
+  // 0 opens a new life with seven hours of night, so a board that will never
+  // hear the time (askForTime false) founds at kUnaskedFoundingHour instead:
+  // he hatches into his morning. A phone's TIME still snaps it to the wall.
+  uint8_t foundingHour = 0;
   // The duel radio (air.h). Null: this board has no duel radio, and a double
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
   Air* air = nullptr;
 };
+
+// The morning a no-phone board founds into (DishOptions::foundingHour): a
+// pet day ahead before pet night at 21:00 (docs/notes/first-hours.md).
+constexpr uint8_t kUnaskedFoundingHour = 9;
 
 class Dish {
  public:

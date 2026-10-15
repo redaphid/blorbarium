@@ -41,7 +41,7 @@ BLORB_THOUGHT(20, dream_pellets,  none,   dreaming,      2,  900, "ZZZ... LUNCH.
 BLORB_THOUGHT(21, see_pellet,     none,   sees_pellet,   9,  300, "I SEE... A MORSEL. MINE.")
 BLORB_THOUGHT(22, see_phone,      none,   sees_phone,    9,  300, "I SEE... A GLOWING RECTANGLE")
 BLORB_THOUGHT(23, see_nothing,    none,   sees_famine,   9,  300, "I SEE... NO CRUMBS. NONE.")
-BLORB_THOUGHT(24, see_damp,       none,   foreseeing,    8,  300, "BRRRUP. I SEE... DAMP.")
+BLORB_THOUGHT(24, see_damp,       none,   foreseeing,    8,  900, "BRRRUP. I SEE... DAMP.")
 BLORB_THOUGHT(25, knees,          none,   elder,         2, 1200, "MY KNEES ARE MOSTLY RUMOUR")
 BLORB_THOUGHT(26, moon,           none,   night,         2, 1800, "THE MOON IS A BIG CRUMB")
 BLORB_THOUGHT(27, anyone,         none,   lonely,        3,  900, "HELLO? IS THIS THING ON?")

@@ -1,0 +1,437 @@
+// The first hours of a fresh pet on a board with no phone, no battery and no
+// wall time (the owner on a plane, a kid in a car): founded from a species
+// starter, driven at 50 Hz through the Dish exactly as main.cpp does, with
+// askForTime off and an RTC that never knows the time. A seated owner glances
+// at him every few minutes and tilts, picks up, taps or presses BOOT for a
+// pellet when the rim hint says so; or nobody touches him at all. Every run
+// logs what the screen shows (lines, faces, sleep, bites, hops) and sums it
+// into the numbers docs/notes/first-hours.md tracks.
+//
+// The floors below are what that note settled on. The sweep that measured
+// them runs with FIRST_HOURS_SWEEP=1 (all nine species, FIRST_HOURS_SEEDS
+// seeds, both owners), and FIRST_HOURS_OUT=<dir> writes each run's timeline.
+#include <gtest/gtest.h>
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <set>
+#include <string>
+#include <variant>
+#include <vector>
+#include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/registry.h"
+#include "blorb/species.h"
+#include "links.h"
+#include "mem_storage.h"
+#include "time_sources.h"
+#include "traces.h"
+
+using namespace blorb;
+using namespace blorbtest;
+
+namespace {
+
+constexpr uint32_t kMinuteMs = 60000;
+constexpr uint32_t kTicksPerSec = 1000 / kTickMs;
+
+enum class Owner : uint8_t { Nobody, Seated };
+const char* ownerName(Owner o) { return o == Owner::Nobody ? "nobody" : "seated"; }
+
+// A seated passenger: glances every 3 to 10 minutes and does one gentle thing.
+// Never a shake, a drop or a face-down tuck.
+class Passenger {
+ public:
+  explicit Passenger(uint64_t seed) : rng_(Rng::seeded(seed ^ 0x9A55E6E7ull)) {}
+  struct Counts { uint32_t glances = 0, presses = 0, holds = 0, tilts = 0, taps = 0; };
+
+  BodySample next(uint32_t ms, const Dish& dish, const Appearance& a) {
+    if (ms >= until_) choose(ms, dish, a);
+    BodySample s = still();
+    switch (g_) {
+      case G::Press: s.buttonDown = true; break;
+      case G::Hold: s = cradled(); break;
+      case G::Tilt: s.ax = tiltX_, s.ay = tiltY_, s.az = 975; break;
+      case G::Tap:
+        if (!tapped_) s.tapCode = 1, tapped_ = true;
+        break;
+      case G::Rest: break;
+    }
+    return s;
+  }
+  const Counts& counts() const { return n_; }
+
+ private:
+  enum class G : uint8_t { Rest, Press, Hold, Tilt, Tap };
+  void act(G g, uint32_t ms, uint32_t forMs) { g_ = g, until_ = ms + forMs, tapped_ = false; }
+  uint32_t between(uint32_t lo, uint32_t hi) { return lo + rng_.below(hi - lo + 1); }
+
+  void choose(uint32_t ms, const Dish& dish, const Appearance& a) {
+    if (g_ != G::Rest) return act(G::Rest, ms, 1500);   // every gesture ends in a release
+    if (taps_ > 0) {
+      --taps_;
+      ++n_.taps;
+      return act(G::Tap, ms, 900);
+    }
+    if (!glanced_) {
+      glanced_ = true;
+      return act(G::Rest, ms, between(3, 10) * kMinuteMs);
+    }
+    glanced_ = false;
+    ++n_.glances;
+    if (std::holds_alternative<Egg>(dish.occupant())) {
+      if (rng_.below(2) == 0) return hold(ms, between(20, 60));
+      return act(G::Rest, ms, 1000);
+    }
+    const Creature* c = std::get_if<Creature>(&dish.occupant());
+    if (!c) return act(G::Rest, ms, 1000);
+    const bool pelletDown = dish.habitat().nearestPellet(DishPos{}).has_value();
+    if (a.hasHint && a.hint == care::feed && !pelletDown && dish.habitat().pantry > 0) return press(ms);
+    if (c->body().asleep && rng_.below(10) < 7) return act(G::Rest, ms, 1000);   // let him sleep
+    if (a.hasHint && (a.hint == care::cuddle || a.hint == care::comfort)) return hold(ms, between(8, 20));
+    if (a.hasHint && a.hint == care::play) return tap(ms);
+    switch (rng_.below(10)) {
+      case 0: case 1: case 2: case 3: return tilt(ms);
+      case 4: case 5: case 6: return hold(ms, between(5, 15));
+      case 7: case 8: return tap(ms);
+      default: return press(ms);   // a kid presses the only button there is
+    }
+  }
+  void press(uint32_t ms) { ++n_.presses, act(G::Press, ms, 200); }
+  void hold(uint32_t ms, uint32_t s) { ++n_.holds, act(G::Hold, ms, s * 1000); }
+  void tap(uint32_t ms) {
+    taps_ = uint8_t(between(1, 3));
+    act(G::Rest, ms, 10);
+  }
+  void tilt(uint32_t ms) {
+    ++n_.tilts;
+    const int16_t lean = int16_t(150 + rng_.below(120));   // 9 to 16 degrees: rolls the marble, under "held"
+    tiltX_ = rng_.below(2) ? lean : int16_t(-lean);
+    tiltY_ = int16_t(int(rng_.below(201)) - 100);
+    act(G::Tilt, ms, between(4, 10) * 1000);
+  }
+
+  Rng rng_;
+  G g_ = G::Rest;
+  uint32_t until_ = 0;
+  bool glanced_ = false, tapped_ = false;
+  uint8_t taps_ = 0;
+  int16_t tiltX_ = 0, tiltY_ = 0;
+  Counts n_;
+};
+
+struct Report {
+  std::string species;
+  uint32_t seed = 0;
+  Owner owner = Owner::Nobody;
+  double hours = 0;
+  double hatchMin = -1;
+  uint32_t thoughts = 0, distinctLines = 0, distinctRows = 0, topLineCount = 0;
+  double longestThoughtGapMin = 0;     // awake, hatched: the longest stretch between two lines
+  uint32_t visible = 0;                // lines, face changes, hops, sleep edges, bites
+  double longestQuietMin = 0;          // the longest stretch with none of those
+  double asleepH = 0, longestSleepMin = 0, firstSleepMin = -1;
+  uint32_t naps = 0, faceChanges = 0, distinctFaces = 0, reflexes = 0, bites = 0, rottenBites = 0;
+  uint32_t pellets = 0;
+  double hungerMax = 0, starvingMin = 0, injuryMax = 0, sickMin = 0;
+  double boredomMean = 0, lonelyMean = 0, touchMean = 0, sleepyMean = 0, hungerMean = 0;
+  bool died = false;
+  std::string cause;
+  std::string topLine;
+  std::map<std::string, uint32_t> actionTicks;
+  Passenger::Counts care;
+  std::vector<std::string> timeline;
+};
+
+double pm(Fx v) { return double(v.raw) / double(Fx::kOne); }
+
+Report live(SpeciesId species, uint32_t seed, Owner owner, double hours) {
+  Report r;
+  r.species = speciesInfo(species).name;
+  r.seed = seed;
+  r.owner = owner;
+  r.hours = hours;
+  MemStorage store;
+  NullLink link;
+  FakeRtc rtc;   // a flat battery: never any wall time
+  uint32_t ms = 0;
+  rtc.poweredMs = &ms;
+  // FIRST_HOURS_GIFT=1: the Gift recipe (starterGenome), what an unpicked nest still founds.
+  const Genome founder = std::getenv("FIRST_HOURS_GIFT") ? starterGenome(seed) : starterGenomeOf(species, seed);
+  DishOptions opt;
+  opt.rtc = &rtc;
+  opt.founder = &founder;
+  opt.askForTime = false;   // as main.cpp: a board nobody can answer still talks
+  const char* hour = std::getenv("FIRST_HOURS_FOUNDING_HOUR");   // 0: the clock before first-hours.md
+  opt.foundingHour = hour ? uint8_t(std::atoi(hour)) : kUnaskedFoundingHour;
+  Dish dish(store, seed, seed, opt);
+  Passenger who(seed);
+
+  auto at = [&] { return double(ms) / kMinuteMs; };
+  auto log = [&](const std::string& what) {
+    char b[24];
+    std::snprintf(b, sizeof b, "%7.2f ", at());
+    r.timeline.push_back(b + what);
+  };
+
+  std::map<std::string, uint32_t> lines;
+  std::set<uint8_t> rows, faces;
+  double lastVisible = 0, lastThought = -1, sleepStart = -1;
+  bool wasAsleep = false, wasThinking = false, wasReflex = false, hatched = false;
+  std::string lastLine;
+  ExprId lastFace{0xFF};
+  ActionId lastAction{0xFF};
+  uint16_t lastFed = 0;
+  uint32_t lastTick = 0, samples = 0;
+  double sums[5]{};
+  Appearance a = dish.appearance();
+  auto visible = [&] {
+    r.visible++;
+    r.longestQuietMin = std::max(r.longestQuietMin, at() - lastVisible);
+    lastVisible = at();
+  };
+
+  const uint32_t endMs = uint32_t(hours * 60 * kMinuteMs);
+  for (; ms < endMs; ms += kSampleMs) {
+    const BodySample s = owner == Owner::Seated ? who.next(ms, dish, a) : still();
+    dish.sample(s, ms);
+    dish.tick(ms, link);
+    if (dish.tickCount() == lastTick) continue;
+    lastTick = dish.tickCount();
+    a = dish.appearance();
+    if (const Clutch* k = std::get_if<Clutch>(&dish.occupant())) {
+      if (!r.died) {
+        r.died = true;
+        const char* causes[] = {"old age", "starved", "injured", "poisoned", "unknown"};
+        r.cause = causes[int(k->cause)];
+        log("DIED " + r.cause);
+      }
+      continue;
+    }
+    const Creature* c = std::get_if<Creature>(&dish.occupant());
+    if (!c) continue;
+    if (!hatched) {
+      hatched = true;
+      r.hatchMin = at();
+      lastVisible = lastThought = at();
+      log("HATCH");
+      visible();
+    }
+    const Chemistry& ch = c->chemistry();
+    const double hunger = pm(ch.drive(drive::hunger)), injury = pm(ch.chem[chem::injury.v]);
+    const double toxin = pm(ch.chem[chem::toxin.v]);
+    r.hungerMax = std::max(r.hungerMax, hunger);
+    r.injuryMax = std::max(r.injuryMax, injury);
+    if (hunger >= 0.8) r.starvingMin += 1.0 / (60 * kTicksPerSec);
+    if (injury >= 0.1 || toxin >= 0.1) r.sickMin += 1.0 / (60 * kTicksPerSec);
+    sums[0] += pm(ch.drive(drive::boredom));
+    sums[1] += pm(ch.drive(drive::loneliness));
+    sums[2] += pm(ch.drive(drive::need_touch));
+    sums[3] += pm(ch.drive(drive::sleepiness));
+    sums[4] += hunger;
+    ++samples;
+    r.actionTicks[ACTIONS[c->action().v].name]++;
+
+    if (a.thinking && (!wasThinking || lastLine != a.line)) {
+      r.thoughts++;
+      lines[a.line]++;
+      rows.insert(a.thought.v);
+      if (!a.asleep) r.longestThoughtGapMin = std::max(r.longestThoughtGapMin, at() - lastThought);
+      lastThought = at();
+      log(std::string(a.prophecy ? "SAY* " : "SAY  ") + a.line);
+      visible();
+    }
+    if (a.asleep) lastThought = at();   // a sleeping pet's silence is not a gap in his talk
+    wasThinking = a.thinking;
+    lastLine = a.thinking ? a.line : "";
+    // As paint::faceFor draws it: asleep is always the asleep face.
+    const ExprId face = a.asleep ? expr::asleep : a.expression;
+    if (face != lastFace && (a.asleep || a.intensity >= Fx::ratio(3, 10))) {
+      if (lastFace.v != 0xFF) r.faceChanges++;
+      faces.insert(face.v);
+      log(std::string("FACE ") + EXPRESSIONS[face.v].name);
+      lastFace = face;
+      visible();
+    }
+    if (c->action() != lastAction) {
+      lastAction = c->action();
+      log(std::string("ACT  ") + ACTIONS[lastAction.v].name);
+    }
+    if (a.reflexActive && !wasReflex) {
+      r.reflexes++;
+      log(std::string("HOP  ") + REFLEXES[a.reflex.v].name);
+      visible();
+    }
+    wasReflex = a.reflexActive;
+    if (a.asleep != wasAsleep) {
+      char why[64];
+      std::snprintf(why, sizeof why, " sleepy=%.2f gate=%.2f", pm(ch.drive(drive::sleepiness)),
+                    pm(ch.locus[locus::sleep_gate.v]));
+      if (a.asleep) {
+        sleepStart = at();
+        r.naps++;
+        if (r.firstSleepMin < 0) r.firstSleepMin = at() - r.hatchMin;
+        log(std::string("SLEEP") + why);
+      } else {
+        r.longestSleepMin = std::max(r.longestSleepMin, at() - sleepStart);
+        log(std::string("WAKE ") + why);
+      }
+      wasAsleep = a.asleep;
+      visible();
+    }
+    if (a.asleep) r.asleepH += 1.0 / (3600 * kTicksPerSec);
+    if (c->stats().fed != lastFed) {
+      lastFed = c->stats().fed;
+      r.bites++;
+      const bool bad = c->body().mouth == Mouthful::RottenPellet;
+      r.rottenBites += bad;
+      log(bad ? "BITE rotten" : "BITE");
+      visible();
+    }
+    if (dish.tickCount() % (10 * 60 * kTicksPerSec) == 0) {
+      char b[160];
+      std::snprintf(b, sizeof b, "NEED hunger=%.2f sleepy=%.2f bored=%.2f lonely=%.2f touch=%.2f injury=%.2f pantry=%u",
+                    hunger, pm(ch.drive(drive::sleepiness)), pm(ch.drive(drive::boredom)),
+                    pm(ch.drive(drive::loneliness)), pm(ch.drive(drive::need_touch)), injury,
+                    unsigned(dish.habitat().pantry));
+      log(b);
+    }
+  }
+  if (wasAsleep) r.longestSleepMin = std::max(r.longestSleepMin, at() - sleepStart);
+  if (hatched) r.longestQuietMin = std::max(r.longestQuietMin, at() - lastVisible);
+  else r.longestQuietMin = at();
+  if (samples) {
+    r.boredomMean = sums[0] / samples, r.lonelyMean = sums[1] / samples, r.touchMean = sums[2] / samples;
+    r.sleepyMean = sums[3] / samples, r.hungerMean = sums[4] / samples;
+  }
+  if (const Creature* c = std::get_if<Creature>(&dish.occupant())) r.pellets = c->stats().fed;
+  r.distinctLines = uint32_t(lines.size());
+  r.distinctRows = uint32_t(rows.size());
+  r.distinctFaces = uint32_t(faces.size());
+  for (const auto& [line, n] : lines)
+    if (n > r.topLineCount) r.topLineCount = n, r.topLine = line;
+  r.care = who.counts();
+  return r;
+}
+
+double awakeHours(const Report& r) {
+  const double alive = r.hours - std::max(0.0, r.hatchMin) / 60;
+  return std::max(0.01, alive - r.asleepH);
+}
+
+std::string row(const Report& r) {
+  char b[512];
+  const double alive = std::max(0.01, r.hours - std::max(0.0, r.hatchMin) / 60);
+  std::snprintf(b, sizeof b,
+                "%-9s %6u %-6s hatch=%5.1fm vis/h=%5.1f quiet=%5.1fm say/h=%4.1f(awake %4.1f) lines=%2u rows=%2u "
+                "top=%2u gap=%5.1fm asleep=%4.2fh naps=%2u longnap=%5.1fm first=%5.1fm faces=%u/%u hops=%u "
+                "bites=%u/%u hunger=%.2f/%.2f starve=%5.1fm inj=%.2f sick=%5.1fm bored=%.2f lonely=%.2f %s",
+                r.species.c_str(), unsigned(r.seed), ownerName(r.owner), r.hatchMin, r.visible / alive,
+                r.longestQuietMin, r.thoughts / alive, r.thoughts / awakeHours(r), r.distinctLines,
+                r.distinctRows, r.topLineCount, r.longestThoughtGapMin, r.asleepH, r.naps, r.longestSleepMin,
+                r.firstSleepMin, r.distinctFaces, r.faceChanges, r.reflexes, r.bites, r.rottenBites, r.hungerMean, r.hungerMax,
+                r.starvingMin, r.injuryMax, r.sickMin, r.boredomMean, r.lonelyMean,
+                r.died ? ("DIED " + r.cause).c_str() : "");
+  return b;
+}
+
+void write(const Report& r) {
+  const char* dir = std::getenv("FIRST_HOURS_OUT");
+  if (!dir) return;
+  const std::string path = std::string(dir) + "/" + r.species + "-" + std::to_string(r.seed) + "-" +
+                           ownerName(r.owner) + ".txt";
+  if (FILE* f = std::fopen(path.c_str(), "w")) {
+    std::fprintf(f, "%s\n", row(r).c_str());
+    for (const auto& [name, n] : r.actionTicks) std::fprintf(f, "# action %s %.1f%%\n", name.c_str(), 100.0 * n / (r.hours * 36000));
+    for (const std::string& l : r.timeline) std::fprintf(f, "%s\n", l.c_str());
+    std::fclose(f);
+  }
+}
+
+double envHours() {
+  const char* h = std::getenv("FIRST_HOURS_HOURS");
+  return h ? std::atof(h) : 6.0;
+}
+
+}  // namespace
+
+// The measurement itself: every species, a few seeds, both owners. Off by
+// default (a few minutes of CPU); the floors below are the suite's guard.
+TEST(Sweep, EverySpeciesSeedAndOwner) {
+  if (!std::getenv("FIRST_HOURS_SWEEP")) GTEST_SKIP() << "FIRST_HOURS_SWEEP=1 runs it";
+  const char* n = std::getenv("FIRST_HOURS_SEEDS");
+  const uint32_t seeds = n ? uint32_t(std::atoi(n)) : 4;
+  const double hours = envHours();
+  for (size_t sp = 0; sp < kSpeciesCount; ++sp)
+    for (uint32_t s = 0; s < seeds; ++s)
+      for (Owner o : {Owner::Nobody, Owner::Seated}) {
+        const Report r = live(SPECIES[sp].id, 0x5EED0000u + s * 7919u, o, hours);
+        std::printf("%s\n", row(r).c_str());
+        std::fflush(stdout);
+        write(r);
+      }
+}
+
+// A board that will never hear the time founds into his morning, and a
+// replug (no battery) resumes the same pet clock rather than starting another.
+TEST(FirstHours, ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt) {
+  MemStorage store;
+  NullLink link;
+  uint32_t ms = 0;
+  const Genome founder = starterGenomeOf(SpeciesId{1}, 7);
+  DishOptions opt;
+  opt.founder = &founder;
+  opt.askForTime = false;
+  opt.foundingHour = kUnaskedFoundingHour;
+  uint32_t offset = 0;
+  {
+    Dish dish(store, 7, 7, opt);
+    ASSERT_EQ(dish.boot(), Boot::Fresh);
+    EXPECT_FALSE(dish.clock().night()) << "founded at pet " << int(kUnaskedFoundingHour) << ":00";
+    runFor(dish, link, ms, 20 * kMinuteMs);
+    ASSERT_TRUE(dish.flush());
+    offset = uint32_t(dish.clock().phaseOffsetTicks);
+  }
+  Dish again(store, 7, 7, opt);
+  EXPECT_EQ(again.boot(), Boot::Resumed);
+  EXPECT_EQ(uint32_t(again.clock().phaseOffsetTicks), offset) << "the founding hour is saved, never re-applied";
+  EXPECT_TRUE(std::holds_alternative<Creature>(again.occupant())) << "a 15-minute egg has hatched by 20 minutes";
+  DishOptions asking;
+  asking.founder = &founder;
+  MemStorage other;
+  EXPECT_EQ(Dish(other, 7, 7, asking).clock().phaseOffsetTicks, 0) << "a board that asks for the time keeps 00:00";
+}
+
+// The floors docs/notes/first-hours.md measured, for a day species and a
+// night-sleeper of each voice length, alone and with a seated owner. Each run
+// is six pet hours from a fresh founding with no phone and no wall time.
+TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
+  for (SpeciesId sp : {SpeciesId{0}, SpeciesId{1}, SpeciesId{5}, SpeciesId{7}})
+    for (Owner o : {Owner::Nobody, Owner::Seated}) {
+      const Report r = live(sp, 0x5EED0000u, o, 6.0);
+      const std::string at = row(r);
+      const double alive = r.hours - r.hatchMin / 60;
+      EXPECT_FALSE(r.died) << at;
+      EXPECT_LE(r.hatchMin, 16) << at;
+      EXPECT_GE(r.thoughts / alive, 10) << at;
+      EXPECT_LE(r.longestThoughtGapMin, 20) << at;
+      EXPECT_GE(r.distinctLines, 7u) << at;
+      EXPECT_LE(r.topLineCount * 3, r.thoughts) << "no line is a third of what he says: " << at;
+      EXPECT_GE(r.naps, 1u) << at;
+      EXPECT_LE(r.asleepH, 2.5) << "naps, not the whole flight: " << at;
+      EXPECT_LE(r.longestSleepMin, 60) << at;
+      EXPECT_GE(r.faceChanges, 3u) << at;
+      EXPECT_LT(r.injuryMax, 0.1) << at;
+      if (o == Owner::Seated) {
+        EXPECT_GE(r.bites, 2u) << at;
+        EXPECT_EQ(r.starvingMin, 0) << at;
+      } else {
+        EXPECT_GE(r.hungerMax, 0.5) << "hungry by the time anyone looks again: " << at;
+      }
+    }
+}
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

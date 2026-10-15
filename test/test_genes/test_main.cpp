@@ -275,7 +275,7 @@ TEST(Starter, CarriesEveryGeneKindAndExpressesEachAtSomeStage) {
   Phenotype p{};
   for (uint8_t s = 0; s < kStageCount; ++s) expressStage(starter, Stage(s), 0, p);
   EXPECT_EQ(p.expressedStages, 0x0F);
-  EXPECT_EQ(p.egg.incubateTicks, 30 * kTicksPerMinute);
+  EXPECT_EQ(p.egg.incubateTicks, 15 * kTicksPerMinute);   // the FirstHours egg (docs/notes/first-hours.md)
   EXPECT_EQ(p.faces.size(), 10u);
   EXPECT_EQ(p.size.base, 136);
 }
