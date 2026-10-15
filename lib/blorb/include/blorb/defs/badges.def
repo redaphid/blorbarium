@@ -1,0 +1,24 @@
+// The badges: one species each, by MAC (docs/notes/decisions-2026-10-15.md D3).
+// The owner: "There will only be one of each." Nine devices, nine species,
+// each exactly once (founding.cpp's static_assert). A MAC not in the table is
+// grungo (founding.h badgeSpecies).
+//
+// Row 0 is the gift device, an adult grungo the owner's friend chose. Its full
+// MAC is recorded nowhere: d4:05:92:77:23:7c is ASSUMED from its BLE name
+// blorb-237c (the last two bytes) and the batch's shared d4:05:92:77 prefix.
+// Its pet is never adopted (Dish::adoptSpecies leaves grungo alone), so a
+// wrong guess here still leaves the pet byte for byte as it is.
+//
+// tools/flash_batch.py reads this file to know which species a badge must
+// advertise, so the firmware and the batch flasher share one table.
+//
+// BLORB_BADGE(badge, m0, m1, m2, m3, m4, m5, species)
+BLORB_BADGE(0, 0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c, grungo)
+BLORB_BADGE(1, 0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3c, mossby)
+BLORB_BADGE(2, 0xd4, 0x05, 0x92, 0x77, 0x1b, 0x44, puffkin)
+BLORB_BADGE(3, 0xd4, 0x05, 0x92, 0x77, 0x1b, 0x34, gilly)
+BLORB_BADGE(4, 0xd4, 0x05, 0x92, 0x77, 0x1c, 0xb0, mothwick)
+BLORB_BADGE(5, 0xd4, 0x05, 0x92, 0x77, 0x1b, 0x30, mudge)
+BLORB_BADGE(6, 0xd4, 0x05, 0x92, 0x77, 0x1b, 0x40, fizz)
+BLORB_BADGE(7, 0xd4, 0x05, 0x92, 0x77, 0x22, 0x58, hushwing)
+BLORB_BADGE(8, 0xd4, 0x05, 0x92, 0x77, 0x22, 0x40, tinker)

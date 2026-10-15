@@ -1,7 +1,7 @@
 // The first hours of a fresh pet on a board with no phone, no battery and no
 // wall time (the owner on a plane, a kid in a car): founded from a species
 // starter, driven at 50 Hz through the Dish exactly as main.cpp does, with
-// askForTime off and an RTC that never knows the time. A seated owner glances
+// main.cpp's founding hour and an RTC that never knows the time. A seated owner glances
 // at him every few minutes and tilts, picks up, taps or presses BOOT for a
 // pellet when the rim hint says so; or nobody touches him at all. Every run
 // logs what the screen shows (lines, faces, sleep, bites, hops) and sums it
@@ -161,7 +161,6 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours) {
   DishOptions opt;
   opt.rtc = &rtc;
   opt.founder = &founder;
-  opt.askForTime = false;   // as main.cpp: a board nobody can answer still talks
   const char* hour = std::getenv("FIRST_HOURS_FOUNDING_HOUR");   // 0: the clock before first-hours.md
   opt.foundingHour = hour ? uint8_t(std::atoi(hour)) : kUnaskedFoundingHour;
   Dish dish(store, seed, seed, opt);
@@ -381,7 +380,6 @@ TEST(FirstHours, ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt) {
   const Genome founder = starterGenomeOf(SpeciesId{1}, 7);
   DishOptions opt;
   opt.founder = &founder;
-  opt.askForTime = false;
   opt.foundingHour = kUnaskedFoundingHour;
   uint32_t offset = 0;
   {
@@ -396,10 +394,10 @@ TEST(FirstHours, ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt) {
   EXPECT_EQ(again.boot(), Boot::Resumed);
   EXPECT_EQ(uint32_t(again.clock().phaseOffsetTicks), offset) << "the founding hour is saved, never re-applied";
   EXPECT_TRUE(std::holds_alternative<Creature>(again.occupant())) << "a 15-minute egg has hatched by 20 minutes";
-  DishOptions asking;
-  asking.founder = &founder;
+  DishOptions plain;
+  plain.founder = &founder;
   MemStorage other;
-  EXPECT_EQ(Dish(other, 7, 7, asking).clock().phaseOffsetTicks, 0) << "a board that asks for the time keeps 00:00";
+  EXPECT_EQ(Dish(other, 7, 7, plain).clock().phaseOffsetTicks, 0) << "tests and the sim keep 00:00";
 }
 
 // The floors docs/notes/first-hours.md measured, for a day species and a
@@ -413,10 +411,10 @@ TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
       const double alive = r.hours - r.hatchMin / 60;
       EXPECT_FALSE(r.died) << at;
       EXPECT_LE(r.hatchMin, 16) << at;
-      EXPECT_GE(r.thoughts / alive, 10) << at;
-      EXPECT_LE(r.longestThoughtGapMin, 20) << at;
-      EXPECT_GE(r.distinctLines, 7u) << at;
-      EXPECT_LE(r.topLineCount * 3, r.thoughts) << "no line is a third of what he says: " << at;
+      EXPECT_GE(r.thoughts / alive, 20) << at;
+      EXPECT_LE(r.longestThoughtGapMin, 6) << at;
+      EXPECT_GE(r.distinctLines, 40u) << at;
+      EXPECT_LE(r.topLineCount * 8, r.thoughts) << "no line is an eighth of what he says: " << at;
       EXPECT_GE(r.naps, 1u) << at;
       EXPECT_LE(r.asleepH, 2.5) << "naps, not the whole flight: " << at;
       EXPECT_LE(r.longestSleepMin, 60) << at;

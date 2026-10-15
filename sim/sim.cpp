@@ -164,6 +164,7 @@ static void debug(const char* verb, const char* a, const char* b) {
     dish->phoneTime().set(unix);
     dish->checkWall();
     dish->clock().alignToWall(unix, int16_t(atoi(b)));
+    dish->setZone(int16_t(atoi(b)));
     return;
   }
   if (!strcmp(verb, "species")) {

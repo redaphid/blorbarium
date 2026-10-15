@@ -1,10 +1,10 @@
 # The first hours of a fresh pet, with no phone and no wall time
 
-Branch `rel-play` (from `release-0.7` at a1b7cca). The owner, 2026-10-15: "I'll be testing one on the plane. I want the gameplay to be interesting during that time". The board runs on a phone's power with no internet and no battery, so after a replug the clock is unknown. The owner sits and handles the board gently. The kids also play in cars.
+Branch `rel-play` (from `release-0.7` at a1b7cca, merged with `origin/main` 0.7.0 at db465ef, which brought the thoughts work's idle rows). The owner, 2026-10-15: "I'll be testing one on the plane. I want the gameplay to be interesting during that time". The board runs on a phone's power with no internet and no battery, so after a replug the clock is unknown. The owner sits and handles the board gently. The kids also play in cars.
 
 ## How it was measured
 
-`test/test_first_hours` drives the real `Dish` the way `src/main.cpp` does: BodySamples at 50 Hz, `askForTime` off, a NullLink (no phone) and an RTC that never knows the time. Each pet is founded from `starterGenomeOf(species, seed)`, which is what a pinned or chosen gift device hatches. There are two owners:
+`test/test_first_hours` drives the real `Dish` the way `src/main.cpp` does: BodySamples at 50 Hz, `askForTime` off, a NullLink (no phone) and an RTC that never knows the time. Each pet is founded from `starterGenomeOf(species, seed)`. main.cpp founds `foundingGenome(species, seed, bands)`, which is that genome with its look bytes rolled, so it runs on the same recipe. There are two owners:
 
 - **nobody**: the board lies still on a tray table for six hours.
 - **seated**: every 3 to 10 minutes the owner does one gentle thing. That is a tilt of 9 to 16 degrees for 4 to 10 s (it rolls the marble but stays under "held"), a pick-up for 5 to 20 s, 1 to 3 single taps, or a BOOT press. The owner presses BOOT when the rim hint says feed, and about one glance in ten anyway. The owner holds the egg now and then and mostly lets him sleep. There are no shakes, drops or face-down tucks.
@@ -19,7 +19,7 @@ MSYS_NO_PATHCONV=1 wsl -d survivor --exec env FIRST_HOURS_SWEEP=1 FIRST_HOURS_SE
 # FIRST_HOURS_GIFT=1 founds starterGenome() (the Gift recipe) instead
 ```
 
-"Before" is `release-0.7` with only the driver added. "After" is this branch. Both runs used the same driver, seeds 0x5EED0000 + 7919k for k = 0..3.
+"Before" is 0.7.0 (`origin/main` db465ef) with only the driver added. "After" is this branch merged with it. Both runs used the same driver, seeds 0x5EED0000 + 7919k for k = 0..3. Sections 1 to 3 below were found on `release-0.7`, before 0.7.0's idle rows existed.
 
 ## What was flat and what was harsh
 
@@ -38,8 +38,8 @@ MSYS_NO_PATHCONV=1 wsl -d survivor --exec env FIRST_HOURS_SWEEP=1 FIRST_HOURS_SE
 | FirstHours: sleepiness tonic | emitter locus, rate, half-life, start | `always`, 0.10 equilibrium, 2 h half-life, starts 0 -> `asleep` inverted (made only while awake), 0.52 equilibrium (0.58 for a species that sleeps by day), 90 min half-life, starts 0.25 | Sleepiness becomes pressure that builds while he is awake and drains while he sleeps, so a pet day has naps. Day species nap about 40 min after every 2.3 h awake, and night-sleepers after every 1.8 h (30 h runs). That is species character from the existing `nocturnal` column ("sleeps by day"). |
 | FirstHours: energy at hatching | `chem(energy, 4 h, initial)` | 0.80 -> 0.45 | Hunger reaches the feed hint (0.5) about 3 h after hatching instead of after 6 h, so the feed hint, a BOOT press, the bite and "BRRRUP. CRUNCH." all fall inside a flight. Left alone he is starving (0.8 or more) from about 4.5 h, with injury 0.05 by 6 h, which one BOOT press fixes. |
 | FirstHours: happy face | `face(happy, weight, ...)` | 0.55 -> 0.60 | A content pet now clears the 0.1 hysteresis over neutral and shows happy, then blep as hunger rises. |
-| FirstHours: egg | `EggGene.incubateMinutes` | 30 -> 15 | A fresh egg hatches in 15 minutes, 10 if held. The founding nest's 60 s timeout comes first. |
-| thoughts.def row 24 `see_damp` | cooldown | 300 s -> 900 s | It was a quarter of everything he said. Now it is at most 4 an hour. The thoughts agent was told, and no text was touched. |
+| FirstHours: egg | `EggGene.incubateMinutes` | 30 -> 15 | A fresh egg hatches in 15 minutes, 10 if held. |
+| thoughts.def row 24 `see_damp` | cooldown | 300 s -> 1800 s | It was a quarter of everything he said on `release-0.7`, and on 0.7.0 still the top line (69 of 222 lines in the thoughts agent's idle test). It filled silence; 0.7.0's idle rows do that now, so it can be rare. Now it is at most 2 an hour. The thoughts agent agreed, and no text was touched. |
 
 Tests changed on purpose:
 - `Starter.CarriesEveryGeneKindAndExpressesEachAtSomeStage`: the egg is 15 minutes, not 30.
@@ -48,38 +48,38 @@ Tests changed on purpose:
 
 New guards are in `test_first_hours`:
 - `ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt`
-- `AFreshPetPlaysThroughHisFirstSixHours`: grungo, mossby, mudge and hushwing, both owners. It checks no death, a hatch within 16 min, at least 10 lines an hour, an awake gap of at most 20 min, at least 7 distinct lines, no line more than a third of all lines, at least 1 nap, at most 2.5 h asleep, no sleep over 60 min, at least 3 face changes, injury under 0.1, and for seated owners at least 2 bites and no starving. On the old clock (`FIRST_HOURS_FOUNDING_HOUR=0`) it fails at 4.8 to 5.3 h asleep.
+- `AFreshPetPlaysThroughHisFirstSixHours`: grungo, mossby, mudge and hushwing, both owners. It checks no death, a hatch within 16 min, at least 20 lines an hour, an awake gap of at most 6 min, at least 40 distinct lines, no line more than an eighth of all lines, at least 1 nap, at most 2.5 h asleep, no sleep over 60 min, at least 3 face changes, injury under 0.1, and for seated owners at least 2 bites and no starving. On the old clock (`FIRST_HOURS_FOUNDING_HOUR=0`) it fails at 4.8 to 5.3 h asleep.
 
 ## Before -> after, per species and owner (mean of 4 seeds; gaps, sleeps, hunger, starving and injury are the worst seed)
 
-"visible" counts lines, face changes, hops, sleep and wake edges, and bites. "longest awake gap" is the longest stretch awake with no line. "Before" is low there only because he was awake for under an hour.
+"visible" counts lines, face changes, hops, sleep and wake edges, and bites. "longest awake gap" is the longest stretch awake with no line; 3 min is the Thinker's quiet-gap ceiling.
 
 | species | owner | hatch min | visible/h | lines/h | distinct lines | top line x | longest awake gap min | h asleep | naps | longest sleep min | first sleep after hatch min | face changes | bites | hunger max | starving min | injury max | deaths |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| grungo | nobody | 30 → 15 | 11.8 → 16.1 | 10.5 → 14.2 | 13 → 20 | 10 → 9 | 6 → 15 | 3.3 → 1.3 | 1.8 → 2.0 | 197 → 40 | 132 → 154 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
-| grungo | seated | 29 → 15 | 16.6 → 23.3 | 12.3 → 13.1 | 21 → 23 | 10 → 8 | 6 → 14 | 3.3 → 1.3 | 1.2 → 2.5 | 199 → 41 | 133 → 67 | 13 → 34 | 2.0 → 3.5 | 0.30 → 0.39 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| mossby | nobody | 30 → 15 | 6.9 → 15.8 | 6.2 → 14.6 | 11 → 19 | 8 → 10 | 6 → 15 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 45 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 84 | 0.00 → 0.05 | 0 → 0 |
-| mossby | seated | 29 → 15 | 9.5 → 27.2 | 7.4 → 14.8 | 16 → 24 | 9 → 10 | 6 → 14 | 4.8 → 0.8 | 1.0 → 1.5 | 287 → 40 | 44 → 161 | 6 → 42 | 0.2 → 4.5 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| puffkin | nobody | 30 → 15 | 6.9 → 16.2 | 6.2 → 15.0 | 12 → 20 | 10 → 10 | 6 → 14 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 95 | 0.00 → 0.06 | 0 → 0 |
-| puffkin | seated | 29 → 15 | 9.5 → 24.5 | 7.3 → 14.1 | 16 → 22 | 8 → 10 | 5 → 15 | 4.8 → 1.0 | 1.2 → 2.0 | 287 → 40 | 40 → 137 | 6 → 34 | 0.2 → 4.0 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| gilly | nobody | 30 → 15 | 6.9 → 16.1 | 6.2 → 14.9 | 12 → 20 | 10 → 9 | 6 → 15 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
-| gilly | seated | 29 → 15 | 9.5 → 27.9 | 7.4 → 16.1 | 15 → 25 | 9 → 10 | 5 → 14 | 4.8 → 0.7 | 1.0 → 1.0 | 288 → 40 | 44 → 192 | 6 → 40 | 0.2 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| mothwick | nobody | 30 → 15 | 11.6 → 16.1 | 10.5 → 14.2 | 14 → 20 | 11 → 9 | 7 → 15 | 3.3 → 1.4 | 1.5 → 2.0 | 197 → 40 | 132 → 155 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 87 | 0.00 → 0.05 | 0 → 0 |
-| mothwick | seated | 29 → 15 | 16.8 → 24.0 | 12.2 → 13.7 | 21 → 24 | 10 → 8 | 6 → 14 | 3.3 → 1.2 | 1.5 → 2.2 | 199 → 40 | 132 → 154 | 14 → 33 | 2.0 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| mudge | nobody | 30 → 15 | 6.9 → 16.6 | 6.2 → 15.4 | 5 → 7 | 19 → 21 | 6 → 14 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 102 | 0.00 → 0.06 | 0 → 0 |
-| mudge | seated | 29 → 15 | 9.5 → 27.0 | 7.4 → 16.1 | 8 → 10 | 20 → 22 | 6 → 14 | 4.8 → 0.7 | 1.0 → 1.5 | 287 → 40 | 44 → 145 | 6 → 36 | 0.2 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| fizz | nobody | 30 → 15 | 6.9 → 16.1 | 6.2 → 14.9 | 11 → 18 | 10 → 10 | 5 → 15 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 97 | 0.00 → 0.06 | 0 → 0 |
-| fizz | seated | 29 → 15 | 9.8 → 26.7 | 7.4 → 15.8 | 15 → 25 | 9 → 10 | 5 → 15 | 4.8 → 0.7 | 1.5 → 1.2 | 287 → 40 | 33 → 191 | 6 → 36 | 0.2 → 5.0 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| hushwing | nobody | 30 → 15 | 11.9 → 16.0 | 10.5 → 14.1 | 13 → 18 | 10 → 10 | 6 → 15 | 3.3 → 1.3 | 2.0 → 2.0 | 197 → 40 | 132 → 154 | 3 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 87 | 0.00 → 0.05 | 0 → 0 |
-| hushwing | seated | 29 → 15 | 17.1 → 23.7 | 12.5 → 13.4 | 20 → 23 | 12 → 11 | 6 → 14 | 3.3 → 1.3 | 1.8 → 2.8 | 199 → 41 | 122 → 127 | 14 → 33 | 2.0 → 4.8 | 0.30 → 0.52 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
-| tinker | nobody | 30 → 15 | 11.6 → 16.2 | 10.5 → 14.4 | 14 → 18 | 12 → 9 | 6 → 16 | 3.3 → 1.3 | 1.5 → 2.0 | 197 → 40 | 132 → 154 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
-| tinker | seated | 29 → 15 | 17.1 → 22.8 | 12.4 → 13.7 | 21 → 24 | 10 → 8 | 6 → 15 | 3.3 → 1.3 | 1.8 → 2.0 | 199 → 40 | 108 → 154 | 14 → 30 | 2.0 → 4.8 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| grungo | nobody | 30 → 15 | 18.1 → 26.1 | 16.9 → 24.2 | 59 → 93 | 11 → 7 | 3 → 3 | 3.3 → 1.3 | 1.8 → 2.0 | 197 → 40 | 132 → 154 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
+| grungo | seated | 29 → 15 | 22.6 → 34.2 | 18.3 → 24.1 | 64 → 98 | 11 → 4 | 3 → 3 | 3.3 → 1.3 | 1.2 → 2.5 | 199 → 41 | 133 → 67 | 13 → 34 | 2.0 → 3.5 | 0.30 → 0.39 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| mossby | nobody | 30 → 15 | 8.8 → 26.7 | 8.2 → 25.4 | 24 → 99 | 8 → 6 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 45 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 84 | 0.00 → 0.05 | 0 → 0 |
+| mossby | seated | 29 → 15 | 10.8 → 40.0 | 8.8 → 27.6 | 27 → 107 | 10 → 7 | 3 → 3 | 4.8 → 0.8 | 1.0 → 1.5 | 287 → 40 | 44 → 161 | 6 → 42 | 0.2 → 4.5 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| puffkin | nobody | 30 → 15 | 8.9 → 26.9 | 8.2 → 25.7 | 24 → 96 | 8 → 7 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 95 | 0.00 → 0.06 | 0 → 0 |
+| puffkin | seated | 29 → 15 | 10.9 → 36.4 | 8.8 → 26.1 | 26 → 102 | 8 → 6 | 3 → 3 | 4.8 → 1.0 | 1.2 → 2.0 | 287 → 40 | 40 → 137 | 6 → 34 | 0.2 → 4.0 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| gilly | nobody | 30 → 15 | 9.1 → 26.6 | 8.3 → 25.4 | 24 → 95 | 9 → 7 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
+| gilly | seated | 29 → 15 | 10.9 → 41.0 | 8.9 → 29.3 | 26 → 110 | 9 → 8 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 288 → 40 | 44 → 192 | 6 → 40 | 0.2 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| mothwick | nobody | 30 → 15 | 18.1 → 25.5 | 17.1 → 23.6 | 58 → 92 | 11 → 7 | 3 → 3 | 3.3 → 1.3 | 1.5 → 2.0 | 197 → 40 | 132 → 155 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 87 | 0.00 → 0.05 | 0 → 0 |
+| mothwick | seated | 29 → 15 | 22.2 → 35.5 | 17.7 → 25.3 | 61 → 98 | 12 → 5 | 3 → 3 | 3.3 → 1.2 | 1.5 → 2.2 | 199 → 40 | 132 → 154 | 14 → 33 | 2.0 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| mudge | nobody | 30 → 15 | 9.0 → 27.9 | 8.3 → 26.6 | 20 → 56 | 19 → 16 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 102 | 0.00 → 0.06 | 0 → 0 |
+| mudge | seated | 29 → 15 | 11.2 → 40.6 | 9.2 → 29.8 | 22 → 58 | 19 → 16 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.5 | 287 → 40 | 44 → 145 | 6 → 36 | 0.2 → 5.2 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| fizz | nobody | 30 → 15 | 8.7 → 26.2 | 8.0 → 25.0 | 23 → 93 | 9 → 9 | 3 → 3 | 4.8 → 0.7 | 1.0 → 1.0 | 286 → 40 | 44 → 192 | 1 → 3 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 97 | 0.00 → 0.06 | 0 → 0 |
+| fizz | seated | 29 → 15 | 11.3 → 38.6 | 9.0 → 27.7 | 26 → 108 | 8 → 7 | 3 → 3 | 4.8 → 0.7 | 1.5 → 1.2 | 287 → 40 | 33 → 191 | 6 → 36 | 0.2 → 5.0 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| hushwing | nobody | 30 → 15 | 18.8 → 25.9 | 17.4 → 24.0 | 60 → 92 | 10 → 6 | 3 → 3 | 3.3 → 1.3 | 2.0 → 2.0 | 197 → 40 | 132 → 154 | 3 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 87 | 0.00 → 0.05 | 0 → 0 |
+| hushwing | seated | 29 → 15 | 23.2 → 34.6 | 18.6 → 24.3 | 63 → 102 | 11 → 6 | 3 → 3 | 3.3 → 1.3 | 1.8 → 2.8 | 199 → 41 | 122 → 127 | 14 → 33 | 2.0 → 4.8 | 0.30 → 0.52 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
+| tinker | nobody | 30 → 15 | 18.2 → 25.9 | 17.1 → 24.0 | 58 → 92 | 11 → 9 | 3 → 3 | 3.3 → 1.3 | 1.5 → 2.0 | 197 → 40 | 132 → 154 | 2 → 5 | 0.0 → 0.0 | 0.30 → 1.00 | 0 → 91 | 0.00 → 0.06 | 0 → 0 |
+| tinker | seated | 29 → 15 | 23.0 → 33.9 | 18.3 → 24.7 | 64 → 102 | 11 → 5 | 3 → 3 | 3.3 → 1.3 | 1.8 → 2.0 | 199 → 40 | 108 → 154 | 14 → 30 | 2.0 → 4.8 | 0.30 → 0.30 | 0 → 0 | 0.00 → 0.00 | 0 → 0 |
 
-The clock fix alone, before the genome and line changes (same 72 runs, old genome founded at 09:00):
+The clock fix alone on `release-0.7`, before the genome and line changes (same 72 runs, old genome founded at 09:00):
 - nobody: 17.4 lines/h, 8 distinct, top line 29 times (63 for mudge), 0.3 face changes, 0 h asleep, hunger never above 0.30.
 - seated: 23.6 lines/h, 21 distinct, top line 30 times (64 for mudge), 0 h asleep.
 
-The genome changes and the see_damp cooldown took the top line from 29 to 9-10 (21 for mudge), more than doubled the distinct lines a lone pet says, and added naps, hunger and faces. They cost thought rate (17.4 to about 14.5 an hour when alone) and lengthened the longest awake silence from 7 to 15 minutes.
+On `release-0.7` the genome changes and a 900 s see_damp cooldown took the top line from 29 to 9-10, but left gaps of up to 15 minutes with no line, because a content pet had few rows to say. 0.7.0's idle rows closed those gaps (3 min), and the cooldown went to 1800 s.
 
 Over 30 h (one seed, all species), nothing died after the change. Day species sleep 21:05 to 09:58 with 3 day naps of about 40 min. Night-sleepers sleep 21:17 to 08:05 with 4 naps. The seated owner's rotten pellets still push injury up to 0.85 by hour 30, against 0.67 to 0.90 before.
 
@@ -93,11 +93,11 @@ A pet already on a board keeps its genome and its clock: the founding hour and t
 
 - **No foraging or self-feeding.** With nobody there, food never appears, and he is hungry by the time someone looks again. One BOOT press fixes it (the pantry is full). A dish that feeds itself would make neglect free, and the owner decided neglect matters (genes.h `kNeglectCanKill`).
 - **Rotten pellets killing at 25 to 30 h** is the same on the old firmware and outside the first hours. Rot is designed (e2e-learning.md). If kids pressing BOOT at night in the car turns out to kill pets, the cheap lever is the starter's `rotMinutes` (90) or `fed_bad`'s toxin (0.4).
-- **The awake gap of up to 15 minutes** is set by the thoughts table: with all drives low only no_hat, marble_knows, science and the drive rows can fire. The thoughts agent's offline lines are the fix. The terse voice (mudge) has 7 lines, and its top line is about a quarter of what it says.
+- **Mudge's top line** is "SNACK?", 16 of about 160 lines in 6 h: the terse voice cuts each line to its first sentence. That is the voice's text, not a number here.
 - **What "nocturnal" means** (the species.def column says "sleeps by day", but nights are still melatonin-driven for every species) belongs to the species work. FirstHours only uses the column to raise day sleep pressure.
 - senses.cpp and thoughts.cpp were not touched.
 
 ## Evidence
 
-- Native suite: before (release-0.7 + driver) 727 cases, 726 passed, 1 skipped. After: see the commit message.
+- Native suite: release-0.7 + driver 727 cases, 726 passed, 1 skipped. This branch merged with 0.7.0: 779 cases, 777 passed, 2 skipped, exit 0.
 - Sim film goldens: 22 of 22 frames match, nothing re-blessed (the sim founds `starterGenome()`, the Gift recipe, and asks for the time).

@@ -20,10 +20,9 @@ std::optional<uint32_t> TrialGuard::lineageTwist(std::string_view line) {
   blorb::Args args{line};
   const std::optional<std::string_view> verb = args.word(), kind = args.word();
   if (verb != std::optional<std::string_view>("TWIST")) return std::nullopt;
-  if (kind != std::optional<std::string_view>("rename") && kind != std::optional<std::string_view>("gene_edit") &&
-      kind != std::optional<std::string_view>("pick"))
-    return std::nullopt;
-  return id;
+  for (const char* writes : {"rename", "gene_edit", "pick", "teach", "unteach"})
+    if (kind == std::optional<std::string_view>(writes)) return id;
+  return std::nullopt;
 }
 
 }  // namespace ota

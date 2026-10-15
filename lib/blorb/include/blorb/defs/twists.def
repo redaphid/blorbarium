@@ -15,3 +15,5 @@ BLORB_TWIST(pick,      "<egg>")                                   // choose a cl
 BLORB_TWIST(prophecy,  "<feature> <action> <drive> <permille>")   // set one brain weight
 BLORB_TWIST(prophecy_treat, "")                                   // a treat baked from the phone's futures: vision, so he glows; no food
 BLORB_TWIST(say,       "<text>")                                  // the rest of the line, up to 56 drawable: he croaks it once on the marquee; never saved
+BLORB_TWIST(teach,     "<text>")                                  // up to 30 drawable, kept in taught.lines (the last 4): he says them now and then, phone or not
+BLORB_TWIST(unteach,   "")                                        // he forgets every taught line

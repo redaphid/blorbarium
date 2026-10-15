@@ -139,6 +139,9 @@ static hw::EspNowAir espNow;
 static RadioGate radioGate(espNow);
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
+// The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
+static bool debugAsks();
+static bool debugPress(uint32_t ms);
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 // The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
@@ -161,7 +164,7 @@ static blorb::Appearance shown() {
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
+  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
 #endif
   return a;
 }
@@ -269,8 +272,10 @@ static std::optional<Timed> take() {
 static bool petFeels(bool down) {
 #if !defined(BADGE_BOARD_SIM)
   static bool wasDown = false, otaOwns = false;
-  if (updater.asking() && down && !wasDown) updater.press(millis());
-  otaOwns = updater.asking() || (otaOwns && down);
+  const bool edge = down && !wasDown;
+  if (updater.asking() && edge) updater.press(millis());
+  const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
+  otaOwns = updater.asking() || debugAsks() || debugTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
@@ -333,6 +338,15 @@ static OccupantSummary summarize(const blorb::Occupant& o) {
     OccupantSummary operator()(const blorb::Clutch& k) const { return {"clutch", k.generation, k.parent.hash(), 0}; }
   };
   return std::visit(Visit{}, o);
+}
+
+// The pet's genome, whatever he is now; null when a sealed board never read him.
+static const blorb::Genome* petGenome() {
+  const blorb::Occupant& o = dish->occupant();
+  if (dish->sealed()) return nullptr;
+  if (const blorb::Creature* c = std::get_if<blorb::Creature>(&o)) return &c->genome();
+  if (const blorb::Egg* e = std::get_if<blorb::Egg>(&o)) return &e->genome();
+  return &std::get<blorb::Clutch>(o).parent;
 }
 
 static ota::PetMark petMark() {
@@ -419,8 +433,12 @@ static void reportBoot() {
   if (dish->boot() == blorb::Boot::ReadOnlyNewer)
     Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
                    "Update the firmware to wake him");
-  Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u\n", bootName(dish->boot()), o.kind,
-                unsigned(o.gen), unsigned(o.genome), unsigned(o.age));
+  // species= is what the pet is now (a 0.4.0 pet reads grungo until adopted);
+  // none when a sealed board never read him.
+  const blorb::Genome* pet = petGenome();
+  Serial.printf("[hw] boot=%s occupant=%s gen=%u genome=%08x age=%u species=%s\n", bootName(dish->boot()), o.kind,
+                unsigned(o.gen), unsigned(o.genome), unsigned(o.age),
+                pet ? blorb::speciesInfo(blorb::speciesOf(*pet)).name : "none");
 }
 
 // From the last BodySample the loop took: no second I2C read.
@@ -458,6 +476,47 @@ static void reportStatus(uint32_t now) {
   }
 }
 
+#if !defined(BADGE_BOARD_SIM)
+// The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
+// badge table will adopt him as (founding.h advertisedSpecies), whatever the
+// owner named him. An image on trial keeps the old image's blorb-xxxx, so a
+// trial looks to the page exactly as the board it updated: the page served
+// before rel-site keys its OTA token by device name, and a reloaded one must
+// find that token to CONFIRM. The species name comes with the next boot.
+static const char* bleName(const uint8_t mac[6]) {
+  static char name[16];
+  if (trial.onTrial()) {
+    std::snprintf(name, sizeof name, "blorb-%02x%02x", mac[4], mac[5]);
+  } else {
+    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(petGenome(), mac)).name);
+  }
+  return name;
+}
+
+// A pet 0.4.0 founded becomes his badge's species (founding.h), once the
+// flash can be written: on an OTA trial, only after the trial keeps the
+// image, so the trial's pet check and a rollback both meet the pet the old
+// image saved. Asked once a second until the Dish says it is done.
+static void adoptTableSpecies(uint32_t now) {
+  static bool settled = false;
+  static uint32_t askedAt = 0;
+  if (settled || trial.onTrial() || now - askedAt < 1000) return;
+  askedAt = now;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
+  const blorb::Dish::Adoption a =
+      species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
+  if (a == blorb::Dish::Adoption::NotYet) return;
+  settled = true;
+  if (a == blorb::Dish::Adoption::Adopted) {
+    const OccupantSummary o = summarize(dish->occupant());
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+                  blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
+  }
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
   boardButtonBegin();
@@ -477,26 +536,25 @@ void setup() {
   dishStore.hold(onTrial);
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
-  // With no battery every replug forgets the time, and a kid with no phone
-  // still gets a pet that talks. The sim keeps asking, for its golden.
-  options.askForTime = false;
+  // No battery: no wall time is coming, so a fresh pet hatches into his
+  // morning, not into seven hours of pet night (docs/notes/first-hours.md).
   options.foundingHour = blorb::kUnaskedFoundingHour;
 #else
   options.sealed = simSealed;
 #endif
-  // A fresh device's nest (founding.h). An owner's pin is one egg and needs no
-  // choice; three eggs wait for the kid once the nest is drawn here, and until
-  // then the Dish founds its default.
+  // A fresh board founds its own species: found.pin's, else the badge
+  // table's, else grungo (founding.h). The sim founds the starter, as
+  // it always has, so its goldens hold.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
-#if !defined(BADGE_BOARD_SIM)
-  if (!options.sealed && blorb::needsFounding(dishStore)) awaitFoundPin();
-#endif
   std::optional<blorb::Genome> founder;
-  if (!options.sealed)
-    if (std::optional<blorb::Nest> nest = blorb::nestFor(dishStore, speciesSeed))
-      if (std::optional<blorb::SpeciesId> pick = blorb::FoundingChooser(*nest).sample(lastBody, millis()))
-        founder = blorb::starterGenomeOf(*pick, speciesSeed);
-  if (founder) options.founder = &*founder;
+#if !defined(BADGE_BOARD_SIM)
+  if (!options.sealed && blorb::needsFounding(dishStore)) {
+    awaitFoundPin();
+    const blorb::SpeciesId species = blorb::foundingSpecies(dishStore, mac);
+    founder = blorb::foundingGenome(species, speciesSeed, paint::bandsFor(species));
+    options.founder = &*founder;
+  }
+#endif
 #if !defined(BADGE_BOARD_SIM)
   duelAir = &radioGate;
 #endif
@@ -521,7 +579,7 @@ void setup() {
   }
   otaPackets.begin();
   ble.keepWhile([] { return updater.active(); });
-  const char* name = ble.begin(mac, &otaData);
+  const char* name = ble.begin(bleName(mac), &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
@@ -690,6 +748,8 @@ static void runDebug(const char* line) {
                 why ? why : "ok", c ? kStage[size_t(c->stage())] : "-", o.kind, unsigned(o.gen), unsigned(o.genome),
                 unsigned(o.age), unsigned(store.writes()), unsigned(millis() - t0));
 }
+
+#include "debug_ble.h"
 #endif
 
 void loop() {
@@ -702,10 +762,14 @@ void loop() {
   constexpr bool holdFrame = false;
 #endif
   step(now);
+#if !defined(BADGE_BOARD_SIM)
+  dbgfw::poll();
+#endif
   if (!holdFrame && now - lastFrame >= kFrameMs) {
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
+    else dbgfw::draw(canvas);
 #endif
     boardPresent(display, canvas);
     lastFrame = now;
@@ -726,6 +790,7 @@ void loop() {
     dishStore.hold(false);
     dish->flush();
   }
+  adoptTableSpecies(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

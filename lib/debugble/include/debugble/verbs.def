@@ -1,0 +1,23 @@
+// The debug link's verbs (docs/debug-ble.md). A row plus verb_<name> in
+// src/console.cpp is the whole change; HELP lists the rows, so the page
+// learns a new one with no release. The reach decides who may run it and
+// when (console.h's Reach).
+//
+// DEBUG_VERB(VERB, name, reach, args)
+DEBUG_VERB(HELP,    help,    Look,  "")
+DEBUG_VERB(STATUS,  status,  Look,  "")
+DEBUG_VERB(UNLOCK,  unlock,  Look,  "")                         // the screen asks; a BOOT press after 1.5 s opens Harm to this connection
+DEBUG_VERB(LOCK,    lock,    Look,  "")
+DEBUG_VERB(THINK,   think,   Show,  "<thought>")                // that line now, thought or prophecy
+DEBUG_VERB(FORTUNE, fortune, Show,  "[prophecy]")               // a prophecy now; none named: one drawn
+DEBUG_VERB(LOOK,    look,    Show,  "<species|off>")            // drawn as that species until reset; the pet never changes
+DEBUG_VERB(FIRE,    fire,    Write, "<stim>")                   // any stimulus, body-only ones too, at the next tick
+DEBUG_VERB(WALL,    wall,    Write, "<unix> [tzMinutes] | clear")
+DEBUG_VERB(SCALE,   scale,   Write, "<1..60>")                  // fast-forward until reset, reboot or this connection drops
+DEBUG_VERB(HATCH,   hatch,   Harm,  "")
+DEBUG_VERB(STAGE,   stage,   Harm,  "<baby|child|adult|elder>")
+DEBUG_VERB(WARP,    warp,    Harm,  "<minutes 1..120>")         // that much of his life now
+DEBUG_VERB(CHEM,    chem,    Harm,  "<chem> <permille> ...")    // chemicals and drives, by name
+DEBUG_VERB(DIE,     die,     Harm,  "[eggs|remains]")
+DEBUG_VERB(SPECIES, species, Harm,  "<species>")                // his body and power genes, in place; recorded in the lineage
+DEBUG_VERB(WIPE,    wipe,    Harm,  "[species]")                // erase, provision as a fresh board, restart

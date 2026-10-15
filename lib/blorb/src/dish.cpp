@@ -1,6 +1,7 @@
 #include "blorb/dish.h"
 
 #include <algorithm>
+#include "blorb/founding.h"
 #include "blorb/friend_egg.h"
 #include <cstring>
 #include <utility>
@@ -86,7 +87,7 @@ void copyName(char (&to)[16], const char* from) {
 }  // namespace
 
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air), askForTime_(options.askForTime) {
+    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -104,6 +105,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   }
   lineage_ = Lineage::open(store, founder, lineageId, 0);
   duel_.attach(store);
+  taught_ = Taught::load(store);
   if (loaded == SlotState::Resumed || loaded == SlotState::FellBack) {
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
@@ -172,8 +174,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
-    else if (!askingForTime()) thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake),
-                        phoneAwayTicks());
+    else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
     if (e->tick(out)) onHatch(*e);
   } else {
@@ -259,13 +260,27 @@ void Dish::fire(StimId s) { pending_.fireRemote(s); }
 
 void Dish::think(ThoughtId id) {
   if (const Creature* c = std::get_if<Creature>(&live_.occupant))
-    thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_);
+    thinker_.force(id, *c, live_.habitat, live_.clock, lineage_, tick_, fromPhone());
 }
 
 bool Dish::say(std::string_view line) {
   const Creature* c = std::get_if<Creature>(&live_.occupant);
   if (c) thinker_.say(line, *c, lineage_, tick_);
   return c != nullptr;
+}
+
+bool Dish::teach(std::string_view line) {
+  const Taught next = taught_.with(line);
+  if (readOnly_ || !next.save(store_)) return false;
+  taught_ = next;
+  say(line);
+  return true;
+}
+
+bool Dish::unteach() {
+  if (readOnly_ || !Taught{}.save(store_)) return false;
+  taught_ = Taught{};
+  return true;
 }
 
 bool Dish::editGene(GeneUid uid, uint8_t offset, uint8_t value) {
@@ -280,6 +295,29 @@ void Dish::rename(const char* name) {
   lineage_.rename(name);
   copyName(live_.settings.name, lineage_.currentName());
   eventDirty_ = true;
+}
+
+Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
+  if (readOnly_) return Adoption::NotNeeded;
+  Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (!c) {
+    const Genome& g = std::holds_alternative<Egg>(live_.occupant) ? std::get<Egg>(live_.occupant).genome()
+                                                                  : std::get<Clutch>(live_.occupant).parent;
+    return predatesSpecies(g) ? Adoption::NotYet : Adoption::NotNeeded;
+  }
+  if (!predatesSpecies(c->genome())) return Adoption::NotNeeded;
+  if (!store_.writable() || duel_.active()) return Adoption::NotYet;   // a duel plays a copy of his genome
+  if (!blorb::adoptSpecies(*c, species, live_.settings.speciesSeed, bands)) return Adoption::NotNeeded;
+  lineage_.recordEdit(c->generation(), c->genome());
+  char was[16], now[16];
+  speciesLineName(kGrungo, was);
+  speciesLineName(species, now);
+  if (std::strcmp(lineage_.currentName(), was) == 0) rename(now);
+  // A rerun after a power cut may find the Rename on the log and the old name in the save.
+  copyName(live_.settings.name, lineage_.currentName());
+  eventDirty_ = true;
+  save();
+  return Adoption::Adopted;
 }
 
 // Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
@@ -304,7 +342,6 @@ Appearance Dish::appearance() const {
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
-  a.timeUnknown = askingForTime();
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
@@ -331,6 +368,14 @@ std::optional<uint32_t> Dish::wallNow() const {
   if (!wallKnown_ || !live_.wall) return std::nullopt;
   return live_.wall->wallSeconds + (tick_ - live_.wall->tick) / kTicksPerSecond;
 }
+
+std::optional<uint32_t> Dish::localNow() const {
+  const std::optional<uint32_t> wall = wallNow();
+  if (!wall || !zone_) return std::nullopt;
+  return uint32_t(int64_t(*wall) + int64_t(*zone_) * 60);
+}
+
+FromPhone Dish::fromPhone() const { return FromPhone{phoneAwayTicks(), localNow(), lineage_.named(), &taught_}; }
 
 uint32_t Dish::phoneAwayTicks() const {
   uint32_t since = live_.wall ? live_.wall->tick : 0;
@@ -378,6 +423,13 @@ void Dish::checkWall() {
   live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
   if (welcome) welcomePhone();
+}
+
+void Dish::forgetWall() {
+  wallKnown_ = false;
+  live_.wall.reset();
+  lastCatchUp_ = CatchUp{};
+  eventDirty_ = true;
 }
 
 // A phone came back after he had been asking for it: the visit is worth

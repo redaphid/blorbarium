@@ -177,7 +177,9 @@ std::vector<Appearance> everyKind() {
   a.pantry = 255;
   a.hasHint = true;
   a.hint = blorb::care::feed;
-  a.timeUnknown = true;
+  a.thinking = true;
+  std::snprintf(a.line, sizeof(a.line), "%s", "THE POND SAYS: YES. NO. YES.");
+  a.thoughtPhase = Fx::ratio(1, 2);
   a.itemCount = 3;
   a.items[0] = {Appearance::Item::What::Pellet, {Fx::one(), Fx::zero()}};
   a.items[1] = {Appearance::Item::What::RottenPellet, {fx(-0.7), fx(0.7)}};
@@ -592,7 +594,9 @@ TEST(Marquee, RunsTheDishAboveHisHeadAndNeverCoversHisFace) {
   for (auto at : {std::pair{0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.7, 0.7}, {-0.7, -0.7}}) {
     Appearance a = adult(at.first, at.second);
     auto plain = render(a, pack);
-    a.timeUnknown = true;
+    a.thinking = true;
+    std::snprintf(a.line, sizeof(a.line), "%s", "I SEE A MARBLE IN YOUR FUTURE");
+    a.thoughtPhase = Fx::ratio(1, 2);
     Rows band = changed(*plain, *render(a, pack));
     ASSERT_LE(band.top, band.bottom) << "no marquee drawn";
     EXPECT_LE(band.bottom - band.top, 24);
@@ -643,28 +647,6 @@ TEST(Marquee, AThoughtCrossesOnceAndIsGoneBeforeItsPhaseEnds) {
     auto cv = at(off);
     EXPECT_EQ(changed(*cv, kSide / 2, kSide), 0) << "the thought comes back from the right at " << off << " of " << span;
     EXPECT_GT(changed(*cv, 0, kSide / 2), 0) << "the thought's tail vanished early at " << off << " of " << span;
-  }
-}
-
-// It scrolled by poseTick once. An egg never advances that, so the board showed
-// the line frozen, and a creature's snapped back at every change of pose.
-TEST(Marquee, MovesWithTheClockAndWithNothingElse) {
-  constexpr int kBandTop = 34, kBandEnd = 54;   // draw.cpp's strip: dy -76, 20 rows
-  const auto& pack = paint::placeholderPack();
-  Appearance egg;
-  egg.kind = Appearance::Kind::Egg;
-  Appearance creature = adult();
-  for (Appearance a : {egg, creature}) {
-    a.timeUnknown = true;
-    for (uint32_t t : {0u, 1234u, 600000u}) {
-      auto now = render(a, pack, 0, t), again = render(a, pack, 0, t), later = render(a, pack, 0, t + 500);
-      EXPECT_EQ(countChanged(*now, *again), 0) << "the same instant draws different pixels at " << t;
-      int band = 0, elsewhere = 0;
-      for (int i = 0; i < kSide * kSide; ++i)
-        if (now->px[i] != later->px[i]) ++(i / kSide >= kBandTop && i / kSide < kBandEnd ? band : elsewhere);
-      EXPECT_GT(band, 100) << "the line does not move in half a second from " << t;
-      EXPECT_EQ(elsewhere, 0) << "the clock moves something besides the marquee at " << t;
-    }
   }
 }
 
@@ -806,12 +788,6 @@ TEST(Previews, DumpWhenAsked) {
   clutch.eggs[2].cloak = blorb::Tint{36, 120, 120};
   clutch.eggs[2].skin = blorb::Tint{-20, 140, 128};
   shots.push_back({"clutch", clutch});
-
-  Appearance unknown = idle;
-  unknown.at = {Fx::zero(), Fx::one()};
-  unknown.timeUnknown = true;
-  unknown.poseTick = 25;
-  shots.push_back({"time_unknown", unknown});
 
   Appearance remains;
   remains.kind = Appearance::Kind::Remains;

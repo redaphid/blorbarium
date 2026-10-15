@@ -1,4 +1,4 @@
-# Wall time first, so the marquee shows only in time_unknown.
+# Wall time first, as a phone visit gives it: the pet's day is the wall's.
 @0 DEBUG time 1790000000
 # The 30-minute egg hatches; life falls to an adult's, then an elder's.
 @100 DEBUG warp 18000

@@ -19,7 +19,9 @@ namespace {
 PeerAddr addr(uint8_t n) { return PeerAddr{{2, 0, 0, 0, 0, n}}; }
 constexpr Weather kStorm{300, 100, 200, 8};   // BATTLES.md testing item 4: 30% lost, 10% doubled, 20% up to 0.8 s late
 
-enum class Mercy : uint8_t { Spare, Finish, Wait };
+// HeldIn: BOOT held from the downing's reveal on and never let go.
+// Regrip: the same, let go once in Mercy, then held again.
+enum class Mercy : uint8_t { Spare, Finish, Wait, HeldIn, Regrip };
 
 // How one scripted kid plays. Everything it does it reads off the view, as a
 // kid reads the screen.
@@ -82,6 +84,11 @@ struct Device {
 
   DuelInput kid(const DuelView& v, uint32_t tick) {
     DuelInput in;
+    if ((policy.mercy == Mercy::HeldIn || policy.mercy == Mercy::Regrip) && v.theyAreDown && !v.iAmDown &&
+        (v.phase == DuelPhase::Revealing || v.phase == DuelPhase::Mercy)) {
+      in.bootDown = !(policy.mercy == Mercy::Regrip && v.phase == DuelPhase::Mercy && v.phaseTicks == 5);
+      return in;
+    }
     switch (v.phase) {
       case DuelPhase::Lobby:
         if (policy.clinkAt) {
@@ -526,6 +533,37 @@ TEST(DuelSession, TheWinnersSilenceSparesAndAFinishNeedsTheAck) {
   }
   EXPECT_GT(waited, 5u);
   EXPECT_GT(acked, 5u);
+}
+
+// A BOOT hold that began before the skull showed (a heavy special held
+// through the reveal) never finishes: the kid must let go and hold again.
+TEST(DuelSession, AHoldCarriedIntoMercyIsNoFinish) {
+  uint32_t heldIn = 0, regripped = 0;
+  for (uint32_t seed = 1; seed <= 60; ++seed) {
+    for (Mercy mercy : {Mercy::HeldIn, Mercy::Regrip}) {
+      Ether ether(seed, {});
+      Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 3);
+      a.policy.tier = b.policy.tier = Stakes::Mortal;
+      a.policy.mercy = b.policy.mercy = mercy;
+      ASSERT_TRUE(a.open(0) && b.open(0));
+      runOut(ether, a, b);
+      if (!a.downed && !b.downed) continue;
+      Device& winner = a.downed ? b : a;
+      Device& loser = a.downed ? a : b;
+      ASSERT_EQ(winner.meetings.size(), 1u);
+      if (mercy == Mercy::HeldIn) {
+        ++heldIn;
+        EXPECT_FALSE(loser.fell) << "seed " << seed;
+        EXPECT_EQ(winner.meetings[0].verdict, Verdict::Spare) << "seed " << seed;
+      } else {
+        ++regripped;
+        EXPECT_TRUE(loser.fell) << "seed " << seed;
+        EXPECT_TRUE(winner.meetings[0].iSlew) << "seed " << seed;
+      }
+    }
+  }
+  EXPECT_GT(heldIn, 5u);
+  EXPECT_GT(regripped, 5u);
 }
 
 TEST(DuelSession, AFinishTheFallenSideNeverHeardSlaysNobody) {

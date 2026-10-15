@@ -79,7 +79,8 @@ std::string phaseLine(const blorbtest::ScriptedLink& link) {
 void liveThrough(Dish& dish) {
   blorbtest::ScriptedLink phone;
   for (const char* l : {"#1 HELLO", "#2 TIME 1790000000", "#3 TWIST stimulus shake", "#4 TWIST prophecy_treat",
-                        "#5 TWIST gene_edit 9 1 7", "#6 SUB state", "#7 SNAPSHOT", "#8 TIME 1790090000"})
+                        "#5 TWIST gene_edit 9 1 7", "#6 SUB state", "#7 SNAPSHOT", "#8 TIME 1790090000",
+                        "#9 TWIST teach HELLO", "#a TWIST unteach"})
     phone.inbound.emplace_back(l);
   for (uint32_t ms = 0; ms <= 2 * 3600 * 1000; ms += 1000) dish.tick(ms, phone);
 }

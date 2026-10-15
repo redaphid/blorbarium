@@ -59,23 +59,6 @@ TEST(Wheel, EverySpeciesHasThreeGoodThreeBadThreeEvenMatchups) {
   }
 }
 
-TEST(FoundingNest, OneEggPerElementAndEverySpeciesCanBeOffered) {
-  std::set<uint8_t> offered;
-  for (uint32_t splash = 0; splash < 256; splash += 85)
-    for (uint32_t sprout = 0; sprout < 256; sprout += 85)
-      for (uint32_t spark = 0; spark < 256; spark += 85) {
-        const uint32_t seed = splash | (sprout << 8) | (spark << 16) | 0xA5000000u;
-        const FoundingNest n = foundingNest(seed);
-        for (uint8_t e = 0; e < kCycle; ++e) {
-          EXPECT_EQ(uint8_t(speciesInfo(n.eggs[e]).element), e) << "seed " << seed;
-          offered.insert(n.eggs[e].v);
-        }
-        const FoundingNest again = foundingNest(seed);
-        EXPECT_EQ(0, std::memcmp(&n, &again, sizeof n)) << "a nest replays from its seed";
-      }
-  EXPECT_EQ(offered.size(), kSpeciesCount);
-}
-
 TEST(SpeciesTraits, AHybridCarriesAPowerItsBodyDoesNot) {
   EXPECT_FALSE(SpeciesTraits{}.hybrid());
   EXPECT_FALSE((SpeciesTraits{SpeciesId{6}, power::zap, 0}.hybrid()));

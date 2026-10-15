@@ -23,5 +23,7 @@ extern const size_t kDuelGeneCount;
 inline constexpr GeneUid kFirstDuelGeneUid{0x0F10};
 
 GenomeBuilder& appendDuelGenes(GenomeBuilder&);
+// Reads a Duel-source stimulus: a line that already feels duels.
+bool feelsDuels(const Genome&);
 
 }  // namespace blorb
