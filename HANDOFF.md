@@ -14,10 +14,13 @@ and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
 ## Where things stand (2026-10-15, owner on a plane with all 9 badges)
 
-**Live:** firmware **0.7.1** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
-(manifest a6421b8, firmware commit 01b19c8, image sha256
-`MGDbGjLlC8xhm4bJJXG47Zhnt9t1evkKCkc211enZTQ`, 2,218,256 B). 0.7.0
-(daf4f19) went out first. `main` = `release-0.7`. Every decision is in
+**Live:** firmware **0.7.2** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
+(manifest 05d7661, firmware commit a5e7a78, 2,257,904 B): 0.7.1 plus
+car-proof senses (bed needs 30 s face down and still; road vibration fires
+no shake, knock or drop) and every species' own lines written from its art.
+Shipped by the owner's order before its gates; afterwards native 794/796
+and sim 22/22 (no_phone re-blessed for its new line). 0.7.0 (daf4f19) and
+0.7.1 (01b19c8) went out first. `main` = `release-0.7`. Every decision is in
 `docs/notes/decisions-2026-10-15.md`.
 
 What 0.7.x is: main + `battles` (nine species, ESP-NOW duels) + one species
@@ -45,18 +48,20 @@ from the phone.
 
 ### Open work, in order
 
-1. **0.7.2: car-proof senses + personalities.** `rel-senses` (worktree
-   `D:/Projects/_wt/blorb-senses`) never pushed: its agent reported a
-   green merge with main at c3f96c6 (lid-on needs ~30 s face down and
-   still; vibration gating), but no branch reached origin. `rel-persona`
-   9b96768: full lines for all nine species from their art. Merge both,
-   run the gates, release.
-2. **0.7.3: death rework** (owner: "Death should not be a choice, and I've
-   repeatedly talked about how I want them to die"). `rel-death` 5c10132 is
-   WIP: Mortal, Mercy, Finish and debug DIE removed. Still to do: quote
-   the owner's own words on how pets die (mindmeld, user-asks.md, branch
-   `notes`), implement exactly that, check a 0.7.x/0.7.3 mixed duel pair
-   cannot kill, then release. Never ship it half-done.
+1. **Finish stays.** The owner, verbatim: "No no no you CANNOT remove
+   finish. I have said this a lot". Branch `rel-death` (5c10132, WIP)
+   removes Mortal, Mercy and Finish: it was ordered by mistake and must
+   **never** be merged. A later "I am fine with whatever death work now"
+   did not undo the Finish rule. Find the owner's own words on how pets
+   die before touching death again.
+2. **"Text only shows once a phone connects"** (owner, on 0.7.1). No phone
+   or time gate exists in the code (thoughts.cpp:326-365, dish.cpp:177,
+   main.cpp:162-190). Likely cause: the adopted field pets sleep for hours
+   (they kept the old sleep genes, and nocturnal species sleep by pet day),
+   and asleep only `dreaming` speaks; a phone's welcome wakes him. Branch
+   `rel-sleep` (gameplay agent) is to verify that, then add sleep talk and
+   give adopted pets the first-hours sleep retune. Workaround: wake him by
+   picking him up, tapping or pressing BOOT.
 3. Known from the first-hours run: at 25-30 h, night BOOT presses leave
    pellets that rot and a starving pet eats them (injury up to 0.85).
    Levers are `rotMinutes` (90) and fed_bad's toxin (0.4).
