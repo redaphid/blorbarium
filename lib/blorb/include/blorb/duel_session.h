@@ -103,15 +103,16 @@ struct DuelTimings {
   static constexpr uint16_t kSilentTicks = 200;     // 20 s with no packet: they wandered off
   static constexpr uint16_t kLobbyForgetTicks = 30; // a friend unheard for 3 s leaves the rim
   static constexpr uint16_t kHugHoldTicks = 30;     // BOOT held 3 s on the friends screen
-  static constexpr uint8_t kClinkWindowTicks = 3;   // two knocks within 300 ms are a clink
+  static constexpr uint8_t kClinkWindowTicks = 6;   // two knocks within 600 ms are a clink (300 ms was too tight for kids)
   static constexpr uint8_t kBeaconEvery = 3, kHurryEvery = 2, kIdleEvery = 10;
   static constexpr uint8_t kLeavingBurst = 3;       // `leaving` goes out this many times on the way out
   static constexpr uint16_t kGenomeTicks = 150;     // 15 s to swap genomes after both hugs, else the egg fizzles
   static constexpr uint8_t kChunksPerSend = 4;
   // Graft from candidate C: a friend must be close. Below this a beacon is
-  // ignored (not drawn, never matched). An estimate for ESP-NOW at 10 dBm,
-  // about arm's length; unit D12 sets it on a desk at 30 cm and 2 m.
-  static constexpr int8_t kNearRssi = -62;
+  // ignored (not drawn, never matched). An estimate for ESP-NOW at 10 dBm:
+  // -62 (arm's length) was never measured and missed kids standing apart, so
+  // -75, a few steps across a room. Unit D12 still owes the 30 cm / 2 m reading.
+  static constexpr int8_t kNearRssi = -75;
 };
 
 // The fairness rules that need both cards and this device's book: the
@@ -152,6 +153,7 @@ struct DuelView {
   Peer peers[kMaxLobbyPeers]{};
   uint8_t peerCount = 0;
   int8_t aimedPeer = -1;
+  Decline myDecline = Decline::None;    // the lobby: this pet only beacons his picture and never matches
 
   BattleCard me{}, them{};
   // Staking: [me, them]. A tier above a side's ceiling is greyed with why[side][tier].
@@ -248,6 +250,9 @@ class DuelSession {
     // Revealing are derived in view()), then Mercy, Fallen or Fainting.
     DuelPhase phase = DuelPhase::Greeting;
     uint32_t phaseTick = 0, lastHeard = 0, lastSent = 0, lastBeacon = 0;
+    // The lobby knock that matched: the greeting's beacons still carry it, so
+    // a friend who knocked first, and matches only on hearing mine, can.
+    std::optional<uint32_t> knock;
     bool theyLeft = false, conflict = false;
     // Staking
     Ceiling pair{};                     // mine against this friend

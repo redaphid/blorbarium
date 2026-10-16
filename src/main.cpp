@@ -176,7 +176,8 @@ static blorb::Appearance shown() {
 static paint::DuelScene duelScene;
 static void drawFrame(const blorb::Appearance& a, uint32_t now) {
   const blorb::BootHint& b = a.boot;
-  const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble};
+  const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble,
+                              b.doubleFill};
   if (a.dueling) {
     // The lobby has no act of its own yet: the dish stays, with the friend hint.
     const blorb::DuelView v = dish->duelView();

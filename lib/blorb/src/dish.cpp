@@ -125,7 +125,13 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
 
 void Dish::sample(const BodySample& s, uint32_t nowMs) {
   detectors_.sample(s, nowMs, pending_);
-  if (s.buttonDown && !buttonDown_) buttonSinceMs_ = nowMs;
+  if (s.buttonDown && !buttonDown_) {
+    buttonSinceMs_ = nowMs;
+    tapSecond_ = tapArmed_ && nowMs - tapReleaseMs_ <= kDoublePressMs;
+  } else if (!s.buttonDown && buttonDown_) {
+    tapArmed_ = nowMs - buttonSinceMs_ < kButtonHoldMs && !tapSecond_;
+    tapReleaseMs_ = nowMs;
+  }
   buttonDown_ = s.buttonDown;
   lastSampleMs_ = nowMs;
 }
@@ -358,7 +364,14 @@ Appearance Dish::appearance() const {
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
   if ((ctx == BootContext::Awake || ctx == BootContext::Asleep) && live_.habitat.pantry == 0) a.boot.greyed = true;
+  if (a.boot.hasDouble && tapArmed_ && !buttonDown_ && lastSampleMs_ - tapReleaseMs_ <= kDoublePressMs)
+    a.boot.doubleFill = uint8_t(std::max<uint32_t>(1, 255 - (lastSampleMs_ - tapReleaseMs_) * 255 / kDoublePressMs));
   a.dueling = duel_.active();
+  if (a.dueling && v.phase == DuelPhase::Lobby && v.myDecline == Decline::None) {
+    a.lobby = true;
+    a.lobbyFriends = v.peerCount;
+    a.lobbyTicksLeft = uint16_t(v.phaseTicks < DuelTimings::kLobbyTicks ? DuelTimings::kLobbyTicks - v.phaseTicks : 0);
+  }
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);

@@ -111,7 +111,8 @@ struct Kid {
         return;
       case DuelPhase::Friends:
         if (askRematch) {
-          if (!v.rematchAsked) hold(-1, 2, Frame{-1, true}), hold(-1, 6, Frame{});
+          // A second press inside the double's window would be a double, which leaves.
+          if (!v.rematchAsked) hold(-1, 2, Frame{-1, true}), hold(-1, 10, Frame{});
           return;
         }
         if (v.phaseTicks < leaveAfter) return hold(-1, 1, Frame{});
@@ -310,6 +311,69 @@ TEST(Gestures, TwoQuickPressesAreADoubleAndASlowSecondIsAPress) {
   };
   EXPECT_EQ(run(160), (std::vector<uint8_t>{stim::button.v, stim::button_double.v}));
   EXPECT_EQ(run(kDoublePressMs + 60), (std::vector<uint8_t>{stim::button.v, stim::button.v}));
+}
+
+// A kid's double is slower than an adult's: 600 ms between the presses still
+// opens a duel, and the first press feeds him the moment it comes up, not
+// once the window has closed.
+TEST(Gestures, AKidsSlowDoubleCountsAndTheFirstPressFeedsAtOnce) {
+  ButtonDetector d;
+  std::vector<std::pair<uint32_t, uint8_t>> fired;
+  for (uint32_t ms = 0; ms < 2000; ms += 20) {
+    BodySample s;
+    s.buttonDown = ms < 150 || (ms >= 750 && ms < 900);
+    SenseOut out;
+    d.sample(s, ms, out);
+    for (uint8_t i = 0; i < out.stimCount; ++i) fired.push_back({ms, out.stimuli[i].v});
+  }
+  ASSERT_EQ(fired.size(), 2u);
+  EXPECT_EQ(fired[0], (std::pair<uint32_t, uint8_t>{160, stim::button.v}));
+  EXPECT_EQ(fired[1].second, stim::button_double.v);
+}
+
+// The first press lights BOOT's hint until the double's window closes, and a
+// double opens a lobby that says it is looking, how long it has, and when a
+// friend is near.
+TEST(Gestures, TheFirstPressGlowsAndTheLobbySaysItIsLooking) {
+  Ether ether(3, {});
+  Device a(ether, 1), b(ether, 2);
+  const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
+  a.boot(ga, 1), b.boot(gb, 2);
+  a.growUp(), b.growUp();
+  ASSERT_EQ(a.dish->bootContext(), BootContext::Awake);
+  auto press = [](Device& d, uint32_t downMs, uint32_t upMs) {
+    for (uint32_t t = 0; t < downMs; t += 20) {
+      BodySample s;
+      s.az = 1000, s.buttonDown = true;
+      d.dish->sample(s, d.ms += 20);
+    }
+    for (uint32_t t = 0; t < upMs; t += 20) {
+      BodySample s;
+      s.az = 1000;
+      d.dish->sample(s, d.ms += 20);
+    }
+    d.dish->tick(d.ms, d.link);
+  };
+  press(a, 140, 100);
+  EXPECT_GT(a.dish->appearance().boot.doubleFill, 0) << "the first press waits, visibly, for its second";
+  EXPECT_FALSE(a.dish->duelActive());
+  press(a, 0, kDoublePressMs + 100);
+  EXPECT_EQ(a.dish->appearance().boot.doubleFill, 0) << "the window closed: the glow is gone";
+  EXPECT_FALSE(a.dish->appearance().lobby);
+
+  for (Device* d : {&a, &b}) press(*d, 140, 500), press(*d, 140, 100);
+  ASSERT_TRUE(a.dish->duelActive() && b.dish->duelActive());
+  Appearance look = a.dish->appearance();
+  EXPECT_TRUE(look.lobby);
+  EXPECT_GT(look.lobbyTicksLeft, DuelTimings::kLobbyTicks - 20);
+  for (uint32_t t = 1; t <= 10; ++t) {
+    ether.advance(t);
+    for (Device* d : {&a, &b}) d->dish->tick(d->ms += 100, d->link);
+  }
+  look = a.dish->appearance();
+  EXPECT_TRUE(look.lobby);
+  EXPECT_EQ(look.lobbyFriends, 1);
+  EXPECT_LT(look.lobbyTicksLeft, DuelTimings::kLobbyTicks - 5);
 }
 
 // ---- testing item 5 ------------------------------------------------------------------

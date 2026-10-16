@@ -198,6 +198,10 @@ class Dish {
   // rim's hold ring fills with it.
   bool buttonDown_ = false;
   uint32_t buttonSinceMs_ = 0, lastSampleMs_ = 0;
+  // ButtonDetector's double window, mirrored for the rim: a short press that
+  // could still become a double lights the hint until the window closes.
+  uint32_t tapReleaseMs_ = 0;
+  bool tapArmed_ = false, tapSecond_ = false;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;
   uint32_t echoTick_ = 0;

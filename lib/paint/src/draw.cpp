@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
 #include "duel/duel_art.h"
@@ -882,6 +883,29 @@ void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
                   width - off, 0);
 }
 
+// The duel's lobby keeps the dish, so it has to say what it is doing: a
+// line saying it is looking (or that a friend is near and how to meet), the
+// seconds until the radio gives up, and a sonar ring pulsing out to the rim.
+void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
+  const uint16_t colour = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
+  constexpr uint32_t kPulseMs = 1200;
+  const int r = 70 + int(nowMs % kPulseMs) * 48 / int(kPulseMs);
+  const int fade = 200 - int(nowMs % kPulseMs) * 180 / int(kPulseMs);
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const int dx = x - kSide / 2, dy = y - kSide / 2, d2 = dx * dx + dy * dy;
+      if (d2 >= (r - 3) * (r - 3) && d2 <= (r + 3) * (r + 3)) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], colour, fade);
+    }
+  Marquee strip = kMarqueeStrip;
+  if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
+  dimBand(cv, strip);
+  char s[64];
+  const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
+  std::snprintf(s, sizeof s, a.lobbyFriends ? "FRIEND NEAR! TAP BADGES TOGETHER  %02u  " : "LOOKING FOR A FRIEND...  %02u  ",
+                secs);
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
+}
+
 // Boot::Sealed: a keepsake is on the flash and this boot could not open it.
 // The pet sleeps in a drop of amber, safe and whole, and the line under him is
 // for whoever can plug him into a computer. Warm and still on purpose: nothing
@@ -1027,7 +1051,8 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   rimTokens(cv, a);
   hint(cv, a);
   // Low when he stands high in the dish, so the line never crosses his face.
-  if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
+  if (a.lobby) lobbyLine(cv, a, nowMs);
+  else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   mask(cv);
 }
 

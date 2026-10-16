@@ -131,6 +131,7 @@ struct BootHint {
   bool hasHold = false;       // a hold does something else: the ring is drawn
   uint8_t holdFill = 0;       // 0..255 while held
   bool hasDouble = false;     // two dots under the glyph when a double press does something
+  uint8_t doubleFill = 0;     // 0..255: a first press is waiting for its second, draining as the window closes
 };
 
 }  // namespace blorb

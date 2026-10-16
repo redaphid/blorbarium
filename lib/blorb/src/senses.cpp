@@ -43,7 +43,6 @@ constexpr uint32_t kLandWindowMs = 500;
 constexpr int32_t kLandMg = 550;
 constexpr int32_t kBumpMg = 200;                   // pushed up along gravity on two samples running: the whole body moved, as a road moves it
 constexpr uint32_t kBumpMaskMs = 300;              // the tap engine reports 100-200 ms after the bump that set it off
-constexpr uint32_t kButtonHoldMs = 1200;
 constexpr int32_t kWarmSpanCx10 = 30;              // 3 C above the baseline is warmth 1
 constexpr int32_t kWarmBaselineSamples = 32768;    // about 11 minutes at 50 Hz
 constexpr int32_t kMotionFullMg = 500;

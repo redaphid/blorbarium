@@ -379,6 +379,21 @@ TEST(DuelSession, OnlyTheCoincidentPairOfThreeMatchesOnAClink) {
   EXPECT_EQ(a.s.view(80).them.lineageId, b.setup.card.lineageId);
 }
 
+// Kids tapping badges together are not in step: half a second apart still
+// clinks, a whole second does not.
+TEST(DuelSession, AClinkHalfASecondApartStillMatches) {
+  for (const uint32_t apart : {5u, 9u}) {
+    Ether ether(8, {});
+    Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+    a.policy.clinkAt = 20u;
+    b.policy.clinkAt = 20u + apart;
+    ASSERT_TRUE(a.open(0) && b.open(0));
+    run(ether, {&a, &b}, 1, 80, [](uint32_t) { return false; });
+    const bool met = (a.phases >> uint8_t(DuelPhase::Staking) & 1) && (b.phases >> uint8_t(DuelPhase::Staking) & 1);
+    EXPECT_EQ(met, apart <= T::kClinkWindowTicks) << apart << " ticks apart";
+  }
+}
+
 TEST(DuelSession, ThreeDevicesKnockingAtOnceMatchNobody) {
   Ether ether(8, {});
   Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2), c(ether, 3, SpeciesId{6}, 3);

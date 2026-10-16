@@ -211,6 +211,7 @@ void DuelSession::enterBattle(const Lobby& l, uint8_t peer, uint32_t tick) {
   b.battle = BattleId{duelSeed(setup_.nonce, b.theirNonce, rematch, Stakes::Spar), rematch, Stakes::Spar};
   b.phaseTick = b.lastHeard = tick;
   b.lastBeacon = tick;
+  b.knock = l.myKnock;
   b.skill = setup_.skill;
   b.pair = setup_.ceiling;
   b.chosen = Stakes(std::min(u8(Stakes::Scrap), u8(b.pair.top)));
@@ -316,7 +317,7 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
   if (b.phase == DuelPhase::Greeting) {
     if (tick - b.phaseTick >= T::kGreetTicks) return enterLobby(air, tick);
     if (tick - b.lastBeacon >= T::kBeaconEvery) {
-      beacon(air, b.peer, std::nullopt, tick);
+      beacon(air, b.peer, b.knock, tick);
       b.lastBeacon = tick;
     }
   } else if (b.phase == DuelPhase::Staking) {
@@ -728,6 +729,7 @@ DuelView DuelSession::view(uint32_t tick) const {
     v.phase = DuelPhase::Lobby;
     v.phaseTicks = uint16_t(tick - l->openedTick);
     v.me = setup_.card;
+    v.myDecline = setup_.decline;
     v.peerCount = l->count;
     for (uint8_t i = 0; i < l->count; ++i) {
       const Lobby::Seen& s = l->seen[i];

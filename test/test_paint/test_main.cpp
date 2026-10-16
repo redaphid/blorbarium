@@ -799,6 +799,31 @@ TEST(Previews, DumpWhenAsked) {
 
 }  // namespace
 
+// The duel's lobby keeps the dish, so it must say it is looking: a line on
+// the strip above him (and a different one once a friend is near), and a
+// pulse that moves with the clock.
+TEST(Lobby, SaysItIsLookingAndPulses) {
+  Appearance home = adult(0.0, 0.3);   // low in the dish, so the strip stays above him
+  Appearance looking = home;
+  looking.dueling = looking.lobby = true;
+  looking.lobbyTicksLeft = 420;
+  Appearance near = looking;
+  near.lobbyFriends = 1;
+  auto strip = [](const Canvas240& a, const Canvas240& b) {
+    int n = 0;
+    for (int y = 34; y < 54; ++y)
+      for (int x = 0; x < kSide; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+    return n;
+  };
+  const auto plain = render(home, paint::placeholderPack(), 0, 500);
+  const auto shown = render(looking, paint::placeholderPack(), 0, 500);
+  const auto friendly = render(near, paint::placeholderPack(), 0, 500);
+  const auto later = render(looking, paint::placeholderPack(), 0, 1100);
+  EXPECT_GT(strip(*plain, *shown), 300) << "the lobby writes on the strip";
+  EXPECT_GT(strip(*shown, *friendly), 100) << "a friend near reads differently";
+  EXPECT_GT(countChanged(*shown, *later) - strip(*shown, *later), 300) << "the pulse moves";
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

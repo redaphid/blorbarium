@@ -72,6 +72,7 @@ struct RimHint {
   bool hasHold = false;             // a hold does something else: the ring, filling with holdFill
   uint8_t holdFill = 0;
   bool hasDouble = false;           // a double press does something: two short bars under it
+  uint8_t doubleFill = 0;           // a first press waits for its second: the glyph lights, fading as the window closes
 };
 
 // The hint at its place on the rim, for any screen (the dish draws it too).
