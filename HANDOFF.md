@@ -14,7 +14,15 @@ and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
 ## Where things stand (2026-10-15, owner on a plane with all 9 badges)
 
-**Live:** firmware **0.7.3** (manifest 9a51816, firmware b8766c5: 0.7.2 plus
+**Live:** firmware **0.7.4** (manifest 2c0c9a3, firmware 7577c64): sticky
+FIGHT MODE. A BOOT double press (0.4 s) searches for 5 min or until a
+second double press. Badges pair by claim, answer and lock (lowest MAC, no
+badge claimed twice, no RSSI gate, 20 dBm). A fight shows only once both
+badges have heard each other. BOOT picks the stakes (default Spar); tilt
+only aims. Lid and drop no longer end a fight. Wire v2: 0.7.3 and 0.7.4 do
+not see each other. Finish and Mercy are unchanged. The commit body of
+c79cce7 has the root cause; BATTLES.md is not yet updated. Not proven on
+hardware. Before it, 0.7.3 (manifest 9a51816, firmware b8766c5: 0.7.2 plus
 sleep talk and the first-hours sleep retune for adopted pets, which fixes
 "text only with a phone"; docs/notes/sleep-talk.md). Before it, **0.7.2** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
 (manifest 05d7661, firmware commit a5e7a78, 2,257,904 B): 0.7.1 plus
