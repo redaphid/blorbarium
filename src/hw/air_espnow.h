@@ -23,12 +23,13 @@ namespace hw {
 class EspNowAir : public blorb::Air {
  public:
   static constexpr uint8_t kChannel = 1;
-  // A lobby beacon every 300 ms from up to four friends plus a State burst is
-  // a handful of frames between loop passes; past this a frame is dropped and
-  // counted, as the air drops them anyway.
-  static constexpr UBaseType_t kQueueDepth = 12;
-  // 10 dBm (quarter-dBm units): arm's length is the game, not the room.
-  static constexpr int8_t kTxQuarterDbm = 40;
+  // A beacon every 300 ms from each of eight friends in fight mode, plus a
+  // State burst, between loop passes of about 200 ms; past this a frame is
+  // dropped and counted, as the air drops them anyway.
+  static constexpr UBaseType_t kQueueDepth = 24;
+  // 20 dBm (quarter-dBm units): fight mode pairs with any badge the radio
+  // reaches. 10 dBm and an arm's-length RSSI gate lost badges in one room.
+  static constexpr int8_t kTxQuarterDbm = 80;
 
   bool open() override {
     if (open_) return true;

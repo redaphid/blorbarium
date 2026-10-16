@@ -808,7 +808,7 @@ TEST(Lobby, SaysItIsLookingAndPulses) {
   looking.dueling = looking.lobby = true;
   looking.lobbyTicksLeft = 420;
   Appearance near = looking;
-  near.lobbyFriends = 1;
+  near.lobbyDecline = blorb::Decline::Resting;
   auto strip = [](const Canvas240& a, const Canvas240& b) {
     int n = 0;
     for (int y = 34; y < 54; ++y)
@@ -820,7 +820,7 @@ TEST(Lobby, SaysItIsLookingAndPulses) {
   const auto friendly = render(near, paint::placeholderPack(), 0, 500);
   const auto later = render(looking, paint::placeholderPack(), 0, 1100);
   EXPECT_GT(strip(*plain, *shown), 300) << "the lobby writes on the strip";
-  EXPECT_GT(strip(*shown, *friendly), 100) << "a friend near reads differently";
+  EXPECT_GT(strip(*shown, *friendly), 100) << "a resting pet's fight mode reads differently";
   EXPECT_GT(countChanged(*shown, *later) - strip(*shown, *later), 300) << "the pulse moves";
 }
 

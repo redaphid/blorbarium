@@ -179,9 +179,10 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
   const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble,
                               b.doubleFill};
   if (a.dueling) {
-    // The lobby has no act of its own yet: the dish stays, with the friend hint.
+    // Fight mode keeps the dish, with its line and pulse (paint::draw); so does
+    // a locked pair until both have heard each other, so no badge shows a fight alone.
     const blorb::DuelView v = dish->duelView();
-    if (v.phase != blorb::DuelPhase::Lobby) {
+    if (v.phase != blorb::DuelPhase::Lobby && v.phase != blorb::DuelPhase::Greeting) {
       duelScene = paint::sceneOf(v, a);
       duelScene.boot = hint;
       paint::drawDuel(duelScene, paint::packFor(a.species), paint::packFor(v.them.species), canvas, now);

@@ -883,9 +883,21 @@ void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
                   width - off, 0);
 }
 
-// The duel's lobby keeps the dish, so it has to say what it is doing: a
-// line saying it is looking (or that a friend is near and how to meet), the
-// seconds until the radio gives up, and a sonar ring pulsing out to the rim.
+// Why a pet in fight mode is not up for a fight, in a word a kid reads.
+const char* notReady(blorb::Decline d) {
+  using D = blorb::Decline;
+  switch (d) {
+    case D::Asleep: case D::Sleepy: return "SLEEPY";
+    case D::Hungry: return "HUNGRY";
+    case D::Resting: return "RESTING";
+    case D::WantsACuddle: return "WANTS A CUDDLE";
+    default: return "NOT READY";
+  }
+}
+
+// Fight mode keeps the dish, so it has to say what it is doing: a line saying
+// it is looking for a fight (or connecting, or why not yet), the time until it
+// gives up, how to stop, and a sonar ring pulsing out to the rim.
 void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   const uint16_t colour = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
   constexpr uint32_t kPulseMs = 1200;
@@ -899,10 +911,15 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   Marquee strip = kMarqueeStrip;
   if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
   dimBand(cv, strip);
-  char s[64];
+  char s[96];
   const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
-  std::snprintf(s, sizeof s, a.lobbyFriends ? "FRIEND NEAR! TAP BADGES TOGETHER  %02u  " : "LOOKING FOR A FRIEND...  %02u  ",
-                secs);
+  if (a.lobbyConnecting)
+    std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
+  else if (a.lobbyDecline != blorb::Decline::None)
+    std::snprintf(s, sizeof s, "FIGHT MODE - %s  %u:%02u  PRESS TWICE TO STOP  ", notReady(a.lobbyDecline), secs / 60,
+                  secs % 60);
+  else
+    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  %u:%02u  PRESS TWICE TO STOP  ", secs / 60, secs % 60);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 

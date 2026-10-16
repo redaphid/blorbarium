@@ -65,7 +65,9 @@ class DishDuel {
   //  3 the captured stimuli leave `raw`; the duel's own join it (Duel-sourced,
   //    through duelFilter at the agreed stakes)
   //  4 wounds and scars as each turn resolves; a downing, a fall, a Meeting,
-  //    a friend egg, each written at once; a rematch reopens pinned
+  //    a friend egg, each written at once
+  //  5 fight mode between fights: the pet's card refreshed, his readiness
+  //    rechecked every tick; a pet who is no creature any more leaves it
   DuelStepped step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
                    uint64_t lineageId, uint16_t petDay, uint32_t tick);
 
@@ -84,8 +86,11 @@ class DishDuel {
   const Refusal& refusal() const { return refusal_; }
 
  private:
-  bool open(Occupant&, Lineage&, Air&, uint64_t lineageId, uint16_t petDay, uint32_t tick,
-            std::optional<DuelSetup::Pin> pin, DuelStepped&);
+  bool open(Occupant&, Lineage&, Air&, uint64_t lineageId, uint16_t petDay, uint32_t tick, DuelStepped&);
+  // The rest after a duel is between sittings: a rematch searching for its friend skips it.
+  Decline ready(const Occupant&, uint32_t tick) const;
+  // This pet as he is now, for open() and for fight mode between fights.
+  DuelSetup setupFor(const Creature*, uint64_t lineageId, uint16_t petDay, uint32_t tick, Decline);
 
   Storage* store_ = nullptr;
   DuelSession session_;

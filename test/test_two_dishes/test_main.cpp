@@ -65,6 +65,7 @@ struct Kid {
   uint16_t leaveAfter = 0;       // the friends screen: ticks to look before leaving
   Rng rng = Rng::seeded(1);
   bool shook = false;
+  bool fought = false;   // a fight showed: back in fight mode, a kid who leaves presses twice
 
   void plan(const DuelView& v, bool dueling, std::deque<Frame>& out) {
     auto hold = [&](int8_t aim, int n, Frame f) { for (int i = 0; i < n; ++i) { f.aim = aim; out.push_back(f); } };
@@ -76,15 +77,23 @@ struct Kid {
     }
     switch (v.phase) {
       case DuelPhase::Lobby:
-        if (v.peerCount > 0) hold(0, 4, Frame{}), hold(0, 1, Frame{-1, false, true}), hold(0, 2, Frame{});
-        return;
+        // Fight mode pairs by itself: the kid just waits, tilting the badge
+        // about, and after a fight leaves it with a double press.
+        if (fought && leave) {
+          fought = false;
+          return hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
+        }
+        return hold(int8_t(rng.below(4)), 1, Frame{});
       case DuelPhase::Staking: {
+        // BOOT only, whatever the tilt: a press per step up from Spar, then a
+        // 3 s hold locks it (a kid pressing for Mortal and never holding gets Scrap).
         if (v.confirmed) return hold(-1, 1, Frame{});
         const int8_t t = int8_t(std::min(uint8_t(tier), uint8_t(v.ceiling[0])));
-        hold(t, 4, Frame{});
-        if (t == 0) hold(t, 1, Frame{-1, false, true});
-        else if (t == 1 || pressForMortal) hold(t, 2, Frame{-1, true}), hold(t, 1, Frame{});
-        else hold(t, 33, Frame{-1, true}), hold(t, 1, Frame{});
+        const int8_t lean = int8_t(rng.below(3));
+        hold(lean, 4, Frame{});
+        for (int8_t i = 0; i < t; ++i) hold(lean, 1, Frame{-1, true}), hold(lean, 2, Frame{});
+        if (!pressForMortal) hold(lean, 33, Frame{-1, true}), hold(lean, 1, Frame{});
+        else hold(lean, 90, Frame{});
         return;
       }
       case DuelPhase::Choosing:
@@ -188,6 +197,7 @@ struct Device {
     const bool dueling = dish->duelActive();
     const DuelView v = dish->duelView();
     if (v.phase != shownPhase) plan.clear();   // a new screen: the kid looks again
+    if (uint8_t(v.phase) >= uint8_t(DuelPhase::Staking)) kid.fought = true;
     shownPhase = v.phase;
     if (plan.empty()) kid.plan(v, dueling, plan);
     Frame f;
@@ -313,15 +323,14 @@ TEST(Gestures, TwoQuickPressesAreADoubleAndASlowSecondIsAPress) {
   EXPECT_EQ(run(kDoublePressMs + 60), (std::vector<uint8_t>{stim::button.v, stim::button.v}));
 }
 
-// A kid's double is slower than an adult's: 600 ms between the presses still
-// opens a duel, and the first press feeds him the moment it comes up, not
-// once the window has closed.
-TEST(Gestures, AKidsSlowDoubleCountsAndTheFirstPressFeedsAtOnce) {
+// The first press of a double feeds him the moment it comes up, not once
+// the window has closed; the second opens fight mode.
+TEST(Gestures, TheFirstPressOfADoubleFeedsAtOnce) {
   ButtonDetector d;
   std::vector<std::pair<uint32_t, uint8_t>> fired;
   for (uint32_t ms = 0; ms < 2000; ms += 20) {
     BodySample s;
-    s.buttonDown = ms < 150 || (ms >= 750 && ms < 900);
+    s.buttonDown = ms < 150 || (ms >= 450 && ms < 600);
     SenseOut out;
     d.sample(s, ms, out);
     for (uint8_t i = 0; i < out.stimCount; ++i) fired.push_back({ms, out.stimuli[i].v});
@@ -332,9 +341,9 @@ TEST(Gestures, AKidsSlowDoubleCountsAndTheFirstPressFeedsAtOnce) {
 }
 
 // The first press lights BOOT's hint until the double's window closes, and a
-// double opens a lobby that says it is looking, how long it has, and when a
-// friend is near.
-TEST(Gestures, TheFirstPressGlowsAndTheLobbySaysItIsLooking) {
+// double opens fight mode, which says it is looking and how long it has, and
+// finds the other badge in fight mode by itself: no tap, no tilt.
+TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {
   Ether ether(3, {});
   Device a(ether, 1), b(ether, 2);
   const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
@@ -361,19 +370,23 @@ TEST(Gestures, TheFirstPressGlowsAndTheLobbySaysItIsLooking) {
   EXPECT_EQ(a.dish->appearance().boot.doubleFill, 0) << "the window closed: the glow is gone";
   EXPECT_FALSE(a.dish->appearance().lobby);
 
-  for (Device* d : {&a, &b}) press(*d, 140, 500), press(*d, 140, 100);
+  for (Device* d : {&a, &b}) press(*d, 140, 200), press(*d, 140, 100);
   ASSERT_TRUE(a.dish->duelActive() && b.dish->duelActive());
   Appearance look = a.dish->appearance();
   EXPECT_TRUE(look.lobby);
-  EXPECT_GT(look.lobbyTicksLeft, DuelTimings::kLobbyTicks - 20);
-  for (uint32_t t = 1; t <= 10; ++t) {
+  EXPECT_GT(look.lobbyTicksLeft, DuelTimings::kFightModeTicks - 20);
+  bool connecting = false;
+  uint32_t t = 1;
+  for (; t <= 100 && a.dish->duelView().phase != DuelPhase::Staking; ++t) {
     ether.advance(t);
     for (Device* d : {&a, &b}) d->dish->tick(d->ms += 100, d->link);
+    look = a.dish->appearance();
+    connecting = connecting || look.lobbyConnecting;
+    if (a.dish->duelView().phase == DuelPhase::Lobby) EXPECT_TRUE(look.lobby && !look.lobbyConnecting);
   }
-  look = a.dish->appearance();
-  EXPECT_TRUE(look.lobby);
-  EXPECT_EQ(look.lobbyFriends, 1);
-  EXPECT_LT(look.lobbyTicksLeft, DuelTimings::kLobbyTicks - 5);
+  EXPECT_TRUE(connecting) << "a locked pair says so before the fight shows";
+  EXPECT_EQ(a.dish->duelView().phase, DuelPhase::Staking) << "paired within " << t << " ticks";
+  EXPECT_FALSE(a.dish->appearance().lobby) << "the fight shows";
 }
 
 // ---- testing item 5 ------------------------------------------------------------------
@@ -938,7 +951,7 @@ TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {
     const DuelView v = bout.a.dish->duelView();
     sawAsk = sawAsk || (v.phase == DuelPhase::Friends && v.theyAskedRematch);
     // A press that asked on the way out reopens at once, since the friend asked too.
-    anotherBout = anotherBout || (wasFriends && v.phase != DuelPhase::Friends && v.phase != DuelPhase::Closed);
+    anotherBout = anotherBout || (wasFriends && uint8_t(v.phase) >= uint8_t(DuelPhase::Greeting) && v.phase != DuelPhase::Friends);
     wasFriends = wasFriends || v.phase == DuelPhase::Friends;
   };
   for (int t = 0; t < 4000; ++t) {
@@ -947,7 +960,7 @@ TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {
   }
   ASSERT_TRUE(sawAsk) << "the friend's ask reached my screen first";
   for (int t = 0; t < 100; ++t) watch();
-  EXPECT_FALSE(anotherBout) << "from the friends screen the only way on is out";
+  EXPECT_FALSE(anotherBout) << "from the friends screen the only way on is out: fight mode, then out of it";
   EXPECT_FALSE(bout.a.dish->duelActive()) << "I left";
   EXPECT_EQ(bout.a.dish->duels().state().friends[0].s.met, 1) << "and no second bout began";
 }

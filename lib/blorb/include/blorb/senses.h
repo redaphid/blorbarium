@@ -107,10 +107,10 @@ struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400
 // is ButtonDouble instead of Button: the duel's "ready" (BATTLES.md, "BOOT,
 // everywhere"). Where a double press means nothing, the Dish counts it as a
 // press again (boot.h), so tapping through a clutch is not slowed. v2's U3
-// replaces this detector with the game wheel's. 700 ms, not 400: kids on
-// the first badges missed the double at 400 (owner, 2026-10-16). The first
-// press still feeds at once; only the second waits on the window.
-inline constexpr uint32_t kDoublePressMs = 700;
+// replaces this detector with the game wheel's. The first press still feeds
+// at once; only the second waits on the window. 400 ms is the owner's
+// (2026-10-16: "2 presses with the same duration of 0.4s").
+inline constexpr uint32_t kDoublePressMs = 400;
 inline constexpr uint32_t kButtonHoldMs = 1200;   // a press held this long is ButtonHold, not a press
 
 struct ButtonDetector : DetectorBase {    // release < 1.2 s -> Button (or ButtonDouble); reaching 1.2 s -> ButtonHold

@@ -83,7 +83,7 @@ TEST(DuelWire, EveryKindFitsOneFrameAtItsMeasuredSize) {
   EXPECT_EQ(Frame{Packet{BeaconPacket{}}}.n, kBeaconWireBytes);
   EXPECT_EQ(Frame{Packet{state()}}.n, kStateWireBytes);
   EXPECT_EQ(Frame{Packet{GenomePacket{}}}.n, kGenomeWireBytes);
-  EXPECT_EQ(kBeaconWireBytes, 77u);
+  EXPECT_EQ(kBeaconWireBytes, 78u);
   EXPECT_EQ(kStateWireBytes, 111u);
   EXPECT_EQ(kGenomeWireBytes, 224u);
   EXPECT_LE(kGenomeWireBytes, kDatagramMax);
@@ -106,7 +106,7 @@ TEST(DuelWire, ABeaconNeverBroadcastsTheLineage) {
   p.roster = rosterHash();
   p.nonce = 77;
   p.wants = PeerAddr{{2, 0, 0, 0, 0, 9}};
-  p.knockAgoTicks = 2;
+  p.seq = 0xBEEF;
   p.decline = Decline::Sleepy;
   p.ceiling = Stakes::Scrap;
   p.card = card(3);
@@ -114,6 +114,7 @@ TEST(DuelWire, ABeaconNeverBroadcastsTheLineage) {
   EXPECT_EQ(q.card.lineageId, 0u);
   EXPECT_EQ(q.card.look.lifeSeed, p.card.look.lifeSeed);
   EXPECT_EQ(q.wants, p.wants);
+  EXPECT_EQ(q.seq, 0xBEEF);
   EXPECT_EQ(q.decline, Decline::Sleepy);
 }
 
@@ -166,7 +167,7 @@ TEST(DuelWire, DescribeNamesEachFrameAndEachRefusal) {
   BeaconPacket bp;
   bp.wants = PeerAddr{{2, 0, 0, 0, 0, 1}};
   Frame b{Packet{bp}};
-  EXPECT_STREQ(describe(b.b, b.n).s, "beacon wants");
+  EXPECT_STREQ(describe(b.b, b.n).s, "beacon claims #0");
   GenomePacket g;
   g.index = 4, g.len = 10, g.have = 0b111;
   Frame gf{Packet{g}};

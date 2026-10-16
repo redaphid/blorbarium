@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 #include <cstring>
 #include <memory>
+#include <string>
+#include <tuple>
+#include <vector>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/duel_session.h"
 #include "blorb/species.h"
@@ -32,8 +35,7 @@ struct Policy {
   uint16_t queuePermille = 300;      // of picked turns with the meter full: a special (half of them heavy)
   Mercy mercy = Mercy::Spare;
   bool hug = false, rematch = false;
-  std::optional<uint32_t> clinkAt;   // lobby: knock at this tick and aim at nobody
-  bool lidWhenBehind = false;        // a Scrap or Mortal: put the lid down while losing
+  bool lidWhenBehind = false;        // a Scrap or Mortal: put the lid down (and drop it) while losing
 };
 
 Policy randomPolicy(Rng& r) {
@@ -55,10 +57,12 @@ struct Device {
   Policy policy;
   Rng rng;
   uint8_t bouts = 1, maxBouts = 1;
+  uint8_t boutsEnded = 0, stayFor = 0;   // fight mode: bouts with anyone after the first, then the kid leaves
 
   std::vector<Meeting> meetings;
   std::vector<DuelView> lastViews;   // the view on the tick each Meeting arrived
   uint32_t woundTurns = 0, phases = 0, specials = 0, closedAt = 0;
+  bool fought = false;   // this bout reached Staking: its end is a bout's end
   bool downed = false, fell = false, sawEggFizzle = false;
   std::optional<bool> mercyLocked;
   std::optional<FriendEgg> egg;
@@ -91,26 +95,24 @@ struct Device {
     }
     switch (v.phase) {
       case DuelPhase::Lobby:
-        if (policy.clinkAt) {
-          in.knock = tick == *policy.clinkAt;
-        } else if (v.peerCount > 0) {
-          in.aim = 0;
-          in.knock = tick % 5 == 0;
-        }
+        // Fight mode pairs by itself; a kid tilting the badge about changes nothing.
+        in.aim = int8_t(tick % 4);
         break;
       case DuelPhase::Staking: {
-        const Stakes tier = Stakes(std::min(uint8_t(policy.tier), uint8_t(v.ceiling[0])));
-        in.aim = int8_t(tier);
-        if (v.phaseTicks >= policy.confirmAfter) {
-          if (tier == Stakes::Mortal) in.bootDown = true;
-          else if (tier == Stakes::Scrap) in.press = v.phaseTicks % 4 == 0;
-          else in.knock = v.phaseTicks % 4 == 0;
+        // BOOT only: a press per step up from Spar, two ticks apart, then a
+        // 3 s hold locks it. The tilt wanders and must pick nothing.
+        in.aim = int8_t(tick % 3);
+        const uint8_t want = std::min(uint8_t(policy.tier), uint8_t(v.ceiling[0]));
+        if (!v.confirmed && v.phaseTicks >= policy.confirmAfter) {
+          const uint16_t k = uint16_t(v.phaseTicks - policy.confirmAfter);
+          if (k < 2 * want) in.press = k % 2 == 0;
+          else if (k < 2 * want + 32) in.bootDown = true;
         }
         break;
       }
       case DuelPhase::Choosing:
         if (policy.lidWhenBehind && v.mine.hearts < v.theirs.hearts) {
-          in.lid = true;
+          in.lid = in.dropped = true;
           break;
         }
         if (v.phaseTicks == 0 || planAt < 0) {
@@ -167,19 +169,38 @@ struct Device {
     fell |= fx.fall;
     if (fx.met) meetings.push_back(*fx.met), lastViews.push_back(v);
     if (fx.egg) egg = std::move(fx.egg);
+    if (uint8_t(s.view(tick).phase) >= uint8_t(DuelPhase::Staking)) fought = true;
     if (fx.radioClosed && !closedAt) closedAt = tick, ended = s.view(tick).ended;
-    if (fx.rematch && policy.rematch && bouts < maxBouts) {
-      setup.pin = *fx.rematch;
-      setup.nonce = setup.nonce * 747796405u + 1;
-      ++bouts;
-      closedAt = 0;
-      EXPECT_TRUE(open(tick));
+    // Fight mode searches again after a bout. A rematch both asked for is
+    // the next bout; otherwise this kid presses twice and leaves fight mode.
+    if (fx.backToLobby && fought) {
+      fought = false;
+      closedAt = tick, ended = s.view(tick).ended;
+      ++boutsEnded;
+      if (fx.rematch && policy.rematch && bouts < maxBouts) {
+        ++bouts;
+        closedAt = 0;
+      } else if (boutsEnded <= stayFor) {
+        closedAt = 0;
+      } else {
+        s.close(air, ended);
+      }
     }
   }
 };
 
 template <class Stop>
 uint32_t run(Ether& ether, std::initializer_list<Device*> devices, uint32_t from, uint32_t limit, Stop stop) {
+  uint32_t t = from;
+  for (; t < limit; ++t) {
+    ether.advance(t);
+    for (Device* d : devices) d->step(t);
+    if (stop(t)) break;
+  }
+  return t;
+}
+template <class Stop>
+uint32_t runAll(Ether& ether, const std::vector<Device*>& devices, uint32_t from, uint32_t limit, Stop stop) {
   uint32_t t = from;
   for (; t < limit; ++t) {
     ether.advance(t);
@@ -297,58 +318,244 @@ TEST(DuelSession, SilenceFizzlesBothWithinTwentySeconds) {
   }
 }
 
-TEST(DuelSession, ALidOnOneSideEndsBoth) {
-  Ether ether(5, kStorm);
-  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-  a.policy.tier = b.policy.tier = Stakes::Spar;
-  ASSERT_TRUE(a.open(0) && b.open(0));
-  const uint32_t lid = run(ether, {&a, &b}, 1, 5000, [&](uint32_t t) { return a.s.view(t).hasLast; });
-  DuelInput down;
-  down.lid = true;
-  a.s.tick(a.air, down, lid + 1);
-  EXPECT_FALSE(a.s.active());
-  runOut(ether, a, b, lid + 2);
-  EXPECT_LE(b.closedAt, lid + 10);   // the goodbye burst, not the silence timer
-  EXPECT_EQ(b.ended, EndReason::Left);
-  ASSERT_EQ(b.meetings.size(), 1u);
-  EXPECT_TRUE(b.meetings[0].fizzled);   // a Spar: nobody flees one
-}
-
-// Fleeing a Scrap while behind is a forfeit that keeps every wound.
-TEST(DuelSession, FleeingAScrapWhileBehindForfeitsAndKeepsTheWounds) {
-  bool seen = false;
-  for (uint32_t seed = 1; seed <= 40 && !seen; ++seed) {
+// A lid, a drop or a face-down badge never ends a fight (a car, a pocket):
+// the kid who would once have fled plays on to the rules' own end.
+TEST(DuelSession, ALidOrADropNeverEndsAFight) {
+  uint32_t tried = 0;
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
     Ether ether(seed, kStorm);
     Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 99);
     a.policy.tier = b.policy.tier = Stakes::Scrap;
     a.policy.lidWhenBehind = true;
     ASSERT_TRUE(a.open(0) && b.open(0));
     runOut(ether, a, b);
-    if (a.ended != EndReason::Fled) continue;
-    seen = true;
-    ASSERT_EQ(a.meetings.size(), 1u);
-    ASSERT_EQ(b.meetings.size(), 1u);
-    EXPECT_TRUE(a.meetings[0].fled);
-    EXPECT_FALSE(a.meetings[0].fizzled);
-    EXPECT_EQ(a.meetings[0].ending, b.meetings[0].ending);
-    EXPECT_EQ(b.meetings[0].ending, b.meetings[0].me == Side::A ? Ending::AWon : Ending::BWon);
-    EXPECT_FALSE(b.meetings[0].fled || b.meetings[0].fizzled);
-    EXPECT_GT(a.woundTurns, 0u);   // applied turn by turn, before the lid; nothing undoes them
+    ASSERT_EQ(a.meetings.size(), 1u) << "seed " << seed;
+    ASSERT_EQ(b.meetings.size(), 1u) << "seed " << seed;
+    expectSameBattle(a.meetings[0], b.meetings[0]);
+    EXPECT_FALSE(a.meetings[0].fled || a.meetings[0].fizzled) << "seed " << seed;
+    EXPECT_NE(a.ended, EndReason::LidDown);
+    EXPECT_NE(a.ended, EndReason::Dropped);
+    tried += a.meetings[0].ending != Ending::Draw;
   }
-  EXPECT_TRUE(seen);
+  EXPECT_GT(tried, 5u);
 }
 
-TEST(DuelSession, AFriendFarAwayIsNeverMatched) {
+// No RSSI gate: a friend across the room, or further, pairs.
+TEST(DuelSession, AFriendAcrossTheRoomStillPairs) {
   Ether ether(6, {});
   Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-  b.air.heardAt = T::kNearRssi - 8;   // a heard B across the room
+  b.air.heardAt = -95;
   ASSERT_TRUE(a.open(0) && b.open(0));
   runOut(ether, a, b);
-  EXPECT_EQ(a.phases & (1u << uint8_t(DuelPhase::Staking)), 0u);
-  EXPECT_EQ(b.phases & (1u << uint8_t(DuelPhase::Staking)), 0u);
-  EXPECT_TRUE(a.meetings.empty() && b.meetings.empty());
-  EXPECT_EQ(a.ended, EndReason::LobbyTimeout);
+  ASSERT_EQ(a.meetings.size(), 1u);
+  ASSERT_EQ(b.meetings.size(), 1u);
+  expectSameBattle(a.meetings[0], b.meetings[0]);
 }
+
+// Fight mode is a mode: the old lobby's minute is long gone. A friend who
+// enters it minutes later still pairs, with no tap and no tilt.
+TEST(DuelSession, FightModeWaitsForAFriendWhoComesMinutesLater) {
+  Ether ether(9, kStorm);
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  ASSERT_TRUE(a.open(0));
+  run(ether, {&a, &b}, 1, 2400, [](uint32_t) { return false; });
+  ASSERT_TRUE(a.s.searching());
+  EXPECT_LT(a.s.view(2400).fightTicksLeft, 700);
+  ASSERT_TRUE(b.open(2400));
+  runOut(ether, a, b, 2400);
+  ASSERT_EQ(a.meetings.size(), 1u);
+  ASSERT_EQ(b.meetings.size(), 1u);
+  expectSameBattle(a.meetings[0], b.meetings[0]);
+}
+
+// Out of fight mode by a double press, or after five minutes with no fight.
+// A pet resting after a fight holds that clock; a tilt or a knock never leaves.
+TEST(DuelSession, FightModeEndsOnADoublePressOrAfterFiveMinutes) {
+  Ether ether(10, {});
+  Device a(ether, 1, kGrungo, 1);
+  ASSERT_TRUE(a.open(0));
+  for (uint32_t t = 1; t < 200; ++t) {
+    DuelInput in;
+    in.aim = int8_t(t % 4), in.knock = t % 7 == 0, in.lid = t % 11 == 0, in.dropped = t % 13 == 0;
+    a.s.tick(a.air, in, t);
+  }
+  EXPECT_TRUE(a.s.searching());
+  DuelInput twice;
+  twice.doublePress = true;
+  const DuelEffects fx = a.s.tick(a.air, twice, 200);
+  EXPECT_TRUE(fx.radioClosed);
+  EXPECT_FALSE(a.s.active());
+  EXPECT_EQ(a.s.view(200).ended, EndReason::Left);
+
+  ASSERT_TRUE(a.open(1000));
+  uint32_t t = 1001;
+  for (; a.s.active() && t < 1000 + 4000; ++t) a.s.tick(a.air, DuelInput{}, t);
+  EXPECT_EQ(t - 1, 1000u + T::kFightModeTicks);
+  EXPECT_EQ(a.s.view(t).ended, EndReason::LobbyTimeout);
+
+  ASSERT_TRUE(a.open(10000));
+  a.s.setDecline(Decline::Resting);
+  for (t = 10001; t < 11000; ++t) a.s.tick(a.air, DuelInput{}, t);
+  a.s.setDecline(Decline::None);
+  for (; a.s.active() && t < 20000; ++t) a.s.tick(a.air, DuelInput{}, t);
+  EXPECT_GE(t - 1, 10999u + T::kFightModeTicks) << "the rest held the clock";
+}
+
+// The tilt never picks the stakes: two kids who only tilt fight a Spar; one
+// press each agrees a Scrap; Mortal needs the hold, and unheld locks as Scrap.
+TEST(DuelSession, OnlyBootPicksTheStakes) {
+  for (const auto& [ta, tb, want] : {std::tuple{Stakes::Spar, Stakes::Mortal, Stakes::Spar},
+                                     std::tuple{Stakes::Scrap, Stakes::Scrap, Stakes::Scrap},
+                                     std::tuple{Stakes::Mortal, Stakes::Mortal, Stakes::Mortal}}) {
+    Ether ether(11, {});
+    Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+    a.policy.tier = ta, b.policy.tier = tb;
+    ASSERT_TRUE(a.open(0) && b.open(0));
+    runOut(ether, a, b);
+    ASSERT_EQ(a.meetings.size(), 1u);
+    EXPECT_EQ(a.meetings[0].battle.stakes, want);
+  }
+  // Pressed up to Mortal and never held: it locks as Scrap after 8 s.
+  Ether ether(12, {});
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  a.policy.tier = b.policy.tier = Stakes::Mortal;
+  ASSERT_TRUE(a.open(0) && b.open(0));
+  run(ether, {&a, &b}, 1, 2000, [&](uint32_t t) {
+    for (Device* d : {&a, &b}) {
+      const DuelView v = d->s.view(t);
+      if (v.phase == DuelPhase::Staking && !v.confirmed) d->policy.tier = Stakes::Mortal, d->policy.confirmAfter = 9999;
+    }
+    return a.s.view(t).phase == DuelPhase::Choosing;
+  });
+  EXPECT_EQ(a.s.view(2000).agreed, Stakes::Spar) << "no press: Spar";
+}
+
+// One direction of the link lost. Lost from before a pair locks: neither
+// badge ever shows the fight. Lost mid-handshake (packets already in flight
+// can still complete it on one side, as no handshake can rule out a cut after
+// its last message): at most one badge shows it, for no longer than the
+// friend's greeting takes to give up, and both are searching again after.
+// Once the air clears they fight, and agree.
+TEST(DuelSession, AOneWayLinkShowsAFightOnOneBadgeBrieflyAtMost) {
+  uint32_t oneSided = 0;
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
+    for (const bool midway : {false, true}) {
+      for (const bool aDeaf : {false, true}) {
+        Ether ether(seed, kStorm);
+        Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 7);
+        Device& cut = aDeaf ? b : a;
+        a.stayFor = b.stayFor = 1;   // a bout the cut ended on one side is not the kid's last
+        if (!midway) cut.air.muted = 1000;
+        ASSERT_TRUE(a.open(0) && b.open(0));
+        uint32_t from = 1;
+        if (midway) {
+          from = run(ether, {&a, &b}, 1, 400, [&](uint32_t t) {
+            return a.s.view(t).phase == DuelPhase::Greeting || b.s.view(t).phase == DuelPhase::Greeting;
+          }) + 1;
+          cut.air.muted = 1000;
+        }
+        uint32_t shown[2] = {0, 0};
+        run(ether, {&a, &b}, from, from + 400, [&](uint32_t t) {
+          for (int i = 0; i < 2; ++i)
+            shown[i] += uint8_t((i ? b : a).s.view(t).phase) >= uint8_t(DuelPhase::Staking);
+          return false;
+        });
+        const std::string what = "seed " + std::to_string(seed) + (midway ? " midway" : " before") + (aDeaf ? " b->a" : " a->b");
+        if (!midway) EXPECT_EQ(shown[0] + shown[1], 0u) << what;
+        EXPECT_TRUE(shown[0] == 0 || shown[1] == 0) << what;
+        EXPECT_LE(shown[0] + shown[1], uint32_t(T::kGreetTicks) + 20) << what;
+        oneSided += shown[0] + shown[1] > 0;
+        EXPECT_TRUE(a.s.searching() && b.s.searching()) << what;
+        cut.air.muted = 0;
+        runOut(ether, a, b, from + 400);
+        ASSERT_FALSE(a.meetings.empty()) << what;
+        const Meeting& last = a.meetings.back();
+        const Meeting* theirs = nullptr;
+        for (const Meeting& m : b.meetings)
+          if (m.battle == last.battle) theirs = &m;
+        ASSERT_NE(theirs, nullptr) << what;
+        expectSameBattle(last, *theirs);
+        EXPECT_FALSE(last.fizzled) << what;
+      }
+    }
+  }
+  EXPECT_LT(oneSided, 20u);   // the three steps make even a cut mid-handshake rarely show anything
+}
+
+// A crowd in fight mode on a stormy link (drops, doubles, late packets): each
+// badge is in one fight at a time, never two; a fight that shows on a badge
+// shows on its friend too, within a few packets; both sides of every fight
+// agree on every byte; and an odd badge out keeps searching and pairs once a
+// friend is free. Each badge fights twice, then its kid leaves fight mode.
+void crowd(uint8_t n, uint32_t seeds) {
+  uint32_t fights = 0;
+  for (uint32_t seed = 1; seed <= seeds; ++seed) {
+    Ether ether(seed * 31 + n, kStorm);
+    std::vector<std::unique_ptr<Device>> owned;
+    std::vector<Device*> all;
+    for (uint8_t i = 0; i < n; ++i) {
+      owned.push_back(std::make_unique<Device>(ether, uint8_t(i + 1), SpeciesId{uint8_t(i % 9)}, seed * 16 + i));
+      owned.back()->stayFor = 1;
+      owned.back()->policy.tier = Stakes(i % 2);
+      all.push_back(owned.back().get());
+    }
+    for (Device* d : all) ASSERT_TRUE(d->open(0));
+    struct Start { uint32_t tick; uint64_t friendId; };
+    std::vector<std::vector<Start>> starts(n);
+    std::vector<bool> showing(n, false);
+    const auto indexOf = [&](uint64_t lineage) {
+      for (uint8_t i = 0; i < n; ++i)
+        if (all[i]->setup.card.lineageId == lineage) return int(i);
+      return -1;
+    };
+    runAll(ether, all, 1, 40000, [&](uint32_t t) {
+      std::vector<uint8_t> claimedBy(n, 0);
+      for (uint8_t i = 0; i < n; ++i) {
+        const DuelView v = all[i]->s.view(t);
+        const bool shows = uint8_t(v.phase) >= uint8_t(DuelPhase::Staking);
+        if (shows) {
+          const int f = indexOf(v.them.lineageId);
+          EXPECT_GE(f, 0);
+          EXPECT_NE(f, int(i));
+          if (f >= 0) ++claimedBy[f];
+          if (!showing[i]) starts[i].push_back({t, v.them.lineageId});
+        }
+        showing[i] = shows;
+      }
+      for (uint8_t i = 0; i < n; ++i) EXPECT_LE(claimedBy[i], 1) << "badge " << int(i) << " in two fights, tick " << t;
+      for (Device* d : all)
+        if (d->s.active()) return false;
+      return true;
+    });
+    for (uint8_t i = 0; i < n; ++i) {
+      EXPECT_FALSE(all[i]->s.active()) << "seed " << seed << " badge " << int(i);
+      for (const Start& s : starts[i]) {
+        const int f = indexOf(s.friendId);
+        ASSERT_GE(f, 0);
+        bool mirrored = false;
+        for (const Start& o : starts[f])
+          mirrored = mirrored || (o.friendId == all[i]->setup.card.lineageId && o.tick + 60 >= s.tick && s.tick + 60 >= o.tick);
+        EXPECT_TRUE(mirrored) << "seed " << seed << ": a fight showed on badge " << i << " alone at " << s.tick;
+      }
+      for (const Meeting& m : all[i]->meetings) {
+        const int f = indexOf(m.friendCard.lineageId);
+        ASSERT_GE(f, 0);
+        const Meeting* theirs = nullptr;
+        for (const Meeting& o : all[f]->meetings)
+          if (o.battle == m.battle) theirs = &o;
+        ASSERT_NE(theirs, nullptr) << "seed " << seed << ": badge " << i << " met one its friend never did";
+        expectSameBattle(m, *theirs);
+        ++fights;
+      }
+      EXPECT_GE(all[i]->meetings.size(), n % 2 && n > 1 ? 0u : 1u) << "seed " << seed << " badge " << int(i);
+    }
+  }
+  EXPECT_GT(fights, seeds * (n / 2) * 2);   // each side's record, at least one bout per pair
+}
+
+TEST(FightMode, ThreeBadgesPairOneAtATimeAndAgree) { crowd(3, 30); }
+TEST(FightMode, FourBadgesPairOneAtATimeAndAgree) { crowd(4, 20); }
+TEST(FightMode, NineBadgesPairOneAtATimeAndAgree) { crowd(9, 8); }
 
 TEST(DuelSession, ADecliningFriendShowsWhyAndIsNeverMatched) {
   Ether ether(7, {});
@@ -362,45 +569,6 @@ TEST(DuelSession, ADecliningFriendShowsWhyAndIsNeverMatched) {
   runOut(ether, a, b, 100);
   EXPECT_EQ(a.phases & (1u << uint8_t(DuelPhase::Greeting)), 0u);
   EXPECT_TRUE(a.meetings.empty() && b.meetings.empty());
-}
-
-// Two kids knock their devices together; a third knocks a second later.
-// Only the coincident pair matches.
-TEST(DuelSession, OnlyTheCoincidentPairOfThreeMatchesOnAClink) {
-  Ether ether(8, {});
-  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2), c(ether, 3, SpeciesId{6}, 3);
-  a.policy.clinkAt = b.policy.clinkAt = 20u;
-  c.policy.clinkAt = 30u;
-  ASSERT_TRUE(a.open(0) && b.open(0) && c.open(0));
-  run(ether, {&a, &b, &c}, 1, 80, [](uint32_t) { return false; });
-  EXPECT_TRUE(a.phases >> uint8_t(DuelPhase::Staking) & 1);
-  EXPECT_TRUE(b.phases >> uint8_t(DuelPhase::Staking) & 1);
-  EXPECT_EQ(c.phases & (1u << uint8_t(DuelPhase::Greeting)), 0u);
-  EXPECT_EQ(a.s.view(80).them.lineageId, b.setup.card.lineageId);
-}
-
-// Kids tapping badges together are not in step: half a second apart still
-// clinks, a whole second does not.
-TEST(DuelSession, AClinkHalfASecondApartStillMatches) {
-  for (const uint32_t apart : {5u, 9u}) {
-    Ether ether(8, {});
-    Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-    a.policy.clinkAt = 20u;
-    b.policy.clinkAt = 20u + apart;
-    ASSERT_TRUE(a.open(0) && b.open(0));
-    run(ether, {&a, &b}, 1, 80, [](uint32_t) { return false; });
-    const bool met = (a.phases >> uint8_t(DuelPhase::Staking) & 1) && (b.phases >> uint8_t(DuelPhase::Staking) & 1);
-    EXPECT_EQ(met, apart <= T::kClinkWindowTicks) << apart << " ticks apart";
-  }
-}
-
-TEST(DuelSession, ThreeDevicesKnockingAtOnceMatchNobody) {
-  Ether ether(8, {});
-  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2), c(ether, 3, SpeciesId{6}, 3);
-  a.policy.clinkAt = b.policy.clinkAt = c.policy.clinkAt = 20u;
-  ASSERT_TRUE(a.open(0) && b.open(0) && c.open(0));
-  run(ether, {&a, &b, &c}, 1, 80, [](uint32_t) { return false; });
-  for (Device* d : {&a, &b, &c}) EXPECT_EQ(d->phases & (1u << uint8_t(DuelPhase::Greeting)), 0u);
 }
 
 TEST(PairCeiling,MortalNeedsAFairFightPickedTurnsAndAnEvenRecord) {

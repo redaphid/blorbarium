@@ -118,11 +118,13 @@ struct Appearance {
   uint16_t refusedTicks = 0;
   // A duel is open: the duel scene replaces the dish, drawn from Dish::duelView().
   bool dueling = false;
-  // The duel's lobby, which keeps the dish: it says it is looking, how many
-  // friends it hears, and how long until the radio gives up.
-  bool lobby = false;
+  // Fight mode, which keeps the dish: it says it is looking (or connecting,
+  // or why he is not up for it), how many friends it hears, and how long
+  // until it gives up.
+  bool lobby = false, lobbyConnecting = false;
   uint8_t lobbyFriends = 0;
   uint16_t lobbyTicksLeft = 0;
+  Decline lobbyDecline = Decline::None;
 
   // A line scrolling once across the dish (thoughts.h): the row, the line as
   // his voice says it, and how far through its pass (0..1).

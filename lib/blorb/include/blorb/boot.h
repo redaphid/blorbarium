@@ -31,7 +31,7 @@ enum class BootContext : uint8_t {
   MercyLoser,    // duel: I am down
   Fallen,        // duel: a pet fell (either side)
   DuelOutcome,   // duel: the friends screen
-  Lobby,         // duel: looking for a friend
+  Lobby,         // fight mode: searching (a press still feeds him; a double press leaves)
   FoundingNest,  // first boot: three eggs
   ClutchPick,    // the eggs after a vigil
   Vigil,         // his remains, before the eggs
@@ -50,10 +50,9 @@ enum class BootAct : uint8_t {
   PeekEgg,           // presentation only: who is inside, for 3 s
   LayFlower,         // presentation only: a flower on the remains
   OtaYes,            // ota::Session::press (after kMinAskMs): yes, update
-  PickFriend,        // the aimed friend, as a knock does
-  CloseDuel,         // radio off, back to the dish
-  ConfirmTier,       // Spar or Scrap under the tilt
-  ConfirmMortal,     // a 3 s hold while the skull fills
+  CloseDuel,         // leave: fight mode back to the dish, or the friends screen back to fight mode
+  ConfirmTier,       // step the pick: Spar, Scrap, Mortal (the tilt never picks); unheld, it locks after 8 s
+  ConfirmMortal,     // a 3 s hold locks the pick now; Mortal only ever this way
   QueueQuick,        // lock the aimed stance as a quick special's hidden landing (1 turn wind-up)
   QueueHeavy,        // the same, held 1.2 s: a heavy special (2 turns wind-up)
   Spare,             // the winner's mercy
@@ -88,7 +87,7 @@ inline constexpr BootMeaning kBoot[] = {
     {BootContext::MercyLoser, BootAct::Plead, BootAct::Plead, BootAct::Nothing, BootGlyph::Plead, 0},
     {BootContext::Fallen, BootAct::Nothing, BootAct::Nothing, BootAct::Nothing, BootGlyph::Candle, 0},
     {BootContext::DuelOutcome, BootAct::AskRematch, BootAct::Hug, BootAct::CloseDuel, BootGlyph::Rematch, 3000},
-    {BootContext::Lobby, BootAct::PickFriend, BootAct::Nothing, BootAct::CloseDuel, BootGlyph::Friend, 0},
+    {BootContext::Lobby, BootAct::DropPellet, BootAct::Nothing, BootAct::CloseDuel, BootGlyph::Pellet, 0},
     {BootContext::FoundingNest, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
     {BootContext::ClutchPick, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
     {BootContext::Vigil, BootAct::LayFlower, BootAct::Nothing, BootAct::Nothing, BootGlyph::Flower, 0},

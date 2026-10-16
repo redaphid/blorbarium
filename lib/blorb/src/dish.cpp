@@ -363,14 +363,17 @@ Appearance Dish::appearance() const {
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
-  if ((ctx == BootContext::Awake || ctx == BootContext::Asleep) && live_.habitat.pantry == 0) a.boot.greyed = true;
+  if ((ctx == BootContext::Awake || ctx == BootContext::Asleep || ctx == BootContext::Lobby) && live_.habitat.pantry == 0)
+    a.boot.greyed = true;
   if (a.boot.hasDouble && tapArmed_ && !buttonDown_ && lastSampleMs_ - tapReleaseMs_ <= kDoublePressMs)
     a.boot.doubleFill = uint8_t(std::max<uint32_t>(1, 255 - (lastSampleMs_ - tapReleaseMs_) * 255 / kDoublePressMs));
   a.dueling = duel_.active();
-  if (a.dueling && v.phase == DuelPhase::Lobby && v.myDecline == Decline::None) {
+  if (a.dueling && (v.phase == DuelPhase::Lobby || v.phase == DuelPhase::Greeting)) {
     a.lobby = true;
+    a.lobbyConnecting = v.phase == DuelPhase::Greeting;
     a.lobbyFriends = v.peerCount;
-    a.lobbyTicksLeft = uint16_t(v.phaseTicks < DuelTimings::kLobbyTicks ? DuelTimings::kLobbyTicks - v.phaseTicks : 0);
+    a.lobbyTicksLeft = v.fightTicksLeft;
+    a.lobbyDecline = v.myDecline;
   }
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();

@@ -61,12 +61,12 @@ bool getCard(In& in, BattleCard& c) {
 }
 
 void put(Out& o, const BeaconPacket& p) {
-  o.u16(p.roster), o.u32(p.nonce), o.raw(p.wants.mac, 6), o.u8(p.knockAgoTicks);
+  o.u16(p.roster), o.u32(p.nonce), o.raw(p.wants.mac, 6), o.u16(p.seq);
   o.u8(uint8_t(p.decline)), o.u8(uint8_t(p.ceiling));
   putCard(o, p.card, false);
 }
 bool get(In& in, BeaconPacket& p) {
-  p.roster = in.u16(), p.nonce = in.u32(), in.raw(p.wants.mac, 6), p.knockAgoTicks = in.u8();
+  p.roster = in.u16(), p.nonce = in.u32(), in.raw(p.wants.mac, 6), p.seq = in.u16();
   bool ok = enumIn(in, Decline::Unfair, p.decline);
   ok &= enumIn(in, Stakes::Mortal, p.ceiling);
   return getCard(in, p.card) && ok;
@@ -81,7 +81,7 @@ void put(Out& o, const StatePacket& p) {
   putCard(o, p.card, true);
   o.u8(p.moveCount), o.raw(p.moves, DuelRules::kLogSlots), o.u8(p.heard);
   o.u8(p.emoteSeq), o.u8(uint8_t(p.emote));
-  o.u8(uint8_t(p.leaving | p.rematch << 1 | p.hugged << 2));
+  o.u8(uint8_t(p.leaving | p.rematch << 1 | p.hugged << 2 | p.greeted << 3));
   o.u16(p.genomeBytes), o.u32(p.genomeHash);
 }
 bool get(In& in, StatePacket& p) {
@@ -102,8 +102,8 @@ bool get(In& in, StatePacket& p) {
   p.emoteSeq = in.u8();
   ok &= enumIn(in, Emote::Plead, p.emote);
   const uint8_t flags = in.u8();
-  ok &= flags < 8;
-  p.leaving = flags & 1, p.rematch = flags & 2, p.hugged = flags & 4;
+  ok &= flags < 16;
+  p.leaving = flags & 1, p.rematch = flags & 2, p.hugged = flags & 4, p.greeted = flags & 8;
   p.genomeBytes = in.u16(), p.genomeHash = in.u32();
   return ok && p.genomeBytes <= kMaxGenomeBytes;
 }
@@ -178,7 +178,7 @@ WireText describe(const uint8_t* bytes, size_t len) {
     const char* why = envelopeFault(bytes, len);
     std::snprintf(t.s, sizeof t.s, "%s", why ? why : "bad body");
   } else if (const BeaconPacket* b = std::get_if<BeaconPacket>(&*p)) {
-    std::snprintf(t.s, sizeof t.s, "beacon%s%s", b->wants.none() ? "" : " wants", b->knockAgoTicks < 255 ? " knock" : "");
+    std::snprintf(t.s, sizeof t.s, "beacon%s #%u", b->wants.none() ? "" : " claims", unsigned(b->seq));
   } else if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
     std::snprintf(t.s, sizeof t.s, "state t%u h%u %s%s%s", st->moveCount, st->heard, kTier[uint8_t(st->battle.stakes)],
                   st->leaving ? " bye" : "", st->hugged ? " hug" : "");

@@ -72,7 +72,7 @@ BootHint bootHint(BootContext ctx, const DuelView* v, uint32_t heldMs) {
   if (!v) return h;
   switch (ctx) {
     case BootContext::Staking:
-      h.art = uint8_t(v->aim >= 0 && v->aim <= 2 ? v->aim : uint8_t(v->chosen));
+      h.art = uint8_t(v->chosen);
       h.greyed = v->confirmed;
       break;
     case BootContext::DuelTurn:
@@ -95,19 +95,17 @@ void DishDuel::attach(Storage& s) {
   book_ = DuelBook::open(s);
 }
 
-bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId, uint16_t petDay, uint32_t tick,
-                    std::optional<DuelSetup::Pin> pin, DuelStepped& out) {
-  Creature* c = std::get_if<Creature>(&o);
-  // A rematch is the same sitting: the rest after a duel is between duels.
-  const uint32_t since = pin || !dueledThisBoot_ ? UINT32_MAX : tick - lastEndTick_;
-  const Decline why = readiness(o, book_.lossesInARow(), since, faintedLast_);
-  if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
+Decline DishDuel::ready(const Occupant& o, uint32_t tick) const {
+  const uint32_t since = session_.pinned() || !dueledThisBoot_ ? UINT32_MAX : tick - lastEndTick_;
+  return readiness(o, book_.lossesInARow(), since, faintedLast_);
+}
+
+DuelSetup DishDuel::setupFor(const Creature* c, uint64_t lineageId, uint16_t petDay, uint32_t tick, Decline why) {
   DuelSetup setup;
   setup.decline = why;
   setup.book = &book_;
   setup.petDay = petDay;
   setup.manualTurns = book_.manualTurns();
-  setup.pin = pin;
   setup.nonce = fnvWord(fnvWord(fnvWord(0x811c9dc5u, uint32_t(lineageId)), tick), ++opens_);
   if (c) {
     genome_ = c->genome();
@@ -117,18 +115,22 @@ bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId,
     setup.ceiling = ceilingFor(*c, deviceCeiling_);
     for (Stakes s : {Stakes::Spar, Stakes::Scrap, Stakes::Mortal}) setup.skull[uint8_t(s)] = forecast(*c, s).skull;
   }
+  return setup;
+}
+
+bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId, uint16_t petDay, uint32_t tick,
+                    DuelStepped& out) {
+  Creature* c = std::get_if<Creature>(&o);
+  const Decline why = ready(o, tick);
+  if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
   // A pet who declines still opens: his picture beacons to a friend nearby,
-  // and he is never matched (duel_session.h). Only a pet who is no creature stays shut.
-  if (why == Decline::NotACreature || !session_.open(LocalConsent{}, air, setup, tick)) {
+  // and he is never claimed (duel_session.h) until he is ready. Only a pet
+  // who is no creature stays shut.
+  if (why == Decline::NotACreature || !session_.open(LocalConsent{}, air, setupFor(c, lineageId, petDay, tick, why), tick)) {
     refusal_ = Refusal{why, tick, true};
     return false;
   }
-  if (why != Decline::None) {
-    refusal_ = Refusal{why, tick, true};
-  } else {
-    refusal_ = Refusal{};
-    if (!pin) faintedLast_ = false;   // read by readiness above: the rest after the last duel's faint
-  }
+  refusal_ = why != Decline::None ? Refusal{why, tick, true} : Refusal{};
   return true;
 }
 
@@ -146,7 +148,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       refusal_ = Refusal{Decline::None, tick, true};
       return out;
     }
-    if (!open(o, lineage, *air, lineageId, petDay, tick, std::nullopt, out)) return out;
+    if (!open(o, lineage, *air, lineageId, petDay, tick, out)) return out;
     c = std::get_if<Creature>(&o);
   }
   if (!air) return out;
@@ -211,13 +213,23 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   }
   // The rest is after a battle: a lobby that only beaconed a picture, or
   // found nobody, asks none.
-  if (fx.radioClosed && battled_) {
+  if ((fx.radioClosed || fx.backToLobby) && battled_) {
     lastEndTick_ = tick;
     dueledThisBoot_ = true;
     battled_ = false;
   }
-  if (fx.rematch && !fell_ && std::holds_alternative<Creature>(o))
-    open(o, lineage, *air, lineageId, petDay, tick, fx.rematch, out);
+  // Fight mode between fights: he is re-read (wounds lower his ceiling), and
+  // whether he is up for it is asked every tick, so a rest ends by itself.
+  if (session_.searching()) {
+    const Decline why = ready(o, tick);
+    if (why == Decline::NotACreature) {
+      session_.close(*air, EndReason::Finished);   // he fell, or is remains: fight mode ends with him
+    } else {
+      if (fx.backToLobby) session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
+      session_.setDecline(why);
+      if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
+    }
+  }
   if (!session_.active()) fell_ = false;
   return out;
 }

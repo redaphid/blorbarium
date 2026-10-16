@@ -69,11 +69,11 @@ static_assert((kHoldPhaseCaptures & (duelStimBit(stim::shake) | duelStimBit(stim
               "BOOT is the duel's; a shake, a drop, the lid and a cuddle are always the pet's");
 
 enum class DuelPhase : uint8_t {
-  Closed,     // radio off
-  Lobby,      // ready: beaconing; nearby ready friends' faces sit on the rim
-  Greeting,   // matched: VS splash until the friend's first State proves they are in too
-  Staking,    // both kids pick a tier and confirm it with its gesture: knock (Spar), BOOT press
-              // (Scrap), BOOT held 3 s (Mortal); both pets' skulls show
+  Closed,     // radio off: not in fight mode
+  Lobby,      // fight mode: beaconing and claiming, until a pair locks, a double press, or 5 min with no fight
+  Greeting,   // a pair locked: still drawn as fight mode ("connecting") until the friend's State proves they are in too
+  Staking,    // the fight shows. Each kid's BOOT press steps Spar, Scrap, Mortal; a 3 s hold locks it, and
+              // after kStakeAutoTicks the pick locks itself (an unheld Mortal as Scrap); both pets' skulls show
   Choosing,   // tilt to aim, knock to lock, BOOT for a special, shake for a prophecy
   Waiting,    // locked (or winding up); the friend has not
   Revealing,  // both known: the stances pop, the bonk plays, hearts fly (3 s)
@@ -89,30 +89,27 @@ enum class DuelPhase : uint8_t {
 // nobody fled.
 enum class EndReason : uint8_t { None, Finished, LidDown, Dropped, WanderedOff, Conflict, LobbyTimeout, Left, Fled };
 
-inline constexpr uint8_t kMaxLobbyPeers = 4;
+inline constexpr uint8_t kMaxLobbyPeers = 4;   // drawn in a view
+inline constexpr uint8_t kMaxLobbyHeard = 8;   // remembered in fight mode: nine badges in a room each hear eight
 
 struct DuelTimings {
-  static constexpr uint16_t kLobbyTicks = 600;      // 60 s ready with no match: radio off
-  static constexpr uint16_t kGreetTicks = 20;       // a one-sided match falls back to the lobby
+  static constexpr uint16_t kFightModeTicks = 3000; // 5 min in fight mode with no fight: radio off
+  static constexpr uint16_t kGreetTicks = 50;       // a locked pair that never hears the friend's State: back to searching
   static constexpr uint16_t kChooseTicks = 100;     // 10 s, then the pet picks
   static constexpr uint16_t kRevealTicks = 30;
   static constexpr uint16_t kFaintTicks = 40;
   static constexpr uint16_t kFallenTicks = 50;      // the fallen side keeps sending, so the victor hears the ack
   static constexpr uint16_t kFriendsTicks = 120;
-  static constexpr uint16_t kStakingTicks = 200;    // 20 s to agree on stakes, else back to the lobby
+  static constexpr uint16_t kStakingTicks = 200;    // 20 s to agree on stakes, else back to searching
+  static constexpr uint16_t kStakeAutoTicks = 80;   // 8 s of Staking: my pick locks itself
   static constexpr uint16_t kSilentTicks = 200;     // 20 s with no packet: they wandered off
-  static constexpr uint16_t kLobbyForgetTicks = 30; // a friend unheard for 3 s leaves the rim
+  static constexpr uint16_t kLobbyForgetTicks = 30; // a friend unheard for 3 s is forgotten (and so is a claim on them)
+  static constexpr uint16_t kPinTicks = 100;        // a rematch waits 10 s for its friend, then searches for anyone
   static constexpr uint16_t kHugHoldTicks = 30;     // BOOT held 3 s on the friends screen
-  static constexpr uint8_t kClinkWindowTicks = 6;   // two knocks within 600 ms are a clink (300 ms was too tight for kids)
   static constexpr uint8_t kBeaconEvery = 3, kHurryEvery = 2, kIdleEvery = 10;
   static constexpr uint8_t kLeavingBurst = 3;       // `leaving` goes out this many times on the way out
   static constexpr uint16_t kGenomeTicks = 150;     // 15 s to swap genomes after both hugs, else the egg fizzles
   static constexpr uint8_t kChunksPerSend = 4;
-  // Graft from candidate C: a friend must be close. Below this a beacon is
-  // ignored (not drawn, never matched). An estimate for ESP-NOW at 10 dBm:
-  // -62 (arm's length) was never measured and missed kids standing apart, so
-  // -75, a few steps across a room. Unit D12 still owes the 30 cm / 2 m reading.
-  static constexpr int8_t kNearRssi = -75;
 };
 
 // The fairness rules that need both cards and this device's book: the
@@ -152,8 +149,8 @@ struct DuelView {
   struct Peer { SpeciesId species; CardLook look; Decline decline; bool wantsMe, chosen, compatible; };
   Peer peers[kMaxLobbyPeers]{};
   uint8_t peerCount = 0;
-  int8_t aimedPeer = -1;
   Decline myDecline = Decline::None;    // the lobby: this pet only beacons his picture and never matches
+  uint16_t fightTicksLeft = 0;          // fight mode: until the radio gives up with no fight
 
   BattleCard me{}, them{};
   // Staking: [me, them]. A tier above a side's ceiling is greyed with why[side][tier].
@@ -210,8 +207,9 @@ struct DuelEffects {
   bool fall = false;                    // Mortal, finished, and I am the one downed: Creature::fall()
   std::optional<Meeting> met;           // the battle ended: DuelBook::record
   std::optional<FriendEgg> egg;         // both hugged and the genome arrived: FriendEggStore::save
-  std::optional<DuelSetup::Pin> rematch;   // both asked: reopen with this pin (unless a pet fell)
-  bool radioClosed = false;
+  std::optional<DuelSetup::Pin> rematch;   // both asked: fight mode searches for this friend first
+  bool backToLobby = false;             // a battle (or a pairing) ended and fight mode searches again: refresh()
+  bool radioClosed = false;             // fight mode ended
   void stim(StimId s) { if (stimCount < 4) stimuli[stimCount++] = s; }
 };
 
@@ -226,6 +224,14 @@ class DuelSession {
   // Meeting, if a battle was under way, is the last tick's.
   void close(Air&, EndReason);
   bool active() const { return !std::holds_alternative<Closed>(state_); }
+  bool searching() const { return std::holds_alternative<Lobby>(state_); }
+  bool pinned() const { return setup_.pin.has_value(); }   // a rematch is searching for its friend
+  // Fight mode between fights: the pet as he is now (wounds, ceiling, card),
+  // keeping this lobby's nonce and pin. Only while searching().
+  void refresh(const DuelSetup&);
+  // Whether he is up for a fight now: a resting or sleepy pet stays in fight
+  // mode, beaconing his picture, and is claimed again once he is ready.
+  void setDecline(Decline);
   DuelView view(uint32_t tick) const;
 
  private:
@@ -233,12 +239,10 @@ class DuelSession {
   struct Closed { EndReason why = EndReason::None; };
   struct Lobby {
     struct Seen { PeerAddr addr; BeaconPacket beacon; uint32_t heardTick; int8_t rssi; };
-    Seen seen[kMaxLobbyPeers]{};
+    Seen seen[kMaxLobbyHeard]{};
     uint8_t count = 0;
-    int8_t aimed = -1;
-    PeerAddr wants{};
+    PeerAddr wants{};                   // my claim
     uint32_t openedTick = 0, lastBeacon = 0;
-    std::optional<uint32_t> myKnock;
   };
   struct Battle {
     PeerAddr peer{};
@@ -250,9 +254,13 @@ class DuelSession {
     // Revealing are derived in view()), then Mercy, Fallen or Fainting.
     DuelPhase phase = DuelPhase::Greeting;
     uint32_t phaseTick = 0, lastHeard = 0, lastSent = 0, lastBeacon = 0;
-    // The lobby knock that matched: the greeting's beacons still carry it, so
-    // a friend who knocked first, and matches only on hearing mine, can.
-    std::optional<uint32_t> knock;
+    uint16_t lockSeq = 0;               // the friend's beacon that locked the pair: a newer one that
+                                        // claims someone else, or has another nonce, means they left
+    // The start, in three steps over a lossy air: each locks on the other's
+    // claim; each hears the other's State (greeted, sent from then on); each
+    // shows the fight only on hearing a State that says the friend heard
+    // mine. A link lost either way shows the fight on neither badge.
+    bool greeted = false;
     bool theyLeft = false, conflict = false;
     // Staking
     Ceiling pair{};                     // mine against this friend
@@ -302,18 +310,26 @@ class DuelSession {
   DuelSetup setup_{};
   PeerAddr self_{};
   int8_t aim_ = -1;
+  uint32_t modeSince_ = 0;   // fight mode began, or its last fight ended: 5 min from here it gives up
+  uint16_t beaconSeq_ = 0;
+  EndReason lastEnd_ = EndReason::None;   // why the last battle or pairing ended, for the log
 
-  // The match rule, computed by each side alone, so no "accept" message exists:
-  // I take friend P when we chose each other (P.wants == me && my wants == P),
-  // or when our knocks landed within kClinkWindowTicks and P is the only
-  // friend whose knock did. A peer under kNearRssi, on another roster, or
-  // declining is never matched; a pinned session matches its pin only.
-  static std::optional<uint8_t> match(const Lobby&, PeerAddr self, const std::optional<DuelSetup::Pin>&,
-                                      uint32_t tick);
+  // Fight mode's pairing, computed by each badge alone from beacons, so no
+  // "accept" message exists. A badge that is ready and claims nobody claims
+  // the lowest-address friend it hears who is ready and claims nobody or it,
+  // and keeps that claim while that stays true (so a lower friend arriving
+  // never breaks a claim already answered). A claim on someone else is the
+  // "already paired" reply. The pair locks when two claims meet, so no badge
+  // is ever claimed by two: its one claim names one friend. A pinned lobby (a
+  // rematch) claims its pin only. Any range the radio reaches; no RSSI gate.
+  std::optional<uint8_t> claim(Lobby&);
 
-  void enterLobby(Air&, uint32_t tick);
+  void enterLobby(uint32_t tick);
   void lobbyTick(Lobby&, Air&, const DuelInput&, uint32_t tick, DuelEffects&);
-  void beacon(Air&, PeerAddr wants, std::optional<uint32_t> knock, uint32_t tick);
+  void beacon(Air&, PeerAddr wants);
+  // A battle or a pairing is over: say goodbye (in a battle), and fight mode
+  // searches again. `fought`: the fight showed, so the 5 min starts over.
+  void backToLobby(Air&, uint32_t tick, EndReason, bool goodbye, DuelEffects&, bool fought);
   void enterBattle(const Lobby&, uint8_t peer, uint32_t tick);
   void battleTick(Battle&, Air&, const DuelInput&, uint32_t tick, DuelEffects&);
   void onState(Battle&, const StatePacket&, uint32_t tick);
@@ -322,14 +338,13 @@ class DuelSession {
   bool play(Battle&, Air&, const DuelInput&, uint32_t tick, DuelEffects&);
   void applyResolved(Battle&, uint32_t tick, DuelEffects&);
   void cheer(Battle&, Emote, uint32_t tick);
-  void finish(Battle&, Air&, DuelEffects&, EndReason, bool theyLeft);
+  void finish(Battle&, Air&, uint32_t tick, DuelEffects&, EndReason, bool theyLeft);
   void enterFarewell(Battle&, uint32_t tick, DuelEffects&);
   void farewellTick(Farewell&, Air&, const DuelInput&, uint32_t tick, DuelEffects&);
   void closeWith(Air&, EndReason, bool goodbye);
   bool sameBout(const Battle&, BattleId) const;
   Outcome resolveFor(const Battle&) const;
   bool specialFits(const Battle&, Windup) const;
-  bool holdsVerdict(const Battle&) const;
   uint8_t assistFor(const Battle&, uint8_t side) const;
   Meeting meetingOf(const Battle&) const;
 };

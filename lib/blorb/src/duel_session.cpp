@@ -96,22 +96,50 @@ bool DuelSession::open(LocalConsent, Air& air, const DuelSetup& s, uint32_t tick
   if (!air.open()) return false;
   setup_ = s;
   self_ = air.self();
-  enterLobby(air, tick);
+  modeSince_ = tick;
+  lastEnd_ = EndReason::None;
+  enterLobby(tick);
   return true;
 }
 
-void DuelSession::enterLobby(Air&, uint32_t tick) {
+void DuelSession::refresh(const DuelSetup& s) {
+  if (!searching()) return;
+  const uint32_t nonce = setup_.nonce;
+  const std::optional<DuelSetup::Pin> pin = setup_.pin;
+  setup_ = s;
+  setup_.nonce = nonce, setup_.pin = pin;
+}
+
+void DuelSession::setDecline(Decline d) { setup_.decline = d; }
+
+// Each search starts with no friends heard, so a pairing is only ever locked
+// on a beacon sent since, and with a fresh nonce, so the next bout's id is new
+// and a late State of the last one never passes for it.
+void DuelSession::enterLobby(uint32_t tick) {
   Lobby l;
   l.openedTick = tick;
   l.lastBeacon = tick - T::kBeaconEvery;
   if (setup_.pin) l.wants = setup_.pin->peer;
+  setup_.nonce = duelSeed(setup_.nonce, tick, 0, Stakes::Spar);
   state_ = l;
+}
+
+void DuelSession::backToLobby(Air& air, uint32_t tick, EndReason why, bool goodbye, DuelEffects& fx, bool fought) {
+  Battle* b = std::get_if<Battle>(&state_);
+  Farewell* f = std::get_if<Farewell>(&state_);
+  if (f) b = &f->last;
+  if (goodbye && b && b->phase != DuelPhase::Greeting)
+    for (uint8_t i = 0; i < T::kLeavingBurst; ++i) sendState(*b, air, b->lastSent, f, true);
+  if (fought) modeSince_ = tick;
+  lastEnd_ = why;
+  enterLobby(tick);
+  fx.backToLobby = true;
 }
 
 DuelEffects DuelSession::tick(Air& air, const DuelInput& in, uint32_t tick) {
   DuelEffects fx;
   if (!active()) return fx;
-  fx.captured = kHoldPhaseCaptures;
+  fx.captured = searching() ? duelStimBit(stim::button_double) | duelStimBit(stim::button_hold) : kHoldPhaseCaptures;
   aim_ = in.aim;
   if (auto* l = std::get_if<Lobby>(&state_)) lobbyTick(*l, air, in, tick, fx);
   else if (auto* b = std::get_if<Battle>(&state_)) battleTick(*b, air, in, tick, fx);
@@ -122,42 +150,42 @@ DuelEffects DuelSession::tick(Air& air, const DuelInput& in, uint32_t tick) {
 
 // ---- the lobby ----------------------------------------------------------------------
 
-std::optional<uint8_t> DuelSession::match(const Lobby& l, PeerAddr self, const std::optional<DuelSetup::Pin>& pin,
-                                          uint32_t tick) {
-  const auto eligible = [&](const Lobby::Seen& s) {
-    return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None && (!pin || s.addr == pin->peer);
+std::optional<uint8_t> DuelSession::claim(Lobby& l) {
+  const auto open = [&](const Lobby::Seen& s) {
+    return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
+           (s.beacon.wants.none() || s.beacon.wants == self_) && (!setup_.pin || s.addr == setup_.pin->peer);
   };
-  for (uint8_t i = 0; i < l.count; ++i)
-    if (eligible(l.seen[i]) && l.seen[i].beacon.wants == self && l.wants == l.seen[i].addr) return i;
-  // The clink: their knock, dated by when their beacon was heard, lands
-  // within the window of mine, and nobody else's does.
-  if (!l.myKnock || tick - *l.myKnock > 4 * T::kClinkWindowTicks) return std::nullopt;
-  std::optional<uint8_t> found;
-  uint8_t coincident = 0;
-  for (uint8_t i = 0; i < l.count; ++i) {
-    const Lobby::Seen& s = l.seen[i];
-    if (s.beacon.knockAgoTicks == 255) continue;
-    const int64_t theirs = int64_t(s.heardTick) - s.beacon.knockAgoTicks, mine = *l.myKnock;
-    if ((theirs > mine ? theirs - mine : mine - theirs) > T::kClinkWindowTicks) continue;
-    ++coincident;
-    if (eligible(s)) found = i;
+  if (setup_.decline != Decline::None) {
+    l.wants = PeerAddr{};
+    return std::nullopt;
   }
-  return coincident == 1 ? found : std::nullopt;
+  std::optional<uint8_t> held;
+  for (uint8_t i = 0; i < l.count; ++i)
+    if (l.seen[i].addr == l.wants && open(l.seen[i])) held = i;
+  if (!held) {
+    l.wants = PeerAddr{};
+    for (uint8_t i = 0; i < l.count; ++i)
+      if (open(l.seen[i]) && (!held || l.seen[i].addr < l.seen[*held].addr)) held = i;
+    if (held) l.wants = l.seen[*held].addr;
+  }
+  if (held && l.seen[*held].beacon.wants == self_) return held;
+  return std::nullopt;
 }
 
 void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t tick, DuelEffects&) {
   while (std::optional<Datagram> d = air.receive()) {
-    if (d->rssi < T::kNearRssi) continue;
     const std::optional<Packet> p = decode(d->bytes, d->len);
     const BeaconPacket* beacon = p ? std::get_if<BeaconPacket>(&*p) : nullptr;
     if (!beacon) continue;
     uint8_t slot = l.count;
     for (uint8_t i = 0; i < l.count; ++i)
       if (l.seen[i].addr == d->from) slot = i;
-    if (slot == kMaxLobbyPeers) {
-      slot = 0;
-      for (uint8_t i = 1; i < l.count; ++i)
-        if (l.seen[i].heardTick < l.seen[slot].heardTick) slot = i;
+    // A late beacon never overrides a newer one: a claim only moves forward.
+    if (slot < l.count && int16_t(uint16_t(beacon->seq - l.seen[slot].beacon.seq)) <= 0) continue;
+    if (slot == kMaxLobbyHeard) {
+      slot = l.wants == l.seen[0].addr ? 1 : 0;
+      for (uint8_t i = 0; i < l.count; ++i)
+        if (l.seen[i].addr != l.wants && l.seen[i].heardTick < l.seen[slot].heardTick) slot = i;
     }
     if (slot == l.count) ++l.count;
     l.seen[slot] = Lobby::Seen{d->from, *beacon, tick, d->rssi};
@@ -168,31 +196,30 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
   l.count = kept;
 
   if (in.doublePress) return closeWith(air, EndReason::Left, false);
-  l.aimed = in.aim >= 0 && in.aim < l.count ? in.aim : -1;
-  if (in.knock) l.myKnock = tick;
-  if ((in.knock || in.press) && l.aimed >= 0) l.wants = l.seen[l.aimed].addr;
-  if (setup_.pin) l.wants = setup_.pin->peer;
+  // A pet resting after a fight holds the clock: the 5 min are for searching.
+  if (setup_.decline == Decline::Resting) modeSince_ = tick;
+  if (tick - modeSince_ >= T::kFightModeTicks) return closeWith(air, EndReason::LobbyTimeout, false);
+  if (setup_.pin && tick - l.openedTick >= T::kPinTicks) setup_.pin.reset();
 
-  const std::optional<uint8_t> m = setup_.decline == Decline::None ? match(l, self_, setup_.pin, tick) : std::nullopt;
-  if (m) {
+  if (const std::optional<uint8_t> m = claim(l)) {
     enterBattle(l, *m, tick);
     Battle& b = std::get<Battle>(state_);
+    beacon(air, b.peer);   // my claim at once, so the friend locks too
     sendState(b, air, tick, nullptr, false);
     return;
   }
-  if (tick - l.openedTick >= T::kLobbyTicks) return closeWith(air, EndReason::LobbyTimeout, false);
   if (tick - l.lastBeacon >= T::kBeaconEvery) {
-    beacon(air, l.wants, l.myKnock, tick);
+    beacon(air, l.wants);
     l.lastBeacon = tick;
   }
 }
 
-void DuelSession::beacon(Air& air, PeerAddr wants, std::optional<uint32_t> knock, uint32_t tick) {
+void DuelSession::beacon(Air& air, PeerAddr wants) {
   BeaconPacket p;
   p.roster = rosterHash();
   p.nonce = setup_.nonce;
   p.wants = wants;
-  p.knockAgoTicks = knock && tick - *knock < 255 ? uint8_t(tick - *knock) : 255;
+  p.seq = ++beaconSeq_;
   p.decline = setup_.decline;
   p.ceiling = setup_.ceiling.top;
   p.card = setup_.card;
@@ -211,10 +238,10 @@ void DuelSession::enterBattle(const Lobby& l, uint8_t peer, uint32_t tick) {
   b.battle = BattleId{duelSeed(setup_.nonce, b.theirNonce, rematch, Stakes::Spar), rematch, Stakes::Spar};
   b.phaseTick = b.lastHeard = tick;
   b.lastBeacon = tick;
-  b.knock = l.myKnock;
+  b.lockSeq = s.beacon.seq;
   b.skill = setup_.skill;
   b.pair = setup_.ceiling;
-  b.chosen = Stakes(std::min(u8(Stakes::Scrap), u8(b.pair.top)));
+  b.chosen = Stakes::Spar;
   state_ = std::move(b);
 }
 
@@ -234,6 +261,8 @@ void DuelSession::onState(Battle& b, const StatePacket& st, uint32_t tick) {
   b.lastHeard = tick;
   if (b.phase == DuelPhase::Greeting) {
     if (st.battle != b.battle) return;
+    b.greeted = true;
+    if (!st.greeted) return;
     b.theirs = st.card;
     DuelBook::HeadToHead h2h{};
     uint8_t forKeeps = 0;
@@ -288,6 +317,7 @@ void DuelSession::sendState(Battle& b, Air& air, uint32_t tick, const Farewell* 
   st.emoteSeq = b.emoteSeqOut;
   st.emote = b.emoteOut;
   st.leaving = leaving;
+  st.greeted = b.greeted;
   if (f) {
     st.rematch = f->iAsked;
     st.hugged = f->iHugged;
@@ -305,23 +335,31 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
   while (std::optional<Datagram> d = air.receive()) {
     if (d->from != b.peer) continue;
     const std::optional<Packet> p = decode(d->bytes, d->len);
-    const StatePacket* st = p ? std::get_if<StatePacket>(&*p) : nullptr;
-    if (st && st->roster == rosterHash() && sameBout(b, st->battle)) onState(b, *st, tick);
+    if (!p) continue;
+    if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
+      if (st->roster == rosterHash() && sameBout(b, st->battle)) onState(b, *st, tick);
+    } else if (const BeaconPacket* bp = std::get_if<BeaconPacket>(&*p)) {
+      // A beacon newer than the one that locked us: still claiming me in this
+      // pairing, or searching again (they gave up on it), which ends it here too.
+      if (int16_t(uint16_t(bp->seq - b.lockSeq)) <= 0) continue;
+      b.lockSeq = bp->seq;
+      if (bp->wants != self_ || bp->nonce != b.theirNonce) b.theyLeft = true;
+    }
   }
-  if (b.conflict) return finish(b, air, fx, EndReason::Conflict, false);
-  if (b.theyLeft) return finish(b, air, fx, EndReason::Left, true);
-  if ((in.lid || in.dropped) && !holdsVerdict(b))
-    return finish(b, air, fx, in.lid ? EndReason::LidDown : EndReason::Dropped, false);
-  if (tick - b.lastHeard >= T::kSilentTicks) return finish(b, air, fx, EndReason::WanderedOff, true);
+  // No lid, drop or face-down exit: a car or a pocket never ends a fight.
+  // Only silence, a conflict, or the friend leaving does.
+  if (b.conflict) return finish(b, air, tick, fx, EndReason::Conflict, false);
+  if (b.theyLeft) return finish(b, air, tick, fx, EndReason::Left, true);
+  if (tick - b.lastHeard >= T::kSilentTicks) return finish(b, air, tick, fx, EndReason::WanderedOff, true);
 
   if (b.phase == DuelPhase::Greeting) {
-    if (tick - b.phaseTick >= T::kGreetTicks) return enterLobby(air, tick);
+    if (tick - b.phaseTick >= T::kGreetTicks) return backToLobby(air, tick, EndReason::WanderedOff, false, fx, false);
     if (tick - b.lastBeacon >= T::kBeaconEvery) {
-      beacon(air, b.peer, b.knock, tick);
+      beacon(air, b.peer);
       b.lastBeacon = tick;
     }
   } else if (b.phase == DuelPhase::Staking) {
-    if (tick - b.phaseTick >= T::kStakingTicks) return enterLobby(air, tick);
+    if (tick - b.phaseTick >= T::kStakingTicks) return backToLobby(air, tick, EndReason::WanderedOff, true, fx, true);
     stake(b, in, tick);
   } else {
     if (!play(b, air, in, tick, fx)) return;
@@ -334,13 +372,25 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
 }
 
 void DuelSession::stake(Battle& b, const DuelInput& in, uint32_t tick) {
+  // BOOT alone picks the stakes, never a tilt or a knock: a press steps to the
+  // next tier this pair may enter (Spar, Scrap, Mortal, Spar), a 3 s hold
+  // locks the pick, and after kStakeAutoTicks it locks itself. Mortal is only
+  // ever agreed with the hold: unheld, it locks as Scrap, the tier its press
+  // already agreed to on the way past.
   if (!b.confirmed) {
-    if (in.aim >= 0 && in.aim <= u8(b.pair.top)) b.chosen = Stakes(in.aim);
-    if (b.chosen == Stakes::Mortal && in.bootDown) {
+    if (in.press || in.doublePress) {
+      const uint8_t next = uint8_t(u8(b.chosen) + 1);
+      b.chosen = next > u8(b.pair.top) ? Stakes::Spar : Stakes(next);
+      b.holdTicks = 0;
+    }
+    if (in.bootDown) {
       if (++b.holdTicks >= kFinishHoldTicks) b.confirmed = true;
     } else {
       b.holdTicks = 0;
-      if ((in.knock && b.chosen == Stakes::Spar) || (in.press && b.chosen != Stakes::Mortal)) b.confirmed = true;
+    }
+    if (!b.confirmed && tick - b.phaseTick >= T::kStakeAutoTicks) {
+      if (b.chosen == Stakes::Mortal) b.chosen = Stakes::Scrap;
+      b.confirmed = true;
     }
   }
   if (!b.confirmed || !b.theyConfirmed) return;
@@ -489,7 +539,7 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       b.phaseTick = tick;
     }
     if (b.metSent && tick - b.phaseTick >= T::kFallenTicks) {
-      closeWith(air, EndReason::Finished, false);
+      backToLobby(air, tick, EndReason::Finished, false, fx, true);
       return false;
     }
     return true;
@@ -518,11 +568,6 @@ void DuelSession::cheer(Battle& b, Emote e, uint32_t tick) {
   ++b.emoteSeqOut;
   b.emoteOut = e;
   b.emoteOutTick = tick;
-}
-
-bool DuelSession::holdsVerdict(const Battle& b) const {
-  const Outcome& o = b.outcome;
-  return o.over() && !o.downed[uint8_t(b.me)] && o.downed[1 - uint8_t(b.me)] && b.mine.count() > o.resolved;
 }
 
 Meeting DuelSession::meetingOf(const Battle& b) const {
@@ -559,29 +604,21 @@ Meeting DuelSession::meetingOf(const Battle& b) const {
   return m;
 }
 
-// The battle ended outside the rules' own ending: a lid, a drop, silence, a
-// goodbye or a conflict. Before turn 0 nothing was applied, so nothing is
-// recorded. After it, the side that left while behind in a Scrap or Mortal
-// duel fled and forfeits; otherwise it is a fizzle.
-void DuelSession::finish(Battle& b, Air& air, DuelEffects& fx, EndReason why, bool theyLeft) {
-  if (b.phase == DuelPhase::Greeting || b.phase == DuelPhase::Staking) return closeWith(air, why, !theyLeft);
+// The battle ended outside the rules' own ending: silence, a conflict or a
+// goodbye. Before turn 0 nothing was applied, so nothing is recorded. After
+// it, neither badge can know what the other last heard, so both call it a
+// fizzle (a draw), whoever went quiet; wounds already taken stay. A downed
+// pet whose duel ends before the verdict lives.
+void DuelSession::finish(Battle& b, Air& air, uint32_t tick, DuelEffects& fx, EndReason why, bool theyLeft) {
+  if (b.phase == DuelPhase::Greeting || b.phase == DuelPhase::Staking)
+    return backToLobby(air, tick, why, !theyLeft, fx, b.phase == DuelPhase::Staking);
   if (!b.metSent) {
     const Outcome& o = b.outcome;
-    const uint8_t me = uint8_t(b.me), leaver = theyLeft ? uint8_t(1 - me) : me;
+    const uint8_t me = uint8_t(b.me);
     Meeting m = meetingOf(b);
-    if (why == EndReason::Conflict) {
+    if (why == EndReason::Conflict || !o.over()) {
       m.ending = Ending::Draw;
       m.fizzled = true;
-    } else if (!o.over()) {
-      const bool behind = o.side[leaver].hearts < o.side[1 - leaver].hearts;
-      if (o.stakes != Stakes::Spar && behind) {
-        m.ending = wonBy(uint8_t(1 - leaver));
-        m.fled = !theyLeft;
-        if (!theyLeft) why = EndReason::Fled;
-      } else {
-        m.ending = Ending::Draw;
-        m.fizzled = true;
-      }
     } else if (o.awaitingVerdict()) {
       // A downed pet who leaves before the verdict lives, and fled. The
       // victor leaving instead spares him, and nobody fled.
@@ -590,7 +627,7 @@ void DuelSession::finish(Battle& b, Air& air, DuelEffects& fx, EndReason why, bo
     fx.met = m;
     b.metSent = true;
   }
-  closeWith(air, why, !theyLeft);
+  backToLobby(air, tick, why, !theyLeft, fx, true);
 }
 
 void DuelSession::enterFarewell(Battle& b, uint32_t tick, DuelEffects& fx) {
@@ -638,9 +675,11 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
     }
   }
 
-  if (in.doublePress || in.lid || in.dropped) return closeWith(air, EndReason::Left, true);
-  if (theyLeft) return closeWith(air, EndReason::Left, false);
-  if (in.press || in.knock) f.iAsked = true;
+  // Leaving the friends screen is a double press, back to searching; a lid,
+  // a drop or a knock never decides anything here.
+  if (in.doublePress) return backToLobby(air, tick, EndReason::Left, true, fx, true);
+  if (theyLeft) return backToLobby(air, tick, EndReason::Left, false, fx, true);
+  if (in.press) f.iAsked = true;
   if (in.bootDown) {
     if (++f.hugHold >= T::kHugHoldTicks) f.iHugged = true;
   } else {
@@ -649,7 +688,8 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
   if (in.cradle) f.iHugged = true;
   if (f.iAsked && f.theyAsked) {
     fx.rematch = DuelSetup::Pin{b.peer, uint8_t(b.battle.rematch + 1)};
-    return closeWith(air, EndReason::Finished, false);
+    setup_.pin = fx.rematch;
+    return backToLobby(air, tick, EndReason::Finished, false, fx, true);
   }
 
   if (f.iHugged && f.theyHugged && setup_.genome && f.theirGenomeBytes > 0 && !f.swapping && !f.eggDone) {
@@ -699,7 +739,7 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
   const bool theyLack = f.swapping && f.theyHaveMine != allOf(mine);
   const bool sparkling = f.eggFizzled && tick - f.fizzledAt < T::kRevealTicks;
   if (tick - f.since >= T::kFriendsTicks && !(swapOpen && (!f.eggDone || theyLack)) && !sparkling)
-    closeWith(air, EndReason::Finished, false);
+    backToLobby(air, tick, EndReason::Finished, false, fx, true);
 }
 
 // ---- closing ------------------------------------------------------------------------
@@ -725,18 +765,20 @@ DuelView DuelSession::view(uint32_t tick) const {
     v.ended = c->why;
     return v;
   }
+  const uint32_t searched = tick - modeSince_;
+  v.fightTicksLeft = uint16_t(searched >= T::kFightModeTicks ? 0 : T::kFightModeTicks - searched);
+  v.myDecline = setup_.decline;
   if (const Lobby* l = std::get_if<Lobby>(&state_)) {
     v.phase = DuelPhase::Lobby;
+    v.ended = lastEnd_;
     v.phaseTicks = uint16_t(tick - l->openedTick);
     v.me = setup_.card;
-    v.myDecline = setup_.decline;
-    v.peerCount = l->count;
-    for (uint8_t i = 0; i < l->count; ++i) {
+    v.peerCount = std::min(l->count, kMaxLobbyPeers);
+    for (uint8_t i = 0; i < v.peerCount; ++i) {
       const Lobby::Seen& s = l->seen[i];
       v.peers[i] = DuelView::Peer{s.beacon.card.species, s.beacon.card.look, s.beacon.decline, s.beacon.wants == self_,
                                   l->wants == s.addr, s.beacon.roster == rosterHash()};
     }
-    v.aimedPeer = l->aimed;
     return v;
   }
   const Farewell* f = std::get_if<Farewell>(&state_);

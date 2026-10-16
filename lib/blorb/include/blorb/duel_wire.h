@@ -8,7 +8,7 @@
 //
 // Three kinds, all state-based ("everything I have so far"), so any one
 // packet that arrives is enough and none needs an ack of its own:
-//   Beacon  broadcast in the lobby, every 300 ms: my card, whom I chose, my last knock, whether I am up for it
+//   Beacon  broadcast in fight mode, every 300 ms: my card, whom I claim, a sequence number, whether I am up for it
 //   State   unicast once matched, 5 Hz while the friend lacks something, else 1 Hz:
 //           my card, my whole move log, how many of THEIR moves I hold, my cheer, my hug
 //   Genome  unicast after both hugs (friend egg): which of THEIR chunks I hold, and one of MINE they lack
@@ -24,7 +24,7 @@
 
 namespace blorb {
 
-inline constexpr uint8_t kWireMagic0 = 'b', kWireMagic1 = 'D', kWireVersion = 1;
+inline constexpr uint8_t kWireMagic0 = 'b', kWireMagic1 = 'D', kWireVersion = 2;   // 2: fight mode's claims (0.7.4); a 0.7.3 badge refuses it, and it them
 
 // Cheers: pictures only, all kind. A double knock sends one of the first
 // four; Plead is the downed kid's only voice in Mercy.
@@ -33,8 +33,8 @@ enum class Emote : uint8_t { None, Heart, Star, Laugh, Wave, Plead };
 struct BeaconPacket {
   uint16_t roster = 0;           // rosterHash(): a mismatch greys the friend out
   uint32_t nonce = 0;            // fresh per open(); half the battle seed
-  PeerAddr wants{};              // whom my owner pointed at and knocked (none: nobody yet)
-  uint8_t knockAgoTicks = 255;   // ticks since my last knock, 255 = none: the clink
+  PeerAddr wants{};              // whom I claim (none: nobody); a claim on someone else says "already paired"
+  uint16_t seq = 0;              // bumps per beacon from this session, so a late one never overrides a newer
   Decline decline = Decline::None;   // shown on the friend's screen as a picture; never matched while set
   Stakes ceiling = Stakes::Spar;     // the highest tier this pet may enter on this device
   BattleCard card{};             // encode() writes lineageId as 0 in a beacon: no permanent id is broadcast;
@@ -64,6 +64,7 @@ struct StatePacket {
   bool leaving = false;          // lid, drop, face down or a double press goodbye: ends it now
   bool rematch = false;          // asked on the friends screen
   bool hugged = false;           // hugged on the friends screen: yes to a friend egg
+  bool greeted = false;          // I have heard your State in this bout: the start's third step
   uint16_t genomeBytes = 0;      // my genome's length once I hugged, so the friend knows the chunk count
   uint32_t genomeHash = 0;
 };
@@ -91,7 +92,7 @@ inline constexpr size_t kLookWireBytes = kRegionCount * 3 + 1 + 1 + 1 + 4 * 2 + 
 inline constexpr size_t kCardWireBytes = 1 + 1 + 1 + 1 + 4 + 1 + 1 + 8 + kLookWireBytes;
 inline constexpr size_t kFrameOverhead = 4 + 4;   // header + crc
 inline constexpr size_t kBattleIdBytes = 6;
-inline constexpr size_t kBeaconWireBytes = kFrameOverhead + 2 + 4 + 6 + 1 + 1 + 1 + kCardWireBytes;
+inline constexpr size_t kBeaconWireBytes = kFrameOverhead + 2 + 4 + 6 + 2 + 1 + 1 + kCardWireBytes;
 inline constexpr size_t kStateWireBytes = kFrameOverhead + 2 + kBattleIdBytes + 4 + 1 + 1 + 1 + 3 + 3 + 1 +
                                           kCardWireBytes + 1 + DuelRules::kLogSlots + 1 + 1 + 1 + 1 + 2 + 4;
 inline constexpr size_t kGenomeWireBytes = kFrameOverhead + kBattleIdBytes + 8 + 1 + 1 + kGenomeChunk;
