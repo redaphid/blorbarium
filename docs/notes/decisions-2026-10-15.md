@@ -192,3 +192,38 @@ annoyed, foresee, sleep, egg), and each has its own line for every row except
   scrolled to a slightly different place by a different-length line.
 - **Flash:** badge128 firmware.bin 2,217,968 -> 2,256,992 bytes (+39,024,
   read-only data only; bss unchanged).
+
+## D13. Death: the owner's own words, and Finish stays
+
+The owner's words on death, from the Claude Code transcripts (UTC, user
+turns and question answers only; found by the death agent):
+
+1. 2026-10-03 03:28 (session 5a48df13): asked "Can blorb die?", chose
+   "Can die, then lays an egg" over the recommended "Never dies".
+2. 2026-10-03 03:49: on SOUL.md's never-dies rule, "Ignore that part. It was
+   overfitting."
+3. 2026-10-03 04:41: "Also I want it to 'catch up' over time, not freeze. So
+   if you haven't seem him in a while, he might die. This is for adults who
+   love video games; death is fine".
+4. 2026-10-13 11:16 (session d9cc3960): "Pets should die. My family has a
+   dark sense of humor. They want something more complex. It's fine".
+5. 2026-10-13 23:23: "People should be able to push the 'boot' button to do
+   contextual things. Maybe have a dark souls esque queued special move".
+6. 2026-10-14 06:31 (session 40b60ff7): "It shouldn't _prevent_ death. Close
+   to dead + time = dead".
+7. 2026-10-14 06:36: "We should have negative effects to the pet if it's
+   been neglected for a while. Like, 3+ weeks. Once it has the latest time."
+8. 2026-10-15 (this release): "Death should not be a choice, and I've
+   repeatedly talked about how I want them to die."
+9. 2026-10-15, minutes later: "No no no you CANNOT remove finish. I have
+   said this a lot".
+
+- **Decision:** Finish, Mercy and Mortal stay exactly as shipped. Branch
+  `rel-death` (d6ee110), which removed them on a misread of (8), is kept
+  for the record and must never be merged.
+- **Reading of (8):** most likely "a kid cannot opt out of death": it must
+  always be possible (old age, neglect, close to dead + time), which fits
+  (6) and (9). Not yet acted on. No transcript mentions Finish, so the
+  owner's statements about it went through another channel (voice, phone,
+  relay after 2026-10-12). The next session should ask before touching
+  death.
