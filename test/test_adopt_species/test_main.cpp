@@ -108,6 +108,26 @@ struct Badge {
   Dish::Adoption adopt() { return dish->adoptSpecies(tableOf(field), paint::bandsFor(tableOf(field))); }
 };
 
+// What 0.7.0 adopted him as: its species founder still had the Gift
+// recipe's bytes where FirstHours now differs (genes.h Recipe), so those
+// bytes are put back as 0.7.0 left them.
+void asOn070(Dish& dish, SpeciesId species, uint32_t seed) {
+  GenomeBuilder gift, first;
+  authorStarter(gift, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::Gift);
+  authorStarter(first, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::FirstHours);
+  const Genome g = *gift.build(), f = *first.build();
+  struct Edit { GeneUid uid; uint8_t at, value; };
+  std::vector<Edit> edits;
+  g.forEach([&](const GeneView& v) {
+    const std::optional<GeneView> w = f.find(v.header.uid);
+    for (uint8_t i = 0; w && i < v.header.len; ++i)
+      if (w->body[i] != v.body[i]) edits.push_back({v.header.uid, i, v.body[i]});
+  });
+  ASSERT_FALSE(edits.empty());
+  for (const Edit& e : edits) ASSERT_TRUE(dish.editGene(e.uid, e.at, e.value));
+  ASSERT_TRUE(dish.flush());
+}
+
 std::map<uint16_t, std::vector<uint8_t>> genesByUid(const Genome& g) {
   std::map<uint16_t, std::vector<uint8_t>> out;
   g.forEach([&](const GeneView& v) {
@@ -368,6 +388,99 @@ TEST(Adopt, TheGiftDevicesGrungoStaysByteForByteAndAdvertisesGrungo) {
     EXPECT_EQ(std::string(d.settings().name), "Grungo");
     EXPECT_EQ(advertisedSpecies(&pet, kGiftMac), kGrungo) << "it advertises as the grungo it is";
     EXPECT_EQ(advertisedSpecies(nullptr, kGiftMac), kGrungo) << "sealed, too";
+  }
+}
+
+// ---- 0.7.0's adoptions take FirstHours' sleep -------------------------------------------------------
+
+// A badge 0.7.0 adopted kept the Gift recipe's sleep (hours asleep in his
+// pet night, no day naps; docs/notes/first-hours.md). The step after
+// adoption gives him the genome 0.7.1's adoption would have, once.
+TEST(Retune, A070AdoptionSleepsAs071WouldHaveAdoptedHim) {
+  for (const FieldBadge& f : kBatch) {
+    Badge on071(f), on070(f);
+    on071.liveOn040();
+    ASSERT_EQ(on071.adopt(), Dish::Adoption::Adopted);
+    on070.liveOn040();
+    ASSERT_EQ(on070.adopt(), Dish::Adoption::Adopted);
+    asOn070(*on070.dish, tableOf(f), on070.seed());
+    ASSERT_NE(on070.creature().genome().bytes(), on071.creature().genome().bytes()) << f.species;
+
+    EXPECT_EQ(on071.dish->retuneFirstHours(tableOf(f)), Dish::Adoption::NotNeeded) << f.species << ": already";
+    EXPECT_EQ(on070.dish->retuneFirstHours(tableOf(f)), Dish::Adoption::Adopted) << f.species;
+    EXPECT_EQ(on070.creature().genome().bytes(), on071.creature().genome().bytes()) << f.species;
+    const auto files = on070.flash.files;
+    EXPECT_EQ(on070.dish->retuneFirstHours(tableOf(f)), Dish::Adoption::NotNeeded) << f.species << ": once";
+    EXPECT_EQ(on070.flash.files, files) << f.species;
+    const std::vector<uint8_t> retuned = on070.creature().genome().bytes();
+    on070.boot();
+    EXPECT_EQ(on070.dish->boot(), Boot::Resumed);
+    EXPECT_EQ(on070.creature().genome().bytes(), retuned) << f.species << ": saved";
+    EXPECT_EQ(on070.dish->lineage().genomeOf(0)->bytes(), retuned) << f.species << ": on the lineage";
+  }
+}
+
+TEST(Retune, WaitsWhileTheStorageIsHeld) {
+  Badge b(kBatch[2]);
+  b.liveOn040();
+  ASSERT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  asOn070(*b.dish, tableOf(b.field), b.seed());
+  b.dish.reset();
+  ota::HeldStorage held(b.flash);
+  held.hold(true);
+  const auto files = b.flash.files;
+  b.boot(held);
+  const std::vector<uint8_t> before = b.creature().genome().bytes();
+  EXPECT_EQ(b.dish->retuneFirstHours(tableOf(b.field)), Dish::Adoption::NotYet);
+  EXPECT_EQ(b.creature().genome().bytes(), before) << "the trial's pet mark sees him as he was";
+  EXPECT_EQ(b.flash.files, files) << "a held board writes nothing";
+  held.hold(false);
+  EXPECT_EQ(b.dish->retuneFirstHours(tableOf(b.field)), Dish::Adoption::Adopted);
+}
+
+TEST(Retune, AnOwnersEditToASleepByteIsLeftAsHeIs) {
+  Badge b(kBatch[3]);
+  b.liveOn040();
+  ASSERT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  asOn070(*b.dish, tableOf(b.field), b.seed());
+  std::optional<GeneUid> happy;
+  b.creature().genome().forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<ExpressionGene>::value && v.body[0] == expr::happy.v) happy = v.header.uid;
+  });
+  ASSERT_TRUE(happy);
+  ASSERT_TRUE(b.dish->editGene(*happy, 1, 200));
+  const std::vector<uint8_t> edited = b.creature().genome().bytes();
+  EXPECT_EQ(b.dish->retuneFirstHours(tableOf(b.field)), Dish::Adoption::NotNeeded);
+  EXPECT_EQ(b.creature().genome().bytes(), edited);
+}
+
+TEST(Retune, OnlyAnAdoptedPetOfThatSpecies) {
+  Badge b(kBatch[0]);
+  b.liveOn040();
+  EXPECT_EQ(b.dish->retuneFirstHours(tableOf(b.field)), Dish::Adoption::NotNeeded) << "not adopted yet";
+  ASSERT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  asOn070(*b.dish, tableOf(b.field), b.seed());
+  const std::vector<uint8_t> before = b.creature().genome().bytes();
+  EXPECT_EQ(b.dish->retuneFirstHours(species::fizz), Dish::Adoption::NotNeeded) << "a mossby is not a fizz";
+  EXPECT_EQ(b.dish->retuneFirstHours(kGrungo), Dish::Adoption::NotNeeded);
+  EXPECT_EQ(b.creature().genome().bytes(), before);
+}
+
+TEST(Retune, TheGiftDevicesGrungoIsNeverRetuned) {
+  const uint32_t giftSeed = 15048;
+  for (const Genome& pet : {starterGenome(giftSeed), foundingGenome040(seedOf(kGiftMac))}) {
+    MemStorage store;
+    DishOptions o;
+    o.founder = &pet;
+    Dish d(store, giftSeed, kLineageId, o);
+    NullLink link;
+    uint32_t ms = 0;
+    while (!std::holds_alternative<Creature>(d.occupant()) && ms < 3600000) d.tick(ms += 1000, link);
+    ASSERT_TRUE(d.flush());
+    const auto files = store.files;
+    EXPECT_EQ(d.retuneFirstHours(kGrungo), Dish::Adoption::NotNeeded);
+    EXPECT_EQ(std::get<Creature>(d.occupant()).genome().bytes(), pet.bytes());
+    EXPECT_EQ(store.files, files);
   }
 }
 

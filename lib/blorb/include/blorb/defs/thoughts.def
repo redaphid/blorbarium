@@ -147,3 +147,13 @@ BLORB_THOUGHT(120, moon_wink,      none,   night,         0, 5400, "THE MOON WIN
 BLORB_THOUGHT(121, dark_snacks,    none,   night,         0, 5400, "NIGHT THOUGHTS: DARK SNACKS.")
 BLORB_THOUGHT(122, night_light,    none,   night,         0, 5400, "I GLOW A BIT. A NIGHT LIGHT.")
 BLORB_THOUGHT(123, only_me,        none,   night,         0, 5400, "EVERYONE SLEEPS BUT ME.")
+// Asleep: what he murmurs in his sleep, dreaming or not, so a sleeping pet
+// still says something every few minutes. Priority 0 and long cooldowns, as idle.
+BLORB_THOUGHT(124, snore,         none,   dozing,        0, 1800, "ZZZ... MMF... ZZZ...")
+BLORB_THOUGHT(125, mumble,        none,   dozing,        0, 1800, "MMM... FIVE MORE MINUTES...")
+BLORB_THOUGHT(126, dream_chase,   none,   dozing,        0, 1800, "ZZZ... GOT THE MARBLE...")
+BLORB_THOUGHT(127, dream_feast,   none,   dozing,        0, 1800, "ZZZ... A MOUNTAIN OF SNACKS")
+BLORB_THOUGHT(128, dream_flight,  none,   dozing,        0, 1800, "ZZZ... I CAN FLY... ZZZ")
+BLORB_THOUGHT(129, sleep_count,   none,   dozing,        0, 1800, "ZZZ... ONE FLY... TWO FLY...")
+BLORB_THOUGHT(130, sleep_warm,    none,   dozing,        0, 1800, "MM. WARM. NOT GETTING UP.")
+BLORB_THOUGHT(131, dream_rain,    none,   dozing,        0, 1800, "ZZZ... RAIN ON THE RIM...")

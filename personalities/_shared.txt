@@ -395,3 +395,27 @@ night_light     night
 
 only_me         night
   EVERYONE SLEEPS BUT ME.
+
+snore           dozing
+  ZZZ... MMF... ZZZ...
+
+mumble          dozing
+  MMM... FIVE MORE MINUTES...
+
+dream_chase     dozing
+  ZZZ... GOT THE MARBLE...
+
+dream_feast     dozing
+  ZZZ... A MOUNTAIN OF SNACKS
+
+dream_flight    dozing
+  ZZZ... I CAN FLY... ZZZ
+
+sleep_count     dozing
+  ZZZ... ONE FLY... TWO FLY...
+
+sleep_warm      dozing
+  MM. WARM. NOT GETTING UP.
+
+dream_rain      dozing
+  ZZZ... RAIN ON THE RIM...
