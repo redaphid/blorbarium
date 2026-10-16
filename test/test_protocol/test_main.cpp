@@ -462,7 +462,7 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
 
 TEST(Golden, Hello) {
   Rig r;
-  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.3 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
+  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.4 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
 }
 
 TEST(Golden, State) {
