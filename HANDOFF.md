@@ -14,7 +14,9 @@ and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
 ## Where things stand (2026-10-15, owner on a plane with all 9 badges)
 
-**Live:** firmware **0.7.2** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
+**Live:** firmware **0.7.3** (manifest 9a51816, firmware b8766c5: 0.7.2 plus
+sleep talk and the first-hours sleep retune for adopted pets, which fixes
+"text only with a phone"; docs/notes/sleep-talk.md). Before it, **0.7.2** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
 (manifest 05d7661, firmware commit a5e7a78, 2,257,904 B): 0.7.1 plus
 car-proof senses (bed needs 30 s face down and still; road vibration fires
 no shake, knock or drop) and every species' own lines written from its art.
@@ -59,9 +61,10 @@ from the phone.
    main.cpp:162-190). Likely cause: the adopted field pets sleep for hours
    (they kept the old sleep genes, and nocturnal species sleep by pet day),
    and asleep only `dreaming` speaks; a phone's welcome wakes him. Branch
-   `rel-sleep` (gameplay agent) is to verify that, then add sleep talk and
-   give adopted pets the first-hours sleep retune. Workaround: wake him by
-   picking him up, tapping or pressing BOOT.
+   Confirmed by `rel-sleep`'s FIELD_PETS_SWEEP and fixed in 0.7.3 (sleep
+   talk, about 20 lines an hour asleep; adopted pets get the FirstHours sleep
+   bytes). Not done: a one-time clock shift that would wake the field pets
+   from their 0.4.0 pet night (irreversible; they wake by about 11 h anyway).
 3. Known from the first-hours run: at 25-30 h, night BOOT presses leave
    pellets that rot and a starving pet eats them (injury up to 0.85).
    Levers are `rotMinutes` (90) and fed_bad's toxin (0.4).
