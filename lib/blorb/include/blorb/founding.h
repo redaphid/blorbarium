@@ -74,6 +74,16 @@ bool predatesSpecies(const Genome&);
 // Checkpoint and saves.
 bool adoptSpecies(Creature&, SpeciesId, uint32_t speciesSeed, const LookBands&);
 
+// An adopted pet that still sleeps by the Gift recipe takes the FirstHours
+// recipe's bytes (genes.h Recipe): sleep as pressure, so a day has naps, not
+// hours of sleep, plus the energy, happy-face and egg bytes. 0.7.0 adopted
+// with the Gift bytes and adoption never runs twice, so this is its own
+// step. It writes only when he is `species`, `species` is not grungo, and
+// every byte the two recipes differ in still holds the Gift value: an owner
+// edit, a mutation or a pet already retuned is left as he is. False, and
+// nothing changes, otherwise. The caller records the lineage Checkpoint and saves.
+bool retuneFirstHours(Creature&, SpeciesId, uint32_t speciesSeed);
+
 // The species a board shows the world as (its Bluetooth name): its pet's, or
 // the table's for a pet the table will adopt. pet is null when the pet was
 // not read (a sealed board): then badgeSpecies.

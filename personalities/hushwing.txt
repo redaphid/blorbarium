@@ -290,3 +290,27 @@ night_light
   MY EYES ARE THE NIGHT LIGHT.
 only_me
   ALL SLEEP. I KEEP WATCH.
+snore
+  ZZZ... HOOO... ZZZ...
+  ZZZ... FLUFF... ZZZ... HOO
+mumble
+  MMM... SHH... SHHH... SHH...
+  MMM... TOO LOUD... NOTED...
+dream_chase
+  ZZZ... SWOOP... NOT A SOUND...
+  ZZZ... A MOTH... I SAW IT...
+dream_feast
+  ZZZ... SOFT FOOD... NO CRUNCH
+  ZZZ... QUIET SOUP... HOO...
+dream_flight
+  ZZZ... OVER THE MIST... HUSH
+  ZZZ... SILENT WINGS... GLIDE
+sleep_count
+  ONE REED... TWO REEDS... NOTED
+  ONE STAR... TWO STARS... SHH
+sleep_warm
+  MM. WARM HANDS. I ALLOW IT.
+  MM... SNUG ON MY PERCH...
+dream_rain
+  ZZZ... SOFT RAIN. NO THUNDER
+  ZZZ... QUIET RAIN... GOOD...

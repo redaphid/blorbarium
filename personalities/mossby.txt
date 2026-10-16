@@ -288,3 +288,27 @@ night_light
   THE MOON LIT MY SHELL. PRETTY.
 only_me
   EVERYONE SLEEPS. I AM STILL UP
+snore
+  ZZZZZ... MMM... ZZZZZZZZZ...
+  ZZZ... MMM... ZZZ... NO RUSH
+mumble
+  MMM... ONE MORE NAP... OR TWO
+  MMM... MIND THE HOUSE... MM...
+dream_chase
+  ZZZ... I'LL CATCH IT. TUESDAY
+  ZZZ... I LOST THE RACE. LOVELY
+dream_feast
+  ZZZ... MOSS. MORE MOSS. MM...
+  ZZZ... A LEAF... A BIGGER LEAF
+dream_flight
+  ZZZ... FLYING. SLOWLY. NICE.
+  ZZZ... MY HOUSE IS FLOATING...
+sleep_count
+  ONE DEWDROP... ONE... OH DEAR
+  ONE SNAIL... ONE... STILL ONE
+sleep_warm
+  MMM... COSY SHELL. STAYING IN
+  MMM... DEW AND MOSS. SNUG...
+dream_rain
+  ZZZ... RAIN... LOVELY RAIN...
+  ZZZ... DRIP... DRIP... BLISS

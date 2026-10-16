@@ -496,24 +496,36 @@ static const char* bleName(const uint8_t mac[6]) {
 // A pet 0.4.0 founded becomes his badge's species (founding.h), once the
 // flash can be written: on an OTA trial, only after the trial keeps the
 // image, so the trial's pet check and a rollback both meet the pet the old
-// image saved. Asked once a second until the Dish says it is done.
+// image saved. Then, under the same rule, a pet 0.7.0 adopted with the Gift
+// recipe's sleep takes FirstHours' (founding.h retuneFirstHours). Asked once
+// a second until the Dish says each is done. A board not in the table, and
+// the gift grungo (row 0), are neither adopted nor retuned.
 static void adoptTableSpecies(uint32_t now) {
-  static bool settled = false;
+  static bool adopted = false, retuned = false;
   static uint32_t askedAt = 0;
-  if (settled || trial.onTrial() || now - askedAt < 1000) return;
+  if ((adopted && retuned) || trial.onTrial() || now - askedAt < 1000) return;
   askedAt = now;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
-  const blorb::Dish::Adoption a =
-      species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
-  if (a == blorb::Dish::Adoption::NotYet) return;
-  settled = true;
-  if (a == blorb::Dish::Adoption::Adopted) {
-    const OccupantSummary o = summarize(dish->occupant());
-    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
-                  blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
+  if (!adopted) {
+    const blorb::Dish::Adoption a =
+        species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
+    if (a == blorb::Dish::Adoption::NotYet) return;
+    adopted = true;
+    if (a == blorb::Dish::Adoption::Adopted) {
+      const OccupantSummary o = summarize(dish->occupant());
+      Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+                    blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
+    }
   }
+  const uint32_t was = summarize(dish->occupant()).genome;
+  const blorb::Dish::Adoption r = species ? dish->retuneFirstHours(*species) : blorb::Dish::Adoption::NotNeeded;
+  if (r == blorb::Dish::Adoption::NotYet) return;
+  retuned = true;
+  if (r == blorb::Dish::Adoption::Adopted)
+    Serial.printf("[hw] retuned first-hours sleep species=%s genome=%08x->%08x\n", blorb::speciesInfo(*species).name,
+                  unsigned(was), unsigned(summarize(dish->occupant()).genome));
 }
 #endif
 

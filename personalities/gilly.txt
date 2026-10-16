@@ -288,3 +288,27 @@ night_light
   I'M A LITTLE PINK NIGHT LIGHT!
 only_me
   EVERYONE SLEEPS! SWEET DREAMS!
+snore
+  ZZZ... BLUB... BLUB... ZZZ
+  ZZZ... BLOOP... ZZZ... BLOOP
+mumble
+  MMM... FRIEND... HUGS... MM
+  MMM... I'M FINE... I'M FINE...
+dream_chase
+  ZZZ... TAG! YOU'RE IT, FRIEND
+  ZZZ... SWIM FASTER, FRIEND!
+dream_feast
+  ZZZ... WORMS FOR EVERYONE...
+  ZZZ... MUD PIE... FOR ALL!
+dream_flight
+  ZZZ... MY FRILLS ARE WINGS...
+  ZZZ... SWIMMING IN THE SKY...
+sleep_count
+  ONE FRIEND... TWO FRIENDS...
+  ONE FRILL... TWO FRILLS...
+sleep_warm
+  MMM... SNUG AS A TADPOLE...
+  MMM... WARM MUD BATH... COMFY
+dream_rain
+  ZZZ... RAIN! MORE SPLASHING...
+  ZZZ... PUDDLES FOR FRIENDS!

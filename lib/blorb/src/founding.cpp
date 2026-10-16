@@ -158,6 +158,29 @@ bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const Lo
   return true;
 }
 
+bool retuneFirstHours(Creature& c, SpeciesId species, uint32_t speciesSeed) {
+  if (species == kGrungo || predatesSpecies(c.genome()) || speciesOf(c.genome()) != species) return false;
+  GenomeBuilder gift, first;
+  authorStarter(gift, speciesInfo(species).starter, speciesSeed, kNeglectCanKill, Recipe::Gift);
+  authorStarter(first, speciesInfo(species).starter, speciesSeed, kNeglectCanKill, Recipe::FirstHours);
+  const Genome from = *gift.build(), to = *first.build();
+  struct Edit { GeneUid uid; uint8_t at, value; };
+  std::vector<Edit> edits;
+  bool gifted = true;
+  from.forEach([&](const GeneView& g) {
+    const std::optional<GeneView> f = to.find(g.header.uid), mine = c.genome().find(g.header.uid);
+    for (uint8_t i = 0; f && i < g.header.len; ++i) {
+      if (f->body[i] == g.body[i]) continue;
+      if (!mine || mine->header.type != g.header.type || mine->header.len != g.header.len || mine->body[i] != g.body[i])
+        gifted = false;
+      edits.push_back(Edit{g.header.uid, i, f->body[i]});
+    }
+  });
+  if (!gifted || edits.empty()) return false;
+  for (const Edit& e : edits) c.editGene(e.uid, e.at, e.value);
+  return true;
+}
+
 SpeciesId speciesOf(const Genome& g) {
   Phenotype p;
   expressStage(g, Stage::Baby, 0, p);

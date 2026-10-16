@@ -46,6 +46,7 @@ pet that never meets a phone never says them; he still says everything else.
 | upside_down | He is awake and the board is upside down. |
 | drowsy | He is awake and very sleepy. |
 | dreaming | He is asleep and dreaming. |
+| dozing | He is asleep, dreaming or not: a murmur in his sleep. |
 | foreseeing | He is in his oracle trance. |
 | sees_pellet | He is in the trance and there is a pellet in the dish. |
 | sees_phone | He is in the trance and a phone is near. |

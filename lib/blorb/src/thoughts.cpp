@@ -104,6 +104,7 @@ bool cradled(const Observed& o, uint16_t&) { return sense(o, locus::cradled) >= 
 bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, locus::upside_down) >= kHalf; }
 bool drowsy(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::sleepiness) >= kHigh; }
 bool dreaming(const Observed& o, uint16_t&) { return o.c.body().asleep && o.c.body().dreaming; }
+bool dozing(const Observed& o, uint16_t&) { return o.c.body().asleep; }
 bool foreseeing(const Observed& o, uint16_t&) { return doing(o, action::foresee); }
 bool sees_pellet(const Observed& o, uint16_t&) { return doing(o, action::foresee) && anyPellet(o); }
 bool sees_phone(const Observed& o, uint16_t&) { return doing(o, action::foresee) && sense(o, locus::owner_near) >= kHalf; }

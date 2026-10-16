@@ -287,3 +287,27 @@ night_light
   MY CHEEKS GLOW PINK! I THINK!
 only_me
   EVERYONE SLEEPS! BUT ME! YAY!
+snore
+  ZZZ... POOF... ZZZ... POOF...
+  ZZZ... SNNRK... ACHOO! ZZZ...
+mumble
+  MMM... HUG... HUG ME... MMM
+  MMM... SPARKLES... MORE...
+dream_chase
+  ZZZ... BOUNCE BOUNCE... GOT IT
+  ZZZ... CATCH THE SPARKLE! WHEE
+dream_feast
+  ZZZ... A SNACK AS BIG AS ME!
+  ZZZ... A DAMP LOG CAKE! YUM!
+dream_flight
+  ZZZ... I'M A SPORE... WHEEE...
+  ZZZ... BOUNCED TO THE STARS!
+sleep_count
+  ZZZ... ONE HUG... TWO HUGS...
+  ZZZ... ONE BOUNCE... TWO...
+sleep_warm
+  MMM... FLUFFY... SO FLUFFY...
+  MMM... BIG HUG... WARM HUG...
+dream_rain
+  ZZZ... SOGGY... STILL BOUNCY
+  ZZZ... PUDDLE... BOUNCE! SPLAT

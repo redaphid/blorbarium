@@ -132,6 +132,10 @@ class Dish {
   // the saved pet adopted, or adopts the unsaved one the same way.
   enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
   Adoption adoptSpecies(SpeciesId, const LookBands&);
+  // The one-time step after adoption (founding.h retuneFirstHours), recorded
+  // and saved the same way. NotYet as adoptSpecies; NotNeeded once he sleeps
+  // by FirstHours or when he is not the Gift recipe's `species`.
+  Adoption retuneFirstHours(SpeciesId);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
 
   // Duels (dish_duel.h). The view is plain data for the duel scene and the

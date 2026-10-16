@@ -320,6 +320,18 @@ Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
   return Adoption::Adopted;
 }
 
+Dish::Adoption Dish::retuneFirstHours(SpeciesId species) {
+  if (readOnly_) return Adoption::NotNeeded;
+  Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (!c) return Adoption::NotYet;
+  if (!store_.writable() || duel_.active()) return Adoption::NotYet;
+  if (!blorb::retuneFirstHours(*c, species, live_.settings.speciesSeed)) return Adoption::NotNeeded;
+  lineage_.recordEdit(c->generation(), c->genome());
+  eventDirty_ = true;
+  save();
+  return Adoption::Adopted;
+}
+
 // Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
 bool Dish::flush() { return readOnly_ || save(); }
 
