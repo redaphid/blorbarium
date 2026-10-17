@@ -949,6 +949,28 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 
+// Fight mode, still unpaired (resting included: he is still searching): a
+// solid red ring round the whole rim, 7 px, readable across a room, its
+// brightness breathing but always red. Over everything the dish draws; BOOT's
+// hint is drawn after it (main.cpp), so it stays legible. A dark inner edge
+// keeps it apart from a red pet.
+void searchingRing(Canvas240& cv, uint32_t nowMs) {
+  constexpr int kWidth = 7;
+  constexpr uint32_t kBreathMs = 1600;
+  const int phase = int(nowMs % kBreathMs), half = int(kBreathMs / 2);
+  const int lift = phase < half ? phase : int(kBreathMs) - phase;   // 0..800
+  const uint16_t red = to565({170 + lift * 85 / half, 0, 0}), edge = to565({50, 0, 0});
+  // In half pixels from the centre of the 240 px disc, so the ring is round to the pixel.
+  constexpr int kOuter = kSide * kSide, kInner = (kSide - 2 * kWidth) * (kSide - 2 * kWidth),
+                kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+      if (d2 >= kOuter || d2 < kEdge) continue;
+      cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
+    }
+}
+
 // Boot::Sealed: a keepsake is on the flash and this boot could not open it.
 // The pet sleeps in a drop of amber, safe and whole, and the line under him is
 // for whoever can plug him into a computer. Warm and still on purpose: nothing
@@ -1097,6 +1119,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   if (a.lobby) lobbyLine(cv, a, nowMs);
   else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
+  if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
   mask(cv);
 }
 

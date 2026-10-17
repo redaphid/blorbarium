@@ -759,6 +759,11 @@ TEST(Previews, DumpWhenAsked) {
   asleep.hintUrgency = fx(0.7);
   shots.push_back({"asleep", asleep});
 
+  Appearance fight = idle;
+  fight.dueling = fight.lobby = true;
+  fight.lobbyTicksLeft = 2873;
+  shots.push_back({"fight_searching", fight});
+
   Appearance egg;
   egg.kind = Appearance::Kind::Egg;
   egg.eggProgress = fx(0.5);
@@ -822,6 +827,38 @@ TEST(Lobby, SaysItIsLookingAndPulses) {
   EXPECT_GT(strip(*plain, *shown), 300) << "the lobby writes on the strip";
   EXPECT_GT(strip(*shown, *friendly), 100) << "a resting pet's fight mode reads differently";
   EXPECT_GT(countChanged(*shown, *later) - strip(*shown, *later), 300) << "the pulse moves";
+}
+
+// Fight mode, unpaired: a solid red ring round the whole rim, over the pet,
+// breathing in brightness but always red; gone once a pair locks or fight
+// mode ends; kept while he rests in fight mode (still unpaired).
+TEST(Lobby, SearchingIsARedRingRoundTheWholeRim) {
+  Appearance home = adult(0.0, 0.3);
+  Appearance searching = home, resting = home, connecting = home;
+  searching.dueling = searching.lobby = true;
+  searching.lobbyTicksLeft = 2400;
+  resting = searching, resting.lobbyDecline = blorb::Decline::Resting;
+  connecting = searching, connecting.lobbyConnecting = true;
+  auto red = [](uint16_t p) { return ((p >> 11) & 31) * 255 / 31 >= 160 && ((p >> 5) & 63) <= 4 && (p & 31) <= 2; };
+  const auto rimRed = [&](const Canvas240& cv) {
+    int n = 0, of = 0;
+    for (int deg = 0; deg < 360; deg += 5) {
+      const double rad = deg * 3.14159265 / 180;
+      for (double r : {115.0, 116.5, 118.0}) {
+        const int x = int(119.5 + r * std::cos(rad)), y = int(119.5 + r * std::sin(rad));
+        n += red(cv.px[y * kSide + x]), ++of;
+      }
+    }
+    return n * 100 / of;
+  };
+  for (uint32_t ms : {0u, 400u, 800u, 1200u}) {
+    EXPECT_GE(rimRed(*render(searching, paint::placeholderPack(), 0, ms)), 98) << ms << " ms";
+    EXPECT_GE(rimRed(*render(resting, paint::placeholderPack(), 0, ms)), 98) << ms << " ms";
+  }
+  EXPECT_LT(rimRed(*render(home, paint::placeholderPack(), 0, 0)), 5);
+  EXPECT_LT(rimRed(*render(connecting, paint::placeholderPack(), 0, 0)), 5) << "a locked pair has no ring";
+  const auto dim = render(searching, paint::placeholderPack(), 0, 0), bright = render(searching, paint::placeholderPack(), 0, 800);
+  EXPECT_GT(bright->px[119 * kSide + 2], dim->px[119 * kSide + 2]) << "it breathes";
 }
 
 // A double press that opened no fight mode says why on the strip, and each
