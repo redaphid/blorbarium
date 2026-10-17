@@ -82,8 +82,17 @@ class DishDuel {
 
   // The last double press that did not open a duel, for the screen: why
   // (Decline), or None when the radio was refused (an update holds it).
-  struct Refusal { Decline why = Decline::None; uint32_t tick = 0; bool any = false; };
+  struct Refusal { Decline why = Decline::None; uint32_t tick = 0; bool any = false; NoFight kind = NoFight::None; };
   const Refusal& refusal() const { return refusal_; }
+  // A double press where BOOT means no fight (an egg, the nest, the vigil):
+  // the Dish's routing says so, and the screen shows why.
+  void refuse(NoFight, uint32_t tick);
+  // Fight mode asked for while an update held the radio: it opens by itself
+  // once the radio is free (an update that keeps, kPendingTicks at most).
+  bool pending() const { return pendingSince_.has_value(); }
+  static constexpr uint32_t kPendingTicks = 6000;   // 10 min: a trial keeps or rolls back within 5
+  // A pet resting after his last fight: how long until he is up for another.
+  uint32_t restTicksLeft(uint32_t tick) const;
 
  private:
   bool open(Occupant&, Lineage&, Air&, uint64_t lineageId, uint16_t petDay, uint32_t tick, DuelStepped&);
@@ -104,6 +113,8 @@ class DishDuel {
   bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false, battled_ = false;
   Refusal refusal_;
   std::optional<uint32_t> heldPress_;
+  std::optional<uint32_t> pendingSince_;
+  uint32_t lastTry_ = 0;
   std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows
 };
 

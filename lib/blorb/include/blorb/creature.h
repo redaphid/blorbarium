@@ -122,6 +122,9 @@ class Creature {
   // Sim scripts and tests only: starts that action at the next tick, as the
   // brain would, and holds it for its minTicks unless it finishes.
   void force(ActionId);
+  // Ends his sleep at the next tick, as a stimulus that wakes would (a
+  // double press for a fight). Not saved.
+  void wake() { wakeAsked_ = true; }
   void fire(StimId);                   // sim scripts and tests: lands with the next tick's stimuli
 
   // Phone twists (DEVIATIONS.md 4), applied between ticks.
@@ -168,6 +171,7 @@ class Creature {
   uint32_t actionStart_ = 0;           // in stats_.ageTicks
   bool actionDone_ = false;            // its behaviour finished and stopped; the brain picks next
   std::optional<ActionId> forced_;     // force(), applied at the next tick
+  bool wakeAsked_ = false;             // wake(), applied at the next tick
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
 };

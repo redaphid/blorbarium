@@ -172,7 +172,8 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
         woken = woken || r.wakes;
       }
     }
-  if (woken && body_.asleep && !actionDone_) finish();
+  if ((woken || wakeAsked_) && body_.asleep && !actionDone_) finish();
+  wakeAsked_ = false;
 
   // 3 chemistry
   Fx before[kReflexCount];

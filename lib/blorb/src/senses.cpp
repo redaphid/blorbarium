@@ -304,19 +304,24 @@ void KnockDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 }
 
 void ButtonDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
-  if (s.buttonDown && !down_) {
-    down_ = true;
-    held_ = false;
-    second_ = released_ && ms - lastRelease_ <= kDoublePressMs;
-    downSince_ = ms;
-  } else if (s.buttonDown && !held_ && ms - downSince_ >= kButtonHoldMs) {
-    held_ = true;
-    out.fire(stim::button_hold);
-  } else if (!s.buttonDown && down_) {
-    down_ = false;
+  if (s.buttonDown) {
+    upPending_ = false;   // up for one sample only: a bounce, and the press goes on
+    if (!down_) {
+      down_ = true;
+      held_ = false;
+      second_ = released_ && ms - lastRelease_ <= kDoublePressMs;
+      downSince_ = ms;
+    } else if (!held_ && ms - downSince_ >= kButtonHoldMs) {
+      held_ = true;
+      out.fire(stim::button_hold);
+    }
+  } else if (down_) {
+    if (!upPending_) upPending_ = true, upAt_ = ms;
+    if (ms - upAt_ < kButtonSettleMs) return;
+    down_ = upPending_ = false;
     // A double ends the pair: a third quick press starts a new one.
     released_ = !held_ && !second_;
-    lastRelease_ = ms;
+    lastRelease_ = upAt_;
     if (!held_) out.fire(second_ ? stim::button_double : stim::button);
   }
 }

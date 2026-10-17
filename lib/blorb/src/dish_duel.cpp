@@ -95,6 +95,14 @@ void DishDuel::attach(Storage& s) {
   book_ = DuelBook::open(s);
 }
 
+void DishDuel::refuse(NoFight why, uint32_t tick) { refusal_ = Refusal{Decline::None, tick, true, why}; }
+
+uint32_t DishDuel::restTicksLeft(uint32_t tick) const {
+  if (!dueledThisBoot_ || session_.pinned()) return 0;
+  const uint32_t rest = faintedLast_ ? kRestAfterFaintTicks : kRestTicks, since = tick - lastEndTick_;
+  return since >= rest ? 0 : rest - since;
+}
+
 Decline DishDuel::ready(const Occupant& o, uint32_t tick) const {
   const uint32_t since = session_.pinned() || !dueledThisBoot_ ? UINT32_MAX : tick - lastEndTick_;
   return readiness(o, book_.lossesInARow(), since, faintedLast_);
@@ -142,13 +150,39 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   if (c && fromBody(raw, stim::cradle) && book_.lossesInARow() >= kLossesBeforeACuddle) book_.recordCuddle(tick);
 
   if (!session_.active()) {
-    if (!fromBody(raw, stim::button_double) || bootContext(o, nullptr) != BootContext::Awake) return out;
-    drop(raw, duelStimBit(stim::button_double));
-    if (!air) {
-      refusal_ = Refusal{Decline::None, tick, true};
+    const bool asked = fromBody(raw, stim::button_double);
+    const BootContext ctx = bootContext(o, nullptr);
+    if (asked) drop(raw, duelStimBit(stim::button_double));
+    if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
+      pendingSince_.reset();   // a second double press while it waits takes the ask back
+      refusal_ = Refusal{};
       return out;
     }
-    if (!open(o, lineage, *air, lineageId, petDay, tick, out)) return out;
+    bool tryOpen = false;
+    if (asked && c && ctx == BootContext::Asleep) {
+      // Asleep: woken for it, unless he is too sleepy to fight anyway.
+      if (c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) {
+        refuse(NoFight::TooSleepy, tick);
+        return out;
+      }
+      c->wake();
+      tryOpen = true;
+    } else if (asked && ctx == BootContext::Awake) {
+      tryOpen = true;
+    } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
+      tryOpen = true;
+    }
+    if (!tryOpen) return out;
+    lastTry_ = tick;
+    if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
+      // The radio said no with the pet ready: an update holds it. Ask again each second.
+      if (!air || refusal_.why == Decline::None) {
+        if (!pendingSince_) pendingSince_ = tick;
+        refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
+      }
+      return out;
+    }
+    pendingSince_.reset();
     c = std::get_if<Creature>(&o);
   }
   if (!air) return out;

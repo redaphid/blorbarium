@@ -202,7 +202,7 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
 // The task is the IMU's only reader; the Dish is still only the loop's.
 namespace bodyq {
 struct Timed { blorb::BodySample s; uint32_t ms; };
-constexpr uint8_t kRing = 32;   // 640 ms of samples: a long save or a warp drops the newest, never blocks
+constexpr uint8_t kRing = 128;   // 2.5 s of samples: only a save or warp longer than that drops the newest, never blocks
 static Timed ring[kRing];
 static uint8_t head = 0, tail = 0;
 #if !defined(BADGE_BOARD_SIM)

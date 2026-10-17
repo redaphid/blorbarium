@@ -15,6 +15,7 @@ constexpr Fx kLevel = Fx::ratio(1, 2);
 constexpr uint8_t kDefaultBrightness = 200;
 // A press for the eyes (a peek, a flower) or a refused duel shows this long.
 constexpr uint32_t kEchoTicks = 3 * 1000 / kTickMs;
+constexpr uint32_t kNoFightTicks = 5 * 1000 / kTickMs;   // a refused fight's reason stays up this long
 
 // The unpowered catch-up (DEVIATIONS.md 3): chemistry at the dry run's
 // five-minute stride, at most 12 hours of it per catch-up. The boards have no
@@ -209,6 +210,12 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
   const BootMeaning& m = bootMeaning(ctx);
   if (m.doublePress == BootAct::Nothing && fired(out, stim::button_double)) {
     const bool remote = out.remote & duelStimBit(stim::button_double);
+    // A kid asking for a fight where there is no pet to fight is told why.
+    if (!remote && !sealed()) {
+      if (ctx == BootContext::Egg) duel_.refuse(NoFight::Egg, tick_);
+      else if (ctx == BootContext::FoundingNest || ctx == BootContext::ClutchPick) duel_.refuse(NoFight::Nest, tick_);
+      else if (ctx == BootContext::Vigil) duel_.refuse(NoFight::Remains, tick_);
+    }
     uint8_t kept = 0;
     for (uint8_t i = 0; i < out.stimCount; ++i)
       if (out.stimuli[i] != stim::button_double) out.stimuli[kept++] = out.stimuli[i];
@@ -378,6 +385,10 @@ Appearance Dish::appearance() const {
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
+  // Why no fight, in words: for kNoFightTicks, or for as long as fight mode waits on an update.
+  if (!a.dueling && r.any && r.kind != NoFight::None && (duel_.pending() || tick_ - r.tick < kNoFightTicks))
+    a.noFight = r.kind, a.noFightTicks = uint16_t(std::min<uint32_t>(tick_ - r.tick, 0xFFFF));
+  a.restTicksLeft = uint16_t(std::min<uint32_t>(duel_.restTicksLeft(tick_), 0xFFFF));
   const DuelBook& book = duel_.book();
   book.forEachTrophy([&](const Trophy& t) {
     if (a.trophyCount < Appearance::kRimTrophies) a.trophies[a.trophyCount++] = t.fallen;

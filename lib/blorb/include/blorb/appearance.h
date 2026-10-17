@@ -116,6 +116,11 @@ struct Appearance {
   bool refused = false;
   Decline declined = Decline::None;
   uint16_t refusedTicks = 0;
+  // Why a double press opened no fight mode, in words on the strip (an egg,
+  // the nest, too sleepy to wake, an update finishing), noFightTicks ago.
+  NoFight noFight = NoFight::None;
+  uint16_t noFightTicks = 0;
+  uint16_t restTicksLeft = 0;   // resting after a fight: shown in fight mode
   // A duel is open: the duel scene replaces the dish, drawn from Dish::duelView().
   bool dueling = false;
   // Fight mode, which keeps the dish: it says it is looking (or connecting,

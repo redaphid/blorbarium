@@ -113,11 +113,16 @@ struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400
 inline constexpr uint32_t kDoublePressMs = 400;
 inline constexpr uint32_t kButtonHoldMs = 1200;   // a press held this long is ButtonHold, not a press
 
+// GPIO0 is read raw: a release counts once BOOT has stayed up this long (two
+// 50 Hz samples), so a contact bounce caught by one sample never splits a
+// press in two. The release is dated from the first up sample.
+inline constexpr uint32_t kButtonSettleMs = 15;
+
 struct ButtonDetector : DetectorBase {    // release < 1.2 s -> Button (or ButtonDouble); reaching 1.2 s -> ButtonHold
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private:
-  uint32_t downSince_ = 0, lastRelease_ = 0;
-  bool down_ = false, held_ = false, second_ = false, released_ = false;
+  uint32_t downSince_ = 0, lastRelease_ = 0, upAt_ = 0;
+  bool down_ = false, held_ = false, second_ = false, released_ = false, upPending_ = false;
 };
 struct LidDetector : DetectorBase {       // az < -0.8 g and still for 30 s -> lidded, LidDown; righting -> LidUp
   void sample(const BodySample&, uint32_t ms, SenseOut&);

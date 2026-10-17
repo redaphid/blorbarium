@@ -50,8 +50,10 @@ enum class Decline : uint8_t {
   Unfair,         // a balance: not a fair fight (the assist, too few picked turns, a lopsided head-to-head, or today's for-keeps duel already fought)
 };
 
-inline constexpr Fx kDeclineSleepy = Fx::ratio(8, 10);
-inline constexpr Fx kDeclineHungry = Fx::ratio(8, 10);
+// 0.8 -> 0.9 (0.7.5): an ordinary awake pet fights; only one who is truly
+// spent or starving says no.
+inline constexpr Fx kDeclineSleepy = Fx::ratio(9, 10);
+inline constexpr Fx kDeclineHungry = Fx::ratio(9, 10);
 inline constexpr uint32_t kRestTicks = 2 * kTicksPerMinute;
 inline constexpr uint32_t kRestAfterFaintTicks = 5 * kTicksPerMinute;
 inline constexpr uint8_t kLossesBeforeACuddle = 3;

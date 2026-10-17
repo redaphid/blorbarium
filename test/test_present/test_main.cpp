@@ -134,6 +134,8 @@ TEST(Golden, IdleAdult) {
             "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=4");
 }
 
+// stim=8+8 (was 8+9): the press's release settles a sample later (0.7.5
+// debounce), so the button lands one tick later; nothing else moved.
 TEST(Golden, Eating) {
   Rig r;
   r.hatch();
@@ -144,7 +146,7 @@ TEST(Golden, Eating) {
   EXPECT_EQ(dump(r.dish.appearance()),
             "kind=1 gen=0 stage=0 seed=50b440b1 at=64,62 facing=242 scale=55 pose=2/0 face=0<0 349 t19 "
             "reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=1 injury=0 wobble=0 night=998 egg=0 "
-            "fade=0 eggs=0@0 hint=0/0 0 stim=8+9 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
+            "fade=0 eggs=0@0 hint=0/0 0 stim=8+8 r11,128,128 r0,128,137 r0,128,118 r0,128,128 "
             "r0,128,128 r0,140,160 r11,128,128 m0,4,0 i2@52,-545 pantry=3");
 }
 

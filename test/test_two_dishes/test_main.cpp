@@ -336,13 +336,170 @@ TEST(Gestures, TheFirstPressOfADoubleFeedsAtOnce) {
     for (uint8_t i = 0; i < out.stimCount; ++i) fired.push_back({ms, out.stimuli[i].v});
   }
   ASSERT_EQ(fired.size(), 2u);
-  EXPECT_EQ(fired[0], (std::pair<uint32_t, uint8_t>{160, stim::button.v}));
+  EXPECT_EQ(fired[0], (std::pair<uint32_t, uint8_t>{180, stim::button.v}));   // dated 160, settled a sample later
   EXPECT_EQ(fired[1].second, stim::button_double.v);
 }
 
 // The first press lights BOOT's hint until the double's window closes, and a
 // double opens fight mode, which says it is looking and how long it has, and
 // finds the other badge in fight mode by itself: no tap, no tilt.
+// A kid's natural double tap on the real sampling path (50 Hz, each sample
+// stamped): two presses of 80 to 200 ms, 100 to 350 ms apart, at every phase
+// of the sampling clock, is one press and one double, nothing else.
+TEST(Gestures, AKidsNaturalDoubleTapAlwaysRegisters) {
+  int combos = 0;
+  for (uint32_t pressMs = 80; pressMs <= 200; pressMs += 20)
+    for (uint32_t gapMs = 100; gapMs <= 350; gapMs += 25)
+      for (uint32_t phase = 0; phase < 20; phase += 3) {
+        ButtonDetector d;
+        std::vector<uint8_t> fired;
+        const uint32_t second = 1000 + pressMs + gapMs;
+        for (uint32_t ms = phase; ms < 3000; ms += 20) {
+          BodySample s;
+          s.buttonDown = (ms >= 1000 && ms < 1000 + pressMs) || (ms >= second && ms < second + pressMs);
+          SenseOut out;
+          d.sample(s, ms, out);
+          for (uint8_t i = 0; i < out.stimCount; ++i) fired.push_back(out.stimuli[i].v);
+        }
+        EXPECT_EQ(fired, (std::vector<uint8_t>{stim::button.v, stim::button_double.v}))
+            << pressMs << " ms presses, " << gapMs << " ms apart, phase " << phase;
+        ++combos;
+      }
+  EXPECT_GT(combos, 400);
+}
+
+// GPIO0 is read raw: a bounce one sample long inside a press is still one
+// press, not a double that opens fight mode by itself.
+TEST(Gestures, AContactBounceNeverSplitsAPress) {
+  ButtonDetector d;
+  std::vector<uint8_t> fired;
+  for (uint32_t ms = 0; ms < 2000; ms += 20) {
+    BodySample s;
+    s.buttonDown = ms >= 100 && ms < 260 && ms != 160;
+    SenseOut out;
+    d.sample(s, ms, out);
+    for (uint8_t i = 0; i < out.stimCount; ++i) fired.push_back(out.stimuli[i].v);
+  }
+  EXPECT_EQ(fired, (std::vector<uint8_t>{stim::button.v}));
+}
+
+namespace {
+// Two 140 ms presses 200 ms apart, sampled at 50 Hz, then the Dish ticks.
+void doublePress(Device& d) {
+  for (int p = 0; p < 2; ++p) {
+    for (uint32_t t = 0; t < 140; t += 20) {
+      BodySample s;
+      s.az = 1000, s.buttonDown = true;
+      d.dish->sample(s, d.ms += 20);
+    }
+    for (uint32_t t = 0; t < (p ? 100u : 200u); t += 20) {
+      BodySample s;
+      s.az = 1000;
+      d.dish->sample(s, d.ms += 20);
+    }
+  }
+  d.dish->tick(d.ms, d.link);
+}
+void idle(Device& d, int ticks) {
+  for (int i = 0; i < ticks; ++i) d.dish->tick(d.ms += 100, d.link);
+}
+}  // namespace
+
+// Every double press says what it did: fight mode, or why not, in words.
+TEST(FightAsk, AnEggSaysSoAndAFreshBoardNeverFightsSilently) {
+  Ether ether(5, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.dish->occupant()));
+  doublePress(a);
+  EXPECT_FALSE(a.dish->duelActive());
+  const Appearance look = a.dish->appearance();
+  EXPECT_EQ(look.noFight, NoFight::Egg);
+  idle(a, 60);
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::None) << "the reason shows for a few seconds";
+}
+
+TEST(FightAsk, AnAsleepPetWakesForAFightUnlessTooSleepy) {
+  Ether ether(6, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  auto sleep = [&](Fx sleepiness) {
+    a.creature().inject(driveChem(drive::sleepiness), Fx::ratio(9, 10));
+    a.creature().force(action::sleep);
+    for (int i = 0; i < 50 && !a.creature().body().asleep; ++i) idle(a, 1);
+    a.creature().inject(driveChem(drive::sleepiness), sleepiness);
+  };
+  sleep(Fx::ratio(95, 100));
+  ASSERT_TRUE(a.creature().body().asleep);
+  doublePress(a);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::TooSleepy);
+  EXPECT_TRUE(a.creature().body().asleep) << "too sleepy: left to sleep";
+
+  idle(a, 60);
+  sleep(Fx::ratio(3, 10));
+  ASSERT_TRUE(a.creature().body().asleep);
+  doublePress(a);
+  EXPECT_TRUE(a.dish->duelActive()) << "fight mode opens at once";
+  idle(a, 3);
+  EXPECT_FALSE(a.creature().body().asleep) << "woken for it";
+  EXPECT_EQ(a.dish->duelView().myDecline, Decline::None);
+  EXPECT_TRUE(a.dish->appearance().lobby);
+}
+
+TEST(FightAsk, AHungryPetEntersFightModeAndSaysToFeedHim) {
+  Ether ether(7, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  a.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
+  doublePress(a);
+  ASSERT_TRUE(a.dish->duelActive());
+  const Appearance look = a.dish->appearance();
+  EXPECT_TRUE(look.lobby);
+  EXPECT_EQ(look.lobbyDecline, Decline::Hungry);
+}
+
+// Right after an update the radio is the trial's until it keeps: the kid is
+// told, and fight mode opens by itself once the radio is free.
+TEST(FightAsk, DuringAnUpdatesTrialFightModeWaitsAndOpensByItself) {
+  Ether ether(8, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  a.air.refuseOpen = true;   // RadioGate: an image on trial, or an update session
+  doublePress(a);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Updating);
+  idle(a, 200);
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Updating) << "said for as long as it waits";
+  a.air.refuseOpen = false;   // the trial kept
+  idle(a, 15);
+  EXPECT_TRUE(a.dish->duelActive()) << "fight mode opened by itself";
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
+}
+
+TEST(FightAsk, ASecondDoublePressTakesBackAWaitingAsk) {
+  Ether ether(9, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  a.air.refuseOpen = true;
+  doublePress(a);
+  idle(a, 10);
+  doublePress(a);
+  a.air.refuseOpen = false;
+  idle(a, 30);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
+}
+
 TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {
   Ether ether(3, {});
   Device a(ether, 1), b(ether, 2);
@@ -771,7 +928,9 @@ TEST(BootRows, AwakeAPressFeedsAHoldTucksInADoubleOpensTheLobby) {
   EXPECT_TRUE(a.d.dish->duelActive()) << "a double press opens the lobby";
 }
 
-TEST(BootRows, AsleepADoublePressIsTwoPellets) {
+// Asleep, a double press asks for a fight (he is woken for it); too sleepy,
+// he is left to sleep, the first press still fed him, and the screen says why.
+TEST(BootRows, AsleepAndTooSleepyADoublePressIsAPelletAndAReason) {
   Alone a;
   a.d.creature().inject(driveChem(drive::sleepiness), Fx::ratio(9, 10));
   a.d.creature().force(action::sleep);
@@ -780,9 +939,10 @@ TEST(BootRows, AsleepADoublePressIsTwoPellets) {
   expectRow(*a.d.dish, BootContext::Asleep, "asleep");
   const uint8_t before = pellets(*a.d.dish);
   a.doublePress();
-  EXPECT_FALSE(a.d.dish->duelActive()) << "a sleeping pet never duels";
+  EXPECT_FALSE(a.d.dish->duelActive()) << "too sleepy to be woken for a fight";
   EXPECT_EQ(a.d.air.opens, 0u);
-  EXPECT_EQ(pellets(*a.d.dish), before + 2) << "where a double means nothing, it is two presses";
+  EXPECT_EQ(pellets(*a.d.dish), before + 1) << "the first press fed him; the second asked for a fight";
+  EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::TooSleepy);
 }
 
 TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {

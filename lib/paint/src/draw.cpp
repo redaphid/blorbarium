@@ -883,16 +883,39 @@ void thoughtLine(Canvas240& cv, const blorb::Appearance& a, bool low) {
                   width - off, 0);
 }
 
-// Why a pet in fight mode is not up for a fight, in a word a kid reads.
+// Why a pet in fight mode is not up for a fight, in words a kid reads.
 const char* notReady(blorb::Decline d) {
   using D = blorb::Decline;
   switch (d) {
-    case D::Asleep: case D::Sleepy: return "SLEEPY";
-    case D::Hungry: return "HUNGRY";
+    case D::Asleep: case D::Sleepy: return "TOO SLEEPY TO FIGHT";
+    case D::Hungry: return "TOO HUNGRY - PRESS ONCE TO FEED";
     case D::Resting: return "RESTING";
-    case D::WantsACuddle: return "WANTS A CUDDLE";
-    default: return "NOT READY";
+    case D::WantsACuddle: return "NEEDS A CUDDLE";
+    default: return "NOT READY YET";
   }
+}
+
+// Why a double press opened no fight mode at all.
+const char* noFightLine(blorb::NoFight n) {
+  using N = blorb::NoFight;
+  switch (n) {
+    case N::Egg: return "STILL AN EGG - HATCHING SOON";
+    case N::Nest: return "PICK AN EGG FIRST";
+    case N::Remains: return "NOT NOW";
+    case N::TooSleepy: return "ZZZ... TOO SLEEPY TO FIGHT";
+    case N::Updating: return "UPDATE FINISHING - FIGHT MODE SOON";
+    case N::None: break;
+  }
+  return "";
+}
+
+void noFightStrip(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
+  Marquee strip = kMarqueeStrip;
+  if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
+  dimBand(cv, strip);
+  char s[64];
+  std::snprintf(s, sizeof s, "%s  ", noFightLine(a.noFight));
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
 // Fight mode keeps the dish, so it has to say what it is doing: a line saying
@@ -915,7 +938,10 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
   if (a.lobbyConnecting)
     std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
-  else if (a.lobbyDecline != blorb::Decline::None)
+  else if (a.lobbyDecline == blorb::Decline::Resting) {
+    const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
+    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  PRESS TWICE TO STOP  ", rest / 60, rest % 60);
+  } else if (a.lobbyDecline != blorb::Decline::None)
     std::snprintf(s, sizeof s, "FIGHT MODE - %s  %u:%02u  PRESS TWICE TO STOP  ", notReady(a.lobbyDecline), secs / 60,
                   secs % 60);
   else
@@ -1069,6 +1095,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   hint(cv, a);
   // Low when he stands high in the dish, so the line never crosses his face.
   if (a.lobby) lobbyLine(cv, a, nowMs);
+  else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   mask(cv);
 }

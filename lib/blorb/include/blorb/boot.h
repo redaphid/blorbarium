@@ -92,7 +92,7 @@ inline constexpr BootMeaning kBoot[] = {
     {BootContext::ClutchPick, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
     {BootContext::Vigil, BootAct::LayFlower, BootAct::Nothing, BootAct::Nothing, BootGlyph::Flower, 0},
     {BootContext::Egg, BootAct::PeekEgg, BootAct::Nothing, BootAct::Nothing, BootGlyph::Peek, 0},
-    {BootContext::Asleep, BootAct::DropPellet, BootAct::TuckIn, BootAct::Nothing, BootGlyph::Pellet, 1200},
+    {BootContext::Asleep, BootAct::DropPellet, BootAct::TuckIn, BootAct::OpenDuel, BootGlyph::Pellet, 1200},
     {BootContext::Awake, BootAct::DropPellet, BootAct::TuckIn, BootAct::OpenDuel, BootGlyph::Pellet, 1200},
 };
 
@@ -120,6 +120,17 @@ static_assert(deathIsAlwaysAHold(), "a press can never finish a pet or agree to 
 static_assert(everyStateShowsAHint(), "every state draws a hint: a kid never has to guess");
 
 constexpr const BootMeaning& bootMeaning(BootContext c) { return kBoot[size_t(c)]; }
+
+// Why a double press did not open fight mode, shown in words for a few
+// seconds (a reason a Decline already names shows in fight mode itself).
+enum class NoFight : uint8_t {
+  None,
+  Egg,         // still an egg: hatching soon
+  Nest,        // the eggs to choose from (founding, or after a vigil)
+  Remains,     // the vigil
+  TooSleepy,   // asleep, and too sleepy to be woken for it
+  Updating,    // an update holds the radio (its question, or this image on trial): fight mode opens once it keeps
+};
 
 // What Appearance carries every frame, for paint::drawBootHint.
 struct BootHint {

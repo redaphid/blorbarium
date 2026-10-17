@@ -824,6 +824,26 @@ TEST(Lobby, SaysItIsLookingAndPulses) {
   EXPECT_GT(countChanged(*shown, *later) - strip(*shown, *later), 300) << "the pulse moves";
 }
 
+// A double press that opened no fight mode says why on the strip, and each
+// reason reads differently.
+TEST(Lobby, ARefusedFightSaysWhy) {
+  Appearance home = adult(0.0, 0.3);
+  auto strip = [](const Canvas240& a, const Canvas240& b) {
+    int n = 0;
+    for (int y = 34; y < 54; ++y)
+      for (int x = 0; x < kSide; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+    return n;
+  };
+  const auto plain = render(home, paint::placeholderPack(), 0, 500);
+  Appearance egg = home, update = home;
+  egg.noFight = blorb::NoFight::Egg;
+  update.noFight = blorb::NoFight::Updating;
+  const auto e = render(egg, paint::placeholderPack(), 0, 500);
+  const auto u = render(update, paint::placeholderPack(), 0, 500);
+  EXPECT_GT(strip(*plain, *e), 300);
+  EXPECT_GT(strip(*e, *u), 100);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -264,7 +264,9 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // 0xdca5e44a until a chosen sleep needed the gate open past kSleepOnset
   // (docs/notes/first-hours.md: 8a7f68fc) and the shake landed on its fifth
   // reversal, a tick later (rel-senses: c848b73d); both together: e8e58739.
-  constexpr uint32_t kCommitted = 0xe8e58739u;
+  // eb8860f0 once a BOOT release settles over two samples (0.7.5 debounce),
+  // which lands some of the routine's presses a tick later.
+  constexpr uint32_t kCommitted = 0xeb8860f0u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -275,7 +277,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=e8e58739 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=eb8860f0 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
