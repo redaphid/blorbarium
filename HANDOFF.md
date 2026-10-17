@@ -14,7 +14,14 @@ and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
 ## Where things stand (2026-10-15, owner on a plane with all 9 badges)
 
-**Live:** firmware **0.7.5** (manifest f86fac1, firmware ec40e53): fight
+**Live:** firmware **0.7.6** (manifest db3c011, firmware 987ae02): every BOOT
+press and fight ask is logged with its gate on serial (`[diag]`) and the
+debug panel ("Fight:" line, `! DEBUG boot double ms= gap=`, `fight ... gate=
+result=`), and the fight banner shows `HEARD n`. Open question from the owner:
+on 0.7.4, awake hatched pets did not enter fight mode; the cause is not
+confirmed (hypotheses: a silent Sleepy/Hungry decline, the OTA trial gate, or
+the double press not registering). These logs are meant to settle it.
+Before it, **0.7.5** (manifest f86fac1, firmware ec40e53): fight
 mode says why it cannot start (egg, asleep, sleepy, hungry, resting,
 updating), a double press wakes a sleeper, fight mode waits out an OTA trial
 and opens by itself, BOOT is debounced, and a red ring circles the rim while
