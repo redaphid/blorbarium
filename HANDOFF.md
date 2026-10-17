@@ -14,7 +14,11 @@ and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
 ## Where things stand (2026-10-15, owner on a plane with all 9 badges)
 
-**Live:** firmware **0.7.4** (manifest 2c0c9a3, firmware 7577c64): sticky
+**Live:** firmware **0.7.5** (manifest f86fac1, firmware ec40e53): fight
+mode says why it cannot start (egg, asleep, sleepy, hungry, resting,
+updating), a double press wakes a sleeper, fight mode waits out an OTA trial
+and opens by itself, BOOT is debounced, and a red ring circles the rim while
+fight mode searches. Before it, **0.7.4** (manifest 2c0c9a3, firmware 7577c64): sticky
 FIGHT MODE. A BOOT double press (0.4 s) searches for 5 min or until a
 second double press. Badges pair by claim, answer and lock (lowest MAC, no
 badge claimed twice, no RSSI gate, 20 dBm). A fight shows only once both
