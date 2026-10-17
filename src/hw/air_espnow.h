@@ -14,6 +14,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
+#include <cstdio>
 #include <cstring>
 
 #include "blorb/air.h"
@@ -37,7 +38,7 @@ class EspNowAir : public blorb::Air {
     xQueueReset(queue_);
     const uint32_t before = ESP.getFreeHeap();
     WiFi.persistent(false);
-    if (!WiFi.mode(WIFI_STA)) return fail("wifi");
+    if (!WiFi.mode(WIFI_STA)) return fail("wifi", ESP_OK);
     // ESP-NOW's receive callback on IDF 4.4 carries no RSSI, and the lobby
     // gates on it, so the frame's own rx_ctrl is read in promiscuous mode
     // (management frames only: ESP-NOW rides vendor action frames).
@@ -45,9 +46,9 @@ class EspNowAir : public blorb::Air {
     esp_wifi_set_promiscuous_filter(&filter);
     esp_wifi_set_promiscuous_rx_cb(&onSniff);
     esp_wifi_set_promiscuous(true);
-    if (esp_wifi_set_channel(kChannel, WIFI_SECOND_CHAN_NONE) != ESP_OK) return fail("channel");
+    if (const esp_err_t e = esp_wifi_set_channel(kChannel, WIFI_SECOND_CHAN_NONE); e != ESP_OK) return fail("channel", e);
     esp_wifi_set_max_tx_power(kTxQuarterDbm);
-    if (esp_now_init() != ESP_OK) return fail("esp_now_init");
+    if (const esp_err_t e = esp_now_init(); e != ESP_OK) return fail("esp_now_init", e);
     self_ = this;
     esp_now_register_recv_cb(&onReceive);
     addPeer(kBroadcast);
@@ -73,6 +74,7 @@ class EspNowAir : public blorb::Air {
   }
 
   bool isOpen() const override { return open_; }
+  const char* refusal() const override { return failure_; }
   blorb::PeerAddr self() const override { return me_; }
 
   void broadcast(const uint8_t* p, size_t n) override { transmit(kBroadcast, p, n); }
@@ -92,7 +94,9 @@ class EspNowAir : public blorb::Air {
  private:
   static constexpr blorb::PeerAddr kBroadcast{{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
 
-  bool fail(const char* what) {
+  bool fail(const char* what, esp_err_t e = ESP_OK) {
+    if (e == ESP_OK) std::snprintf(failure_, sizeof failure_, "%s", what);
+    else std::snprintf(failure_, sizeof failure_, "%s:0x%x", what, unsigned(e));
     Serial.printf("[hw] air open FAILED at %s heap=%u\n", what, unsigned(ESP.getFreeHeap()));
     esp_now_deinit();
     esp_wifi_set_promiscuous(false);
@@ -143,6 +147,7 @@ class EspNowAir : public blorb::Air {
   blorb::PeerAddr me_{};
   bool open_ = false;
   uint32_t rx_ = 0, tx_ = 0, sendErrors_ = 0;
+  char failure_[32] = "none";
   volatile uint32_t dropped_ = 0;
 };
 

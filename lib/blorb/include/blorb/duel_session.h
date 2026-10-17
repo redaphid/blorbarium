@@ -149,6 +149,7 @@ struct DuelView {
   struct Peer { SpeciesId species; CardLook look; Decline decline; bool wantsMe, chosen, compatible; };
   Peer peers[kMaxLobbyPeers]{};
   uint8_t peerCount = 0;
+  uint8_t heardCount = 0;               // fight mode: every friend heard in the last 3 s (up to kMaxLobbyHeard)
   Decline myDecline = Decline::None;    // the lobby: this pet only beacons his picture and never matches
   uint16_t fightTicksLeft = 0;          // fight mode: until the radio gives up with no fight
 

@@ -243,7 +243,7 @@
     const where = () => `OK phase=${d.phase} stage=${d.stage} age=${d.age}`;
     switch (verb) {
       case "HELP": return out(...Object.entries(DEBUG_REACH).map(([v, r]) => `+ ${v} ${r} `), `OK ${Object.keys(DEBUG_REACH).length}`);
-      case "STATUS": return out(`OK unlock=${d.unlock} scale=${d.scale} trial=${this.trial ? 1 : 0} ota=${this.state === "idle" ? 0 : 1} sealed=0 phase=${d.phase} stage=${d.stage} age=${d.age} species=${d.species} look=${d.look} time=${d.time} dropped=0`);
+      case "STATUS": return out(`OK unlock=${d.unlock} scale=${d.scale} trial=${this.trial ? 1 : 0} ota=${this.state === "idle" ? 0 : 1} sealed=0 phase=${d.phase} stage=${d.stage} age=${d.age} species=${d.species} look=${d.look} time=${d.time} dropped=0 fight=${d.fight || "off"} last=${d.fightLast || "none"}`);
       case "UNLOCK":
         if (this.trial) return out("ERR 409 TRIAL");
         if (d.unlock === "open") return out("OK unlock=open");

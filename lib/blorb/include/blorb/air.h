@@ -53,6 +53,9 @@ class Air {
   virtual void broadcast(const uint8_t*, size_t) = 0;            // the lobby beacon
   virtual void send(const PeerAddr&, const uint8_t*, size_t) = 0; // battle state, unicast (link-layer ack and retry)
   virtual std::optional<Datagram> receive() = 0;                 // oldest first; nothing while closed
+  // Why the last open() said no, for the debug link: "trial", "ota_active",
+  // or the radio's own error.
+  virtual const char* refusal() const { return "radio_closed"; }
 };
 
 }  // namespace blorb

@@ -2,6 +2,7 @@
 // unit D9's cases): each with its own MemStorage and FakeAir, driven by 50 Hz
 // BodySamples from a scripted kid who reads only the duel view, as a kid
 // reads the screen.
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <cstdlib>
@@ -482,6 +483,96 @@ TEST(FightAsk, DuringAnUpdatesTrialFightModeWaitsAndOpensByItself) {
   idle(a, 15);
   EXPECT_TRUE(a.dish->duelActive()) << "fight mode opened by itself";
   EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
+}
+
+namespace {
+std::vector<std::string> diags(Device& d) {
+  std::vector<std::string> out;
+  for (char l[DiagLines::kLine]; d.dish->takeDiag(l);) out.emplace_back(l);
+  return out;
+}
+bool has(const std::vector<std::string>& lines, const std::string& part) {
+  for (const std::string& l : lines)
+    if (l.find(part) != std::string::npos) return true;
+  return false;
+}
+std::string joined(const std::vector<std::string>& lines) {
+  std::string s;
+  for (const std::string& l : lines) s += l + " | ";
+  return s;
+}
+}  // namespace
+
+// Every BOOT press and every ask for a fight is a line for the debug link:
+// how long, how far apart, where BOOT was, what stood in the way, what came of it.
+TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
+  Ether ether(10, {});
+  Device egg(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  egg.boot(ga, 1);
+  doublePress(egg);
+  std::vector<std::string> l = diags(egg);
+  EXPECT_TRUE(has(l, "boot press ms=140 gap=none")) << joined(l);
+  EXPECT_TRUE(has(l, "boot double ms=140 gap=200")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 ctx=egg gate=egg result=refused")) << joined(l);
+  EXPECT_STREQ(egg.dish->fightState(), "off");
+  EXPECT_STREQ(egg.dish->lastFightGate(), "egg");
+
+  Device a(ether, 2);
+  a.boot(ga, 2);
+  a.growUp();
+  diags(a);
+  a.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
+  doublePress(a);
+  l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=1 ctx=awake gate=hungry:0.9")) << joined(l);
+  EXPECT_TRUE(has(l, "result=entered")) << joined(l);
+  EXPECT_STREQ(a.dish->fightState(), "searching");
+
+  Device b(ether, 3);
+  b.boot(ga, 3);
+  b.growUp();
+  b.air.refuseOpen = true;
+  diags(b);
+  doublePress(b);
+  idle(b, 30);
+  l = diags(b);
+  EXPECT_TRUE(has(l, "fight double=1 ctx=awake gate=radio_closed result=waiting")) << joined(l);
+  EXPECT_EQ(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("waiting") != std::string::npos; }), 1)
+      << "a retry each second logs once: " << joined(l);
+  EXPECT_STREQ(b.dish->fightState(), "waiting");
+  b.air.refuseOpen = false;
+  idle(b, 15);
+  l = diags(b);
+  EXPECT_TRUE(has(l, "fight double=0 ctx=awake gate=ok result=entered")) << joined(l);
+  EXPECT_STREQ(b.dish->fightState(), "searching");
+  EXPECT_STREQ(b.dish->lastFightGate(), "ok");
+}
+
+TEST(FightAsk, ASleepingPetsAskSaysWokenOrTooSleepy) {
+  Ether ether(11, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  auto sleep = [&](Fx sleepiness) {
+    a.creature().inject(driveChem(drive::sleepiness), Fx::ratio(9, 10));
+    a.creature().force(action::sleep);
+    for (int i = 0; i < 50 && !a.creature().body().asleep; ++i) idle(a, 1);
+    a.creature().inject(driveChem(drive::sleepiness), sleepiness);
+  };
+  sleep(Fx::ratio(95, 100));
+  diags(a);
+  doublePress(a);
+  std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=1 ctx=asleep gate=asleep:sleepy:0.9")) << joined(l);
+  EXPECT_TRUE(has(l, "result=refused")) << joined(l);
+  idle(a, 60);
+  sleep(Fx::ratio(3, 10));
+  diags(a);
+  doublePress(a);
+  l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=1 ctx=asleep gate=woken result=entered")) << joined(l);
 }
 
 TEST(FightAsk, ASecondDoublePressTakesBackAWaitingAsk) {

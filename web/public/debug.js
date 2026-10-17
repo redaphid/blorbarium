@@ -93,6 +93,7 @@
       log(`← ${r.text}`, r.ok ? "ok" : "err");
       if (/^ERR 423/.test(r.text)) say("Locked: press Unlock, then BOOT on the dish.");
       if (/^(UNLOCK|LOCK|SCALE|LOOK|WALL)/.test(cmd) || !r.ok) refresh();
+      if (cmd === "STATUS" && r.ok) applyFight(r.text);
       return r;
     } catch (e) {
       log(`← ${e.message}`, "err");
@@ -106,6 +107,7 @@
     const r = await channel.send("STATUS").catch(() => null);
     if (!r || !r.ok) return;
     panel.querySelector("#dbgStatus").textContent = r.text.replace(/^OK /, "");
+    applyFight(r.text);
     const unlock = (/unlock=(\w+)/.exec(r.text) || [])[1];
     panel.dataset.unlock = unlock;
     if (unlock === "asking") say("Press BOOT on the dish now (after 1.5 s, within 30 s).");
@@ -113,9 +115,34 @@
     if (mock) panel.querySelector("#dbgMockPress").hidden = unlock !== "asking";
   }
 
+  // The fight line: fight mode's state from STATUS, and the last ask's gate,
+  // result and the radio's answer from the dish's `! DEBUG fight|radio` events.
+  const fight = { state: "", gate: "", result: "", ctx: "", radio: "" };
+  function showFight() {
+    const f = panel.querySelector("#dbgFight");
+    if (!f) return;
+    const parts = [`Fight: ${fight.state || "?"}`];
+    if (fight.result) parts.push(`last ask ${fight.result}${fight.ctx ? ` (${fight.ctx})` : ""}`);
+    if (fight.gate) parts.push(`gate ${fight.gate}`);
+    if (fight.radio) parts.push(`radio ${fight.radio}`);
+    f.textContent = parts.join(" · ");
+  }
+
+  // STATUS's fight= and last=; a last of "none" never hides an ask an event already told.
+  function applyFight(status) {
+    const state = (/fight=(\w+)/.exec(status) || [])[1];
+    const last = (/last=(\S+)/.exec(status) || [])[1];
+    if (last && last !== "none") fight.gate = last;
+    if (state) fight.state = state, showFight();
+  }
+
   function onEvent(text) {
     log(`! ${text}`);
     if (/^DEBUG unlock=/.test(text)) refresh();
+    const ask = /^DEBUG fight double=\d ctx=(\S+) gate=(\S+) result=(\S+)/.exec(text);
+    if (ask) [, fight.ctx, fight.gate, fight.result] = ask, showFight(), refresh();
+    const radio = /^DEBUG radio open=(\d)(?: err=(\S+))?/.exec(text);
+    if (radio) fight.radio = radio[1] === "1" ? "open" : `refused: ${radio[2] || "?"}`, showFight();
   }
 
   function row(label, ...controls) {
@@ -156,6 +183,7 @@
       el("h2", { textContent: "Debug" }),
       el("p", { className: "hint", id: "dbgSay", textContent: "Connect to the dish. Harmful commands need Unlock and a BOOT press." }),
       el("p", { className: "dbg-status", id: "dbgStatus", textContent: "not connected" }),
+      el("p", { className: "dbg-status", id: "dbgFight", textContent: "Fight: ?" }),
       retry,
       datalist("dbgChems", CHEMS), datalist("dbgStims", STIMULI), datalist("dbgThoughts", THOUGHTS),
       row("Unlock", button("Unlock", "UNLOCK", { className: "" }), button("Lock", "LOCK"), button("Status", "STATUS"), mockPress),

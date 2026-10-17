@@ -141,6 +141,11 @@ class Dish {
   // Duels (dish_duel.h). The view is plain data for the duel scene and the
   // films; Closed when none is open.
   bool duelActive() const { return duel_.active(); }
+  // One `! DEBUG` line (without the prefix): BOOT's presses and why a fight did or did not start.
+  bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
+  // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
+  const char* fightState() const;
+  const char* lastFightGate() const { return duel_.lastGate(); }
   DuelView duelView() const { return duel_.view(tick_); }
   const DuelBook& duels() const { return duel_.book(); }
   const std::optional<Meeting>& lastMeeting() const { return duel_.lastMeeting(); }
@@ -202,6 +207,11 @@ class Dish {
   // could still become a double lights the hint until the window closes.
   uint32_t tapReleaseMs_ = 0;
   bool tapArmed_ = false, tapSecond_ = false;
+  // The last press as BOOT's raw level drew it, for the debug link: how long
+  // it was held, and how long after the press before it.
+  uint32_t heldMs_ = 0, gapMs_ = 0;
+  bool releasedOnce_ = false;
+  DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;
   uint32_t echoTick_ = 0;

@@ -9,6 +9,7 @@
 #include "blorb/air.h"
 #include "blorb/boot.h"
 #include "blorb/creature.h"
+#include "blorb/diag.h"
 #include "blorb/duel_book.h"
 #include "blorb/duel_card.h"
 #include "blorb/duel_session.h"
@@ -86,7 +87,10 @@ class DishDuel {
   const Refusal& refusal() const { return refusal_; }
   // A double press where BOOT means no fight (an egg, the nest, the vigil):
   // the Dish's routing says so, and the screen shows why.
-  void refuse(NoFight, uint32_t tick);
+  void refuse(NoFight, uint32_t tick, const char* gate = nullptr);
+  bool searching() const { return session_.searching(); }
+  bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out); }
+  const char* lastGate() const { return lastGate_; }
   // Fight mode asked for while an update held the radio: it opens by itself
   // once the radio is free (an update that keeps, kPendingTicks at most).
   bool pending() const { return pendingSince_.has_value(); }
@@ -115,6 +119,11 @@ class DishDuel {
   std::optional<uint32_t> heldPress_;
   std::optional<uint32_t> pendingSince_;
   uint32_t lastTry_ = 0;
+  DiagLines diag_;
+  char lastGate_[40] = "none";
+  // One ask, for the debug link and STATUS: `double` 0 when fight mode opened by itself.
+  void report(bool asked, BootContext, const char* gate, const char* result);
+  void gateOf(const Occupant&, Decline, uint32_t tick, char (&out)[32]) const;
   std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows
 };
 

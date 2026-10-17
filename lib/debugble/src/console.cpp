@@ -151,12 +151,13 @@ void verb_status(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   const blorb::Occupant& o = c.dish.occupant();
   const blorb::Creature* cr = std::get_if<blorb::Creature>(&o);
   const std::optional<blorb::SpeciesId> look = c.board.looks();
-  r.ok("unlock=%s scale=%u trial=%d ota=%d sealed=%d phase=%s stage=%s age=%u species=%s look=%s time=%s dropped=%u",
+  r.ok("unlock=%s scale=%u trial=%d ota=%d sealed=%d phase=%s stage=%s age=%u species=%s look=%s time=%s dropped=%u "
+       "fight=%s last=%s",
        unlockName(c), unsigned(c.console.scale().factor()), int(c.board.onTrial()), int(c.board.otaActive()),
        int(c.dish.sealed()), kPhases[o.index()], cr ? kStages[uint8_t(cr->stage())] : "-",
        unsigned(cr ? cr->stats().ageTicks : 0), blorb::speciesInfo(c.dish.appearance().species).name,
        look ? blorb::speciesInfo(*look).name : "own", c.dish.timeKnown() ? "known" : "unknown",
-       unsigned(c.console.scale().dropped()));
+       unsigned(c.console.scale().dropped()), c.dish.fightState(), c.dish.lastFightGate());
 }
 
 void verb_unlock(Console::Call& c, blorb::Args& a, blorb::Reply& r) {

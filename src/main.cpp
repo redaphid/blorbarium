@@ -5,7 +5,9 @@
 #include <esp_mac.h>
 
 #include <array>
+#include <cstring>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "blorb/dish.h"
@@ -124,10 +126,15 @@ static hw::TwoLinks links(phone, otaLink);   // DEBUG lines stay on the cable: o
 // radio"): no duel opens while an update session is active or this image is
 // still on trial, so a trial image never writes a wound, a book entry or a
 // friend egg a rollback would meet. Every call runs on the loop task.
+// The radio's opens and refusals, for the debug link (drained with the Dish's lines).
+static blorb::DiagLines radioDiag;
 struct RadioGate : blorb::Air {
   blorb::Air& inner;
+  const char* why = nullptr;     // the last open()'s refusal
+  const char* logged = "";       // the last one logged, so a waiting retry each second logs once
   explicit RadioGate(blorb::Air& a) : inner(a) {}
   bool open() override;
+  const char* refusal() const override { return why ? why : "radio_closed"; }
   void close() override { inner.close(); }
   bool isOpen() const override { return inner.isOpen(); }
   blorb::PeerAddr self() const override { return inner.self(); }
@@ -367,7 +374,14 @@ bool DishOtaHost::busy() {
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
-bool RadioGate::open() { return !updater.active() && !trial.onTrial() && inner.open(); }
+bool RadioGate::open() {
+  why = updater.active() ? "ota_active" : trial.onTrial() ? "trial" : nullptr;
+  const bool ok = !why && inner.open();
+  if (!why && !ok) why = inner.refusal();
+  if (ok) radioDiag.say("radio open=1"), logged = "";
+  else if (std::strcmp(logged, why) != 0) radioDiag.say("radio open=0 err=%s", why), logged = why;
+  return ok;
+}
 bool DishOtaHost::onTrial() { return trial.onTrial(); }
 bool DishOtaHost::handOver(ota::Version to, const ota::Token& token) {
   // A sealed or newer-format keepsake was never read: the Dish's egg is a stand-in, not the pet.
@@ -794,6 +808,12 @@ void loop() {
     if (std::optional<uint32_t> wall = dish->wallNow()) hw::SystemClock::set(*wall);
   reportStatus(now);
   reportDuel();
+  // What BOOT did, why a fight did or did not start, and the radio's answer:
+  // on the cable and as `! DEBUG` events on the debug link (docs/debug-ble.md).
+  for (char line[blorb::DiagLines::kLine]; dish->takeDiag(line) || radioDiag.take(line);) {
+    Serial.printf("[diag] %s\n", line);
+    dbgfw::link.writeLine(std::string("! DEBUG ") + line);
+  }
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();

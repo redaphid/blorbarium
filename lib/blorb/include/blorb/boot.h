@@ -97,6 +97,13 @@ inline constexpr BootMeaning kBoot[] = {
 };
 
 template <class T, size_t N> constexpr size_t bootCount(const T (&)[N]) { return N; }
+
+// BootContext as the debug link names it.
+inline constexpr const char* kBootContextNames[] = {
+    "ota_question", "sealed", "staking", "turn", "winding_up", "mercy_winner", "mercy_loser", "fallen",
+    "outcome",      "lobby",  "nest",    "clutch", "vigil",    "egg",          "asleep",      "awake"};
+static_assert(bootCount(kBootContextNames) == size_t(BootContext::Awake) + 1, "a name per BootContext");
+constexpr const char* bootContextName(BootContext c) { return kBootContextNames[size_t(c)]; }
 constexpr bool everyContextOnce() {
   if (bootCount(kBoot) != size_t(BootContext::Awake) + 1) return false;
   for (size_t i = 0; i < bootCount(kBoot); ++i)

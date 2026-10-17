@@ -774,6 +774,7 @@ DuelView DuelSession::view(uint32_t tick) const {
     v.phaseTicks = uint16_t(tick - l->openedTick);
     v.me = setup_.card;
     v.peerCount = std::min(l->count, kMaxLobbyPeers);
+    v.heardCount = l->count;
     for (uint8_t i = 0; i < v.peerCount; ++i) {
       const Lobby::Seen& s = l->seen[i];
       v.peers[i] = DuelView::Peer{s.beacon.card.species, s.beacon.card.look, s.beacon.decline, s.beacon.wants == self_,

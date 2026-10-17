@@ -90,6 +90,25 @@ def sends_commands_with_it(browser, base):
         page.close()
 
 
+def shows_why_a_fight_did_or_did_not_start(browser, base):
+    page = open_page(browser, base, "mock=1&debug=true")
+    page.locator("#debugPanel").wait_for(state="visible", timeout=10000)
+    page.wait_for_function("() => document.getElementById('dbgFight').textContent.includes('Fight: off')", timeout=10000)
+    page.evaluate("transport.dish.debugEmit('DEBUG boot double ms=120 gap=180')")
+    page.evaluate("transport.dish.debugEmit('DEBUG fight double=1 ctx=awake gate=hungry:0.91 result=entered')")
+    log_has(page, "! DEBUG boot double ms=120 gap=180")
+    log_has(page, "! DEBUG fight double=1 ctx=awake gate=hungry:0.91 result=entered")
+    page.wait_for_function("() => document.getElementById('dbgFight').textContent.includes('last ask entered (awake)')", timeout=10000)
+    assert "gate hungry:0.91" in page.locator("#dbgFight").text_content()
+    page.evaluate("transport.dish.debugEmit('DEBUG radio open=0 err=trial')")
+    page.wait_for_function("() => document.getElementById('dbgFight').textContent.includes('radio refused: trial')", timeout=10000)
+    page.evaluate("transport.dish.dbg.fight = 'searching'; transport.dish.dbg.fightLast = 'ok'")
+    page.locator("button[data-cmd='STATUS']").click()
+    page.wait_for_function("() => document.getElementById('dbgFight').textContent.includes('Fight: searching')", timeout=10000)
+    assert not page.errors, page.errors
+    page.close()
+
+
 FAKE_BT = pathlib.Path(__file__).resolve().parent / "fake_bluetooth.js"
 
 
@@ -135,7 +154,8 @@ def says_why_when_the_link_is_missing(browser, base):
 def main():
     server = serve()
     base = f"http://127.0.0.1:{server.server_address[1]}"
-    cases = [hidden_without_the_param, sends_commands_with_it, opens_over_a_busy_android_link, says_why_when_the_link_is_missing]
+    cases = [hidden_without_the_param, sends_commands_with_it, shows_why_a_fight_did_or_did_not_start,
+             opens_over_a_busy_android_link, says_why_when_the_link_is_missing]
     failed = 0
     with sync_playwright() as p:
         browser = p.chromium.launch()

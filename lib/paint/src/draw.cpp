@@ -934,18 +934,20 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   Marquee strip = kMarqueeStrip;
   if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
   dimBand(cv, strip);
-  char s[96];
+  char s[112];
   const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
   if (a.lobbyConnecting)
     std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
   else if (a.lobbyDecline == blorb::Decline::Resting) {
     const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
-    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  PRESS TWICE TO STOP  ", rest / 60, rest % 60);
+    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  PRESS TWICE TO STOP  ", rest / 60, rest % 60,
+                  unsigned(a.lobbyFriends));
   } else if (a.lobbyDecline != blorb::Decline::None)
-    std::snprintf(s, sizeof s, "FIGHT MODE - %s  %u:%02u  PRESS TWICE TO STOP  ", notReady(a.lobbyDecline), secs / 60,
-                  secs % 60);
+    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  PRESS TWICE TO STOP  ", notReady(a.lobbyDecline),
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
   else
-    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  %u:%02u  PRESS TWICE TO STOP  ", secs / 60, secs % 60);
+    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  PRESS TWICE TO STOP  ",
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 

@@ -95,7 +95,38 @@ void DishDuel::attach(Storage& s) {
   book_ = DuelBook::open(s);
 }
 
-void DishDuel::refuse(NoFight why, uint32_t tick) { refusal_ = Refusal{Decline::None, tick, true, why}; }
+void DishDuel::refuse(NoFight why, uint32_t tick, const char* gate) {
+  refusal_ = Refusal{Decline::None, tick, true, why};
+  static constexpr BootContext kCtx[] = {BootContext::Awake, BootContext::Egg, BootContext::FoundingNest, BootContext::Vigil,
+                                         BootContext::Asleep, BootContext::Awake};
+  static constexpr const char* kGate[] = {"ok", "egg", "nest", "remains", "asleep", "radio"};
+  report(true, kCtx[uint8_t(why)], gate ? gate : kGate[uint8_t(why)], "refused");
+}
+
+void DishDuel::report(bool asked, BootContext ctx, const char* gate, const char* result) {
+  std::snprintf(lastGate_, sizeof lastGate_, "%s", gate);
+  diag_.say("fight double=%d ctx=%s gate=%s result=%s", int(asked), bootContextName(ctx), gate, result);
+}
+
+// The gate as the debug link says it: "ok", or what stood in the way and how
+// far (a drive as 0.00-1.00, a rest in seconds). No spaces, so STATUS can carry it.
+void DishDuel::gateOf(const Occupant& o, Decline why, uint32_t tick, char (&out)[32]) const {
+  const Creature* c = std::get_if<Creature>(&o);
+  const auto drive2 = [&](DriveId d) {
+    const int64_t v = c ? int64_t(c->chemistry().drive(d).raw) * 100 / Fx::kOne : 0;
+    return unsigned(v < 0 ? 0 : v);
+  };
+  switch (why) {
+    case Decline::None: std::snprintf(out, sizeof out, "ok"); break;
+    case Decline::Asleep: std::snprintf(out, sizeof out, "asleep"); break;
+    case Decline::Sleepy: std::snprintf(out, sizeof out, "sleepy:%u.%02u", drive2(drive::sleepiness) / 100, drive2(drive::sleepiness) % 100); break;
+    case Decline::Hungry: std::snprintf(out, sizeof out, "hungry:%u.%02u", drive2(drive::hunger) / 100, drive2(drive::hunger) % 100); break;
+    case Decline::Resting: std::snprintf(out, sizeof out, "resting:%us", unsigned(restTicksLeft(tick) / 10)); break;
+    case Decline::WantsACuddle: std::snprintf(out, sizeof out, "cuddle"); break;
+    case Decline::NotACreature: std::snprintf(out, sizeof out, "no_pet"); break;
+    default: std::snprintf(out, sizeof out, "declined:%u", unsigned(why)); break;
+  }
+}
 
 uint32_t DishDuel::restTicksLeft(uint32_t tick) const {
   if (!dueledThisBoot_ || session_.pinned()) return 0;
@@ -156,34 +187,51 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
       pendingSince_.reset();   // a second double press while it waits takes the ask back
       refusal_ = Refusal{};
+      report(asked, ctx, asked ? "cancelled" : "gave_up", "off");
       return out;
     }
-    bool tryOpen = false;
+    bool tryOpen = false, woke = false;
     if (asked && c && ctx == BootContext::Asleep) {
       // Asleep: woken for it, unless he is too sleepy to fight anyway.
       if (c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) {
-        refuse(NoFight::TooSleepy, tick);
+        char gate[32];
+        gateOf(o, Decline::Sleepy, tick, gate);
+        char asleep[40];
+        std::snprintf(asleep, sizeof asleep, "asleep:%s", gate);
+        refuse(NoFight::TooSleepy, tick, asleep);
         return out;
       }
       c->wake();
-      tryOpen = true;
+      woke = tryOpen = true;
     } else if (asked && ctx == BootContext::Awake) {
       tryOpen = true;
     } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
       tryOpen = true;
     }
+    if (asked && !tryOpen) report(true, ctx, bootContextName(ctx), "refused");
     if (!tryOpen) return out;
     lastTry_ = tick;
+    const bool retry = pendingSince_.has_value();
     if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
       // The radio said no with the pet ready: an update holds it. Ask again each second.
       if (!air || refusal_.why == Decline::None) {
+        if (!retry) report(asked, ctx, air ? air->refusal() : "no_radio", "waiting");
         if (!pendingSince_) pendingSince_ = tick;
         refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
+      } else {
+        report(asked, ctx, "no_pet", "refused");
       }
       return out;
     }
     pendingSince_.reset();
     c = std::get_if<Creature>(&o);
+    {
+      char gate[32];
+      const Decline why = ready(o, tick);
+      if (woke && why == Decline::Asleep) std::snprintf(gate, sizeof gate, "woken");   // he wakes on the next tick
+      else gateOf(o, why, tick, gate);
+      report(asked, ctx, gate, "entered");
+    }
   }
   if (!air) return out;
 

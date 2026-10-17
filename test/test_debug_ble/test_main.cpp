@@ -166,7 +166,7 @@ TEST(Grammar, StatusSaysWhereHeIs) {
   r.boot();
   EXPECT_EQ(r.send("#1 STATUS"),
             "#1 OK unlock=locked scale=1 trial=0 ota=0 sealed=0 phase=egg stage=- age=0 species=grungo look=own "
-            "time=unknown dropped=0");
+            "time=unknown dropped=0 fight=off last=none");
 }
 
 // ---- the unlock -----------------------------------------------------------------------

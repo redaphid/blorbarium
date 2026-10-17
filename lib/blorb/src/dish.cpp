@@ -125,13 +125,26 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
 }
 
 void Dish::sample(const BodySample& s, uint32_t nowMs) {
+  const uint8_t before = pending_.stimCount;
   detectors_.sample(s, nowMs, pending_);
+  // Each press, double and hold the detector fires, as it fires: the press it
+  // ends was measured from BOOT's raw level by the samples before this one.
+  for (uint8_t i = before; i < pending_.stimCount; ++i) {
+    const StimId f = pending_.stimuli[i];
+    const char* what = f == stim::button ? "press" : f == stim::button_double ? "double" : nullptr;
+    if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
+    else if (what && gapMs_ == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(heldMs_));
+    else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(heldMs_), unsigned(gapMs_));
+  }
   if (s.buttonDown && !buttonDown_) {
+    gapMs_ = releasedOnce_ ? nowMs - tapReleaseMs_ : UINT32_MAX;
     buttonSinceMs_ = nowMs;
     tapSecond_ = tapArmed_ && nowMs - tapReleaseMs_ <= kDoublePressMs;
   } else if (!s.buttonDown && buttonDown_) {
-    tapArmed_ = nowMs - buttonSinceMs_ < kButtonHoldMs && !tapSecond_;
+    heldMs_ = nowMs - buttonSinceMs_;
+    tapArmed_ = heldMs_ < kButtonHoldMs && !tapSecond_;
     tapReleaseMs_ = nowMs;
+    releasedOnce_ = true;
   }
   buttonDown_ = s.buttonDown;
   lastSampleMs_ = nowMs;
@@ -193,6 +206,11 @@ void Dish::runOneTick(Link& link) {
     if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
   }
   ++tick_;
+}
+
+const char* Dish::fightState() const {
+  if (!duel_.active()) return duel_.pending() ? "waiting" : "off";
+  return duel_.searching() ? "searching" : "paired";
 }
 
 BootContext Dish::bootContext() const {
@@ -378,7 +396,7 @@ Appearance Dish::appearance() const {
   if (a.dueling && (v.phase == DuelPhase::Lobby || v.phase == DuelPhase::Greeting)) {
     a.lobby = true;
     a.lobbyConnecting = v.phase == DuelPhase::Greeting;
-    a.lobbyFriends = v.peerCount;
+    a.lobbyFriends = v.heardCount;
     a.lobbyTicksLeft = v.fightTicksLeft;
     a.lobbyDecline = v.myDecline;
   }
