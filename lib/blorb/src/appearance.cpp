@@ -10,7 +10,6 @@ constexpr int kSizeLocusPct = 10;        // the size locus at 1 adds this much
 constexpr int kHueShiftSteps = 64;       // the hue_shift locus at 1 turns every region a quarter
 constexpr int kBoundValSteps = 127;      // a fully bound chemical nearly doubles its region's value
 constexpr Fx kHintAt = Fx::ratio(1, 2);  // a drive this high is a need the care hint names
-constexpr Fx kHalf = Fx::ratio(1, 2);
 
 int scaled(Fx level, int steps) { return int((int64_t(clamp01(level).raw) * steps + Fx::kOne / 2) >> Fx::kFrac); }
 

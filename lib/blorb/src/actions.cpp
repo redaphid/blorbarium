@@ -12,7 +12,6 @@ constexpr Fx kNearRim = Fx::ratio(78, 100);   // Curl stops here
 constexpr Fx kWanderTurn = Fx::ratio(1, 10);  // most a wander heading changes per tick, in half turns
 constexpr Fx kHopTurn = Fx::ratio(1, 16);
 constexpr uint16_t kChewTicks = 15;            // he holds the bite this long, so eating can be seen
-constexpr Fx kNoseSpeed = Fx::ratio(9, 100);   // ... so it rolls about half the dish against the habitat's rolling friction
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
 constexpr Fx kHalf = Fx::ratio(1, 2);
 

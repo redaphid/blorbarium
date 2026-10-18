@@ -289,7 +289,6 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   }
   if (fx.fall && c) {
     c->fall();
-    fell_ = true;
     out.save = true;
   }
   if (fx.met) {
@@ -297,7 +296,6 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();
     book_.record(*fx.met, gen, tick, petDay);
     lastMet_ = fx.met;
-    fell_ = fell_ || fx.met->iFell || fx.met->iSlew;
     out.save = true;
   }
   if (fx.egg && store_) {
@@ -330,7 +328,6 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
     }
   }
-  if (!session_.active()) fell_ = false;
   return out;
 }
 

@@ -182,7 +182,6 @@ class Dish {
   bool adopt();                    // false when the flag cannot be written (a trial, a sealed pet)
   // The debug link's FREEHATCH: eggs run without a phone until the next reset. Never saved.
   void setHatchFree(bool free) { hatchFree_ = free; }
-  bool hatchFree() const { return hatchFree_; }
 
  private:
   void runOneTick(Link&);

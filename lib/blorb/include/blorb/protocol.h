@@ -51,7 +51,6 @@ class Reply {
   void chunks(const uint8_t* data, size_t len);    // base64 lines, then OK <len> <crc>
   void ok(const char* fmt = "", ...);
   void err(uint16_t code, const char* text);
-  bool succeeded() const { return ok_; }
   // A success that changed only what is drawn, so a kMutating verb leaves the keepsake clean.
   Reply& unsaved() { unsaved_ = true; return *this; }
   bool changedSave() const { return ok_ && !unsaved_; }
