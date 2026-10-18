@@ -129,35 +129,36 @@ class Soak:
 
     # ---- helpers --------------------------------------------------------------------
 
-    def reboot(self, boards=None, tries=3):
-        """Reboots and isolates: each badge's radio is blacked out from its first loop, so
-        nobody meets anyone until the scenario has set its conditions and calls go()."""
+    def reboot(self, boards=None):
+        """Reboots isolated (`DEBUG reboot quiet`): each badge comes up with its radio blacked
+        out from the first tick, so nobody meets anyone until the scenario has set its
+        conditions and calls go(). It also clears the after-fight rest."""
         boards = boards or self.both
-        for _ in range(tries):
-            marks = {b: b.mark() for b in boards}
-            for b in boards:
-                b.reset()
-            for b in boards:
-                if not b.wait(r"\[hw\] ble adv on", 15, since=marks[b]):
-                    raise Fail("%s did not boot after reset" % b.tag)
-                b.send("DEBUG net clear")
-                b.send("DEBUG net blackout 600000")
-            time.sleep(1.5)
-            raced = [b.tag for b in boards if any("-> greeting" in l or "-> staking" in l for l in b.since(marks[b]))]
-            if not raced:
-                return
-            self.say("   (a pair locked before the blackout took: rebooting again)")
-            for b in boards:
-                b.send("DEBUG net blackout 25000")   # let the half-open battle wander off before the reset
-            time.sleep(1)
-        raise Fail("could not isolate the badges at boot")
+        marks = {b: b.mark() for b in boards}
+        for b in boards:
+            b.expected_boots += 1
+            b.send("DEBUG reboot quiet")
+        for b in boards:
+            if not b.wait(r"\[net\] quiet boot", 20, since=marks[b]):
+                raise Fail("%s did not come back from a quiet reboot" % b.tag)
+            if not b.wait(r"\[hw\] ble adv on", 10, since=marks[b]):
+                raise Fail("%s did not finish booting" % b.tag)
+        # A pet on three losses in a row wants a cuddle before he fights again (a
+        # readiness rule, not a fault): every scenario starts with both cuddled,
+        # through the real held/cradle detectors.
+        for b in boards:
+            b.send("DEBUG cradle 5000")
+        time.sleep(6.0)
+        for b in boards:
+            if any("-> greeting" in l or "-> staking" in l for l in b.since(marks[b])):
+                raise Fail("%s paired through a quiet boot" % b.tag)
 
     def go(self, boards=None):
         """Lifts the isolation; returns the marks from that moment."""
         boards = boards or self.both
         marks = {b: b.mark() for b in self.both}
         for b in boards:
-            b.send("DEBUG net blackout 0")
+            b.send("DEBUG net blackout 0")   # lifts the quiet boot's deafness; keeps the scenario's faults
         return marks
 
     def ctx(self, b):
@@ -193,6 +194,7 @@ class Soak:
             active, phase, _, ctx = self.ctx(b)
             if active or ctx == 15:
                 return True
+            b.send("DEBUG sleepiness 0")   # these scenarios test the controls, not his bedtime (see too_sleepy)
             b.send("DEBUG hang 2500")
             time.sleep(6)
         return False
@@ -233,7 +235,7 @@ class Soak:
         bad = []
         for b in self.both:
             for l in b.since(marks[b]):
-                if re.search(r"Guru Meditation|abort\(\)|Backtrace:|panic|rst:0x[^1] |Brownout|stack overflow|WDT", l):
+                if re.search(r"Guru Meditation|abort\(\)|Backtrace:|panic|Brownout|stack overflow|WDT|rst:0x(7|8|9|f|10) ", l):
                     bad.append("%s: %s" % (b.tag, l))
         unasked = [b.tag for b in self.both if b.boots > b.expected_boots]
         if unasked:
@@ -270,6 +272,7 @@ class Soak:
         time.sleep(2)
         for b in self.both:
             b.send("DEBUG nap")
+            b.send("DEBUG sleepiness 60")   # asleep, but under the 0.9 wake gate
         time.sleep(4)
         for b in self.both:
             active, phase, _, ctx = self.ctx(b)
@@ -320,6 +323,7 @@ class Soak:
         time.sleep(2)
         for b in self.both:
             b.send("DEBUG nap")
+            b.send("DEBUG sleepiness 60")   # asleep, but under the 0.9 wake gate
         time.sleep(4)
         marks = self.go()
         for b in self.both:
@@ -336,16 +340,20 @@ class Soak:
         for b in self.both:
             self.wake_with_hang(b)
         self.B.send("DEBUG nap")   # B out of the air, so A sits in the lobby alone
+        self.B.send("DEBUG sleepiness 60")
         time.sleep(5)
         m = self.A.mark()
         active, phase, _, ctx = self.ctx(self.A)
         if phase != "lobby":
             raise Fail("A not in the lobby (phase=%s ctx=%d)" % (phase, ctx))
         self.A.send("DEBUG hang 2500")
-        if not self.A.wait(r"phase lobby -> closed", 10, since=m):
+        # The hang closes the lobby and fight mode reopens on the next tick (it is always on for an
+        # awake pet), often inside one loop pass, so the evidence is the reopen itself.
+        if not self.A.wait(r"\[diag\] fight double=0 hang=0 ctx=awake gate=ok result=entered|phase lobby -> closed", 10, since=m):
             raise Fail("a hang in the lobby did not leave it")
-        if not self.A.wait(r"phase closed -> lobby", 10, since=m):
-            raise Fail("fight mode did not reopen after the lobby hang")
+        active, phase, _, _ = self.ctx(self.A)
+        if phase != "lobby":
+            raise Fail("fight mode did not reopen after the lobby hang (phase=%s)" % phase)
         marks = self.go()
         self.B.send("DEBUG hang 2500")
         met = self.battle(marks=marks)
@@ -529,6 +537,65 @@ class Soak:
         met = self.battle(marks=marks, timeout=480)
         return "B left cleanly; rematch " + self.check_battle(met, "reset_rematch")
 
+    def _ghosts(self, n, mode, side, label, rx=0):
+        self.reboot()
+        for b in self.both:
+            self.wake_with_hang(b)
+            b.send("DEBUG net ghosts %d %d %s" % (n, mode, side))
+            if rx:
+                b.send("DEBUG net rx %d" % rx)
+                b.send("DEBUG net tx %d" % rx)
+        t = time.monotonic()
+        marks = self.go()
+        joined = [b.wait(r"-> staking", 120, since=marks[b]) for b in self.both]
+        tj = time.monotonic() - t
+        counts = []
+        for b in self.both:
+            m = b.mark()
+            b.send("DEBUG net")
+            r = b.wait(r"ghost_beacons=(\d+)", 5, since=m)
+            counts.append("%s ghost_beacons=%s" % (b.tag, r.group(1) if r else "?"))
+        if not all(joined):
+            raise Fail("%s: A and B never paired in 120 s with %d ghosts (%s)" % (label, n, ", ".join(counts)))
+        met = self.battle(marks=marks, timeout=600)
+        for b in self.both:
+            b.send("DEBUG net clear")
+        return "paired in %.1fs past %d ghosts; %s | %s" % (tj, n, self.check_battle(met, label), ", ".join(counts))
+
+    def s_ghosts_deaf(self):
+        """Three badges in the room everyone hears but who hear nobody, all with lower MACs."""
+        return self._ghosts(3, 0, "low", "ghosts_deaf")
+
+    def s_ghosts_phantom(self):
+        """Three phantoms who claim me but whose greetings never arrive, all with lower MACs."""
+        return self._ghosts(3, 1, "low", "ghosts_phantom")
+
+    def s_ghosts_paired(self):
+        """Six badges busy with each other (claims on each other), lower MACs: never a partner."""
+        return self._ghosts(6, 2, "low", "ghosts_paired")
+
+    def s_ghosts_storm(self):
+        """Six deaf ghosts with higher MACs, and a third of every frame lost each way."""
+        return self._ghosts(6, 0, "high", "ghosts_storm", rx=20)
+
+    def s_too_sleepy(self):
+        """Documents the wake gate: asleep and sleepiness >= 0.9, a hang is refused and he sleeps on."""
+        self.reboot()
+        self.wake_with_hang(self.A)
+        self.A.send("DEBUG nap")
+        time.sleep(3)
+        self.A.send("DEBUG sleepiness 100")
+        time.sleep(1)
+        m = self.A.mark()
+        self.A.send("DEBUG hang 2500")
+        r = self.A.wait(r"fight double=0 hang=1 ctx=asleep gate=(\S+) result=(\w+)", 10, since=m)
+        if not r:
+            raise Fail("the hang was not heard at all")
+        if r.group(2) != "refused":
+            raise Fail("a too-sleepy pet was woken (%s/%s): the gate changed" % (r.group(1), r.group(2)))
+        self.A.send("DEBUG sleepiness 0")
+        return "refused as designed: gate=%s" % r.group(1)
+
     def s_legacy_double(self):
         """A case with BOOT exposed: the double press still wakes and opens fight mode."""
         self.reboot()
@@ -537,6 +604,7 @@ class Soak:
         time.sleep(2)
         for b in self.both:
             b.send("DEBUG nap")
+            b.send("DEBUG sleepiness 60")   # asleep, but under the 0.9 wake gate
         time.sleep(4)
         marks = self.go()
         for b in self.both:
@@ -562,7 +630,7 @@ class Soak:
 
 SCENARIOS = ["clean", "hang_wake", "swing_through", "wobbly_hang", "hang_in_lobby", "hangs_in_battle",
              "noise_in_battle", "hang_on_friends", "loss_20", "loss_50", "loss_80", "dup_reorder",
-             "blackout_short", "blackout_one_way", "blackout_long", "reset_midbattle", "legacy_double",
+             "blackout_short", "blackout_one_way", "blackout_long", "reset_midbattle", "too_sleepy", "legacy_double", "ghosts_deaf", "ghosts_phantom", "ghosts_paired", "ghosts_storm",
              "back_to_back"]
 
 
@@ -584,6 +652,12 @@ def main():
     s = Soak(A, B, log)
     s.say("soak seed=%d ports A=%s B=%s" % (seed, *args.ports))
     names = [n for n in (args.only.split(",") if args.only else SCENARIOS) if n]
+    for b in s.both:   # an open on Linux may have reset it: let that boot finish before talking
+        if b.wait(r"\[hw\] ble adv on", 4, since=0):
+            b.expected_boots = b.boots
+    time.sleep(0.5)
+    for b in s.both:
+        b.expected_boots = b.boots
     s.reboot()
     s.ensure_creatures()
     passed = failed = 0

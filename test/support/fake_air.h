@@ -64,7 +64,7 @@ class FakeAir : public blorb::Air {
       if (a != this) ether_.post(*this, a, p, n);
   }
   void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override {
-    if (!open_) return;
+    if (!open_ || unicastLost) return;
     ++framesSent;
     for (FakeAir* a : ether_.airs_)
       if (a != this && a->self_ == to) ether_.post(*this, a, p, n);
@@ -83,6 +83,8 @@ class FakeAir : public blorb::Air {
 
   bool refuseOpen = false;
   uint16_t muted = 0;         // permille of my frames lost on top of the weather: one direction of a link
+  bool deaf = false;          // I hear nobody, but everyone hears me: the other direction, from every badge at once
+  bool unicastLost = false;   // my beacons arrive, my battle frames never do: a phantom who claims and never greets
   int8_t heardAt = -40;       // the dBm every other device hears me at: a test moves me away
   uint32_t framesSent = 0, opens = 0;   // the consent test asserts 0 for a device that never opened
 
@@ -124,7 +126,7 @@ inline void Ether::advance(uint32_t tick) {
                    [](const InFlight& a, const InFlight& b) { return a.due != b.due ? a.due < b.due : a.seq < b.seq; });
   size_t i = 0;
   for (; i < held_.size() && held_[i].due <= tick; ++i)
-    if (held_[i].to->open_) held_[i].to->inbox_.push_back(held_[i].d);   // a closed radio hears nothing
+    if (held_[i].to->open_ && !held_[i].to->deaf) held_[i].to->inbox_.push_back(held_[i].d);   // a closed radio hears nothing
   held_.erase(held_.begin(), held_.begin() + long(i));
 }
 

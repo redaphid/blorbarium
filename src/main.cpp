@@ -49,15 +49,19 @@ class SerialLink : public blorb::Link {
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
   bool heard_ = false;
-  char debug_[sizeof(line_) + 1] = "";
-  char taken_[sizeof(line_) + 1] = "";
+  // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
+  // (one slot dropped all but the last). Lines are short: 64 bytes each is ample.
+  static constexpr uint8_t kDebugQueue = 8;
+  static constexpr size_t kDebugLine = 64;
+  char debug_[kDebugQueue][kDebugLine] = {};
+  uint8_t debugHead_ = 0, debugTail_ = 0;
+  char taken_[kDebugLine] = "";
 
  public:
   bool connected() override { return heard_; }
   const char* takeDebug() {
-    if (!debug_[0]) return nullptr;
-    std::memcpy(taken_, debug_, sizeof(taken_));
-    debug_[0] = 0;
+    if (debugHead_ == debugTail_) return nullptr;
+    std::memcpy(taken_, debug_[debugTail_++ % kDebugQueue], sizeof(taken_));
     return taken_;
   }
   std::optional<std::string_view> readLine() override {
@@ -72,8 +76,11 @@ class SerialLink : public blorb::Link {
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
-        std::memcpy(debug_, line_ + 6, n - 6);
-        debug_[n - 6] = 0;
+        if (uint8_t(debugHead_ - debugTail_) >= kDebugQueue) ++debugTail_;   // full: the oldest goes
+        char* d = debug_[debugHead_++ % kDebugQueue];
+        const size_t k = std::min(n - 6, kDebugLine - 1);
+        std::memcpy(d, line_ + 6, k);
+        d[k] = 0;
         continue;
       }
       return std::string_view(line_, n);
@@ -147,6 +154,10 @@ static hw::EspNowAir espNow;
 // `DEBUG net ...` makes the room worse between the gate and the radio (hw/net_faults.h).
 static hw::FaultAir faultAir(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
 static RadioGate radioGate(faultAir);
+// Survives ESP.restart() (not a power cut): `DEBUG reboot quiet` boots with the radio blacked out
+// from the first tick, so a soak sets its room before two badges can pair.
+static constexpr uint32_t kQuietMagic = 0x51E7B007u;
+RTC_NOINIT_ATTR static uint32_t quietBoot;
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
@@ -235,9 +246,15 @@ static bool pressed(uint32_t ms) {
 // next, so the real orientation settle and HangDetector decide, as with a
 // kid's hands on a case that covers BOOT. Wobble adds a small hand's tremor
 // and an occasional jolt.
-static volatile uint32_t hangAt = 0, hangMs = 0, rightMs = 0;
+static volatile uint32_t hangAt = 0, hangMs = 0, rightMs = 0, cradleAt = 0, cradleMs = 0;
 static volatile bool hangWobble = false;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
+  // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
+  if (cradleMs && ms - cradleAt < cradleMs) {
+    const uint32_t r = esp_random();
+    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t(-450 + int32_t((r >> 8) % 31) - 15), s.az = 890;
+    return true;
+  }
   if (!hangMs && !rightMs) return false;
   const uint32_t since = ms - hangAt;
   if (since >= hangMs + rightMs) return false;
@@ -621,6 +638,11 @@ void setup() {
 #endif
 #if !defined(BADGE_BOARD_SIM)
   duelAir = &radioGate;
+  if (quietBoot == kQuietMagic) {   // `DEBUG reboot quiet`: deaf and mute until `DEBUG net blackout 0`
+    faultAir.cfg.deaf = true;
+    Serial.printf("[net] quiet boot: radio blacked out until DEBUG net blackout 0\n");
+  }
+  quietBoot = 0;
 #endif
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
@@ -804,6 +826,16 @@ static void hang(const char* line) {
   Serial.printf("[hw] debug hang %ld ms wobble=%ld, then upright 3000 ms\n", ms, wobble);
 }
 
+// `DEBUG cradle [ms]`: held still in a hand for ms (default 5000): a cuddle, through the real detectors.
+static void cradle(const char* a) {
+  const long ms = *a ? std::strtol(a, nullptr, 10) : 5000;
+  if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug cradle: want [ms 1..30000]\n");
+  bodyq::cradleMs = 0;
+  bodyq::cradleAt = millis();
+  bodyq::cradleMs = uint32_t(ms);
+  Serial.printf("[hw] debug cradle %ld ms\n", ms);
+}
+
 // `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
 static void nap() {
   blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
@@ -812,15 +844,25 @@ static void nap() {
   Serial.printf("[hw] debug nap: forced sleep\n");
 }
 
+// `DEBUG sleepiness <pct>`: sets his sleepiness drive, so a soak can make him
+// rested (a wake for a fight is allowed) or too sleepy (it is refused) at will.
+static void setSleepiness(const char* a) {
+  blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
+  if (!c) return (void)Serial.printf("[hw] debug sleepiness: no creature\n");
+  const long pct = std::strtol(a, nullptr, 10);
+  c->inject(blorb::driveChem(blorb::drive::sleepiness), blorb::Fx::ratio(pct < 0 ? 0 : pct > 100 ? 100 : pct, 100));
+  Serial.printf("[hw] debug sleepiness %ld%%\n", pct);
+}
+
 static void netReport() {
   const hw::FaultAir::Config& c = faultAir.cfg;
   const hw::FaultAir::Counts& n = faultAir.n;
-  Serial.printf("[net] cfg rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u blackout_left=%ld | rx=%u rx_dropped=%u tx=%u "
-                "tx_dropped=%u duped=%u delayed=%u blacked=%u overflow=%u open=%d\n",
-                c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs,
-                faultAir.blackedOut() ? long(c.blackoutUntil - millis()) : 0L, unsigned(n.rx), unsigned(n.rxDropped),
+  Serial.printf("[net] cfg rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u ghosts=%u/%u%s blackout_left=%ld | rx=%u "
+                "rx_dropped=%u tx=%u tx_dropped=%u duped=%u delayed=%u blacked=%u overflow=%u ghost_beacons=%u open=%d\n",
+                c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs, c.ghosts, c.ghostMode, c.ghostsLow ? "low" : "high",
+                c.deaf ? -1L : faultAir.blackedOut() ? long(c.blackoutUntil - millis()) : 0L, unsigned(n.rx), unsigned(n.rxDropped),
                 unsigned(n.tx), unsigned(n.txDropped), unsigned(n.duped), unsigned(n.delayed), unsigned(n.blackedOut),
-                unsigned(n.overflow), int(faultAir.isOpen()));
+                unsigned(n.overflow), unsigned(n.ghostBeacons), int(faultAir.isOpen()));
   for (uint8_t i = 0; i < faultAir.heardCount; ++i) {
     const auto& h = faultAir.heard[i];
     Serial.printf("[net] heard %02x:%02x:%02x:%02x:%02x:%02x frames=%u rssi=%d\n", h.from.mac[0], h.from.mac[1],
@@ -842,8 +884,14 @@ static void net(const char* line) {
   else if (!std::strcmp(what, "tx")) c.txDrop = pct(x);
   else if (!std::strcmp(what, "dup")) c.dup = pct(x);
   else if (!std::strcmp(what, "delay")) c.delayMs = uint16_t(x < 0 ? 0 : x > 5000 ? 5000 : x), c.jitterMs = uint16_t(y < 0 ? 0 : y > 5000 ? 5000 : y);
-  else if (!std::strcmp(what, "blackout")) c.blackoutUntil = x > 0 ? uint32_t(millis() + x) | 1 : 0;
-  else return (void)Serial.printf("[net] want: net [clear|rx <pct>|tx <pct>|dup <pct>|delay <ms> [jitter]|blackout <ms>]\n");
+  else if (!std::strcmp(what, "ghosts")) {
+    char side[8] = "low";
+    std::sscanf(line, "%*s %*s %*d %*d %7s", side);
+    c.ghosts = uint8_t(x < 0 ? 0 : x > 6 ? 6 : x), c.ghostMode = uint8_t(y < 0 || y > 2 ? 0 : y);
+    c.ghostsLow = std::strcmp(side, "high") != 0;
+  }
+  else if (!std::strcmp(what, "blackout")) c.blackoutUntil = x > 0 ? uint32_t(millis() + x) | 1 : 0, c.deaf = false;
+  else return (void)Serial.printf("[net] want: net [clear|rx <pct>|tx <pct>|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode 0-2> [low|high]]\n");
   netReport();
 }
 
@@ -862,8 +910,17 @@ static void runDebug(const char* line) {
   std::sscanf(line, "%15s %31s", verb, a);
   if (std::strcmp(verb, "hang") == 0) return hang(line);
   if (std::strcmp(verb, "nap") == 0) return nap();
+  if (std::strcmp(verb, "cradle") == 0) return cradle(a);
+  if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "net") == 0) return net(line);
   if (std::strcmp(verb, "duel") == 0) return duelNow();
+  if (std::strcmp(verb, "reboot") == 0) {
+    quietBoot = std::strcmp(a, "quiet") == 0 ? kQuietMagic : 0;
+    Serial.printf("[hw] debug reboot%s\n", quietBoot ? " quiet" : "");
+    Serial.flush();
+    dish->flush();
+    ESP.restart();
+  }
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);

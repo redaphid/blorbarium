@@ -100,6 +100,10 @@ struct DuelTimings {
   static constexpr uint16_t kPinTicks = 100;        // a rematch waits 10 s for its friend, then searches for anyone
   static constexpr uint16_t kHugHoldTicks = 30;     // BOOT held 3 s on the friends screen
   static constexpr uint8_t kBeaconEvery = 3, kHurryEvery = 2, kIdleEvery = 10;
+  static constexpr uint16_t kClaimPatienceTicks = 40;  // 4 s claiming a friend who claims nobody and never me: try another
+  static constexpr uint16_t kBusyPatienceTicks = 120;  // 12 s (+ up to 3 s jitter) for a friend busy with a pending claim
+  static constexpr uint16_t kSetAsideTicks = 150;      // 15 s a friend who claims nobody and never answered waits
+  static constexpr uint16_t kGreetAsideTicks = 60;     // 6 s a friend whose greeting fell through waits (a crossed race costs little)
   static constexpr uint8_t kLeavingBurst = 3;       // `leaving` goes out this many times on the way out
   static constexpr uint16_t kGenomeTicks = 150;     // 15 s to swap genomes after both hugs, else the egg fizzles
   static constexpr uint8_t kChunksPerSend = 4;
@@ -236,6 +240,7 @@ class DuelSession {
     Seen seen[kMaxLobbyHeard]{};
     uint8_t count = 0;
     PeerAddr wants{};                   // my claim
+    uint32_t wantsSince = 0;            // when I began claiming `wants`
     uint32_t openedTick = 0, lastBeacon = 0;
   };
   struct Battle {
@@ -316,7 +321,22 @@ class DuelSession {
   // "already paired" reply. The pair locks when two claims meet, so no badge
   // is ever claimed by two: its one claim names one friend. A pinned lobby (a
   // rematch) claims its pin only. Any range the radio reaches; no RSSI gate.
-  std::optional<uint8_t> claim(Lobby&);
+  //
+  // A crowded room. A claim I can see go unanswered is pending, not paired,
+  // so its maker is still free to claim. A friend who claims nobody and never
+  // claims me back (he hears nobody: across the room, in a case, a body
+  // between) is set aside for kSetAsideTicks; one whose greeting fell through
+  // (his claim reaches me, his States never do) for kGreetAsideTicks. A set
+  // aside is lifted while nobody else is open, so two badges alone never wait
+  // on it. A new claim prefers a friend claiming me, then the lowest address.
+  // A busy friend (his own claim pending) gets a longer, jittered patience,
+  // so a ring of badges each waiting on the next always breaks. Without these, a
+  // badge everyone heard but who heard nobody held every claim forever.
+  std::optional<uint8_t> claim(Lobby&, uint32_t tick);
+  struct SetAside { PeerAddr addr; uint32_t until = 0; bool hard = false; };   // hard: his greeting fell through
+  SetAside setAside_[kMaxLobbyHeard]{};
+  bool setAside(const PeerAddr&, uint32_t tick, bool hardOnly) const;
+  void setAsideFor(const PeerAddr&, uint32_t tick, bool hard);
 
   void enterLobby(uint32_t tick);
   void lobbyTick(Lobby&, Air&, const DuelInput&, uint32_t tick, DuelEffects&);

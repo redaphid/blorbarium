@@ -121,6 +121,7 @@ void DuelSession::enterLobby(uint32_t tick) {
   l.openedTick = tick;
   l.lastBeacon = tick - T::kBeaconEvery;
   if (setup_.pin) l.wants = setup_.pin->peer;
+  l.wantsSince = tick;
   setup_.nonce = duelSeed(setup_.nonce, tick, 0, Stakes::Spar);
   state_ = l;
 }
@@ -151,24 +152,89 @@ DuelEffects DuelSession::tick(Air& air, const DuelInput& in, uint32_t tick) {
 
 // ---- the lobby ----------------------------------------------------------------------
 
-std::optional<uint8_t> DuelSession::claim(Lobby& l) {
+bool DuelSession::setAside(const PeerAddr& a, uint32_t tick, bool hardOnly) const {
+  for (const SetAside& s : setAside_)
+    if (s.addr == a && int32_t(s.until - tick) > 0 && (s.hard || !hardOnly)) return true;
+  return false;
+}
+
+void DuelSession::setAsideFor(const PeerAddr& a, uint32_t tick, bool hard) {
+  SetAside* slot = &setAside_[0];
+  for (SetAside& s : setAside_) {
+    if (s.addr == a) { slot = &s; break; }
+    if (int32_t(s.until - slot->until) < 0) slot = &s;   // else the one that lapses first
+  }
+  const bool wasHard = slot->addr == a && slot->hard && int32_t(slot->until - tick) > 0;
+  *slot = SetAside{a, tick + (hard ? T::kGreetAsideTicks : T::kSetAsideTicks), hard || wasHard};
+}
+
+std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
+  // A claim on someone else is "already paired" only once it is answered.
+  // One I can see go unanswered (I hear whom he claims, and they claim
+  // somebody else or nobody) is a claim still pending: he is free to be
+  // claimed, and a lock still needs both claims to meet. Without this, two
+  // badges who each first heard a badge that hears nobody looked taken to
+  // each other forever.
+  const auto pending = [&](const Lobby::Seen& s) {
+    for (uint8_t j = 0; j < l.count; ++j)
+      if (l.seen[j].addr == s.beacon.wants) return l.seen[j].beacon.wants != s.addr;
+    return false;   // whom he claims is out of my hearing: take him at his word
+  };
   const auto open = [&](const Lobby::Seen& s) {
     return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
-           (s.beacon.wants.none() || s.beacon.wants == self_) && (!setup_.pin || s.addr == setup_.pin->peer);
+           (s.beacon.wants.none() || s.beacon.wants == self_ || pending(s)) && (!setup_.pin || s.addr == setup_.pin->peer);
+  };
+  const auto want = [&](std::optional<uint8_t> i) {
+    const PeerAddr to = i ? l.seen[*i].addr : PeerAddr{};
+    if (to != l.wants) l.wantsSince = tick;
+    l.wants = to;
   };
   if (setup_.decline != Decline::None) {
-    l.wants = PeerAddr{};
+    want(std::nullopt);
     return std::nullopt;
   }
-  std::optional<uint8_t> held;
+  uint8_t current = kMaxLobbyHeard;
   for (uint8_t i = 0; i < l.count; ++i)
-    if (l.seen[i].addr == l.wants && open(l.seen[i])) held = i;
-  if (!held) {
-    l.wants = PeerAddr{};
-    for (uint8_t i = 0; i < l.count; ++i)
-      if (open(l.seen[i]) && (!held || l.seen[i].addr < l.seen[*held].addr)) held = i;
-    if (held) l.wants = l.seen[*held].addr;
+    if (open(l.seen[i]) && l.seen[i].addr == l.wants) current = i;
+  // My claim's patience: a friend who claims nobody and has not claimed me
+  // back in kClaimPatienceTicks may hear nobody at all, so he is set aside. A
+  // friend whose own claim is pending hears the room and is only busy; he is
+  // given kBusyPatienceTicks, jittered per badge, so a ring of badges each
+  // waiting on the next (partial hearing) always breaks.
+  if (current < kMaxLobbyHeard && !setup_.pin) {
+    const Lobby::Seen& c = l.seen[current];
+    const uint32_t patience = c.beacon.wants.none() ? T::kClaimPatienceTicks
+                                                    : T::kBusyPatienceTicks + (setup_.nonce ^ self_.mac[5]) % 30;
+    if (c.beacon.wants != self_ && tick - l.wantsSince >= patience) {
+      setAsideFor(c.addr, tick, false);
+      current = kMaxLobbyHeard;
+    }
   }
+  // Who I may claim: the open, less the set aside. A friend set aside for
+  // never answering is still taken once he claims me; one whose greeting fell
+  // through only when nobody else is open.
+  bool pool[kMaxLobbyHeard]{};
+  uint8_t pooled = 0;
+  for (uint8_t i = 0; i < l.count; ++i) {
+    const Lobby::Seen& s = l.seen[i];
+    pooled += pool[i] = open(s) && !setAside(s.addr, tick, true) && (s.beacon.wants == self_ || !setAside(s.addr, tick, false));
+  }
+  if (!pooled)
+    for (uint8_t i = 0; i < l.count; ++i)
+      pool[i] = open(l.seen[i]) && setAside(l.seen[i].addr, tick, true);
+  // A claim is kept while he stays in the pool (a claim already out is never
+  // dropped for a better one: that is what keeps a badge in one fight). A new
+  // claim goes to a friend already claiming me, else to the lowest address,
+  // the one order every badge who hears the same room agrees on.
+  std::optional<uint8_t> held;
+  if (current < kMaxLobbyHeard && pool[current]) held = current;
+  const auto better = [&](uint8_t i, uint8_t h) {
+    const bool mi = l.seen[i].beacon.wants == self_, mh = l.seen[h].beacon.wants == self_;
+    return mi != mh ? mi : l.seen[i].addr < l.seen[h].addr;
+  };
+  for (uint8_t i = 0; i < l.count && (!held || *held != current); ++i)
+    if (pool[i] && (!held || better(i, *held))) held = i;
+  want(held);
   if (held && l.seen[*held].beacon.wants == self_) return held;
   return std::nullopt;
 }
@@ -202,7 +268,7 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
   if (tick - modeSince_ >= T::kFightModeTicks) return closeWith(air, EndReason::LobbyTimeout, false);
   if (setup_.pin && tick - l.openedTick >= T::kPinTicks) setup_.pin.reset();
 
-  if (const std::optional<uint8_t> m = claim(l)) {
+  if (const std::optional<uint8_t> m = claim(l, tick)) {
     enterBattle(l, *m, tick);
     Battle& b = std::get<Battle>(state_);
     beacon(air, b.peer);   // my claim at once, so the friend locks too
@@ -354,7 +420,10 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
   if (tick - b.lastHeard >= T::kSilentTicks) return finish(b, air, tick, fx, EndReason::WanderedOff, true);
 
   if (b.phase == DuelPhase::Greeting) {
-    if (tick - b.phaseTick >= T::kGreetTicks) return backToLobby(air, tick, EndReason::WanderedOff, false, fx, false);
+    if (tick - b.phaseTick >= T::kGreetTicks) {
+      setAsideFor(b.peer, tick, true);   // his claim reached me but his States never did: others first for a while
+      return backToLobby(air, tick, EndReason::WanderedOff, false, fx, false);
+    }
     if (tick - b.lastBeacon >= T::kBeaconEvery) {
       beacon(air, b.peer);
       b.lastBeacon = tick;

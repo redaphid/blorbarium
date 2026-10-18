@@ -557,6 +557,163 @@ TEST(FightMode, ThreeBadgesPairOneAtATimeAndAgree) { crowd(3, 30); }
 TEST(FightMode, FourBadgesPairOneAtATimeAndAgree) { crowd(4, 20); }
 TEST(FightMode, NineBadgesPairOneAtATimeAndAgree) { crowd(9, 8); }
 
+// A badge everyone hears but who hears nobody (across a room, in a case, a
+// body between): his beacons say he wants nobody, forever. He has the lowest
+// MAC, so he is everyone's first pick. The two badges who can hear each other
+// must still find each other, on a clear link and in a storm.
+TEST(FightMode, ABadgeWhoHearsNobodyNeverBlocksTwoWhoDo) {
+  uint32_t slowest = 0;
+  for (uint32_t seed = 1; seed <= 40; ++seed) {
+    for (const bool storm : {false, true}) {
+      Ether ether(seed * 7 + 3, storm ? kStorm : Weather{});
+      Device x(ether, 1, SpeciesId{2}, seed), a(ether, 2, kGrungo, seed + 1), b(ether, 3, SpeciesId{4}, seed + 2);
+      x.air.deaf = true;
+      ASSERT_TRUE(x.open(0) && a.open(0) && b.open(0));
+      const std::string what = "seed " + std::to_string(seed) + (storm ? " storm" : " clear");
+      const auto fighting = [](Device& d, uint32_t t) { return uint8_t(d.s.view(t).phase) >= uint8_t(DuelPhase::Staking); };
+      const uint32_t paired = run(ether, {&x, &a, &b}, 1, 1200, [&](uint32_t t) { return fighting(a, t) && fighting(b, t); });
+      ASSERT_LT(paired, 1200u) << what << ": A and B never paired with the deaf badge in the room";
+      // Patience (4 s) on the deaf badge, then the pair: well inside 15 s even in a storm.
+      EXPECT_LT(paired, 150u) << what;
+      slowest = std::max(slowest, paired);
+      EXPECT_EQ(a.s.view(paired).them.lineageId, b.setup.card.lineageId) << what;
+      EXPECT_EQ(b.s.view(paired).them.lineageId, a.setup.card.lineageId) << what;
+      run(ether, {&x, &a, &b}, paired + 1, paired + 6000, [&](uint32_t) { return !a.meetings.empty() && !b.meetings.empty(); });
+      ASSERT_FALSE(a.meetings.empty() || b.meetings.empty()) << what;
+      expectSameBattle(a.meetings.front(), b.meetings.front());
+      EXPECT_TRUE(x.meetings.empty()) << what;
+    }
+  }
+  std::printf("one-way badge in the room: slowest pairing %u ticks\n", unsigned(slowest));
+}
+
+// A phantom: his beacons arrive and he claims the lowest badge, but his
+// battle frames never do, so every greeting with him falls through. He is
+// set aside after one, and the two real badges pair.
+TEST(FightMode, APhantomWhoseGreetingsNeverArriveIsSetAside) {
+  uint32_t slowest = 0;
+  for (uint32_t seed = 1; seed <= 40; ++seed) {
+    Ether ether(seed * 5 + 2, seed % 2 ? kStorm : Weather{});
+    Device a(ether, 1, kGrungo, seed), x(ether, 2, SpeciesId{2}, seed + 1), b(ether, 3, SpeciesId{4}, seed + 2);
+    x.air.unicastLost = true;
+    ASSERT_TRUE(x.open(0) && a.open(0) && b.open(0));
+    const auto fighting = [](Device& d, uint32_t t) { return uint8_t(d.s.view(t).phase) >= uint8_t(DuelPhase::Staking); };
+    const uint32_t paired = run(ether, {&x, &a, &b}, 1, 1200, [&](uint32_t t) { return fighting(a, t) && fighting(b, t); });
+    ASSERT_LT(paired, 1200u) << "seed " << seed << ": the phantom kept A from ever pairing with B";
+    EXPECT_LT(paired, 400u) << "seed " << seed;   // a storm may drop the real greeting too
+    slowest = std::max(slowest, paired);
+    EXPECT_EQ(a.s.view(paired).them.lineageId, b.setup.card.lineageId) << "seed " << seed;
+  }
+  std::printf("phantom in the room: slowest pairing %u ticks\n", unsigned(slowest));
+}
+
+// Four badges and one who hears nobody (the lowest address): the four still
+// pair off, each fight agreed on both sides.
+TEST(FightMode, FourBadgesAndADeafOneStillPairOff) {
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
+    Ether ether(seed * 11 + 4, kStorm);
+    std::vector<std::unique_ptr<Device>> owned;
+    std::vector<Device*> all;
+    for (uint8_t i = 0; i < 5; ++i) {
+      owned.push_back(std::make_unique<Device>(ether, uint8_t(i + 1), SpeciesId{uint8_t(i % 9)}, seed * 16 + i));
+      all.push_back(owned.back().get());
+    }
+    all[0]->air.deaf = true;
+    for (Device* d : all) ASSERT_TRUE(d->open(0));
+    runAll(ether, all, 1, 12000, [&](uint32_t) {
+      for (uint8_t i = 1; i < 5; ++i)
+        if (all[i]->meetings.empty()) return false;
+      return true;
+    });
+    for (uint8_t i = 1; i < 5; ++i) {
+      ASSERT_FALSE(all[i]->meetings.empty()) << "seed " << seed << " badge " << int(i) << " never fought";
+      const Meeting& m = all[i]->meetings.front();
+      const Meeting* theirs = nullptr;
+      for (Device* d : all)
+        for (const Meeting& o : d->meetings)
+          if (d != all[i] && o.battle == m.battle) theirs = &o;
+      ASSERT_NE(theirs, nullptr) << "seed " << seed;
+      expectSameBattle(m, *theirs);
+    }
+    EXPECT_TRUE(all[0]->meetings.empty());
+  }
+}
+
+// Six badges who hear nobody, all ABOVE the two who can hear each other, on a lossy link.
+TEST(FightMode, SixDeafBadgesAboveTwoWhoHearEachOtherNeverBlockThem) {
+  for (uint32_t seed = 1; seed <= 40; ++seed) {
+    Ether ether(seed * 3 + 9, Weather{360, 0, 0, 0});
+    Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 2);
+    std::vector<std::unique_ptr<Device>> ghosts;
+    std::vector<Device*> all{&a, &b};
+    for (uint8_t i = 0; i < 6; ++i) {
+      ghosts.push_back(std::make_unique<Device>(ether, uint8_t(10 + i), SpeciesId{2}, seed * 9 + i));
+      ghosts.back()->air.deaf = true;
+      all.push_back(ghosts.back().get());
+    }
+    for (Device* d : all) ASSERT_TRUE(d->open(0));
+    const auto fighting = [](Device& d, uint32_t t) { return uint8_t(d.s.view(t).phase) >= uint8_t(DuelPhase::Staking); };
+    const uint32_t paired = runAll(ether, all, 1, 1200, [&](uint32_t t) { return fighting(a, t) && fighting(b, t); });
+    EXPECT_LT(paired, 150u) << "seed " << seed;
+  }
+}
+
+// A messy room: six badges who hear each other, two who hear nobody and a
+// phantom, in a storm, addresses shuffled. Every one of the six fights within
+// a few minutes, and both sides of every fight agree on every byte.
+TEST(FightMode, AMessyRoomStillPairsEveryoneWhoCanHear) {
+  for (uint32_t seed = 1; seed <= 25; ++seed) {
+    Ether ether(seed * 17 + 5, kStorm);
+    Rng shuffle = Rng::seeded(seed);
+    uint8_t ids[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (uint8_t i = 8; i > 0; --i) std::swap(ids[i], ids[shuffle.below(i + 1)]);
+    std::vector<std::unique_ptr<Device>> owned;
+    std::vector<Device*> all;
+    for (uint8_t i = 0; i < 9; ++i) {
+      owned.push_back(std::make_unique<Device>(ether, ids[i], SpeciesId{uint8_t(i % 9)}, seed * 16 + i));
+      owned.back()->stayFor = 0;
+      all.push_back(owned.back().get());
+    }
+    all[6]->air.deaf = all[7]->air.deaf = true;
+    all[8]->air.unicastLost = true;
+    for (Device* d : all) ASSERT_TRUE(d->open(0));
+    const uint32_t t = runAll(ether, all, 1, 6000, [&](uint32_t) {
+      for (uint8_t i = 0; i < 6; ++i)
+        if (all[i]->meetings.empty()) return false;
+      return true;
+    });
+    for (uint8_t i = 0; i < 6; ++i) {
+      ASSERT_FALSE(all[i]->meetings.empty()) << "seed " << seed << ": badge " << int(ids[i]) << " never fought (tick " << t << ")";
+      for (const Meeting& m : all[i]->meetings) {
+        const Meeting* theirs = nullptr;
+        for (Device* d : all)
+          for (const Meeting& o : d->meetings)
+            if (d != all[i] && o.battle == m.battle) theirs = &o;
+        ASSERT_NE(theirs, nullptr) << "seed " << seed << ": a fight only one side met";
+        expectSameBattle(m, *theirs);
+      }
+    }
+    for (uint8_t i = 6; i < 9; ++i) EXPECT_TRUE(all[i]->meetings.empty()) << "seed " << seed;
+  }
+}
+
+// Two badges alone never wait on a set-aside: a pair on a lossy link that
+// misses each other's first claims still pairs as soon as a claim lands.
+TEST(FightMode, TwoBadgesAloneNeverWaitOnPatience) {
+  uint32_t slowest = 0;
+  for (uint32_t seed = 1; seed <= 200; ++seed) {
+    Ether ether(seed * 13 + 1, Weather{500, 100, 200, 8});   // half the frames lost
+    Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 9);
+    ASSERT_TRUE(a.open(0) && b.open(0));
+    const uint32_t paired = run(ether, {&a, &b}, 1, 1200, [&](uint32_t t) {
+      return uint8_t(a.s.view(t).phase) >= uint8_t(DuelPhase::Staking) && uint8_t(b.s.view(t).phase) >= uint8_t(DuelPhase::Staking);
+    });
+    EXPECT_LT(paired, 150u) << "seed " << seed;
+    slowest = std::max(slowest, paired);
+  }
+  std::printf("two badges at 50%% loss: slowest pairing %u ticks\n", unsigned(slowest));
+}
+
 TEST(DuelSession, ADecliningFriendShowsWhyAndIsNeverMatched) {
   Ether ether(7, {});
   Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
