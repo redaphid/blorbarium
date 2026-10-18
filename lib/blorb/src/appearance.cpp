@@ -116,6 +116,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   look(c.phenotype(), &chem, a);
   a.foreseeing = c.action() == action::foresee;
   a.glow = clamp01(chem.locus[locus::glow.v]);
+  a.hangCharge = clamp01(chem.locus[locus::hanging.v]);
   if (a.foreseeing) a.glow = fxMax(a.glow, kForeseeGlowFloor);
   a.asleep = body.asleep;
   a.dreaming = body.dreaming;

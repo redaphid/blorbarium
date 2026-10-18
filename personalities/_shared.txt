@@ -419,3 +419,9 @@ sleep_warm      dozing
 
 dream_rain      dozing
   ZZZ... RAIN ON THE RIM...
+
+teach_fight     young
+  FLIP ME OVER. LET'S FIGHT
+
+teach_shake     young
+  SHAKE ME. I SEE THINGS.

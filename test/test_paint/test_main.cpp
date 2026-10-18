@@ -861,6 +861,25 @@ TEST(Lobby, SearchingIsARedRingRoundTheWholeRim) {
   EXPECT_GT(bright->px[119 * kSide + 2], dim->px[119 * kSide + 2]) << "it breathes";
 }
 
+// A hang filling up draws the same band as a fraction of the ring, swept
+// clockwise from the top by the hang's charge: the kid sees the ask land
+// before the lobby's full ring takes over. Nothing hangs, no arc.
+TEST(Lobby, AHangFillsTheRingFromTheTop) {
+  Appearance home = adult(0.0, 0.3);
+  Appearance half = home, full = home;
+  half.hangCharge = Fx::ratio(1, 2);
+  full.hangCharge = Fx::one();
+  auto red = [](uint16_t p) { return ((p >> 11) & 31) * 255 / 31 >= 160 && ((p >> 5) & 63) <= 4 && (p & 31) <= 2; };
+  const auto h = render(half, paint::placeholderPack(), 0, 0), f = render(full, paint::placeholderPack(), 0, 0),
+             n = render(home, paint::placeholderPack(), 0, 0);
+  auto at = [](const Canvas240& cv, int x, int y) { return cv.px[y * kSide + x]; };
+  EXPECT_TRUE(red(at(*h, 120, 3))) << "the top fills first";
+  EXPECT_TRUE(red(at(*h, 236, 120))) << "half full reaches the right side";
+  EXPECT_FALSE(red(at(*h, 3, 120))) << "but not the left: that is the half he has not held yet";
+  EXPECT_TRUE(red(at(*f, 3, 120))) << "a full hang completes the ring";
+  EXPECT_FALSE(red(at(*n, 120, 3))) << "no hang, no arc";
+}
+
 // A double press that opened no fight mode says why on the strip, and each
 // reason reads differently.
 TEST(Lobby, ARefusedFightSaysWhy) {

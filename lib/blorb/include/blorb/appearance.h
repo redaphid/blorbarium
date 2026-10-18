@@ -130,6 +130,10 @@ struct Appearance {
   uint8_t lobbyFriends = 0;
   uint16_t lobbyTicksLeft = 0;
   Decline lobbyDecline = Decline::None;
+  // A hang filling up, 0..1 (the hanging locus): paint draws it as a red
+  // arc sweeping the rim, so the kid holding him upside down can see the
+  // ask landing before fight mode opens. Zero whenever he is not hanging.
+  Fx hangCharge{};
 
   // A line scrolling once across the dish (thoughts.h): the row, the line as
   // his voice says it, and how far through its pass (0..1).

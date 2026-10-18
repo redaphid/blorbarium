@@ -47,6 +47,7 @@ pet that never meets a phone never says them; he still says everything else.
 | drowsy | He is awake and very sleepy. |
 | dreaming | He is asleep and dreaming. |
 | dozing | He is asleep, dreaming or not: a murmur in his sleep. |
+| young | He is in his first day of life: the teaching lines run (flip me over for a fight; shake me and I see things), then never again. |
 | foreseeing | He is in his oracle trance. |
 | sees_pellet | He is in the trance and there is a pellet in the dish. |
 | sees_phone | He is in the trance and a phone is near. |

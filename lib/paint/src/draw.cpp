@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
@@ -973,6 +974,28 @@ void searchingRing(Canvas240& cv, uint32_t nowMs) {
     }
 }
 
+// A hang filling up: the searching ring's band, swept clockwise from the
+// top by exactly the hang's charge, in the same steady red -- the kid
+// holding him upside down watches the ask land, and at full the ring
+// completes and fight mode opens (the lobby's breathing ring takes over).
+// It is a gauge, not a pulse: no breathing, so what fills is what he holds.
+void hangRing(Canvas240& cv, Fx charge) {
+  constexpr int kWidth = 7;
+  constexpr int kOuter = kSide * kSide, kInner = (kSide - 2 * kWidth) * (kSide - 2 * kWidth),
+                kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
+  const uint16_t red = to565({220, 0, 0}), edge = to565({50, 0, 0});
+  const double filled = double(blorb::clamp01(charge).raw) / double(Fx::one().raw);
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+      if (d2 >= kOuter || d2 < kEdge) continue;
+      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+      if (sweep < 0) sweep += 1.0;
+      if (sweep > filled) continue;
+      cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
+    }
+}
+
 // Boot::Sealed: a keepsake is on the flash and this boot could not open it.
 // The pet sleeps in a drop of amber, safe and whole, and the line under him is
 // for whoever can plug him into a computer. Warm and still on purpose: nothing
@@ -1122,6 +1145,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
+  else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby
   mask(cv);
 }
 

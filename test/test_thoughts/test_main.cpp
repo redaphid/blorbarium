@@ -316,6 +316,31 @@ TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
 // The 8-Ball ritual: a shake does not answer at once. First the trance --
 // the foresee face, the prophecy presentation, and no words -- and only
 // when it ends does the answer land, whole.
+// Discoverability: on his first day of life he teaches the two gestures a
+// kid cannot guess -- the flip that finds a fight and the shake that
+// foretells -- saying them as ordinary thoughts. From day two, never:
+// the lessons are for the first day with a new pet.
+TEST(Thoughts, HeTeachesHisGesturesOnHisFirstDayOnly) {
+  Rig r;
+  r.pastWarmUp();
+  bool taught = false;
+  for (uint32_t t = 0; t < 3 * 3600 * 1000 && !taught; t += 60 * 1000) {
+    r.run(60 * 1000);
+    for (const Line& l : r.said) taught = taught || l.id.v == thought::teach_fight.v || l.id.v == thought::teach_shake.v;
+  }
+  EXPECT_TRUE(taught) << "on his first day he names the flip and the shake";
+  // Live past his first day, however much of it the search above used.
+  const uint32_t dayMs = PetClock::kDayTicks * kTickMs;
+  const uint32_t livedMs = r.dish.tickCount() * kTickMs;
+  if (livedMs < dayMs + 3600 * 1000) r.run(dayMs + 3600 * 1000 - livedMs);
+  const size_t mark = r.said.size();
+  r.run(2 * 3600 * 1000);
+  ASSERT_GT(r.said.size(), mark) << "he still thinks on day two";
+  for (size_t i = mark; i < r.said.size(); ++i)
+    EXPECT_TRUE(r.said[i].id.v != thought::teach_fight.v && r.said[i].id.v != thought::teach_shake.v)
+        << "day two: the lessons are done";
+}
+
 TEST(Prophecy, AShakeTrancesBeforeItAnswers) {
   Rig r;
   r.pastWarmUp();
