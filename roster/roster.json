@@ -409,7 +409,7 @@
         "pack": "pets/octopus/octopus_pack.h",
         "palette": 256,
         "frames": 18,
-        "flash_bytes": 88158,
+        "flash_bytes": 92952,
         "region_map": true
       }
     }
