@@ -750,7 +750,8 @@ static void lean(const char* line) {
 // One line per duel event, so the two boards' logs alone prove a duel.
 static void reportDuel() {
   static blorb::DuelPhase phase = blorb::DuelPhase::Closed;
-  static uint8_t peers = 0, turn = 0;
+  static uint8_t peers = 0;
+  static int16_t turn = -1;   // the last turn printed; -1 before a bout's first, so turn 0 prints too
   static uint32_t metHash = 0, refusedAt = 0;
   if (const blorb::DishDuel::Refusal& r = dish->duelRefusal(); r.any && r.tick != refusedAt) {
     refusedAt = r.tick;
@@ -768,7 +769,7 @@ static void reportDuel() {
                   kPhase[size_t(v.phase)], unsigned(v.ended), kStakes[size_t(v.agreed)], unsigned(v.mine.hearts),
                   unsigned(v.theirs.hearts));
     phase = v.phase;
-    if (phase == blorb::DuelPhase::Closed) peers = 0, turn = 0;
+    if (phase == blorb::DuelPhase::Closed || phase == blorb::DuelPhase::Lobby) peers = 0, turn = -1;   // fight mode rarely closes between bouts
   }
   if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
     peers = v.peerCount;
