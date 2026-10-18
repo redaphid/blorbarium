@@ -60,6 +60,8 @@ constexpr void power_hush(PowerPhase ph, PowerCtx& c) {
   if (ph == PowerPhase::OnDamage) c.side[mine(c)].hushTurns = 2;
 }
 
+constexpr void power_blackbell(PowerPhase ph, PowerCtx& c) { power_hush(ph, c); }
+
 // Never called: the core swaps gadget for the power it draws before any phase.
 constexpr void power_gadget(PowerPhase, PowerCtx&) {}
 

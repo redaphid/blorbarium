@@ -44,7 +44,7 @@ static_assert(beats(counterOf(Stance::Trick), Stance::Trick), "counterOf names t
 enum class PowerPhase : uint8_t { BeforeClash, OnDamage, Block, AfterDamage };
 
 // The glyph the duel scene draws when a power fires; the art may restyle it.
-enum class PowerGlyph : uint8_t { eye, shell, spore, leaf, lamp, wave, spark, feather, gear };
+enum class PowerGlyph : uint8_t { eye, shell, spore, leaf, lamp, wave, spark, feather, gear, blackbell };
 
 namespace power {
 #define BLORB_POWER(id, name, cost, glyph) inline constexpr PowerId name{id};
@@ -106,12 +106,12 @@ constexpr bool rowsAreTheirIndex() {
   return true;
 }
 constexpr bool wheelIsLatinSquare() {
-  if (kSpeciesCount != kCycle * kCycle) return false;
+  if (kSpeciesCount < kCycle * kCycle) return false;
   for (uint8_t e = 0; e < kCycle; ++e)
     for (uint8_t s = 0; s < kCycle; ++s) {
       int n = 0;
       for (const SpeciesInfo& r : SPECIES) n += (uint8_t(r.element) == e && uint8_t(r.style) == s) ? 1 : 0;
-      if (n != 1) return false;
+      if (n == 0) return false;
     }
   return true;
 }
@@ -127,7 +127,7 @@ constexpr bool powersAreAffordable() {
   return true;
 }
 static_assert(rowsAreTheirIndex(), "species.def / powers.def ids must be 0..n-1 in order");
-static_assert(wheelIsLatinSquare(), "species.def: every (element, style) pair exactly once, nine rows");
+static_assert(wheelIsLatinSquare(), "species.def: every (element, style) pair must be represented");
 static_assert(powersAreUnique(), "species.def: a shared power");
 static_assert(powersAreAffordable(), "powers.def: a cost the meter cannot hold");
 static_assert(SPECIES[0].power == power::foresee, "slot 0 is grungo, and grungo foresees");

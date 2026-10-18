@@ -22,3 +22,4 @@ BLORB_POWER(5, dash,    3, wave)     // mudge: always first; next turn a head bo
 BLORB_POWER(6, zap,     6, spark)    // fizz: a tickly zap; one more heart on top of the landing (a shell still stops one)
 BLORB_POWER(7, hush,    5, feather)  // hushwing: silent wings; next turn a clash she loses costs her nothing, and a special at her whiffs
 BLORB_POWER(8, gadget,  5, gear)     // tinker: a surprise gadget; one of the other eight powers, drawn from his own luck as it lands
+BLORB_POWER(9, blackbell, 5, blackbell) // octopus: a hush over the next two turns

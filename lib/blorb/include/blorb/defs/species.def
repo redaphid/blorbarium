@@ -31,3 +31,4 @@ BLORB_SPECIES(5, mudge,    Splash, Pounce, dash,    230, 0, 1300, terse)        
 BLORB_SPECIES(6, fizz,     Spark,  Pounce, zap,     200, 0, 1200, hoarder)        // firefly beetle: crackles
 BLORB_SPECIES(7, hushwing, Sprout, Trick,  hush,     60, 1,  900, ominous)        // marsh owl: silent wings
 BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget,  150, 1, 1000, hoarder)        // raccoon: a scrap-pile gadget
+BLORB_SPECIES(9, octopus, Splash, Trick,  blackbell, 210, 1, 1050, ominous)     // octopus: the abyss rings back
