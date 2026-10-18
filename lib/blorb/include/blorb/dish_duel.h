@@ -29,8 +29,8 @@ inline constexpr AimTilt kAimTilt[4] = {
     {0, 500, 0, 866}, {1, -500, 0, 866}, {2, 0, -500, 866}, {3, 0, 500, 866}};
 
 // Graft from candidate B, narrowed: a lineage founded before duels has no
-// duel feeling genes, so its pet would not feel a battle. On his first duel
-// open the starter's duel genes (kDuelGenes) are appended at nextUid() (no uid
+// duel feeling genes, so its pet would not feel a battle. The first tick he
+// is ready in fight mode the starter's duel genes (kDuelGenes) are appended at nextUid() (no uid
 // is ever reused, DEVIATIONS 6), never at their fixed uids, so they never
 // cross; recorded as one lineage Checkpoint, the path TWIST gene_edit uses.
 // A genome that already reads any Duel-source stimulus is left alone, so a
@@ -62,7 +62,9 @@ class DishDuel {
   //  1 a body-sourced `button_double` (or `hang`: held upside down, the same
   //    ask from a case that covers BOOT) while BOOT means OpenDuel: readiness(),
   //    then open with a LocalConsent (made here and nowhere else). A refusal
-  //    shows its picture; a radio OTA holds shakes his head.
+  //    shows its picture; a radio OTA holds shakes his head. An awake
+  //    creature with a radio asks for himself too: fight mode is the
+  //    resting state, and the ask is the wake-up and the shortcut.
   //  2 session.tick, with DuelInput from what a detector fired only
   //  3 the captured stimuli leave `raw`; the duel's own join it (Duel-sourced,
   //    through duelFilter at the agreed stakes)

@@ -178,6 +178,10 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
                            uint64_t lineageId, uint16_t petDay, uint32_t tick) {
   DuelStepped out;
   Creature* c = std::get_if<Creature>(&o);
+  // He dozed off in the lobby: fight mode is an awake pet's state, so it
+  // ends as he sleeps, before anything else this tick reads the session.
+  if (c && air && session_.active() && session_.view(tick).phase == DuelPhase::Lobby && c->body().asleep)
+    session_.close(*air, EndReason::Finished);
   // Three losses in a row want a cuddle, and a cuddle is all it takes.
   if (c && fromBody(raw, stim::cradle) && book_.lossesInARow() >= kLossesBeforeACuddle) book_.recordCuddle(tick);
 
@@ -185,6 +189,11 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     const bool askedHang = fromBody(raw, stim::hang);
     const bool asked = fromBody(raw, stim::button_double) || askedHang;
     const BootContext ctx = bootContext(o, nullptr);
+    // Fight mode is the resting state: an awake creature with a radio asks
+    // for himself, so two badges near each other find the fight with no
+    // gesture at all. The hang and the double press remain the wake-up and
+    // the shortcut; leaving the lobby just reopens it on the next tick.
+    const bool autoAsk = air && c && ctx == BootContext::Awake;
     if (asked) drop(raw, duelStimBit(stim::button_double) | duelStimBit(stim::hang));
     if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
       pendingSince_.reset();   // a second double press while it waits takes the ask back
@@ -205,7 +214,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       }
       c->wake();
       woke = tryOpen = true;
-    } else if (asked && ctx == BootContext::Awake) {
+    } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
       tryOpen = true;
     } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
       tryOpen = true;
@@ -309,7 +318,14 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     if (why == Decline::NotACreature) {
       session_.close(*air, EndReason::Finished);   // he fell, or is remains: fight mode ends with him
     } else {
-      if (fx.backToLobby) session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
+      // The graft rides readiness, not the open: with fight mode always on
+      // he may have opened it as a child, and the starter's duel genes are
+      // owed to the first tick he is actually ready in the lobby.
+      if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
+      // Refreshed every tick he searches, not only on the way back from a
+      // fight: with fight mode always on he may have opened it as a child,
+      // or hungry, and a friend must meet the pet he is now.
+      session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
       session_.setDecline(why);
       if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
     }
