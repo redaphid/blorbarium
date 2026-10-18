@@ -433,6 +433,19 @@ TEST(Hop, LiftsTheSpriteByStrengthTimesTheMax) {
   EXPECT_LT(squash.x0, down.x0);
 }
 
+// A knock's flinch squats him, a little wider and shorter, feet planted.
+TEST(Flinch, SquatsHimWiderAndShorterWithHisFeetOnTheFloor) {
+  BlockPack pack;
+  Appearance rest = adult();
+  Appearance flinching = hopping(rest, fx(0.5), Fx::one());
+  flinching.reflex = blorb::reflex::flinch;
+  const Box down = find(*render(rest, pack), kOlive);
+  const Box squat = find(*render(flinching, pack), kOlive);
+  EXPECT_EQ(squat.y1, down.y1) << "no lift";
+  EXPECT_GT(squat.y0, down.y0) << "shorter";
+  EXPECT_LT(squat.x0, down.x0) << "wider";
+}
+
 // Items used to draw behind him whatever their depth, so one at his feet
 // peeked out between them; the floor now decides what is in front.
 TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
@@ -848,6 +861,49 @@ TEST(Lobby, ARefusedFightSaysWhy) {
   const auto u = render(update, paint::placeholderPack(), 0, 500);
   EXPECT_GT(strip(*plain, *e), 300);
   EXPECT_GT(strip(*e, *u), 100);
+}
+
+// Every reason a double press opened no fight mode reads differently from every other.
+TEST(Lobby, EveryReasonAFightIsRefusedReadsDifferently) {
+  Appearance home = adult(0.0, 0.3);
+  auto strip = [](const Canvas240& a, const Canvas240& b) {
+    int n = 0;
+    for (int y = 34; y < 54; ++y)
+      for (int x = 0; x < kSide; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+    return n;
+  };
+  using N = blorb::NoFight;
+  const N reasons[] = {N::Egg, N::Nest, N::Remains, N::TooSleepy, N::Updating};
+  std::vector<std::unique_ptr<Canvas240>> shown;
+  for (N n : reasons) {
+    Appearance a = home;
+    a.noFight = n;
+    shown.push_back(render(a, paint::placeholderPack(), 0, 500));
+  }
+  for (size_t i = 0; i < shown.size(); ++i)
+    for (size_t j = i + 1; j < shown.size(); ++j)
+      EXPECT_GT(strip(*shown[i], *shown[j]), 100) << int(reasons[i]) << " and " << int(reasons[j]);
+}
+
+// In fight mode a pet who wants a cuddle says so, apart from looking and from resting.
+TEST(Lobby, APetWhoWantsACuddleSaysSoInFightMode) {
+  Appearance looking = adult(0.0, 0.3);
+  looking.dueling = looking.lobby = true;
+  looking.lobbyTicksLeft = 420;
+  Appearance cuddle = looking, resting = looking;
+  cuddle.lobbyDecline = blorb::Decline::WantsACuddle;
+  resting.lobbyDecline = blorb::Decline::Resting;
+  auto strip = [](const Canvas240& a, const Canvas240& b) {
+    int n = 0;
+    for (int y = 34; y < 54; ++y)
+      for (int x = 0; x < kSide; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+    return n;
+  };
+  const auto l = render(looking, paint::placeholderPack(), 0, 500);
+  const auto c = render(cuddle, paint::placeholderPack(), 0, 500);
+  const auto r = render(resting, paint::placeholderPack(), 0, 500);
+  EXPECT_GT(strip(*l, *c), 100);
+  EXPECT_GT(strip(*r, *c), 100);
 }
 
 int main(int argc, char** argv) {

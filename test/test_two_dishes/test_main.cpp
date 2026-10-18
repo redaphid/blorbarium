@@ -639,6 +639,77 @@ TEST(FightAsk, AWaitingAskIsAskedAgainByTheBadgeItself) {
   EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
 }
 
+// A board with no duel radio still hears the ask: it says why once, asks
+// again quietly each second, and gives up after the wait's ten minutes.
+TEST(FightAsk, ABoardWithNoRadioSaysSoOnceAndGivesUp) {
+  Ether ether(9, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1, false);
+  a.growUp();
+  diags(a);
+  doublePress(a);
+  idle(a, 30);
+  std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=no_radio result=waiting")) << joined(l);
+  EXPECT_EQ(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("waiting") != std::string::npos; }), 1)
+      << "asked again each second, logged once: " << joined(l);
+  EXPECT_STREQ(a.dish->fightState(), "waiting");
+  idle(a, int(DishDuel::kPendingTicks));
+  l = diags(a);
+  EXPECT_TRUE(has(l, "gate=gave_up result=off")) << joined(l);
+  EXPECT_STREQ(a.dish->fightState(), "off");
+  EXPECT_FALSE(a.dish->duelActive());
+}
+
+// A pet who wants a cuddle, on a radio an update holds: refused for the
+// cuddle, never left waiting on the radio as if he were ready.
+TEST(FightAsk, APetWhoWantsACuddleIsRefusedNotKeptWaitingWhenTheRadioIsHeld) {
+  Ether ether(9, {});
+  Device a(ether, 1);
+  {
+    DuelBook book = DuelBook::open(a.store);
+    for (uint32_t i = 0; i < 3; ++i) {
+      Meeting m;
+      m.friendCard.lineageId = 0xF00;
+      m.battle.seed = 100 + i;
+      m.me = Side::A;
+      m.ending = Ending::BWon;
+      book.record(m, 0, 10 + i, 0);
+    }
+  }
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  diags(a);
+  a.air.refuseOpen = true;
+  doublePress(a);   // the kid leaves the lobby; the badge asks again into a held radio
+  idle(a, 30);
+  const std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "result=refused")) << joined(l);
+  EXPECT_FALSE(has(l, "waiting")) << joined(l);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_EQ(a.dish->appearance().declined, Decline::WantsACuddle) << "a hug, as a picture";
+  EXPECT_NE(a.dish->appearance().noFight, NoFight::Updating);
+}
+
+// Back in fight mode within two minutes of a bout, he is in it resting, and
+// the log says for how long.
+TEST(FightAsk, AFreshBoutLeavesHimRestingAndTheLogCountsItDown) {
+  Bout bout(7, kGrungo, SpeciesId{6});
+  ASSERT_TRUE(bout.runDuel());
+  Device& a = bout.a.creature().body().asleep ? bout.b : bout.a;   // the loser of a spar naps
+  ASSERT_FALSE(a.creature().body().asleep);
+  ASSERT_TRUE(a.dish->duelActive());
+  diags(a);
+  doublePress(a);   // leaves fight mode; the badge asks again by itself
+  idle(a, 3);
+  const std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "gate=resting:")) << joined(l);
+  EXPECT_TRUE(has(l, "result=entered")) << joined(l);
+  EXPECT_EQ(a.dish->appearance().declined, Decline::Resting);
+}
+
 // The double press's no-button twin: a case that covers BOOT cannot stop a
 // kid asking for a fight, and the ask is the same ask in every way that
 // matters (the same consent, the same refusals, the same log, with hang=1).
@@ -1178,6 +1249,34 @@ TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
   expectRow(*a.d.dish, BootContext::Egg, "egg");
   a.tick({-1, true}), a.tick();
   EXPECT_EQ(a.d.dish->appearance().echo, BootAct::PeekEgg);
+}
+
+// Where there is no pet to fight, a double press or a hang is told why:
+// the remains during the vigil, then the eggs to choose from.
+TEST(BootRows, TheRemainsAndTheClutchAreToldNoForADoublePressOrAHang) {
+  Alone a;
+  a.d.creature().fall();
+  a.tick(), a.tick();
+  expectRow(*a.d.dish, BootContext::Vigil, "vigil");
+  diags(a.d);
+  a.doublePress();
+  EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::Remains);
+  std::vector<std::string> l = diags(a.d);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=vigil gate=remains result=refused")) << joined(l);
+  hang(a.d);
+  EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::Remains);
+  l = diags(a.d);
+  EXPECT_TRUE(has(l, "fight double=0 hang=1 ctx=vigil gate=remains result=refused")) << joined(l);
+  std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+  a.tick();
+  expectRow(*a.d.dish, BootContext::ClutchPick, "clutch");
+  const uint8_t cursor = std::get<Clutch>(a.d.dish->occupant()).cursor;
+  hang(a.d);
+  EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::Nest);
+  l = diags(a.d);
+  EXPECT_TRUE(has(l, "fight double=0 hang=1 ctx=nest gate=nest result=refused")) << joined(l);
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, cursor) << "a hang is never a tap";
+  EXPECT_FALSE(a.d.dish->duelActive());
 }
 
 TEST(BootRows, ASealedDishShowsTheLockAndAPressMovesNothing) {

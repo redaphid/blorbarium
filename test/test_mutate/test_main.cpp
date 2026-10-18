@@ -132,6 +132,34 @@ TEST(Heredity, TheFallbackNeverHatchesAnUncheckedChild) {
   EXPECT_GT(unchanged, 0) << "no seed reached the fallback";
 }
 
+// A lineage whose skin palette can no longer drift (a phone EDIT can pin it)
+// still shows every egg different: the forced change lands on another
+// visible Look byte, or the random pass already made one.
+TEST(Heredity, WithTheSkinPinnedTheForcedLookChangeFindsAnotherVisibleGene) {
+  GenomeBuilder pin = GenomeBuilder::from(parent());
+  std::vector<GeneUid> skins;
+  parent().forEach([&](const GeneView& v) {
+    if (v.header.type != GeneKindOf<PaletteGene>::value || v.body[0] % kRegionCount != region::skin.v) return;
+    skins.push_back(v.header.uid);
+    pin.setFlags(v.header.uid, uint8_t(v.header.flags & ~GeneFlags::Mutable));
+  });
+  ASSERT_FALSE(skins.empty());
+  const Genome pinned = *pin.build();
+  MutationPolicy quiet = policyOf(pinned, Fx::zero());
+  quiet.pointPerGene = quiet.dupPerGene = quiet.delPerGene = quiet.wakePerDormant = quiet.sleepPerGene = Fx::zero();
+  for (const MutationPolicy& pol : {policyOf(pinned, Fx::zero()), quiet}) {
+    for (uint64_t seed = 0; seed < 300; ++seed) {
+      Rng rng = Rng::seeded(seed);
+      Offspring o = mutate(pinned, pol, {}, rng);
+      ASSERT_TRUE(viability(o.genome).ok) << "seed " << seed;
+      ASSERT_GE(lookChanges(pinned, o, pol.minVisibleDelta), 1) << "seed " << seed;
+      for (const MutationOp& op : o.diff.ops)
+        if (auto* p = std::get_if<MutPoint>(&op))
+          for (GeneUid skin : skins) ASSERT_NE(p->gene, skin) << "seed " << seed << ": the pinned skin moved";
+    }
+  }
+}
+
 TEST(Heredity, ApplyRefusesAMissingGeneOrAStaleByte) {
   MutationDiff missing{{MutDel{GeneUid{60000}}}};
   EXPECT_FALSE(apply(parent(), missing).has_value());

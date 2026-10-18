@@ -91,6 +91,23 @@ std::vector<uint8_t> readFile(const std::string& path) {
   return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), {});
 }
 
+// Where a chunk's bytes start in a blob, past its 4-byte header; 0 when absent.
+size_t chunkAt(const std::vector<uint8_t>& b, Chunk tag) {
+  for (size_t at = 18; at + 4 <= b.size();) {
+    const size_t n = size_t(b[at + 2] | b[at + 3] << 8);
+    if (b[at] == uint8_t(tag)) return at + 4;
+    at += 4 + n;
+  }
+  return 0;
+}
+
+// The CRC recomputed, so a hand-edited blob is rejected for what it says, not for damage.
+void reseal(std::vector<uint8_t>& b) {
+  for (size_t i = 14; i < 18; ++i) b[i] = 0;
+  const uint32_t crc = crc32(b.data(), b.size());
+  for (int i = 0; i < 4; ++i) b[14 + size_t(i)] = uint8_t(crc >> (8 * i));
+}
+
 constexpr const char* kFixture = "test/fixtures/keepsake_v1.bin";
 
 }  // namespace
@@ -155,6 +172,46 @@ TEST(Codec, AnyFlippedByteIsRejectedNeverMisread) {
   }
   for (size_t len = 0; len < blob.size(); len += 13)
     EXPECT_FALSE(Keepsake::decode(blob.data(), len, scratch)) << "truncated to " << len;
+}
+
+// The diff an egg shows the phone survives a save, whatever its ops.
+TEST(Codec, AnEggKeepsEveryKindOfOpInItsDiff) {
+  Snapshot s = eggSnapshot();
+  const Egg& was = std::get<Egg>(s.occupant);
+  MutationDiff d;
+  d.ops = {MutPoint{GeneUid{9}, 1, 2, 3, true}, MutDup{GeneUid{9}, GeneUid{400}}, MutDel{GeneUid{10}},
+           MutWake{GeneUid{11}},                MutSleep{GeneUid{12}},             MutHeirloom{GeneUid{13}, {1, 2, 3, 4}}};
+  s.occupant = Egg(Offspring{was.genome(), d}, 2, 77);
+  const std::vector<uint8_t> blob = Keepsake::encode(s);
+  EXPECT_EQ(roundTrip(s), blob);
+  Snapshot back;
+  ASSERT_TRUE(Keepsake::decode(blob.data(), blob.size(), back));
+  const MutationDiff& got = std::get<Egg>(back.occupant).diff();
+  ASSERT_EQ(got.ops.size(), d.ops.size());
+  for (size_t i = 0; i < d.ops.size(); ++i) EXPECT_EQ(got.ops[i].index(), d.ops[i].index()) << i;
+  EXPECT_EQ(std::get<MutWake>(got.ops[3]).gene.v, 11) << "the latent trait that woke";
+}
+
+// A newer firmware's op, or occupant, is refused, never read as something else.
+TEST(Codec, AnOpOrOccupantThisFirmwareDoesNotKnowIsRefused) {
+  Snapshot s = eggSnapshot();
+  s.occupant = Egg(Offspring{std::get<Egg>(s.occupant).genome(), MutationDiff{{MutDel{GeneUid{10}}}}}, 2, 77);
+  const std::vector<uint8_t> blob = Keepsake::encode(s);
+  const size_t occ = chunkAt(blob, Chunk::Occupant);
+  ASSERT_NE(occ, 0u);
+  Snapshot back;
+  std::vector<uint8_t> op = blob;
+  ASSERT_EQ(op[occ + 13], 2) << "kind, generation, laid and incubated, the op count, then the op's tag";
+  op[occ + 13] = 6;
+  reseal(op);
+  EXPECT_FALSE(Keepsake::decode(op.data(), op.size(), back));
+  std::vector<uint8_t> kind = blob;
+  kind[occ] = 3;
+  reseal(kind);
+  EXPECT_FALSE(Keepsake::decode(kind.data(), kind.size(), back));
+  std::vector<uint8_t> same = blob;
+  reseal(same);
+  EXPECT_TRUE(Keepsake::decode(same.data(), same.size(), back)) << "resealing alone changes nothing";
 }
 
 TEST(Slots, SavingTwiceLeavesTwoValidSlotsAndLoadTakesTheNewest) {

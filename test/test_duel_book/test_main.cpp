@@ -233,6 +233,22 @@ TEST(Fold, LossesInARowCountUntilAnythingButALoss) {
   EXPECT_EQ(b.lossesInARow(), 0);
 }
 
+TEST(Fold, ACuddleEndsTheLosingStreakAndTheBookRemembersItAcrossABoot) {
+  MemStorage s;
+  DuelBook b = DuelBook::open(s);
+  b.recordCuddle(5);
+  EXPECT_EQ(s.size(kLog), 0u) << "a cuddle with no losses to soothe writes nothing";
+  for (uint32_t at : {10u, 20u, 30u}) b.record(meeting(Result::Lost), 1, at, 1);
+  ASSERT_EQ(b.lossesInARow(), 3);
+  b.recordCuddle(40);
+  EXPECT_EQ(b.lossesInARow(), 0);
+  DuelBook again = DuelBook::open(s);
+  EXPECT_EQ(again.lossesInARow(), 0);
+  EXPECT_EQ(again.friendOf(kFizzLine)->lost, 3) << "the losses are still his record";
+  again.record(meeting(Result::Lost), 1, 50, 1);
+  EXPECT_EQ(DuelBook::open(s).lossesInARow(), 1) << "a new streak starts after the cuddle";
+}
+
 TEST(Fold, HeadToHeadAndForKeepsPerDayComeFromTheLinesRecord) {
   MemStorage s;
   DuelBook b = DuelBook::open(s);
@@ -449,6 +465,37 @@ TEST(Log, CompactionKeepsOneSummaryPerFriendAndTheSameBook) {
   const size_t size = s.size(kLog);
   b.record(recent.back(), uint16_t(1 + 699 / 100), 6990, 699 / 7);
   EXPECT_EQ(s.size(kLog), size) << "a recent battle stays a no-op through compaction";
+}
+
+// A downing still waiting for its verdict when compaction cuts the log is
+// carried in the summary, so the next boot still reads the flight as a loss.
+TEST(Log, CompactionCarriesADowningStillWaitingForItsVerdict) {
+  size_t metBytes = 0, downedBytes = 0;
+  {
+    MemStorage probe;
+    DuelBook p = DuelBook::open(probe);
+    p.record(meeting(Result::Won, kGillyLine, kGilly), 1, 0, 0);
+    metBytes = probe.size(kLog);
+    p.recordDowned(BattleId{1, 0, Stakes::Mortal}, kFizzLine, 0);
+    downedBytes = probe.size(kLog) - metBytes;
+  }
+  MemStorage s;
+  DuelBook b = DuelBook::open(s);
+  // Fill so that the eighth meeting after the downing is the one that crosses the cap.
+  uint32_t at = 0;
+  while (s.size(kLog) + DuelBook::kKeepRecent * metBytes + downedBytes <= DuelBook::kByteCap)
+    b.record(meeting(Result::Won, kGillyLine, kGilly), 1, at += 10, 1);
+  b.recordDowned(BattleId{77, 0, Stakes::Mortal}, kFizzLine, at += 10);
+  for (uint8_t i = 0; i < DuelBook::kKeepRecent; ++i) b.record(meeting(Result::Won, kGillyLine, kGilly), 1, at += 10, 1);
+  ASSERT_LT(s.size(kLog), DuelBook::kByteCap) << "compacted";
+
+  const std::vector<uint8_t> k = kinds(s);
+  ASSERT_GE(k.size(), size_t(DuelBook::kKeepRecent) + 1);
+  EXPECT_EQ(k[k.size() - DuelBook::kKeepRecent - 1], 2) << "the downing sits just before the kept meetings";
+  EXPECT_EQ(b.friendOf(kFizzLine)->lost, 1);
+  const DuelBook again = DuelBook::open(s);
+  expectSameBook(again.state(), b.state());
+  EXPECT_EQ(again.friendOf(kFizzLine)->lost, 1) << "walking away from the verdict is still a loss";
 }
 
 // ---- Founding's species ---------------------------------------------------------------------

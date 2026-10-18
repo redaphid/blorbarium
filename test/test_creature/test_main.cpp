@@ -350,6 +350,29 @@ TEST(Replay, SameGenomeAndInputsGiveTheSameHash) {
   EXPECT_EQ(a.c.hash(), b.c.hash());
 }
 
+// A stimulus fired on him lands with the next tick, as one his body sensed
+// would: the same hop, the same hash, mid-hop and after.
+TEST(Replay, AFiredShakeHopsAsASensedOneAndHashesTheSameMidHop) {
+  Rig a, b;
+  a.run(50), b.run(50);
+  a.c.fire(stim::shake);
+  a.step();
+  b.fire(stim::shake);
+  ASSERT_TRUE(a.c.body().reflex.has_value()) << "mid-hop";
+  EXPECT_EQ(a.c.body().reflex->kind, b.c.body().reflex->kind);
+  EXPECT_EQ(a.c.hash(), b.c.hash());
+  EXPECT_EQ(a.c.stats().shaken, 1u);
+  a.run(100), b.run(100);
+  EXPECT_EQ(a.c.hash(), b.c.hash());
+}
+
+TEST(Lifecycle, APhonesPlayIsCountedInHisLifeStats) {
+  Rig r;
+  r.fire(stim::played);
+  r.fire(stim::played);
+  EXPECT_EQ(r.c.stats().played, 2u);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

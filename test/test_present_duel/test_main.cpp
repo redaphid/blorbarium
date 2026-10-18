@@ -118,6 +118,66 @@ TEST(Staging, TheSameSceneIsTheSameBytes) {
   EXPECT_EQ(0, std::memcmp(a->px, b->px, sizeof a->px));
 }
 
+namespace {
+DuelStaging stage(const DuelScene& s) {
+  return paint::stageDuel(s, paint::packFor(s.me.look.species), paint::packFor(s.them.look.species));
+}
+}  // namespace
+
+// The downed pet's kid can only plead: a heart floats from him toward the
+// winner, fading as it goes.
+TEST(Staging, APleaFloatsUpFromTheDownedPetTowardTheWinner) {
+  DuelScene quiet = duelScene("mercy", byName("grungo"), byName("fizz"));
+  ASSERT_EQ(quiet.won, paint::Side::Me);
+  auto pleas = [](const DuelStaging& st) {
+    std::vector<paint::Prop> out;
+    for (int i = 0; i < st.propCount; ++i)
+      if (st.props[i].kind == PropKind::Plea) out.push_back(st.props[i]);
+    return out;
+  };
+  auto floating = [&](uint16_t ticks) {
+    DuelScene calm = quiet, plea = quiet;
+    calm.ticks = plea.ticks = ticks;
+    plea.pleading = true;
+    const std::vector<paint::Prop> before = pleas(stage(calm)), after = pleas(stage(plea));
+    EXPECT_EQ(after.size(), before.size() + 1) << "one heart more, at tick " << ticks;
+    return after.back();
+  };
+  const paint::Prop early = floating(2), late = floating(10);
+  const paint::Figure& winner = stage(quiet).fig[0];
+  auto far = [&](const paint::Prop& p) { return std::abs(p.x - winner.x) + std::abs(p.y - winner.y); };
+  EXPECT_LT(far(late), far(early)) << "it goes toward the winner";
+  EXPECT_LT(late.alpha, early.alpha) << "and fades";
+}
+
+TEST(Staging, ADrawEndsWithBothPetsSleepy) {
+  DuelScene s = duelScene("outcome", byName("gilly"), byName("mothwick"));
+  s.won = paint::Side::Neither;
+  const DuelStaging st = stage(s);
+  for (int side = 0; side < 2; ++side) {
+    EXPECT_TRUE(st.fig[side].hasFace) << side;
+    EXPECT_EQ(st.fig[side].face, blorb::expr::sleepy) << side;
+    EXPECT_EQ(st.fig[side].remainsIn, 0) << side;
+  }
+}
+
+// A Mortal duel finished: the fallen pet's remains, and his kind as a trophy on the victor's rim.
+TEST(Staging, AMortalFinishEndsWithTheRemainsAndATrophyOfHisKind) {
+  DuelScene s = duelScene("outcome", byName("tinker"), byName("mudge"));
+  s.won = paint::Side::Me;
+  s.stakes = blorb::Stakes::Mortal;
+  s.verdict = blorb::Verdict::Finish;
+  const DuelStaging st = stage(s);
+  EXPECT_EQ(st.fig[1].remainsIn, 255);
+  EXPECT_EQ(st.fig[0].remainsIn, 0);
+  int trophies = 0;
+  for (int i = 0; i < st.propCount; ++i)
+    if (st.props[i].kind == PropKind::Trophy) trophies += st.props[i].variant == s.them.look.species.v;
+  EXPECT_EQ(trophies, 1);
+  s.verdict = blorb::Verdict::Spare;
+  EXPECT_EQ(stage(s).fig[1].remainsIn, 0) << "spared, he only fainted";
+}
+
 // ---- scars ------------------------------------------------------------------------
 
 namespace {

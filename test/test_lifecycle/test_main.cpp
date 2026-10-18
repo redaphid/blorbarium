@@ -156,6 +156,65 @@ TEST(Lineage, ATornTailIsTruncatedAtEveryByte) {
   }
 }
 
+// A Birth whose diff no longer applies to its parent (a log hand-edited, or
+// a mutate() that changed under it) breaks the chain: those generations
+// cannot be rebuilt, until the next Checkpoint holds the whole genome again.
+TEST(Lineage, ABirthThatNoLongerAppliesLosesOnlyTheGenerationsUpToTheNextCheckpoint) {
+  MemStorage store;
+  Genome g = starterGenome(7);
+  Lineage l = Lineage::open(store, g, 3, 0);
+  std::vector<uint32_t> hashes = {g.hash()};
+  for (uint16_t gen = 1; gen <= kCheckpointEvery; ++gen) {
+    Clutch k = clutchOf(g, gen, 500 + gen);
+    Egg egg(k.child(0), gen, gen);
+    if (gen == 2) egg = Egg(Offspring{egg.genome(), MutationDiff{{MutDel{GeneUid{60000}}}}}, gen, gen);
+    l.recordBirth(egg, k, 0, gen);
+    g = egg.genome();
+    hashes.push_back(g.hash());
+  }
+  EXPECT_EQ(l.genomeOf(1)->hash(), hashes[1]);
+  for (uint16_t gen = 2; gen < kCheckpointEvery; ++gen) EXPECT_FALSE(l.genomeOf(gen).has_value()) << "generation " << gen;
+  ASSERT_TRUE(l.genomeOf(kCheckpointEvery).has_value()) << "the Checkpoint mends it";
+  EXPECT_EQ(l.genomeOf(kCheckpointEvery)->hash(), hashes[kCheckpointEvery]);
+}
+
+// Entries a newer firmware wrote, whole and with good CRCs, that this one
+// cannot read: a kind it does not know, a Birth with an op it does not know.
+// Each is skipped, never misread, and the log still opens and grows.
+TEST(Lineage, EntriesANewerFirmwareWroteAreSkippedNotMisread) {
+  MemStorage store;
+  const Genome starter = starterGenome(7);
+  Lineage l = Lineage::open(store, starter, 9, 0);
+  const size_t birthAt = store.files[kLog].size();
+  Clutch k = clutchOf(starter, 1, 5);
+  const Egg egg(k.child(0), 1, 1);
+  ASSERT_FALSE(egg.diff().ops.empty());
+  l.recordBirth(egg, k, 0, 1);
+  std::vector<uint8_t>& log = store.files[kLog];
+  // Kind and length, then generation, at, chosen, clutch size, the seeds, mutate's version and the op count.
+  const size_t tagAt = birthAt + 3 + 2 + 4 + 1 + 1 + 8 * kMaxClutch + 1 + 2;
+  ASSERT_EQ(log[tagAt], egg.diff().ops[0].index());
+  log[tagAt] = 6;
+  const size_t len = size_t(log[birthAt + 1] | log[birthAt + 2] << 8);
+  const uint32_t crc = crc32(log.data() + birthAt, 3 + len);
+  for (int i = 0; i < 4; ++i) log[birthAt + 3 + len + size_t(i)] = uint8_t(crc >> (8 * i));
+  std::vector<uint8_t> f = {0x7E, 3, 0, 1, 2, 3};
+  const uint32_t crc2 = crc32(f.data(), f.size());
+  for (int i = 0; i < 4; ++i) f.push_back(uint8_t(crc2 >> (8 * i)));
+  log.insert(log.end(), f.begin(), f.end());
+  const std::vector<uint8_t> written = log;
+
+  Lineage again = Lineage::open(store, starter, 9, 0);
+  EXPECT_EQ(store.files[kLog], written) << "nothing was cut as torn";
+  Census c = census(again);
+  EXPECT_EQ(c.foundings, 1);
+  EXPECT_EQ(c.births, 0);
+  EXPECT_EQ(again.genomeOf(0)->hash(), starter.hash());
+  EXPECT_FALSE(again.genomeOf(1).has_value());
+  again.recordDeath(deadCreature(), "Grungo", 2);
+  EXPECT_EQ(census(Lineage::open(store, starter, 9, 0)).deaths, 1) << "and an append after them is read";
+}
+
 // An owner recolour: the hue byte of the first palette gene.
 Genome recoloured(const Genome& g, uint8_t hue) {
   GenomeBuilder b = GenomeBuilder::from(g);

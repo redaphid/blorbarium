@@ -58,6 +58,7 @@ struct MemVolume : Volume {
   bool mounts = false;   // whether these bytes open as they stand
   bool readable = true;
   bool rwRefused = false;   // opens, but not for writing
+  bool formatFails = false;
   bool up = false, rw = false;
   int formats = 0, rwOpens = 0;
 
@@ -73,6 +74,7 @@ struct MemVolume : Volume {
   }
   bool format() override {
     ++formats;
+    if (formatFails) return false;
     std::fill(bytes.begin(), bytes.end(), 0xFF);
     return up = mounts = rw = true;
   }
@@ -296,6 +298,7 @@ TEST(Keepsake, AValidSaveResumesUntouched) {
   EXPECT_EQ(p.slots.opened, Opened::Ok);
   EXPECT_EQ(p.files.opened, Opened::Ok);
   EXPECT_FALSE(p.slots.held) << "both opened, so nothing was scanned";
+  EXPECT_STREQ(describe(p.slots), "ok");
   Dish dish(b, 7, kLineage);
   EXPECT_EQ(dish.boot(), Boot::Resumed);
   Snapshot saved;
@@ -402,6 +405,16 @@ TEST(Writing, OneThatWillNotOpenForWritingSaysSo) {
   EXPECT_EQ(p.files.opened, Opened::Ok);
 }
 
+TEST(Writing, OneThatWillNotFormatSaysSo) {
+  Board b({foreign(kPetSize), false}, {fixture("petfs_head.bin", kPetfsSize), true});   // `pet` would be formatted
+  b.pet.formatFails = true;
+  Provisioned p = b.power();
+  EXPECT_EQ(p.slots.opened, Opened::FormatFailed);
+  EXPECT_STREQ(describe(p.slots), "FAILED: it would not format; nothing saves");
+  EXPECT_EQ(b.pet.formats, 1) << "tried once";
+  EXPECT_EQ(p.files.opened, Opened::Ok);
+}
+
 // ---- an image on trial (docs/ota.md "The trial"): the flash is still the old image's ----
 
 TEST(OnTrial, AnImageOnTrialFormatsNothingAndRunsSealed) {
@@ -410,6 +423,7 @@ TEST(OnTrial, AnImageOnTrialFormatsNothingAndRunsSealed) {
   const Provisioned p = provision(b.pet, b.petfs, kBlock, true);
   EXPECT_EQ(p.slots.opened, Opened::HeldForTrial);
   EXPECT_TRUE(leftAlone(p)) << "it runs sealed, is not Resumed, and its trial rolls it back";
+  EXPECT_STREQ(describe(p.slots), "HELD: it would be formatted, but this image is on trial; its rollback decides");
   EXPECT_EQ(b.pet.formats + b.petfs.formats + b.pet.rwOpens + b.petfs.rwOpens, 0);
   EXPECT_EQ(b.pet.bytes, petBytes);
 }

@@ -326,6 +326,17 @@ TEST(Jumps, HatchThenEachStageInTurn) {
   EXPECT_EQ(r.send("#5 STAGE ancient"), "#5 ERR 400 BAD_ARGS");
 }
 
+// A pet who dies on the way to the stage asked for is said to have died.
+TEST(Jumps, AStageHeDoesNotLiveToSeeSaysHeDied) {
+  Rig r;
+  r.boot();
+  r.unlock();
+  r.send("#1 HATCH");
+  EXPECT_EQ(r.send("#2 CHEM toxin 1000 injury 1000"), "#2 OK 2");
+  EXPECT_EQ(r.send("#3 STAGE elder"), "#3 ERR 409 DIED");
+  EXPECT_FALSE(std::holds_alternative<Creature>(r.dish->occupant())) << "the jump stopped at his death";
+}
+
 TEST(Jumps, StageFromAnEggHatchesHimFirst) {
   Rig r;
   r.boot();

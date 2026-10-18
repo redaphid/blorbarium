@@ -266,6 +266,39 @@ TEST(Say, ThePhonesLineCrossesOnceInTheCroakFaceThenHisThoughtsComeBack) {
   EXPECT_TRUE(thought) << "his own lines resume";
 }
 
+// The phone's line is the one thing that dissolves a trance: it crosses, and
+// the answer the shake was swirling up never lands.
+TEST(Say, ThePhonesLineDissolvesATranceAndNoAnswerFollows) {
+  Rig r;
+  r.pastWarmUp();
+  r.shake(6);
+  ASSERT_TRUE(r.dish.appearance().prophecy && !r.dish.appearance().thinking) << "in the trance";
+  const std::string line = "HELLO FROG";
+  ASSERT_TRUE(r.dish.say(line));
+  r.run(100);
+  Appearance a = r.dish.appearance();
+  EXPECT_EQ(std::string(a.line), line);
+  EXPECT_FALSE(a.prophecy);
+  EXPECT_EQ(a.expression, expr::croak);
+  r.run(passTicks(line.size()) * kTickMs + 3 * kSecond);
+  EXPECT_EQ(r.prophecies(), 0) << "the trance was dissolved, not queued behind the line";
+}
+
+// A script asking for a thought no row names (an id from another build)
+// makes him say nothing, and his own thoughts carry on.
+TEST(Thoughts, AThoughtNoRowNamesIsNeverSaid) {
+  const ThoughtId stale{250};
+  ASSERT_EQ(thoughtInfo(stale), nullptr);
+  Rig r;
+  r.pastWarmUp();
+  r.dish.think(stale);
+  r.run(100);
+  EXPECT_NE(r.dish.appearance().thought, stale);
+  r.run(10 * kMinute);
+  EXPECT_EQ(countOf(r.said, stale), 0);
+  EXPECT_FALSE(r.said.empty()) << "his own lines still come";
+}
+
 TEST(Prophecy, EveryShakeForetellsWearingTheForeseeFace) {
   Rig r;
   r.pastWarmUp();

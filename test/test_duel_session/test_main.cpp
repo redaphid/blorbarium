@@ -556,6 +556,8 @@ void crowd(uint8_t n, uint32_t seeds) {
 TEST(FightMode, ThreeBadgesPairOneAtATimeAndAgree) { crowd(3, 30); }
 TEST(FightMode, FourBadgesPairOneAtATimeAndAgree) { crowd(4, 20); }
 TEST(FightMode, NineBadgesPairOneAtATimeAndAgree) { crowd(9, 8); }
+// Ten: each hears nine and remembers eight, the stalest let go.
+TEST(FightMode, TenBadgesHearMoreThanTheyRememberAndStillAgree) { crowd(10, 4); }
 
 // A badge everyone hears but who hears nobody (across a room, in a case, a
 // body between): his beacons say he wants nobody, forever. He has the lowest
@@ -1004,6 +1006,44 @@ TEST(DuelSession, TheGenomeSwapFizzlesCleanlyWhenCutOff) {
   EXPECT_TRUE(a.sawEggFizzle && b.sawEggFizzle);
   EXPECT_LE(a.closedAt, cut + T::kGenomeTicks + T::kRevealTicks + 2);
   EXPECT_LE(b.closedAt, cut + T::kGenomeTicks + T::kRevealTicks + 2);
+}
+
+// A badge closed mid-fight says goodbye on its way out, so its friend's
+// fight ends at once as a leaving, not after twenty seconds of silence.
+TEST(DuelSession, ABadgeClosedMidFightSaysGoodbyeAndItsFriendEndsAtOnce) {
+  Ether ether(15, {});
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  a.policy.pickPermille = b.policy.pickPermille = 0;   // nobody picks: the turns run long
+  ASSERT_TRUE(a.open(0) && b.open(0));
+  const uint32_t choosing = run(ether, {&a, &b}, 1, 3000, [&](uint32_t t) {
+    return a.s.view(t).phase == DuelPhase::Choosing && b.s.view(t).phase == DuelPhase::Choosing;
+  });
+  ASSERT_LT(choosing, 3000u);
+  a.s.close(a.air, EndReason::Left);
+  EXPECT_FALSE(a.s.active());
+  const uint32_t ended = run(ether, {&b}, choosing + 1, choosing + T::kSilentTicks, [&](uint32_t) { return b.closedAt != 0; });
+  EXPECT_LT(ended, choosing + 10) << "the goodbye, not the silence";
+  EXPECT_EQ(b.ended, EndReason::Left);
+}
+
+// A friend's genome that shares nothing with mine (another engine) is
+// refused at the boundary: the egg fizzles into sparkles on both sides.
+TEST(DuelSession, AStrangersGenomeFizzlesTheEggOnBothSides) {
+  Ether ether(16, {});
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  GenomeBuilder stranger;
+  const uint8_t body[sizeof(PaletteGene)] = {};
+  stranger.append(GeneHeader{GeneKindOf<PaletteGene>::value, sizeof(PaletteGene), 0, Stage::Baby, 0, 0, GeneUid{0x7F00}},
+                  body);
+  b.genome = *stranger.build();
+  a.policy.hug = b.policy.hug = true;
+  a.policy.tier = b.policy.tier = Stakes::Spar;
+  ASSERT_TRUE(a.open(0) && b.open(0));
+  runOut(ether, a, b);
+  EXPECT_FALSE(a.egg || b.egg);
+  EXPECT_TRUE(a.sawEggFizzle && b.sawEggFizzle);
+  ASSERT_FALSE(a.meetings.empty() || b.meetings.empty()) << "the fight itself still counts";
+  expectSameBattle(a.meetings[0], b.meetings[0]);
 }
 
 TEST(DuelInput, APhonesStimuliAreNeverGestures) {

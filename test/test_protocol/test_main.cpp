@@ -30,7 +30,13 @@ struct Rig {
   Dish dish;
   uint32_t ms = 0, lastCall = 0;
 
-  explicit Rig(const Genome& founder = quickEgg()) : dish(store, 7, 0x9f31c2d04a7bull, DishOptions{nullptr, &founder}) {}
+  explicit Rig(const Genome& founder = quickEgg(), bool waitsForPhone = false)
+      : dish(store, 7, 0x9f31c2d04a7bull, optionsOf(founder, waitsForPhone)) {}
+  static DishOptions optionsOf(const Genome& founder, bool waitsForPhone) {
+    DishOptions o{nullptr, &founder};
+    o.hatchNeedsPhone = waitsForPhone;
+    return o;
+  }
   void run(uint32_t forMs) {
     runFor(dish, link, ms, forMs);
     lastCall = ms - kSampleMs;
@@ -451,6 +457,82 @@ TEST(Events, SubPushesStateEveryTwoSecondsAndDisconnectStops) {
   EXPECT_TRUE(r.link.sent.empty()) << "a new connection starts unsubscribed";
 }
 
+TEST(Events, ABareSubSubscribesToEverythingAndNoneToNothing) {
+  Rig r;
+  r.hatch();
+  const Lines out = r.send("#1 SUB");
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(out[0], "#1 OK events=0x3f");
+  EXPECT_EQ(out[1].rfind("! STATE phase=creature", 0), 0u) << "the state comes at once";
+  EXPECT_EQ(r.send("#2 SUB none"), (Lines{"#2 OK events=0x00"}));
+  r.link.sent.clear();
+  r.run(10000);
+  EXPECT_TRUE(r.link.sent.empty());
+}
+
+// The firmware's egg holds still until the page adopts it.
+TEST(Adopt, AnEggHeldForThePhoneHatchesOnlyOnceTheOwnerAdoptsIt) {
+  Rig r(quickEgg(), true);
+  EXPECT_EQ(r.send("#1 ADOPT status"), (Lines{"#1 OK adopted=0 waiting=1"}));
+  r.run(5 * 60000);
+  EXPECT_TRUE(std::holds_alternative<Egg>(r.dish.occupant())) << "five minutes on a one-minute egg, unadopted";
+  EXPECT_EQ(r.send("#2 ADOPT please"), (Lines{"#2 ERR 400 BAD_ARGS"}));
+  EXPECT_EQ(r.send("#3 ADOPT status now"), (Lines{"#3 ERR 400 BAD_ARGS"}));
+  EXPECT_EQ(r.send("#4 ADOPT"), (Lines{"#4 OK adopted=1 waiting=0"}));
+  EXPECT_EQ(r.store.files.count("adopted.flag"), 1u) << "kept, so a replug remembers";
+  EXPECT_EQ(r.send("#5 ADOPT"), (Lines{"#5 OK adopted=1 waiting=0"})) << "adopting twice is still adopted";
+  r.hatch();
+  EXPECT_TRUE(std::holds_alternative<Creature>(r.dish.occupant()));
+}
+
+TEST(Adopt, ASealedPetCannotBeAdoptedAndNothingIsWritten) {
+  MemStorage store;
+  ScriptedLink link;
+  DishOptions o;
+  o.sealed = o.hatchNeedsPhone = true;
+  Dish dish(store, 7, kLineageId, o);
+  EXPECT_EQ(ask(dish, link, "#1 ADOPT"), (Lines{"#1 ERR 409 NOT_NOW"}));
+  EXPECT_TRUE(store.files.empty());
+}
+
+// A gene from a newer firmware is carried, not expressed: GENE shows its bytes, 64 to a line.
+TEST(Gene, AKindThisFirmwareDoesNotKnowIsShownAsItsRawBytes) {
+  constexpr uint8_t kNewer = 0xEE;
+  ASSERT_EQ(geneType(kNewer), nullptr);
+  const Genome base = quickEgg();
+  const GeneUid uid = base.nextUid();
+  uint8_t body[70];
+  for (uint8_t i = 0; i < sizeof body; ++i) body[i] = uint8_t(i * 3);
+  const Genome g = *GenomeBuilder::from(base).append(GeneHeader{kNewer, sizeof body, 0, Stage::Child, 2, 9, uid}, body).build();
+  Rig r(g);
+  std::string first = "#7 + body=", second = "#7 + body=";
+  char hex[3];
+  for (uint8_t i = 0; i < sizeof body; ++i) {
+    std::snprintf(hex, sizeof hex, "%02x", body[i]);
+    (i < 64 ? first : second) += hex;
+  }
+  const std::string head = "#7 + uid=" + std::to_string(uid.v) + " kind=unknown len=70 flags=0x00 stage=child gate=2 weight=9";
+  EXPECT_EQ(r.send("#7 GENE " + std::to_string(uid.v)), (Lines{head, first, second, "#7 OK"}));
+}
+
+// A chemical a genome seeds that no registry row names still shows, by number.
+TEST(Chem, AChemicalWithNoRegistryRowIsListedWithAQuestionMark) {
+  uint16_t unnamed = 0;
+  for (uint16_t i = kDriveBase + kDriveCount; i < kChemSlots && !unnamed; ++i) {
+    bool named = false;
+    for (const ChemInfo& c : CHEMICALS) named = named || c.id.v == i;
+    if (!named) unnamed = i;
+  }
+  ASSERT_NE(unnamed, 0);
+  Rig r;
+  r.hatch();
+  std::get<Creature>(r.dish.occupant()).inject(ChemId{uint8_t(unnamed)}, Fx::ratio(1, 4));
+  const std::string want = "#8 + chem=" + std::to_string(unnamed) + " name=? level=250";
+  bool listed = false;
+  for (const std::string& l : r.send("#8 CHEM")) listed = listed || l == want;
+  EXPECT_TRUE(listed) << want;
+}
+
 TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
   Rig r;
   Lines out = r.send("#5 SCHEMA");
@@ -723,6 +805,20 @@ TEST(Golden, Portrait) {
   EXPECT_EQ(got, want);
   EXPECT_EQ(ask(dish, link, "#69 PORTRAIT 10"), (Lines{"#69 ERR 404 NO_GENOME"}));
   EXPECT_EQ(ask(dish, link, "#6a PORTRAIT 9 4"), (Lines{"#6a ERR 400 BAD_ARGS"}));
+}
+
+TEST(State, AClutchSaysHisEggsTheOneChosenTheVigilAndWhatTookHim) {
+  Rig r;
+  r.hatch();
+  elderDies(r);
+  ASSERT_TRUE(std::holds_alternative<Clutch>(r.dish.occupant()));
+  const Clutch& k = std::get<Clutch>(r.dish.occupant());
+  const Lines out = r.send("#6a STATE");
+  ASSERT_FALSE(out.empty());
+  EXPECT_EQ(out.front(), "#6a + phase=clutch gen=1 eggs=" + std::to_string(k.count) + " cursor=" + std::to_string(k.cursor) +
+                             " vigil=" + std::to_string(k.sinceDeath) + " cause=old_age");
+  EXPECT_EQ(k.count, 3) << "an elder's clutch, of the generation his eggs will be";
+  EXPECT_EQ(out.back(), "#6a OK");
 }
 
 TEST(Golden, Clutch) {

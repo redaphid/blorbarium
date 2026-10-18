@@ -826,6 +826,20 @@ TEST(OtaScreen, TheRingFollowsProgress) {
   }
 }
 
+TEST(OtaScreen, ReadyShowsTheWholeRingWhileItRestarts) {
+  const auto ready = frame({View::Phase::Ready, 1000, 1000, 0});
+  const auto blank = frame({View::Phase::Receiving, 0, 1000, 0});
+  const auto full = frame({View::Phase::Receiving, 1000, 1000, 0});
+  for (const auto& [x, y] : {std::pair{235, 120}, std::pair{120, 235}, std::pair{5, 120}}) {
+    EXPECT_NE(at(*ready, x, y), at(*blank, x, y)) << x << "," << y << " is lit";
+    EXPECT_EQ(at(*ready, x, y), at(*full, x, y)) << "the ring a finished download leaves";
+  }
+  int differ = 0;
+  for (int y = 0; y < 240; ++y)
+    for (int x = 0; x < 240; ++x) differ += at(*ready, x, y) != at(*full, x, y);
+  EXPECT_GT(differ, 0) << "it says Restarting, not 100%";
+}
+
 // ---- on trial, ownership, the restart --------------------------------------------------------------
 
 TEST(OtaSession, RefusesAnUpdateWhileThisImageIsOnTrial) {
@@ -1175,6 +1189,42 @@ TEST(OtaTrialGuard, TwistsThatWriteTheFlashWaitWhileOnTrial) {
   trial = false;
   inner.inbound = {"#9 TWIST rename Bob"};
   EXPECT_EQ(guard.readLine(), std::optional<std::string_view>("#9 TWIST rename Bob"));
+}
+
+// The pet talks through the guard as through the link it wraps; on trial a
+// held twist is answered by the guard, and the pet hears nothing of it.
+TEST(OtaTrialGuard, ThePetAnswersThroughTheGuardAndNeverHearsAHeldTwist) {
+  blorbtest::MemStorage store;
+  blorb::Dish dish(store, 7, 0x9f31c2d04a7bull);
+  ScriptedLink inner;
+  TrialGuard guard(inner, [] { return true; });
+  EXPECT_TRUE(guard.connected());
+  inner.inbound = {"#1 TWIST rename Bob", "#2 HASH"};
+  dish.tick(0, guard);
+  ASSERT_EQ(inner.sent.size(), 2u);
+  EXPECT_EQ(inner.sent[0], "#1 ERR 409 TRIAL");
+  EXPECT_EQ(inner.sent[1].rfind("#2 OK hash=", 0), 0u) << "the pet's own reply goes out through the guard";
+  EXPECT_STRNE(dish.settings().name, "Bob");
+  inner.sent.clear();
+  inner.inbound = {"#3 TWIST rename Bob"};
+  EXPECT_EQ(guard.readLine(), std::nullopt) << "a held line is all there was: nothing to read";
+  EXPECT_EQ(inner.sent, (Lines{"#3 ERR 409 TRIAL"}));
+}
+
+// The receiving state moves its hash along with it; a hash moved into
+// another hasher mid-image finishes the same digest.
+TEST(OtaCrypto, AHashMovedMidwayFinishesTheSameDigest) {
+  const Bytes image = imageBytes(5000, 3);
+  Sha256 a;
+  a.update(image.data(), 2000);
+  Sha256 b;
+  b.update(image.data(), 10);   // whatever b held is let go
+  b = std::move(a);
+  b.update(image.data() + 2000, image.size() - 2000);
+  Bytes out(32);
+  b.finish(out.data());
+  EXPECT_EQ(out, sha256(image));
+  Sha256 c(std::move(b));   // and a hasher moved from twice is still safe to destroy
 }
 
 int main(int argc, char** argv) {

@@ -9,6 +9,7 @@
 #include "blorb/founding.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/dish.h"
 #include "blorb/genes.h"
+#include "blorb/starter_duel.h"
 #include "founding_040.h"
 #include "links.h"
 #include "mem_storage.h"
@@ -358,6 +359,43 @@ TEST(Adopt, AnEggWaitsAndTheCreatureItHatchesIsAdopted) {
   b.hatch();
   EXPECT_EQ(b.adopt(), Dish::Adoption::Adopted);
   EXPECT_EQ(b.dish->appearance().species, species::mudge);
+}
+
+// A pet who died before the update: his clutch waits too, and the child
+// picked from it hatches into the table species.
+TEST(Adopt, AClutchWaitsAndTheChildPickedFromItIsAdopted) {
+  Badge b(kBatch[4]);
+  b.boot();
+  b.hatch();
+  b.creature().fall();
+  b.run(1000);
+  ASSERT_TRUE(std::holds_alternative<Clutch>(b.dish->occupant()));
+  EXPECT_EQ(b.adopt(), Dish::Adoption::NotYet);
+  ASSERT_TRUE(b.dish->pick(0));
+  EXPECT_EQ(b.adopt(), Dish::Adoption::NotYet);
+  b.hatch();
+  EXPECT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  EXPECT_EQ(b.dish->appearance().species, species::mudge);
+}
+
+// A badge whose pet already felt duels before the adoption (the graft)
+// keeps his own duel genes: the species founder's set is not added beside
+// them, so he never feels every duel twice.
+TEST(Adopt, APetWhoAlreadyFeelsDuelsKeepsHisOwnDuelGenes) {
+  Badge plain(kBatch[2]), grafted(kBatch[2]);
+  for (Badge* b : {&plain, &grafted}) b->liveOn040();
+  ASSERT_TRUE(graftDuelGenes(grafted.creature(), grafted.dish->lineage()));
+  ASSERT_TRUE(feelsDuels(grafted.creature().genome()));
+  EXPECT_EQ(plain.adopt(), Dish::Adoption::Adopted);
+  EXPECT_EQ(grafted.adopt(), Dish::Adoption::Adopted);
+  int founders = 0;
+  grafted.creature().genome().forEach([&](const GeneView& v) {
+    founders += v.header.uid.v >= kFirstDuelGeneUid.v && v.header.uid.v < kFirstDuelGeneUid.v + kDuelGeneCount;
+  });
+  EXPECT_EQ(founders, 0) << "none of the founder's duel genes";
+  EXPECT_EQ(grafted.creature().genome().geneCount(), plain.creature().genome().geneCount())
+      << "one set of duel genes each: his own, or the founder's";
+  EXPECT_EQ(grafted.dish->appearance().species, plain.dish->appearance().species);
 }
 
 TEST(Adopt, ASealedBoardIsNeverTouched) {
