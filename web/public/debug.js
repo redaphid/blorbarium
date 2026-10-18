@@ -14,8 +14,8 @@
   const CHEMS = ["hunger", "sleepiness", "boredom", "loneliness", "fear", "pain", "discomfort", "need_touch",
     "life", "injury", "energy", "food", "adrenaline", "toxin", "warmth", "melatonin", "vision", "daze", "pluck", "mettle", "dread"];
   const STIMULI = ["knock", "double_knock", "shake", "picked_up", "put_down", "dropped", "flipped", "righted", "button",
-    "button_hold", "cradle", "lid_down", "lid_up", "touched", "button_double", "pellet_dropped", "fed", "fed_bad",
-    "marble_hit", "dusk", "dawn", "owner_arrived", "owner_left", "petted", "played", "spoken_to"];
+    "button_hold", "cradle", "lid_down", "lid_up", "touched", "button_double", "hang", "pellet_dropped", "fed", "fed_bad",
+    "dusk", "dawn", "owner_arrived", "owner_left", "petted", "played", "spoken_to"];
   const THOUGHTS = ["peckish", "starving", "crunch", "fuzzy_bite", "green", "ow", "heard_you", "ground_lies", "hooded",
     "counted", "put_me_down", "warm_hands", "sky_down", "heavy_eyes", "dream_pellets", "p_snack", "p_feast", "p_feed_me"];
 
@@ -139,7 +139,7 @@
   function onEvent(text) {
     log(`! ${text}`);
     if (/^DEBUG unlock=/.test(text)) refresh();
-    const ask = /^DEBUG fight double=\d ctx=(\S+) gate=(\S+) result=(\S+)/.exec(text);
+    const ask = /^DEBUG fight double=\d(?: hang=\d)? ctx=(\S+) gate=(\S+) result=(\S+)/.exec(text);
     if (ask) [, fight.ctx, fight.gate, fight.result] = ask, showFight(), refresh();
     const radio = /^DEBUG radio open=(\d)(?: err=(\S+))?/.exec(text);
     if (radio) fight.radio = radio[1] === "1" ? "open" : `refused: ${radio[2] || "?"}`, showFight();

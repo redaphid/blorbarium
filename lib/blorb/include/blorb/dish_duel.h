@@ -29,8 +29,8 @@ inline constexpr AimTilt kAimTilt[4] = {
     {0, 500, 0, 866}, {1, -500, 0, 866}, {2, 0, -500, 866}, {3, 0, 500, 866}};
 
 // Graft from candidate B, narrowed: a lineage founded before duels has no
-// duel feeling genes, so its pet would not feel a battle. On his first duel
-// open the starter's duel genes (kDuelGenes) are appended at nextUid() (no uid
+// duel feeling genes, so its pet would not feel a battle. The first tick he
+// is ready in fight mode the starter's duel genes (kDuelGenes) are appended at nextUid() (no uid
 // is ever reused, DEVIATIONS 6), never at their fixed uids, so they never
 // cross; recorded as one lineage Checkpoint, the path TWIST gene_edit uses.
 // A genome that already reads any Duel-source stimulus is left alone, so a
@@ -59,9 +59,12 @@ class DishDuel {
   void attach(Storage&);
 
   // One tick, after the detectors and before the occupant:
-  //  1 a body-sourced `button_double` while BOOT means OpenDuel: readiness(),
+  //  1 a body-sourced `button_double` (or `hang`: held upside down, the same
+  //    ask from a case that covers BOOT) while BOOT means OpenDuel: readiness(),
   //    then open with a LocalConsent (made here and nowhere else). A refusal
-  //    shows its picture; a radio OTA holds shakes his head.
+  //    shows its picture; a radio OTA holds shakes his head. An awake
+  //    creature with a radio asks for himself too: fight mode is the
+  //    resting state, and the ask is the wake-up and the shortcut.
   //  2 session.tick, with DuelInput from what a detector fired only
   //  3 the captured stimuli leave `raw`; the duel's own join it (Duel-sourced,
   //    through duelFilter at the agreed stakes)
@@ -81,13 +84,14 @@ class DishDuel {
   // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Mortal: every tier.
   void setDeviceCeiling(Stakes s) { deviceCeiling_ = s; }
 
-  // The last double press that did not open a duel, for the screen: why
-  // (Decline), or None when the radio was refused (an update holds it).
+  // The last ask that did not open a duel, for the screen: why (Decline), or
+  // None when the radio was refused (an update holds it). A double press and
+  // a hang share it; the log line says which one asked.
   struct Refusal { Decline why = Decline::None; uint32_t tick = 0; bool any = false; NoFight kind = NoFight::None; };
   const Refusal& refusal() const { return refusal_; }
-  // A double press where BOOT means no fight (an egg, the nest, the vigil):
-  // the Dish's routing says so, and the screen shows why.
-  void refuse(NoFight, uint32_t tick, const char* gate = nullptr);
+  // An ask where BOOT means no fight (an egg, the nest, the vigil): the Dish's
+  // routing says so, and the screen shows why.
+  void refuse(NoFight, uint32_t tick, const char* gate = nullptr, bool hang = false);
   bool searching() const { return session_.searching(); }
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out); }
   const char* lastGate() const { return lastGate_; }
@@ -121,8 +125,9 @@ class DishDuel {
   uint32_t lastTry_ = 0;
   DiagLines diag_;
   char lastGate_[40] = "none";
-  // One ask, for the debug link and STATUS: `double` 0 when fight mode opened by itself.
-  void report(bool asked, BootContext, const char* gate, const char* result);
+  // One ask, for the debug link and STATUS: `double` and `hang` say which
+  // gesture asked (0 for both when fight mode opened by itself).
+  void report(bool asked, bool hang, BootContext, const char* gate, const char* result);
   void gateOf(const Occupant&, Decline, uint32_t tick, char (&out)[32]) const;
   std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows
 };

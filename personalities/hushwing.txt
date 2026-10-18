@@ -69,8 +69,6 @@ inherited
   GEN # WATCHES THROUGH ME.
 counted
   I COUNTED THE QUIET. ALL OF IT
-marble_knows
-  THE MARBLE CANNOT HEAR ME COME
 put_me_down
   PUT ME DOWN. GENTLY. SILENTLY.
 warm_hands
@@ -170,8 +168,6 @@ p_famous
 
 rim_walk
   I WALKED THE RIM. NO SOUND.
-marble_foe
-  THE MARBLE IS TOO NOISY.
 clean_glass
   THE GLASS. AN OWL STARES BACK.
 dont_look

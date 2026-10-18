@@ -56,7 +56,6 @@ void count(LifeStats& s, StimId id) {
     case stim::cradle.v: s.cradled = bump(s.cradled); break;
     case stim::dropped.v: s.dropped = bump(s.dropped); break;
     case stim::fed.v: s.fed = bump(s.fed); break;
-    case stim::marble_hit.v:
     case stim::played.v: s.played = bump(s.played); break;
     case stim::dawn.v: s.nights = bump(s.nights); break;
     default: break;

@@ -20,8 +20,8 @@ namespace {
 // rolls the same four Look nudges. The two prints were taken on the engine
 // before species genes existed (battles-d2 0a64811).
 constexpr uint32_t kGiftSeed = 15048;
-constexpr uint32_t kGiftHash = 0xd30f00d1u;
-constexpr uint32_t kGiftLifePrint = 0x69bc9280u, kGiftLifePrintAllFeats = 0xd06bd969u;
+constexpr uint32_t kGiftHash = 0x3df10dafu;   // re-pinned 2026-10-17: the starter retired the marble genes (uids 63, 77)
+constexpr uint32_t kGiftLifePrint = 0xc6f5005bu, kGiftLifePrintAllFeats = 0x69356d6eu;
 
 Phenotype lifeOf(const Genome& g, uint32_t feats = 0) {
   Phenotype p{};
@@ -385,3 +385,5 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+

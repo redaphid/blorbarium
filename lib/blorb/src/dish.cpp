@@ -46,20 +46,6 @@ constexpr int64_t kDriftSeconds = 60;
 // Once wall time is known, the sources are read again this often.
 constexpr uint32_t kWallCheckTicks = kTicksPerMinute;
 
-// A new life's marble starts on a seeded spot this far from the hatchling and
-// no further than kMarbleStartMax from the centre, so it never sits under him.
-constexpr Fx kMarbleClear = Fx::ratio(45, 100);
-constexpr Fx kMarbleStartMax = Fx::ratio(70, 100);
-
-DishPos marbleStart(Rng& rng, DishPos him) {
-  for (;;) {
-    DishPos p{kMarbleStartMax * (rng.unit() + rng.unit() - Fx::one()), kMarbleStartMax * (rng.unit() + rng.unit() - Fx::one())};
-    Fx dx = p.x - him.x, dy = p.y - him.y;
-    if (p.x * p.x + p.y * p.y <= kMarbleStartMax * kMarbleStartMax && dx * dx + dy * dy >= kMarbleClear * kMarbleClear)
-      return p;
-  }
-}
-
 // A newer firmware's keepsake must not be written, so the throwaway life it
 // runs keeps its lineage nowhere.
 struct NullStorage : Storage {
@@ -247,6 +233,27 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
     if (remote) out.fireRemote(stim::button);
     else out.fire(stim::button);
   }
+  // A hang is the double press's twin, never a press: it is not turned into
+  // a pellet here, and where a fight is refused it is refused in words, like
+  // a double press. Where a double press means OpenDuel (Awake, Asleep) a
+  // body hang stays in `out` for DishDuel to open with; everywhere else, and
+  // whenever a phone fired it, it leaves `out` here.
+  if (fired(out, stim::hang)) {
+    const bool remote = (out.remote & duelStimBit(stim::hang)) != 0;
+    if (!(m.doublePress == BootAct::OpenDuel && !remote)) {
+      if (!remote && !sealed()) {
+        if (ctx == BootContext::Egg) duel_.refuse(NoFight::Egg, tick_, nullptr, true);
+        else if (ctx == BootContext::FoundingNest || ctx == BootContext::ClutchPick)
+          duel_.refuse(NoFight::Nest, tick_, nullptr, true);
+        else if (ctx == BootContext::Vigil) duel_.refuse(NoFight::Remains, tick_, nullptr, true);
+      }
+      uint8_t kept = 0;
+      for (uint8_t i = 0; i < out.stimCount; ++i)
+        if (out.stimuli[i] != stim::hang) out.stimuli[kept++] = out.stimuli[i];
+      out.stimCount = kept;
+      out.remote &= ~duelStimBit(stim::hang);
+    }
+  }
   if ((m.press == BootAct::PeekEgg || m.press == BootAct::LayFlower) && fired(out, stim::button)) {
     echo_ = m.press;
     echoTick_ = tick_;
@@ -282,7 +289,6 @@ void Dish::onHatch(Egg& e) {
   live_.habitat = Habitat{};
   live_.habitat.pantry = born.phenotype().habitat.pantrySize;
   live_.habitat.pantryTick = tick_;
-  live_.habitat.marble.at = marbleStart(live_.rng, born.body().at);
   eventDirty_ = true;
 }
 

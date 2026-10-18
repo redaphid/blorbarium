@@ -161,7 +161,7 @@ TEST(Thoughts, WithNoWallTimeHeStillThinksAndForetells) {
   EXPECT_FALSE(r.said.empty()) << "ten minutes in, he has said something with no phone";
   const int before = r.prophecies();
   r.shake(6);
-  r.run(400);
+  r.run(1800);   // past the trance: the answer lands about 1.2 s after the shake
   Appearance a = r.dish.appearance();
   EXPECT_EQ(r.prophecies(), before + 1) << "a shake foretells with no phone";
   EXPECT_TRUE(a.thinking && a.prophecy);
@@ -273,7 +273,7 @@ TEST(Prophecy, EveryShakeForetellsWearingTheForeseeFace) {
   for (int i = 0; i < kShakes; ++i) {
     const int before = r.prophecies();
     r.shake(6);
-    r.run(400);
+    r.run(1800);   // past the trance: the answer lands about 1.2 s after the shake
     Appearance a = r.dish.appearance();
     ASSERT_EQ(r.prophecies(), before + 1) << "shake " << i << " foretold once";
     ASSERT_TRUE(a.thinking && a.prophecy) << "shake " << i;
@@ -300,6 +300,10 @@ TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
   ASSERT_GT(first.thoughtPhase, Fx::ratio(1, 10)) << "the first line is partway across: " << first.line;
   r.shake(6);
   r.run(100);
+  const Appearance trance = r.dish.appearance();
+  EXPECT_TRUE(trance.prophecy && !trance.thinking) << "the new shake cuts the line and goes back into the trance";
+  EXPECT_EQ(r.prophecies(), 1) << "nothing has been answered yet";
+  r.run(1500);
   const Appearance second = r.dish.appearance();
   EXPECT_TRUE(second.thinking && second.prophecy);
   EXPECT_LT(second.thoughtPhase, first.thoughtPhase) << "the new line starts from the beginning";
@@ -307,6 +311,78 @@ TEST(Prophecy, AShakeDuringAProphecyReplacesItFromTheStart) {
   while (r.dish.appearance().thinking && r.dish.appearance().prophecy) r.run(100);
   r.run(30 * kSecond);
   EXPECT_EQ(r.prophecies(), 2) << "the cut-off line does not come back after the new one";
+}
+
+// The 8-Ball ritual: a shake does not answer at once. First the trance --
+// the foresee face, the prophecy presentation, and no words -- and only
+// when it ends does the answer land, whole.
+// Discoverability: on his first day of life he teaches the two gestures a
+// kid cannot guess -- the flip that finds a fight and the shake that
+// foretells -- saying them as ordinary thoughts. From day two, never:
+// the lessons are for the first day with a new pet.
+TEST(Thoughts, HeTeachesHisGesturesOnHisFirstDayOnly) {
+  Rig r;
+  r.pastWarmUp();
+  bool taught = false;
+  for (uint32_t t = 0; t < 3 * 3600 * 1000 && !taught; t += 60 * 1000) {
+    r.run(60 * 1000);
+    for (const Line& l : r.said) taught = taught || l.id.v == thought::teach_fight.v || l.id.v == thought::teach_shake.v;
+  }
+  EXPECT_TRUE(taught) << "on his first day he names the flip and the shake";
+  // Live past his first day, however much of it the search above used.
+  const uint32_t dayMs = PetClock::kDayTicks * kTickMs;
+  const uint32_t livedMs = r.dish.tickCount() * kTickMs;
+  if (livedMs < dayMs + 3600 * 1000) r.run(dayMs + 3600 * 1000 - livedMs);
+  const size_t mark = r.said.size();
+  r.run(2 * 3600 * 1000);
+  ASSERT_GT(r.said.size(), mark) << "he still thinks on day two";
+  for (size_t i = mark; i < r.said.size(); ++i)
+    EXPECT_TRUE(r.said[i].id.v != thought::teach_fight.v && r.said[i].id.v != thought::teach_shake.v)
+        << "day two: the lessons are done";
+}
+
+TEST(Prophecy, AShakeTrancesBeforeItAnswers) {
+  Rig r;
+  r.pastWarmUp();
+  r.shake(6);
+  const Appearance a = r.dish.appearance();
+  EXPECT_TRUE(a.prophecy) << "the trance wears the prophecy presentation";
+  EXPECT_EQ(a.expression, expr::foresee);
+  EXPECT_FALSE(a.thinking) << "no words yet: the ball is still swirling";
+  EXPECT_STREQ(a.line, "");
+  EXPECT_EQ(r.prophecies(), 0);
+  r.run(1800);
+  EXPECT_EQ(r.prophecies(), 1);
+  EXPECT_TRUE(r.dish.appearance().thinking && r.dish.appearance().prophecy);
+}
+
+// A day's first foretelling is a fortune in his own voice, never a bare
+// verdict; after that the ball flips its coin, and in 23 flips it answers
+// plainly at least once. The verdict texts are thoughts.cpp's own.
+TEST(Prophecy, TheDaysFirstForetellingIsAFortuneAndLaterOnesMayBeVerdicts) {
+  static const char* kVerdictTexts[] = {"YES.", "YES. DEFINITELY.", "SIGNS POINT TO YES.", "COUNT ON IT.",
+                                        "NO.", "NO WAY.", "MY ANSWER IS NO.", "DO NOT COUNT ON IT.",
+                                        "MAYBE.", "CANNOT SAY YET.", "THE MIST IS THICK.", "ASK AGAIN LATER."};
+  auto isVerdict = [](const std::string& text) {
+    for (const char* v : kVerdictTexts)
+      if (text == v) return true;
+    return false;
+  };
+  Rig r;
+  r.pastWarmUp();
+  int verdicts = 0;
+  for (int i = 0; i < 24; ++i) {
+    const size_t before = r.said.size();
+    r.shake(6);
+    r.run(1800);
+    ASSERT_GT(r.said.size(), before) << "shake " << i << " foretold";
+    const Line& line = r.said.back();
+    EXPECT_TRUE(line.prophecy);
+    if (isVerdict(line.text)) ++verdicts;
+    if (i == 0) EXPECT_FALSE(isVerdict(line.text)) << "a fortune, not a verdict: " << line.text;
+  }
+  EXPECT_GE(verdicts, 1) << "in 23 coin flips the ball answered plainly at least once";
+  EXPECT_LE(verdicts, 23);
 }
 
 TEST(Prophecy, OneLongShakeIsOneProphecy) {

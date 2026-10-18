@@ -16,6 +16,7 @@
 #include <variant>
 #include <vector>
 #include "blorb/air.h"
+#include "blorb/controls.h"
 #include "blorb/duel.h"
 #include "blorb/duel_book.h"
 #include "blorb/duel_card.h"
@@ -31,7 +32,8 @@ struct DuelTestAccess;   // test/support only
 
 // Proof that this device's own owner asked for a duel. Only DishDuel can make
 // one, and it does so in exactly one place: routing a body-sourced BOOT
-// double press (or v2's wheel row) while a creature lives. The Dish exposes
+// double press (or v2's wheel row, or a body-sourced hang: held upside down,
+// the same ask from a case that covers the button) while a creature lives. The Dish exposes
 // DishDuel to nobody but its own tick, so no protocol verb, twist or packet
 // can reach a line that makes one.
 class LocalConsent {
@@ -48,6 +50,7 @@ struct DuelInput {
   int8_t aim = -1;   // 0..3, or -1 level
   bool knock = false, doubleKnock = false, press = false, hold = false, doublePress = false;
   bool shake = false, cradle = false;
+  bool hang = false;   // held upside down 1 s: in the lobby it leaves, on the friends screen it searches again (the double press, without a button)
   bool lid = false, dropped = false;
   bool bootDown = false;   // the button's level: the Mortal confirm, the Finish and the hug are 3 s holds
   // `remote` is the stimuli a phone fired this tick (SenseOut::remote, unit D9):
@@ -55,18 +58,8 @@ struct DuelInput {
   static DuelInput from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx tiltY, bool bootDown);
 };
 
-// Stimuli the duel takes for itself while it is open, so his body does not
-// flinch at every lock-in knock. BOOT is the duel's in every phase (the
-// special, the confirm, the Finish, the hug), so a heavy special never also
-// tucks him in. A shake always tells the future, and a drop and the lid always
-// reach him (they also end the duel): those are never taken.
-constexpr uint64_t duelStimBit(StimId s) { return uint64_t(1) << s.v; }
-inline constexpr uint64_t kDuelCaptures = duelStimBit(stim::knock) | duelStimBit(stim::double_knock) |
-                                          duelStimBit(stim::button) | duelStimBit(stim::button_double);
-inline constexpr uint64_t kHoldPhaseCaptures = kDuelCaptures | duelStimBit(stim::button_hold);
-static_assert((kHoldPhaseCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::dropped) |
-                                     duelStimBit(stim::lid_down) | duelStimBit(stim::cradle))) == 0,
-              "BOOT is the duel's; a shake, a drop, the lid and a cuddle are always the pet's");
+// Which stimuli the duel takes for itself, and which gestures ask for it,
+// are the controls table (controls.h) — one place to rebind them.
 
 enum class DuelPhase : uint8_t {
   Closed,     // radio off: not in fight mode

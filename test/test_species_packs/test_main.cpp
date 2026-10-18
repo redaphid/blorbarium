@@ -183,7 +183,7 @@ TEST(FromTheGenes, EveryStarterDrawsItsOwnArtNotTheFrog) {
 // species gene, so it draws exactly as it did when grungoPack() was the only pack.
 TEST(FromTheGenes, TheGiftDrawsAsGrungoByteForByte) {
   const blorb::Genome gift = blorb::starterGenome(15048);
-  ASSERT_EQ(gift.hash(), 0xd30f00d1u);
+  ASSERT_EQ(gift.hash(), 0x3df10dafu);
   const blorb::Habitat h;
   const blorb::PetClock clock;
   const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{gift, {}}, uint16_t(0), 0u};

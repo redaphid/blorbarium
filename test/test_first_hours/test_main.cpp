@@ -108,7 +108,7 @@ class Passenger {
   }
   void tilt(uint32_t ms) {
     ++n_.tilts;
-    const int16_t lean = int16_t(150 + rng_.below(120));   // 9 to 16 degrees: rolls the marble, under "held"
+    const int16_t lean = int16_t(150 + rng_.below(120));   // 9 to 16 degrees: a good lean, under "held"
     tiltX_ = rng_.below(2) ? lean : int16_t(-lean);
     tiltY_ = int16_t(int(rng_.below(201)) - 100);
     act(G::Tilt, ms, between(4, 10) * 1000);

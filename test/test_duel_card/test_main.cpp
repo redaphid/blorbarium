@@ -256,20 +256,26 @@ TEST(Readiness, AnAsleepPetSleepsOn) {
   EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::Asleep);
 }
 
-TEST(Readiness, AVerySleepyPetDeclines) {
+TEST(Readiness, AVerySleepyPetFightsOnUnlessTheRulesSayNo) {
   Rig r = calm();
-  r.c().inject(driveChem(drive::sleepiness), kDeclineSleepy - Fx::ratio(1, 100));
-  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::None);
   r.c().inject(driveChem(drive::sleepiness), kDeclineSleepy);
-  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::Sleepy);
+  // The shipped rules (0.7.9): sleepiness never refuses — on the buttonless
+  // case there is no way to tuck him in, so a refusal would be a lockout.
+  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::None);
+  ReadinessRules blocking;
+  blocking.sleepinessBlocks = true;
+  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false, blocking), Decline::Sleepy);
 }
 
-TEST(Readiness, AVeryHungryPetWantsHisBowlFirst) {
+TEST(Readiness, AVeryHungryPetFightsOnUnlessTheRulesSayNo) {
   Rig r = calm();
-  r.c().inject(driveChem(drive::hunger), kDeclineHungry - Fx::ratio(1, 100));
-  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::None);
   r.c().inject(driveChem(drive::hunger), kDeclineHungry);
-  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::Hungry);
+  // The shipped rules (0.7.9): hunger never refuses — on the buttonless case
+  // there is no way to feed him, so a refusal would be a lockout.
+  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false), Decline::None);
+  ReadinessRules blocking;
+  blocking.hungerBlocks = true;
+  EXPECT_EQ(readiness(r.o, 0, UINT32_MAX, false, blocking), Decline::Hungry);
 }
 
 TEST(Readiness, HeRestsTwoMinutesAfterADuelAndFiveAfterAFaint) {

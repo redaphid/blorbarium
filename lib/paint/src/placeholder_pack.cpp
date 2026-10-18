@@ -18,7 +18,7 @@ enum Ix : uint8_t {
   kClear, kOutline, kSkinDark, kSkin, kSkinLight, kBelly, kBellyLight,
   kCloakDark, kCloak, kCloakLight, kIrisDark, kIris, kPupil, kShine,
   kMouth, kTongue, kGlowDark, kGlow, kGlowLight, kShellDark, kShell, kShellLight,
-  kSclera, kPellet, kPelletLight, kRot, kRotSpot, kMarble, kMarbleLight, kIndexCount
+  kSclera, kPellet, kPelletLight, kRot, kRotSpot, kIndexCount
 };
 
 constexpr uint8_t kInvariant = 255;
@@ -36,7 +36,6 @@ constexpr PaletteEntry kPalette[kIndexCount] = {
     {236, 230, 212, kInvariant},
     {196, 134, 62, kInvariant}, {236, 186, 104, kInvariant},
     {112, 112, 62, kInvariant}, {58, 68, 30, kInvariant},
-    {84, 140, 220, kInvariant}, {206, 232, 255, kInvariant},
 };
 
 // Hue in 1/256 turn, sat and val x/128. Skin stays a frog green, the cloak a
@@ -288,14 +287,6 @@ Raster pellet(uint8_t body, uint8_t spot) {
   return r;
 }
 
-Raster marble() {
-  Raster r(11, 11);
-  r.disc(5, 5, 4, kMarble);
-  r.set(3, 3, kMarbleLight); r.set(4, 3, kMarbleLight); r.set(3, 4, kMarbleLight);
-  r.outline();
-  return r;
-}
-
 Raster crop(const Raster& src, int x0, int y0, int w, int h) {
   Raster r(w, h);
   for (int y = 0; y < h; ++y)
@@ -329,7 +320,6 @@ class PlaceholderPack final : public SpritePack {
     remains_ = add(remainsArt(), 42, 49);
     items_[0] = add(pellet(kPellet, kPelletLight), 4, 7);
     items_[1] = add(pellet(kRot, kRotSpot), 4, 7);
-    items_[2] = add(marble(), 5, 10);
   }
 
   const PaletteEntry* palette(uint16_t& count) const override {
@@ -353,7 +343,7 @@ class PlaceholderPack final : public SpritePack {
   FrameRef remains() const override { return ref(remains_); }
   FrameRef item(blorb::Appearance::Item::What w) const override {
     uint8_t i = uint8_t(w);
-    return ref(items_[i < 3 ? i : 0]);
+    return ref(items_[i < 2 ? i : 0]);
   }
 
  private:

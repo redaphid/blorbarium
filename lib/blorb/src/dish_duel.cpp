@@ -95,17 +95,18 @@ void DishDuel::attach(Storage& s) {
   book_ = DuelBook::open(s);
 }
 
-void DishDuel::refuse(NoFight why, uint32_t tick, const char* gate) {
+void DishDuel::refuse(NoFight why, uint32_t tick, const char* gate, bool hang) {
   refusal_ = Refusal{Decline::None, tick, true, why};
   static constexpr BootContext kCtx[] = {BootContext::Awake, BootContext::Egg, BootContext::FoundingNest, BootContext::Vigil,
                                          BootContext::Asleep, BootContext::Awake};
   static constexpr const char* kGate[] = {"ok", "egg", "nest", "remains", "asleep", "radio"};
-  report(true, kCtx[uint8_t(why)], gate ? gate : kGate[uint8_t(why)], "refused");
+  report(true, hang, kCtx[uint8_t(why)], gate ? gate : kGate[uint8_t(why)], "refused");
 }
 
-void DishDuel::report(bool asked, BootContext ctx, const char* gate, const char* result) {
+void DishDuel::report(bool asked, bool hang, BootContext ctx, const char* gate, const char* result) {
   std::snprintf(lastGate_, sizeof lastGate_, "%s", gate);
-  diag_.say("fight double=%d ctx=%s gate=%s result=%s", int(asked), bootContextName(ctx), gate, result);
+  diag_.say("fight double=%d hang=%d ctx=%s gate=%s result=%s", int(asked && !hang), int(hang), bootContextName(ctx), gate,
+            result);
 }
 
 // The gate as the debug link says it: "ok", or what stood in the way and how
@@ -177,17 +178,27 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
                            uint64_t lineageId, uint16_t petDay, uint32_t tick) {
   DuelStepped out;
   Creature* c = std::get_if<Creature>(&o);
+  // He dozed off in the lobby: fight mode is an awake pet's state, so it
+  // ends as he sleeps, before anything else this tick reads the session.
+  if (c && air && session_.active() && session_.view(tick).phase == DuelPhase::Lobby && c->body().asleep)
+    session_.close(*air, EndReason::Finished);
   // Three losses in a row want a cuddle, and a cuddle is all it takes.
   if (c && fromBody(raw, stim::cradle) && book_.lossesInARow() >= kLossesBeforeACuddle) book_.recordCuddle(tick);
 
   if (!session_.active()) {
-    const bool asked = fromBody(raw, stim::button_double);
+    const bool askedHang = fromBody(raw, stim::hang);
+    const bool asked = fromBody(raw, stim::button_double) || askedHang;
     const BootContext ctx = bootContext(o, nullptr);
-    if (asked) drop(raw, duelStimBit(stim::button_double));
+    // Fight mode is the resting state: an awake creature with a radio asks
+    // for himself, so two badges near each other find the fight with no
+    // gesture at all. The hang and the double press remain the wake-up and
+    // the shortcut; leaving the lobby just reopens it on the next tick.
+    const bool autoAsk = air && c && ctx == BootContext::Awake;
+    if (asked) drop(raw, kFightAskMask);
     if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
       pendingSince_.reset();   // a second double press while it waits takes the ask back
       refusal_ = Refusal{};
-      report(asked, ctx, asked ? "cancelled" : "gave_up", "off");
+      report(asked, askedHang, ctx, asked ? "cancelled" : "gave_up", "off");
       return out;
     }
     bool tryOpen = false, woke = false;
@@ -198,28 +209,28 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
         gateOf(o, Decline::Sleepy, tick, gate);
         char asleep[40];
         std::snprintf(asleep, sizeof asleep, "asleep:%s", gate);
-        refuse(NoFight::TooSleepy, tick, asleep);
+        refuse(NoFight::TooSleepy, tick, asleep, askedHang);
         return out;
       }
       c->wake();
       woke = tryOpen = true;
-    } else if (asked && ctx == BootContext::Awake) {
+    } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
       tryOpen = true;
     } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
       tryOpen = true;
     }
-    if (asked && !tryOpen) report(true, ctx, bootContextName(ctx), "refused");
+    if (asked && !tryOpen) report(true, askedHang, ctx, bootContextName(ctx), "refused");
     if (!tryOpen) return out;
     lastTry_ = tick;
     const bool retry = pendingSince_.has_value();
     if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
       // The radio said no with the pet ready: an update holds it. Ask again each second.
       if (!air || refusal_.why == Decline::None) {
-        if (!retry) report(asked, ctx, air ? air->refusal() : "no_radio", "waiting");
+        if (!retry) report(asked, askedHang, ctx, air ? air->refusal() : "no_radio", "waiting");
         if (!pendingSince_) pendingSince_ = tick;
         refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
       } else {
-        report(asked, ctx, "no_pet", "refused");
+        report(asked, askedHang, ctx, "no_pet", "refused");
       }
       return out;
     }
@@ -230,7 +241,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       const Decline why = ready(o, tick);
       if (woke && why == Decline::Asleep) std::snprintf(gate, sizeof gate, "woken");   // he wakes on the next tick
       else gateOf(o, why, tick, gate);
-      report(asked, ctx, gate, "entered");
+      report(asked, askedHang, ctx, gate, "entered");
     }
   }
   if (!air) return out;
@@ -307,7 +318,14 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     if (why == Decline::NotACreature) {
       session_.close(*air, EndReason::Finished);   // he fell, or is remains: fight mode ends with him
     } else {
-      if (fx.backToLobby) session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
+      // The graft rides readiness, not the open: with fight mode always on
+      // he may have opened it as a child, and the starter's duel genes are
+      // owed to the first tick he is actually ready in the lobby.
+      if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
+      // Refreshed every tick he searches, not only on the way back from a
+      // fight: with fight mode always on he may have opened it as a child,
+      // or hungry, and a friend must meet the pet he is now.
+      session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
       session_.setDecline(why);
       if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
     }

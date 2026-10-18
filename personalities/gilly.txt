@@ -67,8 +67,6 @@ inherited
   GEN # SAYS: KEEP SMILING!
 counted
   I COUNTED MY FRILLS. TWELVE!
-marble_knows
-  COME BACK, MARBLE! I'M NICE!
 put_me_down
   CARRY ME! OKAY! PUT ME DOWN!
 warm_hands
@@ -168,8 +166,6 @@ p_famous
 
 rim_walk
   I WALKED THE RIM! TWICE! FUN!
-marble_foe
-  THE MARBLE IS MY FRIEND! NOW!
 clean_glass
   I WAVED AT THE GLASS! IT WAVED
 dont_look

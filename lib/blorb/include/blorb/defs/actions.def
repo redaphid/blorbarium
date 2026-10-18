@@ -11,5 +11,4 @@ BLORB_ACTION( 5, call,        Call,        25, self_called)
 BLORB_ACTION( 6, curl,        Curl,        40, none)          // hood up, toward the rim
 BLORB_ACTION( 7, follow_tilt, FollowTilt,  20, none)
 BLORB_ACTION( 8, flee_tilt,   FleeTilt,    20, none)
-BLORB_ACTION( 9, chase,       Chase,       15, none)          // after the marble
-BLORB_ACTION(10, hop_circles, HopCircles,  20, none)          // happy hopping, cloak flapping
+BLORB_ACTION( 9, hop_circles, HopCircles,  20, none)          // happy hopping, cloak flapping (renumbered from 10 when chase retired: action ids stay dense)

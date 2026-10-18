@@ -121,7 +121,7 @@ Rng getRng(In& in) {
 void putHabitat(Out& o, const Habitat& h) {
   o.u8(Habitat::kMaxPellets);
   for (const Pellet& p : h.pellets) o.fx(p.at.x), o.fx(p.at.y), o.u32(p.droppedTick), o.u8(p.present);
-  o.fx(h.marble.at.x), o.fx(h.marble.at.y), o.fx(h.marble.vx), o.fx(h.marble.vy);
+  o.fx(h.marble.at.x), o.fx(h.marble.at.y), o.fx(h.marble.vx), o.fx(h.marble.vy);   // format ballast: written back as read
   o.u8(h.pantry), o.u32(h.pantryTick);
 }
 Habitat getHabitat(In& in) {

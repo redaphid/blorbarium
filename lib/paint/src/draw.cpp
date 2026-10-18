@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
@@ -542,54 +543,6 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
     }
 }
 
-// The marble is shaded per pixel, not taken from the pack: glass needs a
-// smooth shade, a soft edge and a hot glint, more colours than the pack's full
-// palette has left. Cobalt glass sits outside his greens and browns, so it
-// cannot be read as an egg or a pellet. Lit from the upper left like him.
-constexpr int kMarbleRQ4 = 104;                   // 13 px across, standing on its stand point
-constexpr Rgb kGlassDeep{22, 64, 156}, kGlassLight{100, 200, 255}, kGlassRim{6, 14, 40};
-constexpr Rgb kGlassSwirl{168, 240, 232}, kGlassGlint{255, 255, 255};
-
-Rgb mixRgb(const Rgb& a, const Rgb& b, int t) {   // t 0..256
-  return {a.r + (b.r - a.r) * t / 256, a.g + (b.g - a.g) * t / 256, a.b + (b.b - a.b) * t / 256};
-}
-
-void glassMarble(Canvas240& cv, const Place& q) {
-  const int R = kMarbleRQ4, cx = q.x * 16 + 8, cy = (q.y + 1) * 16 - R;
-  for (int y = (cy + R) / 16 - 1; y <= (cy + R) / 16 + 1; ++y)   // contact shadow
-    for (int x = floorDiv(cx - R, 16); x <= (cx + R) / 16; ++x) {
-      if (x < 0 || y < 0 || x >= kSide || y >= kSide) continue;
-      const int dx = x * 16 + 8 - cx, dy = (y * 16 + 8 - (cy + R)) * 4;
-      const int d = int(isqrt(uint64_t(dx * dx + dy * dy)));
-      if (d < R) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], 0, 110 * (R - d) / R);
-    }
-  const int swirlX = cx + R / 3, swirlY = cy - R / 3, swirlR = R * 3 / 4;
-  for (int y = imax(0, floorDiv(cy - R, 16)); y <= imin(kSide - 1, (cy + R) / 16); ++y)
-    for (int x = imax(0, floorDiv(cx - R, 16)); x <= imin(kSide - 1, (cx + R) / 16); ++x) {
-      const int dx = x * 16 + 8 - cx, dy = y * 16 + 8 - cy;
-      const int d = int(isqrt(uint64_t(dx * dx + dy * dy)));
-      if (d >= R + 8) continue;
-      // Dark at the rim, bright where light gathers low on the far side.
-      int light = imax(0, imin(256, 150 + (dx + dy) * 96 / R - d * 64 / R));
-      Rgb c = mixRgb(kGlassDeep, kGlassLight, light);
-      const int sx = x * 16 + 8 - swirlX, sy = y * 16 + 8 - swirlY;
-      const int band = iabs(int(isqrt(uint64_t(sx * sx + sy * sy))) - swirlR);
-      if (band < 14 && dx + dy > -R / 4 && d < R - 16) c = mixRgb(c, kGlassSwirl, 160 * (14 - band) / 14);
-      if (d > R - 22) c = mixRgb(c, kGlassRim, imin(256, (d - (R - 22)) * 256 / 22));
-      const int alpha = imin(256, (R + 8 - d) * 16);
-      uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, to565(c), alpha);
-    }
-  const int gx = floorDiv(cx - R * 2 / 5, 16), gy = floorDiv(cy - R * 2 / 5, 16);   // the glint
-  for (int y = gy - 1; y <= gy + 1; ++y)
-    for (int x = gx - 1; x <= gx + 1; ++x) {
-      if (x < 0 || y < 0 || x >= kSide || y >= kSide) continue;
-      const int ring = iabs(x - gx) + iabs(y - gy);
-      uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, to565(kGlassGlint), ring == 0 ? 256 : (ring == 1 ? 150 : 50));
-    }
-}
-
 // Depth by the floor: an item standing higher in the dish than his feet is
 // behind him, one level with them or lower is in front. One standing on his
 // footprint (the floor his body covers, out to his shadow's front edge) is
@@ -601,8 +554,7 @@ void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const
     bool inFront = q.y >= him.y;
     if (inFront != front) continue;
     if (iabs(q.x - him.x) <= foot && q.y - him.y >= -foot && q.y - him.y <= foot / 4) continue;
-    if (a.items[i].what == Appearance::Item::What::Marble) glassMarble(cv, q);
-    else blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
+    blit(cv, pack.item(a.items[i].what), q, col, 256, nullptr);
   }
 }
 
@@ -940,13 +892,13 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
     std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
   else if (a.lobbyDecline == blorb::Decline::Resting) {
     const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
-    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  PRESS TWICE TO STOP  ", rest / 60, rest % 60,
+    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  PRESS TWICE OR HANG TO STOP  ", rest / 60, rest % 60,
                   unsigned(a.lobbyFriends));
   } else if (a.lobbyDecline != blorb::Decline::None)
-    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  PRESS TWICE TO STOP  ", notReady(a.lobbyDecline),
+    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  PRESS TWICE OR HANG TO STOP  ", notReady(a.lobbyDecline),
                   unsigned(a.lobbyFriends), secs / 60, secs % 60);
   else
-    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  PRESS TWICE TO STOP  ",
+    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  PRESS TWICE OR HANG TO STOP  ",
                   unsigned(a.lobbyFriends), secs / 60, secs % 60);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
@@ -969,6 +921,28 @@ void searchingRing(Canvas240& cv, uint32_t nowMs) {
     for (int x = 0; x < kSide; ++x) {
       const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
       if (d2 >= kOuter || d2 < kEdge) continue;
+      cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
+    }
+}
+
+// A hang filling up: the searching ring's band, swept clockwise from the
+// top by exactly the hang's charge, in the same steady red -- the kid
+// holding him upside down watches the ask land, and at full the ring
+// completes and fight mode opens (the lobby's breathing ring takes over).
+// It is a gauge, not a pulse: no breathing, so what fills is what he holds.
+void hangRing(Canvas240& cv, Fx charge) {
+  constexpr int kWidth = 7;
+  constexpr int kOuter = kSide * kSide, kInner = (kSide - 2 * kWidth) * (kSide - 2 * kWidth),
+                kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
+  const uint16_t red = to565({220, 0, 0}), edge = to565({50, 0, 0});
+  const double filled = double(blorb::clamp01(charge).raw) / double(Fx::one().raw);
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+      if (d2 >= kOuter || d2 < kEdge) continue;
+      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+      if (sweep < 0) sweep += 1.0;
+      if (sweep > filled) continue;
       cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
     }
 }
@@ -1122,6 +1096,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
+  else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby
   mask(cv);
 }
 

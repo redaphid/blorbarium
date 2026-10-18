@@ -40,13 +40,13 @@ pet that never meets a phone never says them; he still says everything else.
 | heirloom | **#** He is awake and resting, and carries a lesson an ancestor learned. # is that ancestor's generation. |
 | foreseen | **#** He carries a lesson an ancestor learned. # is that ancestor's generation. |
 | bored | He is awake and very bored. |
-| chasing | He is chasing something. |
 | held | Someone is holding the board, but not cradling it. |
 | cradled | Someone is cradling the board gently. |
 | upside_down | He is awake and the board is upside down. |
 | drowsy | He is awake and very sleepy. |
 | dreaming | He is asleep and dreaming. |
 | dozing | He is asleep, dreaming or not: a murmur in his sleep. |
+| young | He is in his first day of life: the teaching lines run (flip me over for a fight; shake me and I see things), then never again. |
 | foreseeing | He is in his oracle trance. |
 | sees_pellet | He is in the trance and there is a pellet in the dish. |
 | sees_phone | He is in the trance and a phone is near. |

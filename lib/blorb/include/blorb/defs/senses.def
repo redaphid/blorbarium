@@ -5,6 +5,7 @@
 BLORB_SENSE(tilt,   TiltDetector)
 BLORB_SENSE(motion, MotionDetector)
 BLORB_SENSE(held,   HeldDetector)
+BLORB_SENSE(hang,   HangDetector)
 BLORB_SENSE(knock,  KnockDetector)
 BLORB_SENSE(button, ButtonDetector)
 BLORB_SENSE(lid,    LidDetector)

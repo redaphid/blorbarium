@@ -180,10 +180,9 @@ std::vector<Appearance> everyKind() {
   a.thinking = true;
   std::snprintf(a.line, sizeof(a.line), "%s", "THE POND SAYS: YES. NO. YES.");
   a.thoughtPhase = Fx::ratio(1, 2);
-  a.itemCount = 3;
+  a.itemCount = 2;
   a.items[0] = {Appearance::Item::What::Pellet, {Fx::one(), Fx::zero()}};
   a.items[1] = {Appearance::Item::What::RottenPellet, {fx(-0.7), fx(0.7)}};
-  a.items[2] = {Appearance::Item::What::Marble, {Fx::zero(), Fx::one()}};
   a.markCount = 2;
   a.marks[0] = {0, 200, blorb::Tint{20, 128, 128}};
   a.marks[1] = {3, 9, blorb::Tint{}};
@@ -462,33 +461,6 @@ TEST(Items, OneUnderHimDoesNotShowBetweenHisLegs) {
   EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
 }
 
-// The pack's marble read as an egg he laid; it is drawn as cobalt glass
-// whatever the pack holds.
-TEST(Items, TheMarbleIsRoundBlueGlassNotThePacksArt) {
-  BlockPack pack;
-  Appearance a = adult();
-  a.items[0] = {Appearance::Item::What::Marble, {fx(0.5), fx(0.5)}};
-  a.itemCount = 1;
-  auto cv = render(a, pack);
-  a.itemCount = 0;
-  auto bare = render(a, pack);
-  EXPECT_EQ(find(*cv, rgb565(200, 40, 40)).count, 0) << "not the pack's chip";
-  int x0 = kSide, x1 = -1, y0 = kSide, y1 = -1, glass = 0;
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      uint16_t p = cv->px[y * kSide + x];
-      if (p == bare->px[y * kSide + x]) continue;
-      int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, b = (p & 31) << 3;
-      if (b < r + 60 || b < g) continue;
-      ++glass;
-      x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
-    }
-  EXPECT_GE(x1 - x0 + 1, 12) << "wide";
-  EXPECT_LE(x1 - x0 + 1, 14);
-  EXPECT_EQ(x1 - x0, y1 - y0) << "round";
-  EXPECT_GE(glass, 100) << "blue pixels in a 13 px disc";
-}
-
 // The pellet he bites leaves the dish; while he eats it is drawn at his
 // mouth, in front of him, and rides the body's transform.
 TEST(Eating, ThePelletHeBitIsInFrontOfHimAtHisMouth) {
@@ -731,9 +703,8 @@ TEST(Previews, DumpWhenAsked) {
   idle.pantry = 4;
   idle.markCount = 1;
   idle.marks[0] = {0, 110, blorb::Tint{}};
-  idle.itemCount = 2;
+  idle.itemCount = 1;
   idle.items[0] = {Appearance::Item::What::Pellet, {fx(0.5), fx(0.4)}};
-  idle.items[1] = {Appearance::Item::What::Marble, {fx(-0.6), fx(0.5)}};
   std::vector<std::pair<std::string, Appearance>> shots;
   shots.push_back({"idle", idle});
 
@@ -859,6 +830,25 @@ TEST(Lobby, SearchingIsARedRingRoundTheWholeRim) {
   EXPECT_LT(rimRed(*render(connecting, paint::placeholderPack(), 0, 0)), 5) << "a locked pair has no ring";
   const auto dim = render(searching, paint::placeholderPack(), 0, 0), bright = render(searching, paint::placeholderPack(), 0, 800);
   EXPECT_GT(bright->px[119 * kSide + 2], dim->px[119 * kSide + 2]) << "it breathes";
+}
+
+// A hang filling up draws the same band as a fraction of the ring, swept
+// clockwise from the top by the hang's charge: the kid sees the ask land
+// before the lobby's full ring takes over. Nothing hangs, no arc.
+TEST(Lobby, AHangFillsTheRingFromTheTop) {
+  Appearance home = adult(0.0, 0.3);
+  Appearance half = home, full = home;
+  half.hangCharge = Fx::ratio(1, 2);
+  full.hangCharge = Fx::one();
+  auto red = [](uint16_t p) { return ((p >> 11) & 31) * 255 / 31 >= 160 && ((p >> 5) & 63) <= 4 && (p & 31) <= 2; };
+  const auto h = render(half, paint::placeholderPack(), 0, 0), f = render(full, paint::placeholderPack(), 0, 0),
+             n = render(home, paint::placeholderPack(), 0, 0);
+  auto at = [](const Canvas240& cv, int x, int y) { return cv.px[y * kSide + x]; };
+  EXPECT_TRUE(red(at(*h, 120, 3))) << "the top fills first";
+  EXPECT_TRUE(red(at(*h, 236, 120))) << "half full reaches the right side";
+  EXPECT_FALSE(red(at(*h, 3, 120))) << "but not the left: that is the half he has not held yet";
+  EXPECT_TRUE(red(at(*f, 3, 120))) << "a full hang completes the ring";
+  EXPECT_FALSE(red(at(*n, 120, 3))) << "no hang, no arc";
 }
 
 // A double press that opened no fight mode says why on the strip, and each

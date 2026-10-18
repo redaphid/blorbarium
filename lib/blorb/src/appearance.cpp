@@ -87,7 +87,6 @@ void dishItems(const Habitat& h, const HabitatRules* rules, uint32_t tick, Appea
     bool rotten = rules && tick - p.droppedTick > rules->rotTicks;
     a.items[a.itemCount++] = Appearance::Item{rotten ? Appearance::Item::What::RottenPellet : Appearance::Item::What::Pellet, p.at};
   }
-  a.items[a.itemCount++] = Appearance::Item{Appearance::Item::What::Marble, h.marble.at};
   a.pantry = h.pantry;
 }
 
@@ -116,6 +115,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   look(c.phenotype(), &chem, a);
   a.foreseeing = c.action() == action::foresee;
   a.glow = clamp01(chem.locus[locus::glow.v]);
+  a.hangCharge = clamp01(chem.locus[locus::hanging.v]);
   if (a.foreseeing) a.glow = fxMax(a.glow, kForeseeGlowFloor);
   a.asleep = body.asleep;
   a.dreaming = body.dreaming;

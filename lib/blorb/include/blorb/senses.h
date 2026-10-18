@@ -22,6 +22,13 @@ struct BodySample {
   bool buttonDown = false;           // BOOT on the 1.28, PWR on the 1.46
   bool touchDown = false;            // 1.46 only
   int16_t touchX = 0, touchY = 0;
+  // The shell's settled panel rotation is 180 from native: the badge is held
+  // upside down in its own plane. Only the shell can say so: it rotates the
+  // sample into the screen's frame before the Dish sees it (main.cpp feel()),
+  // which turns an upside-down badge's gravity into an upright one's, so no
+  // detector could ever derive this from ax/ay. A level, like buttonDown;
+  // HangDetector gives it its timing.
+  bool invertedDown = false;
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered
@@ -97,7 +104,24 @@ struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 5 jol
 };
 struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> held; PickedUp/PutDown; Cradle when still 3 s
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t heldSince_ = 0, stillSince_ = 0, lastCradle_ = 0; bool held_ = false, cradled_ = false;
+ private:
+  uint32_t heldSince_ = 0, stillSince_ = 0, lastCradle_ = 0, lastDisturb_ = 0;
+  int32_t prevX_ = 0, prevY_ = 0, prevZ_ = 0;
+  bool held_ = false, cradled_ = false, primed_ = false;
+};
+// Held upside down -> Hang: the no-button way into (and out of) fight mode,
+// for a case that covers BOOT. The shell has already settled the pose
+// (orient.h: 600 ms dwell, jolts and flat rejected); this detector adds the
+// kid's intent on top, and it is forgiving on purpose: progress accumulates
+// while he is upside down and steady, pauses while he is jolted, and drains
+// at double speed when he is righted, so a wobbly small hand still lands it
+// in about a second and a half instead of restarting from zero at every
+// tremor. One Hang per hang: the progress must drain away before another
+// can fire, so staying upside down in the lobby he just opened never
+// closes it again. The hanging locus is the progress itself, 0 to 1.
+struct HangDetector : DetectorBase {
+  void sample(const BodySample&, uint32_t ms, SenseOut&);
+ private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false;
 };
 struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit; not just after the road pushed the whole body up
   void sample(const BodySample&, uint32_t ms, SenseOut&);

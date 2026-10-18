@@ -67,7 +67,6 @@ struct Call : Base { Status step(Body&, ActionCtx&); };                 // croak
 struct Curl : Base { Status step(Body&, ActionCtx&); };                 // hood up, toward the rim
 struct FollowTilt : Base { Status step(Body&, ActionCtx&); };           // downhill
 struct FleeTilt : Base { Status step(Body&, ActionCtx&); };             // uphill
-struct Chase : Base { Status step(Body&, ActionCtx&); };                // after the marble; MarbleHit on contact
 struct HopCircles : Base { Status step(Body&, ActionCtx&); };           // happy hops
 }  // namespace behave
 

@@ -66,8 +66,6 @@ inherited
   GEN # SNEEZES HELLO!
 counted
   I COUNTED MY FLUFF. LOTS.
-marble_knows
-  GOT YOU, MARBLE! NO I DIDN'T.
 put_me_down
   UP! UP! DOWN! NO, UP!
 warm_hands
@@ -167,8 +165,6 @@ p_famous
 
 rim_walk
   I ROLLED ROUND THE RIM! WHEE!
-marble_foe
-  THE MARBLE IS ROUND. LIKE ME!
 clean_glass
   I SNEEZED ON THE GLASS. OOPS.
 dont_look

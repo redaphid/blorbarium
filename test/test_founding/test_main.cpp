@@ -17,7 +17,7 @@ using namespace blorbtest;
 namespace {
 
 constexpr uint32_t kGiftSeed = 15048;
-constexpr uint32_t kGiftHash = 0xd30f00d1u;
+constexpr uint32_t kGiftHash = 0x3df10dafu;
 constexpr uint64_t kLineageId = 0x9f31c2d04a7bull;
 constexpr const char* kV1 = "test/fixtures/keepsake_v1.bin";
 

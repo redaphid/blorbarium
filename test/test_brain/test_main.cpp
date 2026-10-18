@@ -25,8 +25,8 @@ Temperament midTemperament() {
 
 Fx frac(int num, int den) { return Fx::ratio(num, den); }
 
-// Eat with food near lowers hunger by 0.3; chase with the marble near lowers
-// boredom by 0.3. Nothing else does anything.
+// Eat with food near lowers hunger by 0.3; call with the owner near lowers
+// loneliness by 0.3. Nothing else does anything.
 struct World {
   Fx features[kFeatureCount]{};
   Fx drives[kDriveCount]{};
@@ -37,7 +37,7 @@ struct World {
 
   void answer(ActionId a) {
     if (a == action::eat && sees(locus::food_near)) drive(drive::hunger) = clamp01(drive(drive::hunger) - frac(3, 10));
-    if (a == action::chase && sees(locus::marble_near)) drive(drive::boredom) = clamp01(drive(drive::boredom) - frac(3, 10));
+    if (a == action::call && sees(locus::owner_near)) drive(drive::loneliness) = clamp01(drive(drive::loneliness) - frac(3, 10));
   }
 };
 
@@ -98,7 +98,7 @@ TEST(Learning, EatsWhenHungryAndFoodIsNearButNotWhenFull) {
     World w;
     w.see(locus::light, rng.chance(frac(7, 10)));
     w.see(locus::food_near, rng.chance(frac(1, 2)));
-    w.see(locus::marble_near, rng.chance(frac(1, 2)));
+    w.see(locus::owner_near, rng.chance(frac(1, 2)));
     w.drive(drive::hunger) = rng.unit();
     w.drive(drive::boredom) = rng.unit();
     trial(b, w, t, rng);
@@ -316,7 +316,7 @@ TEST(Beliefs, StrongestComeFirstAndZeroCellsAreNotBeliefs) {
   auto set = [&](LocusId f, ActionId a, DriveId d, Fx v) {
     w[(fi(f) * kActionCount + a.v) * kDriveCount + di(d)] = toQ15(v);
   };
-  set(locus::marble_near, action::chase, drive::boredom, -frac(1, 10));
+  set(locus::owner_near, action::call, drive::loneliness, -frac(1, 10));
   set(locus::food_near, action::eat, drive::hunger, -frac(1, 2));
   set(locus::light, action::rest, drive::sleepiness, frac(3, 10));
   Brain b;
@@ -332,7 +332,7 @@ TEST(Beliefs, StrongestComeFirstAndZeroCellsAreNotBeliefs) {
 
   std::vector<Belief> all = b.strongestBeliefs(50);
   ASSERT_EQ(all.size(), 3u);
-  EXPECT_EQ(all[2].action, action::chase);
+  EXPECT_EQ(all[2].action, action::call);
   EXPECT_LT(all[2].confidence, Fx::one());
 }
 

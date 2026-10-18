@@ -39,8 +39,8 @@ enum class Decline : uint8_t {
   None,
   NotACreature,   // an egg, a clutch or a pet already gone: nothing to duel with
   Asleep,         // zzz
-  Sleepy,         // sleepiness >= 0.8: duels make him sleepy, so about five an hour
-  Hungry,         // hunger >= 0.8: an empty bowl; feed him first
+  Sleepy,         // sleepiness >= 0.9, when the readiness rules let it refuse (and the wake gate's bar)
+  Hungry,         // hunger >= 0.9, when the readiness rules let it refuse
   Resting,        // within 2 minutes of his last duel's end, 5 after a faint
   WantsACuddle,   // three losses in a row: cradle him and he is ready again
   TooYoung,       // a cradle: younger than the tier's youngest stage
@@ -59,9 +59,24 @@ inline constexpr uint32_t kRestAfterFaintTicks = 5 * kTicksPerMinute;
 inline constexpr uint8_t kLossesBeforeACuddle = 3;
 inline constexpr Fx kWoundedInjury = Fx::ratio(1, 2);
 
+// The readiness rules: which of a pet's drives may refuse a fight for him,
+// in one place so a build can swap them. Asleep, Resting and WantsACuddle
+// are not rules but states, and they always refuse. Neither drive refuses
+// in the shipped rules (0.7.9): on the buttonless case there is no way to
+// feed him and no way to tuck him in, so a hunger or sleepiness refusal is
+// not a mood but a lockout — he beacons forever and no badge can ever claim
+// him. Actually falling asleep still ends fight mode, and an ask still
+// cannot wake a pet at kDeclineSleepy (the Dish's own wake gate).
+struct ReadinessRules {
+  bool hungerBlocks = false;
+  bool sleepinessBlocks = false;
+};
+inline constexpr ReadinessRules kReadinessRules{};
+
 // ticksSinceLastDuel is UINT32_MAX for a pet who has never duelled. A cradle
 // resets lossesInARow in the book, not here.
-Decline readiness(const Occupant&, uint8_t lossesInARow, uint32_t ticksSinceLastDuel, bool faintedLast);
+Decline readiness(const Occupant&, uint8_t lossesInARow, uint32_t ticksSinceLastDuel, bool faintedLast,
+                  const ReadinessRules& rules = kReadinessRules);
 
 // The highest tier he may enter now, and for each tier the picture for why
 // not (None for the tiers he may). A tier is his only if every tier below it

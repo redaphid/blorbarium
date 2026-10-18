@@ -69,8 +69,6 @@ inherited
   GEN # LEFT ME A SCREWDRIVER.
 counted
   I COUNTED MY BOLTS. ONE SHORT.
-marble_knows
-  THAT MARBLE IS A GOOD PART.
 put_me_down
   HEY! MIND THE GADGETS!
 warm_hands
@@ -170,8 +168,6 @@ p_famous
 
 rim_walk
   I WALKED THE RIM. FOUND A NUT.
-marble_foe
-  THE MARBLE IS NOT A BEARING.
 clean_glass
   THE GLASS IS TOO CLEAN. HMM.
 dont_look

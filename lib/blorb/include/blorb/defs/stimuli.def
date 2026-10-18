@@ -24,10 +24,10 @@ BLORB_STIM(11, lid_down,       Body,  0)  // face down for 2 s
 BLORB_STIM(12, lid_up,         Body,  0)
 BLORB_STIM(13, touched,        Body,  0)  // 1.46 only
 BLORB_STIM(14, button_double,  Body,  0)  // a second press soon after the first: opens a duel (v2: the wheel)
+BLORB_STIM(15, hang,           Body,  0)  // held upside down 1 s (HangDetector): opens a duel where BOOT is under the case; in fight mode, leaves it
 BLORB_STIM(16, pellet_dropped, World, 0)
 BLORB_STIM(17, fed,            World, 1)  // the Eat action reached a pellet; never phone-fired
 BLORB_STIM(18, fed_bad,        World, 0)  // the pellet was rotten
-BLORB_STIM(19, marble_hit,     World, 1)
 BLORB_STIM(20, dusk,           World, 0)
 BLORB_STIM(21, dawn,           World, 0)
 BLORB_STIM(22, owner_arrived,  World, 1)
