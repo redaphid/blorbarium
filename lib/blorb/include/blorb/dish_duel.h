@@ -103,6 +103,12 @@ class DishDuel {
   uint32_t restTicksLeft(uint32_t tick) const;
 
  private:
+  // step's phases, numbered as its comment numbers them.
+  // 1: the ask, with no session open; false when this tick ends there.
+  bool ask(Occupant&, Lineage&, Air*, SenseOut& raw, uint64_t lineageId, uint16_t petDay, uint32_t tick, DuelStepped&);
+  void holdPress(const Occupant&, SenseOut& raw, bool bootDown, uint32_t tick);   // before 2: a press that may be a double
+  void apply(const DuelEffects&, Occupant&, Lineage&, uint16_t petDay, uint32_t tick, DuelStepped&);   // 4
+  void betweenFights(Occupant&, Lineage&, Air&, uint64_t lineageId, uint16_t petDay, uint32_t tick, DuelStepped&);   // 5
   bool open(Occupant&, Lineage&, Air&, uint64_t lineageId, uint16_t petDay, uint32_t tick, DuelStepped&);
   // The rest after a duel is between sittings: a rematch searching for its friend skips it.
   Decline ready(const Occupant&, uint32_t tick) const;

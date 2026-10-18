@@ -185,90 +185,100 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   // Three losses in a row want a cuddle, and a cuddle is all it takes.
   if (c && fromBody(raw, stim::cradle) && book_.lossesInARow() >= kLossesBeforeACuddle) book_.recordCuddle(tick);
 
-  if (!session_.active()) {
-    const bool askedHang = fromBody(raw, stim::hang);
-    const bool asked = fromBody(raw, stim::button_double) || askedHang;
-    const BootContext ctx = bootContext(o, nullptr);
-    // Fight mode is the resting state: an awake creature with a radio asks
-    // for himself, so two badges near each other find the fight with no
-    // gesture at all. The hang and the double press remain the wake-up and
-    // the shortcut; leaving the lobby just reopens it on the next tick.
-    const bool autoAsk = air && c && ctx == BootContext::Awake;
-    if (asked) drop(raw, kFightAskMask);
-    if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
-      pendingSince_.reset();   // a second double press while it waits takes the ask back
-      refusal_ = Refusal{};
-      report(asked, askedHang, ctx, asked ? "cancelled" : "gave_up", "off");
-      return out;
-    }
-    bool tryOpen = false, woke = false;
-    if (asked && c && ctx == BootContext::Asleep) {
-      // Asleep: woken for it, unless he is too sleepy to fight anyway.
-      if (c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) {
-        char gate[32];
-        gateOf(o, Decline::Sleepy, tick, gate);
-        char asleep[40];
-        std::snprintf(asleep, sizeof asleep, "asleep:%s", gate);
-        refuse(NoFight::TooSleepy, tick, asleep, askedHang);
-        return out;
-      }
-      c->wake();
-      woke = tryOpen = true;
-    } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
-      tryOpen = true;
-    } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
-      tryOpen = true;
-    }
-    if (asked && !tryOpen) report(true, askedHang, ctx, bootContextName(ctx), "refused");
-    if (!tryOpen) return out;
-    lastTry_ = tick;
-    const bool retry = pendingSince_.has_value();
-    if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
-      // The radio said no with the pet ready: an update holds it. Ask again each second.
-      if (!air || refusal_.why == Decline::None) {
-        if (!retry) report(asked, askedHang, ctx, air ? air->refusal() : "no_radio", "waiting");
-        if (!pendingSince_) pendingSince_ = tick;
-        refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
-      } else {
-        report(asked, askedHang, ctx, "no_pet", "refused");
-      }
-      return out;
-    }
-    pendingSince_.reset();
-    c = std::get_if<Creature>(&o);
-    {
-      char gate[32];
-      const Decline why = ready(o, tick);
-      if (woke && why == Decline::Asleep) std::snprintf(gate, sizeof gate, "woken");   // he wakes on the next tick
-      else gateOf(o, why, tick, gate);
-      report(asked, askedHang, ctx, gate, "entered");
-    }
-  }
+  if (!session_.active() && !ask(o, lineage, air, raw, lineageId, petDay, tick, out)) return out;
   if (!air) return out;
-
-  // Where a double press also means something (the lobby: close; the friends
-  // screen: leave), a press waits out the double's window first, so a kid
-  // leaving never asks for a rematch on the way out.
-  {
-    const DuelView v = session_.view(tick);
-    const bool both = bootMeaning(bootContext(o, &v)).doublePress != BootAct::Nothing;
-    const uint32_t window = kDoublePressMs / kTickMs + 1;
-    if (fired(raw, stim::button_double)) heldPress_.reset();
-    if (both && fromBody(raw, stim::button)) {
-      drop(raw, duelStimBit(stim::button));
-      heldPress_ = tick;
-    }
-    // A second press still down may yet be the double: it fires on release.
-    if (heldPress_ && (!both || (tick - *heldPress_ >= window && !bootDown))) {
-      raw.fire(stim::button);
-      heldPress_.reset();
-    }
-  }
+  holdPress(o, raw, bootDown, tick);
   const DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
   DuelEffects fx = session_.tick(*air, in, tick);
   drop(raw, fx.captured);
   for (uint8_t i = 0; i < fx.stimCount; ++i) raw.fire(fx.stimuli[i]);
+  apply(fx, o, lineage, petDay, tick, out);
+  if (session_.searching()) betweenFights(o, lineage, *air, lineageId, petDay, tick, out);
+  return out;
+}
 
+bool DishDuel::ask(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, uint64_t lineageId, uint16_t petDay,
+                   uint32_t tick, DuelStepped& out) {
+  Creature* c = std::get_if<Creature>(&o);
+  const bool askedHang = fromBody(raw, stim::hang);
+  const bool asked = fromBody(raw, stim::button_double) || askedHang;
+  const BootContext ctx = bootContext(o, nullptr);
+  // Fight mode is the resting state: an awake creature with a radio asks
+  // for himself, so two badges near each other find the fight with no
+  // gesture at all. The hang and the double press remain the wake-up and
+  // the shortcut; leaving the lobby just reopens it on the next tick.
+  const bool autoAsk = air && c && ctx == BootContext::Awake;
+  if (asked) drop(raw, kFightAskMask);
+  if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
+    pendingSince_.reset();   // a second double press while it waits takes the ask back
+    refusal_ = Refusal{};
+    report(asked, askedHang, ctx, asked ? "cancelled" : "gave_up", "off");
+    return false;
+  }
+  bool tryOpen = false, woke = false;
+  if (asked && c && ctx == BootContext::Asleep) {
+    // Asleep: woken for it, unless he is too sleepy to fight anyway.
+    if (c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) {
+      char gate[32];
+      gateOf(o, Decline::Sleepy, tick, gate);
+      char asleep[40];
+      std::snprintf(asleep, sizeof asleep, "asleep:%s", gate);
+      refuse(NoFight::TooSleepy, tick, asleep, askedHang);
+      return false;
+    }
+    c->wake();
+    woke = tryOpen = true;
+  } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
+    tryOpen = true;
+  } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
+    tryOpen = true;
+  }
+  if (asked && !tryOpen) report(true, askedHang, ctx, bootContextName(ctx), "refused");
+  if (!tryOpen) return false;
+  lastTry_ = tick;
+  const bool retry = pendingSince_.has_value();
+  if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
+    // The radio said no with the pet ready: an update holds it. Ask again each second.
+    if (!air || refusal_.why == Decline::None) {
+      if (!retry) report(asked, askedHang, ctx, air ? air->refusal() : "no_radio", "waiting");
+      if (!pendingSince_) pendingSince_ = tick;
+      refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
+    } else {
+      report(asked, askedHang, ctx, "no_pet", "refused");
+    }
+    return false;
+  }
+  pendingSince_.reset();
+  char gate[32];
+  const Decline why = ready(o, tick);
+  if (woke && why == Decline::Asleep) std::snprintf(gate, sizeof gate, "woken");   // he wakes on the next tick
+  else gateOf(o, why, tick, gate);
+  report(asked, askedHang, ctx, gate, "entered");
+  return true;
+}
+
+// Where a double press also means something (the lobby: close; the friends
+// screen: leave), a press waits out the double's window first, so a kid
+// leaving never asks for a rematch on the way out.
+void DishDuel::holdPress(const Occupant& o, SenseOut& raw, bool bootDown, uint32_t tick) {
+  const DuelView v = session_.view(tick);
+  const bool both = bootMeaning(bootContext(o, &v)).doublePress != BootAct::Nothing;
+  const uint32_t window = kDoublePressMs / kTickMs + 1;
+  if (fired(raw, stim::button_double)) heldPress_.reset();
+  if (both && fromBody(raw, stim::button)) {
+    drop(raw, duelStimBit(stim::button));
+    heldPress_ = tick;
+  }
+  // A second press still down may yet be the double: it fires on release.
+  if (heldPress_ && (!both || (tick - *heldPress_ >= window && !bootDown))) {
+    raw.fire(stim::button);
+    heldPress_.reset();
+  }
+}
+
+void DishDuel::apply(const DuelEffects& fx, Occupant& o, Lineage& lineage, uint16_t petDay, uint32_t tick,
+                     DuelStepped& out) {
+  Creature* c = std::get_if<Creature>(&o);
   if (c && session_.active()) {
     const DuelView v = session_.view(tick);
     if (uint8_t(v.phase) > uint8_t(DuelPhase::Staking)) c->setDuelStakes(v.agreed);
@@ -309,26 +319,28 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     dueledThisBoot_ = true;
     battled_ = false;
   }
-  // Fight mode between fights: he is re-read (wounds lower his ceiling), and
-  // whether he is up for it is asked every tick, so a rest ends by itself.
-  if (session_.searching()) {
-    const Decline why = ready(o, tick);
-    if (why == Decline::NotACreature) {
-      session_.close(*air, EndReason::Finished);   // he fell, or is remains: fight mode ends with him
-    } else {
-      // The graft rides readiness, not the open: with fight mode always on
-      // he may have opened it as a child, and the starter's duel genes are
-      // owed to the first tick he is actually ready in the lobby.
-      if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
-      // Refreshed every tick he searches, not only on the way back from a
-      // fight: with fight mode always on he may have opened it as a child,
-      // or hungry, and a friend must meet the pet he is now.
-      session_.refresh(setupFor(std::get_if<Creature>(&o), lineageId, petDay, tick, why));
-      session_.setDecline(why);
-      if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
-    }
+}
+
+// Fight mode between fights: he is re-read (wounds lower his ceiling), and
+// whether he is up for it is asked every tick, so a rest ends by itself.
+void DishDuel::betweenFights(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId, uint16_t petDay,
+                             uint32_t tick, DuelStepped& out) {
+  const Decline why = ready(o, tick);
+  if (why == Decline::NotACreature) {
+    session_.close(air, EndReason::Finished);   // he fell, or is remains: fight mode ends with him
+    return;
   }
-  return out;
+  Creature* c = std::get_if<Creature>(&o);
+  // The graft rides readiness, not the open: with fight mode always on
+  // he may have opened it as a child, and the starter's duel genes are
+  // owed to the first tick he is actually ready in the lobby.
+  if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
+  // Refreshed every tick he searches, not only on the way back from a
+  // fight: with fight mode always on he may have opened it as a child,
+  // or hungry, and a friend must meet the pet he is now.
+  session_.refresh(setupFor(c, lineageId, petDay, tick, why));
+  session_.setDecline(why);
+  if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over
 }
 
 }  // namespace blorb
