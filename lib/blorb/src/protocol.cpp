@@ -529,6 +529,14 @@ void cmd_time(Dish& dish, const Request& req, Reply& r) {
   r.ok("caught_up=%u away=%u hurt=%u", unsigned(c.ticks), unsigned(c.awaySeconds), unsigned(c.hurt));
 }
 
+void cmd_adopt(Dish& dish, const Request& req, Reply& r) {
+  Args a{req.args};
+  const std::optional<std::string_view> w = a.word();
+  if (!a.done() || (w && *w != "status")) return r.err(400, "BAD_ARGS");
+  if (!w && !dish.adopt()) return r.err(409, "NOT_NOW");
+  r.ok("adopted=%d waiting=%d", int(dish.adopted()), int(dish.hatchWaits()));
+}
+
 void cmd_sub(Dish& dish, const Request& req, Reply& r) {
   Args a{req.args};
   uint32_t mask = 0;

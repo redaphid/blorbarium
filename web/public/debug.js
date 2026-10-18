@@ -273,6 +273,7 @@
         say("Disconnected: the unlock and any speed-up ended with the connection.");
       }, { once: true });
       refresh();
+      run("FREEHATCH on");   // ?debug: eggs hatch without a phone's TIME
     } catch (e) {
       channel = null;
       showRetry(true);
@@ -299,6 +300,7 @@
       setTimeout(() => { for (const l of lines) ch.feed(l + "\n"); }, 20);
     });
     dish.debugEmit = (text) => ch.feed(`! ${text}\n`);
+    run("FREEHATCH on");
   }
 
   if (enabled && globalThis.document) {

@@ -259,6 +259,14 @@ void verb_scale(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   r.ok("scale=%u", unsigned(*n));
 }
 
+void verb_freehatch(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  const std::optional<std::string_view> w = a.word();
+  const bool off = w == std::optional<std::string_view>("off");
+  if (!a.done() || (w && !off && *w != "on")) return r.err(400, "BAD_ARGS");
+  c.dish.setHatchFree(!off);
+  r.ok("freehatch=%s", off ? "off" : "on");
+}
+
 void verb_hatch(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   if (!a.done()) return r.err(400, "BAD_ARGS");
   const Jump j = hatch(c.dish, warpOf(c.board));

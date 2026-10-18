@@ -87,8 +87,12 @@ void copyName(char (&to)[16], const char* from) {
 
 }  // namespace
 
+namespace {
+constexpr const char* kAdoptedFile = "adopted.flag";   // beside the keepsake, never in the save or its hash
+}
+
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
-    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air) {
+    : store_(store), keep_(store), rtc_(options.rtc), air_(options.air), hatchNeedsPhone_(options.hatchNeedsPhone) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
@@ -107,6 +111,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   lineage_ = Lineage::open(store, founder, lineageId, 0);
   duel_.attach(store);
   taught_ = Taught::load(store);
+  adopted_ = store.size(kAdoptedFile) > 0;
   if (loaded == SlotState::Resumed || loaded == SlotState::FellBack) {
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
@@ -196,7 +201,7 @@ void Dish::runOneTick(Link& link) {
     if (c->dead()) onDeath(*c);
     else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
-    if (e->tick(out)) onHatch(*e);
+    if (!hatchWaits() && e->tick(out)) onHatch(*e);
   } else {
     Clutch& k = std::get<Clutch>(live_.occupant);
     if (k.previewed < k.count) {
@@ -326,6 +331,15 @@ void Dish::rename(const char* name) {
   lineage_.rename(name);
   copyName(live_.settings.name, lineage_.currentName());
   eventDirty_ = true;
+}
+
+bool Dish::adopt() {
+  if (adopted_) return true;
+  if (readOnly_ || !store_.writable()) return false;
+  static const uint8_t kMark[] = {'A', 'D', 'O', 'P'};
+  if (!store_.writeAtomic(kAdoptedFile, kMark, sizeof kMark)) return false;
+  adopted_ = true;
+  return true;
 }
 
 Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {

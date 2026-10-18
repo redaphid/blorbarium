@@ -215,7 +215,7 @@
   // Its gates as the dish has them: harm needs this connection's unlock (a
   // BOOT press, debugPress here), and writes wait out a trial or an update.
   const DEBUG_REACH = { HELP: "look", STATUS: "look", UNLOCK: "look", LOCK: "look", THINK: "show", FORTUNE: "show",
-    LOOK: "show", FIRE: "write", WALL: "write", SCALE: "write", HATCH: "harm", STAGE: "harm", WARP: "harm",
+    LOOK: "show", FIRE: "write", WALL: "write", SCALE: "write", FREEHATCH: "write", HATCH: "harm", STAGE: "harm", WARP: "harm",
     CHEM: "harm", DIE: "harm", SPECIES: "harm", WIPE: "harm" };
   const STAGES = ["baby", "child", "adult", "elder"];
 
@@ -256,6 +256,7 @@
       case "LOOK": d.look = args[0] === "off" ? "own" : args[0]; return out(`OK look=${d.look}`);
       case "FIRE": return out(`OK fire=${args[0]}`);
       case "WALL": d.time = args[0] === "clear" ? "unknown" : "known"; return out(d.time === "known" ? `OK time=known wall=${args[0]} tz=${args[1] || 0} night=0` : "OK time=unknown");
+      case "FREEHATCH": return out(`OK freehatch=${args[0] === "off" ? "off" : "on"}`);
       case "SCALE": d.scale = Number(args[0]); return d.scale >= 1 && d.scale <= 60 ? out(`OK scale=${d.scale}`) : out("ERR 416 OUT_OF_RANGE");
       case "HATCH": if (d.phase !== "egg") return out("ERR 409 NOT_EGG"); Object.assign(d, { phase: "creature", stage: "baby", age: 18000 }); return out(where());
       case "STAGE": {

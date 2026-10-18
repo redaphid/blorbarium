@@ -567,6 +567,8 @@ void setup() {
   // No battery: no wall time is coming, so a fresh pet hatches into his
   // morning, not into seven hours of pet night (docs/notes/first-hours.md).
   options.foundingHour = blorb::kUnaskedFoundingHour;
+  // An egg waits for a phone's TIME; the debug link's FREEHATCH lifts it.
+  options.hatchNeedsPhone = true;
 #else
   options.sealed = simSealed;
 #endif

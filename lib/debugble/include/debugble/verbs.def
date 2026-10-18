@@ -14,6 +14,7 @@ DEBUG_VERB(LOOK,    look,    Show,  "<species|off>")            // drawn as that
 DEBUG_VERB(FIRE,    fire,    Write, "<stim>")                   // any stimulus, body-only ones too, at the next tick
 DEBUG_VERB(WALL,    wall,    Write, "<unix> [tzMinutes] | clear")
 DEBUG_VERB(SCALE,   scale,   Write, "<1..60>")                  // fast-forward until reset, reboot or this connection drops
+DEBUG_VERB(FREEHATCH, freehatch, Write, "[on|off]")           // an egg runs without a phone until reset (the page sends it for ?debug)
 DEBUG_VERB(HATCH,   hatch,   Harm,  "")
 DEBUG_VERB(STAGE,   stage,   Harm,  "<baby|child|adult|elder>")
 DEBUG_VERB(WARP,    warp,    Harm,  "<minutes 1..120>")         // that much of his life now

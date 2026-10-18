@@ -95,6 +95,23 @@ reads or writes it until a grown-up repairs it. A board whose save was written
 by newer firmware (an update rolled back) is sealed the same way and says
 ` sealed=newer`: updating the firmware wakes it. Any other board omits the field.
 
+### ADOPT
+
+```
+#8 ADOPT status
+#8 OK adopted=0 waiting=1
+#9 ADOPT
+#9 OK adopted=1 waiting=0
+```
+
+A board that ships with `hatchNeedsPhone` holds its egg still, with no
+incubation and no hatch, until the owner adopts it. Connecting, `TIME` and
+flashing do not count; only `ADOPT` does (the page's Adopt button). It is
+kept in its own file (`adopted.flag`) beside the keepsake, so a replug does
+not ask again, and a wipe clears it. `ADOPT status` only reports. `ERR 409
+NOT_NOW` when the flag cannot be written (an image on trial, a sealed pet).
+The debug link's `FREEHATCH` runs the egg without adopting.
+
 ### TIME
 
 ```

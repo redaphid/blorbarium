@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#2f3a1c">
 <link rel="icon" href="grungo.png">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -219,6 +220,13 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <summary>Show every gene</summary>
       <ul class="genes" id="genes"></ul>
     </details>
+  </section>
+
+  <section id="adoptBox" hidden>
+    <h2>Adopt</h2>
+    <p class="hint">This egg is waiting for its keeper. It starts to hatch once you adopt it.</p>
+    <button type="button" id="adopt">Adopt this egg</button>
+    <p class="hint" id="adoptHint" role="status"></p>
   </section>
 
   <section id="nameBox" hidden>
@@ -565,8 +573,12 @@ class MockTransport {
     if (verb === "TIME" && params.has("time_refused")) lines.push("ERR 400 BAD_ARGS");
     else if (verb === "TIME") { this.dish.timeKnown = true; lines.push("OK caught_up=0 away=0 hurt=0"); }
     else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
+    else if (verb === "ADOPT") {
+      if (args === "status") lines.push(`OK adopted=${this.dish.adopted ? 1 : 0} waiting=${this.dish.adopted ? 0 : 1}`);
+      else { this.dish.adopted = true; lines.push("OK adopted=1 waiting=0"); }
+    }
     else if (verb === "STATE") lines.push(
-      "+ phase=creature gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0",
+      `+ phase=${params.has("egg") && !this.dish.adopted ? "egg" : "creature"} gen=3 stage=adult age=1987200 action=foresee face=foresee asleep=0`,
       "+ drives hunger=412 sleepiness=180 boredom=655 loneliness=290 fear=40 pain=0 discomfort=120 need_touch=520",
       "+ body life=930 injury=0 glow=610 dreaming=0",
       `+ dish pantry=3 pellets=1 night=0 time=${this.dish.timeKnown ? "known" : "unknown"}`, "OK");
@@ -696,9 +708,24 @@ let link = null, transport = null, poll = null;
 async function refreshState() {
   const r = await link.send("STATE");
   for (const line of r.lines) {
-    if (line.startsWith("phase=")) renderState(kv(line));
+    if (line.startsWith("phase=")) {
+      const st = kv(line);
+      renderState(st);
+      refreshAdopt(st.phase).catch(() => {});
+    }
     else if (line.startsWith("drives")) renderDrives(kv(line));
   }
+}
+
+// ADOPT status: whether an egg is still waiting for its keeper. A firmware
+// without ADOPT (404) hatches by itself, so there is nothing to offer.
+async function refreshAdopt(phase) {
+  let waiting = false;
+  if (phase === "egg") {
+    const r = await link.send("ADOPT status").catch(() => null);
+    waiting = !!r && kv(r.ok).waiting === "1";
+  }
+  ui.show("adoptBox", waiting);
 }
 
 async function refreshHello() {
@@ -1107,6 +1134,21 @@ async function reconnect() {
     ui.show("connect", true);
   }
 }
+
+$("adopt").addEventListener("click", async () => {
+  const hint = $("adoptHint");
+  if (!link) return;
+  hint.dataset.tone = ""; hint.textContent = "Adopting…";
+  try {
+    await link.send("ADOPT");
+    hint.dataset.tone = "ok";
+    hint.textContent = "Adopted. The egg has started to hatch.";
+    await refreshState();
+  } catch (err) {
+    hint.dataset.tone = "err";
+    hint.textContent = err.code === 409 ? "Not now: the dish is busy updating. Try again in a few minutes." : `The dish said no (${err.message}).`;
+  }
+});
 
 $("nameForm").addEventListener("submit", async (e) => {
   e.preventDefault();

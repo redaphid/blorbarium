@@ -161,6 +161,27 @@ TEST(Grammar, HelpListsEveryVerbWithItsReach) {
   EXPECT_TRUE(think);
 }
 
+TEST(Grammar, FreeHatchLetsAnEggRunWithoutAPhone) {
+  Rig r;
+  DishOptions o{&r.clock, &r.founder};
+  o.hatchNeedsPhone = true;
+  r.dish.emplace(r.held, kSeed, kLineage, o);
+  r.console.emplace(r);
+  EXPECT_TRUE(r.dish->hatchWaits());
+  EXPECT_EQ(r.send("#1 FREEHATCH on"), "#1 OK freehatch=on");
+  EXPECT_FALSE(r.dish->hatchWaits());
+  EXPECT_EQ(r.send("#2 FREEHATCH off"), "#2 OK freehatch=off");
+  EXPECT_TRUE(r.dish->hatchWaits());
+  EXPECT_EQ(r.send("#3 FREEHATCH maybe"), "#3 ERR 400 BAD_ARGS");
+  r.dish->phoneTime().set(kWall0);   // a phone merely connecting does not lift it
+  r.dish->checkWall();
+  EXPECT_TRUE(r.dish->hatchWaits());
+  EXPECT_TRUE(r.dish->adopt());   // the page's Adopt
+  EXPECT_FALSE(r.dish->hatchWaits());
+  Dish again(r.held, kSeed, kLineage, o);   // a replug remembers
+  EXPECT_FALSE(again.hatchWaits());
+}
+
 TEST(Grammar, StatusSaysWhereHeIs) {
   Rig r;
   r.boot();

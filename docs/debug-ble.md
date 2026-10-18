@@ -201,6 +201,18 @@ board's system clock, as a board that never met a phone. The next `TIME`
 anchors afresh. A page sends `TIME` when it connects, so reconnecting makes
 the time known again.
 
+### FREEHATCH `[on|off]` (write)
+
+```
+#e FREEHATCH on
+#e OK freehatch=on
+```
+
+An egg holds still, neither incubating nor hatching, until the owner presses
+Adopt on the page (`ADOPT`, docs/ble.md). FREEHATCH lets it run without one, until the next
+reset (it is never saved). The page sends `FREEHATCH on` when it opens the
+debug link, so `?debug` hatches eggs without adopting.
+
 ### SCALE `<1..60>` (write)
 
 ```
@@ -335,7 +347,7 @@ the OTA trial keeps its records, is not touched. A sealed board refuses
   takes a moment the child was waiting for. One press per connection is
   cheap for the person holding the dish and impossible for a phone across
   the room.
-- **Write needs no press**: `FIRE`, `WALL`, `SCALE`. The owner asked for
+- **Write needs no press**: `FIRE`, `WALL`, `SCALE`, `FREEHATCH`. The owner asked for
   these to need none. Each is bounded by what a stranger can already do:
   `TIME` and `TWIST stimulus` are open to any phone today. `WALL` lives no
   gap at all, so it is milder than `TIME`. `FIRE` adds `button` and `fed`,

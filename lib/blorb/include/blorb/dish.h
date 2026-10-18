@@ -67,6 +67,10 @@ struct DishOptions {
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
   Air* air = nullptr;
+  // An egg holds still, neither incubating nor hatching, until the owner
+  // adopts it from the page (ADOPT), or the debug link's FREEHATCH lifts it.
+  // The firmware sets it; the sim and tests keep eggs on their own clock.
+  bool hatchNeedsPhone = false;
 };
 
 // The morning a no-phone board founds into (DishOptions::foundingHour): a
@@ -170,6 +174,15 @@ class Dish {
   // saved anchor, as a board that never met a phone. The next reading anchors
   // afresh and lives no gap. A time source still set will be read again.
   void forgetWall();
+  // True while an egg is held back until the owner adopts it from the page
+  // (ADOPT; DishOptions::hatchNeedsPhone). Adoption is kept in its own file,
+  // so a replug does not ask again. A phone merely connecting does not count.
+  bool hatchWaits() const { return hatchNeedsPhone_ && !hatchFree_ && !adopted_; }
+  bool adopted() const { return adopted_; }
+  bool adopt();                    // false when the flag cannot be written (a trial, a sealed pet)
+  // The debug link's FREEHATCH: eggs run without a phone until the next reset. Never saved.
+  void setHatchFree(bool free) { hatchFree_ = free; }
+  bool hatchFree() const { return hatchFree_; }
 
  private:
   void runOneTick(Link&);
@@ -225,6 +238,7 @@ class Dish {
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
+  bool hatchNeedsPhone_ = false, hatchFree_ = false, adopted_ = false;
 };
 
 }  // namespace blorb

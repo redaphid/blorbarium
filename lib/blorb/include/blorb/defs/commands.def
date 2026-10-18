@@ -18,5 +18,6 @@ BLORB_CMD(CLUTCH,   clutch,   0)
 BLORB_CMD(SNAPSHOT, snapshot, 0)          // the whole Keepsake::encode blob
 BLORB_CMD(TWIST,    twist,    kMutating)  // TWIST <kind> <args>
 BLORB_CMD(TIME,     time,     kMutating)  // TIME <unixSeconds> [tzMinutes]: the phone time source
+BLORB_CMD(ADOPT,    adopt,    0)          // ADOPT: the owner takes the egg, so it may hatch; ADOPT status: asks
 BLORB_CMD(SUB,      sub,      0)
 BLORB_CMD(HASH,     hash,     0)
