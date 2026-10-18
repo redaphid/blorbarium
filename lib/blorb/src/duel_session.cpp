@@ -235,6 +235,9 @@ std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
   for (uint8_t i = 0; i < l.count && (!held || *held != current); ++i)
     if (pool[i] && (!held || better(i, *held))) held = i;
   want(held);
+  // A rematch's friend is still on his friends screen, beaconing nothing: my
+  // beacon keeps naming him, which is how he learns I asked and comes too.
+  if (!held && setup_.pin) l.wants = setup_.pin->peer;
   if (held && l.seen[*held].beacon.wants == self_) return held;
   return std::nullopt;
 }
@@ -302,6 +305,7 @@ void DuelSession::enterBattle(const Lobby& l, uint8_t peer, uint32_t tick) {
   b.theirs = s.beacon.card;
   b.me = self_ < s.addr ? Side::A : Side::B;
   const uint8_t rematch = setup_.pin ? setup_.pin->rematch : 0;
+  setup_.pin.reset();   // the rematch has met its friend: the next search is open again, and rests first
   b.battle = BattleId{duelSeed(setup_.nonce, b.theirNonce, rematch, Stakes::Spar), rematch, Stakes::Spar};
   b.phaseTick = b.lastHeard = tick;
   b.lastBeacon = tick;

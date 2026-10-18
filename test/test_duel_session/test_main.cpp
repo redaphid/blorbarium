@@ -840,6 +840,44 @@ TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {
   EXPECT_NE(a.meetings[1].battle.seed, a.meetings[0].battle.seed);
 }
 
+// The second kid to ask leaves the friends screen first, and says nothing as
+// he goes: his pinned beacon is what tells the first. In clean air or a storm.
+TEST(DuelSession, ARematchAskedOneAfterTheOtherAlwaysMeetsAgain) {
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
+    for (Weather w : {Weather{}, kStorm}) {
+      Ether ether(seed, w);
+      Device a(ether, 1, kGrungo, seed), b(ether, 2, SpeciesId{4}, seed + 7);
+      a.policy.rematch = b.policy.rematch = true;
+      a.maxBouts = b.maxBouts = 2;
+      ASSERT_TRUE(a.open(0) && b.open(0));
+      run(ether, {&a, &b}, 1, 60000, [&](uint32_t) { return a.meetings.size() >= 2 || (!a.s.active() && !b.s.active()); });
+      ASSERT_EQ(a.meetings.size(), 2u) << "seed " << seed << (w.drop > 0 ? " storm" : " clean");
+      EXPECT_EQ(a.meetings[1].battle.rematch, 1) << "seed " << seed;
+    }
+  }
+}
+
+// A rematch is one bout: once it pairs, the pin is spent, so the bout after
+// it waits out the rest like any other instead of starting a second later.
+TEST(DuelSession, ARematchPinIsSpentOnceItsBoutBegins) {
+  Ether ether(12, Weather{});
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  a.policy.rematch = b.policy.rematch = true;
+  a.maxBouts = b.maxBouts = 2;
+  a.stayFor = b.stayFor = 10;
+  ASSERT_TRUE(a.open(0) && b.open(0));
+  bool pinnedAfter = false;
+  run(ether, {&a, &b}, 1, 60000, [&](uint32_t t) {
+    pinnedAfter = pinnedAfter || (a.boutsEnded >= 2 && a.s.searching() && a.s.pinned());
+    if (a.bouts == 2 && a.s.view(t).phase > DuelPhase::Greeting) EXPECT_FALSE(a.s.pinned()) << "pinned mid-rematch";
+    return a.meetings.size() >= 3;
+  });
+  ASSERT_GE(a.meetings.size(), 2u);
+  EXPECT_EQ(a.meetings[1].battle.rematch, 1);
+  EXPECT_FALSE(pinnedAfter) << "the lobby after the rematch was pinned again";
+  if (a.meetings.size() >= 3) EXPECT_EQ(a.meetings[2].battle.rematch, 0) << "a third bout counted as the rematch again";
+}
+
 // The verdict is the winner's alone, and its own 15 s spare when nobody acts.
 // A Finish is the victor's to take only once the fallen side has heard it.
 TEST(DuelSession, TheWinnersSilenceSparesAndAFinishNeedsTheAck) {
