@@ -10,3 +10,4 @@ web/node_modules/
 *signing-key*
 web/public/fw/**/*.bin
 pet_backups/
+.soak/*.log

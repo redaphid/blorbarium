@@ -28,6 +28,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
 #include "hw/air_espnow.h"
+#include "hw/net_faults.h"
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
@@ -143,7 +144,9 @@ struct RadioGate : blorb::Air {
   std::optional<blorb::Datagram> receive() override { return inner.receive(); }
 };
 static hw::EspNowAir espNow;
-static RadioGate radioGate(espNow);
+// `DEBUG net ...` makes the room worse between the gate and the radio (hw/net_faults.h).
+static hw::FaultAir faultAir(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
+static RadioGate radioGate(faultAir);
 // On trial nothing he does is written, so the twists that write his lineage wait.
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
@@ -225,6 +228,30 @@ static bool pressed(uint32_t ms) {
     if (ms - w.at < w.ms) return true;
   return false;
 }
+
+#if !defined(BADGE_BOARD_SIM)
+// `DEBUG hang` holds the raw IMU sample upside down (native bottom up, the
+// pose orient::Up calls rotation 2) over one window, then upright over the
+// next, so the real orientation settle and HangDetector decide, as with a
+// kid's hands on a case that covers BOOT. Wobble adds a small hand's tremor
+// and an occasional jolt.
+static volatile uint32_t hangAt = 0, hangMs = 0, rightMs = 0;
+static volatile bool hangWobble = false;
+static bool posed(uint32_t ms, blorb::BodySample& s) {
+  if (!hangMs && !rightMs) return false;
+  const uint32_t since = ms - hangAt;
+  if (since >= hangMs + rightMs) return false;
+  const bool down = since < hangMs;
+  s.ax = 0, s.ay = int16_t(down ? 1000 : -1000), s.az = 0;
+  if (hangWobble) {
+    const uint32_t r = esp_random();
+    s.ax = int16_t(int32_t(r % 241) - 120);
+    s.az = int16_t(int32_t((r >> 8) % 241) - 120);
+    if ((r >> 16) % 25 == 0) s.ay = int16_t(s.ay + (down ? 500 : -500));   // a jolt, about 2 a second
+  }
+  return true;
+}
+#endif
 }  // namespace bodyq
 
 // `DEBUG lean <aim>` tilts the screen-space sample toward one rim edge, as a
@@ -247,6 +274,9 @@ static blorb::BodySample readBody(uint32_t ms) {
     s = blorb::BodySample{};
     s.az = 1000;   // no IMU: lying flat and still, so no gesture fires by accident
   }
+#if !defined(BADGE_BOARD_SIM)
+  bodyq::posed(ms, s);
+#endif
   s.buttonDown = boardButtonDown() || bodyq::pressed(ms);
   return s;
 }
@@ -720,8 +750,10 @@ static void reportDuel() {
   }
   if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
     peers = v.peerCount;
-    Serial.printf("[duel] lobby hears %u friend(s)%s\n", unsigned(peers),
+    Serial.printf("[duel] lobby hears %u friend(s)%s species=", unsigned(peers),
                   peers && v.peers[0].wantsMe ? ", the first wants me" : "");
+    for (uint8_t i = 0; i < peers; ++i) Serial.printf("%s%s", i ? "," : "", blorb::speciesInfo(v.peers[i].species).name);
+    Serial.printf("\n");
   }
   if (v.hasLast && v.lastTurn != turn) {
     turn = v.lastTurn;
@@ -734,9 +766,10 @@ static void reportDuel() {
   if (const std::optional<blorb::Meeting>& m = dish->lastMeeting(); m && m->outcomeHash != metHash) {
     metHash = m->outcomeHash;
     constexpr const char* kEnding[] = {"ongoing", "A won", "B won", "draw"};
-    Serial.printf("[duel] met side=%c ending=%s turns=%u outcome_hash=%08x battle=%08x/%u\n",
+    Serial.printf("[duel] met side=%c ending=%s turns=%u outcome_hash=%08x battle=%08x/%u them=%s\n",
                   m->me == blorb::Side::A ? 'A' : 'B', kEnding[size_t(m->ending)], unsigned(m->turns),
-                  unsigned(m->outcomeHash), unsigned(m->battle.seed), unsigned(m->battle.rematch));
+                  unsigned(m->outcomeHash), unsigned(m->battle.seed), unsigned(m->battle.rematch),
+                  blorb::speciesInfo(dish->duelView().them.species).name);
   }
 }
 
@@ -758,9 +791,79 @@ static void pinFounding(const char* a) {
   Serial.printf("[hw] debug found %s: %s\n", a, why ? why : "ok, the next fresh founding's nest is this egg");
 }
 
+// `DEBUG hang [ms] [wobble]`: upside down for ms (default 2500), then upright 3 s.
+static void hang(const char* line) {
+  long ms = 2500, wobble = 0;
+  std::sscanf(line, "%*s %ld %ld", &ms, &wobble);
+  if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug hang: want [ms 1..30000] [wobble 0|1]\n");
+  bodyq::hangMs = 0;
+  bodyq::rightMs = 3000;
+  bodyq::hangWobble = wobble != 0;
+  bodyq::hangAt = millis();
+  bodyq::hangMs = uint32_t(ms);
+  Serial.printf("[hw] debug hang %ld ms wobble=%ld, then upright 3000 ms\n", ms, wobble);
+}
+
+// `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
+static void nap() {
+  blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
+  if (!c) return (void)Serial.printf("[hw] debug nap: no creature\n");
+  c->force(blorb::action::sleep);
+  Serial.printf("[hw] debug nap: forced sleep\n");
+}
+
+static void netReport() {
+  const hw::FaultAir::Config& c = faultAir.cfg;
+  const hw::FaultAir::Counts& n = faultAir.n;
+  Serial.printf("[net] cfg rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u blackout_left=%ld | rx=%u rx_dropped=%u tx=%u "
+                "tx_dropped=%u duped=%u delayed=%u blacked=%u overflow=%u open=%d\n",
+                c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs,
+                faultAir.blackedOut() ? long(c.blackoutUntil - millis()) : 0L, unsigned(n.rx), unsigned(n.rxDropped),
+                unsigned(n.tx), unsigned(n.txDropped), unsigned(n.duped), unsigned(n.delayed), unsigned(n.blackedOut),
+                unsigned(n.overflow), int(faultAir.isOpen()));
+  for (uint8_t i = 0; i < faultAir.heardCount; ++i) {
+    const auto& h = faultAir.heard[i];
+    Serial.printf("[net] heard %02x:%02x:%02x:%02x:%02x:%02x frames=%u rssi=%d\n", h.from.mac[0], h.from.mac[1],
+                  h.from.mac[2], h.from.mac[3], h.from.mac[4], h.from.mac[5], unsigned(h.frames), int(h.rssi));
+  }
+}
+
+// `DEBUG net` reports; `DEBUG net clear`; `DEBUG net rx|tx|dup <pct>`;
+// `DEBUG net delay <ms> [jitter]`; `DEBUG net blackout <ms>`.
+static void net(const char* line) {
+  char what[16] = "";
+  long x = 0, y = 0;
+  const int got = std::sscanf(line, "%*s %15s %ld %ld", what, &x, &y);
+  hw::FaultAir::Config& c = faultAir.cfg;
+  const auto pct = [](long v) { return uint8_t(v < 0 ? 0 : v > 100 ? 100 : v); };
+  if (got <= 0) {
+  } else if (!std::strcmp(what, "clear")) faultAir.clear();
+  else if (!std::strcmp(what, "rx")) c.rxDrop = pct(x);
+  else if (!std::strcmp(what, "tx")) c.txDrop = pct(x);
+  else if (!std::strcmp(what, "dup")) c.dup = pct(x);
+  else if (!std::strcmp(what, "delay")) c.delayMs = uint16_t(x < 0 ? 0 : x > 5000 ? 5000 : x), c.jitterMs = uint16_t(y < 0 ? 0 : y > 5000 ? 5000 : y);
+  else if (!std::strcmp(what, "blackout")) c.blackoutUntil = x > 0 ? uint32_t(millis() + x) | 1 : 0;
+  else return (void)Serial.printf("[net] want: net [clear|rx <pct>|tx <pct>|dup <pct>|delay <ms> [jitter]|blackout <ms>]\n");
+  netReport();
+}
+
+// `DEBUG duel`: where the duel stands right now, in one line.
+static void duelNow() {
+  constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
+                                    "revealing", "fainting", "mercy",    "fallen",  "friends"};
+  const blorb::DuelView v = dish->duelView();
+  Serial.printf("[duel] now active=%d phase=%s peers=%u ctx=%u hearts %u-%u\n", int(dish->duelActive()),
+                kPhase[size_t(v.phase)], unsigned(v.peerCount), unsigned(dish->bootContext()), unsigned(v.mine.hearts),
+                unsigned(v.theirs.hearts));
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
+  if (std::strcmp(verb, "hang") == 0) return hang(line);
+  if (std::strcmp(verb, "nap") == 0) return nap();
+  if (std::strcmp(verb, "net") == 0) return net(line);
+  if (std::strcmp(verb, "duel") == 0) return duelNow();
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
