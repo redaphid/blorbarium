@@ -79,12 +79,13 @@ BattleCard cardOf(const Creature& c, uint64_t lineageId, uint8_t level, uint8_t 
   return card;
 }
 
-Decline readiness(const Occupant& o, uint8_t lossesInARow, uint32_t ticksSinceLastDuel, bool faintedLast) {
+Decline readiness(const Occupant& o, uint8_t lossesInARow, uint32_t ticksSinceLastDuel, bool faintedLast,
+                  const ReadinessRules& rules) {
   const Creature* c = std::get_if<Creature>(&o);
   if (!c || c->dead()) return Decline::NotACreature;
   if (c->body().asleep) return Decline::Asleep;
-  if (c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) return Decline::Sleepy;
-  if (c->chemistry().drive(drive::hunger) >= kDeclineHungry) return Decline::Hungry;
+  if (rules.sleepinessBlocks && c->chemistry().drive(drive::sleepiness) >= kDeclineSleepy) return Decline::Sleepy;
+  if (rules.hungerBlocks && c->chemistry().drive(drive::hunger) >= kDeclineHungry) return Decline::Hungry;
   if (ticksSinceLastDuel < (faintedLast ? kRestAfterFaintTicks : kRestTicks)) return Decline::Resting;
   if (lossesInARow >= kLossesBeforeACuddle) return Decline::WantsACuddle;
   return Decline::None;

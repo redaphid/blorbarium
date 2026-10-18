@@ -140,8 +140,7 @@ void DuelSession::backToLobby(Air& air, uint32_t tick, EndReason why, bool goodb
 DuelEffects DuelSession::tick(Air& air, const DuelInput& in, uint32_t tick) {
   DuelEffects fx;
   if (!active()) return fx;
-  fx.captured = searching() ? duelStimBit(stim::button_double) | duelStimBit(stim::button_hold) | duelStimBit(stim::hang)
-                            : kHoldPhaseCaptures;
+  fx.captured = searching() ? kLobbyCaptures : kHoldPhaseCaptures;
   aim_ = in.aim;
   if (auto* l = std::get_if<Lobby>(&state_)) lobbyTick(*l, air, in, tick, fx);
   else if (auto* b = std::get_if<Battle>(&state_)) battleTick(*b, air, in, tick, fx);

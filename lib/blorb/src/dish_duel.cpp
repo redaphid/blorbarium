@@ -194,7 +194,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     // gesture at all. The hang and the double press remain the wake-up and
     // the shortcut; leaving the lobby just reopens it on the next tick.
     const bool autoAsk = air && c && ctx == BootContext::Awake;
-    if (asked) drop(raw, duelStimBit(stim::button_double) | duelStimBit(stim::hang));
+    if (asked) drop(raw, kFightAskMask);
     if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
       pendingSince_.reset();   // a second double press while it waits takes the ask back
       refusal_ = Refusal{};

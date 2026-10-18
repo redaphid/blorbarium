@@ -466,7 +466,7 @@ TEST(FightAsk, AnAsleepPetWakesForAFightUnlessTooSleepy) {
   EXPECT_TRUE(a.dish->appearance().lobby);
 }
 
-TEST(FightAsk, AHungryPetEntersFightModeAndSaysToFeedHim) {
+TEST(FightAsk, AHungryPetEntersFightModeReadyToFight) {
   Ether ether(7, {});
   Device a(ether, 1);
   const Genome ga = starterGenomeOf(kGrungo, 11);
@@ -477,7 +477,34 @@ TEST(FightAsk, AHungryPetEntersFightModeAndSaysToFeedHim) {
   ASSERT_TRUE(a.dish->duelActive());
   const Appearance look = a.dish->appearance();
   EXPECT_TRUE(look.lobby);
-  EXPECT_EQ(look.lobbyDecline, Decline::Hungry);
+  // 0.7.9: hunger is no refusal — on the buttonless case he cannot be fed,
+  // so a hunger refusal would lock him out of fights for good.
+  EXPECT_EQ(look.lobbyDecline, Decline::None);
+}
+
+// The field failure 0.7.9 fixes: two unfed badges in their cases searched
+// forever, each beaconing a hunger refusal the other could never claim.
+TEST(FightAsk, TwoHungryPetsPair) {
+  Ether ether(17, {});
+  Device a(ether, 1), b(ether, 2);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  const Genome gb = starterGenomeOf(kGrungo, 23);
+  a.boot(ga, 1);
+  b.boot(gb, 2);
+  a.growUp();
+  b.growUp();
+  a.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
+  b.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
+  uint32_t t = 1;
+  for (; t <= 200 && (a.dish->duelView().phase == DuelPhase::Lobby ||
+                      b.dish->duelView().phase == DuelPhase::Lobby);
+       ++t) {
+    ether.advance(t);
+    a.dish->tick(a.ms += 100, a.link);
+    b.dish->tick(b.ms += 100, b.link);
+  }
+  EXPECT_NE(a.dish->duelView().phase, DuelPhase::Lobby) << "a hungry pet is claimable";
+  EXPECT_NE(b.dish->duelView().phase, DuelPhase::Lobby) << "and can claim";
 }
 
 // Right after an update the radio is the trial's until it keeps: the kid is
@@ -543,7 +570,7 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   doublePress(a);   // a leave, in the lobby
   idle(a, 3);       // and the badge re-enters by itself, hungry now
   l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake gate=hungry:0.9")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake gate=ok")) << joined(l) << " (hungry no longer refuses, 0.7.9)";
   EXPECT_TRUE(has(l, "result=entered")) << joined(l);
   EXPECT_STREQ(a.dish->fightState(), "searching");
 

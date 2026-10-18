@@ -16,6 +16,7 @@
 #include <variant>
 #include <vector>
 #include "blorb/air.h"
+#include "blorb/controls.h"
 #include "blorb/duel.h"
 #include "blorb/duel_book.h"
 #include "blorb/duel_card.h"
@@ -57,19 +58,8 @@ struct DuelInput {
   static DuelInput from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx tiltY, bool bootDown);
 };
 
-// Stimuli the duel takes for itself while it is open, so his body does not
-// flinch at every lock-in knock. BOOT is the duel's in every phase (the
-// special, the confirm, the Finish, the hug), so a heavy special never also
-// tucks him in. A shake always tells the future, and a drop and the lid always
-// reach him (they also end the duel): those are never taken.
-constexpr uint64_t duelStimBit(StimId s) { return uint64_t(1) << s.v; }
-inline constexpr uint64_t kDuelCaptures = duelStimBit(stim::knock) | duelStimBit(stim::double_knock) |
-                                          duelStimBit(stim::button) | duelStimBit(stim::button_double) |
-                                          duelStimBit(stim::hang);
-inline constexpr uint64_t kHoldPhaseCaptures = kDuelCaptures | duelStimBit(stim::button_hold);
-static_assert((kHoldPhaseCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::dropped) |
-                                     duelStimBit(stim::lid_down) | duelStimBit(stim::cradle))) == 0,
-              "BOOT is the duel's; a shake, a drop, the lid and a cuddle are always the pet's");
+// Which stimuli the duel takes for itself, and which gestures ask for it,
+// are the controls table (controls.h) — one place to rebind them.
 
 enum class DuelPhase : uint8_t {
   Closed,     // radio off: not in fight mode
