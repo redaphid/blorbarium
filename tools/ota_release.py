@@ -105,6 +105,11 @@ def firmware_version() -> str:
     return m.group(1)
 
 
+def newer(a: str, b: str) -> bool:
+    """Whether version a is after b, as the dish compares them."""
+    return tuple(int(x) for x in a.split(".")) > tuple(int(x) for x in b.split("."))
+
+
 def write_pubkey_header(pub: bytes):
     PUBKEY_H.write_text(
         "#pragma once\n"
@@ -158,7 +163,12 @@ def cmd_release(args):
     shown = subprocess.run(["git", "show", f"HEAD:web/public/fw/{board}/manifest.json"], cwd=ROOT,
                            capture_output=True, text=True)
     if shown.returncode == 0:
-        before = json.loads(shown.stdout).get("fmt")
+        last = json.loads(shown.stdout)
+        # A dish refuses an image no newer than its own (NOT_NEWER) and the page calls it up to date.
+        if not args.allow_older and not newer(version, last.get("version", "0.0.0")):
+            sys.exit(f"{version} is not newer than the last release, {last.get('version')}: bump kFirmwareVersion "
+                     "(docs/ota.md \"Releasing\"), or pass --allow-older to sign one every dish takes.")
+        before = last.get("fmt")
         if before is not None and before != stamp["fmt"] and not args.format_change:
             sys.exit(f"this image saves format {stamp['fmt']}, the last release saved {before}. Read docs/ota.md "
                      "\"Save formats\" (an image on trial writes nothing, a kept one writes the new format), "

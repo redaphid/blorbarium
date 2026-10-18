@@ -237,7 +237,14 @@ class MacTable(unittest.TestCase):
         self.assertEqual(dict(rows), {m: s for m, s in fb.BADGE_SPECIES.items() if s != "grungo"})
         self.assertEqual(len(fb.BADGE_SPECIES), 9)                               # read from badges.def
         self.assertEqual(fb.BADGE_SPECIES["d4:05:92:77:23:7c"], "grungo")     # the gift, badges.def row 0
-        self.assertEqual(sorted(fb.BADGE_SPECIES.values()), sorted(fb.SPECIES))   # each species once
+        badges = list(fb.BADGE_SPECIES.values())
+        self.assertEqual(len(set(badges)), len(badges))                         # each species once
+        self.assertLessEqual(set(badges), set(fb.SPECIES))                      # and a species the firmware knows
+
+    def test_the_species_are_species_def_s_in_id_order(self):
+        self.assertEqual(fb.SPECIES[:2], ("grungo", "mossby"))
+        self.assertIn("octopus", fb.SPECIES)                                    # row 9, which has no badge yet
+        self.assertEqual(fb.parse_boot(["[hw] ble name=octopus heap=1 big=1"])["species"], "octopus")
 
 
 class Log(unittest.TestCase):

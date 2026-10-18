@@ -63,7 +63,7 @@ PET_NVS = (0x810000, 0x40000)            # tools/partitions_16mb.csv `pet`
 MIN_ESPTOOL = (4, 7)                     # the first to write a .hex by its segments; older ones write the text itself
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note",
           "species", "pet"]               # pet: the mode, keep or wipe
-SPECIES = ("grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker")
+SPECIES_DEF = ROOT / "lib/blorb/include/blorb/defs/species.def"
 BADGES_DEF = ROOT / "lib/blorb/include/blorb/defs/badges.def"
 OTHER_SPECIES = "grungo"                 # founding.h badgeSpecies: a MAC not in the table
 
@@ -75,6 +75,12 @@ def read_badges(path=BADGES_DEF):
     return {":".join(b.strip()[2:].lower() for b in macs.split(",")[:6]): species for macs, species in rows}
 
 
+def read_species(path=SPECIES_DEF):
+    """The firmware's species slugs in id order, rows `BLORB_SPECIES(n, slug, ...)`."""
+    return tuple(re.findall(r"^BLORB_SPECIES\(\s*\d+\s*,\s*(\w+)\s*,", path.read_text(), re.M))
+
+
+SPECIES = read_species()
 BADGE_SPECIES = read_badges()            # each species once: the 8 badges and the gift device (row 0)
 PERMISSION_FIX = """this user may not open %s. Either join the serial group, then log out and back in:
       sudo usermod -aG dialout $USER        (on Arch: uucp instead of dialout)
@@ -557,7 +563,9 @@ def main(argv=None):
                 if args.watch:
                     row = None      # never auto-retry: a pet that did not come back must not be flashed again
                     break
-                choice = ask("  r to retry, s to skip this badge, q to quit [r]: ")
+                # Enter after PET NOT FOUND must not flash that board again.
+                fallback = "s" if "PET NOT FOUND" in str(e) else "r"
+                choice = ask("  r to retry, s to skip this badge, q to quit [%s]: " % fallback) or fallback
                 if choice == "q":
                     return 1
                 if choice == "s":
@@ -575,6 +583,14 @@ def main(argv=None):
             if isinstance(bench, DryBench):
                 bench.unplug()
             wait_gone(bench, port)
+        elif args.watch and len(bench.badges()) > 1:
+            # No port: several boards were attached and none was new. Watching
+            # again at once would fail the same way every 20 s, a log row and a
+            # badge number each time; this badge waits until only one is left.
+            print("Unplug all but one badge")
+            while len(bench.badges()) > 1:
+                time.sleep(0.3)
+            continue
         n += 1
     return 0
 
