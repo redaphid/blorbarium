@@ -1,0 +1,4 @@
+[submodule "tools/sprite-expressions"]
+	path = tools/sprite-expressions
+	url = https://github.com/redaphid/sprite-expressions.git
+	branch = octopus-birthday
