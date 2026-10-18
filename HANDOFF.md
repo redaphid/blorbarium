@@ -172,8 +172,8 @@ device, or "all different". Settle this before R3.
   `D:\projects\bak\blorbarium\`.
 - **COM12**, CH343 serial 5C94094999: a test board holding an egg
   `e1fe2f88` (blorb-1b44). Its factory image is backed up beside it.
-- Agents flash only COM11 and COM12. The 8 gift devices and the first gift
-  device need the owner's explicit OK in chat.
+- Any badge on the cable may be flashed for testing. Do not back badges up
+  first; the merged `.hex` flash keeps the pet partitions anyway.
 - `tools/flash_board.sh` flashes one board (`--no-reset` to skip the reset).
   `tools/flash_batch.py` flashes a batch and keeps each pet unless
   `--wipe-pet`. **Flashing from a Linux laptop: [LINUX.md](LINUX.md).**
@@ -239,13 +239,12 @@ Beacon 77 B, State 111 B, Genome 224 B. Pets dying is the owner's decision
 ### Rules for agents
 
 1. Work only in this repo; read claude-notification-screen, never write it.
-2. Flash only COM11 and COM12.
+2. Any badge on the cable may be flashed and tested. No flash backups.
 3. Never rewrite history: no rebase, force-push, amend, `reset --hard` or
    `branch -D` of unmerged work. Integrate by merging.
 4. After every commit, `git push -u origin HEAD`, WIP included.
 5. Opus or sonnet only, never fable, and never above high effort.
-6. The pet is a keepsake: say so in the report before changing the `pet` or
-   `petfs` partitions or the save format.
+6. Say so in the report before changing the save format.
 7. Re-bless a golden only after looking at the changed PNG and saying why
    it changed.
 8. These go to children aged 6-13, and pets can die, in battle too.
@@ -262,11 +261,11 @@ has no `ERRORED` or `FAILED`. A merge was once pushed while its tests
 failed, because the push was chained after a `cat`. Each gtest suite needs
 its own `main()`. Scripts are mode 100644, so run them with `bash`.
 
-## The first gift device (bring-up, 2026-10-03)
+## Bring-up history (2026-10-03, historical)
 
 - **Board:** Waveshare ESP32-S3-LCD-1.28, usually COM10 on the owner's desk.
   It runs `flash3` 2f8fd00 with an adult Grungo, generation 0, genome
-  `d30f00d1`, advertising as `blorb-237c`. Keep him. He lives in `pet`
+  `d30f00d1`, advertising as `blorb-237c`. He lives in `pet`
   (`snap.a`, `snap.b`) and on `petfs` (`lineage.log`). A cable flash of a
   merged `.hex` never touches them.
 - **Website:** https://blorb.hypnodroid.com (branch `web`), public through a

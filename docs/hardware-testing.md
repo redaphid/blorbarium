@@ -2,19 +2,16 @@
 
 Nobody can see the board's screen from a tool call, and this desk has no
 camera. This page gives you the full loop on a board on the cable. You hold
-off anything else that drives the port, back the board up, flash it, read
+off anything else that drives the port, flash it, read
 its log, press its button and take a picture of its screen. Every command
 here was run on the test board on 2026-10-13.
 
 ## The boards
 
-| Board | Port | USB serial | MAC | May be flashed |
-|---|---|---|---|---|
-| Test board, Waveshare ESP32-S3-LCD-1.28 | COM11 | `5C94095006` | `d4:05:92:77:1b:34` | Yes |
-| Second test board, the same model, arrived with the factory demo | COM12 | `5C94094999` | `d4:05:92:77:1b:44` | Yes |
-| The gift device, `blorb-237c` (grungo, genome `d30f00d1`) | usually COM10 | | | **No.** It holds a pet someone chose. |
+Any Waveshare ESP32-S3-LCD-1.28 badge on the cable may be flashed and tested.
+Do not back it up first: the merged `.hex` leaves the pet partitions alone.
 
-Both use a CH343 bridge with the same USB id, `1A86:55D3`, and a COM number
+Every badge uses a CH343 bridge with the same USB id, `1A86:55D3`, and a COM number
 can move between plugs. Identify a board by its USB serial number and MAC,
 never by its COM number. `tools/flash_board.sh` checks both before it writes.
 
@@ -45,28 +42,7 @@ of `~/.local/state/badged/badged.log` must say `asked to stop` and
 finish, stop the loop. The hold then lapses by itself, and the hooks bring
 the daemon back. Do not run `daemonctl.py start` for the owner.
 
-## 2. Back up the whole flash, twice
-
-Do not write anything until two reads match.
-
-    E="$HOME/.platformio/penv/Scripts/python.exe $HOME/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM11 -b 921600"
-    $E read_mac
-    $E read_flash 0 0x1000000 read1.bin
-    $E read_flash 0 0x1000000 read2.bin
-    sha256sum read1.bin read2.bin && cmp read1.bin read2.bin
-
-Each read takes about 221 seconds. Keep one copy under
-`D:\projects\bak\blorbarium\` with its sha256 beside it. The test board as
-it arrived (badge firmware 1.4.0, pet Puck) is
-`testboard-5C94095006-badge-1.4.0-2026-10-13.bin`, sha256
-`3668ece7cf2c44e5dccd86bfee75ed943b73d32e32659015a2edecc1b9a009fa`.
-
-To restore that image, run the command below. It **erases blorbarium and
-any pet on the board**, because a flat image overwrites every partition:
-
-    $E write_flash 0x0 D:/projects/bak/blorbarium/testboard-5C94095006-badge-1.4.0-2026-10-13.bin
-
-## 3. Build and flash
+## 2. Build and flash
 
     ~/.platformio/penv/Scripts/pio.exe run -e badge128
     tools/flash_board.sh COM11 5C94095006 d4:05:92:77:1b:34 .pio/build/badge128/merged.hex
@@ -95,7 +71,7 @@ logger's RTS pulse. On a new board, the log then starts with
 blank` and `boot=Fresh`. The serial and MAC checks are the same as without
 it.
 
-## 4. Read the log
+## 3. Read the log
 
     uv run tools/serial_log.py --port COM11 --seconds 300 --reset
 
@@ -117,7 +93,7 @@ than once. Serial-only `DEBUG` verbs never reach the phone:
 | `DEBUG shot` | Sends the screen (see step 5) |
 | `DEBUG bletest <bytes>` | Queues a test pattern to a connected BLE central |
 
-## 5. Take a screenshot
+## 4. Take a screenshot
 
     uv run tools/shot.py --port COM11 --out dish.png --scale 2
     uv run tools/shot.py --port COM11 --send "DEBUG press" --wait 800 --out pressed.png
