@@ -6,7 +6,6 @@ with a few pixels is one whose genes recolour nothing anyone can see.
     python3 tools/region_counts.py mossby fizz       # or no names for every pack
 """
 import sys
-from pathlib import Path
 
 import numpy as np
 

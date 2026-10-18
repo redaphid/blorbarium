@@ -151,7 +151,7 @@ def reload_on_own_trial(browser, base):
 
 def anothers_trial(browser, base):
     page = open_page(browser, base, f"mock=1&faults=none&fw=0.4.0&trial_from=0.3.0&trial_token={TOKEN}&trial_ms=3000")
-    wait_text(page, f"The dish is still checking its last update. Try again in a few minutes.", timeout=15000)
+    wait_text(page, "The dish is still checking its last update. Try again in a few minutes.", timeout=15000)
     rename_locked(page)
     page.locator("#reconnect").wait_for(state="visible", timeout=20000)
     s = page.evaluate(STATS)

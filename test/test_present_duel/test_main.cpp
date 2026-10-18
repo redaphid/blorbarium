@@ -126,7 +126,7 @@ namespace {
 struct Mask { std::vector<int> px; int cx = 0, cy = 0; };
 Mask scarPixels(const Appearance& a, const paint::Figure& fig) {
   Appearance clean = a;
-  clean.scars = {};
+  clean.scars = blorb::Scars{};
   Canvas240 with{}, without{};
   paint::drawFigure(a, paint::packFor(a.species), with, fig);
   paint::drawFigure(clean, paint::packFor(a.species), without, fig);

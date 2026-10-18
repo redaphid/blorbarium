@@ -19,12 +19,11 @@ raised edge. So a scar is always the pet's own skin, whatever its genes made it.
 """
 import math
 
-import sprite_pack as sp
 from sprite_pack import INVARIANT, REGION, Sketch
 
 INK = (24, 20, 16)
 LIGHT = (236, 232, 220)   # a free-standing mark (a ray, a motion line) on the dark screen
-CREASE, DEEP, RIDGE = (40, 40, 40), (28, 28, 28), (190, 190, 190)   # scar shades, as multipliers x128
+CREASE, RIDGE = (40, 40, 40), (190, 190, 190)   # scar shades, as multipliers x128
 
 
 def arc(cx, cy, rx, ry, a0, a1, n=24):

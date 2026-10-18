@@ -30,9 +30,6 @@ import time
 
 import serial
 
-PHASES = ["closed", "lobby", "greeting", "staking", "choosing", "waiting", "revealing", "fainting", "mercy",
-          "fallen", "friends"]
-
 
 class Board:
     def __init__(self, tag, port, t0, log):

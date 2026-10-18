@@ -52,7 +52,7 @@ bool Image::operator==(const Image& o) const {
 }
 
 Session::Session(Slot& slot, Host& host, blorb::Link& link, Config config)
-    : slot_(slot), host_(host), link_(link), config_(config) {}
+    : slot_(slot), host_(host), link_(link), config_(config), state_(Idle{}) {}
 
 bool Session::handle(std::string_view line, uint32_t now, Peer peer) {
   if (line.size() > 200) return false;   // the protocol answers 413

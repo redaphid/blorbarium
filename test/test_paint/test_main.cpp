@@ -628,56 +628,35 @@ constexpr char kLine[] = "TAP ME WITH YOUR PHONE";
 
 std::unique_ptr<Canvas240> blank() { return std::make_unique<Canvas240>(Canvas240{}); }
 
-TEST(MarqueeWidget, AKeptPhaseGoesRoundAsTheClockDoes) {
-  ASSERT_FALSE(paint::marqueeFits(kStrip, paint::kFreeSans9pt7b, kLine));
-  paint::MarqueePhase phase{};
-  const uint32_t t0 = 5000;
-  uint32_t t = t0;
-  for (uint32_t dt : {0u, 33u, 47u, 33u, 1000u, 4000u, 2500u, 333u, 3000u, 41u}) {   // past one lap
-    t += dt;
-    auto kept = blank(), clock = blank();
-    paint::drawMarquee(*kept, kStrip, phase, paint::kFreeSans9pt7b, kLine, 0xFFFF, t);
-    paint::drawMarqueeAt(*clock, kStrip, paint::kFreeSans9pt7b, kLine, 0xFFFF, t - t0);
-    EXPECT_GT(countChanged(*kept, *blank()), 0) << "nothing drawn at " << t - t0;
-    EXPECT_EQ(countChanged(*kept, *clock), 0) << "the kept phase and the clock part at " << t - t0;
+TEST(MarqueeWidget, TheClockTurnsTheRingAtItsOwnSpeed) {
+  const auto& f = paint::kFreeSans9pt7b;
+  ASSERT_FALSE(paint::marqueeFits(kStrip, f, kLine));
+  const uint32_t lap = uint32_t(paint::textWidth(f, kLine) + paint::marqueeHalf(kStrip));
+  for (uint32_t ms : {0u, 33u, 1000u, 4000u, 9000u, 60000u}) {
+    auto clock = blank(), ring = blank();
+    paint::drawMarqueeAt(*clock, kStrip, f, kLine, 0xFFFF, ms);
+    paint::drawMarqueeRing(*ring, kStrip, f, kLine, kLine, 0xFFFF, 0, uint32_t(uint64_t(ms) * 38 / 1000 % lap));
+    EXPECT_GT(countChanged(*clock, *blank()), 0) << "nothing drawn at " << ms;
+    EXPECT_EQ(countChanged(*clock, *ring), 0) << "the clock and the ring part at " << ms;
   }
 }
 
-TEST(MarqueeWidget, ANewLineComesRoundBehindNeverUnderTheReader) {
-  const char* other = "SOMETHING ELSE ENTIRELY, LATER";
+TEST(MarqueeWidget, ALineThatFitsSitsStillAndCentred) {
   const auto& f = paint::kFreeSans9pt7b;
-  paint::MarqueePhase phase{};
-  auto draw = [&](const char* s, uint32_t ms) {
-    auto cv = blank();
-    paint::drawMarquee(*cv, kStrip, phase, f, s, 0xFFFF, 1000 + ms);
-    return cv;
-  };
-  draw(kLine, 0);
-  auto swapped = draw(other, 1000), unchanged = blank();
-  paint::drawMarqueeAt(*unchanged, kStrip, f, kLine, 0xFFFF, 1000);
-  EXPECT_EQ(countChanged(*swapped, *unchanged), 0) << "the strip changed text under the reader";
-  draw(other, 5000);
-  auto lapped = draw(other, 9000), want = blank();
-  const uint32_t lap = uint32_t(paint::textWidth(f, kLine) + paint::marqueeHalf(kStrip));
-  ASSERT_GT(9000u * 38 / 1000, lap) << "the first line has not finished its lap";
-  paint::drawMarqueeRing(*want, kStrip, f, other, other, 0xFFFF, 0, (9000u * 38 - lap * 1000) / 1000);
-  EXPECT_EQ(countChanged(*lapped, *want), 0) << "the new line is not the one going round after the lap";
+  ASSERT_TRUE(paint::marqueeFits(kStrip, f, "HI"));
+  auto early = blank(), late = blank(), centred = blank();
+  paint::drawMarqueeAt(*early, kStrip, f, "HI", 0xFFFF, 0);
+  paint::drawMarqueeAt(*late, kStrip, f, "HI", 0xFFFF, 123456);
+  paint::drawString(*centred, f, "HI", 120 - paint::textWidth(f, "HI") / 2, 120 + kStrip.dy, 0xFFFF, {0, 0, 240, 240, 0});
+  EXPECT_GT(countChanged(*early, *blank()), 0);
+  EXPECT_EQ(countChanged(*early, *late), 0) << "a line that fits moved";
+  EXPECT_EQ(countChanged(*early, *centred), 0) << "a line that fits is not centred";
 }
 
-TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
-  const auto& f = paint::kFreeSans9pt7b;
-  const uint32_t life = paint::marqueeTimedDuration(kStrip, f, kLine);
-  auto arriving = blank(), going = blank();
-  paint::drawMarqueeTimed(*arriving, kStrip, f, kLine, 0xFFFF, 0, life);
-  paint::drawMarqueeTimed(*going, kStrip, f, kLine, 0xFFFF, life / 4, life);
-  EXPECT_EQ(countChanged(*arriving, *blank()), 0) << "a said line starts off the right edge";
-  EXPECT_GT(countChanged(*going, *blank()), 0);
-  auto parked = blank(), centred = blank();
-  paint::drawMarqueeTimed(*parked, kStrip, f, "HI", 0xFFFF, 60000, 60000);
-  const int w = paint::textWidth(f, "HI");
-  paint::drawString(*centred, f, "HI", 120 - w / 2, 120 + kStrip.dy, 0xFFFF, {0, 0, 240, 240, 0});
-  EXPECT_GT(countChanged(*parked, *blank()), 0);
-  EXPECT_EQ(countChanged(*parked, *centred), 0) << "a short said line does not park centred";
+TEST(MarqueeWidget, AStripWithAGivenHalfIgnoresTheRing) {
+  EXPECT_EQ(paint::marqueeHalf({-76, 50, 20, 38, 0}), 50);
+  EXPECT_EQ(paint::marqueeHalf({0, 0, 20, 38, 0}), paint::kRingIn - 6) << "the chord at the centre is the diameter";
+  EXPECT_LT(paint::ringHalfWidth(-100), paint::ringHalfWidth(-76)) << "the chord narrows toward the rim";
 }
 
 // PAINT_DUMP=<dir> writes a PPM per state for review.
