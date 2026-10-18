@@ -196,14 +196,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     switchTo(*forced_);
     forced_.reset();
   } else if (tick % kBrainEvery == 0 && body_.asleep) {
-    uint32_t every = std::max<uint32_t>(kBrainEvery, t.dreamEveryTicks);
-    uint32_t asleepFor = stats_.ageTicks - actionStart_;
-    if (asleepFor >= every && asleepFor / every != (asleepFor - kBrainEvery) / every) {
-      body_.dreaming = brain_.dream(t, rng_);
-      if (body_.dreaming) stats_.dreams = bump(stats_.dreams);
-    } else if (asleepFor % every >= t.dreamLenTicks) {
-      body_.dreaming = false;
-    }
+    dreamOn();
   } else if (tick % kBrainEvery == 0) {
     Fx features[kFeatureCount], drives[kDriveCount];
     for (size_t f = 0; f < kFeatureCount; ++f) features[f] = chem_.locus[FEATURES[f].v];
@@ -233,23 +226,42 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   if (body_.pose != pose::eat) body_.mouth = Mouthful::Nothing;   // a reflex or another action ended the chew
 
   // 7 face, stats, recent loci
-  if (body_.reflex) {
-    const ReflexInfo* row = rowOf(REFLEXES, body_.reflex->kind);
-    showFace(face_, row ? row->face : face_.current, body_.reflex->strength, tick);
-  } else {
-    ExprId best = face_.current;
-    Fx bestScore = scoreOf(face_.current, pheno_, chem_), shown = bestScore;
-    for (const Phenotype::Face& f : pheno_.faces) {
-      Fx s = faceScore(f, chem_);
-      if (s > bestScore) best = f.face, bestScore = s;
-    }
-    if (bestScore > shown + kFaceHysteresis) showFace(face_, best, bestScore, tick);
-    else showFace(face_, face_.current, shown, tick);
-  }
+  pickFace(tick);
   for (size_t a = 0; a < kActionCount; ++a)
     if (ACTIONS[a].id == action_) stats_.actionTicks[a] = bump(stats_.actionTicks[a]);
   ++stats_.ageTicks;
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx{chem_.locus[l].raw >> 1};
+}
+
+// Asleep, the brain only dreams: one every dreamEveryTicks, each lasting dreamLenTicks.
+void Creature::dreamOn() {
+  const Temperament& t = pheno_.temperament;
+  uint32_t every = std::max<uint32_t>(kBrainEvery, t.dreamEveryTicks);
+  uint32_t asleepFor = stats_.ageTicks - actionStart_;
+  if (asleepFor >= every && asleepFor / every != (asleepFor - kBrainEvery) / every) {
+    body_.dreaming = brain_.dream(t, rng_);
+    if (body_.dreaming) stats_.dreams = bump(stats_.dreams);
+  } else if (asleepFor % every >= t.dreamLenTicks) {
+    body_.dreaming = false;
+  }
+}
+
+// A reflex wears its own face; otherwise the best-scoring face takes over
+// only once it beats the one shown by kFaceHysteresis, so a face never flickers.
+void Creature::pickFace(uint32_t tick) {
+  if (body_.reflex) {
+    const ReflexInfo* row = rowOf(REFLEXES, body_.reflex->kind);
+    showFace(face_, row ? row->face : face_.current, body_.reflex->strength, tick);
+    return;
+  }
+  ExprId best = face_.current;
+  Fx bestScore = scoreOf(face_.current, pheno_, chem_), shown = bestScore;
+  for (const Phenotype::Face& f : pheno_.faces) {
+    Fx s = faceScore(f, chem_);
+    if (s > bestScore) best = f.face, bestScore = s;
+  }
+  if (bestScore > shown + kFaceHysteresis) showFace(face_, best, bestScore, tick);
+  else showFace(face_, face_.current, shown, tick);
 }
 
 void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick) {

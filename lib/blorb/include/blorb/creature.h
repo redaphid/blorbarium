@@ -155,6 +155,8 @@ class Creature {
 
  private:
   friend class Keepsake;               // the only other writer of private state
+  void dreamOn();                      // tick's step 5, asleep
+  void pickFace(uint32_t tick);        // tick's step 7
   Genome genome_;                      // immutable this life: no non-const accessor
   uint16_t generation_ = 0;
   uint32_t legacyFeats_ = 0;
