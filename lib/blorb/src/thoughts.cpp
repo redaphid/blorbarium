@@ -298,6 +298,27 @@ std::optional<ThoughtPick> chooseProphecy(const Observed& o, const uint32_t* rea
   return std::nullopt;
 }
 
+// The ball's half of a foretelling: short, decisive, in the font, and done.
+// Half of all foretellings (but never a day's first -- that one is a fortune)
+// are one of these instead of an omen: the oracle still picks which omen
+// would have carried it, and that row takes the cooldown. The ball says yes
+// more than no, and sometimes refuses to say: 45 / 30 / 25.
+struct BallAnswer { const char* text; uint8_t kind; };   // kind: 0 yes, 1 no, 2 not yet
+constexpr BallAnswer kVerdicts[] = {
+    {"YES.", 0}, {"YES. DEFINITELY.", 0}, {"SIGNS POINT TO YES.", 0}, {"COUNT ON IT.", 0},
+    {"NO.", 1}, {"NO WAY.", 1}, {"MY ANSWER IS NO.", 1}, {"DO NOT COUNT ON IT.", 1},
+    {"MAYBE.", 2}, {"CANNOT SAY YET.", 2}, {"THE MIST IS THICK.", 2}, {"ASK AGAIN LATER.", 2},
+};
+const char* drawVerdict(Rng& rng) {
+  const uint32_t roll = rng.below(100);
+  const uint8_t kind = roll < 45 ? 0 : roll < 75 ? 1 : 2;
+  const char* pool[4];
+  uint8_t n = 0;
+  for (const BallAnswer& v : kVerdicts)
+    if (v.kind == kind) pool[n++] = v.text;
+  return pool[rng.below(n)];
+}
+
 // ---- the Thinker ------------------------------------------------------------------
 
 void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
@@ -310,9 +331,17 @@ void Thinker::meet(const Creature& c, const Lineage& lineage, uint32_t tick) {
 }
 
 void Thinker::start(const Creature& c, const Lineage& lineage, const FromPhone& phone, ThoughtPick pick, uint32_t tick,
-                    Rng& rng) {
+                    Rng& rng, const char* verdict) {
   const ThoughtInfo* info = thoughtInfo(pick.id);
   Shown s{info->prophecy() ? Spoken::prophecy : Spoken::thought, pick.id, tick, 0, {}};
+  if (verdict) {   // the ball's text stands in for the omen's; the row still takes its cooldown
+    const size_t len = textLen(verdict);
+    for (size_t i = 0; i < len; ++i) s.line[i] = verdict[i];
+    s.ticks = passTicks(len);
+    now_ = s;
+    readyAt_[info - THOUGHTS] = tick + uint32_t(info->cooldownS) * (1000 / kTickMs);
+    return;
+  }
   const uint8_t frame = uint8_t(rng.below(256));
   char name[kMaxNameText + 1]{};
   Words words{std::string_view(name, nameInFont(lineage.currentName(), name)), {}};
@@ -329,14 +358,46 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   if (c.stats().ageTicks < kWarmUpTicks) return;
   const Observed o{c, habitat, clock, heirlooms_, tick, phone};
-  // Every shake foretells, and a new shake restarts the line rather than
-  // queueing behind it. With every row on cooldown he repeats one. The
-  // phone's said line is the one thing a shake does not cut short.
+  // A foretelling lands when its trance ends. In the trance he is silent:
+  // the line he was saying is already cut and no thought starts. The phone's
+  // said line is the one thing that dissolves a trance instead.
+  if (trance_ && !shook) {
+    if (now_ && now_->kind == Spoken::said) {
+      trance_.reset();
+    } else if (before(tick, trance_->until)) {
+      return;
+    } else {
+      const Trance t = *trance_;
+      trance_.reset();
+      Rng rng = seededFor(life_, tick, kOracleSalt);
+      return start(c, lineage, phone, t.pick, tick, rng, t.verdict);
+    }
+  }
+  // Every shake foretells, after a trance: he goes quiet and swirly first,
+  // like the ball filling with ink, and the answer lands whole. A new shake
+  // restarts the trance rather than queueing behind it. With every row on
+  // cooldown he repeats one. The phone's said line is the one thing a shake
+  // does not cut short.
   if (shook && (!now_ || now_->kind != Spoken::said)) {
     Rng rng = seededFor(life_, tick, kOracleSalt);
     std::optional<ThoughtPick> p = chooseProphecy(o, readyAt_, rng);
     if (!p) p = chooseProphecy(o, nullptr, rng);
-    if (p) return start(c, lineage, phone, *p, tick, rng);
+    // The day's first foretelling is a fortune, never a bare verdict; the
+    // rest are the ball's coin flip between a verdict and an omen.
+    const uint32_t day = clock.petTicks / PetClock::kDayTicks;
+    const bool fortune = day != fortuneDay_;
+    const bool verdict = !fortune && rng.below(2) == 0;
+    if (p || verdict) {
+      if (!p)   // a verdict still needs a row to carry its cooldown
+        for (const ThoughtInfo& t : THOUGHTS)
+          if (t.prophecy()) { p = ThoughtPick{t.id, 0}; break; }
+      if (p) {
+        if (fortune) fortuneDay_ = day;
+        now_.reset();
+        trance_ = Trance{tick + kTranceTicks, *p, verdict ? drawVerdict(rng) : nullptr};
+        return;
+      }
+    }
   }
   if (now_) {
     if (tick - now_->since < now_->ticks) return;
@@ -373,18 +434,28 @@ void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, con
   uint16_t num = 0;
   info->when(Observed{c, habitat, clock, heirlooms_, tick, phone}, num);
   Rng rng = seededFor(life_, tick);
+  trance_.reset();
   start(c, lineage, phone, ThoughtPick{id, num}, tick, rng);
 }
 
 void Thinker::say(std::string_view line, const Creature& c, const Lineage& lineage, uint32_t tick) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   const size_t n = std::min(line.size(), kMaxSaidText);
+  trance_.reset();
   Shown s{Spoken::said, ThoughtId{}, tick, passTicks(n), {}};
   std::copy(line.begin(), line.begin() + n, s.line);
   now_ = s;
 }
 
 void Thinker::show(Appearance& a, uint32_t tick) const {
+  if (trance_ && !now_) {   // in the trance: the foresee face, and no words yet
+    a.prophecy = true;
+    if (a.expression != expr::foresee) a.previous = a.expression;
+    a.expression = expr::foresee;
+    a.intensity = Fx::one();
+    a.exprTicks = 0;
+    return;
+  }
   if (!now_ || tick - now_->since >= now_->ticks) return;
   a.thinking = true;
   a.prophecy = now_->kind == Spoken::prophecy;

@@ -4,9 +4,13 @@
 // which, from what anyone could see of him (drives, the action or reflex,
 // stage, sickness, foresee, what his brain learned, the heirlooms in his
 // genome, the pet clock) plus a draw seeded by his genome and the tick. Every
-// shake brings a prophecy instead of a hop. His oracle weights its topics and
-// picks the voice (voices.def) every line is said in. He needs no phone; what
-// one gives him (FromPhone) only adds lines.
+// shake brings a prophecy instead of a hop, the Magic 8-Ball way: a trance
+// first (kTranceTicks of foresee face and silence), then the answer lands
+// whole -- a day's first foretelling is always a fortune in his own voice,
+// and after that a coin flip between an omen (his oracle weights its topics
+// and picks the voice, voices.def) and a bare verdict (YES / NO / ASK AGAIN
+// LATER, drawn in thoughts.cpp). He needs no phone; what one gives him
+// (FromPhone) only adds lines.
 //
 // Presentation, not life: no line changes him, and the Thinker is not saved
 // or hashed. A reboot starts it afresh, so a replay of the creature stays
@@ -244,6 +248,7 @@ class Thinker {
   void show(Appearance&, uint32_t tick) const;
 
   static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one
+  static constexpr uint32_t kTranceTicks = 12;                         // a shake's trance: the swirl before the answer lands
   static constexpr uint32_t kWarmUpTicks = 3 * kTicksPerMinute;        // a hatchling's first minutes are wordless
   static constexpr uint32_t kQuietTicks = kTicksPerMinute;             // after a line, at least this ...
   static constexpr uint32_t kQuietJitterTicks = 2 * kTicksPerMinute;   // ... plus up to this, drawn
@@ -251,14 +256,20 @@ class Thinker {
  private:
   enum class Spoken : uint8_t { thought, prophecy, said };   // his own line, a shake's foretelling, the phone's
   struct Shown { Spoken kind; ThoughtId id; uint32_t since; uint16_t ticks; char line[kThoughtLineCap]; };
+  // A foretelling on its way: the pick is made at the shake, the line lands
+  // when the trance ends. `verdict` is the Magic 8-Ball's own text when the
+  // answer is a verdict; null when the pick's omen line is the answer.
+  struct Trance { uint32_t until; ThoughtPick pick; const char* verdict; };
   void meet(const Creature&, const Lineage&, uint32_t tick);
-  void start(const Creature&, const Lineage&, const FromPhone&, ThoughtPick, uint32_t tick, Rng&);
+  void start(const Creature&, const Lineage&, const FromPhone&, ThoughtPick, uint32_t tick, Rng&, const char* verdict = nullptr);
 
   uint32_t life_ = 0, lifeGeneration_ = 0xFFFFFFFFu;   // whose lines these are
   Heirlooms heirlooms_;
   uint32_t readyAt_[kThoughtCount]{};                   // per row: its cooldown ends
   uint32_t quietUntil_ = 0;                             // only urgent thoughts before this
+  uint32_t fortuneDay_ = 0xFFFFFFFFu;                   // the pet day whose first foretelling is still owed
   std::optional<Shown> now_;
+  std::optional<Trance> trance_;
 };
 
 }  // namespace blorb
