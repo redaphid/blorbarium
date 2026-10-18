@@ -1,0 +1,4 @@
+time,badge,port,usb_serial,mac,ble_name,boot,genome,fw,result,note,species,pet
+2026-10-17T21:35:44,1,/dev/ttyACM0,,,,,,,failed,esptool could not read the MAC on /dev/ttyACM0:  / A fatal error occurred: Failed to connect to ESP32-S3: No serial data received. / For troubleshooting steps visit: https://docs.espressif.com/projects/esptool/en/latest/troubleshooting.html,,keep
+2026-10-17T21:36:21,2,/dev/ttyACM0,,,,,,,failed,esptool could not read the MAC on /dev/ttyACM0: Connecting......... /  / A fatal error occurred: Invalid head of packet (0x45): Possible serial noise or corruption.,,keep
+2026-10-17T21:36:35,3,/dev/ttyACM0,,,,,,,failed,"could not back up the pet partition, so nothing was written: 4096 (1 %)8192 (3 %)12288 (4 %)16384 (6 %)20480 (7 %)24576 (9 %)28672 (10 %) / A fatal error occurred: Corrupt data, expected 0x1000 bytes but received 0xf80 bytes",,keep

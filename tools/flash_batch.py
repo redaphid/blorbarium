@@ -214,6 +214,8 @@ def esptool_version(text):
 
 def find_esptool(home=None, which=shutil.which, windows=os.name == "nt"):
     """The esptool command as an argv prefix: PlatformIO's own, else one on PATH."""
+    if os.environ.get("ESPTOOL"):     # an explicit esptool 4.7+ when PlatformIO's bundled one is older
+        return [os.environ["ESPTOOL"]]
     home = home or Path.home()
     script = home / ".platformio/packages/tool-esptoolpy/esptool.py"
     for py in (home / ".platformio/penv/Scripts/python.exe", home / ".platformio/penv/bin/python"):
@@ -493,6 +495,8 @@ def main(argv=None):
     ap.add_argument("--wipe-pet", action="store_true",
                     help="erase each badge's pet (backed up first) so it founds a new one; it must boot Fresh")
     ap.add_argument("--daemonctl", default=str(DAEMONCTL), help="badge daemon control script to hold off ('' for none)")
+    ap.add_argument("--watch", action="store_true",
+                    help="no prompts: flash each badge the moment it is attached (or is already), then wait for the next; a failure is logged, never retried")
     ap.add_argument("--dry-run", action="store_true", help="pretend boards; writes nothing, logs to a .dry-run.csv")
     args = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -525,9 +529,16 @@ def main(argv=None):
     while True:
         hold_daemon(None if args.dry_run else args.daemonctl)
         before = bench.badges()
-        if ask("\nPlug in badge %d (%s), press Enter (q to quit): " % (n, pet)) == "q":
+        if args.watch:
+            print("\nWatching for badge %d (%s) ... Ctrl-C to stop" % (n, pet))
+            if isinstance(bench, DryBench):
+                bench.plug()
+            while not bench.badges():
+                time.sleep(0.3)
+            time.sleep(1.5)     # let the port settle before esptool opens it
+        elif ask("\nPlug in badge %d (%s), press Enter (q to quit): " % (n, pet)) == "q":
             break
-        if isinstance(bench, DryBench):
+        if isinstance(bench, DryBench) and not args.watch:
             bench.plug()
         port = None
         while True:
@@ -543,6 +554,9 @@ def main(argv=None):
                 append_log(log, {"time": datetime.now().isoformat(timespec="seconds"), "badge": n,
                                  "port": port or "", "result": "failed", "note": str(e),
                                  "pet": "wipe" if args.wipe_pet else "keep"})
+                if args.watch:
+                    row = None      # never auto-retry: a pet that did not come back must not be flashed again
+                    break
                 choice = ask("  r to retry, s to skip this badge, q to quit [r]: ")
                 if choice == "q":
                     return 1

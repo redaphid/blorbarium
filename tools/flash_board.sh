@@ -36,7 +36,8 @@ for p in ~/.platformio/penv/Scripts/python.exe ~/.platformio/penv/bin/python; do
   [ -x "$p" ] && { py=$p; break; }
 done
 script=~/.platformio/packages/tool-esptoolpy/esptool.py
-if [ -n "$py" ] && [ -f "$script" ]; then et=("$py" "$script")
+if [ -n "${ESPTOOL:-}" ]; then et=("$ESPTOOL")   # explicit esptool 4.7+, for when PlatformIO's is older
+elif [ -n "$py" ] && [ -f "$script" ]; then et=("$py" "$script")
 elif command -v esptool >/dev/null 2>&1; then et=(esptool)
 elif command -v esptool.py >/dev/null 2>&1; then et=(esptool.py)
 else die "no esptool: install PlatformIO and run 'pio run -e badge128' once (it brings one), or 'pipx install esptool'"

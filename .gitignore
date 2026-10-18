@@ -11,3 +11,5 @@ web/node_modules/
 web/public/fw/**/*.bin
 pet_backups/
 .soak/*.log
+.soak/
+.jobs/
