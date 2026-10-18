@@ -372,6 +372,46 @@
         "flash_bytes": 79584,
         "region_map": false
       }
+    },
+    {
+      "id": 9,
+      "name": "Octopus",
+      "slug": "octopus",
+      "species": "octopus",
+      "look": "a squat ink-dark octopus with an oversized skull-pale mantle, ember-red eyes and eight thick curled tentacles",
+      "personality": "A smug tide oracle who treats every duel as a tragedy whose ending is already written.",
+      "habitat": "the drowned theatre beneath the old flood chamber",
+      "power": {
+        "name": "Black Bell",
+        "kind": "dodge",
+        "effect": "Rings without sound; for two turns, losing clashes cost no heart and queued specials vanish into the hush."
+      },
+      "colours": {
+        "dominant": "#5D486B",
+        "secondary": "#2B2234",
+        "glow": "#EB4B52"
+      },
+      "art": {
+        "faces": [
+          "neutral",
+          "happy",
+          "alarmed",
+          "annoyed",
+          "croak",
+          "blep",
+          "foresee",
+          "sleepy",
+          "asleep",
+          "yawn"
+        ],
+        "egg": true,
+        "stages": "procedural: Baby/Child squash the adult body, Elder desaturates it (draw.cpp); no stage art",
+        "pack": "pets/octopus/octopus_pack.h",
+        "palette": 256,
+        "frames": 18,
+        "flash_bytes": 88158,
+        "region_map": true
+      }
     }
   ]
 }

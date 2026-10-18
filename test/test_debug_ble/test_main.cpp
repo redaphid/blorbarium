@@ -379,10 +379,11 @@ TEST(Jumps, SpeciesChangesHisBodyAndPowerInPlaceAndTheLineageSaysSo) {
   EXPECT_EQ(r.creature().stage(), Stage::Child);
   EXPECT_EQ(r.dish->appearance().species, SpeciesId{3});
   EXPECT_EQ(r.send("#4 SPECIES dragon"), "#4 ERR 416 OUT_OF_RANGE");
-  EXPECT_EQ(r.send("#5 SPECIES 9"), "#5 ERR 416 OUT_OF_RANGE");
-  r.boot();   // the genome is the save's: he comes back a gilly
+  EXPECT_EQ(r.send("#5 SPECIES 9"), "#5 OK species=octopus");
+  EXPECT_EQ(r.dish->appearance().species, SpeciesId{9});
+  r.boot();   // the genome is the save's: he comes back an octopus
   EXPECT_EQ(r.dish->boot(), Boot::Resumed);
-  EXPECT_EQ(r.dish->appearance().species, SpeciesId{3});
+  EXPECT_EQ(r.dish->appearance().species, SpeciesId{9});
 }
 
 TEST(Jumps, SpeciesNeedsASpeciesGene) {

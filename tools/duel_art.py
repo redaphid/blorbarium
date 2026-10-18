@@ -194,8 +194,18 @@ def gear(k):
     k.fill(k.mask("ellipse", 11.2, 15, 12.8, 16.6), INK, INVARIANT)
 
 
+def blackbell(k):
+    """The Black Bell: a cracked, silent bell with ink dripping from its rim."""
+    blob(k, [("polygon", [(9, 4), (15, 4), (18, 9), (19, 17), (21, 19), (3, 19), (5, 17), (6, 9)])],
+         (130, 104, 145))
+    stroke(k, [(9, 4), (9.5, 2), (14.5, 2), (15, 4)], 1.4, (210, 194, 215))
+    stroke(k, [(4, 19.5), (20, 19.5)], 1.6, (210, 194, 215))
+    stroke(k, [(12, 6), (10.5, 10), (13, 12), (11, 16)], 1.2, INK)
+    blob(k, [("ellipse", 10, 20, 14, 23)], (90, 66, 105), ink=0.8)
+
+
 POWERS = [("eye", eye), ("shell", shell), ("spore", spore), ("leaf", leaf), ("lamp", lamp),
-          ("wave", wave), ("spark", spark), ("feather", feather), ("gear", gear)]
+          ("wave", wave), ("spark", spark), ("feather", feather), ("gear", gear), ("blackbell", blackbell)]
 STANCES = [("pounce", pounce), ("guard", guard), ("trick", trick)]
 
 

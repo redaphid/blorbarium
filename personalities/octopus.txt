@@ -1,0 +1,216 @@
+OCTOPUS
+abyssal duelist: the last act has already begun
+Element Splash, style Trick, power blackbell. Voice: ominous, which wraps his lines as "LINE... SOON.", "HEED: LINE", "LINE. IT IS WRITTEN.".
+
+WHAT HE LOOKS LIKE
+A squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,
+and eight thick curled tentacles. A cracked bell hangs at his throat. He is
+small enough for the dish and certain enough for the whole abyss.
+
+WHO HE IS
+A theatrical tide oracle and an unapologetic duelist. Every small event is an
+omen; every dinner is a wake. After Paul attended an Edgar Allan Poe
+dinner-theatre for his birthday, the octopus decided every guest had already
+been memorialized. He treats each duel as a tragedy whose ending he has read,
+and enjoys watching a rival discover who the prophecy was about.
+
+HOW HE TALKS
+Solemn, ornate prophecies about tides, ink, ravens, shells and defeat. He makes
+tiny inconveniences sound historic, then undercuts them with a dry insult. He
+never reassures a rival. The gloom is theatrical; the threat is sincere.
+
+LOVES
+Midnight, old stories, cracked bells, shells, dramatic pauses and being right
+about an opponent's imminent loss.
+
+FEARS
+Bright dry places, being forgotten, and a rival who refuses to be intimidated.
+
+CATCHPHRASES
+THE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.
+
+=== LINES ===
+# Lines only he says. Situations and names come from _shared.txt.
+
+peckish
+  THE HUNGER HAS A VERDICT.
+starving
+  YOUR SNACK. MY LAST REQUEST.
+hoarding
+  THE SHELLS ARE EVIDENCE.
+crunch
+  THE ABYSS HEARD THAT.
+fuzzy_bite
+  THE CRUMB IS THINKING.
+smells
+  SOMETHING DIED. OR COOKED.
+green
+  MY INK IS YOUR BAD OMEN.
+ow
+  I PAID FOR THAT PINCH.
+heard_you
+  THE RAVEN HEARD YOU TOO.
+ground_lies
+  THE FLOOR BETRAYS US.
+not_again
+  THE PROPHECY HATES YOU.
+marble_knows
+  THE MARBLE KNOWS YOUR NAME.
+put_me_down
+  PUT ME DOWN. OR DON'T.
+warm_hands
+  WARM. DEEPLY SUSPICIOUS.
+sky_down
+  THE CEILING IS A GRAVE.
+heavy_eyes
+  I WILL HAUNT THIS NAP.
+dream_pellets
+  ZZZ... YOUR DOOM... ZZZ
+see_pellet
+  I SEE A SNACK. IT TREMBLES.
+see_phone
+  THE GLOWING SLAB FORETELLS.
+see_nothing
+  AN EMPTY DISH. A FAMILIAR END.
+see_damp
+  INK WEATHER. EXCELLENT.
+moon
+  THE MOON OWES ME MONEY.
+anyone
+  I HEAR THE RAVEN. NOT YOU.
+science
+  INK OBSCURES THE INEVITABLE.
+no_hat
+  GEN #. NO HOOD. NO MERCY.
+p_snack
+  A SNACK APPROACHES. ALONE.
+p_feast
+  THE FEAST ENDS IN SILENCE.
+p_pellet_soon
+  YOUR BISCUIT IS NUMBERED.
+p_feed_me
+  FEED ME BEFORE THE OMEN.
+p_fuzzy
+  THE CRUMB WILL TURN ON YOU.
+p_more_shaking
+  I FORESAW YOU DROPPING ME.
+p_mud
+  THE TIDE TAKES YOUR SHOES.
+p_big_hand
+  HAND DESCENDS. RAVEN NOTED.
+p_bedtime
+  GO TO BED. I NEED THE DARK.
+p_sun
+  THE SUN RETURNS. HOW RUDE.
+p_rain
+  THE SKY HAS SPILLED AGAIN.
+p_watched
+  THE GLOWING ONE IS YOU.
+p_return
+  THE DEAD RETURN. SO DO YOU.
+p_tap
+  ONE TAP. THREE ACTS OF DOOM.
+p_no
+  THE RAVEN VOTED. YOU LOSE.
+p_doom
+  YOUR FUNERAL IS RUNNING LATE.
+p_lunch
+  MY END IS NOT TODAY. YOURS?
+p_outlook
+  OUTLOOK: WET. AS FORETOLD.
+p_decidedly
+  IT IS DECIDED. BY ME.
+p_lucky
+  LUCK LOOKS ELSEWHERE.
+p_pond_no
+  THE TIDE SAYS NO. OBVIOUSLY.
+p_pond_yes
+  THE TIDE HAS MADE A MISTAKE.
+p_ripples
+  THE WATER KNOWS YOUR END.
+miss_phone
+  THE GLOWING ONE HAS GONE DARK.
+oclock
+  AT #. THE RAVEN STILL WATCHES.
+morning
+  MORNING. THE WORST PLOT TWIST.
+so_late
+  IT IS LATE. EXCELLENT.
+monday
+  MONDAY. A PREMEDITATED CRIME.
+weekend
+  THE WEEKEND IS SUSPECT.
+p_weekend
+  TWO DAYS OF UNWITNESSED DOOM.
+my_name
+  @. THE RAVEN KNOWS IT TOO.
+p_famous
+  @ WILL BE MISQUOTED BY CROWS.
+rim_walk
+  I WALKED THE RIM. IT OWES ME.
+marble_foe
+  THE MARBLE KNOWS WHAT YOU DID.
+clean_glass
+  YOUR FUTURE IS SMUDGED.
+dont_look
+  LOOK AWAY. I AM PREDICTING.
+saw_nothing
+  NOTHING HAPPENED. SUSPICIOUS.
+plans
+  MY PLANS HAVE EIGHT PARTS.
+toes
+  EIGHT ARMS. ZERO SUBTLETY.
+small_lot
+  SQUAT OCTOPUS. TALL FUNERAL.
+popped
+  AN OMEN POPPED. HOW DREADFUL.
+wiggle
+  THE RITUAL WIGGLE IS COMPLETE.
+my_song
+  NEVERMORE. NEVERMORE. NO.
+dust
+  DUST SETTLES. RAVEN WINS.
+important
+  THE ABYSS HAS A SCHEDULE.
+secret_mud
+  THE SECRET IS IN THE INK.
+nap_plan
+  A NAP. THEN YOUR DOWNFALL.
+ceiling
+  THE CEILING HAS NO EXIT.
+serious_face
+  THIS IS MY MERCY FACE.
+no_echo
+  THE ABYSS DOES NOT ECHO.
+king
+  KING OF THIS TINY ABYSS.
+smells_me
+  SMELLS LIKE THE LAST ACT.
+todo
+  TODAY: PREDICT. DUEL. PREVAIL.
+brave
+  I AM BRAVE. YOU ARE DOOMED.
+big_pond
+  I DREAM OF A DEEPER GRAVE.
+floor
+  THE FLOOR KNOWS YOUR SECRETS.
+snack_snacks
+  WHAT EATS THE LAST CRACKER?
+suspense
+  I MAY STRIKE. THE TIDE KNOWS.
+ancestors
+  GEN #. THE RAVEN REMEMBERS.
+ask_me
+  ASK THE ABYSS. IT LIKES YOU.
+legs
+  EIGHT ARMS. NO NEED FOR LEGS.
+shiny
+  SOMETHING SHINY. A BAD OMEN.
+guard
+  I GUARD THE LAST WILL.
+old_fly
+  I REMEMBER THE RAVEN'S BILL.
+hi_you
+  YOU RETURNED. HOW UNFORTUNATE.
+busy
+  BUSY. COUNTING YOUR LOSSES.

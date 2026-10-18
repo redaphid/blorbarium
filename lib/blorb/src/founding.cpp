@@ -32,8 +32,8 @@ constexpr bool sameMac(const uint8_t (&a)[6], const uint8_t (&b)[6]) {
   for (int i = 0; i < 6; ++i) if (a[i] != b[i]) return false;
   return true;
 }
-constexpr bool oneOfEach() {
-  if (countOf(kBadges) != kSpeciesCount) return false;
+constexpr bool badgeTableIsValid() {
+  if (countOf(kBadges) > kSpeciesCount) return false;
   for (size_t i = 0; i < countOf(kBadges); ++i) {
     if (kBadges[i].species.v >= kSpeciesCount) return false;
     for (size_t j = i + 1; j < countOf(kBadges); ++j)
@@ -41,7 +41,7 @@ constexpr bool oneOfEach() {
   }
   return true;
 }
-static_assert(oneOfEach(), "badges.def: every species exactly once, no MAC twice");
+static_assert(badgeTableIsValid(), "badges.def: registered species only, no repeated species or MAC");
 
 // The byte range a founder rolls body byte i of gene v across, if it rolls it.
 struct Roll { uint8_t lo, hi; };

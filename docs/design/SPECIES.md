@@ -1,10 +1,10 @@
 # Species
 
-Blorbarium has one creature today, grungo. This design adds the roster's nine species as data and makes species a heritable, crossable part of the genome. The battles that use them are in `BATTLES.md`. The sketch headers are in `docs/design/sketch/`, and `sketch/check.sh` compiles them (see "Proof" below).
+Blorbarium has one original creature, Grungo, and now registers ten selectable species as data. Species are a heritable, crossable part of the genome. The battles that use them are in `BATTLES.md`.
 
 The roster is bound from `roster/roster.json` on `origin/roster-art` (d98055e), and its ids are stable.
 
-## The nine
+## The ten
 
 | Id | Name | Species | Element | Loves | Power (cost) | What the power does in a duel |
 |---|---|---|---|---|---|---|
@@ -17,6 +17,10 @@ The roster is bound from `roster/roster.json` on `origin/roster-art` (d98055e), 
 | 6 | Fizz | firefly beetle | Spark | Pounce | Static Spark (6) | A tickly zap. The friend loses one heart whatever the clash. |
 | 7 | Hushwing | marsh owl | Sprout | Trick | Hush (5) | Silent wings. For two turns a clash she loses costs her nothing. |
 | 8 | Tinker | raccoon | Spark | Guard | Gadget (5) | A surprise gadget: one of the other eight powers, drawn from his own luck. |
+| 9 | Octopus | octopus | Splash | Trick | Black Bell (5) | A silent bell grants Hush: losing clashes cost no heart and the rival's next special whiffs. |
+The elements form a cycle: Splash douses Spark, Spark singes Sprout, and Sprout drinks Splash. The stances form a second cycle: Pounce beats Trick, Trick beats Guard, and Guard beats Pounce. The original nine rows cover each (element, loved stance) pair; additional species may share a pair while the matchup counts stay balanced. Octopus shares Splash/Trick with Grungo. `species.h` requires every pair to remain represented.
+- **Art.** `paint::packFor(species)` picks the sprite pack. Every device carries all ten, because any friend must be drawable and a friend egg can hatch any of them. The packs go in the 2 MiB raw `art` partition, which is memory-mapped. A missing pack falls back to Grungo tinted by the pet's own palette genes, so a gap in the art is a recoloured frog, never a blank. Colours belong to the pack, so `species.def` has no hue columns, and palette genes tint relative to each pack's authored colours as they tint Grungo today.
+- **Starter genome.** `starterGenomeOf(species, seed)` is Grungo's recipe with the row's bytes written in. It appends a SpeciesGene, a PowerGene, a KnackGene ranked toward the row's loved stance, and the duel feeling genes (`BATTLES.md`, "What the pets feel"). Every starter comes from one function and shares Grungo's gene uids, which is what makes crossing possible.
 
 Every power is used as a queued special: BOOT commits it with a hidden landing stance, it winds up for one turn (quick) or two (heavy), and it fires only if it lands (`BATTLES.md`, "The queued special"). Lantern's cost is 3 for that reason. A countered Foresee landing whiffs instead of backfiring.
 

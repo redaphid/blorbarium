@@ -6,7 +6,7 @@
 // friend egg (friend_egg.h).
 //
 // Nothing in the engine branches on a species id. A species changes:
-//   art      paint::packFor(species) picks the sprite pack (every device holds all nine)
+//   art      paint::packFor(species) picks the sprite pack (every device holds each registered species)
 //   starter  starterGenomeOf(species, seed): grungo's recipe with the row's bytes
 //   duel     its element, its favourite stance, and (by default) its power
 //   voice    the oracle voice its starter genome carries
@@ -105,7 +105,7 @@ constexpr bool rowsAreTheirIndex() {
   for (size_t i = 0; i < kPowerCount; ++i) if (POWERS[i].id.v != i) return false;
   return true;
 }
-constexpr bool wheelIsLatinSquare() {
+constexpr bool wheelCoversEveryPair() {
   if (kSpeciesCount < kCycle * kCycle) return false;
   for (uint8_t e = 0; e < kCycle; ++e)
     for (uint8_t s = 0; s < kCycle; ++s) {
@@ -127,7 +127,7 @@ constexpr bool powersAreAffordable() {
   return true;
 }
 static_assert(rowsAreTheirIndex(), "species.def / powers.def ids must be 0..n-1 in order");
-static_assert(wheelIsLatinSquare(), "species.def: every (element, style) pair must be represented");
+static_assert(wheelCoversEveryPair(), "species.def: every (element, style) pair must be represented");
 static_assert(powersAreUnique(), "species.def: a shared power");
 static_assert(powersAreAffordable(), "powers.def: a cost the meter cannot hold");
 static_assert(SPECIES[0].power == power::foresee, "slot 0 is grungo, and grungo foresees");

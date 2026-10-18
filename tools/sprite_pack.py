@@ -1039,7 +1039,7 @@ def emit_duel(entries, frames, idx):
           "// By Stance (species.h): pounce, guard, trick.",
           "inline constexpr paint::FrameRef kStances[3] = {" + ", ".join(f"kStance{cap(n)}" for n, _ in duel_art.STANCES) + "};",
           "// By PowerGlyph (species.h): eye, shell, spore, leaf, lamp, wave, spark, feather, gear.",
-          "inline constexpr paint::FrameRef kPowers[9] = {" + ", ".join(f"kPower{cap(n)}" for n, _ in duel_art.POWERS) + "};",
+          f"inline constexpr paint::FrameRef kPowers[{len(duel_art.POWERS)}] = {{" + ", ".join(f"kPower{cap(n)}" for n, _ in duel_art.POWERS) + "};",
           "// By stakes tier: spar (a feather), scrap (a plaster), mortal (the full skull).",
           "inline constexpr paint::FrameRef kTiers[3] = {" + ", ".join(f"kTier{cap(n)}" for n, _ in duel_art.TIERS) + "};",
           "// By Element (species.h): splash (a drop), sprout (a seedling), spark (a sparkle).",
