@@ -234,6 +234,24 @@ TEST(Held, TiltedFor400MsIsPickedUpAndFlatFor1500MsIsPutDown) {
   EXPECT_EQ(r.at(locus::held), 0.0);
 }
 
+// Upright is a pose, not a pair of hands: a badge propped in a stand sits
+// tilted and undisturbed, and after fifteen seconds of it he is parked,
+// not held -- so he stops saying he is being held while he sits there.
+TEST(Held, ParkedUprightIsNotHeldHoweverLongHeSits) {
+  Heard r = play(Gesture().still(1000).tilt(500, 0).still(20000));
+  EXPECT_EQ(r.count(stim::picked_up), 1);
+  EXPECT_EQ(r.at(locus::held), 0.0) << "a stand is not a hand";
+}
+
+// A hand is never that still: a grip shifting every couple of seconds is
+// disturbance enough, and he stays held the whole time.
+TEST(Held, AHandThatKeepsShiftingItsGripIsStillHoldingHim) {
+  Gesture g = Gesture().still(1000).tilt(500, 0);
+  for (int i = 0; i < 10; ++i) g.still(1900).jolt(300);
+  Heard r = play(g);
+  EXPECT_EQ(r.at(locus::held), 1.0);
+}
+
 TEST(Held, ABriefTiltIsNotAPickUp) {
   EXPECT_EQ(play(Gesture().still(1000).tilt(600, 0).still(300).right().still(1000)).count(stim::picked_up), 0);
 }
@@ -295,6 +313,24 @@ TEST(Hang, OneHangPerHangAndAHangAgainAfterRighting) {
   g.still(2000).inverted(true).still(3500).inverted(false).still(700).inverted(true).still(1500);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::hang), 2);
+}
+
+// Small hands wobble. A hang that drains instead of resetting still lands:
+// half a second upside down, a brief righting, and the rest of the second
+// is enough -- where a strict dwell would have started over twice.
+TEST(Hang, AWobblyHangStillLandsWithoutStartingOver) {
+  Gesture g;
+  g.still(2000).inverted(true).still(500).inverted(false).still(150).inverted(true).still(800);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 1);
+}
+
+// A jolt mid-hang pauses the ask rather than erasing it.
+TEST(Hang, AJoltPausesAHangInsteadOfErasingIt) {
+  Gesture g;
+  g.still(2000).inverted(true).still(600).pose(0, 0, 1400).still(400).pose(0, 0, 1000).still(400);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 1);
 }
 
 // A badge swung or tossed through upside down is off 1 g while it moves:

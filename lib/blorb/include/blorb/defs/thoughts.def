@@ -33,7 +33,7 @@ BLORB_THOUGHT(12, ancestor_fear,  none,   ancestor_fear, 6, 1200, "GEN # WAS SCA
 BLORB_THOUGHT(13, inherited,      none,   heirloom,      1, 1800, "GEN # SAYS HI. FROM IN HERE.")
 BLORB_THOUGHT(14, counted,        none,   bored,         3,  900, "I HAVE COUNTED THE DISH: ONE")
 BLORB_THOUGHT(15, marble_knows,   none,   chasing,       2, 3600, "THE MARBLE KNOWS WHAT IT DID")
-BLORB_THOUGHT(16, put_me_down,    none,   held,          5,  600, "PUT ME DOWN. NO, WAIT.")
+BLORB_THOUGHT(16, put_me_down,    none,   held,          3, 1800, "PUT ME DOWN. NO, WAIT.")
 BLORB_THOUGHT(17, warm_hands,     none,   cradled,       5,  600, "WARM HANDS. ACCEPTABLE.")
 BLORB_THOUGHT(18, sky_down,       none,   upside_down,   7,  300, "WHY IS THE SKY DOWN THERE")
 BLORB_THOUGHT(19, heavy_eyes,     none,   drowsy,        3,  600, "EYES... HEAVY...")

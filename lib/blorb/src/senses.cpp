@@ -10,8 +10,10 @@ constexpr uint32_t kShakeRearmMs = 600;            // SHAKE_REARM_MS
 constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
-constexpr uint32_t kHangHoldMs = 1000;             // upside down this long, on top of orient.h's 600 ms settle, is a kid asking for a fight
-constexpr uint32_t kHangRearmMs = 500;             // righted this long before a hang can fire again
+constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
+constexpr uint32_t kHangRearmProgressMs = 200;     // progress must drain to here before another hang can fire
+constexpr uint32_t kParkedAfterMs = 15000;         // upright and undisturbed this long: he is parked (a stand, a shelf), not held
+constexpr int32_t kParkedDeltaMg = 30;             // one sample's gravity moving less than this is no disturbance at all
 constexpr int32_t kSteadyMg = 250;                 // TILT_MAX_SHAKE_G: further off 1 g is a jolt, not gravity
 constexpr uint32_t kKnockGapMs = 400;
 
@@ -275,7 +277,20 @@ void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   bool tilted = int32_t(s.ax) * s.ax + int32_t(s.ay) * s.ay > kHeldTiltMg * kHeldTiltMg;
   if (settle(tilted, held_, heldSince_, ms, kHeldOnMs, kHeldOffMs)) out.fire(held_ ? stim::picked_up : stim::put_down);
-  out.set(locus::held, flag(held_));
+  // Upright is a pose, not a pair of hands. A badge propped in a stand or on
+  // a shelf sits upright and undisturbed for minutes, and he should not
+  // spend that time feeling held (and saying so): only a disturbance -- a
+  // grip shifting, a step, a bump -- says hands are on him, and fifteen
+  // undisturbed seconds say they are not, whatever his tilt. The stimulus
+  // edges above keep their old meaning; only the locus learns this.
+  const int32_t dx = s.ax - prevX_, dy = s.ay - prevY_, dz = s.az - prevZ_;
+  const int32_t delta = dx < 0 ? -dx : dx, dyv = dy < 0 ? -dy : dy, dzv = dz < 0 ? -dz : dz;
+  const int32_t worst = delta > dyv ? (delta > dzv ? delta : dzv) : (dyv > dzv ? dyv : dzv);
+  if (!primed_ || worst > kParkedDeltaMg) lastDisturb_ = ms;
+  primed_ = true;
+  prevX_ = s.ax, prevY_ = s.ay, prevZ_ = s.az;
+  const bool parked = ms - lastDisturb_ >= kParkedAfterMs;
+  out.set(locus::held, flag(held_ && !parked));
 
   bool still = held_ && s.az > 0 && absMg(magnitudeMg(s) - kOneG) <= kStillMg;
   if (!still) {
@@ -290,15 +305,27 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 }
 
 // The pose is the shell's word (BodySample::invertedDown); this only gives
-// it timing and a steady hand. A badge swung through upside down on its way
-// somewhere, tossed, or dropped never fires: the turn must be held, at rest
-// near 1 g, for the whole dwell. One fire per hang (settle's edge), and the
-// hanging locus follows the pose itself, so a screen can show it landing
-// before the dwell completes.
+// it timing and intent. A badge swung through upside down on its way
+// somewhere, tossed, or dropped never fires: it is off 1 g while it moves,
+// and those samples only pause him. The rest accumulate, a righting drains
+// them twice as fast, and the hanging locus is the progress itself, so a
+// screen can show the ask filling up before it lands.
 void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  const uint32_t dt = primed_ ? (ms - lastMs_ > 100 ? 100 : ms - lastMs_) : 0;
+  primed_ = true;
+  lastMs_ = ms;
   const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
-  out.set(locus::hanging, flag(s.invertedDown && steady));
-  if (settle(s.invertedDown && steady, hung_, since_, ms, kHangHoldMs, kHangRearmMs) && hung_) out.fire(stim::hang);
+  if (s.invertedDown && steady) {
+    progress_ = progress_ + dt > kHangHoldMs ? kHangHoldMs : progress_ + dt;
+  } else if (!s.invertedDown) {
+    progress_ = progress_ > 2 * dt ? progress_ - 2 * dt : 0;
+  }
+  if (!hung_ && progress_ >= kHangHoldMs) {
+    hung_ = true;
+    out.fire(stim::hang);
+  }
+  if (hung_ && progress_ <= kHangRearmProgressMs) hung_ = false;
+  out.set(locus::hanging, Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)));
 }
 
 // A knuckle lands in a few milliseconds, on one 50 Hz sample at most. A
