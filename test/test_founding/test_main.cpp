@@ -68,7 +68,7 @@ Dish bootGift(MemStorage& store) {
 
 // ---- the table ------------------------------------------------------------------------------------
 
-TEST(Table, TheNineDevicesHoldTheNineSpeciesOnceEach) {
+TEST(Table, NineAssignedDevicesKeepTheirSpeciesOnceEach) {
   const struct { uint8_t m4, m5; const char* species; } kDevices[] = {
       {0x23, 0x7c, "grungo"}, {0x1b, 0x3c, "mossby"}, {0x1b, 0x44, "puffkin"},
       {0x1b, 0x34, "gilly"},  {0x1c, 0xb0, "mothwick"}, {0x1b, 0x30, "mudge"},
@@ -83,8 +83,8 @@ TEST(Table, TheNineDevicesHoldTheNineSpeciesOnceEach) {
     species.insert(tableSpecies(mac)->v);
     macs.insert(std::vector<uint8_t>(mac, mac + 6));
   }
-  EXPECT_EQ(species.size(), kSpeciesCount) << "every species exactly once";
-  EXPECT_EQ(macs.size(), kSpeciesCount) << "no MAC twice";
+  EXPECT_EQ(species.size(), 9u) << "the nine assigned devices each have a stable species";
+  EXPECT_EQ(macs.size(), 9u) << "no MAC twice";
 }
 
 TEST(Table, AnyOtherBoardIsAGrungo) {
@@ -203,7 +203,7 @@ TEST(Pin, OffGivesTheTableBackAndDeletesNothing) {
 }
 
 TEST(Pin, ANameOrNumberWithNoRowIsRefusedAndWritesNothing) {
-  for (const char* bad : {"grungus", "9", "255", "-1", ""}) {
+  for (const char* bad : {"grungus", "10", "255", "-1", ""}) {
     MemStorage store;
     EXPECT_NE(debugverbs::found(store, bad), nullptr) << "'" << bad << "'";
     EXPECT_TRUE(store.files.empty()) << "'" << bad << "'";
@@ -213,7 +213,7 @@ TEST(Pin, ANameOrNumberWithNoRowIsRefusedAndWritesNothing) {
 TEST(Pin, AnythingButAWholePinIsNoPin) {
   const std::vector<uint8_t> good{'B', 'F', 'P', 'N', 1, 3};
   std::vector<std::vector<uint8_t>> bad{{}, {'B', 'F', 'P', 'N', 1}, {'B', 'F', 'P', 'X', 1, 3},
-                                        {'B', 'F', 'P', 'N', 2, 3}, {'B', 'F', 'P', 'N', 1, 9},
+                                        {'B', 'F', 'P', 'N', 2, 3}, {'B', 'F', 'P', 'N', 1, 10},
                                         {'B', 'F', 'P', 'N', 1, 3, 0}};
   MemStorage store;
   store.files["found.pin"] = good;

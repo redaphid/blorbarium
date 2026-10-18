@@ -105,9 +105,9 @@ TEST(Gift, GrungosStarterIsTheOldStarterRetunedPlusTheSpeciesGenes) {
   }
 }
 
-// ---- the nine ----------------------------------------------------------------------------
+// ---- registered species -----------------------------------------------------------------
 
-TEST(Starters, NineAreViableAndEachExpressesItsOwnSpeciesPowerAndKnack) {
+TEST(Starters, EverySpeciesIsViableAndExpressesItsOwnPowerAndKnack) {
   std::set<uint32_t> hashes;
   for (const SpeciesInfo& row : SPECIES) {
     Genome g = starterGenomeOf(row.id, 7);
@@ -217,11 +217,8 @@ TEST(Express, WarPaintWaitsForTheSlayerFeat) {
 
 TEST(Mutation, TenThousandMutationsNeverMoveASpeciesOrPowerByte) {
   Rng rng = Rng::seeded(2026);
-  Genome line[kSpeciesCount] = {starterGenomeOf(SpeciesId{0}, 1), starterGenomeOf(SpeciesId{1}, 1),
-                                starterGenomeOf(SpeciesId{2}, 1), starterGenomeOf(SpeciesId{3}, 1),
-                                starterGenomeOf(SpeciesId{4}, 1), starterGenomeOf(SpeciesId{5}, 1),
-                                starterGenomeOf(SpeciesId{6}, 1), starterGenomeOf(SpeciesId{7}, 1),
-                                starterGenomeOf(SpeciesId{8}, 1)};
+  Genome line[kSpeciesCount]{};
+  for (size_t s = 0; s < kSpeciesCount; ++s) line[s] = starterGenomeOf(SpeciesId{uint8_t(s)}, 1);
   // Every other round a harsh policy, so dup, del, sleep and wild rerolls are all tried on every gene.
   const MutationPolicy harsh{Fx::ratio(1, 2), Fx::ratio(1, 4), Fx::ratio(1, 4), Fx::one(), Fx::ratio(1, 4),
                              Fx::one(), 0, Fx::one(), 8, 0};

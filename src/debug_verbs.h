@@ -61,7 +61,7 @@ inline const char* found(blorb::Storage& store, const char* arg) {
   if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";
   if (!std::strcmp(arg, "off")) return blorb::clearFoundPin(store) ? nullptr : "found.pin would not move aside";
   blorb::SpeciesId s;
-  if (!speciesByName(arg, s) || s.v >= blorb::kSpeciesCount) return "not a species.def name or 0..8";
+  if (!speciesByName(arg, s) || s.v >= blorb::kSpeciesCount) return "not a registered species.def name or id";
   return blorb::writeFoundPin(store, s) ? nullptr : "found.pin was not written";
 }
 

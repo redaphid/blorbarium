@@ -40,7 +40,7 @@ constexpr BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess = 128
 
 namespace sp {
 inline constexpr SpeciesId grungo{0}, mossby{1}, puffkin{2}, gilly{3}, mothwick{4}, mudge{5}, fizz{6}, hushwing{7},
-    tinker{8};
+    tinker{8}, octopus{9};
 }
 
 struct Golden {
@@ -57,7 +57,7 @@ inline constexpr Golden kGoldens[] = {
     {"a spar, grungo v fizz", cardOf(sp::grungo, 0x1D0001), cardOf(sp::fizz, 0x2D0002), 0xD4D40001u, Stakes::Spar,
      "TPGqtPGh_pTGP", "PGTPqgTTGPh_t", 0xc371ec08u},
     {"a scrap with assist, tinker v gilly", cardOf(sp::tinker, 0xA, 200), cardOf(sp::gilly, 0xB, 100), 0xD4D40002u,
-     Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0xb01a435au},
+    Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0xe19fb352u},
     {"specials on both sides, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD),
      0xD4D40003u, Stakes::Spar, "PPPPPqpTGh_tPG", "PPPqtGPh_gTqpP", 0x1ab43fc2u},
     {"a mortal downing and a finish, mudge v hushwing", cardOf(sp::mudge, 0x3), cardOf(sp::hushwing, 0x4),

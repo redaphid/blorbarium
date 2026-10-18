@@ -300,7 +300,7 @@ class DuelSession {
     uint8_t nextChunk = 0;
     std::vector<uint8_t> theirGenome;           // up to kMaxGenomeBytes, only while swapping (PSRAM on the board)
   };
-  std::variant<Closed, Lobby, Battle, Farewell> state_;
+  std::variant<Closed, Lobby, Battle, Farewell> state_{Closed{}};
   DuelSetup setup_{};
   PeerAddr self_{};
   int8_t aim_ = -1;

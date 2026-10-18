@@ -251,7 +251,7 @@ bool wheelHolds(const BalanceReport& r) {
 // heavy special winding up two turns as the design says (the committed probe
 // lands a heavy after one; BATTLES.md, "Measured through resolve()"). The
 // tournament must land within 30 permille of each.
-inline constexpr uint16_t kProbePermille[kSpeciesCount] = {465, 501, 557, 492, 460, 483, 532, 509, 502};
+inline constexpr uint16_t kProbePermille[kSpeciesCount] = {465, 501, 557, 492, 460, 483, 532, 509, 502, 506};
 
 void printWheel(const char* label, const BalanceReport& r) {
   std::printf("%s, %u a pair: median %u turns, worst pair %s over %s %u\n  ", label, r.perPair, r.medianTurns,

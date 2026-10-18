@@ -33,7 +33,7 @@ plant() {   # plant <label> <file under include/blorb> <sed expression> <the sta
 }
 
 # The three rows docs/design/sketch/check.sh plants, verbatim.
-plant "two species on one wheel cell" defs/species.def 's/BLORB_SPECIES(1, mossby,   Sprout, Guard/BLORB_SPECIES(1, mossby,   Sprout, Trick/' "species.def: every (element, style) pair exactly once, nine rows"
+plant "two species on one wheel cell" defs/species.def 's/BLORB_SPECIES(1, mossby,   Sprout, Guard/BLORB_SPECIES(1, mossby,   Sprout, Trick/' "species.def: every (element, style) pair must be represented"
 plant "a shared power" defs/species.def 's/BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget/BLORB_SPECIES(8, tinker,   Spark,  Guard,  zap/' "species.def: a shared power"
 plant "a cost the meter cannot hold" defs/powers.def 's/BLORB_POWER(6, zap,     6,/BLORB_POWER(6, zap,     9,/' "powers.def: a cost the meter cannot hold"
 

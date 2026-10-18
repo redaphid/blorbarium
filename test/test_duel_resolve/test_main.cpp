@@ -338,6 +338,19 @@ TEST(Powers, HushWhiffsTheNextSpecialAndCancelsTheNextLostClash) {
   EXPECT_EQ(clash.turns[8].hit[0], 1) << "worn off";
 }
 
+TEST(Powers, BlackBellUsesItsTwoTurnHush) {
+  const BattleCard octopus = cardOf(sp::octopus, 1), puffkin = cardOf(sp::puffkin, 2);
+  const Outcome whiff = play(octopus, puffkin, "PPPPPqpP", "PPPPPPqp");
+  ASSERT_EQ(whiff.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(whiff.turns[7].special[1], TurnReport::Special::Whiffed);
+  EXPECT_EQ(whiff.turns[7].hit[0], 0);
+  const Outcome clash = play(octopus, puffkin, "PPPPPqpGG", "PPPPPPTTT");
+  ASSERT_EQ(clash.turns[6].special[0], TurnReport::Special::Landed);
+  EXPECT_EQ(clash.turns[7].hit[0], 0);
+  EXPECT_TRUE(clash.turns[7].blocked[0]);
+  EXPECT_EQ(clash.turns[8].hit[0], 1) << "the Black Bell's hush has worn off";
+}
+
 TEST(Powers, LanternDazzlesTheFriendNextTurn) {
   const BattleCard mothwick = cardOf(sp::mothwick, 1), fizz = cardOf(sp::fizz, 2);
   int landed = 0;
