@@ -12,7 +12,20 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
-## Where things stand (2026-10-15, owner on a plane with all 9 badges)
+## Where things stand (2026-10-18)
+
+**Firmware 0.7.10 is committed but NOT released**: the OTA signing key is on
+the Windows desk machine, not the Linux laptop this was done on. To ship it,
+on the desk machine: `git pull`, then
+`uv run --with cryptography python tools/ota_release.py release`, commit the
+manifest, deploy the site. 0.7.10 = 0.7.9 + fight mode pairing in a crowded
+room (a badge who hears nobody no longer blocks every fight) + serial soak
+verbs. Build with the pinned `espressif32@6.9.0` only: an unpinned Linux
+build sealed both test badges. Two open readiness lockouts with no button
+(too sleepy to wake; three losses want a cuddle) are owner decisions. All in
+`docs/notes/fight-soak-2026-10-18.md`.
+
+## Where things stood (2026-10-15, owner on a plane with all 9 badges)
 
 **Live:** firmware **0.7.6** (manifest db3c011, firmware 987ae02): every BOOT
 press and fight ask is logged with its gate on serial (`[diag]`) and the
