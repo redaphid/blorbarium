@@ -520,6 +520,7 @@ void cmd_time(Dish& dish, const Request& req, Reply& r) {
   std::optional<uint32_t> unix = a.number(UINT32_MAX);
   std::optional<int32_t> tz = a.done() ? std::optional<int32_t>(0) : a.signedNumber(-12 * 60, 14 * 60);
   if (!unix || !tz || !a.done()) return r.err(400, "BAD_ARGS");
+  if (*unix < TimeSource::kPlausible) return r.err(416, "OUT_OF_RANGE");
   dish.phoneTime().set(*unix);
   dish.checkWall();
   // After any catch-up the pet tick stands for this wall time, so the day snaps here.

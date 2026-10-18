@@ -50,9 +50,13 @@ struct Box {
   uint32_t ms = 0;
   uint32_t seed = 7;
 
+  bool hatchNeedsPhone = false;
+
   explicit Box(Genome g = quickEgg()) : founder(std::move(g)) { rtc.poweredMs = &ms; }
   Dish& boot() {
-    dish.emplace(store, seed, kLineage, DishOptions{&rtc, &founder});
+    DishOptions o{&rtc, &founder};
+    o.hatchNeedsPhone = hatchNeedsPhone;
+    dish.emplace(store, seed, kLineage, o);
     ms = 0;
     dish->tick(ms, link);
     return *dish;
@@ -588,6 +592,24 @@ TEST(CatchUp, WithNoSourceNothingIsCaughtUpUntilThePhoneGivesTheTime) {
   EXPECT_TRUE(box.dish->timeKnown());
 }
 
+TEST(CatchUp, ATimeFromBeforeAnyRealClockIsRefusedAndLivesNothing) {
+  Box box;
+  box.rtc.atBoot = kWall0;
+  box.boot();
+  box.hatch();
+  box.dish->flush();
+  const uint32_t anchorWall = *box.dish->wallNow();
+  ScriptedLink phone;
+  phone.inbound = {"#1 TIME 0", "#2 TIME 1704067199 60"};
+  box.dish->tick(box.ms, phone);
+  box.dish->tick(box.ms, phone);
+  ASSERT_EQ(phone.sent.size(), 2u);
+  EXPECT_EQ(phone.sent[0], "#1 ERR 416 OUT_OF_RANGE");
+  EXPECT_EQ(phone.sent[1], "#2 ERR 416 OUT_OF_RANGE") << "a second before 2024 is still no clock";
+  EXPECT_EQ(box.dish->lastCatchUp().ticks, 0u) << "a nonsense time was lived as a gap";
+  EXPECT_LT(*box.dish->wallNow() - anchorWall, 10u) << "the anchor moved to the nonsense";
+}
+
 TEST(CatchUp, AnEggIncubatesThroughTheGapAndHatches) {
   Box box(starterGenome(7));
   box.rtc.atBoot = kWall0;
@@ -597,6 +619,20 @@ TEST(CatchUp, AnEggIncubatesThroughTheGapAndHatches) {
   box.boot();
   ASSERT_TRUE(std::holds_alternative<Creature>(box.dish->occupant()));
   EXPECT_GE(box.creature().stats().ageTicks, uint32_t(85 * kTicksPerMinute)) << "hatched at 30 minutes, then lived";
+}
+
+TEST(CatchUp, AnEggNobodyAdoptedWaitsOutTheGapUnhatched) {
+  Box box(starterGenome(7));
+  box.hatchNeedsPhone = true;
+  box.rtc.atBoot = kWall0;
+  box.boot();
+  ASSERT_TRUE(std::holds_alternative<Egg>(box.dish->occupant()));
+  const Fx before = std::get<Egg>(box.dish->occupant()).progress();
+  box.unplugFor(2 * 3600);
+  box.boot();
+  ASSERT_TRUE(std::holds_alternative<Egg>(box.dish->occupant())) << "the gap hatched an egg the page never adopted";
+  EXPECT_EQ(std::get<Egg>(box.dish->occupant()).progress(), before) << "nor did it incubate";
+  EXPECT_GT(box.dish->lastCatchUp().ticks, 0u) << "the clock still caught up";
 }
 
 TEST(CatchUp, AnAbsenceLongerThanTheCapIsClampedAndRecorded) {

@@ -127,7 +127,8 @@ die), snaps the pet's day and night to the real day, and saves at once.
 it is at most 12 hours however long the gap. `away` is the whole unpowered
 gap in seconds, 0 when there was none. `hurt=1` means the gap was three weeks
 or more: he woke starving and injured, and needs feeding now.
-A bad number or tz is `#7 ERR 400 BAD_ARGS`.
+A bad number or tz is `#7 ERR 400 BAD_ARGS`; a time before 2024 is
+`#7 ERR 416 OUT_OF_RANGE` and changes nothing.
 
 TIME also gives his thoughts the owner's local time: until the board is next
 unplugged, some lines know the hour, the morning, late night, Monday, the

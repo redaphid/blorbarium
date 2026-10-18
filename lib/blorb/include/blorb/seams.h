@@ -32,6 +32,10 @@ class Storage {
 // deep sleep plus the time slept.
 class TimeSource {
  public:
+  // 2024-01-01. A wall reading before it was never set: an unset clock, or a
+  // phone that sent nonsense. Nothing believes one, so it is never a gap he lives.
+  static constexpr uint32_t kPlausible = 1704067200;
+
   virtual ~TimeSource() = default;
   virtual std::optional<uint32_t> unixSeconds() = 0;
 };

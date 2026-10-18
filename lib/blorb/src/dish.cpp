@@ -522,7 +522,7 @@ void Dish::welcomePhone() {
 
 // Nobody is there: no gestures, no feeding, no brain. The chemistry runs
 // coarse, stages express as their loci fire, the pantry refills, and a death
-// takes the normal path. An egg incubates and hatches; a clutch's vigil runs
+// takes the normal path. An egg incubates and hatches, once adopted; a clutch's vigil runs
 // to its end and the choice waits for the owner.
 void Dish::catchUp(uint32_t ticks) {
   if (sealed()) return;
@@ -540,7 +540,7 @@ void Dish::catchUp(uint32_t ticks) {
       if (c->dead()) onDeath(*c);
     } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
       bool ready = false;
-      uint32_t i = 0;
+      uint32_t i = hatchWaits() ? n : 0;   // an egg nobody adopted holds still through a gap as through a tick
       while (i < n && !ready) {
         ready = e->tick(SenseOut{});
         ++i;

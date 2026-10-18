@@ -10,7 +10,6 @@ namespace debugble {
 namespace {
 
 constexpr size_t kMaxLine = 200;
-constexpr uint32_t kPlausibleWall = 1704067200;   // 2024-01-01: hw::SystemClock reads anything earlier as unset
 constexpr size_t kMaxChems = 8;
 const char* const kPhases[] = {"egg", "creature", "clutch"};
 const char* const kStages[] = {"baby", "child", "adult", "elder"};
@@ -241,7 +240,7 @@ void verb_wall(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   const std::optional<uint32_t> unix = a.number(UINT32_MAX);
   const std::optional<int32_t> tz = a.done() ? std::optional<int32_t>(0) : a.signedNumber(-12 * 60, 14 * 60);
   if (!unix || !tz || !a.done()) return r.err(400, "BAD_ARGS");
-  if (*unix < kPlausibleWall) return r.err(416, "OUT_OF_RANGE");
+  if (*unix < blorb::TimeSource::kPlausible) return r.err(416, "OUT_OF_RANGE");
   // Forgotten first, so the new time is an anchor and not a gap he lives through.
   c.board.setClock(*unix);
   c.dish.forgetWall();

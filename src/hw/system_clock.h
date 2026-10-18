@@ -14,7 +14,7 @@ namespace hw {
 
 class SystemClock : public blorb::TimeSource {
  public:
-  static constexpr time_t kPlausible = 1704067200;   // 2024-01-01: anything earlier was never set
+  static constexpr time_t kPlausible = blorb::TimeSource::kPlausible;
 
   static bool isSet() { return time(nullptr) >= kPlausible; }
   static void set(uint32_t unixSeconds) {

@@ -13,3 +13,4 @@ pet_backups/
 .soak/*.log
 .soak/
 .jobs/
+*.gcov
