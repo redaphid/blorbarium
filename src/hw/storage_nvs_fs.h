@@ -215,8 +215,17 @@ class NvsFsStorage : public blorb::Storage {
     const bool whole = len == 0 || std::fwrite(data, 1, len, f) == len;
     return std::fclose(f) == 0 && whole;
   }
+  // rescue/ is made on its first use, by a rename or by a torn slot moved into it.
+  static void makeParent(const char* name) {
+    if (const char* slash = std::strrchr(name, '/')) {
+      char dir[80];
+      std::snprintf(dir, sizeof dir, "%s/%.*s", kRoot, int(slash - name), name);
+      mkdir(dir, 0775);   // EEXIST is the usual answer
+    }
+  }
   bool putFile(const char* name, const uint8_t* data, size_t len) {
     if (!filesWrite_) return false;
+    makeParent(name);
     char tmp[80];
     std::snprintf(tmp, sizeof tmp, "%s/%s.tmp", kRoot, name);
     return writeAll(tmp, "wb", data, len) && std::rename(tmp, Path(name).s) == 0;   // LittleFS replaces atomically
@@ -226,11 +235,7 @@ class NvsFsStorage : public blorb::Storage {
   }
   bool renameFile(const char* from, const char* to) {
     if (!filesWrite_) return false;
-    if (const char* slash = std::strrchr(to, '/')) {
-      char dir[80];
-      std::snprintf(dir, sizeof dir, "%s/%.*s", kRoot, int(slash - to), to);
-      mkdir(dir, 0775);   // EEXIST is the usual answer
-    }
+    makeParent(to);
     return std::rename(Path(from).s, Path(to).s) == 0;
   }
 
