@@ -128,6 +128,7 @@ class DishDuel {
   Refusal refusal_;
   std::optional<uint32_t> heldPress_;
   std::optional<uint32_t> pendingSince_;
+  std::optional<uint32_t> declinedAt_;   // the last tick the radio said no while he declined
   uint32_t lastTry_ = 0;
   DiagLines diag_;
   char lastGate_[40] = "none";

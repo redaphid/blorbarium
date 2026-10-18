@@ -1,6 +1,7 @@
 #include "blorb/dish_duel.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include "blorb/friend_egg.h"
 #include "blorb/genes.h"
@@ -235,16 +236,29 @@ bool DishDuel::ask(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, uint6
   }
   if (asked && !tryOpen) report(true, askedHang, ctx, bootContextName(ctx), "refused");
   if (!tryOpen) return false;
+  if (!air) {
+    // A board with no duel radio: the ask only shakes his head. No update
+    // will ever free a radio it does not have, so nothing waits.
+    refusal_ = Refusal{Decline::None, tick, true};
+    report(asked, askedHang, ctx, "no_radio", "refused");
+    return false;
+  }
   lastTry_ = tick;
   const bool retry = pendingSince_.has_value();
-  if (!air || !open(o, lineage, *air, lineageId, petDay, tick, out)) {
+  if (!open(o, lineage, *air, lineageId, petDay, tick, out)) {
     // The radio said no with the pet ready: an update holds it. Ask again each second.
-    if (!air || refusal_.why == Decline::None) {
-      if (!retry) report(asked, askedHang, ctx, air ? air->refusal() : "no_radio", "waiting");
+    if (refusal_.why == Decline::None) {
+      if (!retry) report(asked, askedHang, ctx, air->refusal(), "waiting");
       if (!pendingSince_) pendingSince_ = tick;
       refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
     } else {
-      report(asked, askedHang, ctx, "no_pet", "refused");
+      // Not ready himself (a cuddle owed, a rest): fight mode asks again by
+      // itself every tick, so a run of the same refusal is said once.
+      char gate[32];
+      gateOf(o, refusal_.why, tick, gate);
+      const bool running = declinedAt_ && tick - *declinedAt_ <= 1 && std::strcmp(gate, lastGate_) == 0;
+      declinedAt_ = tick;
+      if (asked || !running) report(asked, askedHang, ctx, gate, "refused");
     }
     return false;
   }

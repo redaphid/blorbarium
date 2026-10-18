@@ -641,7 +641,9 @@ TEST(FightAsk, AWaitingAskIsAskedAgainByTheBadgeItself) {
 
 // A board with no duel radio still hears the ask: it says why once, asks
 // again quietly each second, and gives up after the wait's ten minutes.
-TEST(FightAsk, ABoardWithNoRadioSaysSoOnceAndGivesUp) {
+// A board with no duel radio: the ask shakes his head and nothing waits,
+// since no update will ever free a radio it does not have.
+TEST(FightAsk, ABoardWithNoRadioOnlyShakesHisHead) {
   Ether ether(9, {});
   Device a(ether, 1);
   const Genome ga = starterGenomeOf(kGrungo, 11);
@@ -651,14 +653,11 @@ TEST(FightAsk, ABoardWithNoRadioSaysSoOnceAndGivesUp) {
   doublePress(a);
   idle(a, 30);
   std::vector<std::string> l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=no_radio result=waiting")) << joined(l);
-  EXPECT_EQ(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("waiting") != std::string::npos; }), 1)
-      << "asked again each second, logged once: " << joined(l);
-  EXPECT_STREQ(a.dish->fightState(), "waiting");
-  idle(a, int(DishDuel::kPendingTicks));
-  l = diags(a);
-  EXPECT_TRUE(has(l, "gate=gave_up result=off")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=no_radio result=refused")) << joined(l);
+  EXPECT_FALSE(has(l, "waiting")) << joined(l);
   EXPECT_STREQ(a.dish->fightState(), "off");
+  EXPECT_TRUE(a.dish->duelRefusal().any) << "the head shake";
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::None) << "no update is finishing on a board with no radio";
   EXPECT_FALSE(a.dish->duelActive());
 }
 
@@ -688,6 +687,9 @@ TEST(FightAsk, APetWhoWantsACuddleIsRefusedNotKeptWaitingWhenTheRadioIsHeld) {
   const std::vector<std::string> l = diags(a);
   EXPECT_TRUE(has(l, "result=refused")) << joined(l);
   EXPECT_FALSE(has(l, "waiting")) << joined(l);
+  EXPECT_FALSE(has(l, "gate=no_pet")) << "he is right there: " << joined(l);
+  EXPECT_LE(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("result=refused") != std::string::npos; }), 2)
+      << "fight mode asks every tick; the reason is said once: " << joined(l);
   EXPECT_FALSE(a.dish->duelActive());
   EXPECT_EQ(a.dish->appearance().declined, Decline::WantsACuddle) << "a hug, as a picture";
   EXPECT_NE(a.dish->appearance().noFight, NoFight::Updating);
