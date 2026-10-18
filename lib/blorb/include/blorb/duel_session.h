@@ -31,7 +31,8 @@ struct DuelTestAccess;   // test/support only
 
 // Proof that this device's own owner asked for a duel. Only DishDuel can make
 // one, and it does so in exactly one place: routing a body-sourced BOOT
-// double press (or v2's wheel row) while a creature lives. The Dish exposes
+// double press (or v2's wheel row, or a body-sourced hang: held upside down,
+// the same ask from a case that covers the button) while a creature lives. The Dish exposes
 // DishDuel to nobody but its own tick, so no protocol verb, twist or packet
 // can reach a line that makes one.
 class LocalConsent {
@@ -48,6 +49,7 @@ struct DuelInput {
   int8_t aim = -1;   // 0..3, or -1 level
   bool knock = false, doubleKnock = false, press = false, hold = false, doublePress = false;
   bool shake = false, cradle = false;
+  bool hang = false;   // held upside down 1 s: in the lobby it leaves, on the friends screen it searches again (the double press, without a button)
   bool lid = false, dropped = false;
   bool bootDown = false;   // the button's level: the Mortal confirm, the Finish and the hug are 3 s holds
   // `remote` is the stimuli a phone fired this tick (SenseOut::remote, unit D9):
@@ -62,7 +64,8 @@ struct DuelInput {
 // reach him (they also end the duel): those are never taken.
 constexpr uint64_t duelStimBit(StimId s) { return uint64_t(1) << s.v; }
 inline constexpr uint64_t kDuelCaptures = duelStimBit(stim::knock) | duelStimBit(stim::double_knock) |
-                                          duelStimBit(stim::button) | duelStimBit(stim::button_double);
+                                          duelStimBit(stim::button) | duelStimBit(stim::button_double) |
+                                          duelStimBit(stim::hang);
 inline constexpr uint64_t kHoldPhaseCaptures = kDuelCaptures | duelStimBit(stim::button_hold);
 static_assert((kHoldPhaseCaptures & (duelStimBit(stim::shake) | duelStimBit(stim::dropped) |
                                      duelStimBit(stim::lid_down) | duelStimBit(stim::cradle))) == 0,

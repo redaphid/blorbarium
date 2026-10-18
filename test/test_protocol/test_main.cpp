@@ -234,6 +234,20 @@ TEST(Twist, ThePhoneCannotDeliverPlainFood) {
   EXPECT_EQ(a.dish.hash(), b.dish.hash()) << "a refused feed changed nothing";
 }
 
+// Asking for a fight is body-only too: a hang is the kid's consent, made
+// with the badge in their hands, so a phone in range cannot ask for one.
+TEST(Twist, ThePhoneCannotAskForAFight) {
+  Rig a, b;
+  a.hatch();
+  b.hatch();
+  for (const char* stim : {"hang", "15"})
+    EXPECT_EQ(a.send(std::string("#1 TWIST stimulus ") + stim), (Lines{"#1 ERR 403 BODY_ONLY"})) << stim;
+  a.run(3000);
+  b.run(3000);
+  EXPECT_EQ(a.dish.hash(), b.dish.hash()) << "a refused ask changed nothing";
+  EXPECT_FALSE(a.dish.duelActive());
+}
+
 // A special treat is what body feeding cannot give: this one is the phone's
 // foresight, so he glows as if foreseeing, and it is no meal.
 TEST(Twist, AProphecyTreatMakesHimGlowAndDoesNotFeedHim) {

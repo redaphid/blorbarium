@@ -242,6 +242,27 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
     if (remote) out.fireRemote(stim::button);
     else out.fire(stim::button);
   }
+  // A hang is the double press's twin, never a press: it is not turned into
+  // a pellet here, and where a fight is refused it is refused in words, like
+  // a double press. Where a double press means OpenDuel (Awake, Asleep) a
+  // body hang stays in `out` for DishDuel to open with; everywhere else, and
+  // whenever a phone fired it, it leaves `out` here.
+  if (fired(out, stim::hang)) {
+    const bool remote = (out.remote & duelStimBit(stim::hang)) != 0;
+    if (!(m.doublePress == BootAct::OpenDuel && !remote)) {
+      if (!remote && !sealed()) {
+        if (ctx == BootContext::Egg) duel_.refuse(NoFight::Egg, tick_, nullptr, true);
+        else if (ctx == BootContext::FoundingNest || ctx == BootContext::ClutchPick)
+          duel_.refuse(NoFight::Nest, tick_, nullptr, true);
+        else if (ctx == BootContext::Vigil) duel_.refuse(NoFight::Remains, tick_, nullptr, true);
+      }
+      uint8_t kept = 0;
+      for (uint8_t i = 0; i < out.stimCount; ++i)
+        if (out.stimuli[i] != stim::hang) out.stimuli[kept++] = out.stimuli[i];
+      out.stimCount = kept;
+      out.remote &= ~duelStimBit(stim::hang);
+    }
+  }
   if ((m.press == BootAct::PeekEgg || m.press == BootAct::LayFlower) && fired(out, stim::button)) {
     echo_ = m.press;
     echoTick_ = tick_;

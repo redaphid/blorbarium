@@ -404,6 +404,21 @@ void doublePress(Device& d) {
 void idle(Device& d, int ticks) {
   for (int i = 0; i < ticks; ++i) d.dish->tick(d.ms += 100, d.link);
 }
+// Held upside down, sampled at 50 Hz: upright first (the detector's rearm),
+// then the pose steady past HangDetector's 1 s dwell, then the Dish ticks.
+void hang(Device& d) {
+  for (uint32_t t = 0; t < 700; t += 20) {
+    BodySample s;
+    s.az = 1000;
+    d.dish->sample(s, d.ms += 20);
+  }
+  for (uint32_t t = 0; t < 1300; t += 20) {
+    BodySample s;
+    s.az = 1000, s.invertedDown = true;
+    d.dish->sample(s, d.ms += 20);
+  }
+  d.dish->tick(d.ms, d.link);
+}
 }  // namespace
 
 // Every double press says what it did: fight mode, or why not, in words.
@@ -514,7 +529,7 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   std::vector<std::string> l = diags(egg);
   EXPECT_TRUE(has(l, "boot press ms=140 gap=none")) << joined(l);
   EXPECT_TRUE(has(l, "boot double ms=140 gap=200")) << joined(l);
-  EXPECT_TRUE(has(l, "fight double=1 ctx=egg gate=egg result=refused")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=egg gate=egg result=refused")) << joined(l);
   EXPECT_STREQ(egg.dish->fightState(), "off");
   EXPECT_STREQ(egg.dish->lastFightGate(), "egg");
 
@@ -525,7 +540,7 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   a.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
   doublePress(a);
   l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=1 ctx=awake gate=hungry:0.9")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=hungry:0.9")) << joined(l);
   EXPECT_TRUE(has(l, "result=entered")) << joined(l);
   EXPECT_STREQ(a.dish->fightState(), "searching");
 
@@ -537,14 +552,14 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   doublePress(b);
   idle(b, 30);
   l = diags(b);
-  EXPECT_TRUE(has(l, "fight double=1 ctx=awake gate=radio_closed result=waiting")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=radio_closed result=waiting")) << joined(l);
   EXPECT_EQ(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("waiting") != std::string::npos; }), 1)
       << "a retry each second logs once: " << joined(l);
   EXPECT_STREQ(b.dish->fightState(), "waiting");
   b.air.refuseOpen = false;
   idle(b, 15);
   l = diags(b);
-  EXPECT_TRUE(has(l, "fight double=0 ctx=awake gate=ok result=entered")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake gate=ok result=entered")) << joined(l);
   EXPECT_STREQ(b.dish->fightState(), "searching");
   EXPECT_STREQ(b.dish->lastFightGate(), "ok");
 }
@@ -565,14 +580,14 @@ TEST(FightAsk, ASleepingPetsAskSaysWokenOrTooSleepy) {
   diags(a);
   doublePress(a);
   std::vector<std::string> l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=1 ctx=asleep gate=asleep:sleepy:0.9")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=asleep gate=asleep:sleepy:0.9")) << joined(l);
   EXPECT_TRUE(has(l, "result=refused")) << joined(l);
   idle(a, 60);
   sleep(Fx::ratio(3, 10));
   diags(a);
   doublePress(a);
   l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=1 ctx=asleep gate=woken result=entered")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=asleep gate=woken result=entered")) << joined(l);
 }
 
 TEST(FightAsk, ASecondDoublePressTakesBackAWaitingAsk) {
@@ -589,6 +604,53 @@ TEST(FightAsk, ASecondDoublePressTakesBackAWaitingAsk) {
   idle(a, 30);
   EXPECT_FALSE(a.dish->duelActive());
   EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
+}
+
+// The double press's no-button twin: a case that covers BOOT cannot stop a
+// kid asking for a fight, and the ask is the same ask in every way that
+// matters (the same consent, the same refusals, the same log, with hang=1).
+TEST(FightAsk, AHangOpensFightModeAndAHangAgainLeavesIt) {
+  Ether ether(5, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  hang(a);
+  EXPECT_TRUE(a.dish->duelActive());
+  EXPECT_STREQ(a.dish->fightState(), "searching");
+  EXPECT_TRUE(a.dish->appearance().lobby) << "looking for a fight: the red ring's state";
+  std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=0 hang=1 ctx=awake gate=ok result=entered")) << joined(l);
+  hang(a);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_STREQ(a.dish->fightState(), "off");
+}
+
+TEST(FightAsk, AnEggIsToldNoForAHangToo) {
+  Ether ether(5, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.dish->occupant()));
+  hang(a);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Egg);
+  std::vector<std::string> l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=0 hang=1 ctx=egg gate=egg result=refused")) << joined(l);
+}
+
+// A hang the phone fired is not the body's ask: the debug link's FIRE marks
+// it remote, and no remote stimulus opens a duel (twists refuse hang too).
+TEST(FightAsk, APhoneFiredHangOpensNothing) {
+  Ether ether(5, {});
+  Device a(ether, 1);
+  const Genome ga = starterGenomeOf(kGrungo, 11);
+  a.boot(ga, 1);
+  a.growUp();
+  a.dish->fire(stim::hang);
+  idle(a, 5);
+  EXPECT_FALSE(a.dish->duelActive());
+  EXPECT_STREQ(a.dish->fightState(), "off");
 }
 
 TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {

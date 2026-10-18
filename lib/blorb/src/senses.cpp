@@ -10,6 +10,8 @@ constexpr uint32_t kShakeRearmMs = 600;            // SHAKE_REARM_MS
 constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
+constexpr uint32_t kHangHoldMs = 1000;             // upside down this long, on top of orient.h's 600 ms settle, is a kid asking for a fight
+constexpr uint32_t kHangRearmMs = 500;             // righted this long before a hang can fire again
 constexpr int32_t kSteadyMg = 250;                 // TILT_MAX_SHAKE_G: further off 1 g is a jolt, not gravity
 constexpr uint32_t kKnockGapMs = 400;
 
@@ -285,6 +287,18 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
     out.fire(stim::cradle);
   }
   out.set(locus::cradled, flag(cradled_));
+}
+
+// The pose is the shell's word (BodySample::invertedDown); this only gives
+// it timing and a steady hand. A badge swung through upside down on its way
+// somewhere, tossed, or dropped never fires: the turn must be held, at rest
+// near 1 g, for the whole dwell. One fire per hang (settle's edge), and the
+// hanging locus follows the pose itself, so a screen can show it landing
+// before the dwell completes.
+void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
+  out.set(locus::hanging, flag(s.invertedDown && steady));
+  if (settle(s.invertedDown && steady, hung_, since_, ms, kHangHoldMs, kHangRearmMs) && hung_) out.fire(stim::hang);
 }
 
 // A knuckle lands in a few milliseconds, on one 50 Hz sample at most. A

@@ -59,7 +59,8 @@ class DishDuel {
   void attach(Storage&);
 
   // One tick, after the detectors and before the occupant:
-  //  1 a body-sourced `button_double` while BOOT means OpenDuel: readiness(),
+  //  1 a body-sourced `button_double` (or `hang`: held upside down, the same
+  //    ask from a case that covers BOOT) while BOOT means OpenDuel: readiness(),
   //    then open with a LocalConsent (made here and nowhere else). A refusal
   //    shows its picture; a radio OTA holds shakes his head.
   //  2 session.tick, with DuelInput from what a detector fired only
@@ -81,13 +82,14 @@ class DishDuel {
   // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Mortal: every tier.
   void setDeviceCeiling(Stakes s) { deviceCeiling_ = s; }
 
-  // The last double press that did not open a duel, for the screen: why
-  // (Decline), or None when the radio was refused (an update holds it).
+  // The last ask that did not open a duel, for the screen: why (Decline), or
+  // None when the radio was refused (an update holds it). A double press and
+  // a hang share it; the log line says which one asked.
   struct Refusal { Decline why = Decline::None; uint32_t tick = 0; bool any = false; NoFight kind = NoFight::None; };
   const Refusal& refusal() const { return refusal_; }
-  // A double press where BOOT means no fight (an egg, the nest, the vigil):
-  // the Dish's routing says so, and the screen shows why.
-  void refuse(NoFight, uint32_t tick, const char* gate = nullptr);
+  // An ask where BOOT means no fight (an egg, the nest, the vigil): the Dish's
+  // routing says so, and the screen shows why.
+  void refuse(NoFight, uint32_t tick, const char* gate = nullptr, bool hang = false);
   bool searching() const { return session_.searching(); }
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out); }
   const char* lastGate() const { return lastGate_; }
@@ -121,8 +123,9 @@ class DishDuel {
   uint32_t lastTry_ = 0;
   DiagLines diag_;
   char lastGate_[40] = "none";
-  // One ask, for the debug link and STATUS: `double` 0 when fight mode opened by itself.
-  void report(bool asked, BootContext, const char* gate, const char* result);
+  // One ask, for the debug link and STATUS: `double` and `hang` say which
+  // gesture asked (0 for both when fight mode opened by itself).
+  void report(bool asked, bool hang, BootContext, const char* gate, const char* result);
   void gateOf(const Occupant&, Decline, uint32_t tick, char (&out)[32]) const;
   std::optional<Meeting> lastMet_;   // a press waiting to see if a second one follows
 };

@@ -63,6 +63,7 @@ class Gesture {
   Gesture& raw(const std::vector<BodySample>& v) { for (const BodySample& s : v) emit(s); return *this; }
   Gesture& temp(int16_t cx10) { rest_.tempCx10 = cx10; return *this; }
   Gesture& touch(bool down) { rest_.touchDown = down; return *this; }
+  Gesture& inverted(bool down) { rest_.invertedDown = down; return *this; }
   uint32_t now() const { return ms_; }
   const std::vector<Step>& steps() const { return steps_; }
 
@@ -271,6 +272,37 @@ TEST(Flip, AJoltWhileFaceDownIsNotARighting) {
   EXPECT_EQ(r.count(stim::flipped), 1);
   EXPECT_EQ(r.count(stim::righted), 0);
   EXPECT_EQ(r.at(locus::upside_down), 1.0);
+}
+
+// The shell says the pose (invertedDown: its settled rotation is 180); the
+// detector gives it a kid's intent: held, steady, for a full second.
+TEST(Hang, HeldUpsideDownForASecondIsAHang) {
+  Heard r = play(Gesture().still(2000).inverted(true).still(1500));
+  EXPECT_EQ(r.count(stim::hang), 1);
+  EXPECT_EQ(r.at(locus::hanging), 1.0);
+}
+
+TEST(Hang, AShortTurnUpsideDownIsNotAHang) {
+  Heard r = play(Gesture().still(2000).inverted(true).still(600).inverted(false).still(1000));
+  EXPECT_EQ(r.count(stim::hang), 0);
+  EXPECT_EQ(r.at(locus::hanging), 0.0);
+}
+
+// One hang per hang: staying upside down in the lobby he just opened never
+// asks again, and a second hang needs a righting first.
+TEST(Hang, OneHangPerHangAndAHangAgainAfterRighting) {
+  Gesture g;
+  g.still(2000).inverted(true).still(3500).inverted(false).still(700).inverted(true).still(1500);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 2);
+}
+
+// A badge swung or tossed through upside down is off 1 g while it moves:
+// the pose alone, unsteady, is no ask.
+TEST(Hang, AnUnsteadyUpsideDownIsNotAHang) {
+  Heard r = play(Gesture().still(2000).pose(0, 0, 1400).inverted(true).still(2000));
+  EXPECT_EQ(r.count(stim::hang), 0);
+  EXPECT_EQ(r.at(locus::hanging), 0.0);
 }
 
 // 300 ms in the air is a fall of 44 cm: a lap to a car's floor.

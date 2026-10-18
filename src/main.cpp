@@ -298,6 +298,10 @@ static void feel(const blorb::BodySample& body, uint32_t ms) {
   const uint8_t rot = up.sample(body, ms);
   if (rot != display.getRotation()) display.setRotation(rot);
   blorb::BodySample screen = up.toScreen(body);
+  // Held upside down is the one pose the turn into the screen's frame hides:
+  // the settled rotation is the only place it still exists, so it rides the
+  // sample as a level (BodySample::invertedDown) for HangDetector.
+  screen.invertedDown = rot == 2;
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown);
   dish->sample(screen, ms);

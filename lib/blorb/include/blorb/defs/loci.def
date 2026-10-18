@@ -27,6 +27,7 @@ BLORB_LOCUS( 17, cradled,      Sense, 1)
 BLORB_LOCUS( 18, pantry,       Sense, 0)
 BLORB_LOCUS( 19, foreseeing,   Sense, 0)  // written by the Foresee action; emitters turn it into vision
 BLORB_LOCUS( 20, touch,        Sense, 0)  // 1.46 only; never written on the 1.28
+BLORB_LOCUS( 21, hanging,      Sense, 0)  // held upside down now (the shell's settled rotation is 180); the pose, before HangDetector's dwell makes it a stimulus
 BLORB_LOCUS(128, become_child, Act,   0)
 BLORB_LOCUS(129, become_adult, Act,   0)
 BLORB_LOCUS(130, become_elder, Act,   0)

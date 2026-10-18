@@ -58,6 +58,7 @@ TwistStatus twist_stimulus(Dish& dish, Args& a) {
   const StimInfo* s = rowNamed(STIMULI, *w);
   if (!s) return TwistStatus::OutOfRange;
   if (s->id == stim::button || s->id == stim::fed) return TwistStatus::BodyOnly;   // a pellet, or the meal it gives
+  if (s->id == stim::hang) return TwistStatus::BodyOnly;   // a fight is the kid's ask, made with the body: a phone in range cannot ask for one
   dish.fire(s->id);
   return TwistStatus::Applied;
 }

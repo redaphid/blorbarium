@@ -57,6 +57,7 @@ DuelInput DuelInput::from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx til
     else if (s.v == stim::button.v) in.press = true;
     else if (s.v == stim::button_hold.v) in.hold = true;
     else if (s.v == stim::button_double.v) in.doublePress = true;
+    else if (s.v == stim::hang.v) in.hang = true;
     else if (s.v == stim::shake.v) in.shake = true;
     else if (s.v == stim::cradle.v) in.cradle = true;
     else if (s.v == stim::lid_down.v) in.lid = true;
@@ -139,7 +140,8 @@ void DuelSession::backToLobby(Air& air, uint32_t tick, EndReason why, bool goodb
 DuelEffects DuelSession::tick(Air& air, const DuelInput& in, uint32_t tick) {
   DuelEffects fx;
   if (!active()) return fx;
-  fx.captured = searching() ? duelStimBit(stim::button_double) | duelStimBit(stim::button_hold) : kHoldPhaseCaptures;
+  fx.captured = searching() ? duelStimBit(stim::button_double) | duelStimBit(stim::button_hold) | duelStimBit(stim::hang)
+                            : kHoldPhaseCaptures;
   aim_ = in.aim;
   if (auto* l = std::get_if<Lobby>(&state_)) lobbyTick(*l, air, in, tick, fx);
   else if (auto* b = std::get_if<Battle>(&state_)) battleTick(*b, air, in, tick, fx);
@@ -195,7 +197,7 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
     if (tick - l.seen[i].heardTick <= T::kLobbyForgetTicks) l.seen[kept++] = l.seen[i];
   l.count = kept;
 
-  if (in.doublePress) return closeWith(air, EndReason::Left, false);
+  if (in.doublePress || in.hang) return closeWith(air, EndReason::Left, false);
   // A pet resting after a fight holds the clock: the 5 min are for searching.
   if (setup_.decline == Decline::Resting) modeSince_ = tick;
   if (tick - modeSince_ >= T::kFightModeTicks) return closeWith(air, EndReason::LobbyTimeout, false);
@@ -675,9 +677,9 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
     }
   }
 
-  // Leaving the friends screen is a double press, back to searching; a lid,
-  // a drop or a knock never decides anything here.
-  if (in.doublePress) return backToLobby(air, tick, EndReason::Left, true, fx, true);
+  // Leaving the friends screen is a double press (or a hang, its no-button
+  // twin), back to searching; a lid, a drop or a knock never decides anything here.
+  if (in.doublePress || in.hang) return backToLobby(air, tick, EndReason::Left, true, fx, true);
   if (theyLeft) return backToLobby(air, tick, EndReason::Left, false, fx, true);
   if (in.press) f.iAsked = true;
   if (in.bootDown) {

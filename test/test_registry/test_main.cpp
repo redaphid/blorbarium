@@ -49,8 +49,8 @@ TEST(Tables, EachDerivedCountMatchesItsRows) {
   EXPECT_EQ(kReflexCount, 2u);
   EXPECT_EQ(kFeatureCount, 20u);
   EXPECT_EQ(countOf(CHEMICALS), 13u);
-  EXPECT_EQ(countOf(LOCI), 34u);
-  EXPECT_EQ(countOf(STIMULI), 38u);
+  EXPECT_EQ(countOf(LOCI), 35u);
+  EXPECT_EQ(countOf(STIMULI), 39u);
   EXPECT_EQ(countOf(POSES), 10u);
   EXPECT_EQ(countOf(EXPRESSIONS), 10u);
   EXPECT_EQ(countOf(CARES), 5u);
