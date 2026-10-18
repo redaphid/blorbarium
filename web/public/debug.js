@@ -10,7 +10,8 @@
 
   // From the dish's own tables (species.def, drives.def, chemicals.def,
   // stimuli.def), so the pickers offer real names; any other word still goes as typed.
-  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker"];
+  // The species are ota.js's, which the page loads first and a test holds to species.def.
+  const SPECIES = globalThis.BlorbOta ? globalThis.BlorbOta.SPECIES : [];
   const CHEMS = ["hunger", "sleepiness", "boredom", "loneliness", "fear", "pain", "discomfort", "need_touch",
     "life", "injury", "energy", "food", "adrenaline", "toxin", "warmth", "melatonin", "vision", "daze", "pluck", "mettle", "dread"];
   const STIMULI = ["knock", "double_knock", "shake", "picked_up", "put_down", "dropped", "flipped", "righted", "button",

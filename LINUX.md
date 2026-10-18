@@ -194,13 +194,24 @@ The sprite sources are committed under `pets/<species>/art/` (frames, masks,
 needs only the headers. To re-pack from the sources:
 
     python3 -m venv ~/pkvenv && ~/pkvenv/bin/pip install pillow numpy scipy
-    for p in grungo mossby puffkin gilly mothwick mudge fizz hushwing tinker; do
+    for p in grungo mossby puffkin gilly mothwick mudge fizz hushwing tinker octopus; do
       ~/pkvenv/bin/python tools/sprite_pack.py --pet $p
     done
     git status   # nothing changed: the packer writes the committed bytes
 
 This was checked on 2026-10-15 from a fresh clone of origin/main in WSL
 (Arch): all nine re-packed byte for byte, and `pio run -e badge128` built.
+
+## Run the tests without PlatformIO (optional)
+
+`pio test -e native` is the gate. On a machine that cannot reach the
+PlatformIO registry, the same suites build with the system compiler:
+
+    sudo apt install libgtest-dev libssl-dev gcovr
+    bash tools/host_test.sh            # every suite, [env:native]'s flags
+    bash tools/host_test.sh san        # under ASan and UBSan
+    bash tools/host_test.sh cov        # and lib/'s line coverage
+    bash tools/host_test.sh plain dish # only suites whose name has "dish"
 
 ## Why a cable flash keeps the pet
 
