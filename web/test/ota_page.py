@@ -272,7 +272,8 @@ def old_name_to_species(browser, base):
     page.click("#connect")
     page.locator("#updateGo").wait_for(state="visible", timeout=15000)
     filters = page.evaluate("__fakeBt.filters[0]")
-    assert len(filters) == 10 and all(f["services"] == [NUS] for f in filters), filters
+    species = page.evaluate("BlorbOta.SPECIES")
+    assert len(filters) == 1 + len(species) and all(f["services"] == [NUS] for f in filters), filters
     assert page.text_content("#updateFw") == "blorb-1b3c runs version 0.4.0.", page.text_content("#updateFw")
     update_over_ble(page, 0, "0.7.0")
     wait_text(page, f"Updated to 0.7.0. {FINE}")

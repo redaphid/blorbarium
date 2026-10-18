@@ -199,6 +199,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
   Passenger who(seed);
 
   auto at = [&] { return double(ms) / kMinuteMs; };
+  auto poweredHour = [&]() -> uint32_t { return std::min<uint32_t>(47, ms / (60 * kMinuteMs)); };   // a value: min's reference outlived its temporary under ASan
   auto log = [&](const std::string& what) {
     char b[24];
     std::snprintf(b, sizeof b, "%7.2f ", at());
@@ -272,7 +273,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
 
     if (a.thinking && (!wasThinking || lastLine != a.line)) {
       r.thoughts++;
-      (a.asleep ? r.asleepLinesByHour : r.awakeLinesByHour)[std::min<uint32_t>(47, ms / (60 * kMinuteMs))]++;
+      (a.asleep ? r.asleepLinesByHour : r.awakeLinesByHour)[poweredHour()]++;
       lines[a.line]++;
       rows.insert(a.thought.v);
       if (!a.asleep) r.longestThoughtGapMin = std::max(r.longestThoughtGapMin, at() - lastThought);
@@ -321,7 +322,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
       visible();
     }
     if (a.asleep) r.asleepH += 1.0 / (3600 * kTicksPerSec);
-    if (a.asleep) r.asleepMinByHour[std::min<uint32_t>(47, ms / (60 * kMinuteMs))] += 1.0 / (60 * kTicksPerSec);
+    if (a.asleep) r.asleepMinByHour[poweredHour()] += 1.0 / (60 * kTicksPerSec);
     if (c->stats().fed != lastFed) {
       lastFed = c->stats().fed;
       r.bites++;

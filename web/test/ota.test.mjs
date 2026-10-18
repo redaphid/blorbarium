@@ -154,6 +154,21 @@ test("a page reloaded after REBOOT confirms with its stored token and the update
   assert.equal(after.rolledback, "none");
 });
 
+test("this update, restarted into while the page was away, is confirmed at BEGIN, not called up to date", { timeout: 60000 }, async () => {
+  const release = await mockRelease();
+  const dish = newDish({ trialMs: 1500 });
+  const storage = profile();
+  await newPage(dish, { storage, closeAfter: "OTA REBOOT" }).run(release);
+  await dish.reconnect();
+  assert.equal(dish.trial, true);
+  const { outcome, states } = await newPage(dish, { storage }).run(release);
+  assert.deepEqual(outcome, { ok: true, kind: "updated", fw: "0.4.0" }, `${states}`);
+  assert.deepEqual(states.slice(0, 3), ["checking", "begin", "trial"]);
+  assert.equal(dish.stats.confirms, 1);
+  await settled(dish);
+  assert.equal(dish.fw, "0.4.0", "kept");
+});
+
 test("a visit with another token cannot confirm, and the image rolls back", { timeout: 60000 }, async () => {
   const release = await mockRelease();
   const dish = newDish({ trialMs: 1500 });

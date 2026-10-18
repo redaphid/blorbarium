@@ -238,7 +238,12 @@
           await this.port.send(`OTA ABORT ${this.token}`);
           return "begin";
         }
-        if (/NOT_NEWER/.test(e.message)) return this.finish("up_to_date", null);
+        // Not newer than what it runs. That may be this very update, restarted
+        // into while the link was down and still on trial: it needs its CONFIRM.
+        if (/NOT_NEWER/.test(e.message)) {
+          const k = await this.status();
+          return k.trial === "1" && k.fw === m.version ? "trial" : this.finish("up_to_date", null);
+        }
         // An earlier update is still on trial: confirm it if it is this page's, wait it out, then begin.
         if (/TRIAL/.test(e.message) && !this.detour) {
           this.detour = true;

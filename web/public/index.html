@@ -439,7 +439,7 @@ async function gattRetry(device, op, tries = 8) {
 
 class BleTransport {
   constructor(onDrop) {
-    this.onDrop = onDrop; this.device = null; this.rx = null; this.data = null; this.onLine = () => {};
+    this.onDrop = onDrop; this.device = null; this.rx = null; this.data = null; this.onLine = () => {}; this.smallWrites = false;
     // One handler for the life of the device, so a reconnect never feeds a line twice.
     this.notify = (e) => this.feed(new TextDecoder().decode(e.target.value));
   }
@@ -452,6 +452,7 @@ class BleTransport {
   close() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
   async open() {
     const server = await this.device.gatt.connect();
+    this.smallWrites = false;   // a new connection negotiates its MTU afresh
     try {
       const svc = await server.getPrimaryService(NUS);
       this.rx = await svc.getCharacteristic(RX);
@@ -483,11 +484,16 @@ class BleTransport {
   }
   // The board asks for MTU 247, so a whole request usually fits one write. If the
   // write is refused (MTU stuck at 23), fall back to 20-byte chunks for this link.
+  // A write lost to a drop says nothing about the MTU, and the next link may differ.
   async write(text) {
     const bytes = new TextEncoder().encode(text);
     const put = (part) => gattRetry(this.device, () => this.rx.writeValueWithResponse ? this.rx.writeValueWithResponse(part) : this.rx.writeValue(part));
     if (!this.smallWrites) {
-      try { return await put(bytes); } catch (e) { console.warn("whole-line write refused, chunking", e); this.smallWrites = true; }
+      try { return await put(bytes); } catch (e) {
+        if (!this.device.gatt.connected) throw e;
+        console.warn("whole-line write refused, chunking", e);
+        this.smallWrites = true;
+      }
     }
     for (let i = 0; i < bytes.length; i += 20) await put(bytes.slice(i, i + 20));
   }
