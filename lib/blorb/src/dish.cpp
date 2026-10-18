@@ -46,20 +46,6 @@ constexpr int64_t kDriftSeconds = 60;
 // Once wall time is known, the sources are read again this often.
 constexpr uint32_t kWallCheckTicks = kTicksPerMinute;
 
-// A new life's marble starts on a seeded spot this far from the hatchling and
-// no further than kMarbleStartMax from the centre, so it never sits under him.
-constexpr Fx kMarbleClear = Fx::ratio(45, 100);
-constexpr Fx kMarbleStartMax = Fx::ratio(70, 100);
-
-DishPos marbleStart(Rng& rng, DishPos him) {
-  for (;;) {
-    DishPos p{kMarbleStartMax * (rng.unit() + rng.unit() - Fx::one()), kMarbleStartMax * (rng.unit() + rng.unit() - Fx::one())};
-    Fx dx = p.x - him.x, dy = p.y - him.y;
-    if (p.x * p.x + p.y * p.y <= kMarbleStartMax * kMarbleStartMax && dx * dx + dy * dy >= kMarbleClear * kMarbleClear)
-      return p;
-  }
-}
-
 // A newer firmware's keepsake must not be written, so the throwaway life it
 // runs keeps its lineage nowhere.
 struct NullStorage : Storage {
@@ -298,7 +284,6 @@ void Dish::onHatch(Egg& e) {
   live_.habitat = Habitat{};
   live_.habitat.pantry = born.phenotype().habitat.pantrySize;
   live_.habitat.pantryTick = tick_;
-  live_.habitat.marble.at = marbleStart(live_.rng, born.body().at);
   eventDirty_ = true;
 }
 

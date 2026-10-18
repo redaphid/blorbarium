@@ -71,7 +71,7 @@ std::vector<std::pair<std::string, FrameRef>> everyFrame() {
     for (uint8_t s = 0; s < kStageCount; ++s) out.push_back({std::string("face ") + e.name, pack.face(e.id, Stage(s))});
   for (int pct : {0, 30, 59, 60, 70, 84, 85, 100}) out.push_back({"egg " + std::to_string(pct), pack.egg(Fx::ratio(pct, 100))});
   out.push_back({"remains", pack.remains()});
-  for (auto w : {Appearance::Item::What::Pellet, Appearance::Item::What::RottenPellet, Appearance::Item::What::Marble})
+  for (auto w : {Appearance::Item::What::Pellet, Appearance::Item::What::RottenPellet})
     out.push_back({"item " + std::to_string(int(w)), pack.item(w)});
   return out;
 }

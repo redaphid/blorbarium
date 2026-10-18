@@ -67,8 +67,6 @@ inherited
   GEN # LEFT A NOTE IN MY SHELL
 counted
   I COUNTED TO ONE. IT TOOK AGES
-marble_knows
-  I AM GAINING ON THE MARBLE.
 put_me_down
   MIND THE HOUSE, PLEASE.
 warm_hands
@@ -168,8 +166,6 @@ p_famous
 
 rim_walk
   HALF THE RIM. REST TOMORROW.
-marble_foe
-  THE MARBLE IS TOO FAST. RUDE.
 clean_glass
   I LEFT A SHINY TRAIL. ART.
 dont_look

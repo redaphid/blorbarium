@@ -1059,7 +1059,7 @@ void expectRow(const Dish& d, BootContext ctx, const char* where) {
 uint8_t pellets(const Dish& d) {
   uint8_t n = 0;
   const Appearance a = d.appearance();
-  for (uint8_t k = 0; k < a.itemCount; ++k) n += a.items[k].what != Appearance::Item::What::Marble;
+  for (uint8_t k = 0; k < a.itemCount; ++k) n += a.items[k].what == Appearance::Item::What::Pellet || a.items[k].what == Appearance::Item::What::RottenPellet;
   return n;
 }
 }  // namespace

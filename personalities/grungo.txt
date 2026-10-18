@@ -67,8 +67,6 @@ inherited
   GEN # WHISPERS IN MY HOOD.
 counted
   I FORESAW BOREDOM. HERE IT IS
-marble_knows
-  THE MARBLE CANNOT HIDE.
 put_me_down
   THE GROUND IS SAFER. MOSTLY.
 warm_hands
@@ -168,8 +166,6 @@ p_famous
 
 rim_walk
   I WALKED THE RIM. NO OMENS.
-marble_foe
-  THE MARBLE IS A BAD OMEN.
 clean_glass
   I SEE MY HOOD IN THE GLASS.
 dont_look

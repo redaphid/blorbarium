@@ -8,8 +8,8 @@ using namespace blorb;
 // feature vector is derived (order, filter, recent mapping) shows up here.
 TEST(Features, SituationLociInTableOrderThenRecentLociOfSituationStimuli) {
   const uint8_t expected[] = {
-      3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 16, 17,          // motion .. cradled
-      64 + 0, 64 + 2, 64 + 3, 64 + 10, 64 + 17, 64 + 19, 64 + 22, 64 + 48,   // knock .. petted
+      3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 17,          // motion .. cradled (16 was marble_near)
+      64 + 0, 64 + 2, 64 + 3, 64 + 10, 64 + 17, 64 + 22, 64 + 48,   // knock .. petted (64+19 was marble_hit's recent)
   };
   ASSERT_EQ(kFeatureCount, sizeof(expected));
   for (size_t i = 0; i < kFeatureCount; ++i) EXPECT_EQ(FEATURES[i].v, expected[i]) << "feature " << i;
@@ -44,13 +44,13 @@ TEST(Loci, DirectionMatchesTheIdBand) {
 
 TEST(Tables, EachDerivedCountMatchesItsRows) {
   EXPECT_EQ(kDriveCount, 8u);
-  EXPECT_EQ(kActionCount, 11u);
+  EXPECT_EQ(kActionCount, 10u);
   EXPECT_EQ(kRegionCount, 7u);
   EXPECT_EQ(kReflexCount, 2u);
-  EXPECT_EQ(kFeatureCount, 20u);
+  EXPECT_EQ(kFeatureCount, 18u);
   EXPECT_EQ(countOf(CHEMICALS), 13u);
-  EXPECT_EQ(countOf(LOCI), 35u);
-  EXPECT_EQ(countOf(STIMULI), 39u);
+  EXPECT_EQ(countOf(LOCI), 34u);
+  EXPECT_EQ(countOf(STIMULI), 38u);
   EXPECT_EQ(countOf(POSES), 10u);
   EXPECT_EQ(countOf(EXPRESSIONS), 10u);
   EXPECT_EQ(countOf(CARES), 5u);

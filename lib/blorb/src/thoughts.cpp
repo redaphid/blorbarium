@@ -98,7 +98,6 @@ bool ancestor_fear(const Observed& o, uint16_t& num) { return level(o, drive::fe
 bool heirloom(const Observed& o, uint16_t& num) { return awake(o) && doing(o, action::rest) && datedHeirloom(o, false, num); }
 bool foreseen(const Observed& o, uint16_t& num) { return datedHeirloom(o, false, num); }
 bool bored(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::boredom) >= kHigh; }
-bool chasing(const Observed& o, uint16_t&) { return doing(o, action::chase); }
 bool held(const Observed& o, uint16_t&) { return sense(o, locus::held) >= kHalf && sense(o, locus::cradled) < kHalf; }
 bool cradled(const Observed& o, uint16_t&) { return sense(o, locus::cradled) >= kHalf; }
 bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, locus::upside_down) >= kHalf; }

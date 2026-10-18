@@ -68,8 +68,6 @@ inherited
   GEN # SAYS GO FASTER!
 counted
   BORED, SOMEBODY RACE ME!
-marble_knows
-  CATCHING THAT MARBLE, WATCH!
 put_me_down
   PUT ME DOWN, I WANNA RUN!
 warm_hands
@@ -169,8 +167,6 @@ p_famous
 
 rim_walk
   RIM LAP, NEW RECORD!
-marble_foe
-  THE MARBLE THINKS IT'S FAST!
 clean_glass
   GLASS IS CLEAN, FAST TRACK!
 dont_look

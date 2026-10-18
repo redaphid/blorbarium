@@ -81,7 +81,7 @@ struct Appearance {
   bool owesDebt = false, vendetta = false;
 
   // The dish
-  struct Item { enum class What : uint8_t { Pellet, RottenPellet, Marble } what; DishPos at; };
+  struct Item { enum class What : uint8_t { Pellet, RottenPellet } what; DishPos at; };
   Item items[8]{};
   uint8_t itemCount = 0;
   uint8_t pantry = 0;               // drawn as rim pips so feeding is legible with no phone

@@ -22,7 +22,7 @@ peckish         hungry
   SNACK? SNACK. THE GOOD BITS!
 
 starving        starving
-  I WOULD EAT THE MARBLE
+  I WOULD EAT THE DISH
 
 hoarding        hoarding
   THAT ONE IS FOR LATER.
@@ -62,9 +62,6 @@ inherited       heirloom
 
 counted         bored
   I HAVE COUNTED THE DISH: ONE
-
-marble_knows    chasing
-  THE MARBLE KNOWS WHAT IT DID
 
 put_me_down     held
   PUT ME DOWN. NO, WAIT.
@@ -218,9 +215,6 @@ parrot          taught
 
 rim_walk        always
   I WALKED THE RIM. IT IS ROUND.
-
-marble_foe      always
-  THE MARBLE IS NOT MY FRIEND.
 
 clean_glass     always
   THE GLASS IS VERY CLEAN. HI.
@@ -403,7 +397,7 @@ mumble          dozing
   MMM... FIVE MORE MINUTES...
 
 dream_chase     dozing
-  ZZZ... GOT THE MARBLE...
+  ZZZ... GOT IT... GOT IT...
 
 dream_feast     dozing
   ZZZ... A MOUNTAIN OF SNACKS

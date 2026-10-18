@@ -87,7 +87,6 @@ void dishItems(const Habitat& h, const HabitatRules* rules, uint32_t tick, Appea
     bool rotten = rules && tick - p.droppedTick > rules->rotTicks;
     a.items[a.itemCount++] = Appearance::Item{rotten ? Appearance::Item::What::RottenPellet : Appearance::Item::What::Pellet, p.at};
   }
-  a.items[a.itemCount++] = Appearance::Item{Appearance::Item::What::Marble, h.marble.at};
   a.pantry = h.pantry;
 }
 

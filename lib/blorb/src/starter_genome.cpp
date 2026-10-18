@@ -214,7 +214,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.stimulus(stim::cradle, 1, needTouch, -350, loneliness, -200, fear, -200);
   g.stimulus(stim::fed, 0, hunger, -400, boredom, -50);
   g.stimulus(stim::fed_bad, 0, toxin, 400, discomfort, 300);
-  g.stimulus(stim::marble_hit, 0, boredom, -300);
+  g.skip(1);   // the marble_hit line: retired with the marble; the empty line keeps every later uid
   g.stimulus(stim::owner_arrived, 0, loneliness, -300);
   g.stimulus(stim::lid_down, 1, melatonin, 300);
   g.stimulus(stim::button_hold, 0, sleepiness, 200);
@@ -231,7 +231,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.instinct(locus::recent(stim::shake), locus::recent(stim::knock), action::curl, drive::fear, -600, 700);
   g.instinct(locus::cradled, kNoLocus, action::rest, drive::need_touch, -500, 500);
   g.instinct(locus::day_sin, kNoLocus, action::foresee, drive::boredom, -450, 500);
-  g.instinct(locus::marble_near, kNoLocus, action::chase, drive::boredom, -600, 550, Stage::Child);
+  g.skip(1);   // the chase instinct's line: retired with the marble, as above
   g.instinct(locus::owner_near, kNoLocus, action::call, drive::loneliness, -500, 500, Stage::Adult);
   g.instinct(locus::recent(stim::fed), kNoLocus, action::hop_circles, drive::boredom, -400, 450, Stage::Adult);
   // Once the line has dreamt, he learns he foresaw the shake.

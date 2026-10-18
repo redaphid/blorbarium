@@ -28,7 +28,6 @@ BLORB_STIM(15, hang,           Body,  0)  // held upside down 1 s (HangDetector)
 BLORB_STIM(16, pellet_dropped, World, 0)
 BLORB_STIM(17, fed,            World, 1)  // the Eat action reached a pellet; never phone-fired
 BLORB_STIM(18, fed_bad,        World, 0)  // the pellet was rotten
-BLORB_STIM(19, marble_hit,     World, 1)
 BLORB_STIM(20, dusk,           World, 0)
 BLORB_STIM(21, dawn,           World, 0)
 BLORB_STIM(22, owner_arrived,  World, 1)

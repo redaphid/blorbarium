@@ -25,10 +25,36 @@ inline blorb::Genome foundingGenome040(uint32_t speciesSeed) {
       {region::eye.v, 120, 158, 112, 160, 112, 176},
   };
   const Genome starter = starterGenome(speciesSeed);
+  GenomeBuilder b0 = GenomeBuilder::from(starter);
+  // 0.4.0's recipe still carried the marble: a stimulus gene at uid 63 (a
+  // marble hit eases boredom) and the chase instinct at uid 77. The current
+  // recipe retired both -- its lines stand empty there (skip) so every other
+  // uid is unchanged -- but a field badge's founder has them, byte for byte
+  // as 0.4.0 wrote them. They are inert in this firmware: no def row names
+  // stimulus 19, locus 16 or action 9 any more. Headers and bodies are the
+  // old starter's own, read off starterGenome(15048) before the cut.
+  {
+    constexpr uint8_t kStimulusBody[] = {0x13, 0x00, 0x03, 0x00, 0x00, 0x5a, 0x80, 0x80};
+    constexpr uint8_t kInstinctBody[] = {0x10, 0xff, 0xff, 0x09, 0x02, 0x33, 0x8c};
+    b0.insertAfter(GeneUid{62}, GeneHeader{GeneKindOf<StimulusGene>::value, uint8_t(sizeof(StimulusGene)),
+                                           GeneFlags::Mutable | GeneFlags::Dupable | GeneFlags::Delable, Stage::Baby,
+                                           0, 64, GeneUid{63}},
+                   kStimulusBody);
+    b0.insertAfter(GeneUid{76}, GeneHeader{GeneKindOf<InstinctGene>::value, uint8_t(sizeof(InstinctGene)),
+                                           GeneFlags::Mutable | GeneFlags::Dupable | GeneFlags::Delable, Stage::Child,
+                                           0, 64, GeneUid{77}},
+                   kInstinctBody);
+  }
+  const Genome starterWithMarble = *b0.build();
+  // 0.4.0's hop_circles was action 10; the current table renumbered it to 9
+  // when chase retired (action ids stay dense). The founder's hop instinct
+  // (uid 79) still names 10, so the byte goes back after the build below --
+  // see the setByte with the palette rolls.
   Rng rng = Rng::seeded(uint64_t(speciesSeed) << 32 | 0x666f756eu);
   auto pick = [&](uint8_t lo, uint8_t hi) { return uint8_t(lo + rng.below(uint32_t(hi - lo) + 1u)); };
-  GenomeBuilder b = GenomeBuilder::from(starter);
-  starter.forEach([&](const GeneView& v) {
+  GenomeBuilder b = GenomeBuilder::from(starterWithMarble);
+  b.setByte(GeneUid{79}, 3, 10);   // uid 79's action byte: hop_circles as 0.4.0 numbered it
+  starterWithMarble.forEach([&](const GeneView& v) {
     if (v.header.flags & GeneFlags::Dormant) return;
     if (v.header.type == GeneKindOf<PaletteGene>::value) {
       for (const Roll& r : kRolls)

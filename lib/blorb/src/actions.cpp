@@ -12,7 +12,6 @@ constexpr Fx kNearRim = Fx::ratio(78, 100);   // Curl stops here
 constexpr Fx kWanderTurn = Fx::ratio(1, 10);  // most a wander heading changes per tick, in half turns
 constexpr Fx kHopTurn = Fx::ratio(1, 16);
 constexpr uint16_t kChewTicks = 15;            // he holds the bite this long, so eating can be seen
-constexpr Fx kNoseRange = Fx::ratio(12, 100);  // the marble this close, he noses it on ...
 constexpr Fx kNoseSpeed = Fx::ratio(9, 100);   // ... so it rolls about half the dish against the habitat's rolling friction
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
 constexpr Fx kHalf = Fx::ratio(1, 2);
@@ -198,31 +197,6 @@ Status Curl::step(Body& b, ActionCtx&) {
 
 Status FollowTilt::step(Body& b, ActionCtx& c) { return walkWithTilt(b, c, false, pose::walk); }
 Status FleeTilt::step(Body& b, ActionCtx& c) { return walkWithTilt(b, c, true, pose::flee); }
-
-// Reaching the marble he noses it on the way he is walking, so the chase goes
-// on and he never comes to stand on it.
-Status Chase::step(Body& b, ActionCtx& c) {
-  b.pose = pose::walk;
-  Marble& m = c.habitat.marble;
-  walkTo(b, m.at, kWalk);
-  Fx dx = m.at.x - b.at.x, dy = m.at.y - b.at.y;
-  if (dx * dx + dy * dy <= kNoseRange * kNoseRange) {
-    Fx nx = cosTurn(b.facing), ny = sinTurn(b.facing);
-    // Past where he can follow, a nose into the rim glances off it; straight
-    // in, the bounce comes back to him and he pins it under his feet.
-    Fx r = fxSqrt(m.at.x * m.at.x + m.at.y * m.at.y);
-    if (r > kRoam) {
-      Fx ox = fxDiv(m.at.x, r), oy = fxDiv(m.at.y, r), out = nx * ox + ny * oy;
-      if (out > Fx::zero()) {
-        nx -= ox * (out + out);
-        ny -= oy * (out + out);
-      }
-    }
-    m.vx = nx * kNoseSpeed;
-    m.vy = ny * kNoseSpeed;
-  }
-  return Status::Running;
-}
 
 Status HopCircles::step(Body& b, ActionCtx&) {
   b.pose = pose::bounce;

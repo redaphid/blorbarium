@@ -238,24 +238,6 @@ TEST(Boot, ANewerFormatIsSealedAndWritesNothing) {
 
 // ---- founding a life --------------------------------------------------------------------
 
-// Items draw behind him, so a marble left where he hatches peeks out between his feet.
-TEST(Founding, TheMarbleStartsOnASeededSpotClearOfTheHatchling) {
-  std::vector<DishPos> spots;
-  for (uint32_t seed : {7u, 8u, 9u}) {
-    Box box;
-    box.seed = seed;
-    box.boot();
-    box.hatch();
-    DishPos him = box.creature().body().at, m = box.dish->habitat().marble.at;
-    Fx dx = m.x - him.x, dy = m.y - him.y;
-    EXPECT_GE(dx * dx + dy * dy, Fx::ratio(2, 10)) << "seed " << seed << ": the marble starts at least 0.45 from him";
-    EXPECT_LE(m.x * m.x + m.y * m.y, Fx::ratio(1, 2)) << "seed " << seed << ": and well inside the rim";
-    spots.push_back(m);
-  }
-  EXPECT_TRUE(spots[0].x != spots[1].x || spots[0].y != spots[1].y) << "the spot comes from the seed";
-  EXPECT_TRUE(spots[1].x != spots[2].x || spots[1].y != spots[2].y);
-}
-
 // ---- the replay check -----------------------------------------------------------------------
 
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
@@ -265,8 +247,12 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // (docs/notes/first-hours.md: 8a7f68fc) and the shake landed on its fifth
   // reversal, a tick later (rel-senses: c848b73d); both together: e8e58739.
   // eb8860f0 once a BOOT release settles over two samples (0.7.5 debounce),
-  // which lands some of the routine's presses a tick later.
-  constexpr uint32_t kCommitted = 0xeb8860f0u;
+  // which lands some of the routine's presses a tick later. c1a2eec8 with
+  // the marble cut: no marble rolls in the dish, nothing chases it, and the
+  // starter genome is two genes shorter. (An interim reading of 22246b02
+  // came from incremental builds on a mirror carrying stale objects;
+  // from-scratch builds agree on c1a2eec8.)
+  constexpr uint32_t kCommitted = 0xc1a2eec8u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -277,7 +263,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=eb8860f0 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=c1a2eec8 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

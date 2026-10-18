@@ -67,8 +67,6 @@ inherited
   GEN # HUMS IN MY FLUFF.
 counted
   I COUNTED MY SPOTS. SIX. AGAIN
-marble_knows
-  THE MARBLE GLINTED. I MUST GO.
 put_me_down
   MIND THE WINGS. MIND THEM.
 warm_hands
@@ -168,8 +166,6 @@ p_famous
 
 rim_walk
   I FLUTTERED THE RIM. ROUND.
-marble_foe
-  THE MARBLE SHINES. I DISTRUST.
 clean_glass
   THE GLASS. I SEE A FLUFFY ONE.
 dont_look

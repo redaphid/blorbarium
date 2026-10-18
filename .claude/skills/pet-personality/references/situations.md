@@ -40,7 +40,6 @@ pet that never meets a phone never says them; he still says everything else.
 | heirloom | **#** He is awake and resting, and carries a lesson an ancestor learned. # is that ancestor's generation. |
 | foreseen | **#** He carries a lesson an ancestor learned. # is that ancestor's generation. |
 | bored | He is awake and very bored. |
-| chasing | He is chasing something. |
 | held | Someone is holding the board, but not cradling it. |
 | cradled | Someone is cradling the board gently. |
 | upside_down | He is awake and the board is upside down. |
