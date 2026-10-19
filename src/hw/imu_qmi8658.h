@@ -126,8 +126,10 @@ inline bool read(blorb::BodySample& s) {
   // on a desk was "lidded" after 30 s (bedtime, the pet clock pulled toward
   // night) and face down was "righted"; a cuddle wanted the screen tipped away.
   s.az = int16_t(-(le16(6) * 1000 / kLsbPerG));
-  // STATUS1.bit1 says a tap was reported; TAP_STATUS[1:0] says which kind.
-  s.tapCode = (probe(addr, kStatus1) & 0x02) ? uint8_t(probe(addr, kTapStatus) & 0x03) : 0;
+  // The tap engine's reports are no longer read: they missed real knocks and
+  // reported handling (blorb/knocks.h), and two more I2C reads a sample cost
+  // time the 250 Hz reads need. Knocks come from the samples.
+  s.tapCode = 0;
   return true;
 }
 

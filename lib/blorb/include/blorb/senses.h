@@ -37,6 +37,13 @@ struct BodySample {
   // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
   // and is not one.
   bool knocking = false;
+  // The shell reads the IMU at 250 Hz while awake and hands on every fifth
+  // read; the reads between are summed up here as the one farthest from the
+  // last sample handed on, so a knock's brief peak is not lost between two
+  // 50 Hz samples (a knock on a badge lying on a table is over in 10 ms).
+  // Raw IMU frame, like ax/ay/az; KnockSense reads it, no detector does.
+  bool hasPeak = false;
+  int16_t peakAx = 0, peakAy = 0, peakAz = 0;
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered

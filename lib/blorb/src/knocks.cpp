@@ -55,7 +55,10 @@ uint8_t KnockSense::decide() {
 }
 
 uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
-  const int32_t jerk = primed_ ? iabs32(s.ax - px_) + iabs32(s.ay - py_) + iabs32(s.az - pz_) : 0;
+  // With the shell's 250 Hz peak, the knock is judged on the peak (the read
+  // farthest from the last sample); the steadiness history stays on samples.
+  const int32_t kx = s.hasPeak ? s.peakAx : s.ax, ky = s.hasPeak ? s.peakAy : s.ay, kz = s.hasPeak ? s.peakAz : s.az;
+  const int32_t jerk = primed_ ? iabs32(kx - px_) + iabs32(ky - py_) + iabs32(kz - pz_) : 0;
   uint8_t out = 0;
   if (inBurst_ && ms - last_ > kChainMs) out = decide();
   int32_t gx = g0x_, gy = g0y_, gz = g0z_;
@@ -63,7 +66,7 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
   if (histN_ == kHistory && !inBurst_) gravityBefore(gx, gy, gz);
   int32_t dev = 0;
   if (known) {
-    const int32_t dx = s.ax - gx, dy = s.ay - gy, dz = s.az - gz;
+    const int32_t dx = kx - gx, dy = ky - gy, dz = kz - gz;
     dev = isqrt32(uint32_t(std::min<int64_t>(int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz, 0x7fffffff)));
   }
   const bool spike = known && jerk >= kJerkMg && dev >= (inBurst_ ? kNextDevMg : kDevMg);

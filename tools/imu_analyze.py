@@ -25,10 +25,10 @@ def load(path):
             segs.append({"label": line[3:], "t": t, "imu": [], "stim": [], "other": []})
             continue
         s = segs[-1]
-        if g := re.match(r"\[imu\] (\d+) (-?\d+) (-?\d+) (-?\d+) (\d+) (\d+) (\d) (\d) (\d) (\d)", line):
-            v = [int(x) for x in g.groups()]
+        if g := re.match(r"\[imu\] (\d+) (-?\d+) (-?\d+) (-?\d+) (\d+) (\d+) (\d) (\d) (\d) (\d)(?: pk (-?\d+) (-?\d+) (-?\d+))?", line):
+            v = [int(x) if x is not None else None for x in g.groups()]
             s["imu"].append(dict(ms=v[0], ax=v[1], ay=v[2], az=v[3], tap=v[4], rot=v[5], side=v[6], inv=v[7],
-                                 held=v[8], btn=v[9]))
+                                 held=v[8], btn=v[9], pkx=v[10], pky=v[11], pkz=v[12]))
         elif g := re.match(r"\[stim\] (\d+) (\w+)", line):
             s["stim"].append((int(g.group(1)), g.group(2)))
         elif not line.startswith("[hw] up=") and not line.startswith(">>"):

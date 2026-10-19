@@ -351,16 +351,38 @@ static blorb::BodySample readBody(uint32_t ms, bool* remoteOnly = nullptr) {
 
 #if !defined(BADGE_BOARD_SIM)
 namespace bodyq {
+// Awake, the IMU is read every kSubMs (it measures at 250 Hz) and every
+// fifth read is handed on, carrying the farthest of the five as its peak
+// (BodySample::peakAx..): a knock's peak lasts a few milliseconds, and at 50 Hz
+// most of one on a badge lying on a table fell between samples. In low power,
+// one read per sample, as before, so the chip can light-sleep.
+static volatile bool fastSense = true;   // the loop: !powerPolicy.low()
+constexpr uint32_t kSubMs = 4;
 static void sense(void*) {
   TickType_t wake = xTaskGetTickCount();
+  blorb::BodySample handed{};
+  bool primed = false, far = false;
+  int64_t best = -1;
+  int16_t pk[3] = {};
+  uint8_t sub = 0;
   for (;;) {
-    vTaskDelayUntil(&wake, pdMS_TO_TICKS(blorb::kSampleMs));
+    const bool fast = fastSense;
+    vTaskDelayUntil(&wake, pdMS_TO_TICKS(fast ? kSubMs : blorb::kSampleMs));
     const uint32_t ms = millis();
-    bool far = false;
-    const blorb::BodySample s = readBody(ms, &far);
+    bool farNow = false;
+    blorb::BodySample s = readBody(ms, &farNow);
+    far = far || farNow;
+    const int64_t dx = s.ax - handed.ax, dy = s.ay - handed.ay, dz = s.az - handed.az;
+    const int64_t d = dx * dx + dy * dy + dz * dz;
+    if (d > best) best = d, pk[0] = s.ax, pk[1] = s.ay, pk[2] = s.az;
+    if (fast && ++sub < blorb::kSampleMs / kSubMs) continue;
+    sub = 0;
+    s.hasPeak = primed;
+    s.peakAx = pk[0], s.peakAy = pk[1], s.peakAz = pk[2];
     portENTER_CRITICAL(&mux);
     if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms, far};
     portEXIT_CRITICAL(&mux);
+    handed = s, primed = true, best = -1, far = false;
   }
 }
 
@@ -378,14 +400,14 @@ static std::optional<Timed> take() {
 // `DEBUG trace <seconds>`: every 50 Hz sample on the cable as the IMU read it,
 // with what the shell and the detectors made of it, to set the gestures
 // against real hands (tools/imu_record.py). 0 stops it.
-//   [imu] ms ax ay az tap rot side inverted sideHeld button
+//   [imu] ms ax ay az tap rot side inverted sideHeld button pk peakAx peakAy peakAz
 //   [stim] ms name        each body stimulus, on the sample that fired it
 static uint32_t traceUntil = 0;
 static void traceSample(const blorb::BodySample& raw, const blorb::BodySample& screen, uint8_t rot, uint32_t ms) {
   if (!traceUntil || int32_t(traceUntil - millis()) <= 0) return;
-  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d\n", unsigned(ms), raw.ax, raw.ay, raw.az, unsigned(raw.tapCode),
-                unsigned(rot), int(screen.sideDown), int(screen.invertedDown), int(dish->sideHolding()),
-                int(raw.buttonDown));
+  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d pk %d %d %d\n", unsigned(ms), raw.ax, raw.ay, raw.az,
+                unsigned(raw.tapCode), unsigned(rot), int(screen.sideDown), int(screen.invertedDown),
+                int(dish->sideHolding()), int(raw.buttonDown), raw.peakAx, raw.peakAy, raw.peakAz);
   const uint64_t fired = dish->firedLastSample();
   for (const blorb::StimInfo& st : blorb::STIMULI)
     if (st.id.v < 64 && (fired >> st.id.v & 1)) Serial.printf("[stim] %u %s\n", unsigned(ms), st.name);
@@ -1242,6 +1264,7 @@ static void applyPower(uint32_t now) {
   if (const uint32_t n = links.airLines(); n != seenAirLines) seenAirLines = n, powerPolicy.phone(now);
   powerPolicy.update(now, powerHeld());
   cablePower(now);
+  bodyq::fastSense = !powerPolicy.low();   // 250 Hz reads awake, 50 Hz in low power
   if (powerPolicy.low() == panelLow) return;
   panelLow = powerPolicy.low();
   if (panelLow) {
