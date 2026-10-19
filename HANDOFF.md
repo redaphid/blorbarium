@@ -37,12 +37,14 @@ button.** The nephews' badges (0.7.x) drained their batteries and died. The
 Proof, gotchas and the next step are in
 `docs/notes/low-power-2026-10-18.md`; how it works is `docs/power.md`.
 
-**Next, agreed with the owner:** a real off state with no button. After
-about an hour in low power, save and deep-sleep; wake on the QMI8658's
-wake-on-motion interrupt (believed GPIO4/GPIO3, **unverified**: first step
-is a test build on badge 1 that arms WoM and logs those pins), with a
-probation against backpack and car wakes, the RTC carrying pet time across
-the gap, and a low-battery shutdown from the ADC on GPIO1.
+**Next, agreed with the owner:** a real off state with no button. Measured
+(`tools/wom_probe`): the QMI8658's INT1 is **GPIO47**, which cannot wake
+deep sleep (not an RTC GPIO) but does wake **light sleep** (11 ms at a 2 mg
+test threshold; a still badge at 150 mg stays asleep). So: after about an
+hour in low power, save and enter a manual light sleep with the panel, BLE
+and WiFi off and the IMU in wake-on-motion, woken only by GPIO47; with a
+probation against backpack and car wakes, elapsed time carried into the
+pet's catch-up, and a low-battery shutdown from the ADC on GPIO1.
 
 **On the cable with `badge128_pm`:** a light-sleeping badge loses the first
 bytes it hears (UART0 via the CH343 is deaf asleep). Send a few `\r`, wait
@@ -53,7 +55,8 @@ bytes it hears (UART0 via the CH343 is deaf asleep). Send a few `\r`, wait
 one; what they lack is a clock that survives the battery running flat.
 
 Badges here: badge 1 (mossby, 5C94095000, d4:05:92:77:1b:3c) runs
-`badge128_pm` 0.7.11 with the 600 s default. Badge 5 (mudge, 5C94095003,
+`badge128_pm` 0.7.11 with the 600 s default (reflashed after the probe;
+its pet is expendable, per the owner). Badge 5 (mudge, 5C94095003,
 d4:05:92:77:1b:30) is unplugged on an older 0.7.11 build. Pre-existing
 failures on this Linux host: `test_dish` Budget.ALifeAndARebootFitTheLoopTask...,
 and `test_ota`, `test_adopt_species` and the sim build (gcc 11 `std::variant`
