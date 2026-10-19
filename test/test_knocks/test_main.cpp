@@ -88,7 +88,7 @@ Count script(std::initializer_list<uint32_t> knocksAt, uint32_t untilMs = 4000) 
 
 TEST(Hands, EverySegmentOfTheRecordingCountsWhatTheHandsDid) {
   const std::vector<Segment> segs = loadHands();
-  ASSERT_GE(segs.size(), 10u) << "test/fixtures/hands_2026-10-19.txt";
+  ASSERT_GE(segs.size(), 11u) << "test/fixtures/hands_2026-10-19.txt";
   for (const Segment& s : segs) {
     const Count c = play(s);
     std::printf("[ hands ] %-22s knock knocks %d (want %d), singles %d:%s\n", s.label.c_str(), c.knockKnocks,
@@ -132,7 +132,7 @@ int shakes(const Segment& s) {
 
 TEST(Hands, AKnockKnockIsNoShakeAndAShakeStillIs) {
   for (const Segment& s : loadHands()) {
-    if (s.label.rfind("L1_", 0) == 0 || s.label.rfind("2b_", 0) == 0) {
+    if (s.label.rfind("L1_", 0) == 0 || s.label.rfind("L2_", 0) == 0 || s.label.rfind("2b_", 0) == 0) {
       EXPECT_EQ(shakes(s), 0) << s.label;
     }
     if (s.label == "9_shake") {
@@ -152,12 +152,20 @@ TEST(Scripted, TwoKnocksAreAKnockKnockReportedOnceItIsOver) {
   EXPECT_LE(when, 1340 + KnockSense::kChainMs + 20) << "the last knock rings to 1340";
 }
 
-TEST(Scripted, OneKnockIsASingleAndThreeAreStillAKnockKnock) {
+TEST(Scripted, OneKnockIsASingleAndTwoToFourAreAKnockKnock) {
   EXPECT_EQ(script({1000}).singles, 1);
   EXPECT_EQ(script({1000}).knockKnocks, 0);
   EXPECT_EQ(script({1000, 1240, 1480}).knockKnocks, 1) << "kids knock thrice";
-  const Count four = script({1000, 1240, 1480, 1720});
-  EXPECT_EQ(four.knockKnocks + four.singles, 0) << "four is hammering:" << four.at;
+  EXPECT_EQ(script({1000, 1240, 1480, 1720}).knockKnocks, 1) << "and four times";
+  const Count five = script({1000, 1240, 1480, 1720, 1960});
+  EXPECT_EQ(five.knockKnocks + five.singles, 0) << "five is hammering:" << five.at;
+}
+
+// A quick second knock, 0.12 s after the first once its bounce has died
+// down, is a knock knock (a kid on the board did it); a hard knock's own
+// rebound at 0.08 s is not.
+TEST(Scripted, AQuickSecondKnockCounts) {
+  EXPECT_EQ(script({1000, 1120}).knockKnocks, 1);
 }
 
 TEST(Scripted, KnocksTooFarApartAreTwoSingles) {

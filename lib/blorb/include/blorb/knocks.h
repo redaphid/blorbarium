@@ -19,9 +19,8 @@
 // vector, not az's jerk alone; the next kMergeMs is its ringing; knocks
 // within kChainMs make one burst; the burst counts only if the badge was steady
 // before it and points the same way after; and it is reported when it is over,
-// as the tap engine's code: 1 a single knock, 2 a knock knock (two or three
-// knocks: kids knock thrice). Four or more is hammering, and counts as
-// nothing. While a burst is under way (busy()), a knock's bounce in the hand
+// as the tap engine's code: 1 a single knock, 2 a knock knock (two to four
+// knocks: kids knock thrice). More is hammering, and counts as nothing. While a burst is under way (busy()), a knock's bounce in the hand
 // is no shake (main.cpp sets BodySample::knocking). Pure, so it is tested
 // natively against the recordings.
 #include <cstdint>
@@ -32,13 +31,18 @@ namespace blorb {
 
 class KnockSense {
  public:
-  static constexpr int32_t kDevMg = 1100;        // that far from gravity...
-  static constexpr int32_t kJerkMg = 1200;       // ...reached in one 20 ms step: a knock
-  static constexpr uint32_t kMergeMs = 170;      // a knock rings this long: spikes within it are the same knock
+  static constexpr int32_t kDevMg = 950;         // that far from gravity...
+  static constexpr int32_t kJerkMg = 1000;       // ...reached in one 20 ms step: a knock
+  static constexpr int32_t kNextDevMg = 900;     // the second and third knock of a burst may be softer
+  static constexpr uint32_t kMergeMs = 170;      // a knock rings this long: spikes within it are its bounce...
+  static constexpr uint32_t kFastMs = 80;        // ...unless, this long after it, the badge had calmed
+  static constexpr int32_t kCalmMg = 600;        //    (two samples this close to gravity)
+  static constexpr int32_t kFastDevMg = 1500;    //    and the new spike is this hard: a quick second knock
+  static constexpr uint8_t kMaxKnocks = 4;       // more in one burst is hammering
   static constexpr uint32_t kChainMs = 600;      // the next knock of a knock knock comes within this (hands: 0.18-0.46 s)
-  static constexpr int32_t kSteadySdMg = 80;     // before the first knock: the magnitude's spread...
+  static constexpr int32_t kSteadySdMg = 110;    // before the first knock: the magnitude's spread...
   static constexpr int32_t kSteadyJerkMg = 300;  // ...and three in four samples' jerk under this
-  static constexpr int32_t kDriftMg = 150;       // gravity before and after may differ this much
+  static constexpr int32_t kDriftMg = 300;       // gravity before and after may differ this much (a rim knock shoves it)
   static constexpr uint32_t kSettleMs = 300;     // after the last knock, the ringing is over by then
   static constexpr uint8_t kHistory = 22;        // 440 ms of samples before a knock...
   static constexpr uint8_t kLead = 2;            // ...less the newest two, which may already be its rising edge
@@ -58,6 +62,7 @@ class KnockSense {
   bool inBurst_ = false, steady_ = false;
   uint8_t knocks_ = 0;
   uint32_t last_ = 0, onset_ = 0;
+  int32_t dev1_ = 0, dev2_ = 0;                  // the last two samples' distance from gravity
   int32_t g0x_ = 0, g0y_ = 0, g0z_ = 0;          // gravity before it
   int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
 

@@ -48,7 +48,7 @@ bool KnockSense::steadyBefore() {
 
 uint8_t KnockSense::decide() {
   inBurst_ = false;
-  if (!steady_ || knocks_ > 3 || sumN_ == 0) return 0;
+  if (!steady_ || knocks_ > kMaxKnocks || sumN_ == 0) return 0;
   const int32_t dx = sumX_ / sumN_ - g0x_, dy = sumY_ / sumN_ - g0y_, dz = sumZ_ / sumN_ - g0z_;
   if (int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz >= int64_t(kDriftMg) * kDriftMg) return 0;
   return knocks_ >= 2 ? 2 : 1;
@@ -58,16 +58,20 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
   const int32_t jerk = primed_ ? iabs32(s.ax - px_) + iabs32(s.ay - py_) + iabs32(s.az - pz_) : 0;
   uint8_t out = 0;
   if (inBurst_ && ms - last_ > kChainMs) out = decide();
-  bool spike = false;
   int32_t gx = g0x_, gy = g0y_, gz = g0z_;
+  const bool known = inBurst_ || histN_ == kHistory;
   if (histN_ == kHistory && !inBurst_) gravityBefore(gx, gy, gz);
-  if ((histN_ == kHistory || inBurst_) && jerk >= kJerkMg) {
+  int32_t dev = 0;
+  if (known) {
     const int32_t dx = s.ax - gx, dy = s.ay - gy, dz = s.az - gz;
-    spike = int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz >= int64_t(kDevMg) * kDevMg;
+    dev = isqrt32(uint32_t(std::min<int64_t>(int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz, 0x7fffffff)));
   }
+  const bool spike = known && jerk >= kJerkMg && dev >= (inBurst_ ? kNextDevMg : kDevMg);
   if (spike) {
-    if (inBurst_ && ms - onset_ <= kMergeMs) {
-      last_ = ms;
+    const bool calm = dev1_ < kCalmMg && dev2_ < kCalmMg;
+    const bool fast = ms - onset_ >= kFastMs && calm && dev >= kFastDevMg;
+    if (inBurst_ && ms - onset_ <= kMergeMs && !fast) {
+      last_ = ms;   // its bounce
     } else if (inBurst_) {
       ++knocks_, last_ = onset_ = ms;
     } else {
@@ -79,6 +83,7 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
   } else if (inBurst_ && ms - last_ >= kSettleMs) {
     sumX_ += s.ax, sumY_ += s.ay, sumZ_ += s.az, ++sumN_;
   }
+  dev2_ = dev1_, dev1_ = dev;
   const int32_t mag = isqrt32(uint32_t(int32_t(s.ax) * s.ax + int32_t(s.ay) * s.ay + int32_t(s.az) * s.az));
   hist_[histAt_] = Past{s.ax, s.ay, s.az, mag, jerk};
   histAt_ = uint8_t((histAt_ + 1) % kHistory);
