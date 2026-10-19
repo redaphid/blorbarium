@@ -421,10 +421,10 @@ static bool petFeels(bool down, bool remote) {
 #endif
 }
 
+static blorb::KnockSense knockSense;
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
   // Knocks come from the samples, not the IMU's tap engine, which missed real
   // knock knocks and reported handling as double taps (blorb/knocks.h).
-  static blorb::KnockSense knockSense;
   blorb::BodySample body = sensed;
   body.tapCode = knockSense.sample(sensed, ms);
   lastBody = body;
@@ -457,6 +457,7 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // sample as a level (BodySample::invertedDown) for HangDetector.
   screen.invertedDown = rot == uint8_t((ORIENT_HOME + 2) & 3);   // upside down from home: USB-C down
   screen.sideDown = rot == 1 || rot == 3;   // the hold's twin (SideHoldDetector, controls.h)
+  screen.knocking = knockSense.busy();
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
   dish->sample(screen, ms);

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "blorb/knocks.h"
+#include "../../src/hw/orient.h"
 
 using namespace blorb;
 
@@ -87,7 +88,7 @@ Count script(std::initializer_list<uint32_t> knocksAt, uint32_t untilMs = 4000) 
 
 TEST(Hands, EverySegmentOfTheRecordingCountsWhatTheHandsDid) {
   const std::vector<Segment> segs = loadHands();
-  ASSERT_GE(segs.size(), 8u) << "test/fixtures/hands_2026-10-19.txt";
+  ASSERT_GE(segs.size(), 10u) << "test/fixtures/hands_2026-10-19.txt";
   for (const Segment& s : segs) {
     const Count c = play(s);
     std::printf("[ hands ] %-22s knock knocks %d (want %d), singles %d:%s\n", s.label.c_str(), c.knockKnocks,
@@ -104,6 +105,40 @@ TEST(Hands, SingleKnocksAreSinglesNeverAKnockKnock) {
       EXPECT_EQ(c.knockKnocks, 0);
       EXPECT_GE(c.singles, 4) << c.at;
     }
+}
+
+// Replayed as the shell does (main.cpp feel()): KnockSense first, its busy()
+// riding the sample as `knocking`, then every detector. A knock's bounce in
+// the hand swings both ways like a tiny shake; on the board every knock knock
+// also told the future until `knocking` held the shake off.
+int shakes(const Segment& s) {
+  KnockSense k;
+  orient::Up up{1};   // ORIENT_R0 on the 1.28
+  Detectors d;
+  SenseOut out;
+  int n = 0;
+  for (const auto& [ms, b] : s.samples) {
+    const uint8_t rot = up.sample(b, ms);
+    BodySample x = up.toScreen(b);   // the screen's frame, as the Dish sees it
+    x.tapCode = k.sample(b, ms);
+    x.knocking = k.busy();
+    x.sideDown = rot == 1 || rot == 3, x.invertedDown = rot == 0;
+    out.clear();
+    d.sample(x, ms, out);
+    for (uint8_t i = 0; i < out.stimCount; ++i) n += out.stimuli[i] == stim::shake;
+  }
+  return n;
+}
+
+TEST(Hands, AKnockKnockIsNoShakeAndAShakeStillIs) {
+  for (const Segment& s : loadHands()) {
+    if (s.label.rfind("L1_", 0) == 0 || s.label.rfind("2b_", 0) == 0) {
+      EXPECT_EQ(shakes(s), 0) << s.label;
+    }
+    if (s.label == "9_shake") {
+      EXPECT_GE(shakes(s), 1) << s.label;
+    }
+  }
 }
 
 TEST(Scripted, TwoKnocksAreAKnockKnockReportedOnceItIsOver) {

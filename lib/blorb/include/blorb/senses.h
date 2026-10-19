@@ -33,6 +33,10 @@ struct BodySample {
   // Hidden by the turn into the screen's frame for the same reason, so it
   // rides the same way; SideHoldDetector gives it its timing.
   bool sideDown = false;
+  // A knock burst on a steady badge is under way (blorb::KnockSense, in the
+  // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
+  // and is not one.
+  bool knocking = false;
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered

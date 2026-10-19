@@ -257,6 +257,7 @@ void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 
   // Once a shake fires it takes kShakeRearmMs without a jolt before another
   // can start, so a shake kept up for a second is one shake (orient.h).
+  if (s.knocking) { joltCount_ = 0; return; }   // a knock's bounce, not a shake (KnockSense)
   if (grav_.squared() < kShakeJoltMg * kShakeJoltMg) return;
   bool rested = ms - quietSince_ >= kShakeRearmMs;
   quietSince_ = ms;

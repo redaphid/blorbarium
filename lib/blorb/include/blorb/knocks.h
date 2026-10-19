@@ -13,12 +13,17 @@
 //   - a kid knocks on a badge held still: in the 400 ms before the first knock
 //     the magnitude wobbles under 30 mg (handling: 130 and up) and the badge
 //     still points the same way afterwards.
-// So a knock is a spike in az's jerk; knocks within kChainMs make one burst;
-// the burst counts only if the badge was steady before it and points the same
-// way after; and it is reported when it is over, as the tap engine's code:
-// 1 a single knock, 2 a knock knock (two or three knocks: kids knock thrice).
-// Four or more is hammering, and counts as nothing. Pure, so it is tested
-// natively against the recording.
+// So a knock is a sample that jumps far from where gravity sat (kDevMg) in one
+// step (kJerkMg) -- at 50 Hz a knock's peak often falls between samples, and
+// one on the rim moves the in-plane axes as much as az, so it is the whole
+// vector, not az's jerk alone; the next kMergeMs is its ringing; knocks
+// within kChainMs make one burst; the burst counts only if the badge was steady
+// before it and points the same way after; and it is reported when it is over,
+// as the tap engine's code: 1 a single knock, 2 a knock knock (two or three
+// knocks: kids knock thrice). Four or more is hammering, and counts as
+// nothing. While a burst is under way (busy()), a knock's bounce in the hand
+// is no shake (main.cpp sets BodySample::knocking). Pure, so it is tested
+// natively against the recordings.
 #include <cstdint>
 
 #include "blorb/senses.h"
@@ -27,17 +32,21 @@ namespace blorb {
 
 class KnockSense {
  public:
-  static constexpr int32_t kSpikeMg = 1400;      // az's change between two samples that is a knock
-  static constexpr uint32_t kMergeMs = 120;      // a knock rings this long: spikes within it are the same knock
+  static constexpr int32_t kDevMg = 1100;        // that far from gravity...
+  static constexpr int32_t kJerkMg = 1200;       // ...reached in one 20 ms step: a knock
+  static constexpr uint32_t kMergeMs = 170;      // a knock rings this long: spikes within it are the same knock
   static constexpr uint32_t kChainMs = 600;      // the next knock of a knock knock comes within this (hands: 0.18-0.46 s)
-  static constexpr int32_t kSteadySdMg = 60;     // before the first knock: the magnitude's spread...
-  static constexpr int32_t kSteadyJerkMg = 200;  // ...and three in four samples' jerk under this
+  static constexpr int32_t kSteadySdMg = 80;     // before the first knock: the magnitude's spread...
+  static constexpr int32_t kSteadyJerkMg = 300;  // ...and three in four samples' jerk under this
   static constexpr int32_t kDriftMg = 150;       // gravity before and after may differ this much
   static constexpr uint32_t kSettleMs = 300;     // after the last knock, the ringing is over by then
-  static constexpr uint8_t kHistory = 20;        // 400 ms of samples before a knock
+  static constexpr uint8_t kHistory = 22;        // 440 ms of samples before a knock...
+  static constexpr uint8_t kLead = 2;            // ...less the newest two, which may already be its rising edge
 
   // Every 50 Hz sample: 0, or on the sample a burst is decided, 1 or 2.
   uint8_t sample(const BodySample& s, uint32_t ms);
+  // A burst from a steady badge is under way: its bounce is no shake.
+  bool busy() const { return inBurst_ && steady_; }
 
  private:
   struct Past { int16_t ax, ay, az; int32_t mag, jerk; };
@@ -48,11 +57,12 @@ class KnockSense {
   // The burst under way.
   bool inBurst_ = false, steady_ = false;
   uint8_t knocks_ = 0;
-  uint32_t last_ = 0;
+  uint32_t last_ = 0, onset_ = 0;
   int32_t g0x_ = 0, g0y_ = 0, g0z_ = 0;          // gravity before it
   int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
 
   bool steadyBefore();
+  void gravityBefore(int32_t& x, int32_t& y, int32_t& z) const;
   uint8_t decide();
 };
 

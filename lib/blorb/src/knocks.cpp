@@ -19,25 +19,31 @@ int32_t isqrt32(uint32_t v) {
 
 }  // namespace
 
-// Steady over the whole history: the magnitude's spread, and the jerk of the
-// quietest three samples in four. Also takes gravity before, from the oldest
-// three quarters of it (the newest may already lean into the knock).
+// The history oldest first, less the newest kLead samples.
+void KnockSense::gravityBefore(int32_t& x, int32_t& y, int32_t& z) const {
+  x = y = z = 0;
+  constexpr uint8_t kN = kHistory - kLead;
+  for (uint8_t i = 0; i < kN; ++i) {
+    const Past& p = hist_[(histAt_ + i) % kHistory];
+    x += p.ax, y += p.ay, z += p.az;
+  }
+  x /= kN, y /= kN, z /= kN;
+}
+
+// Steady before the knock: the magnitude's spread, and the jerk of the
+// quietest three samples in four.
 bool KnockSense::steadyBefore() {
-  if (histN_ < kHistory) return false;
+  constexpr uint8_t kN = kHistory - kLead;
   int64_t sum = 0, sq = 0;
-  int32_t jerks[kHistory];
-  g0x_ = g0y_ = g0z_ = 0;
-  constexpr uint8_t kOld = kHistory * 3 / 4;
-  for (uint8_t i = 0; i < kHistory; ++i) {
-    const Past& p = hist_[(histAt_ + i) % kHistory];   // oldest first
+  int32_t jerks[kN];
+  for (uint8_t i = 0; i < kN; ++i) {
+    const Past& p = hist_[(histAt_ + i) % kHistory];
     sum += p.mag, sq += int64_t(p.mag) * p.mag;
     jerks[i] = p.jerk;
-    if (i < kOld) g0x_ += p.ax, g0y_ += p.ay, g0z_ += p.az;
   }
-  g0x_ /= kOld, g0y_ /= kOld, g0z_ /= kOld;
-  const int64_t mean = sum / kHistory, var = sq / kHistory - mean * mean;
-  std::sort(jerks, jerks + kHistory);
-  return var < int64_t(kSteadySdMg) * kSteadySdMg && jerks[kHistory * 3 / 4] < kSteadyJerkMg;
+  const int64_t mean = sum / kN, var = sq / kN - mean * mean;
+  std::sort(jerks, jerks + kN);
+  return var < int64_t(kSteadySdMg) * kSteadySdMg && jerks[kN * 3 / 4] < kSteadyJerkMg;
 }
 
 uint8_t KnockSense::decide() {
@@ -49,17 +55,24 @@ uint8_t KnockSense::decide() {
 }
 
 uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
-  const int32_t jz = primed_ ? iabs32(s.az - pz_) : 0;
-  const int32_t jerk = primed_ ? iabs32(s.ax - px_) + iabs32(s.ay - py_) + jz : 0;
+  const int32_t jerk = primed_ ? iabs32(s.ax - px_) + iabs32(s.ay - py_) + iabs32(s.az - pz_) : 0;
   uint8_t out = 0;
   if (inBurst_ && ms - last_ > kChainMs) out = decide();
-  if (primed_ && jz >= kSpikeMg) {
-    if (inBurst_ && ms - last_ <= kMergeMs) {
+  bool spike = false;
+  int32_t gx = g0x_, gy = g0y_, gz = g0z_;
+  if (histN_ == kHistory && !inBurst_) gravityBefore(gx, gy, gz);
+  if ((histN_ == kHistory || inBurst_) && jerk >= kJerkMg) {
+    const int32_t dx = s.ax - gx, dy = s.ay - gy, dz = s.az - gz;
+    spike = int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz >= int64_t(kDevMg) * kDevMg;
+  }
+  if (spike) {
+    if (inBurst_ && ms - onset_ <= kMergeMs) {
       last_ = ms;
     } else if (inBurst_) {
-      ++knocks_, last_ = ms;
+      ++knocks_, last_ = onset_ = ms;
     } else {
-      inBurst_ = true, knocks_ = 1, last_ = ms;
+      inBurst_ = true, knocks_ = 1, last_ = onset_ = ms;
+      g0x_ = gx, g0y_ = gy, g0z_ = gz;
       steady_ = steadyBefore();
     }
     sumX_ = sumY_ = sumZ_ = sumN_ = 0;
