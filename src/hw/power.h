@@ -25,9 +25,19 @@
 
 #include "blorb/senses.h"
 
+// Seconds with no user input before low power: the owner's 10 minutes. A
+// test build may shorten it without touching the code:
+//   PLATFORMIO_BUILD_FLAGS="-DBLORB_IDLE_SECONDS=30" pio run -e badge128
+// (At run time, `DEBUG power idle <s>` / the debug link's `POWER idle <s>`
+// change it until reset; `idle default` goes back to this.)
+#ifndef BLORB_IDLE_SECONDS
+#define BLORB_IDLE_SECONDS 600
+#endif
+static_assert(BLORB_IDLE_SECONDS >= 1 && BLORB_IDLE_SECONDS <= 86400, "BLORB_IDLE_SECONDS: 1 s to a day");
+
 namespace power {
 
-constexpr uint32_t kIdleMs = 10u * 60u * 1000u;   // the owner: 10 minutes with no user input
+constexpr uint32_t kIdleMs = uint32_t(BLORB_IDLE_SECONDS) * 1000u;
 constexpr int kDriftMg = 120;                     // about 7 degrees of tilt
 constexpr int kJoltMg = 350;                      // past hand tremor and a car's hum
 constexpr int kSmoothShift = 3;                   // 1/8 per 50 Hz sample: about 160 ms

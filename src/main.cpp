@@ -177,7 +177,7 @@ static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 static orient::Up up{ORIENT_R0};
-// Low power after 10 minutes with no user input (src/hw/power.h, docs/power.md).
+// Low power after BLORB_IDLE_SECONDS (600) with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
 static uint32_t framesDrawn = 0;
 

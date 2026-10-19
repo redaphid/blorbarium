@@ -3,6 +3,15 @@
 The badges run on a battery. After **10 minutes with no user input** a badge
 drops to low power, and anything a person does brings it back at once.
 
+The timeout is `BLORB_IDLE_SECONDS` (default 600, `src/hw/power.h`). A test
+build overrides it without touching the code:
+
+    PLATFORMIO_BUILD_FLAGS="-DBLORB_IDLE_SECONDS=30" pio run -e badge128
+
+Rebuild without the flag before a release. At run time `POWER idle <s>`
+(debug link) or `DEBUG power idle <s>` (cable) changes it until reset, and
+`idle default` goes back to the built-in value.
+
 ## What low power is
 
 | | Awake | Low power |
