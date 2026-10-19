@@ -17,7 +17,7 @@ Rebuild without the flag before a release. At run time `POWER idle <s>`
 | | Awake | Low power |
 |---|---|---|
 | Screen | drawn about 5 times a second, backlight at the pet's brightness | panel in sleep (SLPIN), backlight off, nothing drawn |
-| CPU | 240 MHz | 80 MHz, and the loop rests 20 ms a pass |
+| CPU | 240 MHz | 80 MHz, and the loop rests 20 ms a pass; on `badge128_pm`, light sleep between (below) |
 | The pet | lives | lives: every 100 ms tick still runs, so he ages, sleeps and gets hungry as before |
 | Body sensing | 50 Hz | 50 Hz (this is what wakes it) |
 | Bluetooth | advertising, connectable | the same: a phone still finds it |
@@ -26,6 +26,52 @@ Rebuild without the flag before a release. At run time `POWER idle <s>`
 Waking turns the CPU back up, takes the panel out of sleep, draws a fresh
 frame and only then lights the backlight, so the screen never flashes the
 frame from ten minutes ago.
+
+## Light sleep (`badge128_pm`)
+
+The stock Arduino 2.0.17 libraries are built with power management off, so
+on `badge128` low power can only slow the clock. `badge128_pm` links the same
+Arduino, rebuilt from the same sources (ESP-IDF v4.4.7 38eeba213a and the
+components pinned in `tools/sdk/versions.txt`) with these on, and nothing
+else (`tools/pm_framework.defconfig`):
+
+- `CONFIG_PM_ENABLE` and `CONFIG_FREERTOS_USE_TICKLESS_IDLE`: the chip
+  light-sleeps whenever every task is waiting;
+- `CONFIG_BT_CTRL_MODEM_SLEEP` (main crystal as its clock: the board has no
+  32 kHz one): Bluetooth's radio sleeps between events and the link survives;
+- `CONFIG_PM_PROFILING`: the time in each mode, for `slept_ms`.
+
+Build the framework once (an hour or so; it needs jq, and fetches ESP-IDF
+and the components to `~/src/esp32-arduino-lib-builder`), then the env:
+
+    bash tools/pm_framework.sh      # installs ~/.platformio/packages/framework-arduinoespressif32-pm
+    pio run -e badge128_pm
+
+The script refuses to install a build whose sdkconfig differs from stock in
+anything but power management, so LittleFS, NVS and the rest are the stock
+stack: a badge flashed with it resumed its pet with the same genome and age.
+
+Light sleep is only on in low power (`esp_pm_configure` from `cpuPower` in
+`src/main.cpp`); awake, the clock is pinned at 240 MHz with no sleep, so the
+panel's SPI and the backlight never meet a gated clock. In low power the
+sense task's 50 Hz reads and the loop's 20 ms rests wake it; the pet ticks,
+motion and the button wake it as before.
+
+**The cable.** The cable is UART0 through the CH343, and a UART hears
+nothing while the chip sleeps: a byte wakes it, but that byte and the next
+few are lost. Any byte on the cable holds light sleep off for 3 s, so a
+script sends a few `\r` (the link ignores them), waits ~60 ms, then its
+line (`tools/power_e2e.py` and `tools/duel_soak.py` do). Output is never
+lost. Lines sent without the preamble to a sleeping badge mostly arrive
+mangled (`#0 ERR 404 UNKNOWN_VERB`).
+
+**ESP-NOW** is not heard while the chip sleeps. Nothing needs it then:
+fight mode holds the badge awake, and a badge enters it by a hang, which
+wakes it first.
+
+Measured on badge 1, idle on the desk, low power: the chip light-slept about
+70% of the time with the cable quiet (11.3 s of 16.2 s), and 5.1 s of 8 with
+a phone connected over Bluetooth. Current draw is still to be measured.
 
 ## The idle bar
 
@@ -76,9 +122,9 @@ Over the debug characteristic (docs/debug-ble.md), reach Show, no unlock:
 
 ```
 #1 POWER
-#1 OK power=full why=boot idle_ms=600000 left_ms=412000 cpu=240 frames=812 changes=0 held=0
+#1 OK power=full why=boot idle_ms=600000 left_ms=412000 cpu=240 frames=812 changes=0 held=0 sleep=off slept_ms=0
 #2 POWER low
-#2 OK power=low why=asked idle_ms=600000 left_ms=0 cpu=80 frames=815 changes=1 held=0
+#2 OK power=low why=asked idle_ms=600000 left_ms=0 cpu=80 frames=815 changes=1 held=0 sleep=light slept_ms=0
 #3 POWER wake
 #4 POWER idle 30          (1..3600 s, until reset)
 #5 POWER idle default
@@ -89,16 +135,27 @@ A badge asked to go low stays low until a hand wakes it (or `POWER wake`):
 the page's own protocol lines do not undo it. Every change is a
 `! DEBUG power=...` event on the debug link and a `[power] ...` line on the
 cable. On the cable: `DEBUG power [low|wake|idle <s>|idle default]`, which
-also prints `input=` (the last thing that counted).
+also prints `input=` (the last thing that counted), and `DEBUG power stats`
+(the PM profiling's lock and mode table).
+
+`sleep=` is `none` on a build without light sleep, `off` awake, `light` in
+low power, and `cable` in low power while a cable byte holds it off.
+`slept_ms` is the light-sleep time since boot.
 
 ## Tests
 
 - `test/test_power`: the rules (idle, drift, shake, knock knock, stray taps
   and bumps ignored, holds, the phone, clock order).
 - `tools/power_e2e.py <port>`: on a real badge, over the cable and Bluetooth.
+  `light` (skipped on a build with `sleep=none`) proves the chip light-sleeps
+  with the cable quiet and the pet lives on; `ble` proves it light-sleeps with
+  a phone connected.
   Needs the badge lying still. `--only ten_minutes` runs the real default;
   `--only hand` asks you to pick it up.
 
 Proven on badge 1 (mossby, d4:05:92:77:1b:3c) at 0.7.11, 2026-10-18: every
 scenario passed, including 600 s to low untouched, the pet aging while dark,
 and a phone connecting waking it. Current draw was not measured.
+
+`badge128_pm` on badge 1, 2026-10-18: every scenario passed, `light` and the
+light-sleep check in `ble` among them.

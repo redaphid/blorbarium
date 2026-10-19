@@ -36,6 +36,12 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
 #include "debugble/console.h"
+#include <sdkconfig.h>
+#if defined(CONFIG_PM_ENABLE)
+#include <driver/uart.h>
+#include <esp_pm.h>
+#include <esp_sleep.h>
+#endif
 using PetStorage = hw::NvsFsStorage;
 #endif
 
@@ -43,6 +49,10 @@ using PetStorage = hw::NvsFsStorage;
 #include "hw/orient.h"
 #include "hw/power.h"
 #include "debug_verbs.h"
+
+// The cable's last byte, for light sleep (main.cpp, "Low power"): a byte holds it off a while.
+static uint32_t cableHeardAt = 0;
+static inline void cableByte() { cableHeardAt = millis(); }
 
 // The protocol over the serial line. A cable has no connect event, so the
 // owner counts as near once a line has arrived. A `DEBUG ` line is held back
@@ -69,6 +79,7 @@ class SerialLink : public blorb::Link {
   std::optional<std::string_view> readLine() override {
     while (Serial.available() > 0) {
       const int c = Serial.read();
+      cableByte();
       if (c == '\r') continue;
       if (c != '\n') {
         if (len_ < sizeof(line_)) line_[len_++] = char(c);
@@ -180,6 +191,12 @@ static orient::Up up{ORIENT_R0};
 // Low power after BLORB_IDLE_SECONDS (600) with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
 static uint32_t framesDrawn = 0;
+#if !defined(BADGE_BOARD_SIM)
+static uint32_t cpuMaxMhz = 240;   // what the clock is set to run at (with DFS it dips below)
+static void pmBegin();             // below, with the rest of low power
+static const char* sleepState();
+static uint32_t sleptMs();
+#endif
 
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
@@ -550,7 +567,7 @@ static void reportStatus(uint32_t now) {
       unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
       lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0,
-      powerPolicy.low() ? "low" : "full", unsigned(getCpuFrequencyMhz()), unsigned(framesDrawn));
+      powerPolicy.low() ? "low" : "full", unsigned(cpuMaxMhz), unsigned(framesDrawn));
 }
 #endif
 
@@ -697,6 +714,12 @@ void setup() {
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
+  pmBegin();
+#if defined(CONFIG_PM_ENABLE)
+  Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
+#else
+  Serial.println("[hw] pm: none (stock framework): low power is 80 MHz and a dark panel");
+#endif
 #endif
 }
 
@@ -1010,6 +1033,78 @@ static constexpr uint32_t kLowRestMs = 20;   // the loop's rest a pass in low po
 static bool panelLow = false, lightAfterFrame = false;
 static uint32_t seenBleGen = 0, seenAirLines = 0;
 
+// The CPU side of low power. On a framework built with power management
+// (CONFIG_PM_ENABLE: tools/pm_framework.sh, env badge128_pm) the chip
+// light-sleeps whenever every task is waiting, which in low power is most
+// of each 20 ms: the sense task's 50 Hz and the loop's rest wake it, and
+// Bluetooth's modem sleep (CONFIG_BT_CTRL_MODEM_SLEEP) keeps the link up
+// across it. Awake there is no light sleep at all, so the panel's SPI and
+// the backlight's PWM never meet a gated clock. On the stock framework the
+// clock just drops to 80 MHz.
+#if defined(CONFIG_PM_ENABLE)
+static constexpr bool kLightSleep = true;
+// The cable is UART0 through the CH343, and a UART hears nothing while the
+// chip light-sleeps: a byte wakes it (uart wakeup, 3 edges) but that byte and
+// the next few are lost. So any byte on the cable holds light sleep off for
+// kCableAwakeMs, and a script sends a few '\r' (the link ignores them), waits
+// ~60 ms, then its line, which arrives whole. A quiet cable lets the chip
+// sleep, so a badge on its cable still proves light sleep (slept_ms).
+static constexpr uint32_t kCableAwakeMs = 3000;
+static esp_pm_lock_handle_t cableLock = nullptr;
+static bool cableHeld = false;
+static void cablePower(uint32_t) {
+  const bool hold = millis() - cableHeardAt < kCableAwakeMs;
+  if (hold == cableHeld || !cableLock) return;
+  cableHeld = hold;
+  if (hold) esp_pm_lock_acquire(cableLock);
+  else esp_pm_lock_release(cableLock);
+}
+static const char* sleepState() { return !powerPolicy.low() ? "off" : cableHeld ? "cable" : "light"; }
+// Light-sleep time since boot, from the PM profiling's mode table (the SLEEP
+// row, which it only prints while light sleep is on: awake, the last one seen).
+static uint32_t sleptMs() {
+  static uint32_t last = 0;
+#if defined(CONFIG_PM_PROFILING)
+  static char buf[1536];
+  std::memset(buf, 0, sizeof buf);
+  FILE* f = fmemopen(buf, sizeof buf - 1, "w");
+  if (!f) return last;
+  esp_pm_dump_locks(f);
+  std::fclose(f);
+  unsigned mhz = 0;
+  unsigned long long us = 0;
+  if (const char* l = std::strstr(buf, "\nSLEEP"); l && std::sscanf(l + 1, "SLEEP %u M %llu", &mhz, &us) == 2)
+    last = uint32_t(us / 1000);
+#endif
+  return last;
+}
+static void cpuPower(bool low) {
+  esp_pm_config_esp32s3_t c{};
+  c.max_freq_mhz = low ? int(kLowMhz) : int(kFullMhz);
+  c.min_freq_mhz = low ? 40 : int(kFullMhz);   // 40: the crystal, while waiting
+  c.light_sleep_enable = low;
+  const esp_err_t e = esp_pm_configure(&c);
+  if (e != ESP_OK) Serial.printf("[power] esp_pm_configure failed err=%d\n", int(e));
+  cpuMaxMhz = uint32_t(c.max_freq_mhz);
+}
+static void pmBegin() {
+  esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "cable", &cableLock);
+  uart_set_wakeup_threshold(UART_NUM_0, 3);
+  esp_sleep_enable_uart_wakeup(0);
+  cpuPower(false);
+}
+#else
+static const char* sleepState() { return "none"; }
+static uint32_t sleptMs() { return 0; }
+static void cablePower(uint32_t) {}
+static constexpr bool kLightSleep = false;
+static void cpuPower(bool low) {
+  cpuMaxMhz = low ? kLowMhz : kFullMhz;
+  setCpuFrequencyMhz(cpuMaxMhz);
+}
+static void pmBegin() {}
+#endif
+
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
 static bool powerHeld() {
@@ -1018,10 +1113,11 @@ static bool powerHeld() {
 }
 
 static const char* powerLine(char* out, size_t n, uint32_t now) {
-  std::snprintf(out, n, "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s",
+  std::snprintf(out, n, "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s sleep=%s slept_ms=%u",
                 powerPolicy.low() ? "low" : "full", power::whyName(powerPolicy.why()), unsigned(powerPolicy.idleMs()),
-                unsigned(powerPolicy.msLeft(now)), unsigned(getCpuFrequencyMhz()), unsigned(framesDrawn),
-                unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()));
+                unsigned(powerPolicy.msLeft(now)), unsigned(cpuMaxMhz), unsigned(framesDrawn),
+                unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()),
+                sleepState(), unsigned(sleptMs()));
   return out;
 }
 
@@ -1030,19 +1126,20 @@ static void applyPower(uint32_t now) {
   if (const uint32_t g = ble.generation(); g != seenBleGen) seenBleGen = g, powerPolicy.phone(now);
   if (const uint32_t n = links.airLines(); n != seenAirLines) seenAirLines = n, powerPolicy.phone(now);
   powerPolicy.update(now, powerHeld());
+  cablePower(now);
   if (powerPolicy.low() == panelLow) return;
   panelLow = powerPolicy.low();
   if (panelLow) {
     lightAfterFrame = false;
     display.sleep();   // backlight to 0, then SLPIN
-    setCpuFrequencyMhz(kLowMhz);
+    cpuPower(true);
   } else {
-    setCpuFrequencyMhz(kFullMhz);
+    cpuPower(false);
     display.getPanel()->setSleep(false);   // SLPOUT; the light waits for a fresh frame
     lastFrame = now - kFrameMs;            // drawn this very pass
     lightAfterFrame = true;
   }
-  char line[160];
+  char line[200];
   Serial.printf("[power] %s\n", powerLine(line, sizeof line, now));
   dbgfw::link.writeLine(std::string("! DEBUG ") + line);
 }
@@ -1059,8 +1156,25 @@ static bool powerAsk(debugble::Board::PowerAsk ask, uint32_t idleMs) {
   return true;
 }
 
+// `DEBUG power stats`: time in each power mode since boot (CONFIG_PM_PROFILING),
+// the proof that the chip really light-sleeps.
+static void powerStats() {
+#if defined(CONFIG_PM_PROFILING)
+  static char buf[2048];
+  std::memset(buf, 0, sizeof buf);
+  if (FILE* f = fmemopen(buf, sizeof buf - 1, "w")) {
+    esp_pm_dump_locks(f);
+    std::fclose(f);
+  }
+  for (char* l = std::strtok(buf, "\n"); l; l = std::strtok(nullptr, "\n")) Serial.printf("[power] stats %s\n", l);
+#else
+  Serial.println("[power] stats: none (this framework has no CONFIG_PM_PROFILING)");
+#endif
+}
+
 static void powerVerb(const char* a, const char* line) {
   using A = debugble::Board::PowerAsk;
+  if (!std::strcmp(a, "stats")) return powerStats();
   A ask = A::Status;
   uint32_t idleMs = 0;
   if (!std::strcmp(a, "low")) ask = A::Low;
@@ -1073,10 +1187,10 @@ static void powerVerb(const char* a, const char* line) {
       return (void)Serial.printf("[power] want: power idle <seconds 1..3600>|default\n");
     ask = A::Idle, idleMs = std::strcmp(what, "default") ? uint32_t(sec) * 1000 : 0;
   } else if (*a && std::strcmp(a, "status")) {
-    return (void)Serial.printf("[power] want: power [status|low|wake|idle <seconds>|idle default]\n");
+    return (void)Serial.printf("[power] want: power [status|low|wake|idle <seconds>|idle default|stats]\n");
   }
   const bool ok = powerAsk(ask, idleMs);
-  char out[160];
+  char out[200];
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
 }
 

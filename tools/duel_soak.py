@@ -77,6 +77,11 @@ class Board:
 
     def send(self, line):
         self.log.write("%8.2f %s >> %s\n" % (time.monotonic() - self.t0, self.tag, line))
+        # A light-sleeping badge (badge128_pm) wakes on the serial line's first
+        # bytes and loses them, then stays awake 3 s: '\r's first (the link
+        # ignores them), and the line once it is up.
+        self.p.write(b"\r" * 8)
+        time.sleep(0.06)
         self.p.write(line.encode() + b"\n")
 
     def reset(self):

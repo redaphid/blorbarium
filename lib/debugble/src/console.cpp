@@ -356,9 +356,9 @@ const char* const kDuelPhases[] = {"closed",    "lobby",    "greeting", "staking
                                    "revealing", "fainting", "mercy",    "fallen",  "friends"};
 
 void powerLine(const Board::PowerView& v, blorb::Reply& r) {
-  r.unsaved().ok("power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d", v.low ? "low" : "full",
-                 v.why, unsigned(v.idleMs), unsigned(v.msLeft), unsigned(v.cpuMhz), unsigned(v.frames),
-                 unsigned(v.changes), int(v.held));
+  r.unsaved().ok("power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d sleep=%s slept_ms=%u",
+                 v.low ? "low" : "full", v.why, unsigned(v.idleMs), unsigned(v.msLeft), unsigned(v.cpuMhz),
+                 unsigned(v.frames), unsigned(v.changes), int(v.held), v.sleep, unsigned(v.sleptMs));
 }
 
 // An optional number in [lo, hi], else `dflt`; nullopt when one is there but bad.

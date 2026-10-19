@@ -59,6 +59,8 @@ class Board {
     uint32_t idleMs, msLeft;    // the timeout, and what is left of it
     uint32_t cpuMhz, frames, changes;
     bool held;                  // a duel, an update or a question keeps it awake
+    const char* sleep = "none";   // light sleep: none (no PM), off (awake), light, usb (held off by a cable)
+    uint32_t sleptMs = 0;         // time light-sleeping since boot
   };
   enum class PowerAsk : uint8_t { Status, Low, Wake, Idle };
   // Status, low power now, awake now, or the idle timeout (ms; 0: the default)

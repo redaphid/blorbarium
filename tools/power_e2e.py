@@ -95,6 +95,11 @@ class Board:
 
     def send(self, line):
         self.log.write("%8.2f >> %s\n" % (time.monotonic() - self.t0, line))
+        # A light-sleeping badge (badge128_pm) wakes on the serial line's first
+        # bytes and loses them, then stays awake 3 s: '\r's first (the link
+        # ignores them), and the line once it is up.
+        self.p.write(b"\r" * 8)
+        time.sleep(0.06)
         self.p.write(line.encode() + b"\n")
 
     def wait(self, pattern, timeout, since=None):
@@ -199,6 +204,31 @@ class Run:
         self.check(int(p2["frames"]) > int(p1["frames"]), "frames run again (%s -> %s)" % (p1["frames"], p2["frames"]))
 
     # ---- scenarios over the cable ---------------------------------------------------------
+
+    def sc_light(self):
+        """Light sleep (badge128_pm): dark and with the cable quiet, the chip itself
+        sleeps most of the time (slept_ms, from the PM profiling), the pet still
+        lives, and a byte on the cable wakes it to answer."""
+        p0 = self.b.power()
+        if p0.get("sleep", "none") == "none":
+            self.say("  no light sleep on this build (sleep=none): skipped")
+            return
+        self.b.ask("DEBUG power low", r"\[power\] now power=low")
+        p1 = self.b.power()
+        self.check(p1["sleep"] == "cable", "a line on the cable holds sleep off (sleep=%s)" % p1["sleep"])
+        t1 = time.monotonic()
+        a1, _, _, _ = self.b.age()   # waits for the status line, sending nothing
+        time.sleep(12)
+        p2 = self.b.power()
+        dt = time.monotonic() - t1
+        slept = (int(p2["slept_ms"]) - int(p1["slept_ms"])) / 1000.0
+        free = dt - 3.5   # the cable's 3 s hold after the last line, and the ask
+        self.check(slept >= 0.4 * free, "light-slept %.1f s of the %.1f s the cable was quiet" % (slept, free))
+        a2, pw, cpu, _ = self.b.age()
+        self.check(pw == "low" and a2 > a1, "the pet lived on through it (age %d -> %d ticks)" % (a1, a2))
+        self.b.ask("DEBUG power wake", r"\[power\] now power=full")
+        p3 = self.b.power()
+        self.check(p3["sleep"] == "off", "awake: no light sleep at all (sleep=%s)" % p3["sleep"])
 
     def sc_idle(self):
         """Still for the timeout: it goes low by itself, stays dark and the pet lives on."""
@@ -397,6 +427,13 @@ class Run:
             await asyncio.sleep(2)
             await dbg("POWER", r"OK power=low")
             await dbg("STATUS", r"OK unlock=")
+            # Light sleep with the phone connected: Bluetooth's modem sleep keeps the link.
+            g1 = await dbg("POWER", r"OK power=low")
+            if "sleep=none" not in g1:
+                await asyncio.sleep(8)   # the cable quiet, the link up
+                g2 = await dbg("POWER", r"OK power=low .*sleep=light")
+                d = (int(re.search(r"slept_ms=(\d+)", g2).group(1)) - int(re.search(r"slept_ms=(\d+)", g1).group(1))) / 1000
+                self.check(d >= 2.0, "light-slept %.1f s of 8 with the phone connected" % d)
             await rx("STATE")   # a protocol line: input, but the page that asked for low power must not undo it
             await asyncio.sleep(0.5)
             await dbg("POWER", r"OK power=low why=asked")
@@ -453,7 +490,7 @@ class Run:
         self.check(bool(up) and self.b.boots == boots + 1, "BLE REBOOT restarted it, and the pet resumed")
         self.b.wait(r"\[hw\] ble adv on", 5)
 
-    SCENARIOS = ["idle", "button", "drift", "cradle", "still_stays_dark", "asked", "hold", "ble"]
+    SCENARIOS = ["idle", "button", "drift", "cradle", "still_stays_dark", "asked", "hold", "light", "ble"]
     EXTRA = ["ten_minutes", "hand"]
 
     def run(self, names):

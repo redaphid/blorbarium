@@ -49,7 +49,7 @@ struct Board : debugble::Board {
     if (!::powerAsk(ask, idleMs)) return false;
     const uint32_t now = millis() + warpMs;
     v = PowerView{powerPolicy.low(), power::whyName(powerPolicy.why()), powerPolicy.idleMs(), powerPolicy.msLeft(now),
-                  uint32_t(getCpuFrequencyMhz()), framesDrawn, powerPolicy.changes(), powerHeld()};
+                  cpuMaxMhz, framesDrawn, powerPolicy.changes(), powerHeld(), sleepState(), sleptMs()};
     return true;
   }
   bool press(uint32_t ms, bool twice) override { return remotePress(ms, twice); }

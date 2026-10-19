@@ -663,7 +663,7 @@ TEST(Device, PowerNeedsNoPressAndSavesNothing) {
   Device r;
   r.boot();
   EXPECT_EQ(r.send("#1 POWER"),
-            "#1 OK power=full why=boot idle_ms=600000 left_ms=600000 cpu=240 frames=42 changes=0 held=0");
+            "#1 OK power=full why=boot idle_ms=600000 left_ms=600000 cpu=240 frames=42 changes=0 held=0 sleep=none slept_ms=0");
   EXPECT_EQ(r.send("#2 POWER low").substr(0, 33), "#2 OK power=low why=asked idle_ms");
   EXPECT_TRUE(r.low);
   EXPECT_EQ(r.send("#3 POWER wake").substr(0, 16), "#3 OK power=full");
