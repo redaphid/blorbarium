@@ -48,6 +48,7 @@ using PetStorage = hw::NvsFsStorage;
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
 #include "hw/power.h"
+#include "hw/turn_yes.h"
 #include "debug_verbs.h"
 
 // The cable's last byte, for light sleep (main.cpp, "Low power"): a byte holds it off a while.
@@ -388,6 +389,16 @@ static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false
   // The panel and the engine turn together, so downhill is down on the glass.
   const uint8_t rot = up.sample(body, ms);
   if (rot != display.getRotation()) display.setRotation(rot);
+#if !defined(BADGE_BOARD_SIM)
+  // "Turn me around!": a turn answers the update's question as a press does.
+  // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
+  // press to unlock, so no phone says yes for itself.
+  static hw::TurnYes turnYes;
+  if (turnYes.sample(updater.asking(), rot, millis())) {
+    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(rot));
+    updater.press(millis());
+  }
+#endif
   blorb::BodySample screen = up.toScreen(body);
   // Held upside down is the one pose the turn into the screen's frame hides:
   // the settled rotation is the only place it still exists, so it rides the

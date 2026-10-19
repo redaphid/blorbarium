@@ -1,7 +1,7 @@
 """Signing and releasing firmware for updates over Bluetooth (docs/ota.md).
 
     uv run --with cryptography python tools/ota_release.py keygen
-    uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build]
+    uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build] [--env badge128_pm]
     uv run --with cryptography python tools/ota_release.py check web/public/fw/lcd128/manifest.json
     uv run --with cryptography python tools/ota_release.py fixture
 
@@ -140,7 +140,7 @@ def cmd_release(args):
     if point(key.public_key()) != embedded_point():
         sys.exit(f"{PUBKEY_H.relative_to(ROOT)} holds another key's public half: a dish built from this tree "
                  "would refuse what this key signs. Run `keygen` with this key first.")
-    board, env = args.board, BOARDS[args.board]
+    board, env = args.board, args.env or BOARDS[args.board]
     clean_tree(board)
     if not args.no_build:
         pio = Path.home() / ".platformio" / "penv" / ("Scripts/pio.exe" if os.name == "nt" else "bin/pio")
@@ -226,6 +226,8 @@ def main():
     r.add_argument("--board", default="lcd128", choices=sorted(BOARDS))
     r.add_argument("--allow-older", action="store_true", help="sign flag 1: the dish takes it even if not newer")
     r.add_argument("--no-build", action="store_true", help="sign the firmware.bin already built")
+    r.add_argument("--env", help="PlatformIO env to build and sign (default: the board's; badge128_pm for light "
+                                 "sleep, which needs tools/pm_framework.sh run once on this machine)")
     r.add_argument("--format-change", action="store_true", help="release an image whose save format differs from the last")
     c = sub.add_parser("check")
     c.add_argument("manifest")

@@ -41,7 +41,7 @@ updated over the air.
 
 ```
 idle --BEGIN (right board, newer, fits, not on trial, not busy, signed)--> confirm
-confirm --button pressed after 1.5 s (not on trial, not busy, save written)--> receiving
+confirm --button pressed or the badge turned after 1.5 s (not on trial, not busy, save written)--> receiving
 confirm --30 s with no press--> idle  last=no_confirm
 receiving --last byte, hash and image check pass--> ready
 receiving --5 min with no byte--> idle  last=timeout
@@ -146,6 +146,15 @@ not on trial and not busy, writes a save, opens the inactive slot and moves to
 `receiving`. Busy at the press is `idle last=busy`, and a failed save is
 `idle last=save_failed`. A `DEBUG press` over the serial cable answers too: the
 cable is a hand on the dish.
+
+**Turn me around.** The children cannot use the button, so the question
+says "Turn me around!" and a turn of the badge answers it exactly as a
+press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the cable). The turn
+is the screen's own settled rotation, a quarter turn held 0.4 s with jolts
+ignored, so it only registers while the badge is held up, not lying flat.
+A turn in the first 1.5 s was already under way and is not a yes. The
+debug link's HANG turns it too, but HANG needs the unlock, which needs a
+hand on the badge.
 
 After 30 s with no press, the session ends with `last=no_confirm`.
 
@@ -254,7 +263,7 @@ is busy.
 2. Fetch `/fw/<board>/manifest.json`. If its version is not newer, the dish
    is up to date.
 3. Fetch the image and check its length and SHA-256 against the manifest.
-4. `OTA BEGIN` with the manifest's fields. Ask the child to press the button,
+4. `OTA BEGIN` with the manifest's fields. Ask the child to turn the badge around (or press the button),
    and poll STATUS each second until `receiving`.
 5. Send writes from `at`. Keep at most 6 KB unacknowledged past the last
    `at=` heard. On `gap`, go back to its `at`. After 2 s with no progress,

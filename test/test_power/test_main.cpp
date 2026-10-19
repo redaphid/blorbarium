@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "blorb/senses.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/hw/power.h"
+#include "../../src/hw/turn_yes.h"
 
 namespace {
 
@@ -203,6 +204,39 @@ TEST(Power, AnInputStampedAfterTheLoopsNowIsNoTimeAtAll) {
 }
 
 }  // namespace
+
+// ---- Turn me around: the update's yes without the button ----------------------------
+
+TEST(TurnYes, AQuarterTurnAfterTheFirstMomentSaysYesOnce) {
+  hw::TurnYes t;
+  EXPECT_FALSE(t.sample(true, 0, 1000));   // the question appears, held at 0
+  EXPECT_FALSE(t.sample(true, 0, 2000));
+  EXPECT_TRUE(t.sample(true, 1, 3000));    // turned
+  EXPECT_FALSE(t.sample(true, 1, 3100));   // once
+}
+
+TEST(TurnYes, NoTurnNoYes) {
+  hw::TurnYes t;
+  for (uint32_t ms = 0; ms < 30000; ms += 20) EXPECT_FALSE(t.sample(true, 2, ms));
+}
+
+TEST(TurnYes, ATurnAlreadyUnderWayIsNotAYesButTheNextOneIs) {
+  hw::TurnYes t;
+  EXPECT_FALSE(t.sample(true, 0, 1000));
+  EXPECT_FALSE(t.sample(true, 1, 1400));   // settled 0.4 s after the question: already turning
+  EXPECT_FALSE(t.sample(true, 1, 3000));
+  EXPECT_TRUE(t.sample(true, 2, 3500));    // a real turn later
+}
+
+TEST(TurnYes, OnlyWhileItAsks) {
+  hw::TurnYes t;
+  EXPECT_FALSE(t.sample(false, 0, 0));
+  EXPECT_FALSE(t.sample(false, 1, 5000));   // turning with no question is nothing
+  EXPECT_FALSE(t.sample(true, 1, 6000));    // a new question starts from where it is
+  EXPECT_FALSE(t.sample(false, 3, 9000));   // the question went away
+  EXPECT_FALSE(t.sample(true, 3, 9100));
+  EXPECT_TRUE(t.sample(true, 0, 11000));
+}
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
