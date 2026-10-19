@@ -200,6 +200,20 @@ class Soak:
             time.sleep(6)
         return False
 
+    def nap_all(self, boards=None, tries=3):
+        """Asleep for real (ctx 14, fight mode closed as he dozed), under the 0.9 wake gate."""
+        boards = boards or self.both
+        for b in boards:
+            for _ in range(tries):
+                b.send("DEBUG nap")
+                b.send("DEBUG sleepiness 60")
+                time.sleep(4)
+                active, phase, _, ctx = self.ctx(b)
+                if ctx == 14 and not active:
+                    break
+            else:
+                raise Fail("%s would not nap (ctx=%d active=%d phase=%s)" % (b.tag, ctx, active, phase))
+
     def battle(self, timeout=420, during=None, marks=None):
         """Waits for both badges to finish one battle. Returns {tag: hash}. `during` runs in a thread meanwhile."""
         marks = marks or {b: b.mark() for b in self.both}
@@ -322,10 +336,7 @@ class Soak:
         for b in self.both:
             self.wake_with_hang(b)
         time.sleep(2)
-        for b in self.both:
-            b.send("DEBUG nap")
-            b.send("DEBUG sleepiness 60")   # asleep, but under the 0.9 wake gate
-        time.sleep(4)
+        self.nap_all()   # asleep, but under the 0.9 wake gate
         marks = self.go()
         for b in self.both:
             b.send("DEBUG hang 3500 1")
@@ -523,21 +534,34 @@ class Soak:
         return "both wandered off cleanly; rematch " + self.check_battle(met, "blackout_long_rematch")
 
     def s_reset_midbattle(self):
-        """A badge loses power mid-battle: the other ends cleanly; after the reboot they fight again."""
-        mk = {}
-
-        def act():
-            mk["B"] = self.B.mark()
-            self.A.reset()
-        r = self._midbattle("reset_midbattle", act, expect_met=False)
-        if r:
-            raise Fail("a battle completed although A was reset mid-battle: " + r)
-        if not self.B.wait(r"-> (lobby|closed)", 30, since=mk["B"]):
-            raise Fail("B never left the battle after A died")
+        """A badge loses power mid-battle: the other ends cleanly (a wander-off draw at most, never a
+        win or a wound); after the reboot they fight again."""
+        self.reboot()
+        for b in self.both:
+            self.wake_with_hang(b)
+        marks = self.go()
+        for b in self.both:
+            if not b.wait(r"-> choosing", 120, since=marks[b]):
+                raise Fail("%s never reached choosing" % b.tag)
+        time.sleep(random.uniform(2, 12))
+        mb = self.B.mark()
+        self.A.reset()
+        left = self.B.wait(r"phase (\w+) -> (lobby|closed) end=(\d+)", 40, since=mb)
+        if not left:
+            raise Fail("B never left the battle after A lost power")
+        met = self.B.wait(r"\[duel\] met side=(\w) ending=([\w ]+?) turns=(\d+)", 3, since=mb)
+        if met and met.group(2) != "draw":
+            raise Fail("B recorded a %s against a badge that lost power" % met.group(2))
+        if self.A.wait(r"\[duel\] met ", 1, since=mb):
+            raise Fail("A recorded a meeting across its own reset")
+        self.A.wait(r"\[hw\] ble adv on", 15, since=mb)
         marks = {b: b.mark() for b in self.both}
         self.wake_with_hang(self.A)
-        met = self.battle(marks=marks, timeout=480)
-        return "B left cleanly; rematch " + self.check_battle(met, "reset_rematch")
+        if not self.wake_with_hang(self.B):
+            raise Fail("B would not go back into fight mode")
+        met2 = self.battle(marks=marks, timeout=480)
+        return "B left cleanly (end=%s%s); rematch %s" % (left.group(3), ", a draw" if met else "",
+                                                           self.check_battle(met2, "reset_rematch"))
 
     def _ghosts(self, n, mode, side, label, rx=0):
         self.reboot()
@@ -584,8 +608,7 @@ class Soak:
         """Documents the wake gate: asleep and sleepiness >= 0.9, a hang is refused and he sleeps on."""
         self.reboot()
         self.wake_with_hang(self.A)
-        self.A.send("DEBUG nap")
-        time.sleep(3)
+        self.nap_all([self.A])
         self.A.send("DEBUG sleepiness 100")
         time.sleep(1)
         m = self.A.mark()
@@ -604,10 +627,7 @@ class Soak:
         for b in self.both:
             self.wake_with_hang(b)
         time.sleep(2)
-        for b in self.both:
-            b.send("DEBUG nap")
-            b.send("DEBUG sleepiness 60")   # asleep, but under the 0.9 wake gate
-        time.sleep(4)
+        self.nap_all()   # asleep, but under the 0.9 wake gate
         marks = self.go()
         for b in self.both:
             b.send("DEBUG double")

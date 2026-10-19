@@ -78,6 +78,12 @@ struct RimHint {
 // The hint at its place on the rim, for any screen (the dish draws it too).
 void drawBootHint(Canvas240&, const RimHint&);
 
+// How long until the badge sleeps (docs/power.md): a 1 px arc one pixel in
+// from the rim, clockwise from the top, `permille` of the way round. Full
+// at any input, shrinking to nothing as the idle timeout runs out. Over
+// everything else: main.cpp draws it last.
+void drawIdleBar(Canvas240&, uint16_t permille);
+
 struct DuelScene {
   DuelAct act = DuelAct::Meeting;
   uint16_t ticks = 0;               // 10 a second since the act began; every motion is a function of it

@@ -18,6 +18,15 @@ Waking turns the CPU back up, takes the panel out of sleep, draws a fresh
 frame and only then lights the backlight, so the screen never flashes the
 frame from ten minutes ago.
 
+## The idle bar
+
+A 1 px arc one pixel in from the rim (`paint::drawIdleBar`, colour 120,150,150)
+shows the time left before the badge sleeps: it starts at 12 o'clock and runs
+clockwise, full round just after any input, shrinking to nothing as the
+timeout runs out. While something holds the badge awake it stays full. It is
+drawn last, over every screen, on the board only (the simulator's goldens
+never see it).
+
 ## What is user input
 
 `src/hw/power.h` (`power::Policy`) decides, from the raw IMU sample (before

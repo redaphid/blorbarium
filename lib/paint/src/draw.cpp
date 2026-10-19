@@ -1100,4 +1100,21 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   mask(cv);
 }
 
+void drawIdleBar(Canvas240& cv, uint16_t permille) {
+  if (permille > 1000) permille = 1000;
+  // In half pixels from the centre: the ring of pixels whose centres sit
+  // between 117 and 118 px out, the outermost the round glass shows whole.
+  constexpr int kOuter = (kSide - 2) * (kSide - 2), kInner = (kSide - 4) * (kSide - 4);
+  const uint16_t c = to565({120, 150, 150});
+  const double filled = permille / 1000.0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+      if (d2 >= kOuter || d2 < kInner) continue;
+      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+      if (sweep < 0) sweep += 1.0;
+      if (sweep < filled) cv.px[y * kSide + x] = c;
+    }
+}
+
 }  // namespace paint

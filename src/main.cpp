@@ -1119,6 +1119,8 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
     else dbgfw::draw(canvas);
+    // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
+    paint::drawIdleBar(canvas, uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs()));
 #endif
     boardPresent(display, canvas);
     ++framesDrawn;

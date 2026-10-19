@@ -11,6 +11,7 @@
 #include <vector>
 #include "blorb/appearance.h"
 #include "blorb/registry.h"
+#include "paint/duel.h"
 #include "paint/marquee.h"
 #include "paint/sprite_pack.h"
 
@@ -869,6 +870,33 @@ TEST(Lobby, ARefusedFightSaysWhy) {
   const auto u = render(update, paint::placeholderPack(), 0, 500);
   EXPECT_GT(strip(*plain, *e), 300);
   EXPECT_GT(strip(*e, *u), 100);
+}
+
+// The idle bar: one pixel wide, on the rim, clockwise from the top by exactly its share.
+TEST(IdleBar, OnePixelOnTheRimClockwiseFromTheTop) {
+  auto lit = [](uint16_t permille) {
+    auto cv = std::make_unique<paint::Canvas240>();
+    std::memset(cv->px, 0, sizeof cv->px);
+    paint::drawIdleBar(*cv, permille);
+    return cv;
+  };
+  auto count = [](const paint::Canvas240& cv, int x0, int x1, int y0, int y1) {
+    int n = 0;
+    for (int y = y0; y < y1; ++y)
+      for (int x = x0; x < x1; ++x) n += cv.px[y * 240 + x] != 0;
+    return n;
+  };
+  EXPECT_EQ(count(*lit(0), 0, 240, 0, 240), 0) << "asleep: nothing";
+  const auto full = lit(1000);
+  const int ring = count(*full, 0, 240, 0, 240);
+  EXPECT_NEAR(ring, int(2 * 3.14159 * 117.5), 60) << "one pixel wide all the way round";
+  for (int r = 0; r < 116; ++r) EXPECT_EQ(full->px[120 * 240 + 120 + r], 0) << "inside, " << r;
+  const auto half = lit(500);
+  EXPECT_NEAR(count(*half, 120, 240, 0, 240), ring / 2, 8) << "the right half: clockwise from the top";
+  EXPECT_EQ(count(*half, 0, 119, 0, 240), 0) << "and not the left";
+  const auto quarter = lit(250);
+  EXPECT_EQ(count(*quarter, 0, 240, 121, 240), 0) << "a quarter stops at 3 o'clock";
+  EXPECT_GT(count(*quarter, 120, 240, 0, 120), ring / 4 - 8);
 }
 
 int main(int argc, char** argv) {
