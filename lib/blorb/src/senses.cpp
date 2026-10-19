@@ -11,6 +11,7 @@ constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
 constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
+constexpr int32_t kHangFaceMg = 500;               // a hang is held up on edge: |az| past this (30 degrees off flat or flatter) is lying down
 constexpr uint32_t kHangRearmProgressMs = 200;     // progress must drain to here before another hang can fire
 constexpr uint32_t kParkedAfterMs = 15000;         // upright and undisturbed this long: he is parked (a stand, a shelf), not held
 constexpr int32_t kParkedDeltaMg = 30;             // one sample's gravity moving less than this is no disturbance at all
@@ -315,7 +316,14 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   primed_ = true;
   lastMs_ = ms;
   const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
-  if (s.invertedDown && steady) {
+  // Lying on a table with its bottom edge a little raised also settles the
+  // panel at 180 (orient.h needs only 0.35 g in the plane): that is the
+  // table, not a hand. A hang is held up on edge, so the face must be near
+  // vertical. And a hang is a turn: a badge that booted upside down, or has
+  // never been upright since, has not been turned by anyone.
+  const bool onEdge = absMg(s.az) <= kHangFaceMg;
+  if (!s.invertedDown && steady) armed_ = true;
+  if (s.invertedDown && steady && onEdge && armed_) {
     progress_ = progress_ + dt > kHangHoldMs ? kHangHoldMs : progress_ + dt;
   } else if (!s.invertedDown) {
     progress_ = progress_ > 2 * dt ? progress_ - 2 * dt : 0;

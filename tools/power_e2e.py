@@ -237,6 +237,7 @@ class Run:
         self.b.send("DEBUG hang 1500")
         self.wait_full({"drift", "jolt"})
         self.lit()
+        self.leave_fight()   # held upside down is also the hang: fight mode opened
 
     def sc_cradle(self):
         """Picked up and held still in a hand (tipped back about 27 degrees): it wakes."""
@@ -259,6 +260,18 @@ class Run:
         self.dark_and_living()
         self.b.send("DEBUG hang 1500")
         self.wait_full({"drift", "jolt"})
+        self.leave_fight()
+
+    def leave_fight(self):
+        """Out of fight mode, if a hang opened it: a double press in the lobby leaves."""
+        time.sleep(3)
+        for _ in range(3):
+            if not self.fight():
+                return
+            m = self.b.mark()
+            self.b.send("DEBUG double")
+            self.b.wait(r"-> closed", 4, since=m)
+        self.check(not self.fight(), "left fight mode")
 
     def fight(self):
         r = self.b.ask("DEBUG duel", r"\[duel\] now active=(\d)")

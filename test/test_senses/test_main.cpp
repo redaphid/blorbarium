@@ -63,7 +63,12 @@ class Gesture {
   Gesture& raw(const std::vector<BodySample>& v) { for (const BodySample& s : v) emit(s); return *this; }
   Gesture& temp(int16_t cx10) { rest_.tempCx10 = cx10; return *this; }
   Gesture& touch(bool down) { rest_.touchDown = down; return *this; }
-  Gesture& inverted(bool down) { rest_.invertedDown = down; return *this; }
+  // Held up on edge, upside down: in the screen's frame (main.cpp turns the
+  // sample) gravity is along -y, as when held upright. Righted: back on edge, upright.
+  Gesture& inverted(bool down) {
+    rest_.invertedDown = down;
+    return pose(0, -1000, 0);
+  }
   uint32_t now() const { return ms_; }
   const std::vector<Step>& steps() const { return steps_; }
 
@@ -328,7 +333,7 @@ TEST(Hang, AWobblyHangStillLandsWithoutStartingOver) {
 // A jolt mid-hang pauses the ask rather than erasing it.
 TEST(Hang, AJoltPausesAHangInsteadOfErasingIt) {
   Gesture g;
-  g.still(2000).inverted(true).still(600).pose(0, 0, 1400).still(400).pose(0, 0, 1000).still(400);
+  g.still(2000).inverted(true).still(600).pose(0, -1400, 0).still(400).pose(0, -1000, 0).still(400);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::hang), 1);
 }
@@ -336,9 +341,36 @@ TEST(Hang, AJoltPausesAHangInsteadOfErasingIt) {
 // A badge swung or tossed through upside down is off 1 g while it moves:
 // the pose alone, unsteady, is no ask.
 TEST(Hang, AnUnsteadyUpsideDownIsNotAHang) {
-  Heard r = play(Gesture().still(2000).pose(0, 0, 1400).inverted(true).still(2000));
+  Heard r = play(Gesture().still(2000).inverted(true).pose(0, -1400, 0).still(2000));
   EXPECT_EQ(r.count(stim::hang), 0);
   EXPECT_EQ(r.at(locus::hanging), 0.0);
+}
+
+// Lying on a table with one edge propped up: the shell settles at 180, but
+// the face is near flat. That is furniture, not a hand.
+TEST(Hang, LyingSlantedOnATableIsNotAHang) {
+  Gesture g;
+  g.still(2000).pose(0, -500, 866);   // 30 degrees up from flat, bottom edge raised
+  g.inverted(false).pose(0, -500, 866);
+  BodySample s;
+  s.ay = -500, s.az = 866, s.invertedDown = true;
+  for (int i = 0; i < 300; ++i) g.raw(s);   // 6 s
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 0);
+}
+
+// Switched on upside down (in a case hung on a hook): no ask until someone
+// has turned it the right way up and back.
+TEST(Hang, BootedUpsideDownIsNotAHangUntilTurned) {
+  Gesture g;
+  BodySample s;
+  s.ay = -1000, s.invertedDown = true;
+  for (int i = 0; i < 200; ++i) g.raw(s);   // 4 s, from the first sample
+  Heard r0 = play(g);
+  EXPECT_EQ(r0.count(stim::hang), 0);
+  g.inverted(false).still(500).inverted(true).still(1500);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 1);
 }
 
 // 300 ms in the air is a fall of 44 cm: a lap to a car's floor.

@@ -59,13 +59,49 @@ TEST(Power, TiltingTheBadgeWakesIt) {
   EXPECT_EQ(p.why(), Why::Drift);
 }
 
-TEST(Power, AKnockWakesIt) {
+TEST(Power, AShakeWakesIt) {
   Policy p;
   feed(p, kFlat, 0, 11 * kMin);
   ASSERT_TRUE(p.low());
-  p.sample(mg(0, 500, 1000), 11 * kMin);   // one sample, half a g sideways
+  p.sample(mg(0, 500, 1000), 11 * kMin);   // half a g sideways...
+  p.sample(kFlat, 11 * kMin + 20);
+  p.sample(mg(0, -500, 1000), 11 * kMin + 40);   // ...and back: a hand
   EXPECT_EQ(p.mode(), Mode::Full);
   EXPECT_EQ(p.why(), Why::Jolt);
+}
+
+TEST(Power, OneBumpOfTheTableIsNoInput) {
+  Policy p;
+  feed(p, kFlat, 0, 11 * kMin);
+  ASSERT_TRUE(p.low());
+  for (uint32_t t = 11 * kMin; t < 12 * kMin; t += 2000) {   // a bump every 2 s for a minute
+    EXPECT_FALSE(p.sample(mg(0, 0, 1500), t));
+    feed(p, kFlat, t + 20, t + 2000);
+  }
+  EXPECT_TRUE(p.low());
+}
+
+TEST(Power, StrayTapsAreNoInputButAKnockKnockIs) {
+  Policy p;
+  feed(p, kFlat, 0, 11 * kMin);
+  ASSERT_TRUE(p.low());
+  blorb::BodySample tap = kFlat;
+  tap.tapCode = 1;
+  for (uint32_t t = 11 * kMin; t < 12 * kMin; t += 3000) {   // typing on the desk: a tap every 3 s
+    p.sample(tap, t);
+    feed(p, kFlat, t + 20, t + 3000);
+  }
+  EXPECT_TRUE(p.low()) << "a tap every few seconds is the desk";
+  p.sample(tap, 12 * kMin);
+  feed(p, kFlat, 12 * kMin + 20, 12 * kMin + 600);
+  p.sample(tap, 12 * kMin + 600);
+  EXPECT_FALSE(p.low()) << "two taps in a second and a half: a knock knock";
+  EXPECT_EQ(p.why(), Why::Tap);
+  feed(p, kFlat, 12 * kMin, 23 * kMin);
+  ASSERT_TRUE(p.low());
+  tap.tapCode = 2;   // the tap engine's own double tap
+  p.sample(tap, 23 * kMin);
+  EXPECT_FALSE(p.low());
 }
 
 TEST(Power, ButtonAndTapWake) {
@@ -75,7 +111,7 @@ TEST(Power, ButtonAndTapWake) {
     ASSERT_TRUE(p.low());
     blorb::BodySample s = kFlat;
     if (button) s.buttonDown = true;
-    else s.tapCode = 1;
+    else s.tapCode = 2;
     p.sample(s, 11 * kMin);
     EXPECT_EQ(p.why(), button ? Why::Button : Why::Tap);
     EXPECT_FALSE(p.low());

@@ -62,9 +62,8 @@ class DishDuel {
   //  1 a body-sourced `button_double` (or `hang`: held upside down, the same
   //    ask from a case that covers BOOT) while BOOT means OpenDuel: readiness(),
   //    then open with a LocalConsent (made here and nowhere else). A refusal
-  //    shows its picture; a radio OTA holds shakes his head. An awake
-  //    creature with a radio asks for himself too: fight mode is the
-  //    resting state, and the ask is the wake-up and the shortcut.
+  //    shows its picture; a radio OTA holds shakes his head. Nothing else opens
+  //    it: fight mode is never the resting state.
   //  2 session.tick, with DuelInput from what a detector fired only
   //  3 the captured stimuli leave `raw`; the duel's own join it (Duel-sourced,
   //    through duelFilter at the agreed stakes)

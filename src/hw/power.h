@@ -6,10 +6,13 @@
 // The pet keeps living: his ticks, the 50 Hz body samples and Bluetooth go
 // on, so time and the phone work as before. Anything a person does wakes it:
 //
-//   - the button (BOOT), or the IMU's tap engine;
+//   - the button (BOOT);
+//   - a knock knock: the IMU's double tap, or two taps within kKnockPairMs.
+//     One tap alone is a desk being bumped or a keyboard being typed on;
 //   - moving the badge: the smoothed gravity drifting kDriftMg from where it
-//     last settled (picked up, tilted, turned over), or one sample jolting
-//     kJoltMg off the smoothed one (a knock, a shake);
+//     last settled (picked up, tilted, turned over), or a shake: two samples
+//     jolting kJoltMg off the smoothed one within kJoltPairMs. One jolt alone
+//     is the table, not a hand;
 //   - a phone: a new Bluetooth connection or a protocol line from it.
 //
 // A badge left on a table drifts by a few mg with temperature; the reference
@@ -28,6 +31,8 @@ constexpr uint32_t kIdleMs = 10u * 60u * 1000u;   // the owner: 10 minutes with 
 constexpr int kDriftMg = 120;                     // about 7 degrees of tilt
 constexpr int kJoltMg = 350;                      // past hand tremor and a car's hum
 constexpr int kSmoothShift = 3;                   // 1/8 per 50 Hz sample: about 160 ms
+constexpr uint32_t kKnockPairMs = 1500;           // two single taps this close are a knock knock
+constexpr uint32_t kJoltPairMs = 300;             // two jolts this close are a hand, not a bump
 
 enum class Mode : uint8_t { Full, Low };
 
@@ -61,7 +66,11 @@ class Policy {
   // so a panel rotation is not itself a move). True when it is user input.
   bool sample(const blorb::BodySample& s, uint32_t now) {
     if (s.buttonDown) return input(Why::Button, now);
-    if (s.tapCode) return input(Why::Tap, now);
+    if (s.tapCode == 2 || (s.tapCode && tapped_ && now - lastTap_ <= kKnockPairMs)) {
+      tapped_ = false;
+      return input(Why::Tap, now);
+    }
+    if (s.tapCode) tapped_ = true, lastTap_ = now;
     const int32_t a[3] = {s.ax, s.ay, s.az};
     if (!seeded_) {
       for (int i = 0; i < 3; ++i) smooth_[i] = ref_[i] = a[i] << kSmoothShift;
@@ -73,6 +82,11 @@ class Policy {
       jolt |= std::abs(a[i] - (smooth_[i] >> kSmoothShift)) > kJoltMg;
       smooth_[i] += a[i] - (smooth_[i] >> kSmoothShift);
       drift |= std::abs((smooth_[i] - ref_[i]) >> kSmoothShift) > kDriftMg;
+    }
+    if (jolt) {
+      const bool pair = jolted_ && now - lastJolt_ <= kJoltPairMs;
+      jolted_ = !pair, lastJolt_ = now;
+      jolt = pair;
     }
     if (!jolt && !drift) return false;
     for (int i = 0; i < 3; ++i) ref_[i] = smooth_[i];   // it settles here next
@@ -130,7 +144,8 @@ class Policy {
   Mode mode_ = Mode::Full;
   Why why_ = Why::Boot, inputWhy_ = Why::Boot;
   uint32_t changes_ = 0, lastInput_ = 0;
-  bool seeded_ = false;
+  bool seeded_ = false, tapped_ = false, jolted_ = false;
+  uint32_t lastTap_ = 0, lastJolt_ = 0;
   int32_t smooth_[3] = {}, ref_[3] = {};   // milli-g << kSmoothShift
 };
 

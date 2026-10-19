@@ -189,11 +189,9 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     const bool askedHang = fromBody(raw, stim::hang);
     const bool asked = fromBody(raw, stim::button_double) || askedHang;
     const BootContext ctx = bootContext(o, nullptr);
-    // Fight mode is the resting state: an awake creature with a radio asks
-    // for himself, so two badges near each other find the fight with no
-    // gesture at all. The hang and the double press remain the wake-up and
-    // the shortcut; leaving the lobby just reopens it on the next tick.
-    const bool autoAsk = air && c && ctx == BootContext::Awake;
+    // Fight mode opens only when a kid asks: a double press, or the hang.
+    // (0.7.8 to 0.7.10 opened it by itself on every awake badge: the radio
+    // never slept and the badge was never idle. The owner turned it off.)
     if (asked) drop(raw, kFightAskMask);
     if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
       pendingSince_.reset();   // a second double press while it waits takes the ask back
@@ -214,7 +212,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       }
       c->wake();
       woke = tryOpen = true;
-    } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
+    } else if (asked && ctx == BootContext::Awake) {
       tryOpen = true;
     } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
       tryOpen = true;

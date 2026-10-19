@@ -118,10 +118,13 @@ struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> hel
 // in about a second and a half instead of restarting from zero at every
 // tremor. One Hang per hang: the progress must drain away before another
 // can fire, so staying upside down in the lobby he just opened never
-// closes it again. The hanging locus is the progress itself, 0 to 1.
+// closes it again. The hanging locus is the progress itself, 0 to 1. Only
+// on edge (the face within 30 degrees of vertical) and only after he has
+// been the right way up since boot: a badge lying slanted on a table, or
+// switched on upside down, is no ask.
 struct HangDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false;
+ private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false, armed_ = false;
 };
 struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit; not just after the road pushed the whole body up
   void sample(const BodySample&, uint32_t ms, SenseOut&);

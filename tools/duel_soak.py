@@ -188,11 +188,12 @@ class Soak:
                 raise Fail("%s would not grow to an adult" % b.tag)
 
     def wake_with_hang(self, b, timeout=30):
-        """The product's own way to wake a sleeper for a fight: a hang. True once he is awake or in fight mode."""
+        """The product's own way into fight mode with no button: a hang (it wakes a sleeper too).
+        Fight mode opens only when asked (0.7.11), so this asks until he is in it."""
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             active, phase, _, ctx = self.ctx(b)
-            if active or ctx == 15:
+            if active:
                 return True
             b.send("DEBUG sleepiness 0")   # these scenarios test the controls, not his bedtime (see too_sleepy)
             b.send("DEBUG hang 2500")
@@ -335,7 +336,7 @@ class Soak:
         return self.check_battle(met, "wobbly_hang")
 
     def s_hang_in_lobby(self):
-        """A hang in the lobby leaves it, and fight mode reopens by itself; the friend is still found."""
+        """A hang in the lobby leaves it and fight mode stays off; a second hang reopens it; the friend is still found."""
         self.reboot()
         for b in self.both:
             self.wake_with_hang(b)
@@ -347,17 +348,18 @@ class Soak:
         if phase != "lobby":
             raise Fail("A not in the lobby (phase=%s ctx=%d)" % (phase, ctx))
         self.A.send("DEBUG hang 2500")
-        # The hang closes the lobby and fight mode reopens on the next tick (it is always on for an
-        # awake pet), often inside one loop pass, so the evidence is the reopen itself.
-        if not self.A.wait(r"\[diag\] fight double=0 hang=0 ctx=awake gate=ok result=entered|phase lobby -> closed", 10, since=m):
+        if not self.A.wait(r"phase lobby -> closed", 10, since=m):
             raise Fail("a hang in the lobby did not leave it")
+        time.sleep(4)
         active, phase, _, _ = self.ctx(self.A)
-        if phase != "lobby":
-            raise Fail("fight mode did not reopen after the lobby hang (phase=%s)" % phase)
+        if active:
+            raise Fail("fight mode reopened by itself after the lobby hang (phase=%s): it must stay off" % phase)
+        if not self.wake_with_hang(self.A):
+            raise Fail("a second hang did not reopen fight mode")
         marks = self.go()
         self.B.send("DEBUG hang 2500")
         met = self.battle(marks=marks)
-        return "left and reopened, then " + self.check_battle(met, "hang_in_lobby")
+        return "left, stayed off, a hang reopened it, then " + self.check_battle(met, "hang_in_lobby")
 
     def _hang_storm(self, boards, every=(3, 7)):
         def run(stop):
