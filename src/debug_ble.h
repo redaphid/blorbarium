@@ -42,6 +42,40 @@ struct Board : debugble::Board {
     wipeAt = millis() + kWipeAfterMs;
     return true;
   }
+
+  // The device itself: what the cable's DEBUG verbs do (main.cpp).
+  bool hasDevice() override { return true; }
+  bool power(PowerAsk ask, uint32_t idleMs, PowerView& v) override {
+    if (!::powerAsk(ask, idleMs)) return false;
+    const uint32_t now = millis() + warpMs;
+    v = PowerView{powerPolicy.low(), power::whyName(powerPolicy.why()), powerPolicy.idleMs(), powerPolicy.msLeft(now),
+                  uint32_t(getCpuFrequencyMhz()), framesDrawn, powerPolicy.changes(), powerHeld()};
+    return true;
+  }
+  bool press(uint32_t ms, bool twice) override { return remotePress(ms, twice); }
+  bool gesture(Gesture g, uint32_t ms, uint8_t arg) override {
+    if (g == Gesture::Hang) hangFor(ms, arg != 0);
+    else if (g == Gesture::Cradle) cradleFor(ms);
+    else leanFor(arg, ms);
+    return true;
+  }
+  bool net(std::string_view args, char* report, size_t n) override {
+    char line[96];
+    std::snprintf(line, sizeof line, "net%.*s", int(args.size()), args.data());
+    if (!::net(line)) return false;
+    const hw::FaultAir::Config& c = faultAir.cfg;
+    std::snprintf(report, n, "rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u ghosts=%u blackout=%d open=%d",
+                  c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs, c.ghosts, int(c.deaf || faultAir.blackedOut()),
+                  int(faultAir.isOpen()));
+    return true;
+  }
+  bool reboot(bool quiet) override {
+    rebootAt = millis() + kWipeAfterMs;   // after the reply has gone, as WIPE
+    rebootQuiet = quiet;
+    return true;
+  }
+  std::optional<uint32_t> rebootAt;
+  bool rebootQuiet = false;
 };
 static Board board;
 static debugble::Console console(board);
@@ -88,6 +122,7 @@ static void poll() {
   }
   runScaled();
   if (wipeAt && int32_t(millis() - *wipeAt) >= 0) wipeNow();
+  if (board.rebootAt && int32_t(millis() - *board.rebootAt) >= 0) rebootNow(board.rebootQuiet);
 }
 
 // The unlock's question, drawn as the update's is (lib/ota/src/screen.cpp):

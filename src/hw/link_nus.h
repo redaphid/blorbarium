@@ -275,13 +275,16 @@ class TwoLinks : public blorb::Link {
     for (blorb::Link* l : {&serial_, &air_})
       if (std::optional<std::string_view> line = l->readLine()) {
         last_ = l;
+        airLines_ += l == &air_;
         return line;
       }
     return std::nullopt;
   }
   void writeLine(std::string_view s) override { last_->writeLine(s); }
+  uint32_t airLines() const { return airLines_; }   // protocol lines from a phone: input, for low power
 
  private:
+  uint32_t airLines_ = 0;
   blorb::Link& serial_;
   blorb::Link& air_;
   blorb::Link* last_ = &serial_;

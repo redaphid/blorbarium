@@ -49,6 +49,32 @@ class Board {
   // pin `found` for the founding (none: the three-egg nest), and restart.
   // False when this board cannot.
   virtual bool wipe(std::optional<blorb::SpeciesId> found) = 0;
+
+  // ---- The device itself (docs/power.md). A board without them (the
+  // default) answers ERR 501 NOT_ON_BOARD; the firmware's are src/debug_ble.h.
+  virtual bool hasDevice() { return false; }
+  struct PowerView {
+    bool low;
+    const char* why;            // power::whyName: what last changed it
+    uint32_t idleMs, msLeft;    // the timeout, and what is left of it
+    uint32_t cpuMhz, frames, changes;
+    bool held;                  // a duel, an update or a question keeps it awake
+  };
+  enum class PowerAsk : uint8_t { Status, Low, Wake, Idle };
+  // Status, low power now, awake now, or the idle timeout (ms; 0: the default)
+  // until reset. False: refused, since something holds it awake.
+  virtual bool power(PowerAsk, uint32_t, PowerView&) { return false; }
+  // BOOT pressed `ms` (twice: the double press), felt by the pet only. False:
+  // a question owns the button, and a remote press must never answer one.
+  virtual bool press(uint32_t ms, bool twice) { (void)ms, (void)twice; return false; }
+  enum class Gesture : uint8_t { Hang, Cradle, Lean };
+  // `arg`: Hang's wobble 0|1, Lean's aim 0..3.
+  virtual bool gesture(Gesture, uint32_t ms, uint8_t arg) { (void)ms, (void)arg; return false; }
+  // The radio's faults, in the serial `DEBUG net` grammar; `report` gets its
+  // one-line state. False: the args did not parse.
+  virtual bool net(std::string_view args, char* report, size_t n) { (void)args, (void)report, (void)n; return false; }
+  // Once the reply has gone: save, then restart (quiet: the radio stays dark).
+  virtual bool reboot(bool quiet) { (void)quiet; return false; }
 };
 
 class Console {

@@ -35,11 +35,13 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "ota/held_storage.h"
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
+#include "debugble/console.h"
 using PetStorage = hw::NvsFsStorage;
 #endif
 
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
+#include "hw/power.h"
 #include "debug_verbs.h"
 
 // The protocol over the serial line. A cable has no connect event, so the
@@ -175,6 +177,9 @@ static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 static orient::Up up{ORIENT_R0};
+// Low power after 10 minutes with no user input (src/hw/power.h, docs/power.md).
+static power::Policy powerPolicy;
+static uint32_t framesDrawn = 0;
 
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
@@ -222,7 +227,7 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
 // every detector times gestures as designed however long a frame takes.
 // The task is the IMU's only reader; the Dish is still only the loop's.
 namespace bodyq {
-struct Timed { blorb::BodySample s; uint32_t ms; };
+struct Timed { blorb::BodySample s; uint32_t ms; bool remote; };
 constexpr uint8_t kRing = 128;   // 2.5 s of samples: only a save or warp longer than that drops the newest, never blocks
 static Timed ring[kRing];
 static uint8_t head = 0, tail = 0;
@@ -234,8 +239,11 @@ static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 // the sense task, so the cable's presses are sampled like a thumb's.
 struct Window { volatile uint32_t at = 0, ms = 0; };
 static Window presses[2];
-static bool pressed(uint32_t ms) {
-  for (const Window& w : presses)
+// The debug link's PRESS and DOUBLE: the pet feels them, but no question on
+// the screen ever takes them for a yes (petFeels).
+static Window remote[2];
+static bool pressed(const Window (&ws)[2], uint32_t ms) {
+  for (const Window& w : ws)
     if (ms - w.at < w.ms) return true;
   return false;
 }
@@ -285,7 +293,8 @@ static void applyLean(blorb::BodySample& s, uint32_t now) {
   s.az = 866;
 }
 
-static blorb::BodySample readBody(uint32_t ms) {
+// `remoteOnly`: the button is down only by the debug link's hand.
+static blorb::BodySample readBody(uint32_t ms, bool* remoteOnly = nullptr) {
   blorb::BodySample s;
   if (!imuOk || !imu::read(s)) {
     s = blorb::BodySample{};
@@ -294,7 +303,10 @@ static blorb::BodySample readBody(uint32_t ms) {
 #if !defined(BADGE_BOARD_SIM)
   bodyq::posed(ms, s);
 #endif
-  s.buttonDown = boardButtonDown() || bodyq::pressed(ms);
+  const bool hand = boardButtonDown() || bodyq::pressed(bodyq::presses, ms);
+  const bool far = bodyq::pressed(bodyq::remote, ms);
+  s.buttonDown = hand || far;
+  if (remoteOnly) *remoteOnly = far && !hand;
   return s;
 }
 
@@ -305,9 +317,10 @@ static void sense(void*) {
   for (;;) {
     vTaskDelayUntil(&wake, pdMS_TO_TICKS(blorb::kSampleMs));
     const uint32_t ms = millis();
-    const blorb::BodySample s = readBody(ms);
+    bool far = false;
+    const blorb::BodySample s = readBody(ms, &far);
     portENTER_CRITICAL(&mux);
-    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms};
+    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms, far};
     portEXIT_CRITICAL(&mux);
   }
 }
@@ -324,10 +337,16 @@ static std::optional<Timed> take() {
 
 // While the dish asks about an update, the button answers it, and the pet
 // feels neither that press nor the rest of that hold. A cable's DEBUG press
-// answers too: the cable is a hand on the dish.
-static bool petFeels(bool down) {
+// answers too: the cable is a hand on the dish. The debug link's press
+// (`remote`) never answers: the pet feels it only while no question shows.
+static bool petFeels(bool down, bool remote) {
 #if !defined(BADGE_BOARD_SIM)
   static bool wasDown = false, otaOwns = false;
+  if (remote) {
+    wasDown = down;
+    otaOwns = false;
+    return down && !updater.asking() && !debugAsks();
+  }
   const bool edge = down && !wasDown;
   if (updater.asking() && edge) updater.press(millis());
   const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
@@ -335,12 +354,20 @@ static bool petFeels(bool down) {
   wasDown = down;
   return down && !otaOwns;
 #else
+  (void)remote;
   return down;
 #endif
 }
 
-static void feel(const blorb::BodySample& body, uint32_t ms) {
+static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false) {
   lastBody = body;
+  // In the IMU's own frame: a turn of the panel is no move. The press that
+  // wakes a dark badge only lights it: nobody pressed for a pellet unseen.
+  static bool wakePress = false;
+  const bool wasLow = powerPolicy.low();
+  powerPolicy.sample(body, ms);
+  if (wasLow && !powerPolicy.low() && body.buttonDown) wakePress = true;
+  if (!body.buttonDown) wakePress = false;
   // The panel and the engine turn together, so downhill is down on the glass.
   const uint8_t rot = up.sample(body, ms);
   if (rot != display.getRotation()) display.setRotation(rot);
@@ -350,7 +377,7 @@ static void feel(const blorb::BodySample& body, uint32_t ms) {
   // sample as a level (BodySample::invertedDown) for HangDetector.
   screen.invertedDown = rot == 2;
   applyLean(screen, ms);
-  screen.buttonDown = petFeels(screen.buttonDown);
+  screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
   dish->sample(screen, ms);
 }
 
@@ -359,7 +386,7 @@ static void feel(const blorb::BodySample& body, uint32_t ms) {
 static void step(uint32_t now) {
 #if !defined(BADGE_BOARD_SIM)
   const uint32_t ahead = now - millis();   // a DEBUG warp runs the loop's clock ahead of millis()
-  while (std::optional<bodyq::Timed> t = bodyq::take()) feel(t->s, t->ms + ahead);
+  while (std::optional<bodyq::Timed> t = bodyq::take()) feel(t->s, t->ms + ahead, t->remote);
 #else
   if (now - lastSample >= blorb::kSampleMs) {
     feel(readBody(now), now);
@@ -517,12 +544,13 @@ static void reportStatus(uint32_t now) {
   if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
   Serial.printf(
       "[hw] up=%u heap=%u minheap=%u big=%u psram_free=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x "
-      "age=%u imu ax=%d ay=%d az=%d mg rot=%u t=%sC tap=%u button=%d\n",
+      "age=%u imu ax=%d ay=%d az=%d mg rot=%u t=%sC tap=%u button=%d power=%s cpu=%u frames=%u\n",
       unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
       unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
-      lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0);
+      lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0,
+      powerPolicy.low() ? "low" : "full", unsigned(getCpuFrequencyMhz()), unsigned(framesDrawn));
 }
 #endif
 
@@ -737,14 +765,18 @@ static void doublePress() {
   Serial.printf("[hw] debug double, boot context %u\n", unsigned(dish->bootContext()));
 }
 
+static void leanFor(uint8_t aim, uint32_t ms) {
+  leanAim = int8_t(aim);
+  leanAt = millis() + warpMs;
+  leanMs = ms;
+  Serial.printf("[hw] debug lean %u for %u ms\n", unsigned(aim), unsigned(ms));
+}
+
 static void lean(const char* line) {
   long aim = -1, ms = 3000;
   if (std::sscanf(line, "%*s %ld %ld", &aim, &ms) < 1 || aim < 0 || aim > 3 || ms <= 0 || ms > 60000)
     return (void)Serial.printf("[hw] debug lean: want <aim 0..3> [ms]\n");
-  leanAim = int8_t(aim);
-  leanAt = millis() + warpMs;
-  leanMs = uint32_t(ms);
-  Serial.printf("[hw] debug lean %ld for %ld ms\n", aim, ms);
+  leanFor(uint8_t(aim), uint32_t(ms));
 }
 
 // One line per duel event, so the two boards' logs alone prove a duel.
@@ -814,26 +846,35 @@ static void pinFounding(const char* a) {
 }
 
 // `DEBUG hang [ms] [wobble]`: upside down for ms (default 2500), then upright 3 s.
+static void hangFor(uint32_t ms, bool wobble);
 static void hang(const char* line) {
   long ms = 2500, wobble = 0;
   std::sscanf(line, "%*s %ld %ld", &ms, &wobble);
   if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug hang: want [ms 1..30000] [wobble 0|1]\n");
+  hangFor(uint32_t(ms), wobble != 0);
+}
+
+static void hangFor(uint32_t ms, bool wobble) {
   bodyq::hangMs = 0;
   bodyq::rightMs = 3000;
-  bodyq::hangWobble = wobble != 0;
+  bodyq::hangWobble = wobble;
   bodyq::hangAt = millis();
-  bodyq::hangMs = uint32_t(ms);
-  Serial.printf("[hw] debug hang %ld ms wobble=%ld, then upright 3000 ms\n", ms, wobble);
+  bodyq::hangMs = ms;
+  Serial.printf("[hw] debug hang %u ms wobble=%d, then upright 3000 ms\n", unsigned(ms), int(wobble));
 }
 
 // `DEBUG cradle [ms]`: held still in a hand for ms (default 5000): a cuddle, through the real detectors.
+static void cradleFor(uint32_t ms) {
+  bodyq::cradleMs = 0;
+  bodyq::cradleAt = millis();
+  bodyq::cradleMs = ms;
+  Serial.printf("[hw] debug cradle %u ms\n", unsigned(ms));
+}
+
 static void cradle(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 5000;
   if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug cradle: want [ms 1..30000]\n");
-  bodyq::cradleMs = 0;
-  bodyq::cradleAt = millis();
-  bodyq::cradleMs = uint32_t(ms);
-  Serial.printf("[hw] debug cradle %ld ms\n", ms);
+  cradleFor(uint32_t(ms));
 }
 
 // `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
@@ -872,7 +913,7 @@ static void netReport() {
 
 // `DEBUG net` reports; `DEBUG net clear`; `DEBUG net rx|tx|dup <pct>`;
 // `DEBUG net delay <ms> [jitter]`; `DEBUG net blackout <ms>`.
-static void net(const char* line) {
+static bool net(const char* line) {
   char what[16] = "";
   long x = 0, y = 0;
   const int got = std::sscanf(line, "%*s %15s %ld %ld", what, &x, &y);
@@ -891,8 +932,9 @@ static void net(const char* line) {
     c.ghostsLow = std::strcmp(side, "high") != 0;
   }
   else if (!std::strcmp(what, "blackout")) c.blackoutUntil = x > 0 ? uint32_t(millis() + x) | 1 : 0, c.deaf = false;
-  else return (void)Serial.printf("[net] want: net [clear|rx <pct>|tx <pct>|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode 0-2> [low|high]]\n");
+  else return Serial.printf("[net] want: net [clear|rx <pct>|tx <pct>|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode 0-2> [low|high]]\n"), false;
   netReport();
+  return true;
 }
 
 // `DEBUG duel`: where the duel stands right now, in one line.
@@ -905,6 +947,23 @@ static void duelNow() {
                 unsigned(v.theirs.hearts));
 }
 
+// Save, then restart; quiet: the radio stays blacked out until `net blackout 0`.
+[[noreturn]] static void rebootNow(bool quiet) {
+  quietBoot = quiet ? kQuietMagic : 0;
+  Serial.printf("[hw] debug reboot%s\n", quietBoot ? " quiet" : "");
+  Serial.flush();
+  dish->flush();
+  ESP.restart();
+  for (;;) {}
+}
+
+// Low power's verbs, below debug_ble.h, which uses them.
+static void powerVerb(const char* a, const char* line);
+static bool powerAsk(debugble::Board::PowerAsk ask, uint32_t idleMs);
+static const char* powerLine(char* out, size_t n, uint32_t now);
+static bool powerHeld();
+static bool remotePress(uint32_t ms, bool twice);
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
@@ -912,15 +971,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
-  if (std::strcmp(verb, "net") == 0) return net(line);
+  if (std::strcmp(verb, "net") == 0) return (void)net(line);
+  if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "duel") == 0) return duelNow();
-  if (std::strcmp(verb, "reboot") == 0) {
-    quietBoot = std::strcmp(a, "quiet") == 0 ? kQuietMagic : 0;
-    Serial.printf("[hw] debug reboot%s\n", quietBoot ? " quiet" : "");
-    Serial.flush();
-    dish->flush();
-    ESP.restart();
-  }
+  if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
   if (std::strcmp(verb, "press") == 0) return press(a);
@@ -930,7 +984,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "found") == 0) return pinFounding(a);
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
-                  "double, lean <aim> [ms], bletest <bytes>)\n", verb);
+                  "double, lean <aim> [ms], hang, cradle, nap, net, duel, power [low|wake|idle <s>], reboot, "
+                  "bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -944,6 +999,100 @@ static void runDebug(const char* line) {
 }
 
 #include "debug_ble.h"
+
+// ---- Low power (src/hw/power.h, docs/power.md) ---------------------------------------
+// Asleep: the backlight is off and the panel in SLPIN, no frame is drawn, the
+// CPU runs at 80 MHz and the loop rests between passes. The pet still ticks,
+// the sense task still samples at 50 Hz (that is what wakes it), Bluetooth
+// still advertises. Awake: 240 MHz, SLPOUT, a fresh frame, then the light.
+static constexpr uint32_t kFullMhz = 240, kLowMhz = 80;
+static constexpr uint32_t kLowRestMs = 20;   // the loop's rest a pass in low power
+static bool panelLow = false, lightAfterFrame = false;
+static uint32_t seenBleGen = 0, seenAirLines = 0;
+
+// What needs the screen awake: a fight (searching, waiting or on), an update
+// or its question, the debug unlock's question, a DEBUG shot going out.
+static bool powerHeld() {
+  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || updater.active() || debugAsks() ||
+         bool(shot);
+}
+
+static const char* powerLine(char* out, size_t n, uint32_t now) {
+  std::snprintf(out, n, "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s",
+                powerPolicy.low() ? "low" : "full", power::whyName(powerPolicy.why()), unsigned(powerPolicy.idleMs()),
+                unsigned(powerPolicy.msLeft(now)), unsigned(getCpuFrequencyMhz()), unsigned(framesDrawn),
+                unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()));
+  return out;
+}
+
+// Every loop: the phone's inputs, the timeout, and the panel and CPU to match.
+static void applyPower(uint32_t now) {
+  if (const uint32_t g = ble.generation(); g != seenBleGen) seenBleGen = g, powerPolicy.phone(now);
+  if (const uint32_t n = links.airLines(); n != seenAirLines) seenAirLines = n, powerPolicy.phone(now);
+  powerPolicy.update(now, powerHeld());
+  if (powerPolicy.low() == panelLow) return;
+  panelLow = powerPolicy.low();
+  if (panelLow) {
+    lightAfterFrame = false;
+    display.sleep();   // backlight to 0, then SLPIN
+    setCpuFrequencyMhz(kLowMhz);
+  } else {
+    setCpuFrequencyMhz(kFullMhz);
+    display.getPanel()->setSleep(false);   // SLPOUT; the light waits for a fresh frame
+    lastFrame = now - kFrameMs;            // drawn this very pass
+    lightAfterFrame = true;
+  }
+  char line[160];
+  Serial.printf("[power] %s\n", powerLine(line, sizeof line, now));
+  dbgfw::link.writeLine(std::string("! DEBUG ") + line);
+}
+
+// `DEBUG power [low|wake|idle <seconds>|idle default]`, and the debug link's POWER.
+static bool powerAsk(debugble::Board::PowerAsk ask, uint32_t idleMs) {
+  const uint32_t now = millis() + warpMs;
+  using A = debugble::Board::PowerAsk;
+  if (ask == A::Low && powerHeld()) return false;
+  if (ask == A::Low) powerPolicy.sleepNow();
+  if (ask == A::Wake) powerPolicy.wakeNow(now);
+  if (ask == A::Idle) powerPolicy.setIdleMs(idleMs ? idleMs : power::kIdleMs);
+  if (ask != A::Status) applyPower(now);
+  return true;
+}
+
+static void powerVerb(const char* a, const char* line) {
+  using A = debugble::Board::PowerAsk;
+  A ask = A::Status;
+  uint32_t idleMs = 0;
+  if (!std::strcmp(a, "low")) ask = A::Low;
+  else if (!std::strcmp(a, "wake")) ask = A::Wake;
+  else if (!std::strcmp(a, "idle")) {
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    const long sec = std::strtol(what, nullptr, 10);
+    if (std::strcmp(what, "default") && (sec < 1 || sec > 3600))
+      return (void)Serial.printf("[power] want: power idle <seconds 1..3600>|default\n");
+    ask = A::Idle, idleMs = std::strcmp(what, "default") ? uint32_t(sec) * 1000 : 0;
+  } else if (*a && std::strcmp(a, "status")) {
+    return (void)Serial.printf("[power] want: power [status|low|wake|idle <seconds>|idle default]\n");
+  }
+  const bool ok = powerAsk(ask, idleMs);
+  char out[160];
+  Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
+}
+
+// The debug link's PRESS and DOUBLE: never while a question owns the button.
+static bool remotePress(uint32_t ms, bool twice) {
+  if (updater.asking() || debugAsks()) return false;
+  const uint32_t t = millis();
+  bodyq::remote[0].ms = bodyq::remote[1].ms = 0;
+  bodyq::remote[0].at = t;
+  bodyq::remote[1].at = t + 250;
+  bodyq::remote[1].ms = twice ? ms : 0;
+  bodyq::remote[0].ms = ms;
+  Serial.printf("[hw] debug ble %s %u ms\n", twice ? "double" : "press", unsigned(ms));
+  return true;
+}
+
 #endif
 
 void loop() {
@@ -959,14 +1108,24 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
   dbgfw::poll();
 #endif
-  if (!holdFrame && now - lastFrame >= kFrameMs) {
+#if !defined(BADGE_BOARD_SIM)
+  applyPower(now);
+  const bool dark = panelLow;
+#else
+  constexpr bool dark = false;
+#endif
+  if (!dark && !holdFrame && now - lastFrame >= kFrameMs) {
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
     else dbgfw::draw(canvas);
 #endif
     boardPresent(display, canvas);
+    ++framesDrawn;
     lastFrame = now;
+#if !defined(BADGE_BOARD_SIM)
+    if (lightAfterFrame) lightAfterFrame = false, display.setBrightness(dish->settings().brightness);
+#endif
   }
 #if !defined(BADGE_BOARD_SIM)
   // The same anchor the Dish holds, so a soft reset's rtc reading counts only the unsaved gap.
@@ -997,5 +1156,7 @@ void loop() {
       Serial.printf("[hw] ble tx chunks=%u retries=%u bytes=%u\n", unsigned(d->chunks), unsigned(d->retries),
                     unsigned(d->bytes));
     }
+  // Asleep, the loop rests: the sense task's 50 Hz and the radio's tasks go on.
+  if (panelLow) delay(kLowRestMs);
 #endif
 }

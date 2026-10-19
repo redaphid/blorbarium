@@ -3,7 +3,9 @@
 // update and a sealed dish), every jump, and that a debug session leaves a
 // pet the next boot resumes.
 #include <gtest/gtest.h>
+#include <cstdio>
 #include <cstring>
+#include <tuple>
 #include <optional>
 #include <string>
 #include <variant>
@@ -193,7 +195,9 @@ TEST(Grammar, StatusSaysWhereHeIs) {
 // ---- the unlock -----------------------------------------------------------------------
 
 // Every harm verb, each well formed, so only the gate can refuse it.
-const char* const kHarm[] = {"HATCH", "STAGE adult", "WARP 5", "CHEM hunger 900", "DIE", "SPECIES gilly", "WIPE"};
+const char* const kHarm[] = {"HATCH",  "STAGE adult", "WARP 5",   "CHEM hunger 900", "DIE",       "SPECIES gilly",
+                             "WIPE",   "PRESS",       "DOUBLE",   "HANG 1000 1",     "CRADLE",    "LEAN 2",
+                             "NET clear", "REBOOT quiet"};
 
 TEST(Unlock, EveryHarmVerbIsRefusedLockedAndChangesNothing) {
   Rig r;
@@ -604,6 +608,127 @@ TEST(Reboot, EveryJumpLeavesAPetTheNextBootResumes) {
   EXPECT_TRUE(r.dish->pick(0));   // the clutch still hatches a child of the line
   r.run(1000);
   EXPECT_EQ(std::get<Egg>(r.dish->occupant()).generation(), 1);
+}
+
+
+// ---- the device itself ----------------------------------------------------------------
+
+// A board with power, a button and a radio, recording what it was asked.
+struct Device : Rig {
+  bool low = false, heldAwake = false, askingQuestion = false, rebooted = false, quiet = false;
+  uint32_t idleMs = 600000, pressedMs = 0, frames = 42;
+  bool twice = false;
+  std::optional<std::tuple<Gesture, uint32_t, uint8_t>> gestured;
+  std::string netArgs;
+  bool hasDevice() override { return true; }
+  bool power(PowerAsk ask, uint32_t ms, PowerView& v) override {
+    if (ask == PowerAsk::Low && heldAwake) return false;
+    if (ask == PowerAsk::Low) low = true;
+    if (ask == PowerAsk::Wake) low = false;
+    if (ask == PowerAsk::Idle) idleMs = ms ? ms : 600000;
+    v = PowerView{low, ask == PowerAsk::Status ? "boot" : "asked", idleMs, low ? 0 : idleMs, low ? 80u : 240u, frames,
+                  0, heldAwake};
+    return true;
+  }
+  bool press(uint32_t ms, bool two) override {
+    if (askingQuestion) return false;
+    pressedMs = ms, twice = two;
+    return true;
+  }
+  bool gesture(Gesture g, uint32_t ms, uint8_t arg) override {
+    gestured = std::tuple{g, ms, arg};
+    return true;
+  }
+  bool net(std::string_view a, char* report, size_t n) override {
+    netArgs = std::string(a);
+    if (a == " bogus") return false;
+    std::snprintf(report, n, "cfg rx_drop=0");
+    return true;
+  }
+  bool reboot(bool q) override {
+    rebooted = true, quiet = q;
+    return true;
+  }
+};
+
+TEST(Device, ABoardWithoutOneSaysSo) {
+  Rig r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 POWER"), "#1 ERR 501 NOT_ON_BOARD");
+  r.unlock();
+  EXPECT_EQ(r.send("#2 PRESS"), "#2 ERR 501 NOT_ON_BOARD");
+}
+
+TEST(Device, PowerNeedsNoPressAndSavesNothing) {
+  Device r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 POWER"),
+            "#1 OK power=full why=boot idle_ms=600000 left_ms=600000 cpu=240 frames=42 changes=0 held=0");
+  EXPECT_EQ(r.send("#2 POWER low").substr(0, 33), "#2 OK power=low why=asked idle_ms");
+  EXPECT_TRUE(r.low);
+  EXPECT_EQ(r.send("#3 POWER wake").substr(0, 16), "#3 OK power=full");
+  EXPECT_FALSE(r.low);
+  EXPECT_EQ(r.send("#4 POWER idle 5").substr(0, 41), "#4 OK power=full why=asked idle_ms=5000 l");
+  EXPECT_EQ(r.send("#5 POWER idle default").substr(0, 43), "#5 OK power=full why=asked idle_ms=600000 l");
+  EXPECT_EQ(r.send("#6 POWER idle 0"), "#6 ERR 416 OUT_OF_RANGE");
+  EXPECT_EQ(r.send("#7 POWER idle 3601"), "#7 ERR 416 OUT_OF_RANGE");
+  EXPECT_EQ(r.send("#8 POWER idle"), "#8 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#9 POWER nap"), "#9 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#a POWER low now"), "#a ERR 400 BAD_ARGS");
+  r.heldAwake = true;
+  EXPECT_EQ(r.send("#b POWER low"), "#b ERR 409 HELD_AWAKE");
+  // Show: it answers on trial and during an update too, since nothing is saved.
+  r.trial = true;
+  EXPECT_EQ(r.send("#c POWER").substr(0, 16), "#c OK power=full");
+}
+
+TEST(Device, PressesAndGesturesAreHarmAndNeverAnswerAQuestion) {
+  Device r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 PRESS"), "#1 ERR 423 LOCKED");
+  r.unlock();
+  EXPECT_EQ(r.send("#2 PRESS"), "#2 OK press=150");
+  EXPECT_EQ(r.pressedMs, 150u);
+  EXPECT_EQ(r.send("#3 PRESS 900"), "#3 OK press=900");
+  EXPECT_EQ(r.send("#4 PRESS 0"), "#4 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#5 PRESS 10001"), "#5 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#6 DOUBLE").substr(0, 14), "#6 OK double=1");
+  EXPECT_TRUE(r.twice);
+  r.askingQuestion = true;
+  EXPECT_EQ(r.send("#7 PRESS"), "#7 ERR 409 ASKING");
+  r.askingQuestion = false;
+  EXPECT_EQ(r.send("#8 HANG"), "#8 OK hang=2500 wobble=0");
+  EXPECT_EQ(r.send("#9 HANG 1200 1"), "#9 OK hang=1200 wobble=1");
+  EXPECT_EQ(std::get<2>(*r.gestured), 1);
+  EXPECT_EQ(r.send("#a HANG 1200 2"), "#a ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#b CRADLE"), "#b OK cradle=5000");
+  EXPECT_EQ(r.send("#c LEAN 3 800"), "#c OK lean=3 ms=800");
+  EXPECT_EQ(std::get<0>(*r.gestured), Device::Gesture::Lean);
+  EXPECT_EQ(r.send("#d LEAN 4"), "#d ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#e LEAN"), "#e ERR 400 BAD_ARGS");
+}
+
+TEST(Device, NetAndRebootGoToTheBoard) {
+  Device r;
+  r.boot();
+  r.unlock();
+  EXPECT_EQ(r.send("#1 NET rx 30"), "#1 OK cfg rx_drop=0");
+  EXPECT_EQ(r.netArgs, " rx 30");
+  EXPECT_EQ(r.send("#2 NET bogus"), "#2 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#3 REBOOT loud"), "#3 ERR 400 BAD_ARGS");
+  EXPECT_FALSE(r.rebooted);
+  EXPECT_EQ(r.send("#4 REBOOT quiet"), "#4 OK rebooting quiet=1");
+  EXPECT_TRUE(r.rebooted && r.quiet);
+}
+
+TEST(Device, NapPutsHimToSleepAndDuelSaysWhereFightModeStands) {
+  Device r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 NAP"), "#1 ERR 409 NO_CREATURE");
+  r.unlock();
+  r.send("#2 HATCH");
+  EXPECT_EQ(r.send("#3 NAP"), "#3 OK nap=1");
+  EXPECT_EQ(r.send("#4 DUEL").substr(0, 35), "#4 OK fight=off active=0 phase=clos");
 }
 
 }  // namespace

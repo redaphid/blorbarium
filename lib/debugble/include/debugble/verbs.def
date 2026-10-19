@@ -22,3 +22,15 @@ DEBUG_VERB(CHEM,    chem,    Harm,  "<chem> <permille> ...")    // chemicals and
 DEBUG_VERB(DIE,     die,     Harm,  "[eggs|remains]")
 DEBUG_VERB(SPECIES, species, Harm,  "<species>")                // his body and power genes, in place; recorded in the lineage
 DEBUG_VERB(WIPE,    wipe,    Harm,  "[species]")                // erase, provision as a fresh board, restart
+// The device itself (docs/power.md, docs/debug-ble.md "The device"): what the
+// serial cable's DEBUG verbs do, over the air. The board runs them (Board).
+DEBUG_VERB(POWER,   power,   Show,  "[low|wake|idle <seconds 1..3600>|idle default]")   // low power now, awake now, or the idle timeout until reset
+DEBUG_VERB(DUEL,    duel,    Look,  "")                         // where fight mode stands
+DEBUG_VERB(NAP,     nap,     Write, "")                         // he falls asleep now, as at bedtime
+DEBUG_VERB(PRESS,   press,   Harm,  "[ms 1..10000]")            // BOOT held that long, felt by the pet only: never answers a question
+DEBUG_VERB(DOUBLE,  double,  Harm,  "")                         // BOOT twice in 0.4 s: fight mode
+DEBUG_VERB(HANG,    hang,    Harm,  "[ms 1..30000] [wobble 0|1]")   // upside down, then upright 3 s, through the real IMU path
+DEBUG_VERB(CRADLE,  cradle,  Harm,  "[ms 1..30000]")            // held still in a hand: a cuddle
+DEBUG_VERB(LEAN,    lean,    Harm,  "<aim 0..3> [ms 1..60000]") // tilted toward one rim edge
+DEBUG_VERB(NET,     net,     Harm,  "[clear|rx|tx|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode> [low|high]]")
+DEBUG_VERB(REBOOT,  reboot,  Harm,  "[quiet]")                  // save, then restart; quiet: radio blacked out until NET blackout 0

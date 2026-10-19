@@ -345,3 +345,130 @@ void verb_wipe(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
 }
 
 }  // namespace debugble
+
+// ---- the device itself ------------------------------------------------------------------
+
+namespace debugble {
+namespace {
+
+constexpr uint32_t kMaxIdleSeconds = 3600;
+const char* const kDuelPhases[] = {"closed",    "lobby",    "greeting", "staking", "choosing", "waiting",
+                                   "revealing", "fainting", "mercy",    "fallen",  "friends"};
+
+void powerLine(const Board::PowerView& v, blorb::Reply& r) {
+  r.unsaved().ok("power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d", v.low ? "low" : "full",
+                 v.why, unsigned(v.idleMs), unsigned(v.msLeft), unsigned(v.cpuMhz), unsigned(v.frames),
+                 unsigned(v.changes), int(v.held));
+}
+
+// An optional number in [lo, hi], else `dflt`; nullopt when one is there but bad.
+std::optional<uint32_t> optNumber(blorb::Args& a, uint32_t lo, uint32_t hi, uint32_t dflt) {
+  if (a.done()) return dflt;
+  const std::optional<uint32_t> n = a.number(hi);
+  if (!n || *n < lo) return std::nullopt;
+  return n;
+}
+
+}  // namespace
+
+void verb_power(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<std::string_view> w = a.word();
+  Board::PowerAsk ask = Board::PowerAsk::Status;
+  uint32_t idleMs = 0;
+  if (w == std::optional<std::string_view>("low")) ask = Board::PowerAsk::Low;
+  else if (w == std::optional<std::string_view>("wake")) ask = Board::PowerAsk::Wake;
+  else if (w == std::optional<std::string_view>("idle")) {
+    ask = Board::PowerAsk::Idle;
+    blorb::Args peek = a;
+    if (peek.word() == std::optional<std::string_view>("default")) {
+      a = peek;
+    } else {
+      const std::optional<uint32_t> s = a.number(UINT16_MAX);
+      if (!s) return r.err(400, "BAD_ARGS");
+      if (*s < 1 || *s > kMaxIdleSeconds) return r.err(416, "OUT_OF_RANGE");
+      idleMs = *s * 1000;
+    }
+  } else if (w && *w != "status") {
+    return r.err(400, "BAD_ARGS");
+  }
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  Board::PowerView v{};
+  if (!c.board.power(ask, idleMs, v)) return r.err(409, "HELD_AWAKE");
+  powerLine(v, r);
+}
+
+void verb_duel(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  const blorb::DuelView v = c.dish.duelView();
+  r.ok("fight=%s active=%d phase=%s peers=%u ctx=%u hearts=%u-%u last=%s", c.dish.fightState(),
+       int(c.dish.duelActive()), kDuelPhases[size_t(v.phase)], unsigned(v.peerCount), unsigned(c.dish.bootContext()),
+       unsigned(v.mine.hearts), unsigned(v.theirs.hearts), c.dish.lastFightGate());
+}
+
+void verb_nap(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  blorb::Creature* cr = creatureOf(c.dish);
+  if (!cr) return r.err(409, "NO_CREATURE");
+  cr->force(blorb::action::sleep);
+  c.dish.markDirty();
+  r.ok("nap=1");
+}
+
+void verb_press(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> ms = optNumber(a, 1, 10000, 150);   // the sim's !button
+  if (!ms || !a.done()) return r.err(400, "BAD_ARGS");
+  if (!c.board.press(*ms, false)) return r.err(409, "ASKING");
+  r.ok("press=%u", unsigned(*ms));
+}
+
+void verb_double(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  if (!c.board.press(100, true)) return r.err(409, "ASKING");
+  r.ok("double=1 ctx=%u", unsigned(c.dish.bootContext()));
+}
+
+void verb_hang(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> ms = optNumber(a, 1, 30000, 2500);
+  const std::optional<uint32_t> wobble = ms ? optNumber(a, 0, 1, 0) : std::nullopt;
+  if (!wobble || !a.done()) return r.err(400, "BAD_ARGS");
+  c.board.gesture(Board::Gesture::Hang, *ms, uint8_t(*wobble));
+  r.ok("hang=%u wobble=%u", unsigned(*ms), unsigned(*wobble));
+}
+
+void verb_cradle(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> ms = optNumber(a, 1, 30000, 5000);
+  if (!ms || !a.done()) return r.err(400, "BAD_ARGS");
+  c.board.gesture(Board::Gesture::Cradle, *ms, 0);
+  r.ok("cradle=%u", unsigned(*ms));
+}
+
+void verb_lean(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> aim = a.number(3);
+  const std::optional<uint32_t> ms = aim ? optNumber(a, 1, 60000, 3000) : std::nullopt;
+  if (!ms || !a.done()) return r.err(400, "BAD_ARGS");
+  c.board.gesture(Board::Gesture::Lean, *ms, uint8_t(*aim));
+  r.ok("lean=%u ms=%u", unsigned(*aim), unsigned(*ms));
+}
+
+void verb_net(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  char report[160] = "";
+  if (!c.board.net(a.rest, report, sizeof report)) return r.err(400, "BAD_ARGS");
+  r.ok("%s", report);
+}
+
+void verb_reboot(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<std::string_view> w = a.word();
+  if (!a.done() || (w && *w != "quiet")) return r.err(400, "BAD_ARGS");
+  if (!c.board.reboot(bool(w))) return r.err(500, "REBOOT_FAILED");
+  r.ok("rebooting quiet=%d", int(bool(w)));
+}
+
+}  // namespace debugble
