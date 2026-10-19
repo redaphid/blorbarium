@@ -34,6 +34,20 @@ button.** The nephews' badges (0.7.x) drained their batteries and died. The
 - Firmware **0.7.11**, not released (the OTA key is on the Windows desk
   machine).
 
+**Merged to main (2026-10-19). Release 0.7.11 from `badge128_pm`**: the
+signing key is on `soul` (the Windows desk machine, `ssh soul`), which
+cannot build `badge128_pm` (the PM framework is built on Linux). So build
+here, sign there: on Linux `pio run -e badge128_pm` at the main commit,
+copy `.pio/build/badge128_pm/firmware.bin` to the same path in soul's
+checkout of that same commit (clean tree), then on soul
+`uv run --with cryptography python tools/ota_release.py release --env badge128_pm --no-build`,
+commit the manifest, deploy the site.
+
+**Updates no longer need the button**: the question says "Turn me around!"
+and a turn of the badge answers it as a press does (`src/hw/turn_yes.h`;
+proven over Bluetooth on badge 1 with a throwaway key). Badges still on
+0.7.10 or older ask for a press for this one last update.
+
 Proof, gotchas and the next step are in
 `docs/notes/low-power-2026-10-18.md`; how it works is `docs/power.md`.
 
