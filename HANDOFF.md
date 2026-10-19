@@ -12,7 +12,54 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
-## Where things stand (2026-10-18)
+## Where things stand (2026-10-18, late: branch `low-power`)
+
+**The badges have a battery and no off state, and the kids cannot use the
+button.** The nephews' badges (0.7.x) drained their batteries and died. The
+`low-power` branch (pushed, not merged, not released) adds:
+
+- **Low power after 10 min idle** (`BLORB_IDLE_SECONDS`, default 600):
+  dark panel, 80 MHz, the pet still lives, BLE still advertises; motion
+  (drift, a shake, a double tap), a phone or the button wakes it. A 1 px
+  idle bar on the rim shows the time left.
+- **Light sleep in low power** on env `badge128_pm`: Arduino 2.0.17 rebuilt
+  from its own pinned sources with only power management and BLE modem sleep
+  on (`bash tools/pm_framework.sh` once, about an hour; then
+  `pio run -e badge128_pm`). About 70% asleep when low, BLE stays connected,
+  the pet's save reads back unchanged. `badge128` is untouched.
+- **No constant fight mode**; a hang needs the badge on its edge.
+- **Debug BLE verbs for everything the device does** (POWER, PRESS, DOUBLE,
+  HANG, CRADLE, LEAN, NET, REBOOT, NAP, DUEL), all proven over real
+  Bluetooth by `tools/debug_ble_e2e.py`.
+- Firmware **0.7.11**, not released (the OTA key is on the Windows desk
+  machine).
+
+Proof, gotchas and the next step are in
+`docs/notes/low-power-2026-10-18.md`; how it works is `docs/power.md`.
+
+**Next, agreed with the owner:** a real off state with no button. After
+about an hour in low power, save and deep-sleep; wake on the QMI8658's
+wake-on-motion interrupt (believed GPIO4/GPIO3, **unverified**: first step
+is a test build on badge 1 that arms WoM and logs those pins), with a
+probation against backpack and car wakes, the RTC carrying pet time across
+the gap, and a low-battery shutdown from the ADC on GPIO1.
+
+**On the cable with `badge128_pm`:** a light-sleeping badge loses the first
+bytes it hears (UART0 via the CH343 is deaf asleep). Send a few `\r`, wait
+60 ms, then the line; `tools/power_e2e.py` and `tools/duel_soak.py` do.
+
+**Correction:** comments in `dish.cpp`, `senses.h`, `thoughts.cpp`,
+`main.cpp` and `dish.h` say the board has no battery. The 1.28 badges have
+one; what they lack is a clock that survives the battery running flat.
+
+Badges here: badge 1 (mossby, 5C94095000, d4:05:92:77:1b:3c) runs
+`badge128_pm` 0.7.11 with the 600 s default. Badge 5 (mudge, 5C94095003,
+d4:05:92:77:1b:30) is unplugged on an older 0.7.11 build. Pre-existing
+failures on this Linux host: `test_dish` Budget.ALifeAndARebootFitTheLoopTask...,
+and `test_ota`, `test_adopt_species` and the sim build (gcc 11 `std::variant`
+in `lib/ota/src/session.cpp:55`).
+
+## Where things stood (2026-10-18)
 
 **Firmware 0.7.10 is committed but NOT released**: the OTA signing key is on
 the Windows desk machine, not the Linux laptop this was done on. To ship it,
