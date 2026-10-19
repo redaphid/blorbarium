@@ -139,6 +139,7 @@
   function onEvent(text) {
     log(`! ${text}`);
     if (/^DEBUG unlock=/.test(text)) refresh();
+    if (/^DEBUG power=/.test(text)) say(`Power: ${text.slice(6)}`);
     const ask = /^DEBUG fight double=\d(?: hang=\d)? ctx=(\S+) gate=(\S+) result=(\S+)/.exec(text);
     if (ask) [, fight.ctx, fight.gate, fight.result] = ask, showFight(), refresh();
     const radio = /^DEBUG radio open=(\d)(?: err=(\S+))?/.exec(text);
@@ -172,6 +173,9 @@
     thought.setAttribute("list", "dbgThoughts");
     const minutes = el("input", { id: "dbgMinutes", type: "number", min: 1, max: 120, value: 30, style: "width:5em" });
     const wall = el("input", { id: "dbgWall", type: "datetime-local" });
+    const idle = el("input", { id: "dbgIdle", type: "number", min: 1, max: 3600, value: 30, style: "width:5em", title: "seconds" });
+    const aim = el("select", { id: "dbgAim" }, ...options(["0", "1", "2", "3"]));
+    const net = el("input", { id: "dbgNet", placeholder: "rx 30 | blackout 5000", size: 18 });
     const unix = () => Math.floor((wall.value ? new Date(wall.value) : new Date()).getTime() / 1000);
     const tz = () => -new Date().getTimezoneOffset();
     const mockPress = el("button", { id: "dbgMockPress", type: "button", className: "ghost", hidden: true, textContent: "Press BOOT (pretend)" });
@@ -193,6 +197,9 @@
       row("Look as", look, button("Look", () => `LOOK ${look.value}`), button("Own look", "LOOK off")),
       row("Wall time", wall, button("Set", () => `WALL ${unix()} ${tz()}`), button("Clear", "WALL clear")),
       row("Speed", button("1x", "SCALE 1"), button("10x", "SCALE 10"), button("60x", "SCALE 60")),
+      row("Power", button("Low now", "POWER low"), button("Wake", "POWER wake"), button("Status", "POWER"),
+        idle, button("Idle after", () => `POWER idle ${idle.value}`), button("10 min", "POWER idle default")),
+      row("Fight", button("Fight mode?", "DUEL")),
       el("h3", { textContent: "Needs the unlock" }),
       row("Hatch", button("Hatch now", "HATCH")),
       row("Stage", stage, button("Grow", () => `STAGE ${stage.value}`)),
@@ -201,6 +208,13 @@
       row("Die", button("Die, show eggs", "DIE eggs", { confirm: "He dies now. Continue?" }),
         button("Die, at the remains", "DIE remains", { confirm: "He dies now. Continue?" })),
       row("Species", species, button("Change", () => `SPECIES ${species.value}`, { confirm: "Change his species for good?" })),
+      row("Nap", button("Nap now", "NAP")),
+      row("Button", button("Press", "PRESS"), button("Hold 1.5 s", "PRESS 1500"), button("Double", "DOUBLE")),
+      row("Gesture", button("Hang", "HANG 2500"), button("Wobbly hang", "HANG 3000 1"), button("Cradle", "CRADLE"),
+        aim, button("Lean", () => `LEAN ${aim.value}`)),
+      row("Radio", net, button("Faults", () => `NET ${net.value.trim()}`.trim()), button("Clear", "NET clear")),
+      row("Reboot", button("Reboot", "REBOOT", { confirm: "Restart the badge (it saves first)?" }),
+        button("Reboot quiet", "REBOOT quiet", { confirm: "Restart with the radio dark until NET blackout 0?" })),
       row("Wipe", wipe, button("Wipe the pet", () => `WIPE ${wipe.value}`.trim(),
         { className: "danger", confirm: "Erase this pet and its whole lineage, and restart as a fresh board?" })),
       el("ol", { id: "dbgLog", className: "dbg-log" }));

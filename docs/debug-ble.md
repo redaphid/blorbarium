@@ -338,6 +338,30 @@ RAM is never saved over the fresh flash. The default `nvs` partition, where
 the OTA trial keeps its records, is not touched. A sealed board refuses
 (`ERR 409 SEALED`): its keepsake is waiting for a person to rescue it.
 
+## The device
+
+What the serial cable's `DEBUG` verbs do, over the air. The board runs them
+(`debugble::Board`'s device half, `src/debug_ble.h`); a board without them
+answers `ERR 501 NOT_ON_BOARD`.
+
+| Verb | Reach | What |
+|---|---|---|
+| `POWER [low\|wake\|idle <s>\|idle default]` | show | low power now, awake now, or the idle timeout until reset (docs/power.md). `ERR 409 HELD_AWAKE` when something keeps it awake |
+| `DUEL` | look | `fight=off\|searching\|waiting\|paired active= phase= peers= ctx= hearts= last=` |
+| `NAP` | write | he falls asleep now, as at bedtime |
+| `PRESS [ms]` | harm | BOOT held that long (default 150), felt by the pet only |
+| `DOUBLE` | harm | two 100 ms presses 250 ms apart: opens or leaves fight mode |
+| `HANG [ms] [wobble]` | harm | upside down on edge for ms (default 2500), then upright 3 s, through the real IMU path |
+| `CRADLE [ms]` | harm | held still, tipped back in a hand (default 5000): a cuddle |
+| `LEAN <aim> [ms]` | harm | tilted toward one rim edge (screen space) |
+| `NET [args]` | harm | the radio's faults, as `DEBUG net`; replies with the config |
+| `REBOOT [quiet]` | harm | save, then restart 500 ms after the reply; quiet keeps the radio dark until `NET blackout 0` |
+
+The gestures and presses are harm because they reach the pet's body: a
+press feeds him, a double press or a hang starts a fight, a cradle is a
+cuddle. `NET` and `REBOOT` are harm because a stranger could otherwise jam
+a fight or keep restarting the badge.
+
 ## What is gated, and why
 
 - **Harm needs the unlock**: `HATCH`, `STAGE`, `WARP`, `CHEM`, `DIE`,
@@ -353,8 +377,8 @@ the OTA trial keeps its records, is not touched. A sealed board refuses
   gap at all, so it is milder than `TIME`. `FIRE` adds `button` and `fed`,
   which feed him. `SCALE` could age him to death if it outlived the phone,
   so it ends with the connection that set it.
-- **Show and look need nothing**: `THINK`, `FORTUNE`, `LOOK`, `HELP`,
-  `STATUS`. Nothing is saved.
+- **Show and look need nothing**: `THINK`, `FORTUNE`, `LOOK`, `POWER`,
+  `HELP`, `STATUS`, `DUEL`. Nothing is saved.
 - **Write and harm wait out a trial** (`ERR 409 TRIAL`). On trial the
   storage writes nothing (`ota::HeldStorage`), so a change would be lost or
   kept only partly, and the trial compares the pet it resumed with the pet
@@ -379,9 +403,11 @@ the engine itself could reach.
   outcome would write wounds, `duels.log` entries and a friend egg into the
   real pet. Two boards and `DEBUG double` over the cable test duels today
   (`tools/duel_hw.py`).
-- **No button press over Bluetooth.** A remote press would answer the
-  unlock's question and the update's, which is the one thing a stranger's
-  phone must never do. The button stays in the hand.
+- **No Bluetooth press answers a question.** `PRESS` and `DOUBLE` need the
+  unlock (one real press on the dish), are refused `ERR 409 ASKING` while
+  the update's or the unlock's question shows, and the firmware routes them
+  past both questions (`petFeels` in `src/main.cpp`): only the pet feels
+  them. So a phone still cannot say yes to an update or to its own unlock.
 
 ## The website's panel
 
@@ -415,7 +441,17 @@ says so. `?mock=1&debug=true` runs it against the mock dish
 ```
 MSYS_NO_PATHCONV=1 wsl -d survivor --exec bash tools/wsl_test.sh test_debug_ble
 uv run --with playwright==1.63.0 python web/test/debug_page.py
+uv run tools/debug_ble_e2e.py /dev/ttyACM1     # every verb on a real badge, over the air (WIPEs it)
 ```
+
+`tools/debug_ble_e2e.py` sends every verb from this machine's Bluetooth to a
+real badge, using the cable only to read its log and for the unlock's press.
+It wipes the pet, hatches and grows him, warps, sets chemicals, scales
+time, changes species and back, sleeps and wakes the badge, opens and leaves
+fight mode by DOUBLE and by HANG, kills him into a clutch, picks an egg over
+the protocol, hatches the next generation, reboots into the clutch, and
+wipes again. 130 checks passed on badge 5 (mudge, d4:05:92:77:1b:30) at
+0.7.11, 2026-10-18.
 
 `test_debug_ble` covers the grammar; every harm verb refused locked with the
 state unchanged; the unlock's 1.5 s, its lapse, its connection and LOCK;
