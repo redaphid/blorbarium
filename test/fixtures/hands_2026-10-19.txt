@@ -1,6 +1,8 @@
 # Real hands on the test board 5C94094999, 2026-10-19 (tools/imu_record.py, badge128_pm).
 # A segment: '= <label> <knock knocks expected> <single knocks expected, - for any>', then
 # '<ms> <ax> <ay> <az>' per 50 Hz sample, raw IMU frame, milli-g. USB-C up is home (rotation 2).
+# Recorded before imu_qmi8658.h negated z: here az is +1 g face DOWN (z into the screen).
+# KnockSense and the shake read magnitudes and differences, so the sign does not matter to them.
 # 1_home: picked up from a desk and held, with some wiggling (a single knock from the wiggle is fine). 2b: five knock knocks held still
 # (and a triple knock just after a grip shift, which does not count). 3: five single knocks.
 # 4/5: four quarter turns each way, held 3 s. 6: four short turns. 7: two hangs.

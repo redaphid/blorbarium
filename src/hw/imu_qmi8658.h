@@ -120,7 +120,12 @@ inline bool read(blorb::BodySample& s) {
   s.tempCx10 = int16_t(le16(0) * 10 / 256);   // 1/256 C per LSB
   s.ax = int16_t(le16(2) * 1000 / kLsbPerG);
   s.ay = int16_t(le16(4) * 1000 / kLsbPerG);
-  s.az = int16_t(le16(6) * 1000 / kLsbPerG);
+  // The QMI8658's z points INTO the screen on the 1.28 (measured on the test
+  // board, 2026-10-19: face up reads -1 g, face down +1 g), and every detector
+  // takes +z out of the screen (senses.h). Before this, a badge lying face up
+  // on a desk was "lidded" after 30 s (bedtime, the pet clock pulled toward
+  // night) and face down was "righted"; a cuddle wanted the screen tipped away.
+  s.az = int16_t(-(le16(6) * 1000 / kLsbPerG));
   // STATUS1.bit1 says a tap was reported; TAP_STATUS[1:0] says which kind.
   s.tapCode = (probe(addr, kStatus1) & 0x02) ? uint8_t(probe(addr, kTapStatus) & 0x03) : 0;
   return true;
