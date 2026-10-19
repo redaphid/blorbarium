@@ -439,6 +439,25 @@ void verb_hang(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   r.ok("hang=%u wobble=%u", unsigned(*ms), unsigned(*wobble));
 }
 
+void verb_side(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> ms = optNumber(a, 1, 30000, 2500);
+  if (!ms) return r.err(400, "BAD_ARGS");
+  const std::optional<std::string_view> w = a.word();
+  if (!a.done() || (w && *w != "l" && *w != "r")) return r.err(400, "BAD_ARGS");
+  const bool left = w && *w == "l";
+  c.board.gesture(Board::Gesture::Side, *ms, uint8_t(left));
+  r.ok("side=%u which=%s", unsigned(*ms), left ? "l" : "r");
+}
+
+void verb_knock(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  const std::optional<uint32_t> n = optNumber(a, 1, 2, 2);
+  if (!n || !a.done()) return r.err(400, "BAD_ARGS");
+  c.board.gesture(Board::Gesture::Knock, 0, uint8_t(*n));
+  r.ok("knock=%u", unsigned(*n));
+}
+
 void verb_cradle(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
   const std::optional<uint32_t> ms = optNumber(a, 1, 30000, 5000);

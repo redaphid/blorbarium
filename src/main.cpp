@@ -274,7 +274,13 @@ static bool pressed(const Window (&ws)[2], uint32_t ms) {
 // and an occasional jolt.
 static volatile uint32_t hangAt = 0, hangMs = 0, rightMs = 0, cradleAt = 0, cradleMs = 0;
 static volatile bool hangWobble = false;
+// `DEBUG side` reuses the hang's windows with another pose: the raw sample's
+// gravity along +x (rotation 1) or -x (rotation 3) instead of +y.
+static volatile int8_t hangSide = 0;   // 0: upside down; +1/-1: on a side
+// `DEBUG knock [1|2]`: the tap engine's report on the next sample, as a knuckle's.
+static volatile uint8_t knockCode = 0;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
+  if (knockCode) s.tapCode = knockCode, knockCode = 0;
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
     const uint32_t r = esp_random();
@@ -286,6 +292,7 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   if (since >= hangMs + rightMs) return false;
   const bool down = since < hangMs;
   s.ax = 0, s.ay = int16_t(down ? 1000 : -1000), s.az = 0;
+  if (down && hangSide) s.ax = int16_t(hangSide * 1000), s.ay = 0;
   if (hangWobble) {
     const uint32_t r = esp_random();
     s.ax = int16_t(int32_t(r % 241) - 120);
@@ -386,6 +393,9 @@ static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false
   powerPolicy.sample(body, ms);
   if (wasLow && !powerPolicy.low() && body.buttonDown) wakePress = true;
   if (!body.buttonDown) wakePress = false;
+  // Nor does the knock knock that wakes it: its twin is a press (controls.h).
+  blorb::BodySample felt = body;
+  if (wasLow && !powerPolicy.low() && felt.tapCode) felt.tapCode = 0;
   // The panel and the engine turn together, so downhill is down on the glass.
   const uint8_t rot = up.sample(body, ms);
   if (rot != display.getRotation()) display.setRotation(rot);
@@ -399,11 +409,12 @@ static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false
     updater.press(millis());
   }
 #endif
-  blorb::BodySample screen = up.toScreen(body);
+  blorb::BodySample screen = up.toScreen(felt);
   // Held upside down is the one pose the turn into the screen's frame hides:
   // the settled rotation is the only place it still exists, so it rides the
   // sample as a level (BodySample::invertedDown) for HangDetector.
   screen.invertedDown = rot == 2;
+  screen.sideDown = rot == 1 || rot == 3;   // the hold's twin (SideHoldDetector, controls.h)
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
   dish->sample(screen, ms);
@@ -572,11 +583,11 @@ static void reportStatus(uint32_t now) {
   if (lastBody.tempCx10 != INT16_MIN) std::snprintf(temp, sizeof temp, "%.1f", lastBody.tempCx10 / 10.0);
   Serial.printf(
       "[hw] up=%u heap=%u minheap=%u big=%u psram_free=%u stack_hwm=%u writes=%u occupant=%s gen=%u genome=%08x "
-      "age=%u imu ax=%d ay=%d az=%d mg rot=%u t=%sC tap=%u button=%d power=%s cpu=%u frames=%u\n",
+      "age=%u tick=%u imu ax=%d ay=%d az=%d mg rot=%u t=%sC tap=%u button=%d power=%s cpu=%u frames=%u\n",
       unsigned(now / 1000), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
       unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
-      unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), lastBody.ax,
+      unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), unsigned(dish->tickCount()), lastBody.ax,
       lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0,
       powerPolicy.low() ? "low" : "full", unsigned(cpuMaxMhz), unsigned(framesDrawn));
 }
@@ -890,11 +901,46 @@ static void hang(const char* line) {
 
 static void hangFor(uint32_t ms, bool wobble) {
   bodyq::hangMs = 0;
+  bodyq::hangSide = 0;
   bodyq::rightMs = 3000;
   bodyq::hangWobble = wobble;
   bodyq::hangAt = millis();
   bodyq::hangMs = ms;
   Serial.printf("[hw] debug hang %u ms wobble=%d, then upright 3000 ms\n", unsigned(ms), int(wobble));
+}
+
+// `DEBUG side [ms] [l|r]`: turned onto a side for ms (default 2500), then
+// upright 3 s: the hold's twin, through the real orientation settle and
+// SideHoldDetector. r (the default) is rotation 1, l rotation 3.
+static void sideFor(uint32_t ms, bool left) {
+  bodyq::hangMs = 0;
+  bodyq::rightMs = 3000;
+  bodyq::hangWobble = false;
+  bodyq::hangSide = int8_t(left ? -1 : 1);
+  bodyq::hangAt = millis();
+  bodyq::hangMs = ms;
+  Serial.printf("[hw] debug side %s %u ms, then upright 3000 ms\n", left ? "l" : "r", unsigned(ms));
+}
+
+static void side(const char* line) {
+  long ms = 2500;
+  char which[4] = "r";
+  std::sscanf(line, "%*s %ld %3s", &ms, which);
+  if (ms <= 0 || ms > 30000 || (which[0] != 'l' && which[0] != 'r'))
+    return (void)Serial.printf("[hw] debug side: want [ms 1..30000] [l|r]\n");
+  sideFor(uint32_t(ms), which[0] == 'l');
+}
+
+// `DEBUG knock [1|2]`: one knock, or a knock knock (default), as the tap engine reports it.
+static void knockOnce(uint8_t code) {
+  bodyq::knockCode = code;
+  Serial.printf("[hw] debug knock %u\n", unsigned(code));
+}
+
+static void knock(const char* a) {
+  const long code = *a ? std::strtol(a, nullptr, 10) : 2;
+  if (code != 1 && code != 2) return (void)Serial.printf("[hw] debug knock: want [1|2]\n");
+  knockOnce(uint8_t(code));
 }
 
 // `DEBUG cradle [ms]`: held still in a hand for ms (default 5000): a cuddle, through the real detectors.
@@ -1002,6 +1048,8 @@ static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
   if (std::strcmp(verb, "hang") == 0) return hang(line);
+  if (std::strcmp(verb, "side") == 0) return side(line);
+  if (std::strcmp(verb, "knock") == 0) return knock(a);
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
@@ -1016,10 +1064,18 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "lean") == 0) return lean(line);
   if (std::strcmp(verb, "species") == 0) return pinSpecies(a);
   if (std::strcmp(verb, "found") == 0) return pinFounding(a);
+  if (std::strcmp(verb, "hatch") == 0) {   // the egg hatches now, as the debug link's HATCH, with no phone (FREEHATCH)
+    dish->setHatchFree(true);
+    const bool ok = debugble::hatch(*dish, warp) == debugble::Jump::Done &&
+                    !std::holds_alternative<blorb::Egg>(dish->occupant());
+    const OccupantSummary o = summarize(dish->occupant());
+    return (void)Serial.printf("[hw] debug hatch: %s occupant=%s genome=%08x\n", ok ? "ok" : "no egg", o.kind,
+                               unsigned(o.genome));
+  }
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, species gilly, found gilly, shot, press [ms], "
-                  "double, lean <aim> [ms], hang, cradle, nap, net, duel, power [low|wake|idle <s>], reboot, "
-                  "bletest <bytes>)\n", verb);
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
+                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
+                  "power [low|wake|idle <s>], reboot, bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();

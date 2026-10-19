@@ -29,6 +29,10 @@ struct BodySample {
   // detector could ever derive this from ax/ay. A level, like buttonDown;
   // HangDetector gives it its timing.
   bool invertedDown = false;
+  // The settled rotation is a quarter turn from native: he is on one side.
+  // Hidden by the turn into the screen's frame for the same reason, so it
+  // rides the same way; SideHoldDetector gives it its timing.
+  bool sideDown = false;
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered
@@ -126,7 +130,22 @@ struct HangDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false, armed_ = false;
 };
-struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock, 400 ms rate limit; not just after the road pushed the whole body up
+// Turned onto a side and held there -> the button held (controls.h): the
+// no-button twin of a BOOT hold, as the hang is the double press's. Held on
+// edge and steady, a quarter turn from upright, it is a level (holding()), as
+// BOOT down is: the Dish times the 3 s holds (Finish, the Mortal pick, the
+// hug) and fills the rim's ring by it, and once it has lasted kButtonHoldMs
+// it fires ButtonHold, once. A turn let go sooner does nothing at all (a
+// release is never a press: the press's twin is the knock knock). Like the
+// hang, only after he has been the right way up: one hold per turn, and a
+// badge switched on sideways, or kept sideways, holds nothing.
+struct SideHoldDetector : DetectorBase {
+  void sample(const BodySample&, uint32_t ms, SenseOut&);
+  bool holding() const { return holding_; }
+  uint32_t heldMs(uint32_t ms) const { return holding_ ? ms - since_ : 0; }
+ private: uint32_t since_ = 0, offSince_ = 0; bool holding_ = false, fired_ = false, armed_ = false, off_ = false;
+};
+struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock (+ Button, its twin: controls.h), 400 ms rate limit; not just after the road pushed the whole body up
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: Gravity grav_; uint32_t last_ = 0, bumpAt_ = 0; bool heavy_ = false, bumped_ = false;
 };

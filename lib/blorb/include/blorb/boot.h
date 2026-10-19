@@ -13,6 +13,11 @@
 // hint from it, so the glyph cannot drift from the behaviour. Where a row's
 // double press is Nothing, the second press of a pair counts as a press
 // again (Dish::routeBoot), so a kid tapping through the clutch is not slowed.
+//
+// A case that covers BOOT says the same three words with the body
+// (controls.h, docs/controls.md): a knock knock is a press, a turn onto a side
+// held there is a hold, the hang is a double press. Each fires the button's
+// own stimulus, so this table is theirs too.
 #include <cstddef>
 #include <cstdint>
 

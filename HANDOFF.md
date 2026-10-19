@@ -12,6 +12,26 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
+## Where things stand (2026-10-19: controls with no button, branch `low-power`)
+
+**With BOOT covered, the pets could not be fed.** A pellet was only ever a
+BOOT press. Every word the button says now has a body twin
+(`lib/blorb/include/blorb/controls.h`, `docs/controls.md`): **knock knock =
+press** (feed, step the stakes, quick special, rematch, next egg), **turn
+onto a side and hold = hold** (tuck in, keep an egg, heavy special; held 3 s:
+Mortal, Finish, hug), **hang = double press** (fight mode). A whole Mortal
+duel, a hug's friend egg, feeding and the clutch run with no button in
+`test_two_dishes` (`NoButton.*`), and on badge 1 through the real IMU path
+(`tools/gesture_e2e.py`, 7/7). Behaviour changes for the owner to confirm
+are listed in `docs/notes/no-button-2026-10-19.md`.
+
+**On-device e2e on `badge128_pm`** (same note): power 9/9 and debug link
+139/139 on badge 1; `duel_soak.py` with two badges is still owed on
+`badge128_pm`. A real knuckle and hand through the case are not yet tried.
+New cable verbs: `DEBUG knock [1|2]`, `DEBUG side [ms] [l|r]`, `DEBUG hatch`;
+debug link `KNOCK`, `SIDE`. `tools/flash_board.sh` now finds a pipx esptool
+4.7 when PlatformIO's 4.5 is too old.
+
 ## Where things stand (2026-10-18, late: branch `low-power`)
 
 **The badges have a battery and no off state, and the kids cannot use the

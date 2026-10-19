@@ -55,6 +55,8 @@ struct Board : debugble::Board {
   bool press(uint32_t ms, bool twice) override { return remotePress(ms, twice); }
   bool gesture(Gesture g, uint32_t ms, uint8_t arg) override {
     if (g == Gesture::Hang) hangFor(ms, arg != 0);
+    else if (g == Gesture::Side) sideFor(ms, arg != 0);
+    else if (g == Gesture::Knock) knockOnce(arg);
     else if (g == Gesture::Cradle) cradleFor(ms);
     else leanFor(arg, ms);
     return true;

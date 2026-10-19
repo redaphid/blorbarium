@@ -45,7 +45,7 @@ BLORB_THOUGHT(25, knees,          none,   elder,         2, 1200, "MY KNEES ARE 
 BLORB_THOUGHT(26, moon,           none,   night,         2, 5400, "THE MOON IS A BIG CRUMB")
 BLORB_THOUGHT(27, anyone,         none,   lonely,        3,  900, "HELLO? IS THIS THING ON?")
 BLORB_THOUGHT(28, science,        none,   learned_food,  2, 1800, "SNACKS FIX HUNGER. SCIENCE.")
-BLORB_THOUGHT(29, no_hat,         none,   always,        0, 1800, "GEN #. STILL NO HAT.")
+BLORB_THOUGHT(29, no_hat,         none,   always,        0, 3600, "GEN #. STILL NO HAT.")
 BLORB_THOUGHT(30, p_snack,        food,   anytime,       1,  300, "ASK AGAIN AFTER SNACK.")
 BLORB_THOUGHT(31, p_feast,        food,   anytime,       1,  300, "FAT FLIES. IT IS WRITTEN.")
 BLORB_THOUGHT(32, p_pellet_soon,  food,   hungry,        3,  300, "A BISCUIT APPROACHES. MAYBE.")
@@ -157,3 +157,8 @@ BLORB_THOUGHT(130, sleep_warm,    none,   dozing,        0, 1800, "MM. WARM. NOT
 BLORB_THOUGHT(131, dream_rain,    none,   dozing,        0, 1800, "ZZZ... RAIN ON THE RIM...")
 BLORB_THOUGHT(132, teach_fight,   none,   young,         4, 7200, "FLIP ME OVER. LET'S FIGHT")
 BLORB_THOUGHT(133, teach_shake,   none,   young,         4, 7200, "SHAKE ME. I SEE THINGS.")
+// The button's twins (controls.h), which a kid cannot guess either. Feeding
+// is taught whenever he is hungry, at any age: with BOOT covered it is the
+// only way food reaches him.
+BLORB_THOUGHT(134, teach_feed,    none,   hungry,        4, 1800, "KNOCK KNOCK ON ME FOR SNACKS")
+BLORB_THOUGHT(135, teach_hold,    none,   young,         4, 7200, "TIP ME SIDEWAYS. NIGHT NIGHT")

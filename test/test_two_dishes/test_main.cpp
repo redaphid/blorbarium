@@ -38,6 +38,8 @@ struct Frame {
   bool down = false, tap = false;
   int8_t shake = 0;   // a hand's swing this tick: 1 up, -1 down
   bool cradle = false, lid = false;
+  // The button's twins (controls.h), for a kid whose case covers BOOT.
+  bool side = false, knock2 = false, hang = false;
 };
 
 BodySample sampleOf(const Frame& f, uint8_t i) {
@@ -49,6 +51,10 @@ BodySample sampleOf(const Frame& f, uint8_t i) {
   if (f.shake) s.ax = 0, s.ay = 0, s.az = i == 2 ? int16_t(1000 + 1000 * f.shake) : 1000;   // 1 g off gravity
   s.tapCode = f.tap && i == 0 ? 1 : 0;
   s.buttonDown = f.down;
+  // On edge in the screen's frame (main.cpp has turned the sample); only the level says how.
+  if (f.side) s.ax = 0, s.ay = -1000, s.az = 0, s.sideDown = true;
+  if (f.hang) s.ax = 0, s.ay = -1000, s.az = 0, s.invertedDown = true;
+  if (f.knock2 && i == 0) s.tapCode = 2;
   return s;
 }
 
@@ -68,12 +74,42 @@ struct Kid {
   bool shook = false;
   bool fought = false;   // a fight showed: back in fight mode, a kid who leaves presses twice
 
+  // No BOOT at all: every press is a knock knock, every hold a turn onto a
+  // side held as long, every double press a hang (controls.h).
+  bool noButton = false;
+  bool everPressed = false;   // a noButton kid's BOOT went down: the harness is wrong
+
   void plan(const DuelView& v, bool dueling, std::deque<Frame>& out) {
-    auto hold = [&](int8_t aim, int n, Frame f) { for (int i = 0; i < n; ++i) { f.aim = aim; out.push_back(f); } };
+    auto hold = [&](int8_t aim, int n, Frame f) {
+      if (noButton && f.down) {
+        f.down = false;
+        if (n <= 2) {   // a press: the knock knock, then a quiet beat (the tap engine's own gap)
+          Frame k = f;
+          k.knock2 = true, k.aim = aim;
+          out.push_back(k);
+          f.aim = aim;
+          for (int i = 1; i < std::max(n, 5); ++i) out.push_back(f);
+          return;
+        }
+        f.side = true;
+      }
+      for (int i = 0; i < n; ++i) { f.aim = aim; out.push_back(f); }
+    };
+    auto dbl = [&]() {
+      if (noButton) {
+        Frame h;
+        h.hang = true;
+        for (int i = 0; i < 4; ++i) out.push_back(Frame{});   // the right way up first: a hang is a turn
+        for (int i = 0; i < 12; ++i) out.push_back(h);
+        for (int i = 0; i < 4; ++i) out.push_back(Frame{});
+        return;
+      }
+      hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
+    };
     if (!dueling) {
       if (!wantDuel) return;
       wantDuel = false;
-      hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
+      dbl();
       return;
     }
     switch (v.phase) {
@@ -82,7 +118,7 @@ struct Kid {
         // about, and after a fight leaves it with a double press.
         if (fought && leave) {
           fought = false;
-          return hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
+          return dbl();
         }
         return hold(int8_t(rng.below(4)), 1, Frame{});
       case DuelPhase::Staking: {
@@ -128,7 +164,7 @@ struct Kid {
         if (v.phaseTicks < leaveAfter) return hold(-1, 1, Frame{});
         if (hug && !v.iHugged) return hold(-1, 34, Frame{-1, true}), hold(-1, 1, Frame{});
         if (hug && !(v.eggLaid || v.eggFizzled)) return hold(-1, 1, Frame{});
-        if (leave) hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
+        if (leave) dbl();
         return;
       default: return;
     }
@@ -203,7 +239,11 @@ struct Device {
     if (plan.empty()) kid.plan(v, dueling, plan);
     Frame f;
     if (!plan.empty()) f = plan.front(), plan.pop_front();
-    for (uint8_t i = 0; i < 5; ++i) dish->sample(sampleOf(f, i), ms + 20 * i);
+    for (uint8_t i = 0; i < 5; ++i) {
+      const BodySample smp = sampleOf(f, i);
+      if (kid.noButton && smp.buttonDown) kid.everPressed = true;
+      dish->sample(smp, ms + 20 * i);
+    }
     ms += 100;
     dish->tick(ms, link);
     if (dish->duelActive()) {
@@ -894,6 +934,88 @@ TEST(TwoDishes, BothHugsLayAFriendEggOnEachSide) {
   EXPECT_EQ(ea->record.battleSeed, eb->record.battleSeed) << "the battle's seed is the cross's";
 }
 
+// ---- no button at all: the twins (controls.h) ------------------------------------------
+
+// Two kids whose cases cover BOOT play a whole Mortal duel: a hang opens fight
+// mode, knock knocks step the stakes to Mortal and a 3 s turn onto a side
+// agrees to it, knocks lock the aimed stances, knock knocks throw specials,
+// the winner turns his badge onto its side for the 3 s the skull takes and
+// Finishes, and a hang leaves. BOOT never goes down.
+TEST(NoButton, AWholeMortalDuelFinishedWithGesturesAlone) {
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    for (Device* d : {&bout.a, &bout.b}) {
+      d->kid.noButton = true;
+      d->kid.tier = Stakes::Mortal;
+      d->kid.mercy = Mercy::Finish;
+      d->kid.special = true;
+    }
+    bout.runDuel();
+    EXPECT_FALSE(bout.a.kid.everPressed || bout.b.kid.everPressed) << "BOOT went down";
+    Device* fallen = !bout.a.alive() ? &bout.a : !bout.b.alive() ? &bout.b : nullptr;
+    if (!fallen) continue;   // nobody was downed: another seed
+    Device* victor = fallen == &bout.a ? &bout.b : &bout.a;
+    EXPECT_EQ(deaths(fallen->dish->lineage()), 1u) << "seed " << seed;
+    EXPECT_TRUE(victor->dish->duels().featsThisLife(0) & feat::slayer) << "seed " << seed;
+    EXPECT_FALSE(bout.a.dish->duelActive() || bout.b.dish->duelActive()) << "a hang left fight mode";
+    return;
+  }
+  FAIL() << "no seed under 30 finished a pet with gestures alone";
+}
+
+// Turning him onto his side tips the tilt, so while he is held there the
+// duel's aim is the one from before the turn: a heavy special lands where
+// the kid aimed, not wherever the turn left the tilt.
+TEST(NoButton, ASideHoldKeepsTheAimFromBeforeTheTurn) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  bout.step();   // the kid sees the new screen (and plans for it): the plan below replaces his
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  int checked = 0;
+  for (int8_t want : {int8_t(0), int8_t(1)}) {
+    Frame aim, side;
+    aim.aim = want, side.side = true;
+    bout.a.plan.clear();
+    for (int i = 0; i < 20; ++i) bout.a.plan.push_back(aim);
+    for (int i = 0; i < 8; ++i) bout.a.plan.push_back(side);
+    bout.a.kid.wantDuel = false;
+    for (int i = 0; i < 20; ++i) bout.step();
+    if (bout.a.dish->duelView().phase != DuelPhase::Choosing) break;
+    EXPECT_EQ(bout.a.dish->duelView().aim, want) << "aimed before the turn";
+    for (int i = 0; i < 6; ++i) {
+      bout.step();
+      if (bout.a.dish->duelView().phase != DuelPhase::Choosing) break;
+      EXPECT_EQ(bout.a.dish->duelView().aim, want) << "on his side, tick " << i;
+      ++checked;
+    }
+  }
+  EXPECT_GE(checked, 6) << "the aim was looked at on his side";
+}
+
+// Spared, with no button: a knock spares as it always did, and nobody dies.
+TEST(NoButton, AMortalDuelSparedByAKnock) {
+  for (uint64_t seed = 1; seed < 30; ++seed) {
+    Bout bout(seed, kGrungo, SpeciesId{6}, true);
+    for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true, d->kid.tier = Stakes::Mortal;
+    ASSERT_TRUE(bout.runDuel()) << "seed " << seed;
+    EXPECT_TRUE(bout.a.alive() && bout.b.alive()) << "seed " << seed;
+    EXPECT_FALSE(bout.a.kid.everPressed || bout.b.kid.everPressed);
+  }
+}
+
+// The hug, as a 3 s turn onto a side on the friends screen, lays the friend egg.
+TEST(NoButton, BothSideHoldHugsLayAFriendEgg) {
+  Bout bout(5, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true, d->kid.hug = true;
+  ASSERT_TRUE(bout.runDuel());
+  EXPECT_TRUE(FriendEggStore::load(bout.a.store) && FriendEggStore::load(bout.b.store)) << "a friend egg on both";
+  EXPECT_FALSE(bout.a.kid.everPressed || bout.b.kid.everPressed);
+}
+
 // ---- the graft, consent, and what is written at once ----------------------------------
 
 namespace {
@@ -1106,6 +1228,51 @@ TEST(BootRows, AwakeAPressFeedsAHoldTucksInADoubleOpensTheLobby) {
   EXPECT_TRUE(a.d.felt.count(stim::button_hold.v)) << "a hold is the tuck-in";
   a.doublePress();
   EXPECT_TRUE(a.d.dish->duelActive()) << "a double press opens the lobby";
+}
+
+// The same rows with no button (controls.h): a knock knock feeds, a turn onto
+// a side held tucks him in (the ring filling as it would for BOOT), a hang
+// opens the lobby, and a knock knock in the lobby still feeds him.
+TEST(BootRows, NoButtonAKnockKnockFeedsASideHoldTucksInAHangOpensTheLobby) {
+  Alone a;
+  Frame kk, side, hang;
+  kk.knock2 = true, side.side = true, hang.hang = true;
+  a.tick(), a.tick();
+  const uint8_t before = pellets(*a.d.dish);
+  a.tick(kk), a.tick(), a.tick();
+  EXPECT_EQ(pellets(*a.d.dish), before + 1) << "a knock knock drops a pellet";
+  EXPECT_TRUE(has(diags(a.d), "gesture knock_knock=press"));
+  a.d.felt.clear();
+  for (int t = 0; t < 6; ++t) a.tick(side);
+  EXPECT_GT(a.d.dish->appearance().boot.holdFill, 0) << "while held on his side, the ring fills";
+  for (int t = 0; t < 8; ++t) a.tick(side);
+  a.tick();
+  EXPECT_TRUE(a.d.felt.count(stim::button_hold.v)) << "a side hold is the tuck-in";
+  EXPECT_TRUE(has(diags(a.d), "gesture side=hold ms=1200"));
+  EXPECT_EQ(pellets(*a.d.dish), before + 1) << "and drops nothing";
+  for (int t = 0; t < 4; ++t) a.tick();
+  for (int t = 0; t < 12; ++t) a.tick(hang);
+  a.tick();
+  EXPECT_TRUE(a.d.dish->duelActive()) << "a hang opens the lobby";
+}
+
+// The clutch with no button: knock knocks step through the eggs, a side hold keeps one.
+TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
+  Alone a;
+  Frame kk, side;
+  kk.knock2 = true, side.side = true;
+  a.d.creature().fall();
+  a.tick(), a.tick();
+  Clutch& k = std::get<Clutch>(a.d.dish->occupant());
+  ASSERT_EQ(k.count, 2);
+  k.sinceDeath = Clutch::kVigilTicks;
+  a.tick();
+  a.tick(kk), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a knock knock: the next egg";
+  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "and it keeps nothing";
+  for (int t = 0; t < 14; ++t) a.tick(side);
+  a.tick();
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps the egg";
 }
 
 // Asleep, a double press asks for a fight (he is woken for it); too sleepy,

@@ -71,7 +71,10 @@ std::optional<uint8_t> pickEgg(const SenseOut& senses, uint8_t& cursor, uint8_t 
   if (count <= 1) return uint8_t(0);
   for (uint8_t i = 0; i < senses.stimCount; ++i) {
     StimId s = senses.stimuli[i];
-    if (s == stim::button_hold || s == stim::double_knock) return cursor;
+    // Keeping an egg is for good, so it is a hold: BOOT held, or its twin, turned
+    // onto a side and held (controls.h). A knock knock is a press (it arrives
+    // with its twin, a Button) and moves on; it no longer keeps.
+    if (s == stim::button_hold) return cursor;
     // A quick second press arrives as a double (ButtonDetector), which means
     // nothing here (boot.h): it is the second tap, so tapping through is never slowed.
     if (s == stim::button || s == stim::button_double || s == stim::knock) cursor = uint8_t((cursor + 1) % count);

@@ -33,9 +33,9 @@ from power_e2e import CRASH, DEBUG, NUS_RX, NUS_TX, Board, Fail  # noqa: E402
 
 ALL_VERBS = ["HELP", "STATUS", "UNLOCK", "LOCK", "THINK", "FORTUNE", "LOOK", "FIRE", "WALL", "SCALE", "FREEHATCH",
              "HATCH", "STAGE", "WARP", "CHEM", "DIE", "SPECIES", "WIPE", "POWER", "DUEL", "NAP", "PRESS", "DOUBLE",
-             "HANG", "CRADLE", "LEAN", "NET", "REBOOT"]
+             "HANG", "SIDE", "KNOCK", "CRADLE", "LEAN", "NET", "REBOOT"]
 HARM = ["HATCH", "STAGE adult", "WARP 5", "CHEM hunger 900", "DIE", "SPECIES gilly", "WIPE", "PRESS", "DOUBLE",
-        "HANG", "CRADLE", "LEAN 1", "NET clear", "REBOOT"]
+        "HANG", "SIDE", "KNOCK", "CRADLE", "LEAN 1", "NET clear", "REBOOT"]
 
 
 class Session:
@@ -270,7 +270,7 @@ class Run:
             await s.dbg("SPECIES %s" % species, r"OK species=%s" % species)
             self.check((await self.status(s)).get("species") == species, "his own species again")
 
-        self.say("== the device: POWER, NAP, DUEL, PRESS, DOUBLE, HANG, CRADLE, LEAN, NET")
+        self.say("== the device: POWER, NAP, DUEL, PRESS, DOUBLE, HANG, KNOCK, SIDE, CRADLE, LEAN, NET")
         m = self.b.mark()
         await s.dbg("POWER low", r"OK power=low why=asked .*cpu=80")
         self.check(bool(await self.serial(r"\[power\] power=low why=asked", 3, m)), "the badge's log: low")
@@ -304,6 +304,17 @@ class Run:
             m = self.b.mark()
             await s.dbg("DOUBLE", r"OK")   # the hang opened it: leave
             await self.serial(r"-> closed", 5, m)
+        # The button's twins (controls.h): a knock knock is a press, a side hold a hold.
+        m = self.b.mark()
+        await s.dbg("KNOCK 2", r"OK knock=2")
+        self.check(bool(await self.serial(r"\[diag\] gesture knock_knock=press", 3, m)), "KNOCK 2 is a press on the board")
+        await s.dbg("KNOCK 1", r"OK knock=1")
+        await s.dbg("KNOCK 3", r"ERR 400 BAD_ARGS")
+        m = self.b.mark()
+        await s.dbg("SIDE 3000 r", r"OK side=3000 which=r")
+        self.check(bool(await self.serial(r"\[diag\] gesture side=hold", 5, m)), "SIDE is a hold on the board")
+        await s.dbg("SIDE 3000 x", r"ERR 400 BAD_ARGS")
+        await asyncio.sleep(3)
         await s.dbg("CRADLE 3000", r"OK cradle=3000")
         await s.dbg("LEAN 2 1000", r"OK lean=2 ms=1000")
         await s.dbg("NET", r"OK rx_drop=0 ")

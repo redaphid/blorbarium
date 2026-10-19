@@ -1,12 +1,29 @@
 #pragma once
-// The duel's controls: which stimuli mean what, in ONE table, so a build can
-// rebind them without hunting through the session and the Dish. The current
-// case covers the BOOT button, so the hang (held upside down, steady) is the
-// live fight toggle; the button bindings sit beside it in the same masks,
-// ready for a case that exposes the button again. Swapping a control is an
-// edit here and nowhere else.
+// The controls: which stimuli mean what, in ONE table, so a build can rebind
+// them without hunting through the session and the Dish.
+//
+// The kids' cases cover BOOT, so every word the button says has a twin made
+// with the body, as reliable as the hang that opens fight mode: a pose held
+// on edge, or the case knocked twice. A twin fires the button's own stimulus,
+// so every screen's row in boot.h (kBoot) means the same thing whichever way
+// it was said, and the rim's hint and hold ring serve both:
+//
+//   BOOT says        its twin                          detector
+//   press            knock knock (the case, twice)     KnockDetector
+//   hold (level)     turned onto a side, held there    SideHoldDetector
+//   double press     the hang: upside down, held       HangDetector
+//
+// So, with no button: knock knock to feed him (or step the stakes, peek in
+// the egg, lay a flower, ask for a rematch, throw a quick special); turn him
+// onto his side and hold to tuck him in, keep an egg, throw a heavy special,
+// and, held the 3 s the ring takes, to agree to Mortal, to Finish or to hug;
+// hang him upside down to open fight mode or leave it. Tilt still aims, one
+// knock still locks the aimed stance and spares, a shake still tells the
+// future, a cuddle still hugs and a turn still answers an update.
 //
 // Who reads what:
+//   kKnockKnockPresses / kSideHoldHolds - the detectors: whether the twins
+//                    speak at all (false: the button alone, as on 0.7.11).
 //   kFightAskMask  - DishDuel: the toggle that asks for fight mode. In the
 //                    lobby and on the friends screen the same gestures mean
 //                    leave / search again, read there as DuelInput's
@@ -25,6 +42,10 @@
 #include "blorb/registry.h"
 
 namespace blorb {
+
+// The twins (above). A knock knock still reaches him as a knock knock too.
+inline constexpr bool kKnockKnockPresses = true;
+inline constexpr bool kSideHoldHolds = true;
 
 constexpr uint64_t duelStimBit(StimId s) { return uint64_t(1) << s.v; }
 

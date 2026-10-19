@@ -1,5 +1,7 @@
 #include "blorb/dish.h"
 
+#include "blorb/controls.h"
+
 #include <algorithm>
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
@@ -123,7 +125,11 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
     const char* what = f == stim::button ? "press" : f == stim::button_double ? "double" : nullptr;
-    if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
+    // The twins (controls.h) say which gesture spoke, not BOOT.
+    if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !buttonDown_) diag_.say("gesture knock_knock=press");
+    else if (f == stim::button_hold && !buttonDown_ && detectors_.side.holding())
+      diag_.say("gesture side=hold ms=%u", unsigned(kButtonHoldMs));
+    else if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
     else if (what && gapMs_ == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(heldMs_));
     else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(heldMs_), unsigned(gapMs_));
   }
@@ -138,6 +144,9 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
     releasedOnce_ = true;
   }
   buttonDown_ = s.buttonDown;
+  const bool hold = buttonDown_ || (kSideHoldHolds && detectors_.side.holding());
+  if (hold && !holdDown_) holdSinceMs_ = nowMs;
+  holdDown_ = hold;
   lastSampleMs_ = nowMs;
 }
 
@@ -174,7 +183,19 @@ void Dish::runOneTick(Link& link) {
   }
   routeBoot(bootContext(), out);
   const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
-  if (duel_.step(live_.occupant, lineage_, air_, out, tiltX_, tiltY_, buttonDown_, live_.settings.lineageId, petDay, tick_)
+  const bool side = kSideHoldHolds && detectors_.side.holding();
+  if (!histPrimed_) {
+    histPrimed_ = true;
+    for (Fx* t : tiltHist_) t[0] = tiltX_, t[1] = tiltY_;
+  }
+  if (side && !sideWas_) {
+    const Fx* before = tiltHist_[(tick_ - kAimBeforeTurn) % kAimHistory];
+    sideTilt_[0] = before[0], sideTilt_[1] = before[1];
+  }
+  sideWas_ = side;
+  tiltHist_[tick_ % kAimHistory][0] = tiltX_, tiltHist_[tick_ % kAimHistory][1] = tiltY_;
+  const Fx aimX = side ? sideTilt_[0] : tiltX_, aimY = side ? sideTilt_[1] : tiltY_;
+  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, holdDown_, live_.settings.lineageId, petDay, tick_)
           .save)
     save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
@@ -407,7 +428,7 @@ Appearance Dish::appearance() const {
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
-  a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, buttonDown_ ? lastSampleMs_ - buttonSinceMs_ : 0);
+  a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, holdDown_ ? lastSampleMs_ - holdSinceMs_ : 0);
   if ((ctx == BootContext::Awake || ctx == BootContext::Asleep || ctx == BootContext::Lobby) && live_.habitat.pantry == 0)
     a.boot.greyed = true;
   if (a.boot.hasDouble && tapArmed_ && !buttonDown_ && lastSampleMs_ - tapReleaseMs_ <= kDoublePressMs)

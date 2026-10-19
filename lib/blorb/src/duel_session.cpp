@@ -531,7 +531,12 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
     const bool canAct = !b.revealing && b.mine.count() == o.resolved;
     if (canAct && !b.choosing) b.chooseTick = tick;
     b.choosing = canAct;
-    if (in.doubleKnock) cheer(b, Emote(1 + b.emoteSeqOut % 4), tick);
+    // A knock knock is a press too (controls.h): where it throws a special it
+    // is not also a cheer; anywhere else it cheers, as it always has.
+    const int8_t aimNow = in.aim <= 2 ? in.aim : -1;
+    const bool throws = canAct && !o.side[me].dozing && aimNow >= 0 &&
+                        ((in.hold && specialFits(b, Windup::Heavy)) || (in.press && specialFits(b, Windup::Quick)));
+    if (in.doubleKnock && !throws) cheer(b, Emote(1 + b.emoteSeqOut % 4), tick);
     if (in.shake && !b.revealing && !(b.prophecy && b.prophecyTurn == o.resolved)) {
       b.prophecy = foretell(o, other(b.me), setup_.card, b.theirs, b.battle.seed);
       b.prophecyTurn = o.resolved;

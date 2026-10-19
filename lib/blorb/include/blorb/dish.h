@@ -216,6 +216,17 @@ class Dish {
   // rim's hold ring fills with it.
   bool buttonDown_ = false;
   uint32_t buttonSinceMs_ = 0, lastSampleMs_ = 0;
+  // The hold as a level, whoever holds: BOOT down, or turned onto a side
+  // (SideHoldDetector, controls.h). What the duel and the ring read.
+  bool holdDown_ = false;
+  uint32_t holdSinceMs_ = 0;
+  // The duel's aim while turned onto a side is the aim from before the turn
+  // (turning him tips the tilt): the last kAimHistory ticks of tilt.
+  static constexpr uint8_t kAimHistory = 16;
+  static constexpr uint8_t kAimBeforeTurn = 15;   // 1.5 s: the turn and orient.h's settle
+  Fx tiltHist_[kAimHistory][2]{};
+  Fx sideTilt_[2]{};
+  bool sideWas_ = false, histPrimed_ = false;
   // ButtonDetector's double window, mirrored for the rim: a short press that
   // could still become a double lights the hint until the window closes.
   uint32_t tapReleaseMs_ = 0;

@@ -419,3 +419,9 @@ teach_fight     young
 
 teach_shake     young
   SHAKE ME. I SEE THINGS.
+
+teach_feed      hungry
+  KNOCK KNOCK ON ME FOR SNACKS
+
+teach_hold      young
+  TIP ME SIDEWAYS. NIGHT NIGHT

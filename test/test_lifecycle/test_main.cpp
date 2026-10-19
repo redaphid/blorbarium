@@ -271,8 +271,9 @@ TEST(Clutch, TheTimeoutPicksTheCursorEgg) {
 // The timeout picks the cursor egg too, so only the moment of the pick shows
 // that the gesture made it: the owner steers to the last egg and picks it the
 // tick his hand lands, half an hour before the timeout could.
-TEST(Clutch, HoldOrDoubleKnockPicksTheCursorEggThatTick) {
-  for (StimId gesture : {stim::button_hold, stim::double_knock}) {
+// A hold picks, whoever holds (BOOT, or turned onto a side: both fire ButtonHold).
+TEST(Clutch, AHoldPicksTheCursorEggThatTick) {
+  for (StimId gesture : {stim::button_hold}) {
     Clutch k = clutchOf(starterGenome(7), 1, 5);
     k.count = 3;
     SenseOut press, pick;
@@ -287,6 +288,21 @@ TEST(Clutch, HoldOrDoubleKnockPicksTheCursorEggThatTick) {
     EXPECT_EQ(*chosen, 2) << "stim " << int(gesture.v);
     EXPECT_EQ(k.sinceDeath, Clutch::kVigilTicks + 2);
   }
+}
+
+// A knock knock is a press now (controls.h): it arrives with its twin, a
+// Button, and moves the cursor on. It never keeps an egg, which is for good.
+TEST(Clutch, AKnockKnockMovesOnAndNeverKeeps) {
+  Clutch k = clutchOf(starterGenome(7), 1, 5);
+  k.count = 3;
+  SenseOut quiet, knockKnock;
+  knockKnock.fire(stim::double_knock);
+  knockKnock.fire(stim::button);
+  for (uint32_t t = 1; t < Clutch::kVigilTicks; ++t) ASSERT_FALSE(k.tick(quiet).has_value());
+  EXPECT_FALSE(k.tick(knockKnock).has_value());
+  EXPECT_EQ(k.cursor, 1);
+  EXPECT_FALSE(k.tick(knockKnock).has_value());
+  EXPECT_EQ(k.cursor, 2);
 }
 
 int main(int argc, char** argv) {

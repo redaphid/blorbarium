@@ -69,6 +69,12 @@ class Gesture {
     rest_.invertedDown = down;
     return pose(0, -1000, 0);
   }
+  // Turned onto a side, held on edge (main.cpp's rotation 1 or 3): in the
+  // screen's frame gravity is along -y again; only the level says so.
+  Gesture& sided(bool down) {
+    rest_.sideDown = down;
+    return pose(0, -1000, 0);
+  }
   uint32_t now() const { return ms_; }
   const std::vector<Step>& steps() const { return steps_; }
 
@@ -371,6 +377,132 @@ TEST(Hang, BootedUpsideDownIsNotAHangUntilTurned) {
   g.inverted(false).still(500).inverted(true).still(1500);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::hang), 1);
+}
+
+// ---- the twins (controls.h) ----------------------------------------------------
+
+// The knock knock is a press: a Button with it, and still a DoubleKnock for him.
+TEST(Twins, AKnockKnockIsAPress) {
+  Heard r = play(Gesture().still(200).tap(2).still(200));
+  EXPECT_EQ(r.count(stim::double_knock), 1);
+  EXPECT_EQ(r.count(stim::button), 1);
+  EXPECT_EQ(r.count(stim::button_double), 0);
+}
+
+// One knock is no press: a desk is bumped and a keyboard typed on.
+TEST(Twins, OneKnockIsNoPress) {
+  Heard r = play(Gesture().still(200).tap(1).still(500).tap(1).still(200));
+  EXPECT_EQ(r.count(stim::knock), 2);
+  EXPECT_EQ(r.count(stim::button), 0);
+}
+
+// The road's knock knock is the road's: masked like its knocks, so no pellet.
+TEST(Twins, ARoadsKnockKnockIsNoPress) {
+  Heard r = play(Gesture().still(200).jolt(-900).jolt(-400).still(100).tap(2).still(200));
+  EXPECT_EQ(r.count(stim::button), r.count(stim::double_knock));
+}
+
+TEST(Twins, TurnedOntoASideAndHeldIsAHold) {
+  Detectors d;
+  SenseOut out;
+  Gesture g;
+  g.still(2000).sided(true).still(1500);
+  int holds = 0, presses = 0;
+  bool heldAtEnd = false;
+  for (const Step& st : g.steps()) {
+    d.sample(st.s, st.ms, out);
+    heldAtEnd = d.side.holding();
+  }
+  for (uint8_t i = 0; i < out.stimCount; ++i) holds += out.stimuli[i] == stim::button_hold, presses += out.stimuli[i] == stim::button;
+  EXPECT_EQ(holds, 1);
+  EXPECT_EQ(presses, 0);
+  EXPECT_TRUE(heldAtEnd) << "the level goes on while he is held there (the 3 s holds time by it)";
+}
+
+// Let go sooner, a turn does nothing at all: a release is never a press.
+TEST(Twins, AShortTurnOntoASideIsNothing) {
+  Heard r = play(Gesture().still(2000).sided(true).still(800).sided(false).still(1000));
+  EXPECT_EQ(r.count(stim::button_hold), 0);
+  EXPECT_EQ(r.count(stim::button), 0);
+}
+
+// One hold per turn: kept on his side he holds once; upright again, and the next turn holds again.
+TEST(Twins, OneHoldPerTurnAndAgainAfterUpright) {
+  Gesture g;
+  g.still(2000).sided(true).still(5000).sided(false).still(500).sided(true).still(1500);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::button_hold), 2);
+}
+
+// A jolt, or a moment past the edge, is a small hand, not a let-go.
+TEST(Twins, AJoltOrAWobbleDoesNotEndASideHold) {
+  Detectors d;
+  SenseOut out;
+  Gesture g;
+  g.still(2000).sided(true).still(600).pose(0, -1500, 0).still(60).pose(0, -800, 600).still(80).pose(0, -1000, 0).still(800);
+  int holds = 0;
+  for (const Step& st : g.steps()) d.sample(st.s, st.ms, out);
+  for (uint8_t i = 0; i < out.stimCount; ++i) holds += out.stimuli[i] == stim::button_hold;
+  EXPECT_EQ(holds, 1);
+}
+
+// Lying on a table on its side settles the panel too; flat is no hold.
+TEST(Twins, LyingFlatWithTheRotationOnASideIsNoHold) {
+  Gesture g;
+  g.still(2000);
+  BodySample s;
+  s.ay = -500, s.az = 866, s.sideDown = true;
+  for (int i = 0; i < 300; ++i) g.raw(s);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::button_hold), 0);
+}
+
+// Switched on sideways, or never upright since: nobody turned him.
+TEST(Twins, BootedOnASideHoldsNothingUntilTurned) {
+  Gesture g;
+  BodySample s;
+  s.ay = -1000, s.sideDown = true;
+  for (int i = 0; i < 200; ++i) g.raw(s);
+  EXPECT_EQ(play(g).count(stim::button_hold), 0);
+  g.sided(false).still(500).sided(true).still(1500);
+  EXPECT_EQ(play(g).count(stim::button_hold), 1);
+}
+
+// Turned back after 0.8 s: the settled rotation lags (orient.h) and still says
+// "on a side" for a second and a half, but in the screen's frame gravity has
+// already swung off down. That lag is no hold (found on badge 1: a 1 s turn
+// held at 2.4 s, after the kid had let go).
+TEST(Twins, TheRotationsLagAfterATurnBackIsNoHold) {
+  Gesture g;
+  g.still(2000).sided(true).still(800);
+  BodySample back;   // upright again, as the screen's frame still turned a quarter sees it
+  back.ax = -1000, back.ay = 0, back.az = 0, back.sideDown = true;
+  for (int i = 0; i < 75; ++i) g.raw(back);   // 1.5 s
+  g.sided(false).still(1000);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::button_hold), 0);
+}
+
+// The same lag after a hang let go early: righted, not hanging.
+TEST(Hang, TheRotationsLagAfterRightingIsNoHang) {
+  Gesture g;
+  g.still(2000).inverted(true).still(500);
+  BodySample back;   // righted, as the screen's frame still turned 180 sees it
+  back.ay = 1000, back.invertedDown = true;
+  for (int i = 0; i < 75; ++i) g.raw(back);
+  g.inverted(false).still(1000);
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::hang), 0);
+}
+
+// Upside down is the hang, not a hold, and a side hold is no hang.
+TEST(Twins, TheHangAndTheSideHoldNeverCross) {
+  Heard a = play(Gesture().still(2000).inverted(true).still(2000));
+  EXPECT_EQ(a.count(stim::hang), 1);
+  EXPECT_EQ(a.count(stim::button_hold), 0);
+  Heard b = play(Gesture().still(2000).sided(true).still(2000));
+  EXPECT_EQ(b.count(stim::hang), 0);
+  EXPECT_EQ(b.count(stim::button_hold), 1);
 }
 
 // 300 ms in the air is a fall of 44 cm: a lap to a car's floor.

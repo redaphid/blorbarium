@@ -706,6 +706,19 @@ TEST(Device, PressesAndGesturesAreHarmAndNeverAnswerAQuestion) {
   EXPECT_EQ(std::get<0>(*r.gestured), Device::Gesture::Lean);
   EXPECT_EQ(r.send("#d LEAN 4"), "#d ERR 400 BAD_ARGS");
   EXPECT_EQ(r.send("#e LEAN"), "#e ERR 400 BAD_ARGS");
+  // The twins (controls.h): turned onto a side, and a knock knock.
+  EXPECT_EQ(r.send("#f SIDE"), "#f OK side=2500 which=r");
+  EXPECT_EQ(std::get<0>(*r.gestured), Device::Gesture::Side);
+  EXPECT_EQ(std::get<2>(*r.gestured), 0);
+  EXPECT_EQ(r.send("#10 SIDE 4000 l"), "#10 OK side=4000 which=l");
+  EXPECT_EQ(std::get<2>(*r.gestured), 1);
+  EXPECT_EQ(r.send("#11 SIDE 4000 up"), "#11 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#12 SIDE 0"), "#12 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#13 KNOCK"), "#13 OK knock=2");
+  EXPECT_EQ(std::get<0>(*r.gestured), Device::Gesture::Knock);
+  EXPECT_EQ(std::get<2>(*r.gestured), 2);
+  EXPECT_EQ(r.send("#14 KNOCK 1"), "#14 OK knock=1");
+  EXPECT_EQ(r.send("#15 KNOCK 3"), "#15 ERR 400 BAD_ARGS");
 }
 
 TEST(Device, NetAndRebootGoToTheBoard) {

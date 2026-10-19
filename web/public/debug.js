@@ -210,6 +210,8 @@
       row("Species", species, button("Change", () => `SPECIES ${species.value}`, { confirm: "Change his species for good?" })),
       row("Nap", button("Nap now", "NAP")),
       row("Button", button("Press", "PRESS"), button("Hold 1.5 s", "PRESS 1500"), button("Double", "DOUBLE")),
+      row("No button", button("Knock knock", "KNOCK 2"), button("Knock", "KNOCK 1"), button("Side hold", "SIDE 2500"),
+        button("Side hold 4 s", "SIDE 4000")),
       row("Gesture", button("Hang", "HANG 2500"), button("Wobbly hang", "HANG 3000 1"), button("Cradle", "CRADLE"),
         aim, button("Lean", () => `LEAN ${aim.value}`)),
       row("Radio", net, button("Faults", () => `NET ${net.value.trim()}`.trim()), button("Clear", "NET clear")),

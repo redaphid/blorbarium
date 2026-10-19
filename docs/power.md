@@ -96,7 +96,8 @@ the panel's turn, so a rotation is no move):
 | A phone | a new Bluetooth connection, or a protocol line on RX | the owner is looking at it |
 
 The press that wakes a dark badge only lights it: the pet does not feel it,
-so nobody drops a pellet they could not see.
+so nobody drops a pellet they could not see. The same goes for the knock
+knock that wakes it, the press's no-button twin (docs/controls.md).
 
 Nothing on the debug characteristic counts, and nothing on the serial cable
 does (the cable is a test harness). Nor does `LEAN`, which bends the sample

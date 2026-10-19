@@ -69,8 +69,8 @@ class Board {
   // BOOT pressed `ms` (twice: the double press), felt by the pet only. False:
   // a question owns the button, and a remote press must never answer one.
   virtual bool press(uint32_t ms, bool twice) { (void)ms, (void)twice; return false; }
-  enum class Gesture : uint8_t { Hang, Cradle, Lean };
-  // `arg`: Hang's wobble 0|1, Lean's aim 0..3.
+  enum class Gesture : uint8_t { Hang, Cradle, Lean, Side, Knock };
+  // `arg`: Hang's wobble 0|1, Lean's aim 0..3, Side's 0 right | 1 left, Knock's 1|2 taps.
   virtual bool gesture(Gesture, uint32_t ms, uint8_t arg) { (void)ms, (void)arg; return false; }
   // The radio's faults, in the serial `DEBUG net` grammar; `report` gets its
   // one-line state. False: the args did not parse.

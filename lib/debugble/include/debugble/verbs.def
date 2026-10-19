@@ -30,6 +30,8 @@ DEBUG_VERB(NAP,     nap,     Write, "")                         // he falls asle
 DEBUG_VERB(PRESS,   press,   Harm,  "[ms 1..10000]")            // BOOT held that long, felt by the pet only: never answers a question
 DEBUG_VERB(DOUBLE,  double,  Harm,  "")                         // BOOT twice in 0.4 s: fight mode
 DEBUG_VERB(HANG,    hang,    Harm,  "[ms 1..30000] [wobble 0|1]")   // upside down, then upright 3 s, through the real IMU path
+DEBUG_VERB(SIDE,    side,    Harm,  "[ms 1..30000] [l|r]")      // turned onto a side, then upright 3 s: the hold's twin (controls.h)
+DEBUG_VERB(KNOCK,   knock,   Harm,  "[1|2]")                    // one knock, or a knock knock (the press's twin), as the tap engine says it
 DEBUG_VERB(CRADLE,  cradle,  Harm,  "[ms 1..30000]")            // held still in a hand: a cuddle
 DEBUG_VERB(LEAN,    lean,    Harm,  "<aim 0..3> [ms 1..60000]") // tilted toward one rim edge
 DEBUG_VERB(NET,     net,     Harm,  "[clear|rx|tx|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode> [low|high]]")

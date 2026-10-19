@@ -352,14 +352,16 @@ answers `ERR 501 NOT_ON_BOARD`.
 | `PRESS [ms]` | harm | BOOT held that long (default 150), felt by the pet only |
 | `DOUBLE` | harm | two 100 ms presses 250 ms apart: opens or leaves fight mode |
 | `HANG [ms] [wobble]` | harm | upside down on edge for ms (default 2500), then upright 3 s, through the real IMU path |
+| `SIDE [ms] [l\|r]` | harm | turned onto a side on edge for ms (default 2500, right), then upright 3 s: the hold's twin (docs/controls.md) |
+| `KNOCK [1\|2]` | harm | one knock, or a knock knock (default): the press's twin, as the tap engine reports it |
 | `CRADLE [ms]` | harm | held still, tipped back in a hand (default 5000): a cuddle |
 | `LEAN <aim> [ms]` | harm | tilted toward one rim edge (screen space) |
 | `NET [args]` | harm | the radio's faults, as `DEBUG net`; replies with the config |
 | `REBOOT [quiet]` | harm | save, then restart 500 ms after the reply; quiet keeps the radio dark until `NET blackout 0` |
 
 The gestures and presses are harm because they reach the pet's body: a
-press feeds him, a double press or a hang starts a fight, a cradle is a
-cuddle. `NET` and `REBOOT` are harm because a stranger could otherwise jam
+press or a knock knock feeds him, a double press or a hang starts a fight,
+a side hold tucks him in, a cradle is a cuddle. `NET` and `REBOOT` are harm because a stranger could otherwise jam
 a fight or keep restarting the badge.
 
 ## What is gated, and why

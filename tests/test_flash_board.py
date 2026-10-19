@@ -47,8 +47,16 @@ class FlashBoard(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_board(self, *args, serial=SERIAL, mac=MAC, version="4.11.0", port="COM11", image=None):
+        # An esptool on PATH is tried when PlatformIO's is too old: shadow the host's with one as old.
+        fakebin = self.home / "fakebin"
+        fakebin.mkdir(exist_ok=True)
+        for name in ("esptool", "esptool.py"):
+            f = fakebin / name
+            f.write_text("#!/bin/sh\necho esptool.py v%s\n" % version)
+            f.chmod(0o755)
         env = dict(os.environ, HOME=self.home.as_posix(), FAKE_LOG=self.log.as_posix(),
-                   FAKE_SERIAL=serial, FAKE_MAC=mac, FAKE_VERSION=version)
+                   FAKE_SERIAL=serial, FAKE_MAC=mac, FAKE_VERSION=version,
+                   PATH=fakebin.as_posix() + os.pathsep + os.environ.get("PATH", ""))
         r = subprocess.run([fb.find_bash(), (ROOT / "tools/flash_board.sh").as_posix(), *args, port, SERIAL, MAC,
                             (image or self.image).as_posix()], env=env, capture_output=True, text=True)
         calls = [c.strip() for c in self.log.read_text().splitlines()] if self.log.exists() else []

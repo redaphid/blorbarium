@@ -1,5 +1,7 @@
 #include "blorb/senses.h"
 
+#include "blorb/controls.h"
+
 namespace blorb {
 namespace {
 
@@ -12,7 +14,13 @@ constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
 constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
 constexpr int32_t kHangFaceMg = 500;               // a hang is held up on edge: |az| past this (30 degrees off flat or flatter) is lying down
-constexpr uint32_t kHangRearmProgressMs = 200;     // progress must drain to here before another hang can fire
+constexpr uint32_t kHangRearmProgressMs = 200;
+constexpr uint32_t kSideLetGoMs = 150;
+// The settled rotation lags a turn back by orient.h's settle and smoothing
+// (about a second and a half), and through that lag the sample in the
+// screen's frame already says he is upright again: gravity off the screen's
+// down. A pose counts only while gravity is within about 45 degrees of it.
+constexpr int32_t kPoseDownMg = -700;             // off the side this long ends a side hold: one jolted sample past the edge does not     // progress must drain to here before another hang can fire
 constexpr uint32_t kParkedAfterMs = 15000;         // upright and undisturbed this long: he is parked (a stand, a shelf), not held
 constexpr int32_t kParkedDeltaMg = 30;             // one sample's gravity moving less than this is no disturbance at all
 constexpr int32_t kSteadyMg = 250;                 // TILT_MAX_SHAKE_G: further off 1 g is a jolt, not gravity
@@ -322,10 +330,12 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   // vertical. And a hang is a turn: a badge that booted upside down, or has
   // never been upright since, has not been turned by anyone.
   const bool onEdge = absMg(s.az) <= kHangFaceMg;
-  if (!s.invertedDown && steady) armed_ = true;
-  if (s.invertedDown && steady && onEdge && armed_) {
+  // Righted while the panel has not yet turned back: righted, not hanging.
+  const bool inverted = s.invertedDown && s.ay <= kPoseDownMg;
+  if (!inverted && steady) armed_ = true;
+  if (inverted && steady && onEdge && armed_) {
     progress_ = progress_ + dt > kHangHoldMs ? kHangHoldMs : progress_ + dt;
-  } else if (!s.invertedDown) {
+  } else if (!inverted) {
     progress_ = progress_ > 2 * dt ? progress_ - 2 * dt : 0;
   }
   if (!hung_ && progress_ >= kHangHoldMs) {
@@ -334,6 +344,35 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   }
   if (hung_ && progress_ <= kHangRearmProgressMs) hung_ = false;
   out.set(locus::hanging, Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)));
+}
+
+// The pose is the shell's (BodySample::sideDown: orient.h's 600 ms settle,
+// jolts and flat rejected); this adds the intent. On edge as for the hang,
+// so a badge lying slanted on a table holds nothing; a jolt while held is a
+// small hand, not a let-go, and so is a moment past the edge.
+void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
+  const bool onEdge = absMg(s.az) <= kHangFaceMg;
+  const bool posed = s.sideDown && onEdge && s.ay <= kPoseDownMg;
+  if (!posed && !s.invertedDown && steady) armed_ = true;
+  if (!holding_) {
+    if (posed && steady && armed_) holding_ = true, fired_ = false, off_ = false, since_ = ms;
+    return;
+  }
+  if (posed) {
+    off_ = false;
+  } else {
+    if (!off_) off_ = true, offSince_ = ms;
+    if (ms - offSince_ >= kSideLetGoMs) {
+      holding_ = false;
+      if (fired_) armed_ = false;   // one hold per turn: upright again before the next
+      return;
+    }
+  }
+  if (!fired_ && ms - since_ >= kButtonHoldMs) {
+    fired_ = true;
+    if (kSideHoldHolds) out.fire(stim::button_hold);
+  }
 }
 
 // A knuckle lands in a few milliseconds, on one 50 Hz sample at most. A
@@ -350,6 +389,8 @@ void KnockDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   if (bumped_ && ms - bumpAt_ <= kBumpMaskMs) return;
   last_ = ms;
   out.fire(s.tapCode == 2 ? stim::double_knock : stim::knock);
+  // The knock knock is a press for whatever a press does on this screen (controls.h).
+  if (s.tapCode == 2 && kKnockKnockPresses) out.fire(stim::button);
 }
 
 void ButtonDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {

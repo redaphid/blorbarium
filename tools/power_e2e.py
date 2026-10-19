@@ -133,11 +133,12 @@ class Board:
         return dict(kv.split("=", 1) for kv in r.group(2).split())
 
     def age(self):
-        """His age in ticks, from the next 10 s status line."""
-        r = self.wait(r"\[hw\] up=\d+ .* age=(\d+) .* power=(\w+) cpu=(\d+) frames=(\d+)", 12)
+        """The dish's life in ticks, from the next 10 s status line: `tick=` (every
+        occupant, an egg included), or on an older build the creature's `age=`."""
+        r = self.wait(r"\[hw\] up=\d+ .* age=(\d+) (?:tick=(\d+) )?.* power=(\w+) cpu=(\d+) frames=(\d+)", 12)
         if not r:
             raise Fail("no status line in 12 s")
-        return int(r.group(1)), r.group(2), int(r.group(3)), int(r.group(4))
+        return int(r.group(2) or r.group(1)), r.group(3), int(r.group(4)), int(r.group(5))
 
 
 class Run:
@@ -312,7 +313,10 @@ class Run:
         self.awake_with_idle(IDLE_S)
         if not self.fight():
             # Rested, so a double press may wake him for a fight (a sleepy pet refuses one).
-            self.b.ask("DEBUG sleepiness 0", r"debug sleepiness 0%")
+            r = self.b.ask("DEBUG sleepiness 0", r"debug sleepiness(?: 0%|: no creature)")
+            if "no creature" in r.group(0):
+                self.say("  an egg or a clutch cannot fight: skipped (hatch him to run it)")
+                return
             m = self.b.mark()
             self.b.send("DEBUG double")
             r = self.b.wait(r"\[diag\] fight .*result=(\w+)", 4, since=m)
@@ -504,6 +508,11 @@ class Run:
             except Fail as e:
                 ok = False
                 self.say("  scenario failed: %s" % e)
+                # The next scenario starts from the same place, whatever this one left behind.
+                try:
+                    self.b.ask("DEBUG power wake", r"\[power\] now power=full")
+                except Fail:
+                    pass
             crashed = [l for _, l in self.b.lines[m:] if CRASH.search(l)]
             if crashed or self.b.boots != self.b.expected_boots:
                 ok = False

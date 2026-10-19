@@ -36,16 +36,23 @@ for p in ~/.platformio/penv/Scripts/python.exe ~/.platformio/penv/bin/python; do
   [ -x "$p" ] && { py=$p; break; }
 done
 script=~/.platformio/packages/tool-esptoolpy/esptool.py
-if [ -n "${ESPTOOL:-}" ]; then et=("$ESPTOOL")   # explicit esptool 4.7+, for when PlatformIO's is older
-elif [ -n "$py" ] && [ -f "$script" ]; then et=("$py" "$script")
-elif command -v esptool >/dev/null 2>&1; then et=(esptool)
-elif command -v esptool.py >/dev/null 2>&1; then et=(esptool.py)
-else die "no esptool: install PlatformIO and run 'pio run -e badge128' once (it brings one), or 'pipx install esptool'"
-fi
-ver=$("${et[@]}" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1) || true
-major=${ver%%.*} minor=${ver#*.}
-[ -n "$ver" ] && { [ "$major" -gt 4 ] || { [ "$major" -eq 4 ] && [ "$minor" -ge 7 ]; }; } ||
-  die "${et[*]} is esptool ${ver:-of no known version}; need 4.7 or newer, which writes a .hex by its segments ('pipx install esptool')"
+# The first esptool of 4.7 or newer: $ESPTOOL, PlatformIO's, then one on PATH
+# (platform espressif32@6.9.0 ships 4.5, so on Linux a pipx esptool is the usual one).
+new_enough() {
+  local ver major minor
+  ver=$("$@" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1) || true
+  major=${ver%%.*} minor=${ver#*.}
+  [ -n "$ver" ] && { [ "$major" -gt 4 ] || { [ "$major" -eq 4 ] && [ "$minor" -ge 7 ]; }; }
+}
+et=() seen=()
+try() { seen+=("$*"); if new_enough "$@"; then et=("$@"); fi; }
+if [ -n "${ESPTOOL:-}" ]; then try "$ESPTOOL"; fi
+if [ ${#et[@]} -eq 0 ] && [ -n "$py" ] && [ -f "$script" ]; then try "$py" "$script"; fi
+if [ ${#et[@]} -eq 0 ] && command -v esptool >/dev/null 2>&1; then try esptool; fi
+if [ ${#et[@]} -eq 0 ] && command -v esptool.py >/dev/null 2>&1; then try esptool.py; fi
+[ ${#seen[@]} -gt 0 ] || die "no esptool: install PlatformIO and run 'pio run -e badge128' once (it brings one), or 'pipx install esptool'"
+[ ${#et[@]} -gt 0 ] ||
+  die "every esptool here is too old (tried: ${seen[*]}); need 4.7 or newer, which writes a .hex by its segments ('pipx install esptool')"
 esptool=("${et[@]}" --chip esp32s3 --port "$port" "${after[@]}")
 
 case "$port" in
