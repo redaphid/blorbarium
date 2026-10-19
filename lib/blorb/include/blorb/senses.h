@@ -126,9 +126,28 @@ struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> hel
 // on edge (the face within 30 degrees of vertical) and only after he has
 // been the right way up since boot: a badge lying slanted on a table, or
 // switched on upside down, is no ask.
+// Re-arming a pose gesture: after it fires, the same gesture waits until the
+// badge has been the right way up (neither on a side nor upside down) and
+// steady for kRearmMs. A badge a child lays on its side, or leans upside down
+// against something, rests in that pose -- and near the on-edge line it can
+// flicker in and out of it for hours -- yet it fires once, not again and again.
+struct PoseRearm {
+  static constexpr uint32_t kRearmMs = 400;
+  bool armed() const { return armed_; }
+  void spend() { armed_ = false, homeFor_ = 0; }
+  void sample(const BodySample& s, bool steady, uint32_t dt) {
+    const bool home = !s.sideDown && !s.invertedDown && steady;
+    homeFor_ = home ? homeFor_ + dt : 0;
+    if (homeFor_ >= kRearmMs) armed_ = true;
+  }
+ private:
+  uint32_t homeFor_ = 0;
+  bool armed_ = false;
+};
+
 struct HangDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
- private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false, armed_ = false;
+ private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false; PoseRearm rearm_;
 };
 // Turned onto a side and held there -> the button held (controls.h): the
 // no-button twin of a BOOT hold, as the hang is the double press's. Held on
@@ -143,7 +162,7 @@ struct SideHoldDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
   bool holding() const { return holding_; }
   uint32_t heldMs(uint32_t ms) const { return holding_ ? ms - since_ : 0; }
- private: uint32_t since_ = 0, offSince_ = 0; bool holding_ = false, fired_ = false, armed_ = false, off_ = false;
+ private: uint32_t since_ = 0, offSince_ = 0, lastMs_ = 0; bool holding_ = false, fired_ = false, off_ = false, primed_ = false; PoseRearm rearm_;
 };
 struct KnockDetector : DetectorBase {     // tapCode -> Knock / DoubleKnock (+ Button, its twin: controls.h), 400 ms rate limit; not just after the road pushed the whole body up
   void sample(const BodySample&, uint32_t ms, SenseOut&);

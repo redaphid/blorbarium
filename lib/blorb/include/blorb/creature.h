@@ -125,6 +125,10 @@ class Creature {
   // Ends his sleep at the next tick, as a stimulus that wakes would (a
   // double press for a fight). Not saved.
   void wake() { wakeAsked_ = true; }
+  // Face down (the lid): a sleep keeps going whatever his sleep gate says, so
+  // bedtime is bedtime for every pet's genes. The Dish sets it every tick
+  // from the lid; not saved.
+  void keepAsleep(bool on) { keepAsleep_ = on; }
   void fire(StimId);                   // sim scripts and tests: lands with the next tick's stimuli
 
   // Phone twists (DEVIATIONS.md 4), applied between ticks.
@@ -172,6 +176,7 @@ class Creature {
   bool actionDone_ = false;            // its behaviour finished and stopped; the brain picks next
   std::optional<ActionId> forced_;     // force(), applied at the next tick
   bool wakeAsked_ = false;             // wake(), applied at the next tick
+  bool keepAsleep_ = false;            // keepAsleep(): not saved, not hashed
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
 };

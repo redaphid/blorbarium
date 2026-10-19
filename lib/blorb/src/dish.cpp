@@ -122,8 +122,10 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   detectors_.sample(s, nowMs, pending_);
   // Each press, double and hold the detector fires, as it fires: the press it
   // ends was measured from BOOT's raw level by the samples before this one.
+  lastFired_ = 0;
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
+    if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;
     const char* what = f == stim::button ? "press" : f == stim::button_double ? "double" : nullptr;
     // The twins (controls.h) say which gesture spoke, not BOOT.
     if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !buttonDown_) diag_.say("gesture knock_knock=press");
@@ -201,6 +203,12 @@ void Dish::runOneTick(Link& link) {
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
     if (fired(out, stim::button)) live_.habitat.dropPellet(rules, live_.rng, tick_, out);
+    // Face down is bedtime, always (owner, 2026-10-19): the lid puts him to
+    // sleep whatever his genes make of it, unless a duel holds him.
+    if (fired(out, stim::lid_down) && !(out.remote & duelStimBit(stim::lid_down)) && !c->body().asleep &&
+        !duel_.active())
+      c->force(action::sleep);
+    c->keepAsleep(detectors_.lid.lidded() && !duel_.active());
     live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
     Stage before = c->stage();
     c->tick(out, live_.habitat, behaviours_, tick_);

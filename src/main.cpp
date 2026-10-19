@@ -36,6 +36,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
 #include "debugble/console.h"
+#include "blorb/knocks.h"
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <driver/uart.h>
@@ -277,10 +278,20 @@ static volatile bool hangWobble = false;
 // `DEBUG side` reuses the hang's windows with another pose: the raw sample's
 // gravity along +x (rotation 1) or -x (rotation 3) instead of +y.
 static volatile int8_t hangSide = 0;   // 0: upside down; +1/-1: on a side
-// `DEBUG knock [1|2]`: the tap engine's report on the next sample, as a knuckle's.
+// `DEBUG knock [1|2]`: one knock, or two 300 ms apart, as a knuckle jolts the
+// raw sample through the face (blorb::KnockSense decides, as for a hand).
 static volatile uint8_t knockCode = 0;
+static volatile uint32_t knockAt = 0;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
-  if (knockCode) s.tapCode = knockCode, knockCode = 0;
+  if (knockCode && int32_t(ms - knockAt) >= 0) {
+    const uint32_t since = ms - knockAt;
+    for (uint8_t i = 0; i < knockCode; ++i) {
+      const uint32_t off = since - i * 300u;
+      if (off < 20) s.az = int16_t(s.az + 1800);
+      else if (off < 40) s.az = int16_t(s.az - 1800);
+    }
+    if (since > 300u * knockCode + 100) knockCode = 0;
+  }
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
     const uint32_t r = esp_random();
@@ -363,6 +374,29 @@ static std::optional<Timed> take() {
 }  // namespace bodyq
 #endif
 
+#if !defined(BADGE_BOARD_SIM)
+// `DEBUG trace <seconds>`: every 50 Hz sample on the cable as the IMU read it,
+// with what the shell and the detectors made of it, to set the gestures
+// against real hands (tools/imu_record.py). 0 stops it.
+//   [imu] ms ax ay az tap rot side inverted sideHeld button
+//   [stim] ms name        each body stimulus, on the sample that fired it
+static uint32_t traceUntil = 0;
+static void traceSample(const blorb::BodySample& raw, const blorb::BodySample& screen, uint8_t rot, uint32_t ms) {
+  if (!traceUntil || int32_t(traceUntil - millis()) <= 0) return;
+  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d\n", unsigned(ms), raw.ax, raw.ay, raw.az, unsigned(raw.tapCode),
+                unsigned(rot), int(screen.sideDown), int(screen.invertedDown), int(dish->sideHolding()),
+                int(raw.buttonDown));
+  const uint64_t fired = dish->firedLastSample();
+  for (const blorb::StimInfo& st : blorb::STIMULI)
+    if (st.id.v < 64 && (fired >> st.id.v & 1)) Serial.printf("[stim] %u %s\n", unsigned(ms), st.name);
+}
+static void traceFor(const char* a) {
+  const long s = std::strtol(a, nullptr, 10);
+  traceUntil = s > 0 ? millis() + uint32_t(s > 3600 ? 3600 : s) * 1000 : 0;
+  Serial.printf("[hw] debug trace %ld s\n", s > 0 ? s : 0L);
+}
+#endif
+
 // While the dish asks about an update, the button answers it, and the pet
 // feels neither that press nor the rest of that hold. A cable's DEBUG press
 // answers too: the cable is a hand on the dish. The debug link's press
@@ -387,7 +421,12 @@ static bool petFeels(bool down, bool remote) {
 #endif
 }
 
-static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false) {
+static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
+  // Knocks come from the samples, not the IMU's tap engine, which missed real
+  // knock knocks and reported handling as double taps (blorb/knocks.h).
+  static blorb::KnockSense knockSense;
+  blorb::BodySample body = sensed;
+  body.tapCode = knockSense.sample(sensed, ms);
   lastBody = body;
   // In the IMU's own frame: a turn of the panel is no move. The press that
   // wakes a dark badge only lights it: nobody pressed for a pellet unseen.
@@ -421,6 +460,9 @@ static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
   dish->sample(screen, ms);
+#if !defined(BADGE_BOARD_SIM)
+  traceSample(body, screen, rot, ms);
+#endif
 }
 
 // The engine's half of the loop: sense, then run whatever 100 ms ticks are
@@ -936,6 +978,7 @@ static void side(const char* line) {
 
 // `DEBUG knock [1|2]`: one knock, or a knock knock (default), as the tap engine reports it.
 static void knockOnce(uint8_t code) {
+  bodyq::knockAt = millis() + 100;   // on a sample to come, not one already read
   bodyq::knockCode = code;
   Serial.printf("[hw] debug knock %u\n", unsigned(code));
 }
@@ -1053,6 +1096,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "hang") == 0) return hang(line);
   if (std::strcmp(verb, "side") == 0) return side(line);
   if (std::strcmp(verb, "knock") == 0) return knock(a);
+  if (std::strcmp(verb, "trace") == 0) return traceFor(a);
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);

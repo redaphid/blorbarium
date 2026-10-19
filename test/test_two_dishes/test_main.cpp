@@ -99,7 +99,7 @@ struct Kid {
       if (noButton) {
         Frame h;
         h.hang = true;
-        for (int i = 0; i < 4; ++i) out.push_back(Frame{});   // the right way up first: a hang is a turn
+        for (int i = 0; i < 6; ++i) out.push_back(Frame{});   // the right way up first: a hang is a turn
         for (int i = 0; i < 12; ++i) out.push_back(h);
         for (int i = 0; i < 4; ++i) out.push_back(Frame{});
         return;
@@ -1254,6 +1254,22 @@ TEST(BootRows, NoButtonAKnockKnockFeedsASideHoldTucksInAHangOpensTheLobby) {
   for (int t = 0; t < 12; ++t) a.tick(hang);
   a.tick();
   EXPECT_TRUE(a.d.dish->duelActive()) << "a hang opens the lobby";
+}
+
+// Face down is bedtime, always: wide awake and rested, laid face down for the
+// lid's 30 s, he is asleep, whatever his genes make of the lid.
+TEST(BootRows, FaceDownAlwaysPutsHimToSleep) {
+  Alone a;
+  for (const auto& d : DRIVES) a.d.creature().inject(driveChem(d.id), Fx::zero());
+  a.tick(), a.tick();
+  ASSERT_FALSE(a.d.creature().body().asleep);
+  Frame lid;
+  lid.lid = true;
+  for (int t = 0; t < 330; ++t) a.tick(lid);
+  bool slept = false;
+  for (int t = 0; t < 5; ++t) a.tick(lid), slept = slept || a.d.creature().body().asleep;
+  EXPECT_TRUE(a.d.felt.count(stim::lid_down.v)) << "the lid came down";
+  EXPECT_TRUE(slept) << "33 s face down";
 }
 
 // The clutch with no button: knock knocks step through the eggs, a side hold keeps one.

@@ -36,6 +36,27 @@ TEST(Power, StillForTenMinutesGoesLow) {
   EXPECT_EQ(p.changes(), 1u);
 }
 
+// Face down is bedtime: low power two minutes after it was laid down, not ten.
+TEST(Power, FaceDownGoesLowAfterTwoMinutes) {
+  Policy p;
+  feed(p, kFlat, 0, 1000);
+  feed(p, mg(0, 0, -1000), 1000, 1000 + 2 * kMin - 500);   // turned over at 1 s: that move is the last input
+  EXPECT_EQ(p.mode(), Mode::Full);
+  feed(p, mg(0, 0, -1000), 1000 + 2 * kMin - 500, 1000 + 2 * kMin + 1000);
+  EXPECT_EQ(p.mode(), Mode::Low);
+  EXPECT_EQ(p.why(), Why::FaceDown);
+  EXPECT_STREQ(power::whyName(p.why()), "facedown");
+}
+
+// Face up, or held on edge, the full ten minutes still apply.
+TEST(Power, FaceUpOrOnEdgeKeepsTheFullTimeout) {
+  for (const blorb::BodySample& s : {kFlat, mg(0, 1000, 0), mg(0, -600, -700)}) {
+    Policy p;
+    feed(p, s, 0, 3 * kMin);
+    EXPECT_EQ(p.mode(), Mode::Full) << s.az;
+  }
+}
+
 TEST(Power, ThermalDriftAndNoiseNeverWake) {
   Policy p;
   feed(p, kFlat, 0, 10 * kMin + 20);

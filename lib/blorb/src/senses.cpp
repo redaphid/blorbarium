@@ -332,14 +332,15 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   const bool onEdge = absMg(s.az) <= kHangFaceMg;
   // Righted while the panel has not yet turned back: righted, not hanging.
   const bool inverted = s.invertedDown && s.ay <= kPoseDownMg;
-  if (!inverted && steady) armed_ = true;
-  if (inverted && steady && onEdge && armed_) {
+  rearm_.sample(s, steady, dt);
+  if (inverted && steady && onEdge && rearm_.armed()) {
     progress_ = progress_ + dt > kHangHoldMs ? kHangHoldMs : progress_ + dt;
   } else if (!inverted) {
     progress_ = progress_ > 2 * dt ? progress_ - 2 * dt : 0;
   }
   if (!hung_ && progress_ >= kHangHoldMs) {
     hung_ = true;
+    rearm_.spend();   // the next hang wants the right way up first (PoseRearm)
     out.fire(stim::hang);
   }
   if (hung_ && progress_ <= kHangRearmProgressMs) hung_ = false;
@@ -351,12 +352,15 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 // so a badge lying slanted on a table holds nothing; a jolt while held is a
 // small hand, not a let-go, and so is a moment past the edge.
 void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
+  const uint32_t dt = primed_ ? (ms - lastMs_ > 100 ? 100 : ms - lastMs_) : 0;
+  primed_ = true;
+  lastMs_ = ms;
   const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
   const bool onEdge = absMg(s.az) <= kHangFaceMg;
   const bool posed = s.sideDown && onEdge && s.ay <= kPoseDownMg;
-  if (!posed && !s.invertedDown && steady) armed_ = true;
+  rearm_.sample(s, steady, dt);
   if (!holding_) {
-    if (posed && steady && armed_) holding_ = true, fired_ = false, off_ = false, since_ = ms;
+    if (posed && steady && rearm_.armed()) holding_ = true, fired_ = false, off_ = false, since_ = ms;
     return;
   }
   if (posed) {
@@ -365,12 +369,12 @@ void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
     if (!off_) off_ = true, offSince_ = ms;
     if (ms - offSince_ >= kSideLetGoMs) {
       holding_ = false;
-      if (fired_) armed_ = false;   // one hold per turn: upright again before the next
       return;
     }
   }
   if (!fired_ && ms - since_ >= kButtonHoldMs) {
     fired_ = true;
+    rearm_.spend();   // one hold per turn: the right way up again before the next (PoseRearm)
     if (kSideHoldHolds) out.fire(stim::button_hold);
   }
 }

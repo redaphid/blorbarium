@@ -15,6 +15,9 @@
 //     is the table, not a hand;
 //   - a phone: a new Bluetooth connection or a protocol line from it.
 //
+// Face down (the screen to the floor) is bedtime: it goes low kFaceDownMs
+// after the last input instead of the full idle timeout.
+//
 // A badge left on a table drifts by a few mg with temperature; the reference
 // follows every wake, so only a real move crosses the threshold. While a
 // hold is up (a duel, an update, a question on the screen) it never sleeps.
@@ -43,13 +46,15 @@ constexpr int kJoltMg = 350;                      // past hand tremor and a car'
 constexpr int kSmoothShift = 3;                   // 1/8 per 50 Hz sample: about 160 ms
 constexpr uint32_t kKnockPairMs = 1500;           // two single taps this close are a knock knock
 constexpr uint32_t kJoltPairMs = 300;             // two jolts this close are a hand, not a bump
+constexpr uint32_t kFaceDownMs = 120000;          // face down is bedtime: low power after 2 min, not the full idle
+constexpr int kFaceDownMg = -800;                 // smoothed az below this: the screen faces the floor
 
 enum class Mode : uint8_t { Full, Low };
 
 // What woke it, or sent it to sleep; for the log and the debug link.
-enum class Why : uint8_t { Boot, Button, Tap, Drift, Jolt, Phone, Hold, Idle, Asked };
+enum class Why : uint8_t { Boot, Button, Tap, Drift, Jolt, Phone, Hold, Idle, Asked, FaceDown };
 inline const char* whyName(Why w) {
-  constexpr const char* kNames[] = {"boot", "button", "tap", "drift", "jolt", "phone", "hold", "idle", "asked"};
+  constexpr const char* kNames[] = {"boot", "button", "tap", "drift", "jolt", "phone", "hold", "idle", "asked", "facedown"};
   return kNames[uint8_t(w)];
 }
 
@@ -98,6 +103,7 @@ class Policy {
       jolted_ = !pair, lastJolt_ = now;
       jolt = pair;
     }
+    faceDown_ = (smooth_[2] >> kSmoothShift) < kFaceDownMg;
     if (!jolt && !drift) return false;
     for (int i = 0; i < 3; ++i) ref_[i] = smooth_[i];   // it settles here next
     return input(jolt ? Why::Jolt : Why::Drift, now);
@@ -120,6 +126,7 @@ class Policy {
       return low() ? set(Mode::Full, Why::Hold) : false;
     }
     if (!low() && sinceInput(now) >= idleMs_) return set(Mode::Low, Why::Idle);
+    if (!low() && faceDown_ && sinceInput(now) >= kFaceDownMs) return set(Mode::Low, Why::FaceDown);
     return false;
   }
 
@@ -154,7 +161,7 @@ class Policy {
   Mode mode_ = Mode::Full;
   Why why_ = Why::Boot, inputWhy_ = Why::Boot;
   uint32_t changes_ = 0, lastInput_ = 0;
-  bool seeded_ = false, tapped_ = false, jolted_ = false;
+  bool seeded_ = false, tapped_ = false, jolted_ = false, faceDown_ = false;
   uint32_t lastTap_ = 0, lastJolt_ = 0;
   int32_t smooth_[3] = {}, ref_[3] = {};   // milli-g << kSmoothShift
 };

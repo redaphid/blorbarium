@@ -225,7 +225,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   } else if (!actionDone_) {
     Status s = behaviours.step(action_, body_, ctx);
     const Fx gate = chem_.locus[locus::sleep_gate.v];
-    if (action_ == action::sleep && (!fires(gate) || (choseSleep && gate < kSleepOnset))) s = Status::Done;
+    if (action_ == action::sleep && !keepAsleep_ && (!fires(gate) || (choseSleep && gate < kSleepOnset))) s = Status::Done;
     if (s == Status::Done) finish();
   }
   chem_.add(chem::food, ctx.foodEaten);

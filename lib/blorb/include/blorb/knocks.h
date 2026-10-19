@@ -1,0 +1,59 @@
+#pragma once
+// Knocks from the raw 50 Hz samples, in place of the QMI8658's tap engine.
+//
+// Measured with real hands on the test board (2026-10-19, tools/imu_record.py,
+// test/fixtures/hands_2026-10-19.txt): the tap engine missed every one of five
+// deliberate knock knocks (it reported two singles) and reported about 34
+// double taps while the badge was only picked up, turned, carried and
+// pocketed, each of which dropped a pellet. The samples themselves tell the
+// two apart plainly:
+//   - a knock on the face jerks the axis through the screen: one sample to the
+//     next, az moves 1,600 to 4,000 mg (often to the +-2 g rail), and rings for
+//     about 100 ms; handling never moved it more than about 1,100 mg;
+//   - a kid knocks on a badge held still: in the 400 ms before the first knock
+//     the magnitude wobbles under 30 mg (handling: 130 and up) and the badge
+//     still points the same way afterwards.
+// So a knock is a spike in az's jerk; knocks within kChainMs make one burst;
+// the burst counts only if the badge was steady before it and points the same
+// way after; and it is reported when it is over, as the tap engine's code:
+// 1 a single knock, 2 a knock knock (two or three knocks: kids knock thrice).
+// Four or more is hammering, and counts as nothing. Pure, so it is tested
+// natively against the recording.
+#include <cstdint>
+
+#include "blorb/senses.h"
+
+namespace blorb {
+
+class KnockSense {
+ public:
+  static constexpr int32_t kSpikeMg = 1400;      // az's change between two samples that is a knock
+  static constexpr uint32_t kMergeMs = 120;      // a knock rings this long: spikes within it are the same knock
+  static constexpr uint32_t kChainMs = 600;      // the next knock of a knock knock comes within this (hands: 0.18-0.46 s)
+  static constexpr int32_t kSteadySdMg = 60;     // before the first knock: the magnitude's spread...
+  static constexpr int32_t kSteadyJerkMg = 200;  // ...and three in four samples' jerk under this
+  static constexpr int32_t kDriftMg = 150;       // gravity before and after may differ this much
+  static constexpr uint32_t kSettleMs = 300;     // after the last knock, the ringing is over by then
+  static constexpr uint8_t kHistory = 20;        // 400 ms of samples before a knock
+
+  // Every 50 Hz sample: 0, or on the sample a burst is decided, 1 or 2.
+  uint8_t sample(const BodySample& s, uint32_t ms);
+
+ private:
+  struct Past { int16_t ax, ay, az; int32_t mag, jerk; };
+  Past hist_[kHistory]{};
+  uint8_t histN_ = 0, histAt_ = 0;
+  bool primed_ = false;
+  int16_t px_ = 0, py_ = 0, pz_ = 0;
+  // The burst under way.
+  bool inBurst_ = false, steady_ = false;
+  uint8_t knocks_ = 0;
+  uint32_t last_ = 0;
+  int32_t g0x_ = 0, g0y_ = 0, g0z_ = 0;          // gravity before it
+  int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
+
+  bool steadyBefore();
+  uint8_t decide();
+};
+
+}  // namespace blorb

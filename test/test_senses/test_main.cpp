@@ -495,6 +495,39 @@ TEST(Hang, TheRotationsLagAfterRightingIsNoHang) {
   EXPECT_EQ(r.count(stim::hang), 0);
 }
 
+// Laid on its side and left there, leaning so the face sits right on the
+// on-edge line: it flickers in and out of the pose for ten minutes, and holds
+// once. Only the right way up again re-arms it (PoseRearm).
+TEST(Twins, LaidOnItsSideAndLeftItHoldsOnceNotOverAndOver) {
+  Gesture g;
+  g.still(2000);
+  BodySample lean;
+  lean.ay = -870, lean.sideDown = true;
+  for (int i = 0; i < 30000; ++i) {   // 10 min at 50 Hz
+    // Settled on edge for its first 2 s, then across |az| = 500 every 0.74 s or every 3 s.
+    lean.az = int16_t(i < 100 ? 480 : (i < 15000 ? i / 37 % 2 : i / 150 % 2) ? 480 : 530);
+    g.raw(lean);
+  }
+  Heard r = play(g);
+  EXPECT_EQ(r.count(stim::button_hold), 1);
+  g.sided(false).still(1000).sided(true).still(1500);
+  EXPECT_EQ(play(g).count(stim::button_hold), 2) << "picked up the right way and turned again: another";
+}
+
+// The same for the hang: leaning upside down against a wall, the face
+// flickering across the line, it asks for a fight once.
+TEST(Hang, LeftLeaningUpsideDownItHangsOnceNotOverAndOver) {
+  Gesture g;
+  g.still(2000);
+  BodySample lean;
+  lean.ay = -870, lean.invertedDown = true;
+  for (int i = 0; i < 30000; ++i) {
+    lean.az = int16_t(i < 100 ? 480 : (i < 15000 ? i / 37 % 2 : i / 150 % 2) ? 480 : 530);
+    g.raw(lean);
+  }
+  EXPECT_EQ(play(g).count(stim::hang), 1);
+}
+
 // Upside down is the hang, not a hold, and a side hold is no hang.
 TEST(Twins, TheHangAndTheSideHoldNeverCross) {
   Heard a = play(Gesture().still(2000).inverted(true).still(2000));

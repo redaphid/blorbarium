@@ -146,6 +146,9 @@ class Dish {
   // films; Closed when none is open.
   bool duelActive() const { return duel_.active(); }
   // One `! DEBUG` line (without the prefix): BOOT's presses and why a fight did or did not start.
+  // For the cable's `DEBUG trace`: the body stimuli (ids < 64) the last sample fired, and the side hold's level.
+  uint64_t firedLastSample() const { return lastFired_; }
+  bool sideHolding() const { return detectors_.side.holding(); }
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
@@ -220,6 +223,7 @@ class Dish {
   // (SideHoldDetector, controls.h). What the duel and the ring read.
   bool holdDown_ = false;
   uint32_t holdSinceMs_ = 0;
+  uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn
   // (turning him tips the tilt): the last kAimHistory ticks of tilt.
   static constexpr uint8_t kAimHistory = 16;
