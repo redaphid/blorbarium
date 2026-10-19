@@ -47,6 +47,17 @@ BootContext bootContext(const Occupant&, const DuelView*);
 BootHint bootHint(BootContext, const DuelView*, uint32_t heldMs);
 
 // What one tick of the duel asks of the Dish.
+// A grown-up's settings for this badge's duels, from the phone (TWIST stakes):
+// the highest tier its pet may enter. Its own file beside the book, kept
+// across reboots and lives; missing or torn, every tier is allowed.
+struct DuelConfig {
+  static constexpr const char* kFile = "duel.cfg";
+  Stakes ceiling = Stakes::Mortal;
+
+  static DuelConfig load(Storage&);
+  bool save(Storage&) const;
+};
+
 struct DuelStepped {
   bool save = false;        // a wound, a scar, a downing, a fall, a graft, a meeting: save the keepsake now
 };
@@ -62,9 +73,9 @@ class DishDuel {
   //  1 a body-sourced `button_double` (or `hang`: held upside down, the same
   //    ask from a case that covers BOOT) while BOOT means OpenDuel: readiness(),
   //    then open with a LocalConsent (made here and nowhere else). A refusal
-  //    shows its picture; a radio OTA holds shakes his head. An awake
-  //    creature with a radio asks for himself too: fight mode is the
-  //    resting state, and the ask is the wake-up and the shortcut.
+  //    shows its picture; a radio OTA holds shakes his head. Fight mode
+  //    opens only when asked; in the lobby the same toggle, or a shake,
+  //    leaves it, and a shake takes back an ask still waiting on an update.
   //  2 session.tick, with DuelInput from what a detector fired only
   //  3 the captured stimuli leave `raw`; the duel's own join it (Duel-sourced,
   //    through duelFilter at the agreed stakes)
@@ -81,8 +92,11 @@ class DishDuel {
   // The newest battle this boot recorded, for a log line that two boards'
   // logs can be compared by (its outcomeHash).
   const std::optional<Meeting>& lastMeeting() const { return lastMet_; }
-  // A grown-up's ceiling (TWIST stakes, unit D14's duel.cfg). Mortal: every tier.
-  void setDeviceCeiling(Stakes s) { deviceCeiling_ = s; }
+  // A grown-up's ceiling (TWIST stakes), saved to duel.cfg before it is
+  // believed. False, with nothing changed, on a board that writes nothing.
+  // A fight already past the lobby keeps the stakes it was opened with.
+  bool setDeviceCeiling(Stakes);
+  Stakes deviceCeiling() const { return deviceCeiling_; }
 
   // The last ask that did not open a duel, for the screen: why (Decline), or
   // None when the radio was refused (an update holds it). A double press and
@@ -128,7 +142,6 @@ class DishDuel {
   Refusal refusal_;
   std::optional<uint32_t> heldPress_;
   std::optional<uint32_t> pendingSince_;
-  std::optional<uint32_t> declinedAt_;   // the last tick the radio said no while he declined
   uint32_t lastTry_ = 0;
   DiagLines diag_;
   char lastGate_[40] = "none";

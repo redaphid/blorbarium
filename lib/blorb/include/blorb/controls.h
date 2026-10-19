@@ -18,8 +18,9 @@
 //                    flinch at every lock-in knock. BOOT is the duel's in
 //                    every phase (the special, the confirm, the Finish, the
 //                    hug), so a heavy special never also tucks him in.
-// A shake always tells the future, and a drop and the lid always reach him
-// (they also end the duel): those are never taken, in any phase.
+// A shake always reaches him, and a drop and the lid always reach him: those
+// are never taken, in any phase. In the lobby a shake also leaves fight mode;
+// in a battle it tells the future.
 #include <cstdint>
 
 #include "blorb/registry.h"

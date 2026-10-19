@@ -69,10 +69,12 @@ the link its request came from, so serial traffic never reaches the phone.
 
 ```
 #1a HELLO
-#1a OK fw=0.4.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00
+#1a OK fw=0.4.0 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00 stakes=mortal
 ```
 
-`phase` is `egg`, `creature` or `clutch`. Trailing words after `HELLO` are ignored.
+`phase` is `egg`, `creature` or `clutch`. `stakes` is this badge's duel ceiling
+(`TWIST stakes`, from 0.7.11; older firmware does not send it). Trailing words
+after `HELLO` are ignored.
 
 ### STATE
 
@@ -195,6 +197,22 @@ he knows changes.
 
 He forgets every taught line. It takes no arguments (`TWIST unteach now` is
 `ERR 400 BAD_ARGS`) and fails like `teach` when the board cannot write.
+
+### TWIST stakes
+
+```
+#76 TWIST stakes scrap
+#76 OK stakes
+```
+
+A grown-up's ceiling for this badge's duels: `spar`, `scrap` or `mortal`
+(or 0, 1, 2). Above it the stakes screen will not go, and a friend sees the
+tier as closed, as if the pet were too young for it. It is kept in
+`duel.cfg` on petfs, across reboots and lives; a new badge allows every
+tier. A fight already past the lobby keeps the stakes it opened with; the
+next one meets the ceiling. Any other word is `ERR 416 OUT_OF_RANGE`, and a
+board that cannot write (an image on trial, a sealed pet) answers
+`ERR 409 NOT_NOW` and keeps the ceiling it had. HELLO's `stakes=` reads it back.
 
 ### HASH
 

@@ -265,7 +265,9 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
     if (tick - l.seen[i].heardTick <= T::kLobbyForgetTicks) l.seen[kept++] = l.seen[i];
   l.count = kept;
 
-  if (in.doublePress || in.hang) return closeWith(air, EndReason::Left, false);
+  // Leaving fight mode: the toggle again, or a shake. The shake stays the
+  // pet's too (controls.h): he feels it as he always does.
+  if (in.doublePress || in.hang || in.shake) return closeWith(air, EndReason::Left, false);
   // A pet resting after a fight holds the clock: the 5 min are for searching.
   if (setup_.decline == Decline::Resting) modeSince_ = tick;
   if (tick - modeSince_ >= T::kFightModeTicks) return closeWith(air, EndReason::LobbyTimeout, false);

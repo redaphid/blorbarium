@@ -154,7 +154,10 @@ class Dish {
   const DuelBook& duels() const { return duel_.book(); }
   const std::optional<Meeting>& lastMeeting() const { return duel_.lastMeeting(); }
   const DishDuel::Refusal& duelRefusal() const { return duel_.refusal(); }
-  void setDuelCeiling(Stakes s) { duel_.setDeviceCeiling(s); }
+  // TWIST stakes: the highest tier this badge's pet may fight at, kept in
+  // duel.cfg. False on a board that writes nothing (sealed, on trial).
+  bool setDuelCeiling(Stakes s) { return !readOnly_ && duel_.setDeviceCeiling(s); }
+  Stakes duelCeiling() const { return duel_.deviceCeiling(); }
   // Where BOOT is now (boot.h). Never OtaQuestion: that is main.cpp's.
   BootContext bootContext() const;
   uint32_t hash() const { return live_.hash(); }   // the replay check and HASH

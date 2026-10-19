@@ -12,7 +12,24 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
-## Where things stand (2026-10-18)
+## Where things stand (2026-10-19)
+
+**Firmware 0.7.11 is committed, not released or flashed** (branch
+`ccr-82507c31-iksr3h`), on top of the unreleased 0.7.10:
+- Fight mode is no longer always on. It opens only when a kid asks (a BOOT
+  double press or the hang); in the lobby the same gesture, or a shake,
+  leaves it. A shake also takes back an ask waiting on an update.
+- A grown-up's stakes ceiling works: `TWIST stakes spar|scrap|mortal`,
+  kept in `duel.cfg`, read back as HELLO's `stakes=`, and set from the
+  page's Fights box. A friend sees the tiers above it as closed.
+- A gardening pass: bug fixes (rematch handshake, unadopted egg hatching in
+  a gap, TIME range, the updater and octopus, ...) and tools/host_test.sh
+  for running the native suites without PlatformIO. Details in the commits.
+Native suites, page tests and Python tests pass in a cloud session; the
+sim, a device build and real badges were not run. tools/duel_soak.py is
+updated for asked-only fight mode but was not run on hardware.
+
+## Where things stood (2026-10-18)
 
 **Firmware 0.7.10 is committed but NOT released**: the OTA signing key is on
 the Windows desk machine, not the Linux laptop this was done on. To ship it,

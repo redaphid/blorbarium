@@ -91,9 +91,41 @@ BootHint bootHint(BootContext ctx, const DuelView* v, uint32_t heldMs) {
   return h;
 }
 
+namespace {
+// "BLDC", a version byte, the ceiling, and a crc32 of everything before it (little-endian).
+constexpr uint8_t kCfgMagic[4] = {'B', 'L', 'D', 'C'};
+constexpr uint8_t kCfgVersion = 1;
+constexpr size_t kCfgLen = sizeof kCfgMagic + 2 + 4;
+}  // namespace
+
+DuelConfig DuelConfig::load(Storage& s) {
+  uint8_t b[kCfgLen];
+  if (s.size(kFile) != kCfgLen) return {};
+  const std::optional<size_t> n = s.read(kFile, 0, b, kCfgLen);
+  if (!n || *n != kCfgLen || std::memcmp(b, kCfgMagic, sizeof kCfgMagic) != 0 || b[4] != kCfgVersion) return {};
+  uint32_t crc = 0;
+  for (size_t i = 0; i < 4; ++i) crc |= uint32_t(b[kCfgLen - 4 + i]) << (8 * i);
+  if (crc != crc32(b, kCfgLen - 4) || b[5] > uint8_t(Stakes::Mortal)) return {};
+  return DuelConfig{Stakes(b[5])};
+}
+
+bool DuelConfig::save(Storage& s) const {
+  uint8_t b[kCfgLen] = {kCfgMagic[0], kCfgMagic[1], kCfgMagic[2], kCfgMagic[3], kCfgVersion, uint8_t(ceiling)};
+  const uint32_t crc = crc32(b, kCfgLen - 4);
+  for (size_t i = 0; i < 4; ++i) b[kCfgLen - 4 + i] = uint8_t(crc >> (8 * i));
+  return s.writeAtomic(kFile, b, kCfgLen);
+}
+
 void DishDuel::attach(Storage& s) {
   store_ = &s;
   book_ = DuelBook::open(s);
+  deviceCeiling_ = DuelConfig::load(s).ceiling;
+}
+
+bool DishDuel::setDeviceCeiling(Stakes s) {
+  if (!store_ || !DuelConfig{s}.save(*store_)) return false;
+  deviceCeiling_ = s;
+  return true;
 }
 
 void DishDuel::refuse(NoFight why, uint32_t tick, const char* gate, bool hang) {
@@ -204,16 +236,14 @@ bool DishDuel::ask(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, uint6
   const bool askedHang = fromBody(raw, stim::hang);
   const bool asked = fromBody(raw, stim::button_double) || askedHang;
   const BootContext ctx = bootContext(o, nullptr);
-  // Fight mode is the resting state: an awake creature with a radio asks
-  // for himself, so two badges near each other find the fight with no
-  // gesture at all. The hang and the double press remain the wake-up and
-  // the shortcut; leaving the lobby just reopens it on the next tick.
-  const bool autoAsk = air && c && ctx == BootContext::Awake;
+  // Fight mode opens only when a kid asks: a double press, or the hang.
   if (asked) drop(raw, kFightAskMask);
-  if (pendingSince_ && (asked || tick - *pendingSince_ >= kPendingTicks)) {
-    pendingSince_.reset();   // a second double press while it waits takes the ask back
+  // A second ask, or a shake, while it waits takes the ask back.
+  const bool cancel = asked || fromBody(raw, stim::shake);
+  if (pendingSince_ && (cancel || tick - *pendingSince_ >= kPendingTicks)) {
+    pendingSince_.reset();
     refusal_ = Refusal{};
-    report(asked, askedHang, ctx, asked ? "cancelled" : "gave_up", "off");
+    report(asked, askedHang, ctx, cancel ? "cancelled" : "gave_up", "off");
     return false;
   }
   bool tryOpen = false, woke = false;
@@ -229,7 +259,7 @@ bool DishDuel::ask(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, uint6
     }
     c->wake();
     woke = tryOpen = true;
-  } else if ((asked || autoAsk) && ctx == BootContext::Awake) {
+  } else if (asked && ctx == BootContext::Awake) {
     tryOpen = true;
   } else if (pendingSince_ && ctx == BootContext::Awake && tick - lastTry_ >= 1000 / kTickMs) {
     tryOpen = true;
@@ -252,13 +282,10 @@ bool DishDuel::ask(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, uint6
       if (!pendingSince_) pendingSince_ = tick;
       refusal_ = Refusal{Decline::None, *pendingSince_, true, NoFight::Updating};
     } else {
-      // Not ready himself (a cuddle owed, a rest): fight mode asks again by
-      // itself every tick, so a run of the same refusal is said once.
+      // Not ready himself (a cuddle owed, a rest): his reason, not the radio's.
       char gate[32];
       gateOf(o, refusal_.why, tick, gate);
-      const bool running = declinedAt_ && tick - *declinedAt_ <= 1 && std::strcmp(gate, lastGate_) == 0;
-      declinedAt_ = tick;
-      if (asked || !running) report(asked, askedHang, ctx, gate, "refused");
+      report(asked, askedHang, ctx, gate, "refused");
     }
     return false;
   }
@@ -345,13 +372,13 @@ void DishDuel::betweenFights(Occupant& o, Lineage& lineage, Air& air, uint64_t l
     return;
   }
   Creature* c = std::get_if<Creature>(&o);
-  // The graft rides readiness, not the open: with fight mode always on
-  // he may have opened it as a child, and the starter's duel genes are
-  // owed to the first tick he is actually ready in the lobby.
+  // The graft rides readiness, not the open: he may have opened fight mode
+  // as a child, and the starter's duel genes are owed to the first tick he
+  // is actually ready in the lobby.
   if (c && why == Decline::None && graftDuelGenes(*c, lineage)) out.save = true;
   // Refreshed every tick he searches, not only on the way back from a
-  // fight: with fight mode always on he may have opened it as a child,
-  // or hungry, and a friend must meet the pet he is now.
+  // fight: he may have opened it as a child, or hungry, and a friend must
+  // meet the pet he is now.
   session_.refresh(setupFor(c, lineageId, petDay, tick, why));
   session_.setDecline(why);
   if (why == Decline::None) faintedLast_ = false;   // the rest after a faint is over

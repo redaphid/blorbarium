@@ -136,4 +136,16 @@ TwistStatus twist_unteach(Dish& dish, Args& a) {
   return dish.unteach() ? TwistStatus::Shown : TwistStatus::NotNow;
 }
 
+// A grown-up's ceiling for this badge's duels, by name or by tier number.
+TwistStatus twist_stakes(Dish& dish, Args& a) {
+  std::optional<std::string_view> w = a.word();
+  if (!w || !a.done()) return TwistStatus::Malformed;
+  constexpr std::string_view kTiers[] = {"spar", "scrap", "mortal"};
+  std::optional<unsigned> n = smallNumber(*w);
+  for (unsigned i = 0; i < 3 && !n; ++i)
+    if (*w == kTiers[i]) n = i;
+  if (!n || *n > unsigned(Stakes::Mortal)) return TwistStatus::OutOfRange;
+  return dish.setDuelCeiling(Stakes(*n)) ? TwistStatus::Shown : TwistStatus::NotNow;   // its own file, not the keepsake
+}
+
 }  // namespace blorb

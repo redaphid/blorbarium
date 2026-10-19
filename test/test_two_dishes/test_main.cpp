@@ -71,14 +71,15 @@ struct Kid {
   void plan(const DuelView& v, bool dueling, std::deque<Frame>& out) {
     auto hold = [&](int8_t aim, int n, Frame f) { for (int i = 0; i < n; ++i) { f.aim = aim; out.push_back(f); } };
     if (!dueling) {
-      // Fight mode opens itself: an awake badge with a radio asks on its
-      // own, so a kid who wants a duel just waits for it to show.
-      return hold(-1, 1, Frame{});
+      // Fight mode opens only when asked: a kid who wants a duel double-presses, once.
+      if (!wantDuel) return hold(-1, 1, Frame{});
+      wantDuel = false;
+      return hold(-1, 1, Frame{-1, true}), hold(-1, 1, Frame{}), hold(-1, 1, Frame{-1, true}), hold(-1, 3, Frame{});
     }
     switch (v.phase) {
       case DuelPhase::Lobby:
-        // Fight mode pairs by itself and is the resting state: the kid
-        // just waits, tilting the badge about. There is no leaving it.
+        // Fight mode pairs by itself: the kid just waits, tilting the
+        // badge about, and it searches on after a fight until he leaves.
         return hold(int8_t(rng.below(4)), 1, Frame{});
       case DuelPhase::Staking: {
         // BOOT only, whatever the tilt: a press per step up from Spar, then a
@@ -404,6 +405,18 @@ void doublePress(Device& d) {
 void idle(Device& d, int ticks) {
   for (int i = 0; i < ticks; ++i) d.dish->tick(d.ms += 100, d.link);
 }
+// A hand's shake: a 1 g swing each 100 ms tick, up then down, eight times.
+void shake(Device& d) {
+  for (int k = 0; k < 8; ++k) {
+    for (int i = 0; i < 5; ++i) {
+      BodySample s;
+      s.az = i == 2 ? int16_t(k % 2 ? 0 : 2000) : 1000;
+      d.dish->sample(s, d.ms += 20);
+    }
+    d.dish->tick(d.ms, d.link);
+  }
+  idle(d, 4);
+}
 // Held upside down, sampled at 50 Hz: upright first (the detector's rearm),
 // then the pose steady past HangDetector's 1 s dwell, then the Dish ticks.
 void hang(Device& d) {
@@ -564,13 +577,18 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   a.boot(ga, 2);
   a.growUp();
   l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake")) << joined(l);
-  EXPECT_TRUE(has(l, "result=entered")) << "the badge asked for itself as it grew: " << joined(l);
+  EXPECT_FALSE(has(l, "result=entered")) << "nobody asked as he grew: " << joined(l);
+  EXPECT_STREQ(a.dish->fightState(), "off");
+  doublePress(a);
+  l = diags(a);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=ok result=entered")) << joined(l);
   a.creature().inject(driveChem(drive::hunger), Fx::ratio(97, 100));
   doublePress(a);   // a leave, in the lobby
-  idle(a, 3);       // and the badge re-enters by itself, hungry now
+  idle(a, 3);
+  EXPECT_STREQ(a.dish->fightState(), "off") << "left, and nothing reopens it";
+  doublePress(a);   // asked again, hungry now
   l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake gate=ok")) << joined(l) << " (hungry no longer refuses, 0.7.9)";
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=ok")) << joined(l) << " (hungry no longer refuses, 0.7.9)";
   EXPECT_TRUE(has(l, "result=entered")) << joined(l);
   EXPECT_STREQ(a.dish->fightState(), "searching");
 
@@ -579,10 +597,10 @@ TEST(FightAsk, EveryPressAndEveryAskIsLogged) {
   b.growUp();
   diags(b);   // clear the grow-up lines: what follows is the wait's own log
   b.air.refuseOpen = true;   // the radio is an update trial's now
-  doublePress(b);   // the kid leaves the lobby; the badge's own ask waits
+  doublePress(b);   // the kid asks; the ask waits
   idle(b, 30);
   l = diags(b);
-  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake gate=radio_closed result=waiting")) << joined(l);
+  EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=awake gate=radio_closed result=waiting")) << joined(l);
   EXPECT_EQ(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("waiting") != std::string::npos; }), 1)
       << "a retry each second logs once: " << joined(l);
   EXPECT_STREQ(b.dish->fightState(), "waiting");
@@ -620,23 +638,43 @@ TEST(FightAsk, ASleepingPetsAskSaysWokenOrTooSleepy) {
   EXPECT_TRUE(has(l, "fight double=1 hang=0 ctx=asleep gate=woken result=entered")) << joined(l);
 }
 
-TEST(FightAsk, AWaitingAskIsAskedAgainByTheBadgeItself) {
+// An ask the radio holds (an update on trial) is asked again each second
+// and opens by itself once the radio is free; a second ask or a shake takes it back.
+TEST(FightAsk, AWaitingAskOpensOnceTheRadioIsFreeUnlessTakenBack) {
   Ether ether(9, {});
   Device a(ether, 1);
   const Genome ga = starterGenomeOf(kGrungo, 11);
   a.boot(ga, 1);
   a.growUp();
   a.air.refuseOpen = true;   // the radio is an update trial's now
-  doublePress(a);   // the kid leaves the lobby; the badge asks again and waits
+  doublePress(a);
   idle(a, 10);
-  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Updating) << "the badge asked again itself, and waits";
-  doublePress(a);   // a second press cannot take the wait back either
-  idle(a, 10);
-  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Updating) << "still waiting: the ask is the badge's now";
+  EXPECT_EQ(a.dish->appearance().noFight, NoFight::Updating) << "the ask waits";
+  EXPECT_STREQ(a.dish->fightState(), "waiting");
   a.air.refuseOpen = false;
   idle(a, 30);
   EXPECT_TRUE(a.dish->duelActive()) << "it opens by itself once the radio is free";
   EXPECT_EQ(a.dish->appearance().noFight, NoFight::None);
+
+  Device b(ether, 2);
+  b.boot(ga, 2);
+  b.growUp();
+  b.air.refuseOpen = true;
+  doublePress(b);
+  idle(b, 10);
+  ASSERT_STREQ(b.dish->fightState(), "waiting");
+  doublePress(b);
+  EXPECT_STREQ(b.dish->fightState(), "off") << "a second ask takes it back";
+  doublePress(b);
+  idle(b, 10);
+  ASSERT_STREQ(b.dish->fightState(), "waiting");
+  diags(b);
+  shake(b);
+  EXPECT_STREQ(b.dish->fightState(), "off") << "so does a shake";
+  EXPECT_TRUE(has(diags(b), "gate=cancelled result=off"));
+  b.air.refuseOpen = false;
+  idle(b, 30);
+  EXPECT_FALSE(b.dish->duelActive()) << "a taken-back ask never opens";
 }
 
 // A board with no duel radio still hears the ask: it says why once, asks
@@ -682,16 +720,17 @@ TEST(FightAsk, APetWhoWantsACuddleIsRefusedNotKeptWaitingWhenTheRadioIsHeld) {
   a.growUp();
   diags(a);
   a.air.refuseOpen = true;
-  doublePress(a);   // the kid leaves the lobby; the badge asks again into a held radio
-  idle(a, 30);
+  doublePress(a);   // the kid asks into a held radio
+  idle(a, 1);
+  EXPECT_EQ(a.dish->appearance().declined, Decline::WantsACuddle) << "a hug, as a picture";
+  idle(a, 29);
   const std::vector<std::string> l = diags(a);
   EXPECT_TRUE(has(l, "result=refused")) << joined(l);
   EXPECT_FALSE(has(l, "waiting")) << joined(l);
   EXPECT_FALSE(has(l, "gate=no_pet")) << "he is right there: " << joined(l);
   EXPECT_LE(std::count_if(l.begin(), l.end(), [](const std::string& s) { return s.find("result=refused") != std::string::npos; }), 2)
-      << "fight mode asks every tick; the reason is said once: " << joined(l);
+      << "one ask, one reason: " << joined(l);
   EXPECT_FALSE(a.dish->duelActive());
-  EXPECT_EQ(a.dish->appearance().declined, Decline::WantsACuddle) << "a hug, as a picture";
   EXPECT_NE(a.dish->appearance().noFight, NoFight::Updating);
 }
 
@@ -704,8 +743,9 @@ TEST(FightAsk, AFreshBoutLeavesHimRestingAndTheLogCountsItDown) {
   ASSERT_FALSE(a.creature().body().asleep);
   ASSERT_TRUE(a.dish->duelActive());
   diags(a);
-  doublePress(a);   // leaves fight mode; the badge asks again by itself
+  doublePress(a);   // leaves fight mode
   idle(a, 3);
+  doublePress(a);   // and asks again
   const std::vector<std::string> l = diags(a);
   EXPECT_TRUE(has(l, "gate=resting:")) << joined(l);
   EXPECT_TRUE(has(l, "result=entered")) << joined(l);
@@ -721,19 +761,18 @@ TEST(FightAsk, AHangOpensFightModeAndAHangAgainLeavesIt) {
   const Genome ga = starterGenomeOf(kGrungo, 11);
   a.boot(ga, 1);
   a.growUp();
-  // No hang was needed: an awake badge with a radio is in fight mode.
+  EXPECT_FALSE(a.dish->duelActive()) << "an awake badge waits to be asked";
+  diags(a);
+  hang(a);
   EXPECT_TRUE(a.dish->duelActive());
   EXPECT_STREQ(a.dish->fightState(), "searching");
   EXPECT_TRUE(a.dish->appearance().lobby) << "looking for a fight: the red ring's state";
   std::vector<std::string> l = diags(a);
-  EXPECT_TRUE(has(l, "fight double=0 hang=0 ctx=awake")) << joined(l);
-  EXPECT_TRUE(has(l, "result=entered")) << "the badge asked for itself: " << joined(l);
+  EXPECT_TRUE(has(l, "fight double=0 hang=1 ctx=awake gate=ok result=entered")) << joined(l);
   hang(a);
   idle(a, 2);
-  EXPECT_TRUE(a.dish->duelActive()) << "a hang leaves it, and the badge is back at once";
-  EXPECT_STREQ(a.dish->fightState(), "searching");
-  l = diags(a);
-  EXPECT_TRUE(has(l, "result=entered")) << "the hang closed it and the badge asked again: " << joined(l);
+  EXPECT_FALSE(a.dish->duelActive()) << "a hang again leaves it, and it stays left";
+  EXPECT_STREQ(a.dish->fightState(), "off");
 }
 
 TEST(FightAsk, AnEggIsToldNoForAHangToo) {
@@ -757,12 +796,17 @@ TEST(FightAsk, APhoneFiredHangOpensNothing) {
   const Genome ga = starterGenomeOf(kGrungo, 11);
   a.boot(ga, 1);
   a.growUp();
-  ASSERT_TRUE(a.dish->duelActive()) << "he is in fight mode because the badge put him there";
   a.dish->fire(stim::hang);
   idle(a, 5);
-  EXPECT_TRUE(a.dish->duelActive()) << "the phone's hang opened nothing and closed nothing";
+  EXPECT_FALSE(a.dish->duelActive()) << "the phone's hang opened nothing";
+  hang(a);
+  ASSERT_TRUE(a.dish->duelActive()) << "his own hang did";
+  a.dish->fire(stim::hang);
+  idle(a, 5);
+  EXPECT_TRUE(a.dish->duelActive()) << "and the phone's closes nothing";
   EXPECT_STREQ(a.dish->fightState(), "searching");
 }
+
 
 TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {
   Ether ether(3, {});
@@ -801,6 +845,7 @@ TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {
   // Wake him for the fight: a double press while asleep is still the ask.
   a.creature().inject(driveChem(drive::sleepiness), Fx::ratio(3, 10));
   press(a, 140, 200), press(a, 140, 100);
+  press(b, 140, 200), press(b, 140, 100);   // b's kid asks too
   ASSERT_TRUE(a.dish->duelActive() && b.dish->duelActive());
   Appearance look = a.dish->appearance();
   EXPECT_TRUE(look.lobby);
@@ -867,6 +912,28 @@ TEST(TwoDishes, TheLoserOfASparSwoonsNapsAndWakes) {
     }
   }
   FAIL() << "no seed under 12 ended a Spar in a faint";
+}
+
+// A grown-up's ceiling on one badge caps the pair: both kids want Scrap,
+// one badge allows Spar, and both see and fight a Spar, with no wound.
+TEST(TwoDishes, OneBadgesCeilingHoldsThePairToIt) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  ASSERT_TRUE(bout.b.dish->setDuelCeiling(Stakes::Spar));
+  bout.a.kid.tier = bout.b.kid.tier = Stakes::Scrap;
+  const Fx injury = bout.a.creature().chemistry().chem[chem::injury.v];
+  bool fought = false;
+  for (int t = 0; t < 6000; ++t) {
+    bout.step();
+    if (!bout.a.dish->duelActive()) continue;
+    const DuelView v = bout.a.dish->duelView();
+    if (fought && v.phase == DuelPhase::Lobby) break;
+    if (v.phase == DuelPhase::Staking) EXPECT_EQ(v.ceiling[1], Stakes::Spar) << "the friend's tiers above Spar show closed";
+    if (v.phase < DuelPhase::Choosing || v.phase == DuelPhase::Friends) continue;
+    fought = true;
+    EXPECT_EQ(v.agreed, Stakes::Spar);
+  }
+  ASSERT_TRUE(fought);
+  EXPECT_EQ(bout.a.creature().chemistry().chem[chem::injury.v], injury) << "a spar wounds nobody";
 }
 
 TEST(TwoDishes, AScrapWoundsByExactlyTheHeartsHeLostAndNothingElse) {
@@ -1004,12 +1071,18 @@ struct Alone {
     d.step();
   }
   void doublePress() { tick({-1, true}), tick(), tick({-1, true}), tick(), tick(), tick(); }
+  void shake() {
+    for (int8_t k = 0; k < 8; ++k) tick({-1, false, false, int8_t(k % 2 ? -1 : 1)});
+    for (int t = 0; t < 4; ++t) tick();
+  }
 };
 }  // namespace
 
 TEST(Graft, APreDuelLineGetsTheDuelGenesOnceAsOneCheckpoint) {
-  Alone a;          // a radio: fight mode opened by itself as he grew
+  Alone a;          // a radio: the graft comes with the first tick he is ready in fight mode
   Alone b(false);   // no radio: never opens, never grafts (the control)
+  EXPECT_EQ(a.d.creature().genome().geneCount(), b.d.creature().genome().geneCount()) << "no graft before fight mode";
+  a.doublePress();
   ASSERT_TRUE(a.d.dish->duelActive());
   EXPECT_EQ(a.d.creature().genome().geneCount(), b.d.creature().genome().geneCount() + kDuelGeneCount)
       << "the graft came with the first tick he was ready in the lobby";
@@ -1023,11 +1096,27 @@ TEST(Graft, APreDuelLineGetsTheDuelGenesOnceAsOneCheckpoint) {
     Dish back(cut, 33, 0xD15400ull + 33);
     EXPECT_EQ(std::get<Creature>(back.occupant()).genome().hash(), grown) << "saved at once";
   }
-  a.doublePress();   // out of the lobby and back in by itself: no second graft
-  for (int t = 0; t < 1300; ++t) a.tick();   // past the rest after a duel
+  a.doublePress();   // out of the lobby
+  for (int t = 0; t < 10; ++t) a.tick();
+  a.doublePress();   // and back in: no second graft
   ASSERT_TRUE(a.d.dish->duelActive());
   EXPECT_EQ(a.d.creature().genome().hash(), grown) << "idempotent";
   EXPECT_EQ(checkpoints(a.d.dish->lineage()), marks);
+}
+
+// Shaking the badge leaves fight mode, and he still feels the shake.
+TEST(FightAsk, AShakeLeavesFightMode) {
+  Alone a;
+  a.doublePress();
+  ASSERT_TRUE(a.d.dish->duelActive());
+  diags(a.d);
+  a.d.felt.clear();
+  a.shake();
+  EXPECT_FALSE(a.d.dish->duelActive()) << "a shake left the lobby";
+  EXPECT_STREQ(a.d.dish->fightState(), "off");
+  EXPECT_TRUE(a.d.felt.count(stim::shake.v)) << "the shake is still his";
+  for (int t = 0; t < 30; ++t) a.tick();
+  EXPECT_FALSE(a.d.dish->duelActive()) << "and nothing reopens it by itself";
 }
 
 TEST(Consent, ThePhoneCanNeitherOpenADuelNorLockAMove) {
@@ -1185,7 +1274,7 @@ uint8_t pellets(const Dish& d) {
 }
 }  // namespace
 
-TEST(BootRows, AwakeAPressFeedsAHoldTucksInAndTheLobbyIsAlreadyOpen) {
+TEST(BootRows, AwakeAPressFeedsAHoldTucksInAndADoublePressOpensTheLobby) {
   {
     Alone a(false);   // no radio: the Awake row is the whole story
     expectRow(*a.d.dish, BootContext::Awake, "awake");
@@ -1200,7 +1289,10 @@ TEST(BootRows, AwakeAPressFeedsAHoldTucksInAndTheLobbyIsAlreadyOpen) {
     a.tick();
     EXPECT_TRUE(a.d.felt.count(stim::button_hold.v)) << "a hold is the tuck-in";
   }
-  Alone a;   // a radio: fight mode is the resting state, and this is its row
+  Alone a;   // a radio: still the Awake row until a kid asks
+  expectRow(*a.d.dish, BootContext::Awake, "awake, with a radio");
+  EXPECT_FALSE(a.d.dish->duelActive()) << "fight mode opens only when asked";
+  a.doublePress();
   expectRow(*a.d.dish, BootContext::Lobby, "the lobby");
   EXPECT_TRUE(a.d.dish->duelActive());
   a.tick();   // settle: the kid takes in the lobby screen

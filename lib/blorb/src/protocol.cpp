@@ -287,9 +287,11 @@ void Protocol::disconnected() { subMask_ = 0; }
 
 void cmd_hello(Dish& dish, const Request&, Reply& r) {
   const Occupant& o = dish.occupant();
-  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x", kFirmwareVersion, unsigned(kFormatVersion),
-       (unsigned long long)(dish.settings().lineageId & 0xFFFFFFFFFFFFull), unsigned(generationOf(o)),
-       dish.settings().name, kPhases[o.index()], unsigned(dish.lineage().legacyFeats()));
+  constexpr const char* kTiers[] = {"spar", "scrap", "mortal"};
+  r.ok("fw=%s fmt=%u lineage=%012llx gen=%u name=%s phase=%s feats=0x%02x stakes=%s", kFirmwareVersion,
+       unsigned(kFormatVersion), (unsigned long long)(dish.settings().lineageId & 0xFFFFFFFFFFFFull),
+       unsigned(generationOf(o)), dish.settings().name, kPhases[o.index()], unsigned(dish.lineage().legacyFeats()),
+       kTiers[uint8_t(dish.duelCeiling())]);
 }
 
 void cmd_schema(Dish&, const Request&, Reply& r) {

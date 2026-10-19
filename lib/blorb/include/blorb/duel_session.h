@@ -63,7 +63,7 @@ struct DuelInput {
 
 enum class DuelPhase : uint8_t {
   Closed,     // radio off: not in fight mode
-  Lobby,      // fight mode: beaconing and claiming, until a pair locks, a double press, or 5 min with no fight
+  Lobby,      // fight mode: beaconing and claiming, until a pair locks, a double press, a hang, a shake, or 5 min with no fight
   Greeting,   // a pair locked: still drawn as fight mode ("connecting") until the friend's State proves they are in too
   Staking,    // the fight shows. Each kid's BOOT press steps Spar, Scrap, Mortal; a 3 s hold locks it, and
               // after kStakeAutoTicks the pick locks itself (an unheld Mortal as Scrap); both pets' skulls show

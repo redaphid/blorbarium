@@ -98,7 +98,7 @@ button {
 }
 button.ghost { background: transparent; color: var(--teal); }
 button:disabled { opacity: 0.5; cursor: default; }
-button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--olive); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--olive); outline-offset: 2px; }
 
 section { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
 h2 { margin: 0; font: 500 0.8rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
@@ -123,7 +123,7 @@ details summary { cursor: pointer; color: var(--teal); font-weight: 700; }
 .tag.mind { background: var(--teal-soft); }
 
 form { display: flex; gap: 10px; flex-wrap: wrap; }
-input {
+input, select {
   flex: 1 1 10rem; min-width: 0; font: 1rem var(--font-body); padding: 11px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--bg); color: var(--fg);
 }
@@ -286,6 +286,41 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
           await link.send("TWIST unteach");
           tell("ok", "He forgot every line you taught him.");
         } catch (err) { tell("err", refused(err)); }
+      });
+    })();
+    </script>
+  </section>
+
+  <!-- Fights, for a grown-up: the highest stakes this badge's pet may fight at
+       (TWIST stakes, docs/ble.md). Shown only by firmware whose HELLO says stakes=. -->
+  <section id="stakesBox" hidden>
+    <h2>Fights</h2>
+    <form id="stakesForm">
+      <select id="stakesInput" aria-label="The highest stakes this badge may fight at">
+        <option value="spar">Spar only: nobody is hurt</option>
+        <option value="scrap">Up to Scrap: wounds and scars</option>
+        <option value="mortal">Up to Mortal: a pet can die</option>
+      </select>
+      <button type="submit">Save</button>
+    </form>
+    <p class="hint" id="stakesHint">For grown-ups. A friend's badge sees the tiers above this as closed. It stays set on the badge.</p>
+    <script>
+    (() => {
+      const el = (id) => document.getElementById(id);
+      const tell = (tone, text) => { el("stakesHint").dataset.tone = tone; el("stakesHint").textContent = text; };
+      const words = { spar: "Spar only", scrap: "up to Scrap", mortal: "up to Mortal" };
+      el("stakesForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const tier = el("stakesInput").value;
+        if (!link) return;
+        tell("", "Sending…");
+        try {
+          await link.send(`TWIST stakes ${tier}`);
+          tell("ok", `This badge now fights ${words[tier]}.`);
+        } catch (err) {
+          tell("err", err.code === 409 ? "The badge cannot save this right now (it may still be checking an update). Try again in a few minutes."
+            : `The dish said no (${err.message}).`);
+        }
       });
     })();
     </script>
@@ -578,7 +613,7 @@ class MockTransport {
     const lines = [];
     if (verb === "TIME" && params.has("time_refused")) lines.push("ERR 400 BAD_ARGS");
     else if (verb === "TIME") { this.dish.timeKnown = true; lines.push("OK caught_up=0 away=0 hurt=0"); }
-    else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05`);
+    else if (verb === "HELLO") lines.push(`OK fw=${this.dish.fw} fmt=1 lineage=00a1b2c3d4e5 gen=3 name=${this.petName} phase=creature feats=0x05${BlorbOta.isNewer(this.dish.fw, "0.7.10") ? ` stakes=${this.stakes || "mortal"}` : ""}`);
     else if (verb === "ADOPT") {
       if (args === "status") lines.push(`OK adopted=${this.dish.adopted ? 1 : 0} waiting=${this.dish.adopted ? 0 : 1}`);
       else { this.dish.adopted = true; lines.push("OK adopted=1 waiting=0"); }
@@ -598,6 +633,7 @@ class MockTransport {
     else if (verb === "TWIST" && this.dish.twist(args)) lines.push(this.dish.twist(args));
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
+    else if (verb === "TWIST" && /^stakes (spar|scrap|mortal)$/.test(args)) { this.stakes = args.slice(7); lines.push("OK stakes"); }
     else if (verb === "OTA") lines.push(this.dish.command(args));
     else lines.push("ERR 404 UNKNOWN_VERB");
     this.deliver(lines.map((l) => `#${id} ${l}`));
@@ -741,6 +777,8 @@ async function refreshHello() {
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
   $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
   $("updateFw").textContent = `${transport.name || "This dish"} runs version ${h.fw || "?"}.`;
+  if (h.stakes) $("stakesInput").value = h.stakes;
+  ui.show("stakesBox", !!h.stakes);
   return h;
 }
 

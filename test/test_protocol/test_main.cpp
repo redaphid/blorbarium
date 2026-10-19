@@ -426,6 +426,39 @@ TEST(Golden, TwistTeach) {
   EXPECT_EQ(r.dish.taught().count, 0);
 }
 
+// A grown-up's ceiling: by name or tier, in its own file, read back by HELLO,
+// kept across a reboot; a board that cannot write keeps the one it had.
+TEST(Golden, TwistStakes) {
+  Rig r;
+  auto keepsake = [&r] {
+    auto files = r.store.files;
+    files.erase(DuelConfig::kFile);
+    return files;
+  };
+  const auto before = keepsake();
+  Lines got;
+  for (const char* op : {"#76 TWIST stakes scrap", "#77 TWIST stakes deadly", "#78 TWIST stakes 3", "#79 TWIST stakes"}) {
+    Lines out = r.send(op);
+    got.insert(got.end(), out.begin(), out.end());
+  }
+  EXPECT_EQ(got, (Lines{"#76 OK stakes", "#77 ERR 416 OUT_OF_RANGE", "#78 ERR 416 OUT_OF_RANGE", "#79 ERR 400 BAD_ARGS"}));
+  EXPECT_TRUE(keepsake() == before) << "the ceiling writes its own file, not the keepsake";
+  EXPECT_EQ(r.dish.duelCeiling(), Stakes::Scrap);
+  EXPECT_NE(r.send("#7a HELLO").front().find(" stakes=scrap"), std::string::npos);
+
+  Dish again(r.store, 7, 0x9f31c2d04a7bull, Rig::optionsOf(quickEgg(), false));
+  EXPECT_EQ(again.duelCeiling(), Stakes::Scrap) << "kept across a reboot";
+
+  EXPECT_EQ(r.send("#7b TWIST stakes 0"), (Lines{"#7b OK stakes"}));
+  EXPECT_EQ(r.dish.duelCeiling(), Stakes::Spar);
+  r.store.tearAt(0);
+  EXPECT_EQ(r.send("#7c TWIST stakes mortal"), (Lines{"#7c ERR 409 NOT_NOW"}));
+  EXPECT_EQ(r.dish.duelCeiling(), Stakes::Spar) << "not believed until it is saved";
+
+  r.store.files[DuelConfig::kFile].back() ^= 1;   // a torn or foreign duel.cfg
+  EXPECT_EQ(DuelConfig::load(r.store).ceiling, Stakes::Mortal) << "every tier, as a new badge";
+}
+
 TEST(Link, AConnectedLinkThatSendsNothingReceivesNothing) {
   Rig r;
   r.run(120000);
@@ -564,7 +597,7 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
 
 TEST(Golden, Hello) {
   Rig r;
-  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.10 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
+  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.11 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00 stakes=mortal"}));
 }
 
 TEST(Golden, State) {

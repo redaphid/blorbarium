@@ -227,6 +227,21 @@ def time_refused(browser, base):
     return page, s
 
 
+def stakes_box(browser, base):
+    old = open_page(browser, base, "mock=1&faults=none&fw=0.7.0")
+    old.locator("#sayBox").wait_for(state="visible", timeout=15000)
+    assert old.locator("#stakesBox").is_hidden(), "firmware without stakes= shows no Fights box"
+    old.close()
+    page = open_page(browser, base, "mock=1&faults=none&fw=0.7.11")
+    page.locator("#stakesBox").wait_for(state="visible", timeout=15000)
+    assert page.input_value("#stakesInput") == "mortal", page.input_value("#stakesInput")
+    page.select_option("#stakesInput", "spar")
+    page.click("#stakesForm button")
+    page.locator("#stakesHint", has_text="This badge now fights Spar only.").wait_for(timeout=10000)
+    assert page.evaluate("transport.stakes") == "spar"
+    return page, {"stakes": page.evaluate("transport.stakes")}
+
+
 # The page's real BleTransport, with fake_bluetooth.js as the radio and the release served here.
 def ble_page(browser, base, query, nearby, version="0.7.0", manifest_fails=0):
     # page.route serves the release; a service worker's fetches would go around it.
@@ -343,6 +358,7 @@ CASES = [
     ("an old blorb- dish updates over Bluetooth and comes back as mossby, no second chooser", old_name_to_species),
     ("connect another dish after the first, and update it too", second_dish),
     ("a failed update check offers Check again", check_again),
+    ("the Fights box sets the badge's ceiling, and old firmware shows none", stakes_box),
 ]
 
 

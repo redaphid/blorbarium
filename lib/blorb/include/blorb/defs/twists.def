@@ -17,3 +17,4 @@ BLORB_TWIST(prophecy_treat, "")                                   // a treat bak
 BLORB_TWIST(say,       "<text>")                                  // the rest of the line, up to 56 drawable: he croaks it once on the marquee; never saved
 BLORB_TWIST(teach,     "<text>")                                  // up to 30 drawable, kept in taught.lines (the last 4): he says them now and then, phone or not
 BLORB_TWIST(unteach,   "")                                        // he forgets every taught line
+BLORB_TWIST(stakes,    "<spar|scrap|mortal>")                     // a grown-up's ceiling: the highest tier this badge fights at, kept in duel.cfg
