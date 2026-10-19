@@ -16,7 +16,13 @@ hold ring serve both. The table and the switches are in
 |---|---|---|
 | press | **knock knock**: the case tapped twice (the IMU's double tap) | `KnockDetector` |
 | hold (a level: 1.2 s, and the 3 s holds) | **turn onto a side and hold it there**, on edge | `SideHoldDetector` |
-| double press | **the hang**: upside down on edge, about a second | `HangDetector` |
+| double press | **the hang**: upside down on edge (USB-C down), about a second | `HangDetector` |
+
+**Which way is up.** In the kids' cases the USB-C port faces up, so that is
+home (`ORIENT_HOME` = 2 in `src/hw/board_lcd128.h`): the hang is USB-C
+**down**, the side hold USB-C to either side. (Until 2026-10-19 the firmware
+took the opposite for home, so the hang meant holding the case the right way
+up.) The screen turns with the badge whatever this says.
 
 The rest is unchanged: tilt aims, one knock locks the aimed stance and
 spares, a shake tells the future, a cuddle hugs, a turn answers an update.

@@ -267,8 +267,8 @@ static bool pressed(const Window (&ws)[2], uint32_t ms) {
 }
 
 #if !defined(BADGE_BOARD_SIM)
-// `DEBUG hang` holds the raw IMU sample upside down (native bottom up, the
-// pose orient::Up calls rotation 2) over one window, then upright over the
+// `DEBUG hang` holds the raw IMU sample upside down from home (USB-C down:
+// ORIENT_HOME's opposite, rotation 0) over one window, then home over the
 // next, so the real orientation settle and HangDetector decide, as with a
 // kid's hands on a case that covers BOOT. Wobble adds a small hand's tremor
 // and an occasional jolt.
@@ -284,20 +284,23 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
     const uint32_t r = esp_random();
-    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t(-450 + int32_t((r >> 8) % 31) - 15), s.az = 890;
+    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((ORIENT_HOME == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
     return true;
   }
   if (!hangMs && !rightMs) return false;
   const uint32_t since = ms - hangAt;
   if (since >= hangMs + rightMs) return false;
   const bool down = since < hangMs;
-  s.ax = 0, s.ay = int16_t(down ? 1000 : -1000), s.az = 0;
+  // Gravity along +y in the IMU's frame settles rotation 2, along -y rotation 0
+  // (orient.h with ORIENT_R0 = 1): home is USB-C up (ORIENT_HOME), the hang its opposite.
+  const int16_t homeY = ORIENT_HOME == 2 ? 1000 : -1000;
+  s.ax = 0, s.ay = int16_t(down ? -homeY : homeY), s.az = 0;
   if (down && hangSide) s.ax = int16_t(hangSide * 1000), s.ay = 0;
   if (hangWobble) {
     const uint32_t r = esp_random();
     s.ax = int16_t(int32_t(r % 241) - 120);
     s.az = int16_t(int32_t((r >> 8) % 241) - 120);
-    if ((r >> 16) % 25 == 0) s.ay = int16_t(s.ay + (down ? 500 : -500));   // a jolt, about 2 a second
+    if ((r >> 16) % 25 == 0) s.ay = int16_t(s.ay + (s.ay > 0 ? 500 : -500));   // a jolt, about 2 a second
   }
   return true;
 }
@@ -413,7 +416,7 @@ static void feel(const blorb::BodySample& body, uint32_t ms, bool remote = false
   // Held upside down is the one pose the turn into the screen's frame hides:
   // the settled rotation is the only place it still exists, so it rides the
   // sample as a level (BodySample::invertedDown) for HangDetector.
-  screen.invertedDown = rot == 2;
+  screen.invertedDown = rot == uint8_t((ORIENT_HOME + 2) & 3);   // upside down from home: USB-C down
   screen.sideDown = rot == 1 || rot == 3;   // the hold's twin (SideHoldDetector, controls.h)
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);

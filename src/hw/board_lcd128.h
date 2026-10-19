@@ -24,6 +24,12 @@ static constexpr int PIN_IMU_SCL = 7;
 // How the IMU sits relative to the panel's own up (src/hw/orient.h). Only the
 // board can settle this: if the screen lands a quarter turn off, add 1 (mod 4).
 static constexpr int ORIENT_R0 = 1;
+// Which settled rotation is the right way up as the kids hold the badge: in
+// their cases the USB-C port faces up, which is rotation 2 (native bottom up).
+// The hang is the opposite (USB-C down), the side hold a quarter turn either
+// way. The screen turns with the badge whatever this says; only the gestures
+// read it (main.cpp feel()).
+static constexpr uint8_t ORIENT_HOME = 2;
 
 class BoardDisplay : public lgfx::LGFX_Device {
   lgfx::Panel_GC9A01 panel_;

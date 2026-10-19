@@ -12,6 +12,7 @@ static constexpr int PIN_BOOT_BUTTON = 0;
 static constexpr int PIN_IMU_SDA = 6;
 static constexpr int PIN_IMU_SCL = 7;
 static constexpr int ORIENT_R0 = 1;   // sim/Wire.h's hand reads in the panel's own axes
+static constexpr uint8_t ORIENT_HOME = 2;   // as the badge (board_lcd128.h): USB-C up is the right way up
 static bool simSealed = false;        // --sealed: a board whose keepsake boot left alone (Boot::Sealed)
 
 #ifndef SIM_SCALE
