@@ -32,12 +32,17 @@ enum class Offer : uint8_t {
   Install,      // newer, for this board, never rolled back here, and the owner allows it
   UpToDate,     // not newer than what runs: an unattended update never goes back
   WrongBoard,
+  OlderFormat,  // writes an older save format than this badge's: it could not read the pet and would roll back
   RolledBack,   // this very version switched in here and rolled back: only a hand retries it (Bluetooth)
   AutoOff,      // the manifest says "auto": false
 };
 const char* offerName(Offer);
 
-Offer judge(const Manifest&, const char* board, ota::Version running, std::optional<ota::Version> rolledBack);
+// `fmt` is the running image's save format (keepsake.h kFormatVersion, the
+// boot line's fmt=). A newer one is fine: the new image migrates the pet, as
+// it would after an update over Bluetooth (docs/ota.md "Save formats").
+Offer judge(const Manifest&, const char* board, ota::Version running, uint32_t fmt,
+            std::optional<ota::Version> rolledBack);
 
 // The token an unattended update hands over (ota::Handover::token): "WIFI"
 // and 12 random bytes. The new image confirms its trial over Wi-Fi only for

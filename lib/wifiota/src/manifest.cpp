@@ -158,13 +158,15 @@ bool imageUrl(std::string_view manifestUrl, const char* file, char* out, size_t 
 }
 
 const char* offerName(Offer o) {
-  constexpr const char* kNames[] = {"install", "up_to_date", "wrong_board", "rolled_back", "auto_off"};
+  constexpr const char* kNames[] = {"install", "up_to_date", "wrong_board", "older_format", "rolled_back", "auto_off"};
   return kNames[size_t(o)];
 }
 
-Offer judge(const Manifest& m, const char* board, ota::Version running, std::optional<ota::Version> rolledBack) {
+Offer judge(const Manifest& m, const char* board, ota::Version running, uint32_t fmt,
+            std::optional<ota::Version> rolledBack) {
   if (std::strcmp(m.image.board, board) != 0) return Offer::WrongBoard;
   if (!(running < m.image.version)) return Offer::UpToDate;
+  if (m.image.fmt < fmt) return Offer::OlderFormat;
   if (rolledBack && *rolledBack == m.image.version) return Offer::RolledBack;
   if (!m.autoInstall) return Offer::AutoOff;
   return Offer::Install;

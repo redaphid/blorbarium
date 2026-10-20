@@ -344,18 +344,23 @@ TEST(Manifest, InstallsOnlyANewerImageForThisBoardThatNeverRolledBackHere) {
   wifiota::Manifest m = *wifiota::parseManifest(kManifest);
   using wifiota::Offer;
   const ota::Version running{0, 7, 11};
-  EXPECT_EQ(wifiota::judge(m, "lcd128", running, std::nullopt), Offer::Install);
-  EXPECT_EQ(wifiota::judge(m, "lcd146", running, std::nullopt), Offer::WrongBoard);
-  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 7, 12}, std::nullopt), Offer::UpToDate);
-  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 8, 0}, std::nullopt), Offer::UpToDate);
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 1, std::nullopt), Offer::Install);
+  EXPECT_EQ(wifiota::judge(m, "lcd146", running, 1, std::nullopt), Offer::WrongBoard);
+  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 7, 12}, 1, std::nullopt), Offer::UpToDate);
+  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 8, 0}, 1, std::nullopt), Offer::UpToDate);
   m.image.flags = ota::kAllowOlder;
-  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 8, 0}, std::nullopt), Offer::UpToDate)
+  EXPECT_EQ(wifiota::judge(m, "lcd128", ota::Version{0, 8, 0}, 1, std::nullopt), Offer::UpToDate)
       << "a signed downgrade still needs a hand";
   m.image.flags = 0;
-  EXPECT_EQ(wifiota::judge(m, "lcd128", running, ota::Version{0, 7, 12}), Offer::RolledBack);
-  EXPECT_EQ(wifiota::judge(m, "lcd128", running, ota::Version{0, 7, 10}), Offer::Install) << "an older rollback";
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 1, ota::Version{0, 7, 12}), Offer::RolledBack);
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 1, ota::Version{0, 7, 10}), Offer::Install) << "an older rollback";
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 2, std::nullopt), Offer::OlderFormat)
+      << "an image that writes an older save than this badge's cannot read the pet";
+  m.image.fmt = 2;
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 1, std::nullopt), Offer::Install) << "a newer format migrates";
+  m.image.fmt = 1;
   m.autoInstall = false;
-  EXPECT_EQ(wifiota::judge(m, "lcd128", running, std::nullopt), Offer::AutoOff);
+  EXPECT_EQ(wifiota::judge(m, "lcd128", running, 1, std::nullopt), Offer::AutoOff);
 }
 
 TEST(Manifest, AWifiTokenIsMarkedAndAPagesIsNot) {

@@ -243,7 +243,8 @@ static void readManifest() {
     return closeWindow();
   }
   schedule.checked(millis());
-  const wifiota::Offer offer = wifiota::judge(*m, BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), trialPort.rolledBack());
+  const wifiota::Offer offer = wifiota::judge(*m, BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion),
+                                             blorb::kFormatVersion, trialPort.rolledBack());
   say("manifest %s %u.%u.%u size=%u fmt=%u: %s", m->image.board, unsigned(v.major), unsigned(v.minor),
       unsigned(v.patch), unsigned(m->image.size), unsigned(m->image.fmt), wifiota::offerName(offer));
   if (offer != wifiota::Offer::Install) {
@@ -352,7 +353,7 @@ static void poll(uint32_t now) {
   }
   if (forced && !f.radioBusy) {
     forced = false;
-    if (!networks.size()) return say("ota check: no network remembered (DEBUG wifi add <ssid> <password>)");
+    if (!networks.size()) return say("ota check: no network remembered (DEBUG wifi set <ssid> <password>)");
     return openWindow(Window::Forced);
   }
   if (confirmToken && trial.onTrial() && networks.size() && int32_t(now - confirmAt) >= 0) {
@@ -461,7 +462,7 @@ static void statusLine() {
 }
 
 // `"My Net" pass` or `MyNet pass`: the SSID, quoted if it has spaces, then the rest as the password.
-static bool parseAdd(const char* s, char (&ssid)[33], char (&pass)[65]) {
+static bool parseSet(const char* s, char (&ssid)[33], char (&pass)[65]) {
   while (*s == ' ') ++s;
   const char* end;
   if (*s == '"') {
@@ -482,7 +483,7 @@ static bool parseAdd(const char* s, char (&ssid)[33], char (&pass)[65]) {
   return true;
 }
 
-// `DEBUG wifi [forget|add <ssid> [password]|on|off|power on|off|auto]`
+// `DEBUG wifi [status|forget|set <ssid> [password]|on|off|power on|off|auto]`
 static void wifiVerb(const char* line) {
   char what[12] = "", arg[12] = "";
   std::sscanf(line, "%*s %11s %11s", what, arg);
@@ -493,9 +494,9 @@ static void wifiVerb(const char* line) {
     say("forgot every network (%s)", ok ? "erased" : "ERASE FAILED");
     return;
   }
-  if (!std::strcmp(what, "add")) {
+  if (!std::strcmp(what, "set")) {
     char ssid[33], pass[65];
-    if (!parseAdd(std::strstr(line, "add") + 3, ssid, pass)) return say("want: wifi add <ssid|\"ssid with spaces\"> [password]");
+    if (!parseSet(std::strstr(line, "set") + 3, ssid, pass)) return say("want: wifi set <ssid|\"ssid with spaces\"> [password]");
     networks.remember(ssid, pass);
     const bool ok = hw::WifiStore::save(networks);
     say("remembered \"%s\" (%s password, %s), %u network(s); not tried: DEBUG ota check tries it", ssid,
@@ -516,7 +517,7 @@ static void wifiVerb(const char* line) {
     say("power taken as %s%s", onPower() ? "on" : "battery", powerOverride ? " (overridden until reset)" : " (inferred)");
     return;
   }
-  say("want: wifi [status|forget|add <ssid> [password]|on|off|power on|off|auto]");
+  say("want: wifi [status|forget|set <ssid> [password]|on|off|power on|off|auto]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

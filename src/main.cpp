@@ -65,7 +65,7 @@ class SerialLink : public blorb::Link {
   bool heard_ = false;
   // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
   // (one slot dropped all but the last). 128 bytes holds the longest, `DEBUG wifi
-  // add "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h).
+  // set "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h).
   static constexpr uint8_t kDebugQueue = 8;
   static constexpr size_t kDebugLine = 128;
   char debug_[kDebugQueue][kDebugLine] = {};
@@ -1160,7 +1160,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
-                  "power [low|wake|idle <s>], reboot, bletest <bytes>, wifi [forget|add|on|off|power], ota check [url])\n",
+                  "power [low|wake|idle <s>], reboot, bletest <bytes>, wifi [forget|set|on|off|power], ota check [url])\n",
                   verb);
     return;
   }
