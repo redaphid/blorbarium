@@ -57,12 +57,12 @@ class KnockSense {
   // 1-4 g. So when the badge was resting dead still (kRestSdMg), a much
   // smaller blip counts -- but only a short one with quiet around it: a desk
   // being typed on, a cup set down or a desk bumped rattles for 60 ms and more
-  // (T2), and that is no knock. Only with the shell's 250 Hz peak.
+  // (T2), and that is no knock (T3: 9 of 9 on a table, 0 from the desk). Only with the shell's 250 Hz peak.
   static constexpr int32_t kRestSdMg = 15;       // the magnitude's spread before: lying on something hard
   static constexpr int32_t kBlipMg = 150;        // a read this far from the last sample is part of a blip
-  static constexpr int32_t kRestFirstMg = 300;   // the first knock's blip reaches this...
+  static constexpr int32_t kRestFirstMg = 150;   // the first knock's blip reaches this (kids knock softly first, then harder)...
   static constexpr int32_t kRestNextMg = 150;    // ...the next ones this
-  static constexpr uint8_t kBlipMaxSamples = 3;  // a blip over 60 ms is a rattle
+  static constexpr uint8_t kBlipMaxSamples = 5;  // a blip over 100 ms is a rattle (a hard knock on a table rings 80 ms)
   static constexpr uint32_t kRestQuietMs = 300;  // and the first comes after this long with none
 
  private:
