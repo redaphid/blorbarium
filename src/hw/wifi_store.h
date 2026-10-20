@@ -1,4 +1,4 @@
-// The remembered Wi-Fi networks and the badge's own Wi-Fi switch
+// The remembered Wi-Fi network and the badge's own Wi-Fi switch
 // (docs/wifi-ota.md "Credentials"), in the default `nvs` partition under
 // namespace "wifi": beside the OTA trial's "ota" records, never in `pet` or
 // `petfs`. Boot only reads, opening read-only, so a badge that was never given
@@ -10,7 +10,7 @@
 
 #include <optional>
 
-#include "wifiota/networks.h"
+#include "wifiota/remembered.h"
 
 namespace hw {
 
@@ -18,34 +18,33 @@ class WifiStore {
  public:
   static constexpr const char* kNamespace = "wifi";
 
-  static wifiota::Networks load() {
+  static std::optional<wifiota::improv::Credentials> load() {
     nvs_handle_t n;
-    if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return {};   // never given one: nothing to read
-    uint8_t blob[wifiota::Networks::kBlobMax];
+    if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return std::nullopt;   // never given one: nothing to read
+    uint8_t blob[wifiota::kRememberedMax];
     size_t len = sizeof blob;
-    const bool ok = nvs_get_blob(n, "nets", blob, &len) == ESP_OK;
+    const bool ok = nvs_get_blob(n, "net", blob, &len) == ESP_OK;
     nvs_close(n);
-    if (!ok) return {};
-    return wifiota::Networks::decode(blob, len).value_or(wifiota::Networks{});
+    return ok ? wifiota::decodeRemembered(blob, len) : std::nullopt;
   }
 
-  static bool save(const wifiota::Networks& nets) {
-    uint8_t blob[wifiota::Networks::kBlobMax];
-    const size_t len = nets.encode(blob, sizeof blob);
+  static bool save(const wifiota::improv::Credentials& c) {
+    uint8_t blob[wifiota::kRememberedMax];
+    const size_t len = wifiota::encodeRemembered(c, blob, sizeof blob);
     nvs_handle_t n;
     if (!len || nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
-    const bool ok = nvs_set_blob(n, "nets", blob, len) == ESP_OK && nvs_commit(n) == ESP_OK;
+    const bool ok = nvs_set_blob(n, "net", blob, len) == ESP_OK && nvs_commit(n) == ESP_OK;
     nvs_close(n);
     return ok;
   }
 
-  // `DEBUG wifi forget`: every network gone. Nothing to do on a badge never given one.
+  // `DEBUG wifi forget`: the network gone. Nothing to do on a badge never given one.
   static bool forget() {
     nvs_handle_t n;
     if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return true;
     nvs_close(n);
     if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
-    const esp_err_t e = nvs_erase_key(n, "nets");
+    const esp_err_t e = nvs_erase_key(n, "net");
     const bool ok = (e == ESP_OK || e == ESP_ERR_NVS_NOT_FOUND) && nvs_commit(n) == ESP_OK;
     nvs_close(n);
     return ok;

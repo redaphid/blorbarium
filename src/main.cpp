@@ -569,7 +569,7 @@ bool RadioGate::open() {
   // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
   // pins the channel to its access point's, and ESP-NOW needs channel 1.
   const bool wifiUp = wifiYieldRadio();
-  why = wifiUpdateHoldsRadio() ? "ota_active" : trial.onTrial() ? "trial" : wifiUp ? "wifi_closing" : nullptr;
+  why = wifiUpdateHoldsRadio() ? "ota_active" : trial.onTrial() ? "trial" : wifiUp ? "wifi_up" : nullptr;
   const bool ok = !why && inner.open();
   if (!why && !ok) why = inner.refusal();
   if (ok) radioDiag.say("radio open=1"), logged = "";
@@ -1260,10 +1260,9 @@ static void pmBegin() {}
 
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
-static bool wifiIdentifying();   // src/wifi_ota.h: Improv's identify shows the badge's name
 static bool powerHeld() {
   return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 ||
-         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || bool(shot) || wifiIdentifying();
+         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || bool(shot);
 }
 
 static const char* powerLine(char* out, size_t n, uint32_t now) {
@@ -1392,7 +1391,7 @@ void loop() {
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
-    else dbgfw::draw(canvas), wififw::draw(canvas);
+    else dbgfw::draw(canvas);
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     paint::drawIdleBar(canvas, uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs()));
 #endif

@@ -31,7 +31,7 @@ test("a result reads back its strings and refuses a bad checksum or length", () 
   const url = "https://blorb.hypnodroid.com/?d=puffkin";
   const r = packet(COMMAND.wifiSettings, Uint8Array.of(url.length, ...bytes(url)));
   assert.deepEqual(parseResult(r), { command: 1, strings: [url] });
-  assert.deepEqual(parseResult(packet(COMMAND.scanNetworks, new Uint8Array(0))), { command: 4, strings: [] });
+  assert.deepEqual(parseResult(packet(COMMAND.deviceInfo, new Uint8Array(0))), { command: 3, strings: [] });
   const bad = Uint8Array.from(r);
   bad[bad.length - 1] ^= 1;
   assert.equal(parseResult(bad), null);
@@ -66,12 +66,6 @@ function fakeDish({ joins = true } = {}) {
         const url = "https://blorb.hypnodroid.com/?d=puffkin";
         note(RPC_RESULT, packet(COMMAND.wifiSettings, Uint8Array.of(url.length, ...bytes(url))));
       }, 5);
-    } else if (p[0] === COMMAND.scanNetworks) {
-      for (const [ssid, rssi, sec] of [["House", "-48", "YES"], ["Cafe", "-80", "NO"]]) {
-        const data = [ssid.length, ...bytes(ssid), rssi.length, ...bytes(rssi), sec.length, ...bytes(sec)];
-        note(RPC_RESULT, packet(COMMAND.scanNetworks, Uint8Array.from(data)));
-      }
-      note(RPC_RESULT, packet(COMMAND.scanNetworks, new Uint8Array(0)));
     }
   };
   return { written, service: { uuid: SERVICE, async getCharacteristic(uuid) { return chars[uuid]; } } };
@@ -89,9 +83,4 @@ test("join rejects with unable to connect when the dish could not join", async (
   const c = new Client(fakeDish({ joins: false }).service);
   await assert.rejects(c.join("House", "wrong"), { code: ERROR.unableToConnect });
   assert.equal(c.state, STATE.authorized);
-});
-
-test("scan gathers results until the empty one", async () => {
-  const c = new Client(fakeDish().service);
-  assert.deepEqual(await c.scan(), [{ ssid: "House", rssi: -48, secured: true }, { ssid: "Cafe", rssi: -80, secured: false }]);
 });

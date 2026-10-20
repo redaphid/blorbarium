@@ -1,7 +1,8 @@
 // Improv Wi-Fi over Web Bluetooth (https://www.improv-wifi.com/ble/): the
 // page hands the dish a Wi-Fi network, which it remembers and uses to update
 // itself when plugged in (docs/wifi-ota.md "Provisioning"). The dish's side is
-// lib/wifiota/include/wifiota/improv.h. No UI text here; the page owns that.
+// lib/wifiota/include/wifiota/improv.h: it answers Wi-Fi settings only (no
+// identify, no scan). No UI text here; the page owns that.
 "use strict";
 (function () {
   const SERVICE = "00467768-6228-2272-4663-277478268000";
@@ -12,9 +13,8 @@
 
   const STATE = { authorizationRequired: 1, authorized: 2, provisioning: 3, provisioned: 4 };
   const ERROR = { none: 0, invalidRpc: 1, unknownRpc: 2, unableToConnect: 3, notAuthorized: 4, unknown: 0xff };
-  const COMMAND = { wifiSettings: 1, identify: 2, deviceInfo: 3, scanNetworks: 4 };
-  const JOIN_MS = 60000;   // the dish tries one network for 15 s, after a duel's radio lets go
-  const SCAN_MS = 20000;
+  const COMMAND = { wifiSettings: 1, deviceInfo: 3 };
+  const JOIN_MS = 30000;   // the dish tries the network for 15 s
 
   const checksum = (bytes) => bytes.reduce((sum, b) => (sum + b) & 0xff, 0);
 
@@ -111,19 +111,6 @@
       return this.rpc(wifiSettings(ssid, password), JOIN_MS, (ok, no) => ({
         onError: no,
         onResult: (r) => { if (r.command === COMMAND.wifiSettings) ok(r.strings[0] || ""); },
-      }));
-    }
-
-    // The networks the dish hears: { ssid, rssi, secured }, strongest first.
-    scan() {
-      const found = [];
-      return this.rpc(packet(COMMAND.scanNetworks, new Uint8Array(0)), SCAN_MS, (ok, no) => ({
-        onError: no,
-        onResult: (r) => {
-          if (r.command !== COMMAND.scanNetworks) return;
-          if (!r.strings.length) return ok(found);   // the end of the list
-          found.push({ ssid: r.strings[0], rssi: Number(r.strings[1]), secured: r.strings[2] === "YES" });
-        },
       }));
     }
   }

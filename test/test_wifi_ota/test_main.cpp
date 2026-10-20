@@ -1,6 +1,6 @@
 // Wi-Fi provisioning and the unattended update (docs/wifi-ota.md): the
 // Improv codec and state machine, the manifest and its verdict, the
-// remembered networks, the power inference, the schedule, and the update
+// remembered network, the power inference, the schedule, and the update
 // itself through the same ota::Session the Bluetooth path uses.
 #include <gtest/gtest.h>
 #include <openssl/bn.h>
@@ -18,7 +18,7 @@
 #include "ota/session.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
-#include "wifiota/networks.h"
+#include "wifiota/remembered.h"
 #include "wifiota/power_sense.h"
 #include "wifiota/schedule.h"
 #include "../../src/hw/ota_pubkey.h"
@@ -35,13 +35,10 @@ struct FakeImprovPort : improv::Port {
   std::vector<improv::Error> errors;
   std::vector<Bytes> results;
   std::vector<improv::Credentials> joins;
-  int identifies = 0, scans = 0;
   void showState(improv::State s) override { states.push_back(s); }
   void showError(improv::Error e) override { errors.push_back(e); }
   void sendResult(const uint8_t* p, size_t n) override { results.emplace_back(p, p + n); }
-  void identify() override { ++identifies; }
   void join(const improv::Credentials& c) override { joins.push_back(c); }
-  void scan() override { ++scans; }
 };
 
 const improv::DeviceInfo kInfo{"blorbarium", "0.7.13", "ESP32-S3", "mossby"};
@@ -202,43 +199,22 @@ TEST(Improv, OneJoinAtATime) {
   m.write(p.data(), p.size());
   EXPECT_EQ(port.joins.size(), 1u);
   EXPECT_EQ(port.errors.back(), improv::Error::Unknown);
-  const Bytes scan = rpc(4, Bytes{});
-  m.write(scan.data(), scan.size());
-  EXPECT_EQ(port.scans, 0) << "no scan while joining";
 }
 
-TEST(Improv, IdentifyAndDeviceInfo) {
+TEST(Improv, DeviceInfoAndNeitherIdentifyNorScan) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
-  const Bytes id = rpc(2, Bytes{});
-  m.write(id.data(), id.size());
-  EXPECT_EQ(port.identifies, 1);
-  EXPECT_TRUE(port.results.empty()) << "identify has no result";
   const Bytes info = rpc(3, Bytes{});
   m.write(info.data(), info.size());
   ASSERT_EQ(port.results.size(), 1u);
   EXPECT_EQ(strings(port.results[0], 3), (std::vector<std::string>{"blorbarium", "0.7.13", "ESP32-S3", "mossby"}));
-}
-
-TEST(Improv, ScanResultsAreStrongestFirstOnceEachThenAnEmptyEnd) {
-  FakeImprovPort port;
-  improv::Machine m(port, kInfo);
-  const Bytes scan = rpc(4, Bytes{});
-  m.write(scan.data(), scan.size());
-  EXPECT_EQ(port.scans, 1);
-  improv::Network nets[4];
-  std::snprintf(nets[0].ssid, sizeof nets[0].ssid, "Home");
-  nets[0].rssi = -70, nets[0].secured = true;
-  std::snprintf(nets[1].ssid, sizeof nets[1].ssid, "Cafe");
-  nets[1].rssi = -50, nets[1].secured = false;
-  std::snprintf(nets[2].ssid, sizeof nets[2].ssid, "Home");   // the upstairs access point
-  nets[2].rssi = -40, nets[2].secured = true;
-  nets[3].rssi = -30;                                        // hidden: no name
-  m.scanned(nets, 4);
-  ASSERT_EQ(port.results.size(), 3u);
-  EXPECT_EQ(strings(port.results[0], 4), (std::vector<std::string>{"Home", "-40", "YES"}));
-  EXPECT_EQ(strings(port.results[1], 4), (std::vector<std::string>{"Cafe", "-50", "NO"}));
-  EXPECT_EQ(strings(port.results[2], 4), (std::vector<std::string>{}));
+  for (uint8_t optional : {2, 4}) {   // identify, scan: optional in the spec, left out
+    const Bytes p = rpc(optional, Bytes{});
+    m.write(p.data(), p.size());
+    EXPECT_EQ(port.errors.back(), improv::Error::UnknownRpc) << int(optional);
+  }
+  EXPECT_EQ(port.results.size(), 1u);
+  EXPECT_EQ(m.state(), improv::State::Authorized);
 }
 
 // ---- the manifest ----------------------------------------------------------------------
@@ -374,68 +350,34 @@ TEST(Manifest, AWifiTokenIsMarkedAndAPagesIsNot) {
   EXPECT_FALSE(wifiota::isWifiToken(page));
 }
 
-// ---- remembered networks ---------------------------------------------------------------
+// ---- the remembered network -----------------------------------------------------------
 
-TEST(Networks, TheNewestFirstTheSameSsidReplacedTheOldestDropped) {
-  wifiota::Networks n;
-  EXPECT_TRUE(n.remember("A", "a1"));
-  EXPECT_TRUE(n.remember("B", "b1"));
-  EXPECT_TRUE(n.remember("C", "c1"));
-  EXPECT_TRUE(n.remember("A", "a2"));
-  ASSERT_EQ(n.size(), 3u);
-  EXPECT_STREQ(n[0].ssid, "A");
-  EXPECT_STREQ(n[0].password, "a2");
-  EXPECT_STREQ(n[1].ssid, "C");
-  EXPECT_STREQ(n[2].ssid, "B");
-  EXPECT_TRUE(n.remember("D", ""));
-  EXPECT_EQ(n.size(), 3u);
-  EXPECT_STREQ(n[0].ssid, "D");
-  EXPECT_STREQ(n[2].ssid, "C") << "B was the oldest";
-  EXPECT_FALSE(n.remember("", "x"));
-  EXPECT_FALSE(n.remember(std::string(33, 's'), "x"));
-  EXPECT_FALSE(n.remember("s", std::string(65, 'p')));
-  n.forgetAll();
-  EXPECT_EQ(n.size(), 0u);
+TEST(Remembered, CredentialsRefuseWhatCouldNotBeJoined) {
+  ASSERT_TRUE(wifiota::credentials("Home Net", ""));
+  EXPECT_STREQ(wifiota::credentials("Home Net", "pw")->ssid, "Home Net");
+  EXPECT_FALSE(wifiota::credentials("", "x"));
+  EXPECT_FALSE(wifiota::credentials(std::string(33, 's'), "x"));
+  EXPECT_FALSE(wifiota::credentials("s", std::string(65, 'p')));
+  EXPECT_FALSE(wifiota::credentials(std::string_view("a\0b", 3), "x"));
+  EXPECT_TRUE(wifiota::credentials(std::string(32, 's'), std::string(64, 'p')));
 }
 
-TEST(Networks, TriesWhatItHearsStrongestFirstThenTheRest) {
-  wifiota::Networks n;
-  n.remember("Hidden", "h");
-  n.remember("Grandma", "g");
-  n.remember("Home", "p");   // Home, Grandma, Hidden
-  const wifiota::Networks::Heard heard[] = {{"Neighbour", -30}, {"Grandma", -60}, {"Home", -75}, {"Home", -55}};
-  uint8_t order[wifiota::Networks::kMax];
-  ASSERT_EQ(n.order(heard, 4, order), 3u);
-  EXPECT_STREQ(n[order[0]].ssid, "Home");
-  EXPECT_STREQ(n[order[1]].ssid, "Grandma");
-  EXPECT_STREQ(n[order[2]].ssid, "Hidden") << "never heard: still tried, last";
-  ASSERT_EQ(n.order(nullptr, 0, order), 3u);
-  EXPECT_EQ(order[0], 0);
-}
-
-TEST(Networks, TheStoredBlobRoundTripsAndRefusesJunk) {
-  wifiota::Networks n;
-  n.remember("Grandma", "");
-  n.remember("Home Net", "correct horse battery staple");
-  uint8_t blob[wifiota::Networks::kBlobMax];
-  const size_t len = n.encode(blob, sizeof blob);
-  ASSERT_GT(len, 0u);
-  const std::optional<wifiota::Networks> back = wifiota::Networks::decode(blob, len);
+TEST(Remembered, TheStoredBlobRoundTripsAndRefusesJunk) {
+  const improv::Credentials c = *wifiota::credentials("Home Net", "correct horse battery staple");
+  uint8_t blob[wifiota::kRememberedMax];
+  const size_t len = wifiota::encodeRemembered(c, blob, sizeof blob);
+  ASSERT_EQ(len, 1 + 1 + 8 + 1 + 28u);
+  const std::optional<improv::Credentials> back = wifiota::decodeRemembered(blob, len);
   ASSERT_TRUE(back);
-  ASSERT_EQ(back->size(), 2u);
-  EXPECT_STREQ((*back)[0].ssid, "Home Net");
-  EXPECT_STREQ((*back)[0].password, "correct horse battery staple");
-  EXPECT_STREQ((*back)[1].ssid, "Grandma");
-  EXPECT_FALSE(wifiota::Networks::decode(blob, len - 1)) << "cut short";
+  EXPECT_STREQ(back->ssid, "Home Net");
+  EXPECT_STREQ(back->password, "correct horse battery staple");
+  EXPECT_FALSE(wifiota::decodeRemembered(blob, len - 1)) << "cut short";
+  EXPECT_FALSE(wifiota::decodeRemembered(blob, 2)) << "only a header";
   blob[0] = 9;
-  EXPECT_FALSE(wifiota::Networks::decode(blob, len)) << "another version";
-  const uint8_t none[] = {wifiota::Networks::kBlobVersion};
-  ASSERT_TRUE(wifiota::Networks::decode(none, 1));
-  EXPECT_EQ(wifiota::Networks::decode(none, 1)->size(), 0u);
-  wifiota::Networks full;
-  for (const char* s : {"a", "b", "c"}) full.remember(s, std::string(64, 'p'));
-  EXPECT_LE(full.encode(blob, sizeof blob), wifiota::Networks::kBlobMax);
-  EXPECT_GT(full.encode(blob, sizeof blob), 0u);
+  EXPECT_FALSE(wifiota::decodeRemembered(blob, len)) << "another version";
+  const improv::Credentials longest = *wifiota::credentials(std::string(32, 's'), std::string(64, 'p'));
+  EXPECT_EQ(wifiota::encodeRemembered(longest, blob, sizeof blob), wifiota::kRememberedMax);
+  EXPECT_EQ(wifiota::encodeRemembered(longest, blob, sizeof blob - 1), 0u);
 }
 
 // ---- knowing it is plugged in ----------------------------------------------------------
@@ -526,19 +468,14 @@ TEST(Schedule, AReadManifestWaitsSixHours) {
   EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kCheckEveryMs), Hold::Open);
 }
 
-TEST(Schedule, FailuresBackOffToHalfAnHour) {
+TEST(Schedule, AFailureTriesAgainInTenMinutes) {
   Schedule s;
-  uint32_t now = 0;
-  std::vector<uint32_t> waits;
-  for (int i = 0; i < 8; ++i) {
-    s.failed(now);
-    waits.push_back(s.dueIn(now));
-    now += s.dueIn(now);
-  }
-  EXPECT_EQ(waits, (std::vector<uint32_t>{60000, 120000, 240000, 480000, 960000, 1800000, 1800000, 1800000}));
-  s.checked(now);
-  s.failed(now + Schedule::kCheckEveryMs);
-  EXPECT_EQ(s.dueIn(now + Schedule::kCheckEveryMs), Schedule::kFirstRetryMs) << "a read starts the backoff over";
+  s.failed(1000);
+  EXPECT_EQ(s.dueIn(1000), 10u * 60 * 1000);
+  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kRetryMs - 1), Hold::NotDue);
+  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kRetryMs), Hold::Open);
+  s.failed(1000 + Schedule::kRetryMs);
+  EXPECT_EQ(s.dueIn(1000 + Schedule::kRetryMs), Schedule::kRetryMs) << "the same wait every time";
 }
 
 TEST(Schedule, ACheckClosesForAnyoneButTheTrialsConfirmNeverDoes) {

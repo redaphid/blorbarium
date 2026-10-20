@@ -1,7 +1,5 @@
 #include "wifiota/improv.h"
 
-#include <algorithm>
-#include <cstdio>
 #include <cstring>
 
 namespace wifiota::improv {
@@ -71,18 +69,11 @@ void Machine::run(Command c, const uint8_t* data, size_t n) {
       set(State::Provisioning);
       return port_.join(*creds);
     }
-    case Command::Identify:
-      if (error_ != Error::None) port_.showError(error_ = Error::None);
-      return port_.identify();
     case Command::DeviceInfo: {
       if (error_ != Error::None) port_.showError(error_ = Error::None);
       const std::string_view s[] = {info_.firmware, info_.version, info_.chip, info_.name};
       return result(c, s, 4);
     }
-    case Command::ScanNetworks:
-      if (state_ == State::Provisioning) return fail(Error::Unknown);
-      if (error_ != Error::None) port_.showError(error_ = Error::None);
-      return port_.scan();
   }
   fail(Error::UnknownRpc);
 }
@@ -97,31 +88,6 @@ void Machine::couldNotJoin() {
   if (state_ != State::Provisioning) return;
   fail(Error::UnableToConnect);
   set(State::Authorized);
-}
-
-void Machine::scanned(const Network* networks, size_t n) {
-  // Strongest first, each SSID once (a house with two access points has one network), hidden ones left out.
-  const Network* picked[kMaxNetworks];
-  size_t count = 0;
-  for (size_t i = 0; i < n; ++i) {
-    const Network& net = networks[i];
-    if (!net.ssid[0]) continue;
-    size_t at = 0;
-    while (at < count && std::strcmp(picked[at]->ssid, net.ssid) != 0) ++at;
-    if (at < count) {
-      if (net.rssi > picked[at]->rssi) picked[at] = &net;
-      continue;
-    }
-    if (count < kMaxNetworks) picked[count++] = &net;
-  }
-  std::sort(picked, picked + count, [](const Network* a, const Network* b) { return a->rssi > b->rssi; });
-  for (size_t i = 0; i < count; ++i) {
-    char rssi[8];
-    std::snprintf(rssi, sizeof rssi, "%d", int(picked[i]->rssi));
-    const std::string_view s[] = {picked[i]->ssid, rssi, picked[i]->secured ? "YES" : "NO"};
-    result(Command::ScanNetworks, s, 3);
-  }
-  result(Command::ScanNetworks, nullptr, 0);   // the end of the list
 }
 
 void Machine::set(State s) {

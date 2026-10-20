@@ -73,15 +73,13 @@ class PacketRing {
     slots_ = static_cast<Packet*>(heap_caps_malloc(sizeof(Packet) * kSlots, MALLOC_CAP_SPIRAM));
     if (!slots_) slots_ = static_cast<Packet*>(malloc(sizeof(Packet) * kSlots));
   }
-  // False when it was dropped (full, or too long). One producer task at a time.
-  bool push(const uint8_t* p, size_t n, ota::Peer peer) {
+  void push(const uint8_t* p, size_t n, ota::Peer peer) {
     const size_t head = head_.load(std::memory_order_relaxed), next = (head + 1) % kSlots;
-    if (!slots_ || n > kMax || next == tail_.load(std::memory_order_acquire)) return false;
+    if (!slots_ || n > kMax || next == tail_.load(std::memory_order_acquire)) return;
     slots_[head].len = uint16_t(n);
     slots_[head].peer = peer;
     std::memcpy(slots_[head].bytes, p, n);
     head_.store(next, std::memory_order_release);
-    return true;
   }
   template <class F>
   void drain(F&& f) {

@@ -10,7 +10,10 @@
 //                                               --failed--> authorized  (error: unable to connect)
 //
 // The badge needs no authorization step (the spec's state 1): see
-// docs/wifi-ota.md, "Security", for why and what a stranger could do.
+// docs/wifi-ota.md, "Security", for why and what a stranger could do. It
+// answers Wi-Fi settings and device info; identify and scan, both optional
+// in the spec, are left out (docs/wifi-ota.md "What was cut") and answer
+// unknown RPC, and the capabilities say no identify.
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -26,13 +29,13 @@ inline constexpr const char* kRpcResult = "00467768-6228-2272-4663-277478268004"
 inline constexpr const char* kCapabilities = "00467768-6228-2272-4663-277478268005";   // read
 // Advertised as 16-bit service data: the state, the capabilities, four zero bytes.
 inline constexpr uint16_t kServiceDataUuid = 0x4677;
-inline constexpr uint8_t kCanIdentify = 0x01;   // capabilities bit 0
+inline constexpr uint8_t kCapabilityBits = 0x00;   // bit 0, identify: not offered
 
 enum class State : uint8_t { AuthorizationRequired = 1, Authorized = 2, Provisioning = 3, Provisioned = 4 };
 enum class Error : uint8_t { None = 0, InvalidRpc = 1, UnknownRpc = 2, UnableToConnect = 3, NotAuthorized = 4, Unknown = 0xff };
-// 1 and 2 are the BLE spec's; 3 and 4 are the serial spec's numbers, which
-// newer clients send over BLE too. A client that never sends them loses nothing.
-enum class Command : uint8_t { WifiSettings = 1, Identify = 2, DeviceInfo = 3, ScanNetworks = 4 };
+// The spec's numbers for the two this badge answers (3 is the serial spec's,
+// which newer clients send over BLE too). 2 (identify) and 4 (scan) are unknown RPCs.
+enum class Command : uint8_t { WifiSettings = 1, DeviceInfo = 3 };
 
 // Command, data length, data, checksum.
 inline constexpr size_t kMaxPacket = 3 + 255;
@@ -52,13 +55,6 @@ struct Credentials {
 // The command's data: an SSID length and bytes, then a password length and bytes, nothing after.
 std::optional<Credentials> parseCredentials(const uint8_t* data, size_t n);
 
-// One network a scan heard.
-struct Network {
-  char ssid[33] = "";
-  int8_t rssi = 0;
-  bool secured = false;
-};
-
 // What the machine needs from the badge.
 class Port {
  public:
@@ -66,9 +62,7 @@ class Port {
   virtual void showState(State) = 0;                        // the Current State characteristic: set it and notify
   virtual void showError(Error) = 0;                        // the Error State characteristic
   virtual void sendResult(const uint8_t* p, size_t n) = 0;  // the RPC Result characteristic
-  virtual void identify() = 0;                              // show which badge this is
   virtual void join(const Credentials&) = 0;                // try them: answer joined() or couldNotJoin()
-  virtual void scan() = 0;                                  // look for networks: answer scanned()
 };
 
 // Device info's four strings.
@@ -81,8 +75,6 @@ struct DeviceInfo {
 
 class Machine {
  public:
-  static constexpr size_t kMaxNetworks = 12;   // a scan's results, strongest first, one SSID once
-
   Machine(Port& port, DeviceInfo info) : port_(port), info_(info) {}
 
   State state() const { return state_; }
@@ -96,7 +88,6 @@ class Machine {
   // The join's outcome. `url` is where the page goes next (the result's one string).
   void joined(std::string_view url);
   void couldNotJoin();
-  void scanned(const Network* networks, size_t n);
 
  private:
   void run(Command, const uint8_t* data, size_t n);

@@ -6,9 +6,9 @@
 // Wi-Fi is off unless a window is open. A window is one of:
 //   - Check: on external power, idle (low power: no user input for the idle
 //     time), nobody there, no duel or fight mode, and a check is due. Due at
-//     once after boot, then every kCheckEveryMs after a manifest was read;
-//     after a failure (no network, no answer) it backs off from kFirstRetryMs,
-//     doubling to kMaxRetryMs, so on power it keeps trying all night;
+//     once after boot, then every kCheckEveryMs after a manifest was read,
+//     and kRetryMs after a failure (no network, no answer), so on power it
+//     keeps trying all night;
 //   - Forced: `DEBUG ota check`, now, whatever the power and whoever is there;
 //   - Confirm: an image on trial after an update over Wi-Fi, which must reach
 //     the site over Wi-Fi within the trial's 5 minutes to keep itself;
@@ -23,7 +23,7 @@
 namespace wifiota {
 
 struct Facts {
-  bool enabled;        // networks remembered, and the badge's own switch is on
+  bool enabled;        // a network remembered, and the badge's own switch is on
   bool onPower;        // PowerSense
   bool idle;           // low power: no user input for the idle time
   bool someoneThere;   // a phone connected, or a question or a Bluetooth update on the screen
@@ -40,8 +40,7 @@ const char* holdName(Hold);
 class Schedule {
  public:
   static constexpr uint32_t kCheckEveryMs = 6u * 60 * 60 * 1000;   // the owner: "every few hours"
-  static constexpr uint32_t kFirstRetryMs = 60u * 1000;
-  static constexpr uint32_t kMaxRetryMs = 30u * 60 * 1000;
+  static constexpr uint32_t kRetryMs = 10u * 60 * 1000;
 
   // Whether a Check window may open now.
   Hold checkHold(const Facts& f, uint32_t now) const {
@@ -70,21 +69,13 @@ class Schedule {
   // Milliseconds until the next check is due, 0 when it is.
   uint32_t dueIn(uint32_t now) const { return due(now) ? 0 : *next_ - now; }
 
-  // A manifest was read: the next check is a while away, and failures start over.
-  void checked(uint32_t now) {
-    next_ = now + kCheckEveryMs;
-    retry_ = kFirstRetryMs;
-  }
-  // No network, no answer, a broken manifest: try again later, later each time.
-  void failed(uint32_t now) {
-    next_ = now + retry_;
-    retry_ = retry_ >= kMaxRetryMs / 2 ? kMaxRetryMs : retry_ * 2;
-  }
-  uint32_t retryMs() const { return retry_; }
+  // A manifest was read: the next check is a while away.
+  void checked(uint32_t now) { next_ = now + kCheckEveryMs; }
+  // No network, no answer, a broken manifest: try again in a while.
+  void failed(uint32_t now) { next_ = now + kRetryMs; }
 
  private:
   std::optional<uint32_t> next_;   // unset: due at once (after boot)
-  uint32_t retry_ = kFirstRetryMs;
 };
 
 }  // namespace wifiota

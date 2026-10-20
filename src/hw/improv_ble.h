@@ -33,9 +33,8 @@ class ImprovBle : public wifiota::improv::Port {
     nus.serve([this](NimBLEServer* server, NimBLEAdvertising* adv) { build(server, adv); });
   }
 
-  // What the badge does for each RPC (src/wifi_ota.h).
+  // What the badge does with the network a phone sent (src/wifi_ota.h).
   std::function<void(const wifiota::improv::Credentials&)> onJoin;
-  std::function<void()> onScan, onIdentify;
 
   wifiota::improv::Machine& machine() { return machine_; }
 
@@ -63,14 +62,8 @@ class ImprovBle : public wifiota::improv::Port {
     result_->setValue(p, n);
     result_->notify();
   }
-  void identify() override {
-    if (onIdentify) onIdentify();
-  }
   void join(const wifiota::improv::Credentials& c) override {
     if (onJoin) onJoin(c);
-  }
-  void scan() override {
-    if (onScan) onScan();
   }
 
  private:
@@ -85,7 +78,7 @@ class ImprovBle : public wifiota::improv::Port {
     result_ = s->createCharacteristic(im::kRpcResult, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     NimBLECharacteristic* caps = s->createCharacteristic(im::kCapabilities, NIMBLE_PROPERTY::READ);
     for (NimBLECharacteristic* c : {state_, error_, rpc, result_, caps}) c->setCallbacks(&callbacks_);
-    const uint8_t state = uint8_t(machine_.state()), none = 0, can = im::kCanIdentify;
+    const uint8_t state = uint8_t(machine_.state()), none = 0, can = im::kCapabilityBits;
     state_->setValue(&state, 1);
     error_->setValue(&none, 1);
     caps->setValue(&can, 1);
