@@ -17,6 +17,7 @@ namespace {
 struct Segment {
   std::string label;
   int knockKnocks = 0, singles = -1;   // -1: any
+  bool atLeast = false;                // "5+": at least that many
   std::vector<std::pair<uint32_t, BodySample>> samples;
 };
 
@@ -28,8 +29,10 @@ std::vector<Segment> loadHands() {
     std::istringstream in(line);
     if (line[0] == '=') {
       Segment s;
-      std::string eq, singles;
-      in >> eq >> s.label >> s.knockKnocks >> singles;
+      std::string eq, singles, kk;
+      in >> eq >> s.label >> kk >> singles;
+      s.atLeast = !kk.empty() && kk.back() == '+';
+      s.knockKnocks = std::stoi(kk);
       s.singles = singles == "-" ? -1 : std::stoi(singles);
       out.push_back(s);
       continue;
@@ -37,6 +40,7 @@ std::vector<Segment> loadHands() {
     uint32_t ms;
     BodySample b;
     in >> ms >> b.ax >> b.ay >> b.az;
+    if (in >> b.peakAx >> b.peakAy >> b.peakAz) b.hasPeak = true;
     out.back().samples.push_back({ms, b});
   }
   return out;
@@ -88,12 +92,13 @@ Count script(std::initializer_list<uint32_t> knocksAt, uint32_t untilMs = 4000) 
 
 TEST(Hands, EverySegmentOfTheRecordingCountsWhatTheHandsDid) {
   const std::vector<Segment> segs = loadHands();
-  ASSERT_GE(segs.size(), 11u) << "test/fixtures/hands_2026-10-19.txt";
+  ASSERT_GE(segs.size(), 13u) << "test/fixtures/hands_2026-10-19.txt";
   for (const Segment& s : segs) {
     const Count c = play(s);
     std::printf("[ hands ] %-22s knock knocks %d (want %d), singles %d:%s\n", s.label.c_str(), c.knockKnocks,
                 s.knockKnocks, c.singles, c.at.c_str());
-    EXPECT_EQ(c.knockKnocks, s.knockKnocks) << s.label << c.at;
+    if (s.atLeast) EXPECT_GE(c.knockKnocks, s.knockKnocks) << s.label << c.at;
+    else EXPECT_EQ(c.knockKnocks, s.knockKnocks) << s.label << c.at;
     if (s.singles >= 0) EXPECT_EQ(c.singles, s.singles) << s.label << c.at;
   }
 }

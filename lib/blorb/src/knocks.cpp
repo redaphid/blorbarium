@@ -30,20 +30,57 @@ void KnockSense::gravityBefore(int32_t& x, int32_t& y, int32_t& z) const {
   x /= kN, y /= kN, z /= kN;
 }
 
+// The magnitude's variance over the history, less the newest kLead samples.
+int64_t KnockSense::spread2() const {
+  constexpr uint8_t kN = kHistory - kLead;
+  int64_t sum = 0, sq = 0;
+  for (uint8_t i = 0; i < kN; ++i) {
+    const Past& p = hist_[(histAt_ + i) % kHistory];
+    sum += p.mag, sq += int64_t(p.mag) * p.mag;
+  }
+  return (int64_t(kN) * sq - sum * sum) / (int64_t(kN) * kN);   // exact: a truncated mean squared is off by 2 x mean x its fraction
+}
+
 // Steady before the knock: the magnitude's spread, and the jerk of the
 // quietest three samples in four.
 bool KnockSense::steadyBefore() {
   constexpr uint8_t kN = kHistory - kLead;
-  int64_t sum = 0, sq = 0;
   int32_t jerks[kN];
-  for (uint8_t i = 0; i < kN; ++i) {
-    const Past& p = hist_[(histAt_ + i) % kHistory];
-    sum += p.mag, sq += int64_t(p.mag) * p.mag;
-    jerks[i] = p.jerk;
-  }
-  const int64_t mean = sum / kN, var = sq / kN - mean * mean;
+  for (uint8_t i = 0; i < kN; ++i) jerks[i] = hist_[(histAt_ + i) % kHistory].jerk;
   std::sort(jerks, jerks + kN);
-  return var < int64_t(kSteadySdMg) * kSteadySdMg && jerks[kN * 3 / 4] < kSteadyJerkMg;
+  return spread2() < int64_t(kSteadySdMg) * kSteadySdMg && jerks[kN * 3 / 4] < kSteadyJerkMg;
+}
+
+// A blip is over: does it start, carry on, or spoil a burst on the table?
+void KnockSense::endBlip() {
+  inBlip_ = false;
+  const Blip b = blip_;
+  const bool quietBefore = !hadBlip_ || b.start - lastBlip_.end >= kRestQuietMs;
+  hadBlip_ = true, lastBlip_ = b;
+  if (restN_ == 0) {
+    if (b.steady && quietBefore && b.n <= kBlipMaxSamples && b.max >= kRestFirstMg) restN_ = 1, restLast_ = b.start;
+    return;
+  }
+  if (b.n > kBlipMaxSamples) restN_ = 0;   // a rattle: the desk, not a knuckle
+  else if (b.max >= kRestNextMg && b.start - restLast_ >= kFastMs) ++restN_, restLast_ = b.start;
+}
+
+uint8_t KnockSense::restSample(int32_t peakJerk, uint32_t ms) {
+  uint8_t out = 0;
+  if (inBlip_ && peakJerk < kBlipMg && ms - blip_.end > 40) endBlip();
+  if (restN_ && !inBlip_ && ms - restLast_ > kChainMs) {
+    out = restN_ <= kMaxKnocks ? (restN_ >= 2 ? 2 : 1) : 0;
+    restN_ = 0;
+  }
+  if (peakJerk >= kBlipMg) {
+    if (!inBlip_) {
+      inBlip_ = true;
+      blip_ = Blip{ms, ms, peakJerk, 1, histN_ == kHistory && spread2() < int64_t(kRestSdMg) * kRestSdMg};
+    } else {
+      blip_.end = ms, blip_.max = std::max(blip_.max, peakJerk), ++blip_.n;
+    }
+  }
+  return out;
 }
 
 uint8_t KnockSense::decide() {
@@ -87,6 +124,13 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
     sumX_ += s.ax, sumY_ += s.ay, sumZ_ += s.az, ++sumN_;
   }
   dev2_ = dev1_, dev1_ = dev;
+  // On a table (rest path): only with the peak; a burst the hand path already
+  // has is the hand path's, and whichever decides first speaks once.
+  if (s.hasPeak) {
+    const uint8_t rest = restSample(jerk, ms);
+    if (inBurst_ && steady_) restN_ = 0;
+    if (!out && rest) out = rest;
+  }
   const int32_t mag = isqrt32(uint32_t(int32_t(s.ax) * s.ax + int32_t(s.ay) * s.ay + int32_t(s.az) * s.az));
   hist_[histAt_] = Past{s.ax, s.ay, s.az, mag, jerk};
   histAt_ = uint8_t((histAt_ + 1) % kHistory);
