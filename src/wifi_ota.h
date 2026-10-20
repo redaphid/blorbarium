@@ -178,6 +178,7 @@ static void startImage(const wifiota::Manifest& m) {
 
 static void readManifest() {
   if (!openGet(manifestUrl())) return failWindow("manifest: %s", get.error());
+  if (get.size() > int(wifiota::kManifestMax)) return failWindow("manifest: %d bytes is not a manifest", get.size());
   const String text = get.text();
   get.close();
   const std::optional<wifiota::Manifest> m = wifiota::parseManifest(std::string_view(text.c_str(), text.length()));
