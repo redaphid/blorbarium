@@ -64,9 +64,10 @@ class SerialLink : public blorb::Link {
   size_t len_ = 0;
   bool heard_ = false;
   // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
-  // (one slot dropped all but the last). Lines are short: 64 bytes each is ample.
+  // (one slot dropped all but the last). 128 bytes holds the longest, `DEBUG wifi
+  // add "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h).
   static constexpr uint8_t kDebugQueue = 8;
-  static constexpr size_t kDebugLine = 64;
+  static constexpr size_t kDebugLine = 128;
   char debug_[kDebugQueue][kDebugLine] = {};
   uint8_t debugHead_ = 0, debugTail_ = 0;
   char taken_[kDebugLine] = "";
@@ -139,6 +140,9 @@ static hw::PacketRing otaPackets;
 static hw::OtaData otaData(otaPackets, ble);
 static ota::Session updater(otaSlot, otaHost, ble,
                             ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
+// The unattended update's data comes from here (src/wifi_ota.h): never a
+// Bluetooth connection's number, which counts up from 1.
+static constexpr ota::Peer kWifiPeer = 0xffffffffu;
 static hw::OtaLink otaLink(ble, updater);
 static ota::Trial trial;
 static hw::EspTrialPort trialPort;
@@ -558,8 +562,14 @@ bool DishOtaHost::busy() {
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
+static bool wifiYieldRadio();       // src/wifi_ota.h
+static bool wifiUpdateHoldsRadio();
+static void wifiBegin();
 bool RadioGate::open() {
-  why = updater.active() ? "ota_active" : trial.onTrial() ? "trial" : nullptr;
+  // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
+  // pins the channel to its access point's, and ESP-NOW needs channel 1.
+  const bool wifiUp = wifiYieldRadio();
+  why = wifiUpdateHoldsRadio() ? "ota_active" : trial.onTrial() ? "trial" : wifiUp ? "wifi_closing" : nullptr;
   const bool ok = !why && inner.open();
   if (!why && !ok) why = inner.refusal();
   if (ok) radioDiag.say("radio open=1"), logged = "";
@@ -798,6 +808,7 @@ void setup() {
     trialWatchdog.start();
   }
   otaPackets.begin();
+  wifiBegin();
   ble.keepWhile([] { return updater.active(); });
   const char* name = ble.begin(bleName(mac), &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
@@ -1112,6 +1123,9 @@ static const char* powerLine(char* out, size_t n, uint32_t now);
 static bool powerHeld();
 static bool remotePress(uint32_t ms, bool twice);
 
+static void wifiVerb(const char* line);   // src/wifi_ota.h
+static void otaVerb(const char* line);
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
@@ -1125,6 +1139,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "duel") == 0) return duelNow();
+  if (std::strcmp(verb, "wifi") == 0) return wifiVerb(line);
+  if (std::strcmp(verb, "ota") == 0) return otaVerb(line);
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
@@ -1144,7 +1160,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
-                  "power [low|wake|idle <s>], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|idle <s>], reboot, bletest <bytes>, wifi [forget|add|on|off|power], ota check [url])\n",
+                  verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1243,9 +1260,10 @@ static void pmBegin() {}
 
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
+static bool wifiIdentifying();   // src/wifi_ota.h: Improv's identify shows the badge's name
 static bool powerHeld() {
-  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || updater.active() || debugAsks() ||
-         bool(shot);
+  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 ||
+         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || bool(shot) || wifiIdentifying();
 }
 
 static const char* powerLine(char* out, size_t n, uint32_t now) {
@@ -1331,6 +1349,11 @@ static void powerVerb(const char* a, const char* line) {
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
 }
 
+#include "wifi_ota.h"
+static bool wifiYieldRadio() { return wififw::yieldRadio(); }
+static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
+static void wifiBegin() { wififw::begin(); }
+
 // The debug link's PRESS and DOUBLE: never while a question owns the button.
 static bool remotePress(uint32_t ms, bool twice) {
   if (updater.asking() || debugAsks()) return false;
@@ -1369,7 +1392,7 @@ void loop() {
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
-    else dbgfw::draw(canvas);
+    else dbgfw::draw(canvas), wififw::draw(canvas);
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     paint::drawIdleBar(canvas, uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs()));
 #endif
@@ -1394,7 +1417,8 @@ void loop() {
   }
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
-  if (updater.rebootDue(millis())) restartIntoUpdate();
+  wififw::poll(millis());
+  if (updater.rebootDue(millis()) && wififw::mayRestart()) restartIntoUpdate();
   trialWatchdog.beat(millis());
   if (trial.poll(millis()) != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
     trialWatchdog.stop();
