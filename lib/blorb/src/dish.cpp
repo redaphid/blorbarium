@@ -128,28 +128,14 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
     if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;
     const char* what = f == stim::button ? "press" : f == stim::button_double ? "double" : nullptr;
     // The twins (controls.h) say which gesture spoke, not BOOT.
-    if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !buttonDown_) diag_.say("gesture knock_knock=press");
-    else if (f == stim::button_hold && !buttonDown_ && detectors_.side.holding())
+    if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !cues_.buttonDown()) diag_.say("gesture knock_knock=press");
+    else if (f == stim::button_hold && !cues_.buttonDown() && detectors_.side.holding())
       diag_.say("gesture side=hold ms=%u", unsigned(kButtonHoldMs));
     else if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
-    else if (what && gapMs_ == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(heldMs_));
-    else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(heldMs_), unsigned(gapMs_));
+    else if (what && cues_.lastGapMs() == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(cues_.lastPressMs()));
+    else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(cues_.lastPressMs()), unsigned(cues_.lastGapMs()));
   }
-  if (s.buttonDown && !buttonDown_) {
-    gapMs_ = releasedOnce_ ? nowMs - tapReleaseMs_ : UINT32_MAX;
-    buttonSinceMs_ = nowMs;
-    tapSecond_ = tapArmed_ && nowMs - tapReleaseMs_ <= kDoublePressMs;
-  } else if (!s.buttonDown && buttonDown_) {
-    heldMs_ = nowMs - buttonSinceMs_;
-    tapArmed_ = heldMs_ < kButtonHoldMs && !tapSecond_;
-    tapReleaseMs_ = nowMs;
-    releasedOnce_ = true;
-  }
-  buttonDown_ = s.buttonDown;
-  const bool hold = buttonDown_ || (kSideHoldHolds && detectors_.side.holding());
-  if (hold && !holdDown_) holdSinceMs_ = nowMs;
-  holdDown_ = hold;
-  lastSampleMs_ = nowMs;
+  cues_.sample(s, detectors_.side.holding(), nowMs);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -197,7 +183,7 @@ void Dish::runOneTick(Link& link) {
   sideWas_ = side;
   tiltHist_[tick_ % kAimHistory][0] = tiltX_, tiltHist_[tick_ % kAimHistory][1] = tiltY_;
   const Fx aimX = side ? sideTilt_[0] : tiltX_, aimY = side ? sideTilt_[1] : tiltY_;
-  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, holdDown_, live_.settings.lineageId, petDay, tick_)
+  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
           .save)
     save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
@@ -430,17 +416,16 @@ Appearance Dish::appearance() const {
     a.pose = pose::sleep;
     a.expression = a.previous = expr::asleep;
     a.intensity = Fx::one();
-    a.boot = bootHint(BootContext::Sealed, nullptr, 0);
+    a.boot = bootHint(BootContext::Sealed, nullptr);
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
-  a.boot = bootHint(ctx, duel_.active() ? &v : nullptr, holdDown_ ? lastSampleMs_ - holdSinceMs_ : 0);
+  a.boot = bootHint(ctx, duel_.active() ? &v : nullptr);
+  cues_.dress(a.boot, bootMeaning(ctx), a.hangCharge);
   if ((ctx == BootContext::Awake || ctx == BootContext::Asleep || ctx == BootContext::Lobby) && live_.habitat.pantry == 0)
     a.boot.greyed = true;
-  if (a.boot.hasDouble && tapArmed_ && !buttonDown_ && lastSampleMs_ - tapReleaseMs_ <= kDoublePressMs)
-    a.boot.doubleFill = uint8_t(std::max<uint32_t>(1, 255 - (lastSampleMs_ - tapReleaseMs_) * 255 / kDoublePressMs));
   a.dueling = duel_.active();
   if (a.dueling && (v.phase == DuelPhase::Lobby || v.phase == DuelPhase::Greeting)) {
     a.lobby = true;

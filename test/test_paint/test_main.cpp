@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include "blorb/appearance.h"
+#include "blorb/dish_duel.h"
 #include "blorb/registry.h"
 #include "paint/duel.h"
 #include "paint/marquee.h"
@@ -772,6 +773,29 @@ TEST(Previews, DumpWhenAsked) {
   shots.push_back({"remains", remains});
 
   for (const auto& [name, a] : shots) writePpm(std::string(dir) + "/" + name + ".ppm", *render(a, pack));
+
+  // The rim's BOOT hint as the firmware draws it over the dish (main.cpp
+  // drawFrame), at rest and with each gesture in flight (gesture_cues.h).
+  std::vector<std::pair<std::string, blorb::BootHint>> hints;
+  blorb::BootHint feed = blorb::bootHint(blorb::BootContext::Awake, nullptr);
+  hints.push_back({"hint_feed", feed});
+  blorb::BootHint knock = feed;
+  knock.knockWait = true;
+  hints.push_back({"hint_one_more_knock", knock});
+  blorb::BootHint side = feed;
+  side.holdFill = 128;
+  hints.push_back({"hint_side_hold_half", side});
+  blorb::BootHint hang = feed;
+  hang.doubleFill = 160;
+  hints.push_back({"hint_hang_rising", hang});
+  blorb::BootHint lobbyHold = blorb::bootHint(blorb::BootContext::Lobby, nullptr);
+  lobbyHold.holdVoid = true, lobbyHold.holdFill = 128;
+  hints.push_back({"hint_lobby_hold_does_nothing", lobbyHold});
+  for (const auto& [name, h] : hints) {
+    auto cv = render(idle, pack);
+    paint::drawBootHint(*cv, paint::rimHint(h));
+    writePpm(std::string(dir) + "/" + name + ".ppm", *cv);
+  }
 }
 
 }  // namespace

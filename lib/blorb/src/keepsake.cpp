@@ -453,14 +453,17 @@ struct Keepsake::Codec {
     }
   }
 
-  // Builds the occupant in place in `out`.
+  static std::optional<In> view(const Chunks& c, Chunk tag) {
+    const auto& b = c.bytes[uint8_t(tag)];
+    if (!b) return std::nullopt;
+    return In{b->p, b->n};
+  }
+
+  // Builds the occupant in place in `out`. A creature and a clutch are read
+  // out of line, so their temporaries are not on the stack under an egg's,
+  // whose constructor expresses a whole Phenotype (eggRulesOf).
   static bool getOccupant(const Chunks& c, Occupant& out) {
-    auto view = [&](Chunk tag) -> std::optional<In> {
-      const auto& b = c.bytes[uint8_t(tag)];
-      if (!b) return std::nullopt;
-      return In{b->p, b->n};
-    };
-    std::optional<In> occ = view(Chunk::Occupant), gen = view(Chunk::Genome);
+    std::optional<In> occ = view(c, Chunk::Occupant), gen = view(c, Chunk::Genome);
     if (!occ || !gen) return false;
     std::optional<Genome> genome = Genome::parse(gen->p, gen->n);
     if (!genome) return false;
@@ -475,61 +478,65 @@ struct Keepsake::Codec {
         e.incubated_ = incubated;
         return true;
       }
-      case Kind::Creature: {
-        std::optional<In> chem = view(Chunk::Chemistry), brain = view(Chunk::Brain), body = view(Chunk::Body),
-                          stats = view(Chunk::Stats);
-        if (!chem || !brain || !body || !stats) return false;
-        Creature& c = out.emplace<Creature>(Creature::Blank{});
-        c.genome_ = std::move(*genome);
-        c.generation_ = in.u16();
-        c.legacyFeats_ = in.u32();
-        c.stage_ = Stage(in.u8() & 3);
-        c.action_ = ActionId{in.u8()};
-        c.actionStart_ = in.u32();
-        c.actionDone_ = in.u8() != 0;
-        bool forced = in.u8() != 0;
-        ActionId forcedId{in.u8()};
-        if (forced) c.forced_ = forcedId;
-        c.face_.current = ExprId{in.u8()};
-        c.face_.previous = ExprId{in.u8()};
-        c.face_.intensity = in.fx();
-        c.face_.sinceTick = in.u32();
-        c.pendingSelf_ = getSenseOut(in);
-        c.rng_ = getRng(in);
-        for (Fx& v : c.chem_.chem) v = chem->fx();
-        for (Fx& v : c.chem_.locus) v = chem->fx();
-        getBrain(*brain, c.brain_);
-        c.body_ = getBody(*body);
-        c.scars_ = getScars(*body);
-        c.stats_ = getStats(*stats);
-        if (!in.ok || !chem->ok || !brain->ok || !body->ok || !stats->ok) return false;
-        // Derived, never saved: the phenotype is re-expressed stage by stage.
-        // Chemical levels and the instinct queue are saved, so nothing is reseeded.
-        for (uint8_t s = 0; s <= uint8_t(c.stage_); ++s) expressStage(c.genome_, Stage(s), c.legacyFeats_, c.pheno_);
-        return true;
-      }
-      case Kind::Clutch: {
-        Clutch& k = out.emplace<Clutch>();
-        k.parent = std::move(*genome);
-        k.generation = in.u16();
-        k.wildBonus = in.fx();
-        for (uint64_t& s : k.seeds) s = in.u64();
-        k.count = uint8_t(std::clamp<int>(in.u8(), 1, kMaxClutch));
-        k.cursor = uint8_t(in.u8() % k.count);
-        k.sinceDeath = in.u32();
-        k.cause = DeathCause(std::min<uint8_t>(in.u8(), uint8_t(DeathCause::Unknown)));
-        k.reached = Stage(in.u8() & 3);
-        for (uint8_t i = 0, n = in.u8(); i < n && in.ok; ++i) k.heirlooms.push_back(getBelief(in));
-        // A friend egg is never his first egg (the timeout's), and lies within the clutch.
-        if (in.ok && in.n - in.at >= 5) {
-          uint8_t slot = in.u8();
-          uint32_t seed = in.u32();
-          if (slot >= 2 && slot <= k.count) k.friendSlot = slot, k.friendSeed = seed;
-        }
-        return in.ok;
-      }
+      case Kind::Creature: return getCreature(c, in, *genome, out);
+      case Kind::Clutch: return getClutch(in, *genome, out);
     }
     return false;
+  }
+
+  [[gnu::noinline]] static bool getCreature(const Chunks& chunks, In& in, Genome& genome, Occupant& out) {
+    std::optional<In> chem = view(chunks, Chunk::Chemistry), brain = view(chunks, Chunk::Brain),
+                      body = view(chunks, Chunk::Body), stats = view(chunks, Chunk::Stats);
+    if (!chem || !brain || !body || !stats) return false;
+    Creature& c = out.emplace<Creature>(Creature::Blank{});
+    c.genome_ = std::move(genome);
+    c.generation_ = in.u16();
+    c.legacyFeats_ = in.u32();
+    c.stage_ = Stage(in.u8() & 3);
+    c.action_ = ActionId{in.u8()};
+    c.actionStart_ = in.u32();
+    c.actionDone_ = in.u8() != 0;
+    bool forced = in.u8() != 0;
+    ActionId forcedId{in.u8()};
+    if (forced) c.forced_ = forcedId;
+    c.face_.current = ExprId{in.u8()};
+    c.face_.previous = ExprId{in.u8()};
+    c.face_.intensity = in.fx();
+    c.face_.sinceTick = in.u32();
+    c.pendingSelf_ = getSenseOut(in);
+    c.rng_ = getRng(in);
+    for (Fx& v : c.chem_.chem) v = chem->fx();
+    for (Fx& v : c.chem_.locus) v = chem->fx();
+    getBrain(*brain, c.brain_);
+    c.body_ = getBody(*body);
+    c.scars_ = getScars(*body);
+    c.stats_ = getStats(*stats);
+    if (!in.ok || !chem->ok || !brain->ok || !body->ok || !stats->ok) return false;
+    // Derived, never saved: the phenotype is re-expressed stage by stage.
+    // Chemical levels and the instinct queue are saved, so nothing is reseeded.
+    for (uint8_t s = 0; s <= uint8_t(c.stage_); ++s) expressStage(c.genome_, Stage(s), c.legacyFeats_, c.pheno_);
+    return true;
+  }
+
+  [[gnu::noinline]] static bool getClutch(In& in, Genome& genome, Occupant& out) {
+    Clutch& k = out.emplace<Clutch>();
+    k.parent = std::move(genome);
+    k.generation = in.u16();
+    k.wildBonus = in.fx();
+    for (uint64_t& s : k.seeds) s = in.u64();
+    k.count = uint8_t(std::clamp<int>(in.u8(), 1, kMaxClutch));
+    k.cursor = uint8_t(in.u8() % k.count);
+    k.sinceDeath = in.u32();
+    k.cause = DeathCause(std::min<uint8_t>(in.u8(), uint8_t(DeathCause::Unknown)));
+    k.reached = Stage(in.u8() & 3);
+    for (uint8_t i = 0, n = in.u8(); i < n && in.ok; ++i) k.heirlooms.push_back(getBelief(in));
+    // A friend egg is never his first egg (the timeout's), and lies within the clutch.
+    if (in.ok && in.n - in.at >= 5) {
+      uint8_t slot = in.u8();
+      uint32_t seed = in.u32();
+      if (slot >= 2 && slot <= k.count) k.friendSlot = slot, k.friendSeed = seed;
+    }
+    return in.ok;
   }
 
   static void put(Out& o, const Snapshot& s, uint32_t seq) {

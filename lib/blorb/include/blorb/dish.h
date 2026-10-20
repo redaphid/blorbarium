@@ -10,6 +10,7 @@
 #include "blorb/appearance.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
+#include "blorb/gesture_cues.h"
 #include "blorb/habitat.h"
 #include "blorb/keepsake.h"
 #include "blorb/lineage.h"
@@ -215,14 +216,10 @@ class Dish {
   SenseOut pending_;               // what the detectors saw since the last tick
   DishDuel duel_;
   Air* air_ = nullptr;
-  // BOOT's level, from the samples: a duel times its 3 s holds by it, and the
-  // rim's hold ring fills with it.
-  bool buttonDown_ = false;
-  uint32_t buttonSinceMs_ = 0, lastSampleMs_ = 0;
-  // The hold as a level, whoever holds: BOOT down, or turned onto a side
-  // (SideHoldDetector, controls.h). What the duel and the ring read.
-  bool holdDown_ = false;
-  uint32_t holdSinceMs_ = 0;
+  // Every BOOT word in flight, from BOOT or its body twin: the hold as a
+  // level (what the duel times its 3 s holds by), a first press or knock
+  // waiting for its second, and how the rim's hint shows it (gesture_cues.h).
+  GestureCues cues_;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn
   // (turning him tips the tilt): the last kAimHistory ticks of tilt.
@@ -231,14 +228,6 @@ class Dish {
   Fx tiltHist_[kAimHistory][2]{};
   Fx sideTilt_[2]{};
   bool sideWas_ = false, histPrimed_ = false;
-  // ButtonDetector's double window, mirrored for the rim: a short press that
-  // could still become a double lights the hint until the window closes.
-  uint32_t tapReleaseMs_ = 0;
-  bool tapArmed_ = false, tapSecond_ = false;
-  // The last press as BOOT's raw level drew it, for the debug link: how long
-  // it was held, and how long after the press before it.
-  uint32_t heldMs_ = 0, gapMs_ = 0;
-  bool releasedOnce_ = false;
   DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;

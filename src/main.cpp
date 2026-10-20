@@ -209,7 +209,7 @@ static blorb::Appearance shown() {
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr, 0);
+  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
 #endif
   return a;
 }
@@ -220,9 +220,13 @@ static blorb::Appearance shown() {
 // loop task's stack should not carry every frame.
 static paint::DuelScene duelScene;
 static void drawFrame(const blorb::Appearance& a, uint32_t now) {
-  const blorb::BootHint& b = a.boot;
-  const paint::RimHint hint{uint8_t(b.glyph), b.art, b.greyed, b.pips, b.hasHold, b.holdFill, b.hasDouble,
-                              b.doubleFill};
+  // Each new thought once on serial, so a host can hear what he says.
+  static char saidLast[sizeof a.line] = "";
+  if (a.thinking && a.line[0] && std::strncmp(saidLast, a.line, sizeof saidLast) != 0) {
+    std::memcpy(saidLast, a.line, sizeof saidLast);
+    Serial.printf("[say] %s\n", a.line);
+  }
+  const paint::RimHint hint = paint::rimHint(a.boot);
   if (a.dueling) {
     // Fight mode keeps the dish, with its line and pulse (paint::draw); so does
     // a locked pair until both have heard each other, so no badge shows a fight alone.
@@ -460,9 +464,13 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // Nor does the knock knock that wakes it: its twin is a press (controls.h).
   blorb::BodySample felt = body;
   if (wasLow && !powerPolicy.low() && felt.tapCode) felt.tapCode = 0;
-  // The panel and the engine turn together, so downhill is down on the glass.
+  // The screen no longer turns with the badge (owner, 2026-10-19: a turning
+  // screen turned the duel's aim with it, so no attack could be picked). The
+  // panel stays at home (USB-C up) and the engine feels the badge in that one
+  // frame: left is left, always. The settled rotation is still read, for the
+  // poses (side hold, hang) and the update's turn.
   const uint8_t rot = up.sample(body, ms);
-  if (rot != display.getRotation()) display.setRotation(rot);
+  if (display.getRotation() != ORIENT_HOME) display.setRotation(ORIENT_HOME);
 #if !defined(BADGE_BOARD_SIM)
   // "Turn me around!": a turn answers the update's question as a press does.
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
@@ -473,13 +481,13 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
     updater.press(millis());
   }
 #endif
-  blorb::BodySample screen = up.toScreen(felt);
-  // Held upside down is the one pose the turn into the screen's frame hides:
-  // the settled rotation is the only place it still exists, so it rides the
-  // sample as a level (BodySample::invertedDown) for HangDetector.
-  screen.invertedDown = rot == uint8_t((ORIENT_HOME + 2) & 3);   // upside down from home: USB-C down
-  screen.sideDown = rot == 1 || rot == 3;   // the hold's twin (SideHoldDetector, controls.h)
+  blorb::BodySample screen = up.toFrame(felt, ORIENT_HOME);
+  // The poses, judged in the turned frame (orient::Up::inverted, sideways):
+  // the detectors take these levels as given.
+  screen.invertedDown = up.inverted(felt, ORIENT_HOME);   // upside down from home: USB-C down
+  screen.sideDown = up.sideways(felt, ORIENT_HOME);       // the hold's twin (SideHoldDetector, controls.h)
   screen.knocking = knockSense.busy();
+  screen.knockWaiting = knockSense.waitingSecond();   // one knock landed: the rim's "one more"
   applyLean(screen, ms);
   screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
   dish->sample(screen, ms);

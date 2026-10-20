@@ -37,6 +37,10 @@ struct BodySample {
   // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
   // and is not one.
   bool knocking = false;
+  // One knock is in and a second could still make a knock knock
+  // (KnockSense::waitingSecond, in the shell): GestureCues lights the hint's
+  // "one more" while it lasts, so a kid who knocked once sees it was felt.
+  bool knockWaiting = false;
   // The shell reads the IMU at 250 Hz while awake and hands on every fifth
   // read; the reads between are summed up here as the one farthest from the
   // last sample handed on, so a knock's brief peak is not lost between two

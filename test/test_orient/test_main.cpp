@@ -79,6 +79,52 @@ TEST(Orient, AJoltIsNotGravity) {
   EXPECT_EQ(up.rotation(), 1);
 }
 
+// Home is USB-C up in the kids' cases (board_lcd128.h ORIENT_HOME = 2).
+constexpr uint8_t kHome = 2;
+
+TEST(Orient, HungAndTurnedOntoASideAreThePoses) {
+  orient::Up up(kR0);
+  feed(up, kHeld[kHome], 1000, 3000);
+  EXPECT_FALSE(up.inverted(kHeld[kHome], kHome));
+  EXPECT_FALSE(up.sideways(kHeld[kHome], kHome));
+  feed(up, kHeld[0], 3000, 5000);
+  EXPECT_TRUE(up.inverted(kHeld[0], kHome)) << "USB-C down";
+  feed(up, kHeld[1], 5000, 7000);
+  EXPECT_TRUE(up.sideways(kHeld[1], kHome));
+  EXPECT_FALSE(up.inverted(kHeld[1], kHome));
+}
+
+// Righted after a hang: the settled rotation lags (about 1.5 s) and still says
+// upside down, but gravity has already swung off its down. That lag is no hang.
+TEST(Orient, TheRotationsLagAfterRightingIsNoHang) {
+  orient::Up up(kR0);
+  feed(up, kHeld[kHome], 1000, 3000);
+  feed(up, kHeld[0], 3000, 5000);
+  ASSERT_TRUE(up.inverted(kHeld[0], kHome));
+  bool lagged = false;
+  for (uint32_t t = 5000; t < 7000; t += 20) {
+    up.sample(kHeld[kHome], t);
+    lagged |= up.rotation() == 0;
+    EXPECT_FALSE(up.inverted(kHeld[kHome], kHome)) << "at " << t;
+  }
+  EXPECT_TRUE(lagged) << "the settle should still say upside down for a while";
+}
+
+// The same lag after a side hold turned back: no hold.
+TEST(Orient, TheRotationsLagAfterATurnBackIsNoSide) {
+  orient::Up up(kR0);
+  feed(up, kHeld[kHome], 1000, 3000);
+  feed(up, kHeld[1], 3000, 5000);
+  ASSERT_TRUE(up.sideways(kHeld[1], kHome));
+  bool lagged = false;
+  for (uint32_t t = 5000; t < 7000; t += 20) {
+    up.sample(kHeld[kHome], t);
+    lagged |= up.rotation() == 1;
+    EXPECT_FALSE(up.sideways(kHeld[kHome], kHome)) << "at " << t;
+  }
+  EXPECT_TRUE(lagged);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {

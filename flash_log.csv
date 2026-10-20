@@ -2,3 +2,16 @@ time,badge,port,usb_serial,mac,ble_name,boot,genome,fw,result,note,species,pet
 2026-10-17T21:35:44,1,/dev/ttyACM0,,,,,,,failed,esptool could not read the MAC on /dev/ttyACM0:  / A fatal error occurred: Failed to connect to ESP32-S3: No serial data received. / For troubleshooting steps visit: https://docs.espressif.com/projects/esptool/en/latest/troubleshooting.html,,keep
 2026-10-17T21:36:21,2,/dev/ttyACM0,,,,,,,failed,esptool could not read the MAC on /dev/ttyACM0: Connecting......... /  / A fatal error occurred: Invalid head of packet (0x45): Possible serial noise or corruption.,,keep
 2026-10-17T21:36:35,3,/dev/ttyACM0,,,,,,,failed,"could not back up the pet partition, so nothing was written: 4096 (1 %)8192 (3 %)12288 (4 %)16384 (6 %)20480 (7 %)24576 (9 %)28672 (10 %) / A fatal error occurred: Corrupt data, expected 0x1000 bytes but received 0xf80 bytes",,keep
+2026-10-19T20:21:53,1,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep
+2026-10-19T20:25:27,2,/dev/ttyACM0,5C94094497,d4:05:92:77:1c:b0,mothwick,Resumed,a2623c5a,0.7.12 7bc0cd2-dirty,ok,,mothwick,keep
+2026-10-19T20:26:30,3,/dev/ttyACM0,5C94094999,d4:05:92:77:1b:44,puffkin,Resumed,23ad1782,0.7.12 7bc0cd2-dirty,ok,,puffkin,keep
+2026-10-19T20:34:00,5,/dev/ttyACM0,5C94094497,d4:05:92:77:1c:b0,mothwick,Resumed,a2623c5a,0.7.12 7bc0cd2-dirty,ok,,mothwick,keep
+2026-10-19T20:40:32,20,/dev/ttyACM0,5C94094497,d4:05:92:77:1c:b0,mothwick,Resumed,a2623c5a,0.7.12 7bc0cd2-dirty,ok,,mothwick,keep
+2026-10-19T20:42:28,21,/dev/ttyACM0,5C94094497,d4:05:92:77:1c:b0,mothwick,Resumed,a2623c5a,0.7.12 7bc0cd2-dirty,ok,,mothwick,keep
+2026-10-19T20:44:41,22,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep
+2026-10-19T20:45:43,23,/dev/ttyACM0,5C94094999,d4:05:92:77:1b:44,puffkin,Resumed,23ad1782,0.7.12 7bc0cd2-dirty,ok,,puffkin,keep
+2026-10-19T20:52:26,30,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep
+2026-10-19T20:58:57,40,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep
+2026-10-19T21:02:17,50,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep
+2026-10-19T21:10:54,51,/dev/ttyACM0,5C94094581,d4:05:92:77:22:40,tinker,Resumed,d6b70c61,0.7.12 7bc0cd2-dirty,ok,,tinker,keep
+2026-10-19T21:12:31,52,/dev/ttyACM0,5C94095000,d4:05:92:77:1b:3c,mossby,Resumed,65e803e6,0.7.12 7bc0cd2-dirty,ok,,mossby,keep

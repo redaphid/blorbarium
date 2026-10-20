@@ -359,6 +359,16 @@ class Bench:
                     named = time.monotonic()
                 if named and (time.monotonic() - named > 5 or any("[hw] adopted" in line for line in lines)):
                     break
+            if os.environ.get("BLORB_WAKE"):   # playtest: wide awake, saved (DEBUG reboot flushes the pet first)
+                for cmd, wait in ((b"DEBUG sleepiness 0\n", 3.0), (b"DEBUG reboot\n", 6.0)):
+                    s.write(cmd)
+                    t1 = time.monotonic()
+                    while time.monotonic() - t1 < wait:
+                        buf += s.read(4096)
+                *whole, buf = buf.split(b"\n")
+                woke = [w.decode("utf-8", "replace").rstrip("\r") for w in whole]
+                print("    wake: " + " | ".join(l for l in woke if "sleepiness" in l or "reboot" in l or "boot=" in l)[:300])
+                lines += woke
             return lines
         finally:
             s.close()

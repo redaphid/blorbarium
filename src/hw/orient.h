@@ -61,10 +61,26 @@ class Up {
     return rot_;
   }
 
+  // The poses the gestures read (main.cpp feel(), BodySample::invertedDown
+  // and sideDown): settled a half turn or a quarter turn from `home`, and
+  // gravity still within about 45 degrees of that rotation's down. The settle
+  // lags a turn back by about 1.5 s, and through the lag the badge is already
+  // upright again: righted, not posed (found on badge 1: a 1 s turn held at
+  // 2.4 s, after the kid had let go).
+  static constexpr int16_t kPoseDownMg = -700;
+  bool inverted(const blorb::BodySample& s, uint8_t home) const {
+    return rot_ == ((home + 2) & 3) && toScreen(s).ay <= kPoseDownMg;
+  }
+  bool sideways(const blorb::BodySample& s, uint8_t home) const {
+    return ((rot_ - home) & 1) && toScreen(s).ay <= kPoseDownMg;
+  }
+
   // The table above, for any ORIENT_R0: (rot - r0 + 1) quarter turns.
-  blorb::BodySample toScreen(blorb::BodySample s) const {
+  blorb::BodySample toScreen(blorb::BodySample s) const { return toFrame(s, rot_); }
+  // The same turn for a fixed rotation: the screen held at `rot` whatever the badge does.
+  blorb::BodySample toFrame(blorb::BodySample s, uint8_t rot) const {
     const int16_t x = s.ax, y = s.ay;
-    switch ((rot_ - r0_ + 1) & 3) {
+    switch ((rot - r0_ + 1) & 3) {
       case 0: break;
       case 1: s.ax = y, s.ay = int16_t(-x); break;
       case 2: s.ax = int16_t(-x), s.ay = int16_t(-y); break;

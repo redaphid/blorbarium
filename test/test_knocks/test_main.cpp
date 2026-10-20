@@ -197,6 +197,76 @@ TEST(Scripted, AKnockThatLeavesTheBadgePointingElsewhereWasABump) {
   EXPECT_EQ(c.knockKnocks + c.singles, 0);
 }
 
+// "One more" (KnockSense::waitingSecond, what GestureCues lights): on from the
+// first knock until the second lands, never before a knock, never for a badge
+// that was moving, and off once the burst is reported.
+TEST(Waiting, LightsBetweenTheFirstKnockAndTheSecond) {
+  KnockSense k;
+  bool before = false, between = false, afterSecond = false, afterReport = false;
+  bool reported = false;
+  for (const auto& [ms, b] : held({1000, 1300}, 3000)) {
+    if (k.sample(b, ms)) reported = true;
+    const bool w = k.waitingSecond();
+    if (ms < 1000) before |= w;
+    else if (ms >= 1040 && ms < 1300) {
+      between |= w;
+      EXPECT_TRUE(w) << ms;
+    }
+    else if (ms >= 1300 && !reported) afterSecond |= w;
+    else if (reported) afterReport |= w;
+  }
+  EXPECT_FALSE(before);
+  EXPECT_TRUE(between);
+  EXPECT_FALSE(afterSecond) << "the second knock landed: nothing more is wanted";
+  EXPECT_FALSE(afterReport);
+}
+
+TEST(Waiting, ASingleKnockWaitsOnlyAsLongAsTheWindow) {
+  KnockSense k;
+  uint32_t lastWaiting = 0;
+  for (const auto& [ms, b] : held({1000}, 3000)) {
+    k.sample(b, ms);
+    if (k.waitingSecond()) lastWaiting = ms;
+  }
+  EXPECT_GE(lastWaiting, 1000 + KnockSense::kChainMs);
+  EXPECT_LE(lastWaiting, 1040 + KnockSense::kChainMs + 20);
+}
+
+TEST(Waiting, NotForABadgeThatWasMoving) {
+  KnockSense k;
+  auto v = held({1000, 1300}, 3000);
+  for (auto& [ms, b] : v)
+    if (ms >= 500 && ms < 990) b.ax = int16_t(ms % 40 ? 400 : -400);
+  for (const auto& [ms, b] : v) {
+    k.sample(b, ms);
+    EXPECT_FALSE(k.waitingSecond()) << ms;
+  }
+}
+
+// Against the hands: every knock knock lit "one more" before it was reported,
+// and handling with no knocks rarely lit it at all.
+TEST(Waiting, TheHandsSawOneMoreBeforeEveryKnockKnock) {
+  for (const Segment& s : loadHands()) {
+    KnockSense k;
+    bool lit = false, prev = false;
+    int litKk = 0, kk = 0, episodes = 0, reports = 0;
+    for (const auto& [ms, b] : s.samples) {
+      const uint8_t code = k.sample(b, ms);
+      const bool w = k.waitingSecond();
+      episodes += w && !prev;
+      prev = w;
+      lit |= w;
+      if (code) ++reports;
+      if (code == 2) ++kk, litKk += lit;
+      if (code) lit = false;
+    }
+    std::printf("[ waiting ] %-22s one-more %d times, %d reported (%d knock knocks, %d lit first)\n", s.label.c_str(),
+                episodes, reports, kk, litKk);
+    EXPECT_EQ(litKk, kk) << s.label;
+    if (s.label[0] >= '4' && s.label[0] <= '9') EXPECT_LE(episodes, 1) << s.label << ": handling lit \"one more\"";
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

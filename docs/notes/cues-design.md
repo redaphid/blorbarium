@@ -1,4 +1,19 @@
-# On-screen cues for the gestures (design, not started)
+# On-screen cues for the gestures (design; parts 3 and 4 done)
+
+**Done (2026-10-19, late):** the feedback while trying (part 3, without
+the pictograms) and the words (part 4). All the feedback rules are in
+`lib/blorb/include/blorb/gesture_cues.h` (`GestureCues`). The Dish feeds it
+every sample and calls `dress()` on the hint. Other code does not need to
+know the rules. What it shows on the rim hint (`paint::drawBootHint`):
+a steady warm glow while a first knock waits for its second
+(`KnockSense::waitingSecond`, which needs the badge steady first, so handling
+does not light it); the hold ring filling for a side hold; a faded ring
+when a hold does nothing on this screen; and the double bars lighting as
+a hang rises. The care hint for "feed" is now the knuckle with two dots,
+and "play" is the knuckle with one. Tests: `test/test_gesture_cues`,
+`test/test_knocks` (`Waiting.*`, against every recording). Previews:
+`hint_*` in `Previews.DumpWhenAsked`. Not done yet: the pictograms
+(part 1), the `Coach` (part 2), and a try with a child.
 
 The owner, 2026-10-19: "We need UI cues that a child can follow to understand
 the gestures they need to perform. They can be discoverable too, when they try

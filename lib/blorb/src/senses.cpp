@@ -16,11 +16,6 @@ constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down ti
 constexpr int32_t kHangFaceMg = 500;               // a hang is held up on edge: |az| past this (30 degrees off flat or flatter) is lying down
 constexpr uint32_t kHangRearmProgressMs = 200;
 constexpr uint32_t kSideLetGoMs = 150;
-// The settled rotation lags a turn back by orient.h's settle and smoothing
-// (about a second and a half), and through that lag the sample in the
-// screen's frame already says he is upright again: gravity off the screen's
-// down. A pose counts only while gravity is within about 45 degrees of it.
-constexpr int32_t kPoseDownMg = -700;             // off the side this long ends a side hold: one jolted sample past the edge does not     // progress must drain to here before another hang can fire
 constexpr uint32_t kParkedAfterMs = 15000;         // upright and undisturbed this long: he is parked (a stand, a shelf), not held
 constexpr int32_t kParkedDeltaMg = 30;             // one sample's gravity moving less than this is no disturbance at all
 constexpr int32_t kSteadyMg = 250;                 // TILT_MAX_SHAKE_G: further off 1 g is a jolt, not gravity
@@ -332,7 +327,7 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   // never been upright since, has not been turned by anyone.
   const bool onEdge = absMg(s.az) <= kHangFaceMg;
   // Righted while the panel has not yet turned back: righted, not hanging.
-  const bool inverted = s.invertedDown && s.ay <= kPoseDownMg;
+  const bool inverted = s.invertedDown;   // the shell checks gravity against the turned frame (main.cpp feel())
   rearm_.sample(s, steady, dt);
   if (inverted && steady && onEdge && rearm_.armed()) {
     progress_ = progress_ + dt > kHangHoldMs ? kHangHoldMs : progress_ + dt;
@@ -358,7 +353,7 @@ void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   lastMs_ = ms;
   const bool steady = absMg(magnitudeMg(s) - kOneG) <= kSteadyMg;
   const bool onEdge = absMg(s.az) <= kHangFaceMg;
-  const bool posed = s.sideDown && onEdge && s.ay <= kPoseDownMg;
+  const bool posed = s.sideDown && onEdge;   // the shell checks gravity against the turned frame
   rearm_.sample(s, steady, dt);
   if (!holding_) {
     if (posed && steady && rearm_.armed()) holding_ = true, fired_ = false, off_ = false, since_ = ms;

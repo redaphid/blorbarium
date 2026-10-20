@@ -779,13 +779,17 @@ void pips(Canvas240& cv, uint8_t pantry) {
   }
 }
 
-// 9x9 gesture glyphs, drawn at 2x: what the owner's hands should do.
-struct Glyph9 { blorb::StimId gesture; uint16_t rows[9]; };
+// 9x9 gesture glyphs, drawn at 2x: what the body should do, and how many
+// knocks it takes -- a dot per knock under the glyph (controls.h), so a child
+// can learn knock once versus knock knock by counting, not reading.
+// The button's action is pressed no more (the cases cover it): its mark is its
+// twin, the knock knock, two dots.
+struct Glyph9 { blorb::StimId gesture; uint8_t knocks; uint16_t rows[9]; };
 constexpr Glyph9 kGestureGlyphs[] = {
-    {blorb::stim::button, {0x07C, 0x082, 0x139, 0x139, 0x139, 0x082, 0x07C, 0x000, 0x1FF}},
-    {blorb::stim::cradle, {0x0C6, 0x1FF, 0x1FF, 0x1FF, 0x0FE, 0x07C, 0x038, 0x010, 0x000}},
-    {blorb::stim::knock, {0x111, 0x092, 0x000, 0x183, 0x000, 0x07C, 0x0FE, 0x0FE, 0x07C}},
-    {blorb::stim::lid_down, {0x038, 0x060, 0x0C0, 0x0C0, 0x0C0, 0x0C0, 0x060, 0x038, 0x000}},
+    {blorb::stim::button, 2, {0x111, 0x092, 0x000, 0x183, 0x000, 0x07C, 0x0FE, 0x0FE, 0x07C}},
+    {blorb::stim::cradle, 0, {0x0C6, 0x1FF, 0x1FF, 0x1FF, 0x0FE, 0x07C, 0x038, 0x010, 0x000}},
+    {blorb::stim::knock, 1, {0x111, 0x092, 0x000, 0x183, 0x000, 0x07C, 0x0FE, 0x0FE, 0x07C}},
+    {blorb::stim::lid_down, 0, {0x038, 0x060, 0x0C0, 0x0C0, 0x0C0, 0x0C0, 0x060, 0x038, 0x000}},
 };
 
 void hint(Canvas240& cv, const Appearance& a) {
@@ -799,6 +803,12 @@ void hint(Canvas240& cv, const Appearance& a) {
       for (int r = 0; r < 9; ++r)
         for (int b = 0; b < 9; ++b)
           if (g.rows[r] & (0x100 >> b)) fill(cv, 111 + 2 * b, 205 + 2 * r, 113 + 2 * b, 207 + 2 * r, c, alpha);
+      // One 4 px dot per knock, 6 px apart, centred under the glyph (whose
+      // columns are 111..128): the count reads at a glance.
+      for (int k = 0; k < g.knocks; ++k) {
+        const int x = 118 - 3 * (g.knocks - 1) + 6 * k;
+        fill(cv, x, 227, x + 4, 230, c, alpha);
+      }
     }
   }
 }
@@ -840,7 +850,7 @@ const char* notReady(blorb::Decline d) {
   using D = blorb::Decline;
   switch (d) {
     case D::Asleep: case D::Sleepy: return "TOO SLEEPY TO FIGHT";
-    case D::Hungry: return "TOO HUNGRY - PRESS ONCE TO FEED";
+    case D::Hungry: return "TOO HUNGRY - KNOCK KNOCK ON ME TO FEED";
     case D::Resting: return "RESTING";
     case D::WantsACuddle: return "NEEDS A CUDDLE";
     default: return "NOT READY YET";
@@ -892,13 +902,13 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
     std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
   else if (a.lobbyDecline == blorb::Decline::Resting) {
     const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
-    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  PRESS TWICE OR HANG TO STOP  ", rest / 60, rest % 60,
+    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  HOLD ME UPSIDE DOWN TO STOP  ", rest / 60, rest % 60,
                   unsigned(a.lobbyFriends));
   } else if (a.lobbyDecline != blorb::Decline::None)
-    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  PRESS TWICE OR HANG TO STOP  ", notReady(a.lobbyDecline),
+    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ", notReady(a.lobbyDecline),
                   unsigned(a.lobbyFriends), secs / 60, secs % 60);
   else
-    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  PRESS TWICE OR HANG TO STOP  ",
+    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
                   unsigned(a.lobbyFriends), secs / 60, secs % 60);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }

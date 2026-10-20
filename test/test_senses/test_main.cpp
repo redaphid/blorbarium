@@ -468,32 +468,8 @@ TEST(Twins, BootedOnASideHoldsNothingUntilTurned) {
   EXPECT_EQ(play(g).count(stim::button_hold), 1);
 }
 
-// Turned back after 0.8 s: the settled rotation lags (orient.h) and still says
-// "on a side" for a second and a half, but in the screen's frame gravity has
-// already swung off down. That lag is no hold (found on badge 1: a 1 s turn
-// held at 2.4 s, after the kid had let go).
-TEST(Twins, TheRotationsLagAfterATurnBackIsNoHold) {
-  Gesture g;
-  g.still(2000).sided(true).still(800);
-  BodySample back;   // upright again, as the screen's frame still turned a quarter sees it
-  back.ax = -1000, back.ay = 0, back.az = 0, back.sideDown = true;
-  for (int i = 0; i < 75; ++i) g.raw(back);   // 1.5 s
-  g.sided(false).still(1000);
-  Heard r = play(g);
-  EXPECT_EQ(r.count(stim::button_hold), 0);
-}
-
-// The same lag after a hang let go early: righted, not hanging.
-TEST(Hang, TheRotationsLagAfterRightingIsNoHang) {
-  Gesture g;
-  g.still(2000).inverted(true).still(500);
-  BodySample back;   // righted, as the screen's frame still turned 180 sees it
-  back.ay = 1000, back.invertedDown = true;
-  for (int i = 0; i < 75; ++i) g.raw(back);
-  g.inverted(false).still(1000);
-  Heard r = play(g);
-  EXPECT_EQ(r.count(stim::hang), 0);
-}
+// The rotation's lag after a turn back is the shell's to hide: orient::Up's
+// inverted() and sideways() (test_orient, *Lag*).
 
 // Laid on its side and left there, leaning so the face sits right on the
 // on-edge line: it flickers in and out of the pose for ten minutes, and holds

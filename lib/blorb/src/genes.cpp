@@ -82,13 +82,24 @@ void describe_chem(const GeneView& v, Describe& d) {
   d.field("initial", g.initial);
 }
 
+// Sleep, made rarer for every pet at once (owner, 2026-10-19: "make sleep much
+// less frequent ... globally"). Whatever a genome says, what makes sleepiness
+// (the awake tonic's emitters, melatonin's reaction into it) works at this
+// fraction when the genes are expressed. The genome's bytes are untouched,
+// so lineages, friend eggs and hashes of genomes are unchanged; a tuck-in
+// (a stimulus) and face-down bedtime still put him to bed.
+constexpr int32_t kSleepinessNum = 2, kSleepinessDen = 5;
+Fx sleepier(Fx made) { return Fx{int32_t(int64_t(made.raw) * kSleepinessNum / kSleepinessDen)}; }
+bool makesSleepiness(ChemId c) { return c == driveChem(drive::sleepiness); }
+
 // ---- reaction ------------------------------------------------------------------
 const MutRule rules_reaction[] = {A, N, A, N, A, N, A, N, N};
 void express_reaction(const GeneView& v, Phenotype& p) {
   auto g = decode<ReactionGene>(v);
   if (!reactionExpresses(ChemId{g.a}, ChemId{g.b})) return;   // stakes.h: a swoon feeds nothing
-  p.chem.reactions.push_back(Reaction{ChemId{g.a}, ChemId{g.b}, ChemId{g.c}, ChemId{g.d}, g.qa, g.qb, g.qc, g.qd,
-                                      perApplication(g.rate, 0)});
+  Fx rate = perApplication(g.rate, 0);
+  if (makesSleepiness(ChemId{g.c}) || makesSleepiness(ChemId{g.d})) rate = sleepier(rate);
+  p.chem.reactions.push_back(Reaction{ChemId{g.a}, ChemId{g.b}, ChemId{g.c}, ChemId{g.d}, g.qa, g.qb, g.qc, g.qd, rate});
 }
 void describe_reaction(const GeneView& v, Describe& d) {
   auto g = decode<ReactionGene>(v);
@@ -104,8 +115,10 @@ const MutRule rules_emitter[] = {A, A, N, N, F, N};
 void express_emitter(const GeneView& v, Phenotype& p) {
   auto g = decode<EmitterGene>(v);
   uint8_t period = std::min(g.period, kMaxPeriod);
+  Fx gain = perApplication(g.gain, period);
+  if (makesSleepiness(ChemId{g.chem})) gain = sleepier(gain);
   p.chem.emitters.push_back(Emitter{LocusId{g.locus}, ChemId{g.chem}, Fx::unitByte(g.threshold),
-                                    perApplication(g.gain, period), (g.flags & 1) != 0, (g.flags & 2) != 0,
+                                    gain, (g.flags & 1) != 0, (g.flags & 2) != 0,
                                     (g.flags & 4) != 0, period});
 }
 void describe_emitter(const GeneView& v, Describe& d) {
