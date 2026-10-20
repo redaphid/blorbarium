@@ -92,7 +92,7 @@ Count script(std::initializer_list<uint32_t> knocksAt, uint32_t untilMs = 4000) 
 
 TEST(Hands, EverySegmentOfTheRecordingCountsWhatTheHandsDid) {
   const std::vector<Segment> segs = loadHands();
-  ASSERT_GE(segs.size(), 14u) << "test/fixtures/hands_2026-10-19.txt";
+  ASSERT_GE(segs.size(), 15u) << "test/fixtures/hands_2026-10-19.txt";
   for (const Segment& s : segs) {
     const Count c = play(s);
     std::printf("[ hands ] %-22s knock knocks %d (want %d), singles %d:%s\n", s.label.c_str(), c.knockKnocks,
