@@ -104,9 +104,12 @@ while awake is the way to add one later.
 
 ## He teaches them
 
-As with the hang and the shake, the pet says what nobody can guess: `KNOCK
-KNOCK ON ME FOR SNACKS` whenever he is hungry (at any age: it is the only way
-food reaches him), and `TIP ME SIDEWAYS. NIGHT NIGHT` on his first day.
+The pet says what nobody can guess: `KNOCK KNOCK ON ME FOR SNACKS`
+whenever he is hungry (at any age: it is the only way food reaches him),
+and on his first day `HOLD ME UPSIDE DOWN TO FIGHT`, `HOLD ME SIDEWAYS.
+NIGHT NIGHT` and `SHAKE ME. I SEE THINGS.` The fight mode line says `HOLD
+ME UPSIDE DOWN TO STOP`, and a hungry pet refused a fight says `TOO HUNGRY -
+KNOCK KNOCK ON ME TO FEED`.
 
 ## Testing
 

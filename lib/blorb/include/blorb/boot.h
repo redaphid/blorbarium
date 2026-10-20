@@ -153,7 +153,11 @@ struct BootHint {
   bool hasHold = false;       // a hold does something else: the ring is drawn
   uint8_t holdFill = 0;       // 0..255 while held
   bool hasDouble = false;     // two dots under the glyph when a double press does something
-  uint8_t doubleFill = 0;     // 0..255: a first press is waiting for its second, draining as the window closes
+  uint8_t doubleFill = 0;     // 0..255: a first press waits for its second (draining), or a hang is on its way up
+  // The fields below and holdFill/doubleFill are progress. GestureCues::dress
+  // (gesture_cues.h) sets them; bootHint() leaves them clear.
+  bool holdVoid = false;      // a hold is felt but this screen's hold does nothing: the ring, grey
+  bool knockWait = false;     // a first knock landed, its second can still come: the hint glows, "one more"
 };
 
 }  // namespace blorb

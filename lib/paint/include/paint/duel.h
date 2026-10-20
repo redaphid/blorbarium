@@ -72,8 +72,13 @@ struct RimHint {
   bool hasHold = false;             // a hold does something else: the ring, filling with holdFill
   uint8_t holdFill = 0;
   bool hasDouble = false;           // a double press does something: two short bars under it
-  uint8_t doubleFill = 0;           // a first press waits for its second: the glyph lights, fading as the window closes
+  uint8_t doubleFill = 0;           // a first press waits for its second, or a hang is on its way up: the bars light
+  bool holdVoid = false;            // a hold is felt but does nothing here: the ring, grey
+  bool knockWait = false;           // a first knock is in, the second can still come: the glyph glows, "one more"
 };
+
+// blorb::BootHint as drawn, field by field (the one place they are matched up).
+RimHint rimHint(const blorb::BootHint&);
 
 // The hint at its place on the rim, for any screen (the dish draws it too).
 void drawBootHint(Canvas240&, const RimHint&);

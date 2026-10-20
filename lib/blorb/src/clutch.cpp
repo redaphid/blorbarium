@@ -19,6 +19,14 @@ EggRules eggRulesOf(const Genome& g) {
   return p.egg;
 }
 
+// An egg's colours from its baby portrait. Out of line, so the Appearance is
+// on the stack only here and not under childOf's dry runs (viability holds a
+// Phenotype and runs a Chemistry), which derivePreviewStep calls first.
+[[gnu::noinline]] EggPreview previewColours(const Genome& g, uint16_t generation) {
+  const Appearance born = portrait(g, Stage::Baby, generation, 0);
+  return EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0, born.species};
+}
+
 Fx lastWrite(const SenseOut& s, LocusId l) {
   for (uint8_t i = 0; i < s.lociCount; ++i) if (s.loci[i].locus == l) return s.loci[i].value;
   return Fx::zero();
@@ -96,9 +104,8 @@ std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
 void Clutch::derivePreviewStep(const FriendEgg* friendEgg) {
   if (previewed >= count) return;
   Offspring o = childOf(*this, previewed, friendEgg);
-  const Appearance born = portrait(o.genome, Stage::Baby, generation, 0);
   EggPreview& e = previews[previewed];
-  e = EggPreview{born.regions[region::skin.v], born.regions[region::cloak.v], born.regions[region::shell.v], 0, 0, born.species};
+  e = previewColours(o.genome, generation);
   for (const MutationOp& op : o.diff.ops) {
     GeneUid uid = std::visit([](const auto& x) -> GeneUid {
       if constexpr (std::is_same_v<std::decay_t<decltype(x)>, MutHeirloom>) return x.after;

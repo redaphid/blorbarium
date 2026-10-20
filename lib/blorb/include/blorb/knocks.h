@@ -52,6 +52,17 @@ class KnockSense {
   // A burst from a steady badge is under way: its bounce is no shake.
   bool busy() const { return (inBurst_ && steady_) || restN_ > 0; }
 
+  // One knock is in and a second could still make it a knock knock: a burst
+  // of one that will count (steady before it, in a hand), or one blip on a
+  // table. It turns true on the knock itself, well before sample() reports
+  // anything (a burst is reported when it is over), and false once a second
+  // knock lands or the window closes. The shell carries it on the sample
+  // (BodySample::knockWaiting) and GestureCues shows it as "one more".
+  bool waitingSecond() const {
+    if (inBurst_ && steady_) return knocks_ == 1;
+    return restN_ == 1;
+  }
+
   // Lying on a table, a knock barely moves the badge: a 150-500 mg blip in one
   // or two 250 Hz reads (test board, T1 2026-10-19), where in a hand it is
   // 1-4 g. So when the badge was resting dead still (kRestSdMg), a much

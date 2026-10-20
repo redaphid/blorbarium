@@ -1085,12 +1085,34 @@ constexpr int kHintPct = 125;
 
 }  // namespace
 
+RimHint rimHint(const blorb::BootHint& b) {
+  RimHint r;
+  r.glyph = uint8_t(b.glyph);
+  r.art = b.art;
+  r.greyed = b.greyed;
+  r.pips = b.pips;
+  r.hasHold = b.hasHold;
+  r.holdFill = b.holdFill;
+  r.hasDouble = b.hasDouble;
+  r.doubleFill = b.doubleFill;
+  r.holdVoid = b.holdVoid;
+  r.knockWait = b.knockWait;
+  return r;
+}
+
 void drawBootHint(Canvas240& cv, const RimHint& h) {
   if (!h.glyph || h.glyph >= kBootGlyphCount) return;
   const P at = kBootAt;
-  // A first press is waiting for its second: a warm glow behind the glyph and
-  // big double bars, fading as the window closes, so a kid sees "once more".
-  if (h.hasDouble && h.doubleFill) disc(cv, at.x, at.y, 21, kDoubleGlow, 80 + h.doubleFill * 176 / 255);
+  // Something waits for its second, so a kid sees "once more" without a
+  // word: a warm glow behind the glyph. A first knock of a knock knock (the
+  // press's twin) glows steadily while its window is open. A first BOOT press,
+  // or a hang on its way up (the double's twin), glows with the big double
+  // bars below, at doubleFill.
+  const bool doubleLit = h.hasDouble && h.doubleFill;
+  if (doubleLit || h.knockWait) {
+    const int glow = h.knockWait ? imax(h.doubleFill, 160) : h.doubleFill;
+    disc(cv, at.x, at.y, 21, kDoubleGlow, 80 + glow * 176 / 255);
+  }
   disc(cv, at.x, at.y, 15, kInk, 190);
   const int alpha = h.greyed ? 150 : 256;
   if (h.glyph == kGlyphTier) drawArt(cv, duel_art::kTiers[h.art % 3], at.x, at.y, 70, alpha);
@@ -1099,8 +1121,11 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
   else drawArt(cv, (h.greyed ? duel_art::kBootGlyphsGrey : duel_art::kBootGlyphs)[h.glyph], at.x, at.y, kHintPct, 256);
   // A hold that means something else: the ring round it, filling clockwise from the top.
   if (h.hasHold) drawArt(cv, duel_art::kHoldRing[h.holdFill * 8 / 255], at.x, at.y, kHintPct, 256);
+  // A hold felt where a hold does nothing: the same ring, faded. The grip
+  // was felt, and it does nothing here.
+  else if (h.holdVoid) drawArt(cv, duel_art::kHoldRing[h.holdFill * 8 / 255], at.x, at.y, kHintPct, 150);
   // The double-press bars sit beside it, toward the middle: under it is the marquee's strip.
-  if (h.hasDouble) drawArt(cv, duel_art::kDoublePress, at.x - (h.doubleFill ? 30 : 24), at.y + 2, h.doubleFill ? 200 : kHintPct, 256);
+  if (h.hasDouble) drawArt(cv, duel_art::kDoublePress, at.x - (doubleLit ? 30 : 24), at.y + 2, doubleLit ? 200 : kHintPct, 256);
   // Pips toward the middle of the dish: how far short a greyed one is, or the turns a wind-up has left.
   if (h.greyed || h.glyph == kGlyphCountdown)
     for (int i = 0; i < imin(h.pips, 6); ++i) {

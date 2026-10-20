@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "blorb/appearance.h"   // first, so PlatformIO's dependency finder links lib/blorb (lib/paint needs it)
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>

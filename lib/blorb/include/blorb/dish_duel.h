@@ -43,8 +43,9 @@ bool graftDuelGenes(Creature&, Lineage&);
 // update, and Sealed is the Dish's own. FoundingNest waits for unit D10.
 BootContext bootContext(const Occupant&, const DuelView*);
 // What the rim shows for it: the row's glyph, greyed when a press does nothing
-// now, and the hold ring filling while BOOT is down.
-BootHint bootHint(BootContext, const DuelView*, uint32_t heldMs);
+// now. The progress of a gesture under way (the hold ring filling, a first
+// knock or press waiting) is GestureCues::dress's (gesture_cues.h).
+BootHint bootHint(BootContext, const DuelView*);
 
 // What one tick of the duel asks of the Dish.
 struct DuelStepped {

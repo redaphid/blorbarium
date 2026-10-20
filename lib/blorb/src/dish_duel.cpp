@@ -62,13 +62,12 @@ BootContext bootContext(const Occupant& o, const DuelView* v) {
   return std::get<Creature>(o).body().asleep ? BootContext::Asleep : BootContext::Awake;
 }
 
-BootHint bootHint(BootContext ctx, const DuelView* v, uint32_t heldMs) {
+BootHint bootHint(BootContext ctx, const DuelView* v) {
   const BootMeaning& m = bootMeaning(ctx);
   BootHint h;
   h.glyph = m.hint;
   h.hasDouble = m.doublePress != BootAct::Nothing;
   h.hasHold = m.hold != BootAct::Nothing && m.hold != m.press && m.holdMs > 0;
-  if (h.hasHold && heldMs > 0) h.holdFill = uint8_t(std::min<uint32_t>(255, heldMs * 255 / m.holdMs));
   if (!v) return h;
   switch (ctx) {
     case BootContext::Staking:

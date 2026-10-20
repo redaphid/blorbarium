@@ -155,10 +155,10 @@ BLORB_THOUGHT(128, dream_flight,  none,   dozing,        0, 1800, "ZZZ... I CAN 
 BLORB_THOUGHT(129, sleep_count,   none,   dozing,        0, 1800, "ZZZ... ONE FLY... TWO FLY...")
 BLORB_THOUGHT(130, sleep_warm,    none,   dozing,        0, 1800, "MM. WARM. NOT GETTING UP.")
 BLORB_THOUGHT(131, dream_rain,    none,   dozing,        0, 1800, "ZZZ... RAIN ON THE RIM...")
-BLORB_THOUGHT(132, teach_fight,   none,   young,         4, 7200, "FLIP ME OVER. LET'S FIGHT")
+BLORB_THOUGHT(132, teach_fight,   none,   young,         4, 7200, "HOLD ME UPSIDE DOWN TO FIGHT")
 BLORB_THOUGHT(133, teach_shake,   none,   young,         4, 7200, "SHAKE ME. I SEE THINGS.")
 // The button's twins (controls.h), which a kid cannot guess either. Feeding
 // is taught whenever he is hungry, at any age: with BOOT covered it is the
 // only way food reaches him.
 BLORB_THOUGHT(134, teach_feed,    none,   hungry,        4, 1800, "KNOCK KNOCK ON ME FOR SNACKS")
-BLORB_THOUGHT(135, teach_hold,    none,   young,         4, 7200, "TIP ME SIDEWAYS. NIGHT NIGHT")
+BLORB_THOUGHT(135, teach_hold,    none,   young,         4, 7200, "HOLD ME SIDEWAYS. NIGHT NIGHT")
