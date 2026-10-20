@@ -14,7 +14,7 @@ hold ring serve both. The table and the switches are in
 
 | BOOT says | Its twin | Detector |
 |---|---|---|
-| press | **knock knock**: the case tapped twice (the IMU's double tap) | `KnockDetector` |
+| press | **knock knock**: the case tapped two to four times, in a hand or lying on a table | `KnockSense` (shell) then `KnockDetector` |
 | hold (a level: 1.2 s, and the 3 s holds) | **turn onto a side and hold it there**, on edge | `SideHoldDetector` |
 | double press | **the hang**: upside down on edge (USB-C down), about a second | `HangDetector` |
 
@@ -59,11 +59,28 @@ already the model, a **pose held on edge** whose progress a kid can see.
   turn let go early does nothing at all. While it is held it is a level, as
   BOOT down is: the duel times its 3 s holds by it and the rim's ring fills.
   The screen turns with the badge, so the kid watches the ring fill.
-- **Knock knock** is the tap engine's double tap, which the low-power rules
-  already trust as deliberate (one tap is a bumped desk or a keyboard). It
-  is masked like every knock after the road pushes the whole body up, so a
-  car's potholes feed nobody (`test_senses` Road cases).
-- **The hang** is unchanged.
+- **Knock knock** comes from the samples themselves (`blorb/knocks.h`,
+  `KnockSense`), not the QMI8658's tap engine: with real hands the tap
+  engine reported 0 of 5 deliberate knock knocks and about 34 double taps
+  from handling (each a pellet). The IMU is read at 250 Hz while awake and
+  each 50 Hz sample carries the farthest of its reads as a peak. In a hand a
+  knock is a jump of about 1 g off gravity in one step, after the badge was
+  steady, leaving it pointing the same way; on a table it is a 150-500 mg
+  blip of under 100 ms with quiet around it (a desk rattles longer). Two to
+  four knocks within 0.6 s are a knock knock; one is a knock. While a burst
+  is under way the shake detector ignores the knock's bounce. Every
+  recording is `test/fixtures/hands_2026-10-19.txt`, checked by
+  `test/test_knocks` (2026-10-19: 17/17 held, 9/9 on a table, 0 false).
+- **The hang** is unchanged, except as below.
+- **One fire per pose** (`PoseRearm`): after a side hold or a hang fires,
+  the same gesture waits until the badge has been the right way up and
+  steady for 0.4 s, so a badge laid on its side, or leaning upside down,
+  fires once however long it lies there (owner, 2026-10-19).
+- **Face down is bedtime**: about 30 s face down and still puts him to sleep
+  whatever his genes say, and keeps him asleep while he lies there; the
+  badge goes to low power 2 minutes after the last input instead of 10.
+- **The IMU's z axis** points into the screen on the 1.28; `imu_qmi8658.h`
+  negates it (before 0.7.12 face up on a desk counted as lidded).
 
 Wii-style swings were considered and left out: a swing is one or two jolts,
 which is also a pothole, a bump on a table or a badge put down hard, and a

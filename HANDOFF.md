@@ -12,6 +12,44 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
+## Where things stand (2026-10-19, evening: 0.7.12 released; next, on-screen cues)
+
+**Firmware 0.7.12 is live** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
+(commit 775f0a4, env `badge128_pm`, built on this Linux laptop, signed on
+`soul` from a throwaway clone `~/blorb-release` with
+`--key /mnt/c/Users/hypnodroid/.config/blorbarium/ota-signing-key.pem`;
+manifest commit after it; `main` = `low-power`). It is everything since 0.7.10:
+light sleep in low power, the no-button controls, and from a live session
+with the owner's hands on test board 5C94094999 (d4:05:92:77:1b:44, "puffkin"):
+
+- **Knocks come from the samples, not the tap engine** (`blorb/knocks.h`): the
+  tap engine missed every real knock knock and reported ~34 from handling.
+  The IMU is read at 250 Hz awake; knocks work held and lying on a table.
+  17/17 held, 9/9 on a table, 0 false, in `test/test_knocks` against every
+  recording (`test/fixtures/hands_2026-10-19.txt`).
+- **The IMU's z was inverted on every badge**: face up on a desk counted as
+  lidded (bedtime, night entrainment). Fixed in `imu_qmi8658.h`.
+- **Face down always sleeps** him and powers down after 2 min (owner).
+- **A pose gesture fires once** until the badge is the right way up again.
+- **USB-C up is home** (`ORIENT_HOME`); the hang is USB-C down.
+- A knock knock no longer fires a shake.
+
+Not proven: an OTA install of 0.7.12 itself over Bluetooth (the image was
+cable-flashed and run for hours; the trial-and-rollback guard is unchanged).
+Badges on 0.7.10 or older still ask for a BOOT press for this update; 0.7.11+
+take "Turn me around!".
+
+**Next, the owner's ask: on-screen cues so a child knows which gesture to
+try, and feedback when they try.** Nothing is drawn for it yet. The design,
+the code it touches and how to preview it are in
+**`docs/notes/cues-design.md`**. Start there.
+
+Tools from this session: `DEBUG trace <s>` (every 50 Hz sample + peak + what
+fired), `DEBUG knock [1|2]`, `DEBUG side [ms] [l|r]`, `DEBUG hatch`;
+`tools/imu_record.py` (marks and commands through `<log>.cmd`),
+`tools/imu_analyze.py`, `tools/gesture_e2e.py`. The session's method and
+numbers: `docs/notes/no-button-2026-10-19.md` and `docs/controls.md`.
+
 ## Where things stand (2026-10-19: controls with no button, branch `low-power`)
 
 **With BOOT covered, the pets could not be fed.** A pellet was only ever a
