@@ -1281,6 +1281,18 @@ static void nap() {
   Serial.printf("[hw] debug nap: forced sleep\n");
 }
 
+// `DEBUG tidy`: what a test run leaves behind, taken away: every pellet on
+// the floor (they rot, and he eats them rotten: a probe that fed a sleeping
+// pet killed him, 2026-10-21), and his toxin and injury back to none, as
+// `DEBUG stage` settles them. The pantry is left as it is.
+static void tidy() {
+  unsigned pellets = 0;
+  for (blorb::Pellet& p : dish->habitat().pellets) pellets += p.present, p.present = false;
+  blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
+  if (c) c->inject(blorb::chem::toxin, blorb::Fx::zero()), c->inject(blorb::chem::injury, blorb::Fx::zero());
+  Serial.printf("[hw] debug tidy: %u pellets taken, %s\n", pellets, c ? "toxin and injury 0" : "no creature");
+}
+
 // `DEBUG sleepiness <pct>`: sets his sleepiness drive, so a soak can make him
 // rested (a wake for a fight is allowed) or too sleepy (it is refused) at will.
 static void setSleepiness(const char* a) {
@@ -1371,6 +1383,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "shake") == 0) return shake();
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
+  if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "latency") == 0) return lat::verb(a);
@@ -1402,7 +1415,7 @@ static void runDebug(const char* line) {
   }
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
-                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, "
+                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
                   "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], reboot, bletest <bytes>)\n", verb);
     return;
   }
