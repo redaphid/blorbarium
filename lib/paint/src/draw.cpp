@@ -567,10 +567,16 @@ void ring(Canvas240& cv, Pt c, int rc, int g8, int amp, const Rgb& tint, int spa
   const int R = rc * (384 + 128 * g8 / 256) / 256;
   const int inner = imax(rc * 7 / 10, 16), outer = haloOuterQ4(rc);
   const int reach = R + outer;
+  // Light lands only where -inner < t < outer, t = isqrt(d2) - R: d2 in
+  // [lo2, hi2). The rest of the box is tested by its d2 alone, with no root.
+  const int64_t loR = imax(0, R - inner + 1), hiR = R + outer;
+  const int64_t lo2 = loR * loR, hi2 = hiR * hiR;
   for (int y = imax(0, floorDiv(c.y - reach, 16)); y <= imin(kSide - 1, (c.y + reach) / 16); ++y) {
     for (int x = imax(0, floorDiv(c.x - reach, 16)); x <= imin(kSide - 1, (c.x + reach) / 16); ++x) {
       int64_t dx = x * 16 + 8 - c.x, dy = y * 16 + 8 - c.y;
-      int t = int(isqrt(uint64_t(dx * dx + dy * dy))) - R;
+      const int64_t d2 = dx * dx + dy * dy;
+      if (d2 < lo2 || d2 >= hi2) continue;
+      int t = int(isqrt(uint64_t(d2))) - R;
       int i = t < 0 ? (-t >= inner ? 0 : amp * (inner + t) / inner) : (t >= outer ? 0 : amp * (outer - t) / outer);
       addLight(cv, x, y, tint, i);
     }
@@ -738,7 +744,7 @@ int footHalfW(const FrameRef& f, int kx) { return f.w * kx / kOne * kShadowWideP
 // The mouth's centre relative to the stand point, in frame pixels (Q4): the
 // mouth-region pixels of the face shown, or of every face of the stage when
 // that one has none (a closed mouth). False when the pack tags no mouth.
-bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
+bool mouthOfFrames(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
   uint16_t count = 0;
   const PaletteEntry* pal = pack.palette(count);
   int64_t sx = 0, sy = 0, n = 0;
@@ -760,6 +766,23 @@ bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, 
   if (n == 0) return false;
   out = {int(sx / n), int(sy / n)};
   return true;
+}
+
+// The same, kept from frame to frame while he eats: it reads every pixel of
+// the face (and of every face of his stage when that one shows no mouth), and
+// it is pure in the pack, the face and the stage.
+bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
+  static const SpritePack* lastPack = nullptr;
+  static FrameRef lastFace{};
+  static blorb::Stage lastStage{};
+  static bool lastFound = false;
+  static Pt lastAt{};
+  if (lastPack != &pack || lastStage != stage || !sameFrame(lastFace, shown)) {
+    lastPack = &pack, lastFace = shown, lastStage = stage;
+    lastFound = mouthOfFrames(pack, shown, stage, lastAt);
+  }
+  if (lastFound) out = lastAt;
+  return lastFound;
 }
 
 // While he eats, the pellet he bit is in his mouth, in front of him, fresh or
