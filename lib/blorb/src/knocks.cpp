@@ -128,7 +128,7 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
     sumX_ += s.ax, sumY_ += s.ay, sumZ_ += s.az, ++sumN_;
   }
   if (!inBurst_ || !steady_ || knocks_ < 2 || knocks_ > kMaxKnocks) heard_ = false;
-  else if (!heard_ && ms - last_ >= kHeardQuietMs && dev < kNextDevMg && dev1_ < kNextDevMg) heard_ = true;
+  else if (!heard_ && ms - last_ >= kHeardQuietMs && dev < kNextDevMg) heard_ = true;
   dev2_ = dev1_, dev1_ = dev;
   // On a table (rest path): only with the peak; a burst the hand path already
   // has is the hand path's, and whichever decides first speaks once.

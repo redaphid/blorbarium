@@ -31,13 +31,16 @@ void GestureCues::dress(BootHint& h, const BootMeaning& m, Fx hangCharge) const 
   // itself (the update's yes, a plea), holding just presses: no ring.
   // A side hold fires ButtonHold at kSideHoldMs, not BOOT's 1.2 s: where the
   // row's hold is that one, the ring fills to it, so it is full as it fires.
-  // The ring shows from the hold's first sample (a sliver), and a side
-  // hold's grey ring at once: only a BOOT tap needs kVoidRingAfterMs to
-  // tell it from a hold, and a turn onto a side is never a tap.
+  // The ring shows from the hold's first sample: its first eighth at once
+  // (the ring is drawn in eighths, so a fill from zero showed nothing for
+  // the first 250 ms of a side hold), the rest as the hold goes on. A side
+  // hold's grey ring shows at once too: only a BOOT tap needs
+  // kVoidRingAfterMs to tell it from a hold, and a turn is never a tap.
   const uint32_t held = heldMs();
   const uint32_t holdMs = !buttonDown_ && m.holdMs == kButtonHoldMs ? kSideHoldMs : m.holdMs;
   const uint32_t voidAfter = buttonDown_ ? kVoidRingAfterMs : 0;
-  if (h.hasHold && holdDown_) h.holdFill = uint8_t(std::max<uint32_t>(1, std::min<uint32_t>(255, held * 255 / holdMs)));
+  if (h.hasHold && holdDown_)
+    h.holdFill = uint8_t(std::min<uint32_t>(255, kRingFirst + held * (255 - kRingFirst) / holdMs));
   else if (m.hold == BootAct::Nothing && holdDown_ && held >= voidAfter) h.holdVoid = true, h.holdFill = 128;
 
   // The double: a first BOOT press lights the bars, fading as its window

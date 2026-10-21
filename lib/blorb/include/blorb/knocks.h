@@ -77,19 +77,19 @@ class KnockSense {
   // A second knock is in, in a burst that can still count, and it has rung
   // out: a knock knock is on its way, though sample() reports it only once
   // the burst is over (moreMs after its last knock). True from the first
-  // two samples after the second knock with no spike (kHeardQuietMs) and
+  // sample after the second knock that is no spike (kHeardQuietMs) and
   // nothing knock-sized off gravity (kNextDevMg), until then; it stays true
   // through a third knock's ringing, and is false again if the burst runs on
   // into hammering. The shell carries it on the sample
   // (BodySample::knockKnock) and the rim flashes at once, so a kid sees his
   // knock knock heard as he makes it, not 0.6 s later: on the recorded hands
-  // 40 ms after the second knock (p50; p95 140 ms, as a knock in a hand rings),
+  // 20 ms after the second knock (p50; p95 100 ms, as a knock in a hand rings),
   // where waiting out 80 ms with no spike at all took 80/200 ms, and as long
   // as 580 ms when a bounce restarted the wait (docs/notes/controls-latency.md).
   // A shake from a still badge (the sim's: 1.5 g along x, flipping every 60
   // ms, each flip a "knock") never sits within kNextDevMg of gravity, so it
   // never flashes.
-  static constexpr uint32_t kHeardQuietMs = 40;
+  static constexpr uint32_t kHeardQuietMs = 20;
   bool knockKnock() const {
     if (inBurst_ && steady_) return heard_;
     return restN_ >= 2 && restN_ <= kMaxKnocks;
