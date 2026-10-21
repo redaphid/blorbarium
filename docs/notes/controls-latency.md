@@ -347,3 +347,32 @@ all in handling, where the badge really turns.
 
 The harness now times a BOOT tap that showed nothing while down from its
 release (`Recorder::rebase`).
+
+### Board: 8029a0d, `--reps 6`: the aim held 3.5 s in fight mode
+
+At rest the aim was read 36/68 ms after the lean (from 100/207). In fight
+mode, 3501/3648: the aim held until the next knock knock's burst ended.
+Holding the aim for a knock burst's whole window (`KnockSense::busy`, up to
+0.6 s after its last knock, and on the board longer: the burst's table side
+can stay busy) froze the aim long past the knock.
+
+### 9. The aim holds only while a knock rings
+
+`KnockSense::ringing()`: a burst in a hand, within kMergeMs (170 ms) of its
+last spike or bounce. The aim holds only then (`BodySample::knockRinging`).
+What a knock locks is the aim on its first sample (the Dish's knockAim), and
+the screen shows that aim until the burst is decided, so the hand's sway
+between the knocks moves neither. Recordings: no first knock moved the aim
+it locks (`Aim.OnTheRecordingsAKnockLocksTheAimTheHandHeld`, every first
+knock on every recording); a lean right after a single knock or a knock knock
+is the aim within 60 ms (`Aim.ATiltRightAfterAKnockIsTheAimAtOnce`; with the
+burst's window it was 390 and 230 ms). `DEBUG trace` lines now end with the
+aim, busy and ring; `latency_probe.py --trace-fight` traces the first fight
+rep, should busy stick again.
+
+### 10. The cable never stalls the loop
+
+The cable's UART had only its 128-byte FIFO: a longer line held the loop
+until it went out at 115200 baud (the 10 s status line ~20 ms, a protocol
+reply more), and a gesture's samples and its frame waited with it (seen p95
+51-53 ms while the probe asked STATE). Serial now queues 2 KB.

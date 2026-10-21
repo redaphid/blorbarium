@@ -592,14 +592,16 @@ static std::optional<Timed> take() {
 // `DEBUG trace <seconds>`: every 50 Hz sample on the cable as the IMU read it,
 // with what the shell and the detectors made of it, to set the gestures
 // against real hands (tools/imu_record.py). 0 stops it.
-//   [imu] ms ax ay az tap rot side inverted sideHeld button pk peakAx peakAy peakAz
+//   [imu] ms ax ay az tap rot side inverted sideHeld button pk peakAx peakAy peakAz aim a busy b ring r
+//         (aim: the aim the duel reads now; busy: a knock burst under way; ring: a knock ringing)
 //   [stim] ms name        each body stimulus, on the sample that fired it
 static uint32_t traceUntil = 0;
 static void traceSample(const blorb::BodySample& raw, const blorb::BodySample& screen, uint8_t rot, uint32_t ms) {
   if (!traceUntil || int32_t(traceUntil - millis()) <= 0) return;
-  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d pk %d %d %d\n", unsigned(ms), raw.ax, raw.ay, raw.az,
-                unsigned(raw.tapCode), unsigned(rot), int(screen.sideDown), int(screen.invertedDown),
-                int(dish->sideHolding()), int(raw.buttonDown), raw.peakAx, raw.peakAy, raw.peakAz);
+  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d pk %d %d %d aim %d busy %d ring %d\n", unsigned(ms), raw.ax, raw.ay,
+                raw.az, unsigned(raw.tapCode), unsigned(rot), int(screen.sideDown), int(screen.invertedDown),
+                int(dish->sideHolding()), int(raw.buttonDown), raw.peakAx, raw.peakAy, raw.peakAz, int(dish->aimNow()),
+                int(screen.knocking), int(screen.knockRinging));
   const uint64_t fired = dish->firedLastSample();
   for (const blorb::StimInfo& st : blorb::STIMULI)
     if (st.id.v < 64 && (fired >> st.id.v & 1)) Serial.printf("[stim] %u %s\n", unsigned(ms), st.name);
@@ -998,6 +1000,14 @@ static void adoptTableSpecies(uint32_t now) {
 #endif
 
 void setup() {
+#if !defined(BADGE_BOARD_SIM)
+  // A line on the cable is queued, not waited out: with only the UART's
+  // 128-byte FIFO, the loop stood still while every longer line went out at
+  // 115200 baud (the 10 s status line, ~330 bytes: ~20 ms; a reply to the
+  // protocol: more), and a gesture's samples and frame waited with it
+  // (DEBUG latency: seen p95 51 ms while a probe asked STATE).
+  Serial.setTxBufferSize(2048);
+#endif
   Serial.begin(115200);
   boardButtonBegin();
 #if !defined(BADGE_BOARD_SIM)

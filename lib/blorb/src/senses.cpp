@@ -310,7 +310,10 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 
 void AimDetector::sample(const BodySample& s, uint32_t, SenseOut&) {
   if (absMg(magnitudeMg(s) - kOneG) > kSteadyMg) return;   // a jolt says nothing about the lean
-  if (s.knocking) return;   // a knock burst: the badge rings in the hand, and a knock is what locks the aim
+  // A knock ringing in the hand sways the badge: the aim holds (a knock
+  // locks the aim, and never moves it). Only while it rings: a burst's whole
+  // window (KnockSense::busy) once held the aim ~3.5 s on the board.
+  if (s.knockRinging) return;
   // The mean of this sample and the last steady one: one odd sample is
   // halved, and a lean is all there on its second sample (a smoothing that
   // only nears its target crawls the last of the way to a dead zone's edge).

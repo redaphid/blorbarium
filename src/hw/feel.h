@@ -60,6 +60,7 @@ class Feel {
     f.screen.invertedDown = poses_.inverted();   // upside down from home: the hang
     f.screen.sideDown = poses_.sideways();       // the hold's twin (SideHoldDetector, controls.h)
     f.screen.knocking = knocks_.busy();                  // a knock's bounce is no shake
+    f.screen.knockRinging = knocks_.ringing();           // ...nor an aim
     // One knock landed: the rim's "one more"; a second landed: the rim's flash.
     f.screen.knockWaiting = !asking && knocks_.waitingSecond();
     f.screen.knockKnock = !asking && knocks_.knockKnock();

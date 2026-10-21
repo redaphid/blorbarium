@@ -99,6 +99,7 @@ uint8_t KnockSense::decide() {
 }
 
 uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
+  now_ = ms;
   // With the shell's 250 Hz peak, the knock is judged on the peak (the read
   // farthest from the last sample); the steadiness history stays on samples.
   const int32_t kx = s.hasPeak ? s.peakAx : s.ax, ky = s.hasPeak ? s.peakAy : s.ay, kz = s.hasPeak ? s.peakAz : s.az;

@@ -33,6 +33,9 @@ struct BodySample {
   // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
   // and is not one.
   bool knocking = false;
+  // A knock in the hand is ringing (KnockSense::ringing, in the shell): the
+  // aim holds through it.
+  bool knockRinging = false;
   // One knock is in and a second could still make a knock knock
   // (KnockSense::waitingSecond, in the shell): GestureCues lights the hint's
   // "one more" while it lasts, so a kid who knocked once sees it was felt.
