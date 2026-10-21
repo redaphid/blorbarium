@@ -703,11 +703,6 @@ constexpr Rgb kBurst{255, 225, 74}, kBurstEdge{196, 64, 16};
 constexpr Rgb kStrike{200, 30, 40};
 constexpr Rgb kGlowLight{255, 240, 170};
 
-bool inDisc(int x, int y) {
-  const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide;
-  return dx * dx + dy * dy <= kSide * kSide;
-}
-
 // Where a burst may not paint: the two faces (drawStaged sets it while bursts draw).
 const Box* gKeepOut = nullptr;
 bool keptOut(int x, int y) {
@@ -1175,9 +1170,11 @@ void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& min
   phaseEnd(Phase::Figure);
   drawBootHint(cv, sc.boot);
   phaseStart();
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x)
-      if (!inDisc(x, y)) cv.px[y * kSide + x] = 0;
+  for (int y = 0; y < kSide; ++y) {
+    const int from = kDish.from[y];
+    std::memset(&cv.px[y * kSide], 0, sizeof(uint16_t) * size_t(from));
+    std::memset(&cv.px[y * kSide + kSide - from], 0, sizeof(uint16_t) * size_t(from));
+  }
   phaseEnd(Phase::Mask);
 }
 

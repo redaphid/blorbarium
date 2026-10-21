@@ -47,6 +47,25 @@ ScarLayer placeScars(const blorb::Scars&, const FrameRef& body, const PaletteEnt
 // where no scar is. A crease is darker, its ridge a little lighter.
 int scarShade(const ScarLayer&, int rx, int ry);
 
+// ---- the round panel ----------------------------------------------------------------
+
+// Row y's first column inside the round panel (a pixel whose centre is within
+// 120 px of the middle), so the last is 239 - it: every pixel of the row left
+// of it and right of the last is outside. Worked out at compile time, so a
+// mask is two memsets a row, not a test a pixel.
+struct DishSpans { uint8_t from[240]; };
+constexpr DishSpans dishSpans() {
+  DishSpans s{};
+  for (int y = 0; y < 240; ++y) {
+    int x = 0;
+    const int dy = 2 * y + 1 - 240;
+    while (x < 120 && (2 * x + 1 - 240) * (2 * x + 1 - 240) + dy * dy > 240 * 240) ++x;
+    s.from[y] = uint8_t(x);
+  }
+  return s;
+}
+inline constexpr DishSpans kDish = dishSpans();
+
 // ---- draw.cpp -----------------------------------------------------------------------
 
 // A pet where the duel stands him: his own Appearance (colours, marks, scars,

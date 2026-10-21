@@ -782,11 +782,7 @@ bool inDish(int x, int y) {
 
 // The first column of row y inside the dish (inDish), and so, by symmetry,
 // the last is kSide - 1 - it. Every pixel left of it and right of the last is outside.
-int dishFrom(int y) {
-  int x = 0;
-  while (x < kSide / 2 && !inDish(x, y)) ++x;
-  return x;
-}
+int dishFrom(int y) { return kDish.from[y]; }
 
 // A dark bog-teal dish, lighter at the middle, with a faint glassy rim,
 // ordered-dithered so the gradient does not band in RGB565.
@@ -1051,8 +1047,7 @@ constexpr char kSealedMarquee[] = "SAFE BUT STUCK - ASK A GROWN-UP";
 void amber(Canvas240& cv, int alpha) {
   const uint16_t c = to565({kAmber[0], kAmber[1], kAmber[2]});
   for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x)
-      if (inDish(x, y)) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], c, alpha);
+    for (int x = dishFrom(y); x < kSide - dishFrom(y); ++x) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], c, alpha);
 }
 
 // Over him: the tint, two glints where light would catch a polished drop, the
