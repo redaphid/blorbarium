@@ -1,4 +1,5 @@
 #include <cmath>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
@@ -238,7 +239,8 @@ class RowReader {
       ++row_;
       int x = 0;
       while (x < w_) {
-        if (row_ == y) std::memset(buf_ + x, p_[1], size_t(imin(p_[0], w_ - x)));
+        if (row_ == y)   // runs are a few pixels: a loop, not a memset call each
+          for (uint8_t *d = buf_ + x, *e = buf_ + x + imin(p_[0], w_ - x), v = p_[1]; d < e;) *d++ = v;
         x += p_[0];
         p_ += 2;
       }
@@ -407,32 +409,54 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   // 64-bit division a pixel (a library call on the board).
   const int den = 2 * v.kx;   // kx >= 1 (above), so den > 0
   const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
+  const int fw = f.w, ox = f.originX, oy = f.originY;
   const bool scarred_ = scars && scars->count;
   static ScarRows scarRows;   // shared, like scratchColours: one blit at a time, off the loop task's stack
   if (scarred_) scarRows.begin(*scars);
+  // Each canvas column's source column. Along a row they depend on the row
+  // only through the lean, so with none they are worked out once a blit; and
+  // since they only climb, the columns that land inside the frame are one
+  // span, [xa, xb]. Shared like scarRows.
+  static int16_t cols[kSide];
+  int lastShift = INT_MIN, xa = 0, xb = -1;
   for (int y = top; y <= bottom; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
-    int sy = f.originY + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
+    int sy = oy + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
     if (sy < 0) continue;
     if (sy >= f.h) break;
     const uint8_t* row = rows.seek(sy);
-    int shift2 = floorDiv(int64_t(dy2) * v.shear, kOne);
-    if (scarred_) scarRows.row(sy - f.originY);
-    const int64_t num = int64_t(2 * (left - p.x) + 1 + shift2) * kOne;
-    int q = floorDiv(num, den), rem = int(num - int64_t(q) * den);   // 0 <= rem < den
-    for (int x = left; x <= right; ++x, q += stepQ, rem += stepR) {
-      if (rem >= den) rem -= den, ++q;
-      int sx = f.originX + int(q);
-      if (sx < 0 || sx >= f.w) continue;
-      uint8_t i = row[sx];
+    const int shift2 = v.shear ? floorDiv(int64_t(dy2) * v.shear, kOne) : 0;
+    if (shift2 != lastShift) {
+      lastShift = shift2;
+      const int64_t num = int64_t(2 * (left - p.x) + 1 + shift2) * kOne;
+      int q = floorDiv(num, den), rem = int(num - int64_t(q) * den);   // 0 <= rem < den
+      xa = right + 1, xb = left - 1;
+      for (int x = left; x <= right; ++x, q += stepQ, rem += stepR) {
+        if (rem >= den) rem -= den, ++q;
+        const int sx = ox + q;
+        cols[x] = int16_t(sx);
+        if (sx >= 0 && sx < fw) xa = imin(xa, x), xb = x;
+      }
+    }
+    uint16_t* const out = &cv.px[y * kSide];
+    if (alpha >= 256 && !mottle && !scarred_) {   // most of what is drawn: a palette lookup a pixel
+      const uint16_t* const base = col.base;
+      for (int x = xa; x <= xb; ++x)
+        if (const uint8_t i = row[cols[x]]) out[x] = base[i];
+      continue;
+    }
+    if (scarred_) scarRows.row(sy - oy);
+    for (int x = xa; x <= xb; ++x) {
+      const int sx = cols[x];
+      const uint8_t i = row[sx];
       if (!i) continue;
-      bool spot = mottle && col.region[i] == blorb::region::skin.v && spotted(*mottle, sx - f.originX, sy - f.originY);
+      const bool spot = mottle && col.region[i] == blorb::region::skin.v && spotted(*mottle, sx - ox, sy - oy);
       uint16_t c = spot ? col.spot[i] : col.base[i];
       if (scarred_ && isHide(col.region[i])) {
-        const int q = scarRows.shade(sx - f.originX);
+        const int q = scarRows.shade(sx - ox);
         if (q != 128) c = scarred(c, q);   // 128 leaves it as it is
       }
-      uint16_t& dst = cv.px[y * kSide + x];
+      uint16_t& dst = out[x];
       dst = alpha >= 256 ? c : blend(dst, c, alpha);
     }
   }
