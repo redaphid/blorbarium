@@ -217,19 +217,21 @@ static uint32_t sleptMs();
 // rows= is the rows sent a frame (240 is a whole frame); cpu_now= the clock as
 // it runs, against cpu=, the clock it was set to. A second line splits a
 // frame's time by phase, ms a frame (paint/phases.h):
-//   [fps] phases bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
-// over= is what is drawn over the dish after it (the update's screen, the
-// debug link's mark, the idle bar), wait= the rest of the loop between frames.
+//   [fps] phases look=0.9 bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
+// look= is the Dish working out his Appearance (draw_ms counts it), over= what
+// is drawn over the dish after it (the update's screen, the debug link's
+// mark, the idle bar), wait= the rest of the loop between frames.
 //   DEBUG fps bench    what the canvas's memory and the renderer's parts cost, once each
 static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
 static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0;
-static uint64_t drawUs = 0, pushUs = 0;
+static uint64_t lookUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
-static void note(uint32_t draw, uint32_t push) {
-  ++frames, drawUs += draw, pushUs += push;
-  if (draw + push > worstUs) worstUs = draw + push;
+// look: the Dish's Appearance (the engine's), draw: the canvas, push: the panel.
+static void note(uint32_t look, uint32_t draw, uint32_t push) {
+  ++frames, lookUs += look, drawUs += draw, pushUs += push;
+  if (look + draw + push > worstUs) worstUs = look + draw + push;
 }
 // "a.b": tenths of a ms from a total of us over n.
 static void ms(char* out, size_t cap, uint64_t us, uint32_t n) {
@@ -239,7 +241,7 @@ static void ms(char* out, size_t cap, uint64_t us, uint32_t n) {
 static void report() {
   const uint32_t t = millis(), over = t - since, n = frames ? frames : 1, rows = boardRowsSent() - rows0;
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
-  const uint32_t draw = uint32_t(drawUs / n), push = uint32_t(pushUs / n);
+  const uint32_t draw = uint32_t((lookUs + drawUs) / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
                 "spi_mhz=%u.%u frame_ms=%u power=%s\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
@@ -251,15 +253,17 @@ static void report() {
   uint64_t painted = 0;
   for (int i = 0; i < int(Phase::Count); ++i) painted += spent[i];
   const uint64_t loopUs = uint64_t(over) * 1000;
-  char f[10][12];
+  char f[11][12];
   const Phase order[] = {Phase::Background, Phase::Figure, Phase::Rim, Phase::Text, Phase::Rings, Phase::Mask, Phase::Hint};
-  for (int i = 0; i < 7; ++i) ms(f[i], sizeof f[i], spent[uint8_t(order[i])], n);
-  ms(f[7], sizeof f[7], drawUs > painted ? drawUs - painted : 0, n);
-  ms(f[8], sizeof f[8], pushUs, n);
-  ms(f[9], sizeof f[9], loopUs > drawUs + pushUs ? loopUs - drawUs - pushUs : 0, n);
-  Serial.printf("[fps] phases bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s\n", f[0], f[1],
-                f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9]);
-  since = t, frames = 0, worstUs = 0, rows0 = boardRowsSent(), drawUs = pushUs = 0;
+  ms(f[0], sizeof f[0], lookUs, n);
+  for (int i = 0; i < 7; ++i) ms(f[1 + i], sizeof f[1 + i], spent[uint8_t(order[i])], n);
+  ms(f[8], sizeof f[8], drawUs > painted ? drawUs - painted : 0, n);
+  ms(f[9], sizeof f[9], pushUs, n);
+  const uint64_t busy = lookUs + drawUs + pushUs;
+  ms(f[10], sizeof f[10], loopUs > busy ? loopUs - busy : 0, n);
+  Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s\n", f[0],
+                f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10]);
+  since = t, frames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0;
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
@@ -1508,9 +1512,13 @@ void loop() {
 #endif
   if (!dark && !holdFrame && now - lastFrame >= kFrameMs) {
 #if !defined(BADGE_BOARD_SIM)
+    const uint32_t lookAt = micros();
+#endif
+    const blorb::Appearance look = shown();
+#if !defined(BADGE_BOARD_SIM)
     const uint32_t drawAt = micros();
 #endif
-    drawFrame(shown(), now);
+    drawFrame(look, now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
     else dbgfw::draw(canvas);
@@ -1520,7 +1528,7 @@ void loop() {
 #endif
     boardPresent(display, canvas);
 #if !defined(BADGE_BOARD_SIM)
-    fps::note(pushAt - drawAt, micros() - pushAt);
+    fps::note(drawAt - lookAt, pushAt - drawAt, micros() - pushAt);
 #endif
     ++framesDrawn;
     lastFrame = now;

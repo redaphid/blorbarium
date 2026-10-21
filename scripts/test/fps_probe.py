@@ -10,7 +10,7 @@
 First `DEBUG fps bench`: a memset and a read of the whole canvas (its
 memory's speed) and the frame shown now drawn ten times, by phase, in us.
 Then, for each SPI clock (`DEBUG lcd <MHz>`): settle, then `DEBUG fps` over a
-window at rest, with the frame's ms by phase (bg, fig, rim, text, rings,
+window at rest, with the frame's ms by phase (look, bg, fig, rim, text, rings,
 mask, hint, over, push, and wait: the rest of the loop). Then low power and back: `DEBUG power low` must show no
 frames and the clock down, `DEBUG power wake` the clock at 240 again and
 frames running. Last, at each clock, a hang (`DEBUG hang`, the red ring
