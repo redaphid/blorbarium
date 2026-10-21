@@ -102,8 +102,72 @@ while awake is the way to add one later.
 - **While turned onto a side, the duel's aim is the aim from before the
   turn** (the tilt of 1.5 s before), since turning him tips the tilt: a
   heavy special lands where the kid aimed.
-- **The knock knock that wakes a dark badge only lights it**, as the press
-  that wakes it does: nobody feeds him unseen.
+- **Nobody feeds him unseen.** The press that wakes a dark badge only lights
+  it, and so does a knock knock decided on the sample that woke it. In a
+  hand the first knock's jolt usually wakes the badge, and the knock knock,
+  decided 0.6 s later, then feeds him on a lit screen
+  (`test_feeding` `KnockKnock.ADarkBadgeIsLitAndNeverFedInTheDark`).
+- **A question owns the knock knock as it owns BOOT**: while the update asks
+  "Turn me around!" (or the debug unlock asks), a knock knock answers
+  nothing and feeds nobody (`hw/feel.h`). Until 2026-10-21 it dropped a
+  pellet behind the update's screen, where it rotted unseen.
+
+## Feeding, as the kid sees it
+
+Owner, 2026-10-21: "The 'feeding' mechanism on double knock either doesn't
+work, or its effects are not obvious." It worked (`test/test_feeding` plays
+real knocks, the recordings included, through the shell and the Dish at
+either home and any frame rate), but almost nothing showed it: a 15 px
+pellet appeared somewhere, 0.6 s after the second knock, and he ate it only
+if he wanted it. Four pellets in the pantry and one back every two hours
+(the metabolism gene) meant a kid who knocked five times was then fed
+nothing, with only a greyed glyph to say so. Now (`blorb/feed_show.h`,
+`lib/paint/src/feeding.cpp`, presentation only: the engine is unchanged):
+
+People who then played with the badges said the pellet "looks like
+pooping" and they could not tell if he ate: the pack's small dark pellet
+appeared on the floor by his feet. So the food is now a fat cookie drawn in
+code (golden, chocolate chips, a dark outline, a highlight), never by his
+feet or behind him, and it goes into his mouth:
+
+| When | What shows |
+|---|---|
+| The second knock lands | as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided: a small ring round the rim's pellet glyph, and a cookie springs out of it and waits there (none if the pantry is empty) |
+| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry's pip goes |
+| It lies in the dish | as a cookie; one that would lie on, under or behind him, or by his feet, is set down beside him, clear of his body |
+| He bites it | it is at his mouth (held up by his eyes when a species' mouth is tagged low, as the octopus's), a bite out of it each third of the chew; a burst and crumbs, YUM! and three hearts (rotten: grey-green, YUCK) |
+| Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
+| He is full (hunger under 0.15) | he says I'M FULL! in a bubble. The cookie still lies there |
+| He is asleep | ZZZ... in a bubble. The cookie waits for him |
+| The pantry is empty | ALL GONE! in a bubble; the pantry's empty slots shake at the top, the next one filling like a clock |
+
+The first version (2026-10-21, 94e22a3) flashed a gold ring round the whole
+rim on the second knock ("a little much, and didn't help me understand I was
+feeding it") and said a refusal in pictures: the owner, knocking until the
+pantry was empty, read its grey cookie and hourglass as "two emojis, the
+globe and something else". Both are gone: the knock brings a cookie, and a
+refusal is words (checked against the font, `test_paint` `Font.*`).
+
+**The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
+declared in `lib/paint/src/figure.h`): every cookie on screen goes through
+it, so generated art can replace its body (a sprite at the centre and
+radius it is given) without touching the feeding. The packs' `item()`
+pellet frames are no longer drawn.
+
+Previews: `bash scripts/test/feeding_film.sh` films a feeding (grungo,
+puffkin, a mudge hatchling, and the three refusals) on this checkout and on
+the commit before it, into `outputs/feeding/` (`sheet_<film>.png`: before
+above after). The sim's `!knock` and `!dtap` now knock the raw samples, as
+a knuckle does (they had set the tap engine's register, which `KnockSense`
+overrules, so no sim knock had reached the pet since 0.7.12); goldens
+`knock_knock` and `pellet_toss` film it.
+
+Not changed, for the owner to decide: the pantry (4, one back every 2 h);
+that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
+starving pet that eats it later is poisoned); where the engine drops it (a
+random spot within 0.6 of the middle, then it rolls downhill, to the bottom
+rim when the badge is held upright); and his mouth opening toward it (pose
+art).
 
 ## He teaches them
 

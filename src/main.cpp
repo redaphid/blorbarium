@@ -49,6 +49,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 using PetStorage = hw::NvsFsStorage;
 #endif
 
+#include "hw/feel.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
 #include "hw/power.h"
@@ -202,7 +203,6 @@ static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
-static orient::Up up{ORIENT_R0};
 // Low power after BLORB_IDLE_SECONDS (600) with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
 static uint32_t framesDrawn = 0;
@@ -605,29 +605,22 @@ static bool petFeels(bool down, bool remote) {
 #endif
 }
 
-static blorb::KnockSense knockSense;
+// The knocks, the power policy's input, the poses and the turn into the
+// screen's frame, for every sample (hw/feel.h, pure so test_feeding replays it).
+static hw::Feel shell{ORIENT_R0, ORIENT_HOME, powerPolicy};
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
-  // Knocks come from the samples, not the IMU's tap engine, which missed real
-  // knock knocks and reported handling as double taps (blorb/knocks.h).
-  blorb::BodySample body = sensed;
-  body.tapCode = knockSense.sample(sensed, ms);
-  lastBody = body;
-  // In the IMU's own frame: a turn of the panel is no move. The press that
-  // wakes a dark badge only lights it: nobody pressed for a pellet unseen.
-  static bool wakePress = false;
-  const bool wasLow = powerPolicy.low();
-  powerPolicy.sample(body, ms);
-  if (wasLow && !powerPolicy.low() && body.buttonDown) wakePress = true;
-  if (!body.buttonDown) wakePress = false;
-  // Nor does the knock knock that wakes it: its twin is a press (controls.h).
-  blorb::BodySample felt = body;
-  if (wasLow && !powerPolicy.low() && felt.tapCode) felt.tapCode = 0;
+#if !defined(BADGE_BOARD_SIM)
+  const bool asking = updater.asking() || debugAsks();   // a question owns BOOT, and its twin with it
+#else
+  constexpr bool asking = false;
+#endif
+  hw::Felt f = shell.sample(sensed, ms, asking);
+  lastBody = f.body;
   // The screen no longer turns with the badge (owner, 2026-10-19: a turning
   // screen turned the duel's aim with it, so no attack could be picked). The
   // panel stays at home (USB-C up) and the engine feels the badge in that one
   // frame: left is left, always. The settled rotation is still read, for the
   // poses (side hold, hang) and the update's turn.
-  const uint8_t rot = up.sample(body, ms);
   if (display.getRotation() != ORIENT_HOME) {
     boardPanelIdle();
     display.setRotation(ORIENT_HOME);
@@ -638,23 +631,16 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
-  if (turnYes.sample(updater.asking(), rot, millis())) {
-    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(rot));
+  if (turnYes.sample(updater.asking(), f.rot, millis())) {
+    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(f.rot));
     updater.press(millis());
   }
 #endif
-  blorb::BodySample screen = up.toFrame(felt, ORIENT_HOME);
-  // The poses, judged in the turned frame (orient::Up::inverted, sideways):
-  // the detectors take these levels as given.
-  screen.invertedDown = up.inverted(felt, ORIENT_HOME);   // upside down from home: USB-C down
-  screen.sideDown = up.sideways(felt, ORIENT_HOME);       // the hold's twin (SideHoldDetector, controls.h)
-  screen.knocking = knockSense.busy();
-  screen.knockWaiting = knockSense.waitingSecond();   // one knock landed: the rim's "one more"
-  applyLean(screen, ms);
-  screen.buttonDown = petFeels(screen.buttonDown && !wakePress, remote);
-  dish->sample(screen, ms);
+  applyLean(f.screen, ms);
+  f.screen.buttonDown = petFeels(f.screen.buttonDown, remote);
+  dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
-  traceSample(body, screen, rot, ms);
+  traceSample(f.body, f.screen, f.rot, ms);
 #endif
 }
 
@@ -827,7 +813,7 @@ static void reportStatus(uint32_t now) {
       unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(ESP.getFreePsram()), unsigned(uxTaskGetStackHighWaterMark(nullptr)),
       unsigned(store.writes()), o.kind, unsigned(o.gen), unsigned(o.genome), unsigned(o.age), unsigned(dish->tickCount()), lastBody.ax,
-      lastBody.ay, lastBody.az, unsigned(up.rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0,
+      lastBody.ay, lastBody.az, unsigned(shell.up().rotation()), temp, unsigned(lastBody.tapCode), lastBody.buttonDown ? 1 : 0,
       powerPolicy.low() ? "low" : "full", unsigned(cpuMaxMhz), unsigned(framesDrawn));
 }
 #endif

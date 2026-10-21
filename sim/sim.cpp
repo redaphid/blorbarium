@@ -129,8 +129,8 @@ static void hand(const char* word, const char* a, const char* b) {
   SimHand& h = Wire.hand;
   const uint32_t now = millis();
   if (!strcmp(word, "shake")) h.shakeUntil = now + argMs(a, 1200);
-  else if (!strcmp(word, "knock")) h.tap = 1;
-  else if (!strcmp(word, "dtap")) h.tap = 2;
+  else if (!strcmp(word, "knock")) h.tap = 1, h.knock(now);
+  else if (!strcmp(word, "dtap")) h.tap = 2, h.knock(now), h.knock(now + 300);   // knock knock: a press (controls.h)
   else if (!strcmp(word, "tilt")) { h.tiltX = atoi(a); h.tiltY = atoi(b); h.lidded = false; h.lidUntil = 0; }
   else if (!strcmp(word, "flip")) h.flipUntil = now + 600;   // past kFaceDownMg and back, short of a lid
   else if (!strcmp(word, "lid")) { if (*a) h.lidUntil = now + argMs(a, 0); else h.lidded = true; }

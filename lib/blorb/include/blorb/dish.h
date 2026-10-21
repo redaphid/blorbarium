@@ -10,6 +10,7 @@
 #include "blorb/appearance.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
+#include "blorb/feed_show.h"
 #include "blorb/gesture_cues.h"
 #include "blorb/habitat.h"
 #include "blorb/keepsake.h"
@@ -198,6 +199,7 @@ class Dish {
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
+  void feedView(Appearance&) const;
   void onHatch(Egg&);
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
@@ -220,6 +222,11 @@ class Dish {
   // level (what the duel times its 3 s holds by), a first press or knock
   // waiting for its second, and how the rim's hint shows it (gesture_cues.h).
   GestureCues cues_;
+  // Feeding as the eyes see it (feed_show.h): presentation only, never saved
+  // or hashed. nowMs_ is the newest time the shell has handed in, a sample's
+  // or a tick call's: the frame drawn next is about then.
+  FeedShow feed_;
+  uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn
   // (turning him tips the tilt): the last kAimHistory ticks of tilt.

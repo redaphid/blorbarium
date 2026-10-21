@@ -1,0 +1,17 @@
+# Wall time first, as a phone visit gives it: the pet's day is the wall's.
+@0 DEBUG time 1790000000
+# The 30-minute egg hatches; life falls to an adult's.
+@100 DEBUG warp 18000
+@200 DEBUG inject life 0.5
+@300 DEBUG warp 600
+# Hungry, resting, so the shots find him in one place.
+@400 DEBUG inject vision 0
+@400 DEBUG inject hunger 1
+@400 DEBUG force rest
+@2400 DEBUG force rest
+# A knock knock through the face: two knuckle jolts in the raw samples, 300 ms
+# apart, judged by KnockSense in the shell as on a badge. The rim flashes on
+# the second (knock_knock), and once it is decided the pellet is tossed in
+# from the rim's glyph (pellet_toss).
+@3000 !dtap
+@4400 DEBUG force rest

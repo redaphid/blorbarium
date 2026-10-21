@@ -12,8 +12,10 @@
 #include "blorb/appearance.h"
 #include "blorb/dish_duel.h"
 #include "blorb/registry.h"
+#include "blorb/thoughts.h"
 #include "paint/duel.h"
 #include "paint/marquee.h"
+#include "paint/text.h"
 #include "paint/sprite_pack.h"
 
 using blorb::Appearance;
@@ -94,10 +96,10 @@ struct LegsPack : BlockPack {
   FrameRef body(blorb::PoseId, blorb::Stage, uint16_t) const override { return frame(legs, kBodyEyes); }
 };
 
-// The block with a mouth: its neutral patch tags a 6x4 block centred at frame (30, 52).
+// The block with a mouth: its neutral patch tags a 6x4 block centred at frame (30, 36).
 // A rotten pellet is a brown chip; every other item is the red one.
 struct MouthPack : BlockPack {
-  std::vector<uint8_t> mouth = encode(kW, kH, [](int x, int y) { return uint8_t(x >= 27 && x < 33 && y >= 50 && y < 54 ? 3 : 0); });
+  std::vector<uint8_t> mouth = encode(kW, kH, [](int x, int y) { return uint8_t(x >= 27 && x < 33 && y >= 34 && y < 38 ? 3 : 0); });
   std::vector<uint8_t> rot = encode(kItem, kItem, [](int, int) { return uint8_t(4); });
   PaletteEntry withMouth[5] = {{0, 0, 0, 255}, {96, 128, 48, 255}, {200, 40, 40, 255}, {250, 250, 0, blorb::region::mouth.v},
                                {120, 88, 32, 255}};
@@ -437,62 +439,124 @@ TEST(Hop, LiftsTheSpriteByStrengthTimesTheMax) {
 
 // Items used to draw behind him whatever their depth, so one at his feet
 // peeked out between them; the floor now decides what is in front.
-TEST(Items, OneBelowHisFeetIsDrawnWholeAndOneAboveHidesBehindHim) {
+// The food is feeding.cpp's cookie (drawFood), found by its outline.
+constexpr uint16_t kCookieEdge = (96 >> 3) << 11 | (52 >> 2) << 5 | (22 >> 3);
+constexpr uint16_t kRotEdge = (66 >> 3) << 11 | (74 >> 2) << 5 | (36 >> 3);
+
+// Food far from him lies where it is, in front of him or behind him by the floor.
+TEST(Items, FoodAwayFromHimLiesWhereItIs) {
   BlockPack pack;
-  const uint16_t kChip = rgb565(200, 40, 40);
-  for (double dy : {0.14, -0.08}) {
-    Appearance a = adult();
-    a.items[0] = {Appearance::Item::What::Pellet, {fx(0), fx(dy)}};
-    a.itemCount = 1;
-    int shown = find(*render(a, pack), kChip).count;
-    if (dy > 0) EXPECT_EQ(shown, BlockPack::kItem * BlockPack::kItem) << "below his feet: in front, whole";
-    else EXPECT_EQ(shown, 0) << "above his feet: behind him";
-  }
-}
-
-TEST(Items, OneUnderHimDoesNotShowBetweenHisLegs) {
-  LegsPack pack;
-  const uint16_t kChip = rgb565(200, 40, 40);
-  Appearance a = adult();
-  a.items[0] = {Appearance::Item::What::Pellet, {fx(0), fx(-0.06)}};
+  Appearance a = adult(-0.5, -0.5);
+  a.items[0] = {Appearance::Item::What::Pellet, {fx(0.5), fx(0.5)}};
   a.itemCount = 1;
-  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, behind his legs";
-  a.items[0].at.y = fx(0.02);
-  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "under his body, at his toes";
-  a.items[0].at.y = fx(0.14);
-  EXPECT_EQ(find(*render(a, pack), kChip).count, BlockPack::kItem * BlockPack::kItem) << "in front of his feet";
+  const Box food = find(*render(a, pack), kCookieEdge);
+  ASSERT_GT(food.count, 20);
+  const Box body = find(*render(a, pack), kOlive);
+  EXPECT_GT(food.x0, body.x1) << "off to his right";
+  EXPECT_GT(food.y0, body.y1) << "and below him in the dish";
 }
 
-// The pellet he bites leaves the dish; while he eats it is drawn at his
-// mouth, in front of him, and rides the body's transform.
-TEST(Eating, ThePelletHeBitIsInFrontOfHimAtHisMouth) {
+// Food by his feet, under him or behind his body is set down beside him,
+// clear of it: on the floor by his rear or between his feet it read as a
+// dropping to the people who played with him.
+TEST(Items, FoodNearHimIsSetBesideHimNeverUnderOrBehind) {
+  LegsPack pack;
+  for (double dy : {0.14, 0.02, -0.06, -0.08, -0.2})
+    for (double dx : {-0.03, 0.03}) {
+      Appearance a = adult();
+      a.items[0] = {Appearance::Item::What::Pellet, {fx(dx), fx(dy)}};
+      a.itemCount = 1;
+      const auto cv = render(a, pack);
+      const Box food = find(*cv, kCookieEdge), body = find(*cv, kOlive);
+      ASSERT_GT(food.count, 20) << dx << "," << dy << ": always seen";
+      EXPECT_TRUE(food.x0 > body.x1 || food.x1 < body.x0) << dx << "," << dy << ": beside him, not on him";
+      EXPECT_EQ(food.x0 > body.x1, dx > 0) << "on its own side";
+    }
+}
+
+// The food he bit leaves the dish; while he eats it is at his mouth, in
+// front of him, rides the body's transform, and goes as he chews.
+TEST(Eating, TheFoodHeBitIsAtHisMouthAndGoesAsHeChews) {
   MouthPack pack;
-  const uint16_t kChip = rgb565(200, 40, 40);
   Appearance a = adult();
-  EXPECT_EQ(find(*render(a, pack), kChip).count, 0) << "not eating: nothing at his mouth";
+  EXPECT_EQ(find(*render(a, pack), kCookieEdge).count, 0) << "not eating: nothing at his mouth";
   a.mouth = blorb::Mouthful::Pellet;
-  Box body = find(*render(a, pack), kOlive);
-  Box chip = find(*render(a, pack), kChip);
-  ASSERT_EQ(chip.count, BlockPack::kItem * BlockPack::kItem) << "whole, in front of him";
-  double sy = double(body.y1 - body.y0 + 1) / BlockPack::kH;
-  EXPECT_NEAR((chip.x0 + chip.x1) / 2.0, body.x0 + 30, 1.5);
-  EXPECT_NEAR((chip.y0 + chip.y1) / 2.0, body.y0 + 52 * sy, 1.5);
-  Box up = find(*render(hopping(a, fx(0.45), Fx::one()), pack), kChip);
-  EXPECT_EQ(chip.y0 - up.y0, kHopMaxPx) << "it leaps with him";
+  a.pose = blorb::pose::eat;
+  a.poseTick = 0;
+  const Box body = find(*render(a, pack), kOlive);
+  const auto whole = render(a, pack);
+  const Box food = find(*whole, kCookieEdge);
+  ASSERT_GT(food.count, 20) << "in front of him";
+  const double sy = double(body.y1 - body.y0 + 1) / BlockPack::kH;
+  EXPECT_NEAR((food.x0 + food.x1) / 2.0, body.x0 + 30, 2.0);
+  EXPECT_NEAR((food.y0 + food.y1) / 2.0, body.y0 + 36 * sy, 2.0);
+  const Box up = find(*render(hopping(a, fx(0.45), Fx::one()), pack), kCookieEdge);
+  EXPECT_EQ(food.y0 - up.y0, kHopMaxPx) << "it leaps with him";
+  a.poseTick = 13;
+  const Box chewed = find(*render(a, pack), kCookieEdge);
+  EXPECT_LT(chewed.count, food.count) << "bitten";
+}
+
+// Every species at every stage has a mouth the food goes to: up at his face
+// (mossby's is low, under his shell, and still his face), never down by his
+// feet (food low on him read as something he left).
+TEST(Eating, EverySpeciesEatsAtItsMouthAtEveryStage) {
+  for (uint8_t sp = 0; sp < blorb::kSpeciesCount; ++sp)
+    for (blorb::Stage st : {blorb::Stage::Baby, blorb::Stage::Adult, blorb::Stage::Elder}) {
+      const paint::SpritePack& pack = paint::packFor(blorb::SpeciesId{sp});
+      Appearance a = adult();
+      a.stage = st;
+      a.scalePct = st == blorb::Stage::Baby ? 55 : 100;
+      a.species = blorb::SpeciesId{sp};
+      a.pose = blorb::pose::eat;
+      a.mouth = blorb::Mouthful::Pellet;
+      const Box food = find(*render(a, pack), kCookieEdge);
+      ASSERT_GT(food.count, 20) << "species " << int(sp) << " stage " << int(st) << ": no mouth tagged";
+      Appearance shut = a;
+      shut.mouth = blorb::Mouthful::Nothing;
+      shut.pose = blorb::pose::idle;
+      auto plain = render(shut, pack);
+      int top = kSide, bottom = -1;   // his body, from the dish's background: the first and last rows he covers at the centre column
+      Appearance empty;
+      empty.kind = Appearance::Kind::Clutch;   // a clutch of none: the dish alone
+      auto bg = render(empty, pack);
+      for (int y = 0; y < kSide; ++y)
+        for (int x = 100; x < 140; ++x)
+          if (plain->px[y * kSide + x] != bg->px[y * kSide + x]) top = std::min(top, y), bottom = std::max(bottom, y);
+      const int mid = (food.y0 + food.y1) / 2;
+      EXPECT_LT(mid, top + (bottom - top) * 7 / 10) << "species " << int(sp) << " stage " << int(st)
+                                                    << ": the food is low on him, not at his face";
+    }
+}
+
+// A mouth tagged low on the body (the octopus's beak, under him) holds the
+// food up by his eyes: food low on him read as something he was leaving.
+TEST(Eating, AMouthLowOnHimHoldsTheFoodUpByHisEyes) {
+  struct LowMouth : MouthPack {
+    std::vector<uint8_t> low = encode(kW, kH, [](int x, int y) { return uint8_t(x >= 27 && x < 33 && y >= 68 && y < 72 ? 3 : 0); });
+    FrameRef face(blorb::ExprId e, blorb::Stage) const override {
+      return e == blorb::expr::neutral ? frame(low, kBodyEyes) : FrameRef{};
+    }
+  } pack;
+  Appearance a = adult();
+  a.mouth = blorb::Mouthful::Pellet;
+  const Box body = find(*render(a, pack), kOlive), food = find(*render(a, pack), kCookieEdge);
+  ASSERT_GT(food.count, 20);
+  const double sy = double(body.y1 - body.y0 + 1) / BlockPack::kH;
+  EXPECT_NEAR((food.y0 + food.y1) / 2.0, body.y0 + (16 + 24) * sy, 2.5) << "the eyes, and 3/10 of him below them";
 }
 
 // It used to be the fresh pellet whatever he bit, so the owner never saw him eat rot.
-TEST(Eating, ARottenBiteIsTheRottenPelletAtHisMouth) {
+TEST(Eating, ARottenBiteIsTheRottenFoodAtHisMouth) {
   MouthPack pack;
-  const uint16_t kFresh = rgb565(200, 40, 40), kRotten = rgb565(120, 88, 32);
   Appearance a = adult();
   a.mouth = blorb::Mouthful::Pellet;
-  const Box fresh = find(*render(a, pack), kFresh);
+  const Box fresh = find(*render(a, pack), kCookieEdge);
   a.mouth = blorb::Mouthful::RottenPellet;
   auto cv = render(a, pack);
-  const Box rotten = find(*cv, kRotten);
-  EXPECT_EQ(find(*cv, kFresh).count, 0) << "no fresh pellet anywhere";
-  ASSERT_EQ(rotten.count, BlockPack::kItem * BlockPack::kItem) << "the rotten one, whole, in front of him";
+  const Box rotten = find(*cv, kRotEdge);
+  EXPECT_EQ(find(*cv, kCookieEdge).count, 0) << "no fresh food anywhere";
+  ASSERT_GT(rotten.count, 20);
   EXPECT_EQ(rotten.x0, fresh.x0) << "where the fresh one would be";
   EXPECT_EQ(rotten.y0, fresh.y0);
 }
@@ -680,6 +744,99 @@ TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
   paint::drawString(*centred, f, "HI", 120 - w / 2, 120 + kStrip.dy, 0xFFFF, {0, 0, 240, 240, 0});
   EXPECT_GT(countChanged(*parked, *blank()), 0);
   EXPECT_EQ(countChanged(*parked, *centred), 0) << "a short said line does not park centred";
+}
+
+// ---- feeding (feed_show.h, feeding.cpp) ------------------------------------------------
+
+// Nothing heard, dropped, refused or eaten lately: the dish is drawn as it always was.
+TEST(Feeding, NoNewsDrawsNothing) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.1);
+  a.pantry = 2;
+  a.feed.pantryMax = 4;
+  a.feed.fullness = fx(0.5);
+  Appearance plain = a;
+  plain.feed = blorb::FeedView{};
+  EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
+}
+
+// The second knock says FOOD at once: a cookie springs out of the rim's
+// pellet glyph (top right) and waits there; nothing else on the screen moves.
+// With the pantry empty, no cookie comes.
+TEST(Feeding, TheKnockKnockBringsACookieOutOfThePantryGlyph) {
+  const auto& pack = paint::placeholderPack();
+  Appearance plain = adult();
+  plain.pantry = 3;
+  Appearance heard = plain;
+  heard.feed.heardMs = 400;
+  auto a = render(plain, pack), b = render(heard, pack);
+  const Box food = find(*b, kCookieEdge);
+  ASSERT_GT(food.count, 40) << "a cookie, big";
+  EXPECT_GT(food.x0, 110) << "under the glyph at the top right";
+  EXPECT_LT(food.y1, 80);
+  int far = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x)
+      far += a->px[y * kSide + x] != b->px[y * kSide + x] && (x < 100 || y > 90);
+  EXPECT_EQ(far, 0) << "nothing round the whole screen: no ring, no meter yet";
+  heard.pantry = 0;
+  EXPECT_EQ(find(*render(heard, pack), kCookieEdge).count, 0) << "none left: no cookie";
+  heard.pantry = 3;
+  heard.feed.heardMs = 2400;
+  EXPECT_EQ(countChanged(*render(plain, pack), *render(heard, pack)), 0) << "nothing came of the knocks: it went back in";
+}
+
+// Everything the pet says, and the feeding's own words, draws with glyphs the
+// badge's font has (thoughts.h inFont is what the lines are checked against):
+// a character outside it would draw as nothing, or as some other symbol.
+TEST(Font, HasEveryCharacterTheLinesMayUse) {
+  const paint::Font& f = paint::kFreeSans9pt7b;
+  for (int c = 1; c < 128; ++c) {
+    if (!blorb::inFont(char(c))) continue;
+    ASSERT_GE(c, f.first) << char(c);
+    ASSERT_LE(c, f.last) << char(c);
+    const paint::Glyph& g = f.glyphs[c - f.first];
+    EXPECT_GT(g.xAdvance, 0) << char(c);
+    if (c != ' ') EXPECT_GT(g.width * g.height, 0) << "'" << char(c) << "' has no ink";
+  }
+}
+
+// The belly meter up the left rim: fuller, more of it lit.
+TEST(Feeding, TheBellyMeterShowsHowFullHeIs) {
+  const auto& pack = paint::placeholderPack();
+  Appearance plain = adult();
+  plain.feed.pantryMax = 4;
+  auto lit = [&](double full) {
+    Appearance a = plain;
+    a.feed.meterMs = 100;
+    a.feed.fullness = fx(full);
+    auto cv = render(a, pack);
+    auto base = render(plain, pack);
+    int n = 0;
+    for (int y = 60; y < 152; ++y)
+      for (int x = 0; x < 30; ++x) n += cv->px[y * kSide + x] != base->px[y * kSide + x] && (((cv->px[y * kSide + x] >> 11) & 31) > 20);
+    return n;
+  };
+  EXPECT_GT(lit(0.8), lit(0.2) + 200);
+}
+
+// In the air, the newest pellet is not at its spot in the dish; landed, it is.
+TEST(Feeding, TheNewPelletIsTossedThenLands) {
+  const BlockPack pack;
+  Appearance a = adult(-0.6, -0.6);
+  a.itemCount = 1;
+  a.items[0] = {Appearance::Item::What::Pellet, {fx(0.5), fx(0.5)}};
+  Appearance aloft = a;
+  aloft.feed.flying = 0;
+  aloft.feed.droppedMs = 200;
+  Appearance landed = aloft;
+  landed.feed.droppedMs = 3000;
+  const Box spot = find(*render(a, pack), kCookieEdge);
+  ASSERT_GT(spot.count, 0);
+  const Box air = find(*render(aloft, pack), kCookieEdge);
+  ASSERT_GT(air.count, spot.count) << "bigger in the air";
+  EXPECT_LT(air.y1, spot.y0) << "above its spot, on its way down";
+  EXPECT_EQ(countChanged(*render(landed, pack), *render(a, pack)), 0) << "landed and old news: an item like any";
 }
 
 // PAINT_DUMP=<dir> writes a PPM per state for review.
