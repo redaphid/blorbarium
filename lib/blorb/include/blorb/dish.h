@@ -110,6 +110,9 @@ class Dish {
   PetClock& clock() { return live_.clock; }
   const PetClock& clock() const { return live_.clock; }
   uint32_t tickCount() const { return tick_; }
+  // When, on tick()'s clock, the newest tick was due: the screen draws between
+  // ticks from it (paint/tween.h). Read only; nothing here moves the life clock.
+  uint32_t lastTickMs() const { return lastTickMs_; }
   void markDirty() { eventDirty_ = true; }
   bool pick(uint8_t egg);          // the pick twist and the body's clutch choice share this
   // As if a detector saw it, landing at the next tick, but marked as the

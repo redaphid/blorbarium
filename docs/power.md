@@ -94,10 +94,24 @@ Awake, the CPU runs at 240 MHz and the loop draws a frame every 20 ms
   frames of every species, the duel's moments, a hang, fight mode and the
   amber, and hashes every one: `REF=main bash scripts/test/paint_bench.sh`
   builds the same bench with another commit's renderer to compare.
+- **Frames between ticks** (`lib/paint/include/paint/tween.h`): the pet lives
+  on 100 ms ticks, and each 20 ms frame draws him between the tick before and
+  the tick now, so he moves every frame rather than in 10 Hz steps. Clocks
+  (his pose and face clocks, a hop's phase, a thought's crawl, a duel act)
+  run on past the tick exactly; where he stands, the pellets, the glow and
+  the hang's charge are eased one tick (100 ms) behind. An idle layer
+  (`lib/paint/src/lively.cpp`) adds breath, a sway, a bob, a glance and blinks
+  at each species' own tempo, from the screen's clock and his genome.
+  `paint::kScreenSpeed` (1.2) runs his animations and a duel's staging that
+  much faster than the ticks; his life runs as it always did. All of it is
+  the screen's: present() leaves the fields zero, and zero draws the tick's
+  own frame byte for byte (`hash=` in the paint bench; the sim's `--steps`).
+  `DEBUG smooth off` draws each tick's own frame until reset, to compare.
 - **The panel** keeps what it was sent, so `boardPresent` sends only the rows
-  whose hash changed: between the pet's 100 ms ticks most frames send
-  nothing, and a crossing thought sends its strip. Every 64th frame, and
-  every frame after the panel wakes, sends all of it.
+  whose hash changed: a pet at rest sends the few rows his breath and blinks
+  move (about 11 a frame for grungo in the sim), a walk about 70, a hop about
+  130, and a crossing thought its strip. Every 64th frame, and every frame
+  after the panel wakes, sends all of it.
 - **The SPI clock** is 40 MHz. The panel's clock pin (GPIO10) is not SPI2's
   IO-MUX clock pin, so the bus goes through the GPIO matrix, which IDF 4.4
   holds to 40 MHz; LovyanGFX does not clamp it, and a command byte garbled at

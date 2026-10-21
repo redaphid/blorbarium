@@ -145,6 +145,16 @@ struct Appearance {
   ThoughtId thought{};
   char line[kThoughtLineCap]{};
   Fx thoughtPhase{};
+
+  // Between ticks. The screen draws every 20 ms and he lives every 100, so
+  // paint/tween.h fills these from the tick before and the time since it; they
+  // are the screen's, never the engine's. present() leaves them zero, which
+  // draws exactly the tick's own frame, as every frame was drawn before them.
+  DishPos from{};                   // where he stood a tick ago ...
+  uint16_t behind = 0;              // ... and how far he is drawn still on the way from it to `at`, 0..256
+  uint16_t poseSub = 0, exprSub = 0;   // 1/256 ticks past poseTick and exprTicks, 0..255
+  bool lively = false;              // breath and the idle layer drawn on liveMs (paint/tween.h)
+  uint32_t liveMs = 0;              // the screen's clock: wall ms run at the screen's speed
 };
 
 Appearance present(const Occupant&, const Habitat&, const PetClock&, uint32_t tick);
