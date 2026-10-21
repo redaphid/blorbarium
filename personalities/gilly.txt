@@ -55,6 +55,7 @@ ow
   OW! IT'LL GROW BACK!
 heard_you
   HI! YES! I HEARD! HELLO!
+  ONE KNOCK! NOW DO TWO!
 ground_lies
   WHEE! SPLOSH! WHEE!
 not_again
@@ -73,6 +74,7 @@ warm_hands
   WARM HANDS! A LITTLE TOO WARM!
 sky_down
   UPSIDE DOWN! NEW VIEW!
+  UPSIDE DOWN! MY FRILLS FLOP!
 heavy_eyes
   SLEEPY... HAPPY... SLEEPY...
 dream_pellets
@@ -123,7 +125,7 @@ p_watched
 p_return
   THEY'LL COME BACK! THEY ALWAYS
 p_tap
-  A TAP IS COMING! HI, TAP!
+  A KNOCK KNOCK! FOR ME! SNACKS!
 p_no
   NO! BUT A HAPPY NO!
 p_doom
@@ -308,3 +310,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN! MORE SPLASHING...
   ZZZ... PUDDLES FOR FRIENDS!
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME! SNACK TIME!
+teach_fight
+  FIGHT? HOLD ME UPSIDE DOWN!
+teach_hold
+  SLEEPY? HOLD ME SIDEWAYS!
+teach_shake
+  SHAKE ME! I SEE GOOD THINGS!

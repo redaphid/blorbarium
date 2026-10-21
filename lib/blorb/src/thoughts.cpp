@@ -100,7 +100,15 @@ bool foreseen(const Observed& o, uint16_t& num) { return datedHeirloom(o, false,
 bool bored(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::boredom) >= kHigh; }
 bool held(const Observed& o, uint16_t&) { return sense(o, locus::held) >= kHalf && sense(o, locus::cradled) < kHalf; }
 bool cradled(const Observed& o, uint16_t&) { return sense(o, locus::cradled) >= kHalf; }
-bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, locus::upside_down) >= kHalf; }
+// Upside down is the hang's pose: the badge turned half round from home
+// (ORIENT_HOME, either one), where the screen, held at home, shows him on his
+// head. The shell judges it from home (main.cpp feel()); HangDetector's
+// `hanging` is full once he has been held there the hang's whole second. Not
+// locus::upside_down: that is face down (the screen to the floor, where nobody
+// reads him), and it stays set until the screen faces well up again, so a
+// badge laid face down a moment and then held up on edge or worn on a lanyard
+// kept saying so the right way up.
+bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, locus::hanging) >= Fx::one(); }
 bool drowsy(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::sleepiness) >= kHigh; }
 bool dreaming(const Observed& o, uint16_t&) { return o.c.body().asleep && o.c.body().dreaming; }
 bool dozing(const Observed& o, uint16_t&) { return o.c.body().asleep; }

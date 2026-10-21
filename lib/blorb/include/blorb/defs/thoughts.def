@@ -25,7 +25,7 @@ BLORB_THOUGHT( 4, fuzzy_bite,     none,   rotten_bite,   8,  300, "THAT ONE WAS 
 BLORB_THOUGHT( 5, smells,         none,   rotten_near,   3,  900, "SOMETHING IN HERE SMELLS")
 BLORB_THOUGHT( 6, green,          none,   sick,          5,  600, "I FEEL GREEN. GREENER.")
 BLORB_THOUGHT( 7, ow,             none,   hurt,          5,  600, "OW. EVERYTHING. OW.")
-BLORB_THOUGHT( 8, heard_you,      none,   knocked,       7,  300, "I HEARD YOU THE FIRST TIME")
+BLORB_THOUGHT( 8, heard_you,      none,   knocked,       7,  300, "WHO'S THERE? TRY KNOCK KNOCK!")
 BLORB_THOUGHT( 9, ground_lies,    none,   shaken,        8,  300, "EEP! THE GROUND IS A LIE")
 BLORB_THOUGHT(10, not_again,      none,   dreads_shake,  7,  600, "OH NO. NOT THE SHAKING.")
 BLORB_THOUGHT(11, hooded,         none,   scared,        4,  600, "I AM NOT HIDING. I AM HOODED.")
@@ -59,7 +59,7 @@ BLORB_THOUGHT(39, p_sun,          sky,    light,         2,  300, "THE SUN RETUR
 BLORB_THOUGHT(40, p_rain,         sky,    anytime,       1,  300, "RAIN. SOMEWHERE. ON SOMEONE.")
 BLORB_THOUGHT(41, p_watched,      owner,  phone_near,    3,  300, "THE GLOWING ONE IS WATCHING.")
 BLORB_THOUGHT(42, p_return,       owner,  missing_you,   3,  300, "BROTHER WILL RETURN. CROOOAK.")
-BLORB_THOUGHT(43, p_tap,          owner,  anytime,       1,  300, "YOU WILL TAP A PHONE. SOON.")
+BLORB_THOUGHT(43, p_tap,          owner,  anytime,       1,  300, "YOU WILL KNOCK KNOCK. SOON.")
 BLORB_THOUGHT(44, p_no,           doom,   anytime,       1,  300, "CERTAINLY. PROBABLY. NO.")
 BLORB_THOUGHT(45, p_doom,         doom,   anytime,       1,  300, "ALL IS DOOM. EXCEPT SNACKS.")
 BLORB_THOUGHT(46, p_lunch,        doom,   old,           3,  300, "MY END IS NEAR. AS IS LUNCH.")
@@ -155,10 +155,10 @@ BLORB_THOUGHT(128, dream_flight,  none,   dozing,        0, 1800, "ZZZ... I CAN 
 BLORB_THOUGHT(129, sleep_count,   none,   dozing,        0, 1800, "ZZZ... ONE FLY... TWO FLY...")
 BLORB_THOUGHT(130, sleep_warm,    none,   dozing,        0, 1800, "MM. WARM. NOT GETTING UP.")
 BLORB_THOUGHT(131, dream_rain,    none,   dozing,        0, 1800, "ZZZ... RAIN ON THE RIM...")
-BLORB_THOUGHT(132, teach_fight,   none,   young,         4, 7200, "HOLD ME UPSIDE DOWN TO FIGHT")
+BLORB_THOUGHT(132, teach_fight,   none,   young,         4, 7200, "TO FIGHT, HOLD ME UPSIDE DOWN")
 BLORB_THOUGHT(133, teach_shake,   none,   young,         4, 7200, "SHAKE ME. I SEE THINGS.")
 // The button's twins (controls.h), which a kid cannot guess either. Feeding
 // is taught whenever he is hungry, at any age: with BOOT covered it is the
 // only way food reaches him.
 BLORB_THOUGHT(134, teach_feed,    none,   hungry,        4, 1800, "KNOCK KNOCK ON ME FOR SNACKS")
-BLORB_THOUGHT(135, teach_hold,    none,   young,         4, 7200, "HOLD ME SIDEWAYS. NIGHT NIGHT")
+BLORB_THOUGHT(135, teach_hold,    none,   young,         4, 7200, "BEDTIME? HOLD ME SIDEWAYS.")

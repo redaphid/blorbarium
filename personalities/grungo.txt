@@ -55,6 +55,7 @@ ow
   I FORESAW THIS. STILL OW.
 heard_you
   I FORESAW THAT KNOCK.
+  ONE KNOCK. THE OMEN WANTS TWO.
 ground_lies
   THE EARTH SPEAKS! IT YELLS!
 not_again
@@ -73,6 +74,7 @@ warm_hands
   WARM HANDS. A GOOD OMEN.
 sky_down
   THE POND IS ON THE CEILING?
+  MY HOOD FELL UP. AN OMEN.
 heavy_eyes
   THE VISIONS GROW BLURRY...
 dream_pellets
@@ -123,7 +125,7 @@ p_watched
 p_return
   THE ONE WHO LEFT WILL RETURN.
 p_tap
-  A FINGER WILL TAP GLASS. SOON.
+  TWO KNOCKS COME. THEN SNACKS.
 p_no
   NO. THE FLIES AGREE.
 p_doom
@@ -308,3 +310,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN... A GOOD OMEN...
   ZZZ... DRIP, DRIP... THE POND
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME. FOOD FALLS.
+teach_fight
+  TO DUEL, HOLD ME UPSIDE DOWN.
+teach_hold
+  HOLD ME SIDEWAYS. I SLUMBER.
+teach_shake
+  SHAKE ME. I SEE THINGS. EEP.
