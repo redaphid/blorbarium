@@ -266,14 +266,39 @@ struct Outline {
   const Xf* variants; int variantCount;
 };
 
+bool sameFrame(const FrameRef& a, const FrameRef& b) {
+  if (a.rle != b.rle || a.w != b.w || a.h != b.h || a.originX != b.originX || a.originY != b.originY ||
+      a.eyeCount != b.eyeCount)
+    return false;
+  for (int e = 0; e < imin(a.eyeCount, 2); ++e)
+    if (a.eyes[e].x != b.eyes[e].x || a.eyes[e].y != b.eyes[e].y || a.eyes[e].r != b.eyes[e].r) return false;
+  return true;
+}
+
 // Each frame's rows are walked once and every transform visits that row's
-// corners; the callers keep only a max or a min, so the order is free.
+// corners. The callers keep only a max or a min of each coordinate or of the
+// distance from a point, so the order is free and a frame met twice (his idle
+// body, and the pose's when it is the same) is walked once. With no lean, a
+// run of rows whose left (or right) edge stays at one column is a vertical
+// segment: every corner on it projects to the same x, and y only climbs down
+// it, so its two ends are the only corners that can hold the max or min.
 template <class Visit>
 void visitOutline(const Outline& o, Visit&& visit) {
+  bool lean = false;
+  for (int v = 0; v < o.variantCount; ++v) lean |= o.variants[v].shear != 0;
   for (int i = 0; i < o.frameCount; ++i) {
     const FrameRef& f = o.frames[i];
     if (!drawable(f)) continue;
+    bool seen = false;
+    for (int j = 0; j < i && !seen; ++j) seen = sameFrame(o.frames[j], f);
+    if (seen) continue;
     const uint8_t* p = f.rle;
+    // The open segments: each edge's column and the row its run began on (-1: none open).
+    int loX = -1, loFrom = 0, hiX = -1, hiFrom = 0;
+    auto close = [&](int x, int from, int to) {   // the ends of a segment at column x, rows [from, to)
+      for (int v = 0; v < o.variantCount; ++v)
+        for (int sy : {from * 16, to * 16}) visit(project(o.variants[v], f, x * 16, sy), 0);
+    };
     for (int y = 0; y < f.h; ++y) {
       int x = 0, lo = -1, hi = -1;
       while (x < f.w) {
@@ -281,11 +306,21 @@ void visitOutline(const Outline& o, Visit&& visit) {
         x += p[0];
         p += 2;
       }
+      if (lean) {
+        if (lo < 0) continue;
+        for (int v = 0; v < o.variantCount; ++v)
+          for (int sy : {y * 16, (y + 1) * 16})
+            for (int sx : {lo * 16, hi * 16}) visit(project(o.variants[v], f, sx, sy), 0);
+        continue;
+      }
+      if (loX >= 0 && lo != loX) close(loX, loFrom, y), loX = -1;
+      if (hiX >= 0 && hi != hiX) close(hiX, hiFrom, y), hiX = -1;
       if (lo < 0) continue;
-      for (int v = 0; v < o.variantCount; ++v)
-        for (int sy : {y * 16, (y + 1) * 16})
-          for (int sx : {lo * 16, hi * 16}) visit(project(o.variants[v], f, sx, sy), 0);
+      if (loX < 0) loX = lo, loFrom = y;
+      if (hiX < 0) hiX = hi, hiFrom = y;
     }
+    if (loX >= 0) close(loX, loFrom, f.h);
+    if (hiX >= 0) close(hiX, hiFrom, f.h);
   }
   for (int v = 0; v < o.variantCount; ++v) {
     const Xf& xf = o.variants[v];
