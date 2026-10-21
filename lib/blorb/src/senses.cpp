@@ -53,7 +53,7 @@ constexpr uint32_t kBumpMaskMs = 300;              // the tap engine reports 100
 constexpr int32_t kWarmSpanCx10 = 30;              // 3 C above the baseline is warmth 1
 constexpr int32_t kWarmBaselineSamples = 32768;    // about 11 minutes at 50 Hz
 constexpr int32_t kMotionFullMg = 500;
-constexpr Fx kTiltSmooth = Fx::ratio(1, 16);       // orient.h's 0.25 per 100 ms, at 50 Hz
+constexpr Fx kTiltSmooth = Fx::ratio(1, 8);
 constexpr Fx kMotionSmooth = Fx::ratio(1, 8);
 constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr Fx kHalfPi{26353589};                    // pi/2 in Q8.24
