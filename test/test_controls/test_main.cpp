@@ -241,6 +241,9 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
   std::printf("[ latency ] knock knock  ack %-22s word %s\n", all.kkAck.str().c_str(), all.kkWord.str().c_str());
   std::printf("[ latency ] side hold    ack %-22s word %s\n", all.sideAck.str().c_str(), all.sideWord.str().c_str());
   std::printf("[ latency ] hang         ack %-22s word %s\n", all.hangAck.str().c_str(), all.hangWord.str().c_str());
+  // The knock knock is heard as the second knock rings out (KnockSense::knockKnock).
+  EXPECT_LE(all.kkAck.pct(50), 60u);
+  EXPECT_LE(all.kkAck.pct(95), 160u);
   // The pose is the hand's within two steady samples (src/hw/poses.h): the
   // ring and the charge start with the turn, not ~0.8 s after it...
   EXPECT_LE(all.sideAck.pct(95), 60u);
