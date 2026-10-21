@@ -1082,6 +1082,23 @@ constexpr bool arenaTExact() {
 }
 static_assert(arenaTExact(), "arenaT is d2 / 225 across the dish");
 
+// The pools never move, so their boxes are pixels at compile time too (7 KB of flash).
+template <int P>
+struct PoolBox {
+  static constexpr int kW = 2 * kPools[P].rx - 1, kH = 2 * kPools[P].ry - 1;
+  uint16_t px[kH][kW];
+};
+template <int P>
+constexpr PoolBox<P> poolBox() {
+  PoolBox<P> b{};
+  for (int r = 0; r < PoolBox<P>::kH; ++r)
+    for (int c = 0; c < PoolBox<P>::kW; ++c)
+      b.px[r][c] = arenaPixel(kPools[P].x - kPools[P].rx + 1 + c, kPools[P].y - kPools[P].ry + 1 + r);
+  return b;
+}
+constexpr PoolBox<0> kPool0 = poolBox<0>();
+constexpr PoolBox<1> kPool1 = poolBox<1>();
+
 // The arena: a dusky dish with a pool of light under each pet, so each stands
 // on his own ground; ordered-dithered so the gradient does not band. Each row
 // from the table, a pixel and its mirror at once (the gradient is symmetric),
@@ -1101,10 +1118,13 @@ void arena(Canvas240& cv) {
       row[x] = l[x & 3];
       row[kSide - 1 - x] = l[3 - (x & 3)];
     }
-    for (const Pool& p : kPools) {
-      if (iabs(y - p.y) >= p.ry) continue;
-      for (int x = imax(from, p.x - p.rx + 1); x <= imin(kSide - 1 - from, p.x + p.rx - 1); ++x) row[x] = arenaPixel(x, y);
-    }
+    auto pool = [&](const Pool& p, const uint16_t* box, int w) {
+      if (iabs(y - p.y) >= p.ry) return;
+      const int x0 = p.x - p.rx + 1, a = imax(from, x0), b = imin(kSide - 1 - from, p.x + p.rx - 1);
+      if (a <= b) std::memcpy(row + a, box + (y - (p.y - p.ry + 1)) * w + (a - x0), sizeof(uint16_t) * size_t(b - a + 1));
+    };
+    pool(kPools[0], &kPool0.px[0][0], PoolBox<0>::kW);
+    pool(kPools[1], &kPool1.px[0][0], PoolBox<1>::kW);
   }
 }
 
