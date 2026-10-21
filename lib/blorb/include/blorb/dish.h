@@ -155,12 +155,14 @@ class Dish {
   // above 0, and the aim the tilt reads as of the last sample, not the last
   // tick (-1 level). Reads only.
   bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
-  int8_t aimNow() const;
+  int8_t aimNow() const { return detectors_.aim.aim(); }
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
   const char* lastFightGate() const { return duel_.lastGate(); }
-  DuelView duelView() const { return duel_.view(tick_); }
+  // The duel as the screen shows it: the session's, with the aim as of the
+  // last sample (liveAim), not the last tick.
+  DuelView duelView() const;
   const DuelBook& duels() const { return duel_.book(); }
   const std::optional<Meeting>& lastMeeting() const { return duel_.lastMeeting(); }
   const DishDuel::Refusal& duelRefusal() const { return duel_.refusal(); }
@@ -240,6 +242,11 @@ class Dish {
   Fx tiltHist_[kAimHistory][2]{};
   Fx sideTilt_[2]{};
   bool sideWas_ = false, histPrimed_ = false;
+  // The aim a knock is made at: the aim on the first knock's sample, which
+  // the lock takes when the knock is decided ~0.6 s later (a hand drifts).
+  int8_t knockAim_ = -1;
+  bool knockWaitWas_ = false;
+  int8_t liveAim() const;
   DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;

@@ -18,6 +18,7 @@
 // charge: what the next frame can draw) and the word (press, hold, hang).
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -242,8 +243,8 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
   std::printf("[ latency ] side hold    ack %-22s word %s\n", all.sideAck.str().c_str(), all.sideWord.str().c_str());
   std::printf("[ latency ] hang         ack %-22s word %s\n", all.hangAck.str().c_str(), all.hangWord.str().c_str());
   // The knock knock is heard as the second knock rings out (KnockSense::knockKnock).
-  EXPECT_LE(all.kkAck.pct(50), 60u);
-  EXPECT_LE(all.kkAck.pct(95), 160u);
+  EXPECT_LE(all.kkAck.pct(50), 40u);
+  EXPECT_LE(all.kkAck.pct(95), 120u);
   // The pose is the hand's within two steady samples (src/hw/poses.h): the
   // ring and the charge start with the turn, not ~0.8 s after it...
   EXPECT_LE(all.sideAck.pct(95), 60u);
@@ -314,6 +315,118 @@ TEST(Latency, ASideHoldIsTimedFromTheTurnAndATurnLetGoSoonerIsNoWord) {
   char line[400];
   ASSERT_TRUE(r.line(uint8_t(Ctl::Side), line, sizeof line));
   EXPECT_NE(std::string(line).find("words=0 silent=1"), std::string::npos) << line << ": felt, never shown";
+}
+
+// ---- the aim (AimDetector): the duel's tilt, egg picking's too ----------------------
+
+namespace {
+
+// The aim the old way: the tilt detector's smoothed loci read as DuelInput reads them.
+struct OldAim {
+  TiltDetector tilt;
+  SenseOut out;
+  int8_t sample(const BodySample& b, uint32_t ms) {
+    out.clear();
+    tilt.sample(b, ms, out);
+    Fx x = Fx::ratio(1, 2), y = Fx::ratio(1, 2);
+    for (uint8_t i = 0; i < out.lociCount; ++i) {
+      if (out.loci[i].locus == locus::tilt_x) x = out.loci[i].value;
+      if (out.loci[i].locus == locus::tilt_y) y = out.loci[i].value;
+    }
+    return DuelInput::from(SenseOut{}, 0, x, y, false).aim;
+  }
+};
+
+int8_t aimOf(AimDetector& a, const BodySample& b) {
+  SenseOut out;
+  a.sample(b, 0, out);
+  return a.aim();
+}
+
+BodySample lean(int16_t ax, int16_t ay) {
+  BodySample b;
+  b.ax = ax, b.ay = ay;
+  b.az = int16_t(std::sqrt(std::max(0, 1000 * 1000 - ax * ax - ay * ay)));
+  return b;
+}
+
+}  // namespace
+
+TEST(Aim, ALeanIsTheAimOnItsSecondSample) {
+  for (const AimTilt& t : kAimTilt) {
+    AimDetector a;
+    BodySample level;
+    level.az = 1000;
+    for (int i = 0; i < 10; ++i) EXPECT_EQ(aimOf(a, level), -1);
+    BodySample b;
+    b.ax = t.ax, b.ay = t.ay, b.az = t.az;
+    aimOf(a, b);
+    EXPECT_EQ(aimOf(a, b), t.aim) << "20 ms after the hand got there";
+  }
+}
+
+TEST(Aim, AHandOnASectorsEdgeKeepsItsAim) {
+  AimDetector a;
+  for (int i = 0; i < 5; ++i) aimOf(a, lean(500, 0));
+  ASSERT_EQ(a.aim(), 0);
+  // Wobbling either side of the diagonal between left and toward the kid:
+  // the old reading flipped with every wobble across it.
+  int flips = 0;
+  int8_t was = a.aim();
+  for (int i = 0; i < 100; ++i) {
+    const int16_t w = int16_t(i % 2 ? 40 : -40);
+    if (aimOf(a, lean(int16_t(400 + w), int16_t(-400 + w))) != was) ++flips, was = a.aim();
+  }
+  EXPECT_EQ(flips, 0);
+  // Leaning on past it, the aim moves.
+  aimOf(a, lean(250, -500));
+  EXPECT_EQ(aimOf(a, lean(250, -500)), 2);
+  // And just inside the dead zone it lets go only under kOutMg.
+  for (int i = 0; i < 4; ++i) aimOf(a, lean(0, -250));
+  EXPECT_EQ(a.aim(), 2) << "250 mg: still aimed (out under 200)";
+  for (int i = 0; i < 4; ++i) aimOf(a, lean(0, -150));
+  EXPECT_EQ(a.aim(), -1);
+}
+
+TEST(Aim, AKnockNeverReAims) {
+  AimDetector a;
+  for (int i = 0; i < 5; ++i) aimOf(a, lean(0, 500));
+  ASSERT_EQ(a.aim(), 3);
+  BodySample k = lean(0, 500);
+  k.az = int16_t(k.az + 1800);   // a knock through the face
+  aimOf(a, k);
+  k.az = int16_t(k.az - 3600);
+  aimOf(a, k);
+  EXPECT_EQ(aimOf(a, lean(0, 500)), 3);
+}
+
+// On every recording, as the shell hands the samples on: how often each way
+// of reading the aim changes its mind, in all and while a knock burst is
+// under way. A knock must never re-aim (that is what a knock locks), and
+// nothing on the recordings re-aims more than the tilt did, but for the
+// handling, where the badge really turns and the aim now follows it.
+TEST(Aim, OnTheRecordingsAKnockNeverReAims) {
+  int oldTotal = 0, newTotal = 0;
+  for (const Segment& seg : loadHands()) {
+    ::power::Policy policy;
+    hw::Feel shell(kR0, kHome, policy);
+    OldAim old;
+    AimDetector now;
+    int8_t o = -1, n = -1;
+    int oldChanges = 0, newChanges = 0, oldKnocked = 0, newKnocked = 0;
+    for (const auto& [ms, b] : seg.samples) {
+      const hw::Felt f = shell.sample(b, ms, false);
+      const int8_t oa = old.sample(f.screen, ms), na = aimOf(now, f.screen);
+      oldChanges += oa != o, newChanges += na != n;
+      if (f.screen.knocking) oldKnocked += oa != o, newKnocked += na != n;
+      o = oa, n = na;
+    }
+    std::printf("[ aim ] %-26s changes: tilt %3d, aim %3d; while knocked: tilt %d, aim %d\n", seg.label.c_str(),
+                oldChanges, newChanges, oldKnocked, newKnocked);
+    oldTotal += oldChanges, newTotal += newChanges;
+    EXPECT_EQ(newKnocked, 0) << seg.label << ": a knock re-aimed";
+  }
+  std::printf("[ aim ] all: tilt %d, aim %d\n", oldTotal, newTotal);
 }
 
 TEST(Latency, ARawAimIsTheDuelsSectors) {

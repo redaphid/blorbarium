@@ -98,6 +98,23 @@ struct TiltDetector : DetectorBase {      // EMA tilt -> tilt_x/tilt_y, upside_d
   void sample(const BodySample&, uint32_t ms, SenseOut&);
  private: Fx sx_, sy_; bool upside_ = false;
 };
+// The aim: which rim sector the badge is tipped toward (DuelInput's: 0 left,
+// 1 right, 2 toward the kid, 3 away; -1 level), for the duel, the stakes and
+// the lobby's friends. From gravity itself, halfway to each sample, with
+// hysteresis instead of the tilt's smoothing (the tilt rolls the food and
+// stays smooth): into a sector past kInMg in the plane (DuelInput's dead
+// zone, 0.15 of the tilt locus), out under kOutMg, and to another only
+// once it leads the held one by kSwitchMg, so a hand on a sector's edge holds
+// its aim. A jolt (a knock) is skipped. The aim follows the hand in 20-40 ms
+// where the tilt's smoothing took 330 (docs/notes/controls-latency.md).
+struct AimDetector : DetectorBase {
+  static constexpr int32_t kInMg = 300;
+  static constexpr int32_t kOutMg = 200;
+  static constexpr int32_t kSwitchMg = 120;
+  void sample(const BodySample&, uint32_t ms, SenseOut&);
+  int8_t aim() const { return aim_; }
+ private: int32_t x_ = 0, y_ = 0; bool primed_ = false; int8_t aim_ = -1;
+};
 // Gravity as the body feels it at rest: an average of the samples within
 // 0.25 g of 1 g and near the average, so a jolt or a swing never drags it.
 // What a sample has beyond it (d) is a hand or the road. A detector that
