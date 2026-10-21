@@ -43,13 +43,20 @@ A coordinator session: features done by agents in worktrees, merged to `main`
   power mode"). Not yet looked at. Suspects: idle never reached (IMU noise or
   the knock/hold detectors counting as activity, BLE), or the flipped home
   making a resting badge read as held.
-- **`framerate`** branch (agent, not merged): 240 MHz and faster drawing while
-  awake. Check its last commit message for what's proven.
+- **`framerate`** branch (not merged: never run on a board). Drawing was the
+  limit (~190 ms a frame, ~5 fps), not the clock. 7b94954 makes the renderer
+  ~4x faster on the host with byte-identical frames (`scripts/test/paint_bench.sh`);
+  93cc5c5 caps frames at 20 ms, pushes only changed rows, SPI at 80 MHz
+  (`BLORB_LCD_SPI_MHZ`, unproven: CLK goes through the GPIO matrix; 40 is one
+  line) and holds 240 MHz awake on `badge128_pm`. Test plan:
+  `uv run scripts/test/fps_probe.py /dev/ttyACM0 --clocks 40,80`, then watch the
+  panel at 80 MHz for torn rows. Expect ~40-50 fps.
 - **`wifi-ota`** branch (pushed): builds, 945 native tests pass, never run on
   a badge, one trivial conflict with main (`drawFrame`, keep both). Owner
   questions open: a gesture before accepting a network? 6 h interval?
-- `pio run -e sim` fails on main (`main.cpp`: `KnockSense` not found), so the
-  sim film goldens can't run.
+- `pio run -e sim` fails on main (`KnockSense` not found); fixed on
+  `framerate` (6044b45). With it, 6 of 22 sim goldens already drift on main
+  (eating, shake_hop, hatch, no_phone, thought, prophecy): re-bless or look.
 - The stale `bench` branch on origin equals an older main; delete it.
 
 ## Where things stand (2026-10-19, evening: 0.7.12 released; next, on-screen cues)
