@@ -464,6 +464,17 @@ Appearance Dish::appearance() const {
   return a;
 }
 
+// The aim as DuelInput would read it from the tilt loci the detectors wrote
+// on the last sample (the tick reads the same ones when it comes).
+int8_t Dish::aimNow() const {
+  Fx x = tiltX_, y = tiltY_;
+  for (uint8_t i = 0; i < pending_.lociCount; ++i) {
+    if (pending_.loci[i].locus == locus::tilt_x) x = pending_.loci[i].value;
+    if (pending_.loci[i].locus == locus::tilt_y) y = pending_.loci[i].value;
+  }
+  return DuelInput::from(SenseOut{}, 0, x, y, false).aim;
+}
+
 // Feeding as the eyes see it: FeedShow's ages, and what the habitat and he
 // say now. Reads only; nothing here reaches him.
 void Dish::feedView(Appearance& a) const {

@@ -165,8 +165,12 @@ struct PoseRearm {
   bool armed_ = false;
 };
 
+inline constexpr uint32_t kHangHoldMs = 900;   // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
 struct HangDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
+  // The progress now, 0 to 1: the hanging locus as of the last sample, not
+  // the last tick.
+  Fx charge() const { return Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)); }
  private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false; PoseRearm rearm_;
 };
 // Turned onto a side and held there -> the button held (controls.h): the

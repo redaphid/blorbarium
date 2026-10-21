@@ -12,7 +12,6 @@ constexpr uint32_t kShakeRearmMs = 600;            // SHAKE_REARM_MS
 constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
-constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
 constexpr int32_t kHangFaceMg = 500;               // a hang is held up on edge: |az| past this (30 degrees off flat or flatter) is lying down
 constexpr uint32_t kHangRearmProgressMs = 200;
 constexpr uint32_t kSideLetGoMs = 150;

@@ -151,6 +151,11 @@ class Dish {
   // For the cable's `DEBUG trace`: the body stimuli (ids < 64) the last sample fired, and the side hold's level.
   uint64_t firedLastSample() const { return lastFired_; }
   bool sideHolding() const { return detectors_.side.holding(); }
+  // For the cable's `DEBUG latency` (src/latency.h): the hang's progress
+  // above 0, and the aim the tilt reads as of the last sample, not the last
+  // tick (-1 level). Reads only.
+  bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
+  int8_t aimNow() const;
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
