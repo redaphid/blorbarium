@@ -84,6 +84,9 @@ constexpr P kStanceAt[3] = {kLeft, kRight, kNear};   // Pounce, Guard, Trick
 constexpr P kTierAt[3] = {kLeft, kNear, kRight};     // Spar, Scrap, Mortal
 
 constexpr int kGlyphPct = 125, kAimedPct = 170;
+// The stance under the tilt: twice the 24 px art, its 48 px twin drawn 1:1, so
+// a kid sees at a glance which one his hand points at.
+constexpr int kAimedStancePct = 200;
 constexpr int kTimerFillOf = 255;
 
 constexpr uint16_t kClashTicks = 30;   // the reveal takes 3 s
@@ -305,10 +308,11 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const P at = {kStanceAt[st].x + (aimed ? (kSide / 2 - kStanceAt[st].x) / 6 : 0),
                   kStanceAt[st].y + (aimed ? (kSide / 2 - kStanceAt[st].y) / 6 : 0)};
     // The lean: my pet's pick, a soft light under it, brighter with the assist.
+    // Wider under the big one, so it still shows round its backing.
     if (st == sc.lean && !sc.me.locked)
-      add(s, prop(PropKind::Glow, 0, at, 100, 90 + sc.whisper * 165 / 255 * (192 + bump(t % 12, 0, 12) / 4) / 256));
-    add(s, prop(PropKind::Stance, st, at, aimed ? kAimedPct : kGlyphPct, aimed || sc.aim < 0 ? 255 : 150));
-    if (aimed && sc.me.locked) add(s, prop(PropKind::Tick, 0, {at.x + 16, at.y - 16}, 110));
+      add(s, prop(PropKind::Glow, 0, at, aimed ? 120 : 100, 90 + sc.whisper * 165 / 255 * (192 + bump(t % 12, 0, 12) / 4) / 256));
+    add(s, prop(PropKind::Stance, st, at, aimed ? kAimedStancePct : kGlyphPct, aimed || sc.aim < 0 ? 255 : 150));
+    if (aimed && sc.me.locked) add(s, prop(PropKind::Tick, 0, {at.x + 19, at.y - 19}, 110));
   }
   // My pet leans toward the stance under the tilt, his kid's hand in his body.
   if (sc.aim >= 0) {
@@ -951,7 +955,7 @@ void stars(Canvas240& cv, const Prop& p) {
 
 void glow(Canvas240& cv, const Prop& p) {
   const uint16_t k = c565(kGlowLight);
-  constexpr int R = 30;
+  const int R = 30 * p.scalePct / 100;
   for (int y = -R; y <= R; ++y)
     for (int x = -R; x <= R; ++x) {
       const int d2 = x * x + y * y;
@@ -997,7 +1001,12 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
   switch (p.kind) {
     case PropKind::Heart: return heart(cv, p);
     case PropKind::Pip: return pip(cv, p);
-    case PropKind::Stance: backed(cv, p, 15); return art(cv, duel_art::kStances[p.variant % 3], p);
+    case PropKind::Stance:
+      backed(cv, p, 15);
+      // At twice its size or more the 48 px twin, at half the scale: sharp, not blocks.
+      if (p.scalePct >= 200)
+        return drawArt(cv, duel_art::kStancesBig[p.variant % 3], p.x, p.y, p.scalePct / 2, p.alpha + 1);
+      return art(cv, duel_art::kStances[p.variant % 3], p);
     case PropKind::Power: backed(cv, p, 14); return art(cv, duel_art::kPowers[p.variant % 9], p);
     case PropKind::Tier:
       backed(cv, p, 15);

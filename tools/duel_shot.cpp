@@ -1,7 +1,7 @@
 // The duel screen without a duel: draws test/support/duel_scenes.h's moments
 // for any two species, or plays a whole scripted duel as frames for a film.
 //
-//   duel_shot --moment mercy --mine gilly --theirs fizz --out mercy.bmp [--ticks 12]
+//   duel_shot --moment mercy --mine gilly --theirs fizz --out mercy.bmp [--ticks 12] [--aim 0]
 //   duel_shot --film outputs/duel-film --mine gilly --theirs fizz        frame_0000.bmp ... at 10 fps
 //
 // Built by `pio run -e duelshot` (tools/duel_film.sh does it in WSL). The same
@@ -128,7 +128,7 @@ int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs)
 int main(int argc, char** argv) {
   std::string moment = "meeting", out = "duel.bmp", filmDir;
   blorb::SpeciesId mine = blorb::kGrungo, theirs = blorb::kGrungo;
-  int ticks = -1;
+  int ticks = -1, aim = -2;   // --aim: the stance under the tilt (-1 none), else the moment's own
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
     const char* v = i + 1 < argc ? argv[i + 1] : nullptr;
@@ -138,6 +138,7 @@ int main(int argc, char** argv) {
     else if (a == "--out") out = v;
     else if (a == "--film") filmDir = v;
     else if (a == "--ticks") ticks = std::atoi(v);
+    else if (a == "--aim") aim = std::atoi(v);
     else if (a == "--mine" || a == "--theirs") {
       if (!species(v, a == "--mine" ? mine : theirs)) { std::fprintf(stderr, "duel_shot: %s is not a species\n", v); return 2; }
     } else { std::fprintf(stderr, "duel_shot: unknown %s\n", a.c_str()); return 2; }
@@ -148,6 +149,7 @@ int main(int argc, char** argv) {
   if (!known) { std::fprintf(stderr, "duel_shot: %s is not a moment\n", moment.c_str()); return 2; }
   DuelScene s = blorbtest::duelScene(moment.c_str(), mine, theirs);
   if (ticks >= 0) s.ticks = uint16_t(ticks);
+  if (aim >= -1) s.aim = int8_t(aim);
   auto cv = std::make_unique<paint::Canvas240>();
   paint::drawDuel(s, paint::packFor(mine), paint::packFor(theirs), *cv, 0);
   return writeBmp(*cv, out) ? 0 : 1;

@@ -985,6 +985,7 @@ def build_duel():
     BUDGET = {**BUDGET, **DUEL_BUDGET}
     frames = {**duel_art.frames(), **boot_art.frames()}
     entries, by_region = build_palette(list(frames.values()))
+    frames.update(duel_art.twins())   # indexed into that palette, never shaping it
     return entries, frames, {n: index(s, by_region) for n, s in frames.items()}
 
 
@@ -1038,6 +1039,8 @@ def emit_duel(entries, frames, idx):
           "inline constexpr paint::FrameRef kTrophies[9] = {" + ", ".join(f"kTrophy{cap(n)}" for n, _ in duel_art.TROPHIES) + "};",
           "// By Stance (species.h): pounce, guard, trick.",
           "inline constexpr paint::FrameRef kStances[3] = {" + ", ".join(f"kStance{cap(n)}" for n, _ in duel_art.STANCES) + "};",
+          "// The same at 48 px, for the stance a kid aims at: drawn at half the scale asked.",
+          "inline constexpr paint::FrameRef kStancesBig[3] = {" + ", ".join(f"kStance{cap(n)}Big" for n, _ in duel_art.STANCES) + "};",
           "// By PowerGlyph (species.h): eye, shell, spore, leaf, lamp, wave, spark, feather, gear.",
           f"inline constexpr paint::FrameRef kPowers[{len(duel_art.POWERS)}] = {{" + ", ".join(f"kPower{cap(n)}" for n, _ in duel_art.POWERS) + "};",
           "// By stakes tier: spar (a feather), scrap (a plaster), mortal (the full skull).",
