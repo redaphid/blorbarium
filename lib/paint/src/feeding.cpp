@@ -6,13 +6,12 @@
 //
 //   food      a fat cookie (drawFood, the one seam for food art), on the
 //             floor, in the air, at his mouth and in the bubbles;
-//   heard     a warm ring sweeps in from the rim;
+//   heard     the rim's pellet glyph pops and a cookie springs out of it;
 //   flight    the cookie, big, arcs from the rim's pellet glyph down to its
 //             spot beside him, its shadow waiting, and lands in a puff;
-//   refused   a bubble beside his head: the cookie struck through (full),
-//             the moon and zz (asleep), or a grey cookie and the hourglass
-//             (the pantry is empty, its slots shaking at the top, the next
-//             one filling);
+//   refused   a bubble beside his head says why, in words: I'M FULL!,
+//             ZZZ..., or ALL GONE! (the pantry's slots shaking at the top,
+//             the next one filling);
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
 //             rotten one: green crumbs and YUCK);
 //   belly     a meter up the left rim, its level his fullness (1 - hunger),
@@ -21,6 +20,7 @@
 
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "blorb/thoughts.h"
 #include "paint/text.h"
 
 namespace paint {
@@ -34,7 +34,9 @@ constexpr int kSide = 240;
 constexpr int kNever = FeedView::kNever;
 
 // ---- timing, ms: each a one-line change -------------------------------------
-constexpr int kFlashMs = 600;      // the rim's flash on the second knock
+constexpr int kPopMs = 300;        // the ring round the pantry's glyph on the second knock
+constexpr int kSpringMs = 160;     // a cookie springing out of the glyph
+constexpr int kWaitMs = 1600;      // ...and back in if no pellet came of the knocks by then
 constexpr int kFlightMs = 700;     // the pellet's flight from the rim to the dish
 constexpr int kPuffMs = 450;       // and its landing
 constexpr int kRefusedMs = 2600;   // a refusal's bubble
@@ -48,7 +50,8 @@ constexpr int kMeterMs = 3600;     // the meter, after the last event
 constexpr int kFadeMs = 300;
 
 // ---- where -------------------------------------------------------------------
-constexpr int kFromX = 142, kFromY = 50;      // just under the rim's pellet glyph (duel_scene.cpp kBootAt), which is drawn over the dish
+constexpr int kGlyphX = 146, kGlyphY = 18;    // the rim's pellet glyph (duel_scene.cpp kBootAt), drawn over the dish
+constexpr int kFromX = 142, kFromY = 68;      // just under it, where the cookie waits and is tossed from (its stand point)
 constexpr int kArcPx = 34;                    // how high the toss rises over the straight line
 constexpr int kMeterTop = 62, kMeterBottom = 150, kMeterIn = 100, kMeterOut = 114;   // up the left rim
 constexpr int kPantryR = 108;                 // the pantry's row (draw.cpp pips)
@@ -199,23 +202,40 @@ void beside(const DishSpots& s, int& x, int& y, int& tx, int& ty) {
   const int hx = s.him ? s.x : kSide / 2, top = s.him ? s.top : 60;
   const int side = hx + 64 <= kSide - 50 ? 1 : -1;
   x = clampi(hx + side * 64, 50, kSide - 50);
-  y = clampi(top + 26, 46, kSide - 50);
-  tx = hx + side * 22, ty = top + 34;
+  y = clampi(top + 6, 38, kSide - 50);
+  tx = hx + side * 18, ty = top + 18;
 }
 
-// ---- heard: a warm ring sweeps in from the rim --------------------------------
-void flash(Canvas240& cv, int t) {
-  if (t >= kFlashMs) return;
-  const int alpha = 230 * (kFlashMs - t) / kFlashMs;
-  const int out = 119 - 16 * easeOut(t, kFlashMs) / 256, in = out - 8;
-  for (int y = 0; y < kSide; ++y) {
-    const int dy = 2 * y + 1 - kSide;
-    if (dy * dy > 4 * out * out) continue;
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 <= 4 * out * out && d2 >= 4 * in * in) put(cv, x, y, kWarm, alpha);
-    }
+// ---- heard: a cookie springs out of the pantry's glyph ------------------------
+// At the second knock (KnockSense::knockKnock, ~0.1 s after it lands), before
+// the knock knock is even decided: a small ring round the rim's pellet glyph,
+// and a cookie springs out of it and bobs below it, the first thing he will
+// be tossed (pelletAloft starts there, that size). With the pantry empty no
+// cookie comes: its slots say so. If no pellet follows (the knocks ran on
+// into hammering) it goes back in.
+void glyphPop(Canvas240& cv, int t) {
+  if (t >= kPopMs) return;
+  const int r = 22 + 5 * easeOut(t, kPopMs) / 256;
+  ring(cv, kGlyphX, kGlyphY, r - 2, r, kWarm, 170 * (kPopMs - t) / kPopMs);
+}
+
+void cookieOut(Canvas240& cv, const FeedView& f, uint8_t pantry) {
+  const int t = f.heardMs;
+  if (t == kNever || pantry == 0) return;
+  if (f.droppedMs != kNever && f.droppedMs <= t) return;   // tossed: the flight has it (drawItems)
+  if (f.refused != FeedRefusal::None && f.refusedMs <= t) return;
+  int x = kFromX, y = kFromY, r = kFoodR * 2;
+  if (t < kSpringMs) {   // out of the glyph, growing
+    const int u = easeOut(t, kSpringMs);
+    x = kGlyphX + (kFromX - kGlyphX) * u / 256, y = kGlyphY + (kFromY - kGlyphY) * u / 256, r = 3 + (r - 3) * u / 256;
+  } else if (t >= kWaitMs) {   // nothing came of it: back in
+    if (t >= kWaitMs + kSpringMs) return;
+    const int u = 256 - easeOut(t - kWaitMs, kSpringMs);
+    x = kGlyphX + (kFromX - kGlyphX) * u / 256, y = kGlyphY + (kFromY - kGlyphY) * u / 256, r = 3 + (r - 3) * u / 256;
+  } else {
+    y += wave(t, 500, 2);   // waiting to be tossed
   }
+  drawFood(cv, x, y - r, r, Food{});
 }
 
 // ---- the landing: a puff of dust round the pellet -----------------------------
@@ -259,34 +279,33 @@ void emptyPantry(Canvas240& cv, const FeedView& f, int t) {
   }
 }
 
+// What each refusal says, in words: the owner read the first pictures (a grey
+// cookie and an hourglass) as "two emojis, a globe and something else".
+// Short, so a six-year-old reads them, and in the font (thoughts.h inFont).
+constexpr const char* kSaysFull = "I'M FULL!";
+constexpr const char* kSaysAsleep = "ZZZ...";
+constexpr const char* kSaysEmpty = "ALL GONE!";
+static_assert(blorb::writable(kSaysFull, blorb::kMaxThoughtText, "") && blorb::writable(kSaysAsleep, blorb::kMaxThoughtText, "") &&
+                  blorb::writable(kSaysEmpty, blorb::kMaxThoughtText, "") && blorb::writable("YUM!", blorb::kMaxThoughtText, "") &&
+                  blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
+              "what he says when fed is in the font");
+
 void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
   if (f.refused == FeedRefusal::None || f.refusedMs >= kRefusedMs) return;
   const int t = f.refusedMs;
   if (f.refused == FeedRefusal::Empty) emptyPantry(cv, f, t);
+  const char* says = f.refused == FeedRefusal::Full ? kSaysFull : f.refused == FeedRefusal::Asleep ? kSaysAsleep : kSaysEmpty;
   int x = 0, y = 0, tx = 0, ty = 0;
   beside(s, x, y, tx, ty);
   y += wave(t, 1200, 2);
   const int pop = t < 160 ? 150 + 106 * t / 160 : 256;   // it pops in
   const int alpha = fadeOut(t, kRefusedMs) * 235 / 256;
-  const int w = 56 * pop / 256, h = 30 * pop / 256;
+  const int w = (textWidth(kFreeSans9pt7b, says) + 16) * pop / 256, h = 24 * pop / 256;
+  x = clampi(x, 30 + w / 2, kSide - 30 - w / 2);
   bubble(cv, x, y, w, h, tx, ty, alpha);
-  const int pct = 120 * pop / 256;
-  switch (f.refused) {
-    case FeedRefusal::Full:   // no thanks: the pellet, struck through
-      drawFood(cv, x, y, 9 * pct / 120, Food{}, alpha);
-      stroke(cv, x - 10 * pop / 256, y - 10 * pop / 256, x + 10 * pop / 256, y + 10 * pop / 256, 1, kNo, alpha);
-      break;
-    case FeedRefusal::Asleep:   // asleep: the moon, and zz
-      drawArt(cv, duel_art::kBootMoon, x - 9 * pop / 256, y, pct, alpha);
-      if (pop == 256) drawString(cv, kFreeSans9pt7b, "z", x + 4, y + 2, to565({70, 90, 170}), Clip{0, 0, kSide, kSide, 0});
-      if (pop == 256 && t > 400) drawString(cv, kFreeSans9pt7b, "z", x + 12, y - 4, to565({70, 90, 170}), Clip{0, 0, kSide, kSide, 0});
-      break;
-    case FeedRefusal::Empty:   // none left yet: the grey pellet and the hourglass
-      drawFood(cv, x - 10 * pop / 256, y, 7 * pct / 120, Food{0, false, true}, alpha);
-      drawArt(cv, duel_art::kBootCountdown, x + 11 * pop / 256, y, pct, alpha);
-      break;
-    default: break;
-  }
+  if (pop == 256 && alpha > 128)
+    drawString(cv, kFreeSans9pt7b, says, x - w / 2 + 8, y, to565(f.refused == FeedRefusal::Asleep ? Rgb{60, 80, 160} : kInk),
+               Clip{0, 0, kSide, kSide, 0});
 }
 
 // ---- the chomp ----------------------------------------------------------------
@@ -381,7 +400,7 @@ bool pelletAloft(const FeedView& f, int landX, int landY, int& x, int& y, int& s
   const int t = f.droppedMs;
   x = kFromX + (landX - kFromX) * t / kFlightMs;
   y = kFromY + (landY - kFromY) * t / kFlightMs - kArcPx * 4 * t / kFlightMs * (kFlightMs - t) / kFlightMs;
-  scalePct = 300 - 200 * t / kFlightMs;
+  scalePct = 200 - 100 * t / kFlightMs;
   return true;
 }
 
@@ -405,14 +424,15 @@ void foodAloft(Canvas240& cv, const FeedView& f, int landX, int landY, bool rott
 void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) {
   const FeedView& f = a.feed;
   if (a.kind != blorb::Appearance::Kind::Creature || a.sealed) {
-    if (f.heardMs < kFlashMs) flash(cv, f.heardMs);   // a knock knock is heard on any screen the dish draws
+    if (f.heardMs < kPopMs) glyphPop(cv, f.heardMs);   // a knock knock is heard on any screen the dish draws
     return;
   }
   belly(cv, f);
   if (f.droppedMs != kNever) puff(cv, s, f.droppedMs);
   refused(cv, f, s);
   chomp(cv, f, s);
-  if (f.heardMs < kFlashMs) flash(cv, f.heardMs);
+  glyphPop(cv, f.heardMs);
+  cookieOut(cv, f, a.pantry);
 }
 
 }  // namespace paint
