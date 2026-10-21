@@ -220,12 +220,15 @@ static uint32_t sleptMs();
 //   [fps] phases look=0.9 bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
 // look= is the Dish working out his Appearance (draw_ms counts it), over= what
 // is drawn over the dish after it (the update's screen, the debug link's
-// mark, the idle bar), wait= the rest of the loop between frames.
+// mark, the idle bar), wait= the rest of the loop between frames. push= is the
+// loop's part of sending (the row hashes, the copy to the send task, and any
+// wait for the last frame's rows still going out), send= the send task's time
+// on the bus, on core 0 (async; sync: push= is all of it and send= is 0).
 //   DEBUG fps bench    what the canvas's memory and the renderer's parts cost, once each
 static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
-static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0;
+static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0;
 static uint64_t lookUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
 // look: the Dish's Appearance (the engine's), draw: the canvas, push: the panel.
@@ -253,7 +256,7 @@ static void report() {
   uint64_t painted = 0;
   for (int i = 0; i < int(Phase::Count); ++i) painted += spent[i];
   const uint64_t loopUs = uint64_t(over) * 1000;
-  char f[11][12];
+  char f[12][12];
   const Phase order[] = {Phase::Background, Phase::Figure, Phase::Rim, Phase::Text, Phase::Rings, Phase::Mask, Phase::Hint};
   ms(f[0], sizeof f[0], lookUs, n);
   for (int i = 0; i < 7; ++i) ms(f[1 + i], sizeof f[1 + i], spent[uint8_t(order[i])], n);
@@ -261,9 +264,11 @@ static void report() {
   ms(f[9], sizeof f[9], pushUs, n);
   const uint64_t busy = lookUs + drawUs + pushUs;
   ms(f[10], sizeof f[10], loopUs > busy ? loopUs - busy : 0, n);
-  Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s\n", f[0],
-                f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10]);
-  since = t, frames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0;
+  ms(f[11], sizeof f[11], boardSendUs() - send0, n);
+  Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
+                "send=%s (%s)\n",
+                f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], boardSendAsync() ? "async" : "sync");
+  since = t, frames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
@@ -301,15 +306,20 @@ static void bench() {
 }  // namespace fps
 
 // `DEBUG lcd [MHz]`: the panel's SPI write clock until reset (BLORB_LCD_SPI_MHZ is the default).
+// `DEBUG lcd sync|async`: send the rows from the loop, or from the send task on core 0 (the default).
 static void lcdVerb(const char* a) {
   if (*a) {
     const long mhz = std::strtol(a, nullptr, 10);
     if (mhz < 1 || mhz > 80) return (void)Serial.printf("[hw] want: lcd <MHz 1..80>\n");
+    boardPanelIdle();
     display.setWriteMhz(uint32_t(mhz));
     boardRepaintAll();   // the next frame whole, at the new clock: what to look at
+  } else if (std::strcmp(a, "sync") == 0 || std::strcmp(a, "async") == 0) {
+    boardSetSendAsync(a[0] == 'a');
   }
   const uint32_t khz = display.writeKhz();   // what the divider gives: `lcd 30` runs at 26.6
-  Serial.printf("[hw] lcd spi_mhz=%u.%u (built %u)\n", unsigned(khz / 1000), unsigned(khz % 1000 / 100), unsigned(BLORB_LCD_SPI_MHZ));
+  Serial.printf("[hw] lcd spi_mhz=%u.%u (built %u) send=%s\n", unsigned(khz / 1000), unsigned(khz % 1000 / 100),
+                unsigned(BLORB_LCD_SPI_MHZ), boardSendAsync() ? "async" : "sync");
 }
 #endif
 
@@ -584,6 +594,7 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // poses (side hold, hang) and the update's turn.
   const uint8_t rot = up.sample(body, ms);
   if (display.getRotation() != ORIENT_HOME) {
+    boardPanelIdle();
     display.setRotation(ORIENT_HOME);
     boardRepaintAll();   // the rows the panel holds were sent the other way round
   }
@@ -907,6 +918,7 @@ void setup() {
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
   [[maybe_unused]] bool panelUp = display.init();
+  boardPresentBegin(display);   // the panel's send task, on core 0
 #if !defined(BADGE_BOARD_SIM)
   display.setBrightness(dish->settings().brightness);
   reportBoot();
@@ -1273,7 +1285,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], reboot, bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1412,10 +1424,12 @@ static void applyPower(uint32_t now) {
   panelLow = powerPolicy.low();
   if (panelLow) {
     lightAfterFrame = false;
+    boardPanelIdle();
     display.sleep();   // backlight to 0, then SLPIN
     cpuPower(true);
   } else {
     cpuPower(false);
+    boardPanelIdle();
     display.getPanel()->setSleep(false);   // SLPOUT; the light waits for a fresh frame
     boardRepaintAll();                     // all of it: the panel's memory is not trusted across SLPIN
     lastFrame = now - kFrameMs;            // drawn this very pass
@@ -1533,7 +1547,7 @@ void loop() {
     ++framesDrawn;
     lastFrame = now;
 #if !defined(BADGE_BOARD_SIM)
-    if (lightAfterFrame) lightAfterFrame = false, display.setBrightness(dish->settings().brightness);
+    if (lightAfterFrame) lightAfterFrame = false, boardPanelIdle(), display.setBrightness(dish->settings().brightness);
 #endif
   }
 #if !defined(BADGE_BOARD_SIM)

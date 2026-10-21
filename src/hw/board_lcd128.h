@@ -6,6 +6,9 @@
 
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
+#include <esp_heap_caps.h>
+
+#include <cstring>
 
 #include "paint/sprite_pack.h"
 
@@ -152,15 +155,77 @@ inline uint32_t of(const uint16_t* p) {
 static void boardRepaintAll() { panelrows::stale = true; }
 static uint32_t boardRowsSent() { return panelrows::sent; }
 
+// The send runs on core 0 while the loop draws the next frame on core 1: a
+// frame's changed rows are copied into a shadow of the panel in PSRAM (the
+// canvas is internal and drawn over at once), and a task sends them from
+// there, so drawing waits on the panel only when the last frame's rows are
+// still going out. At 40 MHz a hang's ~95 rows are ~9 ms of SPI the draw no
+// longer waits through. No PSRAM, or `DEBUG lcd sync`: sent in place, as before.
+namespace panelsend {
+struct Run { uint8_t from, rows; };
+static uint16_t* shadow = nullptr;          // CANVAS_W x CANVAS_H in PSRAM, the panel's rows as last copied
+static Run runs[CANVAS_H / 2 + 1];          // runs of changed rows, at most every other row
+static int runCount = 0;
+static BoardDisplay* to = nullptr;
+static TaskHandle_t task = nullptr;
+static SemaphoreHandle_t idle = nullptr;    // held while a send is under way
+static bool async = true;
+static volatile uint32_t sendUs = 0;        // time on the bus since boot, us (the task's, for DEBUG fps)
+
+static void send(BoardDisplay& display, const uint16_t* px) {
+  display.startWrite();
+  for (int i = 0; i < runCount; ++i)
+    display.pushImage(0, runs[i].from, CANVAS_W, runs[i].rows,
+                      reinterpret_cast<const lgfx::rgb565_t*>(px + runs[i].from * CANVAS_W));
+  display.endWrite();
+}
+
+static void loop(void*) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    const uint32_t t0 = micros();
+    send(*to, shadow);
+    sendUs += micros() - t0;
+    xSemaphoreGive(idle);
+  }
+}
+}  // namespace panelsend
+
+// Before anything else talks to the panel (sleep, rotation, its clock): the last frame's send is done.
+static void boardPanelIdle() {
+  using namespace panelsend;
+  if (idle && xSemaphoreTake(idle, portMAX_DELAY) == pdTRUE) xSemaphoreGive(idle);
+}
+
+// After display.init(): the shadow and the send task, if PSRAM has room.
+static void boardPresentBegin(BoardDisplay& display) {
+  using namespace panelsend;
+  to = &display;
+  shadow = static_cast<uint16_t*>(heap_caps_malloc(sizeof(uint16_t) * CANVAS_W * CANVAS_H, MALLOC_CAP_SPIRAM));
+  idle = xSemaphoreCreateBinary();
+  if (!shadow || !idle) return void(async = false);
+  xSemaphoreGive(idle);
+  // Core 0, beside the radio's tasks (which outrank it); the loop and its drawing are core 1's.
+  if (xTaskCreatePinnedToCore(loop, "lcdsend", 3072, nullptr, 1, &task, 0) != pdPASS) async = false;
+}
+static bool boardSendAsync() { return panelsend::async && panelsend::task; }
+static void boardSetSendAsync(bool on) {
+  boardPanelIdle();
+  panelsend::async = on;
+}
+static uint32_t boardSendUs() { return panelsend::sendUs; }
+
 // The canvas is native-endian RGB565, which is rgb565_t to LGFX: pushImage
 // converts it to the panel's byte-swapped wire order on the way out, a run of
 // changed rows at a time.
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
   using namespace panelrows;
+  using namespace panelsend;
   const bool all = stale || ++sinceFull >= kFullEvery;
   if (all) stale = false, sinceFull = 0;
-  const auto* px = reinterpret_cast<const lgfx::rgb565_t*>(canvas.px);
-  display.startWrite();
+  const bool background = boardSendAsync();
+  if (background) xSemaphoreTake(idle, portMAX_DELAY);   // the last frame's rows are out; the shadow is free
+  runCount = 0;
   int from = -1;   // the first row of the run being gathered
   for (int y = 0; y <= CANVAS_H; ++y) {
     bool changed = false;
@@ -171,10 +236,18 @@ static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) 
     }
     if (changed && from < 0) from = y;
     if (!changed && from >= 0) {
-      display.pushImage(0, from, CANVAS_W, y - from, px + from * CANVAS_W);
+      runs[runCount++] = {uint8_t(from), uint8_t(y - from)};
       sent += uint32_t(y - from);
       from = -1;
     }
   }
-  display.endWrite();
+  if (!background) {
+    if (runCount) send(display, canvas.px);
+    return;
+  }
+  if (!runCount) return void(xSemaphoreGive(idle));
+  for (int i = 0; i < runCount; ++i)
+    std::memcpy(shadow + runs[i].from * CANVAS_W, canvas.px + runs[i].from * CANVAS_W,
+                sizeof(uint16_t) * CANVAS_W * runs[i].rows);
+  xTaskNotifyGive(task);   // the task gives idle back when the rows are out
 }
