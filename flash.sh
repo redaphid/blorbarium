@@ -2,12 +2,20 @@
 # Force-flash every badge the moment it is attached. No backup, no identity checks.
 #   ./flash.sh            # build if needed, then flash badges as they appear (Ctrl-C to stop)
 #   ./flash.sh --once     # flash one badge and exit
+#   ./flash.sh --flip     # for cases held USB-C down: that is the right way up (env badge128_flip)
 # Writes the merged .hex, whose gaps leave the pet partitions alone, so each pet stays.
 # If a badge will not connect, unplug it, hold BOOT, and plug it back in.
 set -u
 cd "$(dirname "$0")"
-image=.pio/build/badge128/merged.hex
-once=0; [ "${1:-}" = "--once" ] && once=1
+env=badge128; once=0
+for a in "$@"; do
+  case $a in
+    --once) once=1 ;;
+    --flip) env=badge128_flip ;;
+    *) echo "flash.sh: unknown option $a (--once, --flip)" >&2; exit 2 ;;
+  esac
+done
+image=.pio/build/$env/merged.hex
 
 # esptool 4.7+ is required: older ones write the hex text itself and destroy the pet.
 et=${ESPTOOL:-}
@@ -21,7 +29,9 @@ ver=$("$et" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)
 { [ "${ver%%.*}" -gt 4 ] || { [ "${ver%%.*}" -eq 4 ] && [ "${ver#*.}" -ge 7 ]; }; } 2>/dev/null ||
   { echo "flash.sh: $et is esptool ${ver:-?}; need 4.7+ (uv tool install esptool)" >&2; exit 1; }
 
-[ -f "$image" ] || { echo "flash.sh: building firmware"; ~/.platformio/penv/bin/pio run -e badge128 || exit 1; }
+# Always: a no-op when nothing changed, and a stale image is never written.
+echo "flash.sh: building $env"; ~/.platformio/penv/bin/pio run -e "$env" || exit 1
+[ $env = badge128_flip ] && echo "flash.sh: FLIPPED: USB-C down is up on these badges"
 
 badge_port() {   # first /dev/ttyACM* that is a CH343 (1a86:55d3)
   local p d
