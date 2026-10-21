@@ -93,7 +93,7 @@ than once. Serial-only `DEBUG` verbs never reach the phone:
 | `DEBUG shot` | Sends the screen (see step 5) |
 | `DEBUG bletest <bytes>` | Queues a test pattern to a connected BLE central |
 | `DEBUG fps` | Frames a second since it last asked, with the draw and push times (docs/power.md, "Awake: full speed") |
-| `DEBUG lcd [MHz]` | The panel's SPI write clock until reset (built at `BLORB_LCD_SPI_MHZ`, 80) |
+| `DEBUG lcd [MHz]` | The panel's SPI write clock until reset (built at `BLORB_LCD_SPI_MHZ`, 40; it prints the clock the divider gives) |
 
 ## 4. Take a screenshot
 

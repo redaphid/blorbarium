@@ -37,14 +37,16 @@ static constexpr int ORIENT_R0 = 1;
 static_assert(BLORB_ORIENT_HOME == 0 || BLORB_ORIENT_HOME == 2, "home is USB-C up (2) or USB-C down (0)");
 static constexpr uint8_t ORIENT_HOME = BLORB_ORIENT_HOME;
 
-// The panel's SPI write clock, in MHz. 40 is proven on this board; the wiki
-// allows 80, which halves a whole frame's push (23 ms at 40, 11.5 at 80). The
-// clock is the 80 MHz APB divided, so 80, 40, 26, 20 are what it can be. A
-// build may pin it without touching the code:
-//   PLATFORMIO_BUILD_FLAGS="-DBLORB_LCD_SPI_MHZ=40" pio run -e badge128
-// and `DEBUG lcd <MHz>` changes it until reset, to set the two side by side.
+// The panel's SPI write clock, in MHz: 40. The panel's clock is on GPIO10,
+// not SPI2's IO-MUX clock pin (GPIO12), so the bus goes through the GPIO
+// matrix, which IDF 4.4 holds to 40 MHz (spi_master.h) and LovyanGFX does not
+// clamp. A command byte (MADCTL, INVON, RASET) garbled at 80 is never healed by
+// a repaint, so 80 is opt-in, to try on a bench badge:
+//   PLATFORMIO_BUILD_FLAGS="-DBLORB_LCD_SPI_MHZ=80" pio run -e badge128
+// or `DEBUG lcd 80` until reset. The clock is the 80 MHz APB divided by a
+// whole number, so 80, 40, 26.7, 20 are what it can be; writeKhz() says which.
 #ifndef BLORB_LCD_SPI_MHZ
-#define BLORB_LCD_SPI_MHZ 80
+#define BLORB_LCD_SPI_MHZ 40
 #endif
 static_assert(BLORB_LCD_SPI_MHZ >= 1 && BLORB_LCD_SPI_MHZ <= 80, "BLORB_LCD_SPI_MHZ: 1 to 80");
 
@@ -107,7 +109,14 @@ class BoardDisplay : public lgfx::LGFX_Device {
     cfg.freq_write = mhz * 1000000;
     bus_.config(cfg);
   }
-  uint32_t writeMhz() const { return bus_.config().freq_write / 1000000; }
+  // The clock the bus really runs at, kHz, worked out as LovyanGFX's divider
+  // is (FreqToClockDiv, platforms/esp32/common.cpp): the APB over (pre + 1)(n + 1).
+  uint32_t writeKhz() const {
+    const uint32_t apb = getApbFrequency(), asked = bus_.config().freq_write;
+    if (asked >= apb) return apb / 1000;
+    const uint32_t div = apb / (asked + 1), pre = std::min<uint32_t>(div / 64, 8191), n = std::min<uint32_t>(div / (pre + 1), 63);
+    return apb / ((pre + 1) * (n + 1)) / 1000;
+  }
 };
 
 static void boardButtonBegin() { pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP); }

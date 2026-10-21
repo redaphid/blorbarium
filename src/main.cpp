@@ -226,10 +226,10 @@ static void report() {
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
   const uint32_t draw = uint32_t(drawUs / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
-                "spi_mhz=%u frame_ms=%u power=%s\n",
+                "spi_mhz=%u.%u frame_ms=%u power=%s\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
                 unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
-                unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeMhz()),
+                unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeKhz() / 1000), unsigned(display.writeKhz() % 1000 / 100),
                 unsigned(kFrameMs), powerPolicy.low() ? "low" : "full");
   since = now, frames = 0, worstUs = 0, rows0 = boardRowsSent(), drawUs = pushUs = 0;
 }
@@ -243,7 +243,8 @@ static void lcdVerb(const char* a) {
     display.setWriteMhz(uint32_t(mhz));
     boardRepaintAll();   // the next frame whole, at the new clock: what to look at
   }
-  Serial.printf("[hw] lcd spi_mhz=%u (built %u)\n", unsigned(display.writeMhz()), unsigned(BLORB_LCD_SPI_MHZ));
+  const uint32_t khz = display.writeKhz();   // what the divider gives: `lcd 30` runs at 26.6
+  Serial.printf("[hw] lcd spi_mhz=%u.%u (built %u)\n", unsigned(khz / 1000), unsigned(khz % 1000 / 100), unsigned(BLORB_LCD_SPI_MHZ));
 }
 #endif
 
@@ -517,7 +518,10 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // frame: left is left, always. The settled rotation is still read, for the
   // poses (side hold, hang) and the update's turn.
   const uint8_t rot = up.sample(body, ms);
-  if (display.getRotation() != ORIENT_HOME) display.setRotation(ORIENT_HOME);
+  if (display.getRotation() != ORIENT_HOME) {
+    display.setRotation(ORIENT_HOME);
+    boardRepaintAll();   // the rows the panel holds were sent the other way round
+  }
 #if !defined(BADGE_BOARD_SIM)
   // "Turn me around!": a turn answers the update's question as a press does.
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's

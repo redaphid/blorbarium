@@ -18,7 +18,7 @@ Rebuild without the flag before a release. At run time `POWER idle <s>`
 |---|---|---|
 | Screen | drawn up to 50 times a second, only the rows that changed sent (below), backlight at the pet's brightness | panel in sleep (SLPIN), backlight off, nothing drawn |
 | CPU | 240 MHz, flat out | 80 MHz, and the loop rests 20 ms a pass; on `badge128_pm`, light sleep between (below) |
-| Panel SPI | 80 MHz (`BLORB_LCD_SPI_MHZ`) | idle |
+| Panel SPI | 40 MHz (`BLORB_LCD_SPI_MHZ`) | idle |
 | The pet | lives | lives: every 100 ms tick still runs, so he ages, sleeps and gets hungry as before |
 | Body sensing | 50 Hz | 50 Hz (this is what wakes it) |
 | Bluetooth | advertising, connectable | the same: a phone still finds it |
@@ -98,9 +98,13 @@ Awake, the CPU runs at 240 MHz and the loop draws a frame every 20 ms
   whose hash changed: between the pet's 100 ms ticks most frames send
   nothing, and a crossing thought sends its strip. Every 64th frame, and
   every frame after the panel wakes, sends all of it.
-- **The SPI clock** is 80 MHz, the wiki's figure, half the time of 40 for a
-  whole frame (11.5 ms against 23). 40 MHz is the proven one: a build pins it
-  with `-DBLORB_LCD_SPI_MHZ=40`, and `DEBUG lcd <MHz>` changes it until reset.
+- **The SPI clock** is 40 MHz. The panel's clock pin (GPIO10) is not SPI2's
+  IO-MUX clock pin, so the bus goes through the GPIO matrix, which IDF 4.4
+  holds to 40 MHz; LovyanGFX does not clamp it, and a command byte garbled at
+  80 is not healed by a repaint. 80 (the wiki's figure, a whole frame in
+  11.5 ms against 23) is opt-in on a bench badge: `-DBLORB_LCD_SPI_MHZ=80`, or
+  `DEBUG lcd 80` until reset. `spi_mhz` reports the clock the divider really
+  gives (`lcd 30` runs at 26.6).
 
 The sense task (250 Hz awake) has a higher priority than the loop, so drawing
 never delays a sample; the loop takes the samples between frames, as before.
@@ -108,7 +112,7 @@ never delays a sample; the loop takes the samples between frames, as before.
 `DEBUG fps` on the cable prints what frames cost since it last asked (the
 shape of the line; these numbers are not a measurement):
 
-    [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 cpu=240 cpu_now=240 spi_mhz=80 frame_ms=20 power=full
+    [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 cpu=240 cpu_now=240 spi_mhz=40.0 frame_ms=20 power=full
 
 `draw_ms` is the canvas, `push_ms` the panel, `rows` the rows sent a frame
 (240 is all of it), `cpu_now` the clock as it runs. In low power it reports
