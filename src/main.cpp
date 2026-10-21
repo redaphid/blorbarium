@@ -12,6 +12,7 @@
 
 #include "blorb/dish.h"
 #include "blorb/founding.h"
+#include "blorb/knocks.h"
 #include "paint/duel.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
@@ -36,7 +37,6 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
 #include "debugble/console.h"
-#include "blorb/knocks.h"
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <driver/uart.h>
