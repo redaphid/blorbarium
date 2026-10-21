@@ -33,6 +33,9 @@ struct BodySample {
   // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
   // and is not one.
   bool knocking = false;
+  // A knock in the hand is ringing (KnockSense::ringing, in the shell): the
+  // aim holds through it.
+  bool knockRinging = false;
   // One knock is in and a second could still make a knock knock
   // (KnockSense::waitingSecond, in the shell): GestureCues lights the hint's
   // "one more" while it lasts, so a kid who knocked once sees it was felt.
@@ -100,7 +103,7 @@ struct TiltDetector : DetectorBase {      // EMA tilt -> tilt_x/tilt_y, upside_d
 };
 // The aim: which rim sector the badge is tipped toward (DuelInput's: 0 left,
 // 1 right, 2 toward the kid, 3 away; -1 level), for the duel, the stakes and
-// the lobby's friends. From gravity itself, halfway to each sample, with
+// the lobby's friends. From gravity itself, two steady samples' mean, with
 // hysteresis instead of the tilt's smoothing (the tilt rolls the food and
 // stays smooth): into a sector past kInMg in the plane (DuelInput's dead
 // zone, 0.15 of the tilt locus), out under kOutMg, and to another only
@@ -113,7 +116,7 @@ struct AimDetector : DetectorBase {
   static constexpr int32_t kSwitchMg = 120;
   void sample(const BodySample&, uint32_t ms, SenseOut&);
   int8_t aim() const { return aim_; }
- private: int32_t x_ = 0, y_ = 0; bool primed_ = false; int8_t aim_ = -1;
+ private: int32_t x_ = 0, y_ = 0, px_ = 0, py_ = 0; bool primed_ = false; int8_t aim_ = -1;
 };
 // Gravity as the body feels it at rest: an average of the samples within
 // 0.25 g of 1 g and near the average, so a jolt or a swing never drags it.

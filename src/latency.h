@@ -78,6 +78,18 @@ class Recorder {
     if (o.on) set(o, s, us);
   }
   // Closes it now, with whatever stages it reached.
+  // The decisive moment turned out later (a BOOT tap's is its release, not
+  // its press): In moves to inUs, and the stages already reached with it.
+  void rebase(Ctl c, uint32_t inUs, uint32_t seenUs) {
+    Open& o = open_[uint8_t(c)];
+    if (!o.on || int32_t(inUs - o.in) <= 0) return;
+    const uint32_t d = inUs - o.in;
+    for (uint32_t& a : o.at)
+      if (a != kUnset) a = a > d ? a - d : 0;
+    o.in = inUs;
+    o.at[uint8_t(St::Seen)] = kUnset;
+    set(o, St::Seen, seenUs);
+  }
   void close(Ctl c) {
     if (isOpen(c)) finish(c);
   }
@@ -256,6 +268,9 @@ class Watch {
     if (s.knockKnockWord) r.mark(Ctl::KnockKnock, St::Word, s.seenUs);
     // BOOT: from the press down; a double or a hold is filed as one.
     if (s.button && !buttonWas_) r.begin(Ctl::Press, s.readUs, s.seenUs), r.mark(Ctl::Press, St::Detect, s.seenUs);
+    // A tap that showed nothing while down (no ring where a hold does
+    // nothing here) is a press decided on its release: timed from there.
+    if (!s.button && buttonWas_ && !r.has(Ctl::Press, St::Ack)) r.rebase(Ctl::Press, s.readUs, s.seenUs);
     buttonWas_ = s.button;
     if (s.dbl) r.rekey(Ctl::Press, Ctl::Double), r.mark(Ctl::Double, St::Word, s.seenUs);
     else if (s.hold && !s.sideHolding) r.rekey(Ctl::Press, Ctl::Hold), r.mark(Ctl::Hold, St::Word, s.seenUs);
