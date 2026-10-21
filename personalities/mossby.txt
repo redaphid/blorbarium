@@ -55,6 +55,7 @@ ow
   OW. MY SHELL TOOK MOST OF IT.
 heard_you
   I HEARD. I AM COMING. SLOWLY.
+  ONE KNOCK... AND THE NEXT ONE?
 ground_lies
   WHOA. THE HOUSE IS MOVING.
 not_again
@@ -73,6 +74,7 @@ warm_hands
   WARM HANDS. LIKE A NICE LEAF.
 sky_down
   MY HOUSE IS ON TOP. OR UNDER?
+  OH DEAR. TURNED OVER. NO RUSH.
 heavy_eyes
   A LONG NAP, I THINK...
 dream_pellets
@@ -123,7 +125,7 @@ p_watched
 p_return
   YOU WILL COME BACK. I'LL WAIT.
 p_tap
-  YOU WILL TAP A PHONE. FAST.
+  A KNOCK KNOCK COMES. SLOWLY.
 p_no
   NO. BUT ASK AGAIN SLOWLY.
 p_doom
@@ -308,3 +310,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN... LOVELY RAIN...
   ZZZ... DRIP... DRIP... BLISS
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME FOR A SNACK.
+teach_fight
+  A FIGHT? HOLD ME UPSIDE DOWN.
+teach_hold
+  HOLD ME SIDEWAYS. NAP TIME.
+teach_shake
+  SHAKE ME. I SEE THINGS. SLOWLY

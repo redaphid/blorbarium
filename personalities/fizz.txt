@@ -54,7 +54,7 @@ green
 ow
   OW! MY SHELL GOT SCUFFED!
 heard_you
-  BZZT. I HEARD. STOP TAPPING.
+  BZZT. HEARD YOU. KNOCK TWICE.
 ground_lies
   BZZZZT! SPARKS EVERYWHERE!
 not_again
@@ -73,6 +73,7 @@ warm_hands
   WARM HANDS. NO SPARKS. PROMISE
 sky_down
   UPSIDE DOWN. DROPPED NOTHING.
+  MY STASH IS ON THE CEILING!
 heavy_eyes
   GLOW... FADING... BZZ...
 dream_pellets
@@ -123,7 +124,7 @@ p_watched
 p_return
   THEY'LL BE BACK. WITH SHINIES
 p_tap
-  A TAP COMES. A ZAPPY ONE.
+  TWO KNOCKS. TWO SNACKS. DIBS.
 p_no
   NO. BZZT. NO.
 p_doom
@@ -308,3 +309,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN... NO... FIZZLE...
   ZZZ... WET? NO... SHELL UP...
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME. GOLD SNACKS
+teach_fight
+  TO FIGHT: HOLD ME UPSIDE DOWN
+teach_hold
+  SLEEPY? HOLD ME SIDEWAYS.
+teach_shake
+  SHAKE ME. I SEE GOLD. MAYBE.

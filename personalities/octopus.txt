@@ -50,6 +50,7 @@ ow
   I PAID FOR THAT PINCH.
 heard_you
   THE RAVEN HEARD YOU TOO.
+  A RAPPING. AT MY CHAMBER DOOR.
 ground_lies
   THE FLOOR BETRAYS US.
 not_again
@@ -60,6 +61,7 @@ warm_hands
   WARM. DEEPLY SUSPICIOUS.
 sky_down
   THE CEILING IS A GRAVE.
+  UPSIDE DOWN. AS IN ACT THREE.
 heavy_eyes
   I WILL HAUNT THIS NAP.
 dream_pellets
@@ -107,7 +109,7 @@ p_watched
 p_return
   THE DEAD RETURN. SO DO YOU.
 p_tap
-  ONE TAP. THREE ACTS OF DOOM.
+  ONE KNOCK. THREE ACTS OF DOOM.
 p_no
   THE RAVEN VOTED. YOU LOSE.
 p_doom
@@ -210,3 +212,13 @@ hi_you
   YOU RETURNED. HOW UNFORTUNATE.
 busy
   BUSY. COUNTING YOUR LOSSES.
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME. I FEAST.
+teach_fight
+  TO LOSE, HOLD ME UPSIDE DOWN.
+teach_hold
+  TO REST, HOLD ME SIDEWAYS.
+teach_shake
+  SHAKE ME. HEAR YOUR DOOM.

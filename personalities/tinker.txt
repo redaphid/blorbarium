@@ -57,6 +57,7 @@ ow
   OW. NEED A NEW PART.
 heard_you
   I HEARD. I'M WORKING HERE.
+  ONE KNOCK? THE LOCK TAKES TWO.
 ground_lies
   WHOA! MY BOLTS! MY SCREWS!
 not_again
@@ -75,6 +76,7 @@ warm_hands
   WARM HANDS. GOOD FOR TINKERING
 sky_down
   UPSIDE DOWN. MY POCKETS! NO!
+  UPSIDE DOWN. BOLTS EVERYWHERE.
 heavy_eyes
   TOOLS... DOWN... ZZZ...
 dream_pellets
@@ -125,7 +127,7 @@ p_watched
 p_return
   THEY RETURN. I BUILT A BELL.
 p_tap
-  A TAP. CHECK THE WIRING.
+  A KNOCK. CHECK THE WIRING.
 p_no
   NO. BROKEN. CAN'T FIX THAT.
 p_doom
@@ -310,3 +312,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN... NO... RUST...
   ZZZ... TARP OVER THE PILE...
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME. SNACKS OUT.
+teach_fight
+  TO FIGHT, HOLD ME UPSIDE DOWN.
+teach_hold
+  HOLD ME SIDEWAYS. NAP IN A BOX
+teach_shake
+  SHAKE ME. I SEE PARTS. NICE.

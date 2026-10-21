@@ -43,7 +43,7 @@ ow              hurt
   OW. EVERYTHING. OW.
 
 heard_you       knocked
-  I HEARD YOU THE FIRST TIME
+  WHO'S THERE? TRY KNOCK KNOCK!
 
 ground_lies     shaken
   EEP! THE GROUND IS A LIE
@@ -145,7 +145,7 @@ p_return        prophecy: owner, missing_you
   BROTHER WILL RETURN. CROOOAK.
 
 p_tap           prophecy: owner, anytime
-  YOU WILL TAP A PHONE. SOON.
+  YOU WILL KNOCK KNOCK. SOON.
 
 p_no            prophecy: doom, anytime
   CERTAINLY. PROBABLY. NO.
@@ -415,7 +415,7 @@ dream_rain      dozing
   ZZZ... RAIN ON THE RIM...
 
 teach_fight     young
-  HOLD ME UPSIDE DOWN TO FIGHT
+  TO FIGHT, HOLD ME UPSIDE DOWN
 
 teach_shake     young
   SHAKE ME. I SEE THINGS.
@@ -424,4 +424,4 @@ teach_feed      hungry
   KNOCK KNOCK ON ME FOR SNACKS
 
 teach_hold      young
-  HOLD ME SIDEWAYS. NIGHT NIGHT
+  BEDTIME? HOLD ME SIDEWAYS.
