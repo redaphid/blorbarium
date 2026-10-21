@@ -66,7 +66,21 @@ constexpr int imin(int a, int b) { return a < b ? a : b; }
 constexpr int imax(int a, int b) { return a > b ? a : b; }
 constexpr int iabs(int a) { return a < 0 ? -a : a; }
 
+// The same root in 32 bits, starting at the value's own top bit: on the
+// board's 32-bit core the 64-bit loop costs a few hundred cycles a call, and
+// a frame makes tens of thousands of them.
+uint32_t isqrt32(uint32_t v) {
+  if (!v) return 0;
+  uint32_t r = 0, bit = uint32_t(1) << ((31 - __builtin_clz(v)) & ~1);
+  while (bit) {
+    if (v >= r + bit) { v -= r + bit; r = (r >> 1) + bit; } else { r >>= 1; }
+    bit >>= 2;
+  }
+  return r;
+}
+
 uint32_t isqrt(uint64_t v) {
+  if (v <= 0xFFFFFFFFu) return isqrt32(uint32_t(v));
   uint64_t r = 0, bit = uint64_t(1) << 62;
   while (bit > v) bit >>= 2;
   while (bit) {
@@ -248,26 +262,29 @@ struct Outline {
   const Xf* variants; int variantCount;
 };
 
+// Each frame's rows are walked once and every transform visits that row's
+// corners; the callers keep only a max or a min, so the order is free.
 template <class Visit>
 void visitOutline(const Outline& o, Visit&& visit) {
+  for (int i = 0; i < o.frameCount; ++i) {
+    const FrameRef& f = o.frames[i];
+    if (!drawable(f)) continue;
+    const uint8_t* p = f.rle;
+    for (int y = 0; y < f.h; ++y) {
+      int x = 0, lo = -1, hi = -1;
+      while (x < f.w) {
+        if (p[1]) { if (lo < 0) lo = x; hi = imin(x + p[0], f.w); }
+        x += p[0];
+        p += 2;
+      }
+      if (lo < 0) continue;
+      for (int v = 0; v < o.variantCount; ++v)
+        for (int sy : {y * 16, (y + 1) * 16})
+          for (int sx : {lo * 16, hi * 16}) visit(project(o.variants[v], f, sx, sy), 0);
+    }
+  }
   for (int v = 0; v < o.variantCount; ++v) {
     const Xf& xf = o.variants[v];
-    for (int i = 0; i < o.frameCount; ++i) {
-      const FrameRef& f = o.frames[i];
-      if (!drawable(f)) continue;
-      const uint8_t* p = f.rle;
-      for (int y = 0; y < f.h; ++y) {
-        int x = 0, lo = -1, hi = -1;
-        while (x < f.w) {
-          if (p[1]) { if (lo < 0) lo = x; hi = imin(x + p[0], f.w); }
-          x += p[0];
-          p += 2;
-        }
-        if (lo < 0) continue;
-        for (int sy : {y * 16, (y + 1) * 16})
-          for (int sx : {lo * 16, hi * 16}) visit(project(xf, f, sx, sy), 0);
-      }
-    }
     for (int i = 0; i < o.eyedCount; ++i) {
       const FrameRef& f = o.eyed[i];
       for (int e = 0; e < imin(f.eyeCount, 2); ++e)
@@ -295,10 +312,17 @@ Pt middle(const FrameRef& f, const Xf& xf) {
 struct Disc { int x = 0, y = 0, r = 0; };   // Q4
 Disc envelope(const Outline& o, Pt centre, int marginQ4) {
   Disc d{centre.x, centre.y, 0};
+  // The root is monotonic, so the outline's points (no reach) need only the
+  // farthest one's: one root, not one a corner.
+  uint64_t far2 = 0;
+  bool any = false;
   visitOutline(o, [&](Pt p, int reach) {
     int64_t dx = p.x - d.x, dy = p.y - d.y;
-    d.r = imax(d.r, int(isqrt(uint64_t(dx * dx + dy * dy))) + reach);
+    const uint64_t d2 = uint64_t(dx * dx + dy * dy);
+    if (!reach) { far2 = d2 > far2 ? d2 : far2, any = true; return; }
+    d.r = imax(d.r, int(isqrt(d2)) + reach);
   });
+  if (any) d.r = imax(d.r, int(isqrt(far2)));
   d.r += marginQ4 + 16;   // + the stand point's rounding
   return d;
 }
@@ -310,8 +334,10 @@ int headroom(const Outline& o, const Place& p, int marginQ4) {
   int64_t room = kSide * 16;
   visitOutline(o, [&](Pt q, int reach) {
     const int64_t x = int64_t(p.x) * 16 + q.x - kSide * 8, y = int64_t(p.y) * 16 + q.y - kSide * 8;
-    const int64_t r = kSide * 8 - reach - marginQ4 - 16;
-    const int64_t up = r > (x < 0 ? -x : x) ? y + int64_t(isqrt(uint64_t(r * r - x * x))) : 0;
+    const int64_t r = kSide * 8 - reach - marginQ4 - 16, ax = x < 0 ? -x : x;
+    // The root is at least r - |x|, so a point that clears the lowest room so far even with that needs no root.
+    if (r > ax && y + (r - ax) >= room) return;
+    const int64_t up = r > ax ? y + int64_t(isqrt(uint64_t(r * r - x * x))) : 0;
     room = up < room ? up : room;
   });
   return room > 0 ? int(room / 16) : 0;
@@ -365,6 +391,12 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   int left = imax(0, p.x + floorDiv(int64_t(-f.originX) * v.kx, kOne) - lean - 1);
   int right = imin(kSide - 1, p.x + ceilDiv(int64_t(f.w - f.originX) * v.kx, kOne) + lean + 1);
   RowReader rows(f);
+  // Each pixel's source column is floorDiv((2 (x - p.x) + 1 + shift2) kOne, 2 kx).
+  // Along a row the numerator grows by 2 kOne a pixel, so the quotient and its
+  // remainder are stepped rather than divided: the same columns, with no
+  // 64-bit division a pixel (a library call on the board).
+  const int den = 2 * v.kx;   // kx >= 1, so den > 0
+  const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
   for (int y = top; y <= bottom; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
     int sy = f.originY + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
@@ -372,8 +404,11 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
     if (sy >= f.h) break;
     const uint8_t* row = rows.seek(sy);
     int shift2 = floorDiv(int64_t(dy2) * v.shear, kOne);
-    for (int x = left; x <= right; ++x) {
-      int sx = f.originX + floorDiv(int64_t(2 * (x - p.x) + 1 + shift2) * kOne, 2 * v.kx);
+    const int64_t num = int64_t(2 * (left - p.x) + 1 + shift2) * kOne;
+    int q = floorDiv(num, den), rem = int(num - int64_t(q) * den);   // 0 <= rem < den
+    for (int x = left; x <= right; ++x, q += stepQ, rem += stepR) {
+      if (rem >= den) rem -= den, ++q;
+      int sx = f.originX + int(q);
       if (sx < 0 || sx >= f.w) continue;
       uint8_t i = row[sx];
       if (!i) continue;
@@ -742,29 +777,63 @@ bool inDish(int x, int y) {
   return dx * dx + dy * dy <= kSide * kSide;
 }
 
+// The first column of row y inside the dish (inDish), and so, by symmetry,
+// the last is kSide - 1 - it. Every pixel left of it and right of the last is outside.
+int dishFrom(int y) {
+  int x = 0;
+  while (x < kSide / 2 && !inDish(x, y)) ++x;
+  return x;
+}
+
 // A dark bog-teal dish, lighter at the middle, with a faint glassy rim,
 // ordered-dithered so the gradient does not band in RGB565.
 void background(Canvas240& cv, Fx night) {
   static constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+  constexpr int kStep = kSide * kSide / 256;   // d2 per step of t
+  constexpr int kRimFrom = 228 * 228;          // d2 below this has no rim: |isqrt(d2) - 233| >= 6
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 > kSide * kSide) { cv.px[y * kSide + x] = 0; continue; }
-      int t = d2 / (kSide * kSide / 256);
+  // The dish lit, at each step out from the middle. The rim's glass and the
+  // dither land per pixel; inside the rim no channel comes near 255, so the
+  // clamp is the rim's alone. One row of these is what every pixel used to work out.
+  static uint8_t litR[257], litG[257], litB[257];
+  for (int t = 0; t <= 256; ++t) {
+    litR[t] = uint8_t((22 - 10 * t / 256) * lit / 256);
+    litG[t] = uint8_t((58 - 22 * t / 256) * lit / 256);
+    litB[t] = uint8_t((56 - 20 * t / 256) * lit / 256);
+  }
+  for (int y = 0; y < kSide; ++y) {
+    uint16_t* row = &cv.px[y * kSide];
+    const int from = dishFrom(y), to = kSide - from;   // [from, to) is inside
+    std::memset(row, 0, sizeof(uint16_t) * size_t(from));
+    std::memset(row + to, 0, sizeof(uint16_t) * size_t(kSide - to));
+    const int dy = 2 * y + 1 - kSide;
+    const uint8_t* bayer = kBayer[y & 3];
+    int s = -1;   // isqrt(d2) at the last rim pixel: the next is a step or two from it
+    for (int x = from; x < to; ++x) {
+      const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
+      const int t = d2 / kStep, d = bayer[x & 3];
+      if (d2 < kRimFrom) {
+        row[x] = uint16_t(((litR[t] + d / 2) >> 3) << 11 | ((litG[t] + d / 4) >> 2) << 5 | (litB[t] + d / 2) >> 3);
+        continue;
+      }
       Rgb c{22 - 10 * t / 256, 58 - 22 * t / 256, 56 - 20 * t / 256};
-      int rim = 6 - iabs(int(isqrt(uint64_t(d2))) - 233);
+      if (s < 0) s = int(isqrt32(uint32_t(d2)));
+      while (s * s > d2) --s;
+      while ((s + 1) * (s + 1) <= d2) ++s;
+      int rim = 6 - iabs(s - 233);
       if (rim > 0) { c.r += 4 * rim; c.g += 8 * rim; c.b += 7 * rim; }
-      int d = kBayer[y & 3][x & 3];
-      cv.px[y * kSide + x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
-                                    imin(255, c.b * lit / 256 + d / 2)});
+      row[x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
+                      imin(255, c.b * lit / 256 + d / 2)});
     }
+  }
 }
 
 void mask(Canvas240& cv) {
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x)
-      if (!inDish(x, y)) cv.px[y * kSide + x] = 0;
+  for (int y = 0; y < kSide; ++y) {
+    const int from = dishFrom(y);
+    std::memset(&cv.px[y * kSide], 0, sizeof(uint16_t) * size_t(from));
+    std::memset(&cv.px[y * kSide + kSide - from], 0, sizeof(uint16_t) * size_t(from));
+  }
 }
 
 // Pantry pellets as pips along the top of the rim.
@@ -946,13 +1015,24 @@ void hangRing(Canvas240& cv, Fx charge) {
                 kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
   const uint16_t red = to565({220, 0, 0}), edge = to565({50, 0, 0});
   const double filled = double(blorb::clamp01(charge).raw) / double(Fx::one().raw);
+  // The double atan2 is soft float on the board, thousands of cycles a pixel.
+  // The single-precision one (the FPU's) is within a millionth of a turn of
+  // it, so only a pixel within kSure of the edge of the fill needs the double
+  // to say which side it falls: the same pixels, at a sliver of the cost.
+  constexpr float kSure = 1e-4f;
+  const float filledF = float(filled);
   for (int y = 0; y < kSide; ++y)
     for (int x = 0; x < kSide; ++x) {
       const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
       if (d2 >= kOuter || d2 < kEdge) continue;
-      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
-      if (sweep < 0) sweep += 1.0;
-      if (sweep > filled) continue;
+      float rough = std::atan2(float(dx), float(-dy)) / 6.2831853f;
+      if (rough < 0) rough += 1.0f;
+      if (rough > filledF + kSure) continue;
+      if (rough >= filledF - kSure) {
+        double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+        if (sweep < 0) sweep += 1.0;
+        if (sweep > filled) continue;
+      }
       cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
     }
 }
@@ -1115,16 +1195,31 @@ void drawIdleBar(Canvas240& cv, uint16_t permille) {
   // In half pixels from the centre: the ring of pixels whose centres sit
   // between 117 and 118 px out, the outermost the round glass shows whole.
   constexpr int kOuter = (kSide - 2) * (kSide - 2), kInner = (kSide - 4) * (kSide - 4);
+  // The ring's pixels and, for each, the least permille that lights it, worked
+  // out once: a double atan2 is soft float on the board, thousands of cycles a
+  // pixel, every frame. 764 pixels, 3 KB.
+  struct Lit { uint16_t at, from; };
+  constexpr int kRing = 764;   // the pixels whose centres lie in that band
+  static Lit ring[kRing];
+  static int n = -1;
+  if (n < 0) {
+    n = 0;
+    for (int y = 0; y < kSide; ++y)
+      for (int x = 0; x < kSide && n < kRing; ++x) {
+        const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+        if (d2 >= kOuter || d2 < kInner) continue;
+        double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+        if (sweep < 0) sweep += 1.0;
+        // Lit while sweep < permille / 1000.0, exactly as that test reads.
+        int from = int(sweep * 1000.0);
+        while (from > 0 && sweep < (from - 1) / 1000.0) --from;
+        while (from <= 1000 && !(sweep < from / 1000.0)) ++from;
+        ring[n++] = {uint16_t(y * kSide + x), uint16_t(from)};
+      }
+  }
   const uint16_t c = to565({120, 150, 150});
-  const double filled = permille / 1000.0;
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 >= kOuter || d2 < kInner) continue;
-      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
-      if (sweep < 0) sweep += 1.0;
-      if (sweep < filled) cv.px[y * kSide + x] = c;
-    }
+  for (int i = 0; i < n; ++i)
+    if (permille >= ring[i].from) cv.px[ring[i].at] = c;
 }
 
 }  // namespace paint

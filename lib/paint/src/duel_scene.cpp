@@ -1052,6 +1052,8 @@ void arena(Canvas240& cv) {
       const int t = d2 / (kSide * kSide / 256);
       Rgb c{40 - 22 * t / 256, 30 - 16 * t / 256, 56 - 26 * t / 256};
       for (const Pool& p : kPools) {
+        // A whole radius off on either axis puts |ex| or |ey| at 256 or more: no light, and no divisions to learn it.
+        if (iabs(x - p.x) >= p.rx || iabs(y - p.y) >= p.ry) continue;
         const int ex = (x - p.x) * 256 / p.rx, ey = (y - p.y) * 256 / p.ry, e = (ex * ex + ey * ey) >> 8;
         if (e < 256) { c.r += 26 * (256 - e) / 256; c.g += 30 * (256 - e) / 256; c.b += 24 * (256 - e) / 256; }
       }
