@@ -67,13 +67,18 @@ class WifiStation {
   // ---- the scan: what is in range ----
   bool scan() {
     seen_ = 0;
+    if (!aps_) {   // PSRAM, made at the first scan: internal RAM is the scarce kind
+      aps_ = static_cast<Ap*>(heap_caps_calloc(kSeenMax, sizeof(Ap), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+      views_ = static_cast<wifiota::Seen*>(heap_caps_calloc(kSeenMax, sizeof(wifiota::Seen), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+      if (!aps_ || !views_) return false;
+    }
     return WiFi.scanNetworks(true, false, false, kScanMsPerChannel) == WIFI_SCAN_RUNNING;
   }
   // -1 still scanning, -2 failed, else how many networks it found (the
   // strongest kSeenMax of them copied for seen()).
   int scanned() {
     const int16_t n = WiFi.scanComplete();
-    if (n < 0) return n;
+    if (n < 0 || !aps_) return n;
     seen_ = 0;
     for (int16_t i = 0; i < n; ++i) {
       Ap a;
@@ -125,8 +130,8 @@ class WifiStation {
     uint8_t bssid[6] = {};
   };
   bool up_ = false;
-  Ap aps_[kSeenMax];
-  wifiota::Seen views_[kSeenMax];
+  Ap* aps_ = nullptr;
+  wifiota::Seen* views_ = nullptr;
   uint8_t seen_ = 0;
 #if defined(CONFIG_PM_ENABLE)
   esp_pm_lock_handle_t lock_ = nullptr;

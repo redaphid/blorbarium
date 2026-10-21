@@ -75,6 +75,7 @@ class ImprovBle : public wifiota::improv::Port {
 
   void build(NimBLEServer* server, NimBLEAdvertising* adv) {
     namespace im = wifiota::improv;
+    const uint32_t heap0 = ESP.getFreeHeap();
     NimBLEService* s = server->createService(im::kService);
     state_ = s->createCharacteristic(im::kCurrentState, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     error_ = s->createCharacteristic(im::kErrorState, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
@@ -89,8 +90,8 @@ class ImprovBle : public wifiota::improv::Port {
     const uint8_t data[6] = {state, can, 0, 0, 0, 0};
     const bool inAdv = adv->setServiceData(NimBLEUUID(im::kServiceDataUuid), data, sizeof data);
     const bool inScan = adv->addServiceUUID(im::kService);
-    Serial.printf("[wifi] improv service up: service data %s, uuid in scan response %s\n", inAdv ? "advertised" : "NO ROOM",
-                  inScan ? "yes" : "no room");
+    Serial.printf("[wifi] improv service up: service data %s, uuid in scan response %s, heap %u -> %u (before the server starts)\n",
+                  inAdv ? "advertised" : "NO ROOM", inScan ? "yes" : "no room", unsigned(heap0), unsigned(ESP.getFreeHeap()));
   }
 
   void set(NimBLECharacteristic* c, uint8_t v) {

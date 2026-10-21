@@ -11,10 +11,15 @@
 // 7 KB of it), made for the GET and given back when it ends. The TLS record
 // buffers go to PSRAM (src/wifi_ota.h, tlsCalloc).
 //
+// Internal RAM is the scarce kind (a duel's radio takes about 37 KB of it):
+// everything here but a few flags lives in PSRAM, made at the first GET and
+// kept. The ring is a plain single-writer, single-reader one (not FreeRTOS's
+// stream buffer, whose code sits in IRAM).
+//
 // A text GET (the manifest) reads the whole body, at most kTextMax bytes,
-// into text(). A streamed GET (the image) feeds a ring of kRingBytes in PSRAM
-// that the loop drains with take(): when the loop is slow the task waits for
-// room, so the download goes at the speed the flash takes it.
+// into text(). A streamed GET (the image) feeds a ring of kRingBytes that the
+// loop drains with take(): when the loop is slow the task waits for room, so
+// the download goes at the speed the flash takes it.
 #pragma once
 
 #include <Arduino.h>
@@ -23,14 +28,15 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/stream_buffer.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <new>
 
 #include "hw/tls_roots.h"
 
@@ -50,29 +56,32 @@ class NetJob {
 
   // Start a GET of `url`: https:// with the pinned roots (tls_roots.h), or
   // http:// (only a cable's `DEBUG ota check http://...` asks for one).
-  // False when one is still running or the task could not be made.
+  // False when one is still running, or PSRAM or the task could not be had.
   bool start(const char* url, bool text) {
     if (busy()) return false;
-    std::snprintf(url_, sizeof url_, "%s", url);
+    if (!m_) {
+      void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!p) return false;
+      m_ = new (p) Mem;
+    }
+    std::snprintf(m_->url, sizeof m_->url, "%s", url);
     text_ = text;
     textLen_ = 0;
     size_ = -1;
     got_ = 0;
-    error_[0] = 0;
+    m_->error[0] = 0;
+    m_->text[0] = 0;
     cancel_ = false;
     openMs_ = 0;
     stackFree_ = 0;
-    if (!text) {
-      if (!ringStore_) ringStore_ = static_cast<uint8_t*>(heap_caps_malloc(kRingBytes + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-      if (!ringStore_) return fail("no PSRAM for the ring"), false;
-      ring_ = xStreamBufferCreateStatic(kRingBytes, 1, ringStore_, &ringStatic_);
-    }
+    head_ = tail_ = 0;
     state_ = State::Opening;
     running_ = true;
     startedAt_ = millis();
     if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", kStackBytes, this, 1, nullptr, 1) != pdPASS) {
       running_ = false;
-      return fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap())), false;
+      state_ = fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap()));
+      return false;
     }
     return true;
   }
@@ -82,27 +91,41 @@ class NetJob {
   // The task stops at its next chance: a read, a wait for room, or the end of
   // the blocking call it is in (each bounded by the timeouts above).
   void cancel() { cancel_ = true; }
-  uint32_t runningMs() const { return running_ ? millis() - startedAt_ : 0; }
 
   int size() const { return size_; }                    // Content-Length, -1 when none was sent
-  const char* text() const { return text_buf_; }
+  const char* text() const { return m_ ? m_->text : ""; }
   size_t textLen() const { return textLen_; }
   size_t received() const { return got_; }
-  const char* error() const { return error_; }
+  const char* error() const { return m_ ? m_->error : "no PSRAM"; }
   uint32_t openMs() const { return openMs_; }           // DNS, connect, TLS and headers
   uint32_t stackFree() const { return stackFree_; }     // the task's stack never used, at its end
 
   // The loop: up to `cap` streamed bytes that have arrived, without waiting.
-  size_t take(uint8_t* out, size_t cap) { return ring_ ? xStreamBufferReceive(ring_, out, cap, 0) : 0; }
-  size_t waiting() const { return ring_ ? xStreamBufferBytesAvailable(ring_) : 0; }
-  // Once the task has ended: the ring emptied for the next GET.
+  size_t take(uint8_t* out, size_t cap) {
+    const uint32_t head = head_, tail = tail_;
+    size_t n = std::min(cap, size_t(head - tail));
+    std::atomic_thread_fence(std::memory_order_acquire);
+    for (size_t i = 0; i < n; ++i) out[i] = m_->ring[(tail + i) % kRingBytes];
+    std::atomic_thread_fence(std::memory_order_release);
+    tail_ = tail + uint32_t(n);
+    return n;
+  }
+  size_t waiting() const { return size_t(head_ - tail_); }
+  // Once the task has ended: ready for the next GET.
   void reset() {
     if (busy()) return;
-    if (ring_) xStreamBufferReset(ring_);
+    head_ = tail_ = 0;
     state_ = State::Idle;
   }
 
  private:
+  struct Mem {
+    char url[200];
+    char text[kTextMax + 1];
+    char error[96];
+    uint8_t ring[kRingBytes];
+  };
+
   static void run(void* arg) {
     auto* self = static_cast<NetJob*>(arg);
     self->get();   // everything it made is gone when this returns
@@ -111,9 +134,27 @@ class NetJob {
     vTaskDelete(nullptr);
   }
 
+  // The task: `n` bytes into the ring, waiting while it is full.
+  void put(const uint8_t* p, size_t n) {
+    while (n && !cancel_) {
+      const uint32_t head = head_, tail = tail_;
+      const size_t room = kRingBytes - size_t(head - tail);
+      if (!room) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+        continue;
+      }
+      const size_t k = std::min(room, n);
+      std::atomic_thread_fence(std::memory_order_acquire);   // the loop is done with that room
+      for (size_t i = 0; i < k; ++i) m_->ring[(head + i) % kRingBytes] = p[i];
+      std::atomic_thread_fence(std::memory_order_release);
+      head_ = head + uint32_t(k);   // published after the bytes
+      p += k, n -= k;
+    }
+  }
+
   void get() {
     std::unique_ptr<WiFiClient> client;
-    if (std::strncmp(url_, "https://", 8) == 0) {
+    if (std::strncmp(m_->url, "https://", 8) == 0) {
       auto* secure = new WiFiClientSecure;
       secure->setCACert(kTlsRoots);
       secure->setHandshakeTimeout(kHandshakeS);
@@ -127,7 +168,7 @@ class NetJob {
     http.setTimeout(kHeadersMs);
     http.setUserAgent("blorbarium");
     const uint32_t t0 = millis();
-    if (!http.begin(*client, url_)) return finish(fail("bad url"));
+    if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
     const int code = http.GET();
     openMs_ = millis() - t0;
     if (cancel_) return finish(fail("cancelled"), http);
@@ -137,20 +178,22 @@ class NetJob {
     WiFiClient* s = http.getStreamPtr();
     if (!s) return finish(fail("no stream"), http);
     if (text_) {
-      if (size_ > int(kTextMax)) return finish(fail("%d bytes is not a manifest", size_), http);
+      if (size_ > int(kTextMax)) return finish(fail("%d bytes is not a manifest", int(size_)), http);
       state_ = State::Body;
       const size_t want = size_ >= 0 ? size_t(size_) : kTextMax;
       uint32_t heard = millis();
-      while (textLen_ < want && !cancel_) {
-        const int n = s->available() > 0 ? s->read(reinterpret_cast<uint8_t*>(text_buf_) + textLen_, want - textLen_) : 0;
-        if (n > 0) textLen_ += size_t(n), heard = millis();
+      size_t len = 0;
+      while (len < want && !cancel_) {
+        const int n = s->available() > 0 ? s->read(reinterpret_cast<uint8_t*>(m_->text) + len, want - len) : 0;
+        if (n > 0) len += size_t(n), heard = millis();
         else if (!s->connected()) break;
         else if (millis() - heard > kStallMs) return finish(fail("the manifest stalled"), http);
         else vTaskDelay(pdMS_TO_TICKS(10));
       }
-      text_buf_[textLen_] = 0;
+      m_->text[len] = 0;
+      textLen_ = len;
       if (cancel_) return finish(fail("cancelled"), http);
-      if (size_ >= 0 && textLen_ != size_t(size_)) return finish(fail("the manifest was cut at %u bytes", unsigned(textLen_)), http);
+      if (size_ >= 0 && len != size_t(size_)) return finish(fail("the manifest was cut at %u bytes", unsigned(len)), http);
       return finish(State::Done, http);
     }
     if (size_ <= 0) return finish(fail("no length"), http);
@@ -162,9 +205,8 @@ class NetJob {
       if (avail > 0) {
         const int n = s->read(buf, std::min(sizeof buf, size_t(avail)));
         if (n <= 0) continue;
-        for (size_t off = 0; off < size_t(n) && !cancel_;)   // wait for the loop to make room
-          off += xStreamBufferSend(ring_, buf + off, size_t(n) - off, pdMS_TO_TICKS(50));
-        got_ += size_t(n);
+        put(buf, size_t(n));
+        got_ = got_ + size_t(n);
         heard = millis();
       } else if (!s->connected()) {
         break;
@@ -175,7 +217,7 @@ class NetJob {
       }
     }
     if (cancel_) return finish(fail("cancelled"), http);
-    if (got_ != size_t(size_)) return finish(fail("the connection closed at %u of %d bytes", unsigned(got_), size_), http);
+    if (got_ != size_t(size_)) return finish(fail("the connection closed at %u of %d bytes", unsigned(got_), int(size_)), http);
     finish(State::Done, http);
   }
 
@@ -188,23 +230,21 @@ class NetJob {
   State fail(const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    std::vsnprintf(error_, sizeof error_, fmt, ap);
+    std::vsnprintf(m_->error, sizeof m_->error, fmt, ap);
     va_end(ap);
     return State::Failed;
   }
 
-  char url_[200] = "";
+  Mem* m_ = nullptr;
   bool text_ = true;
-  char text_buf_[kTextMax + 1] = "";
+  // Each written by one side and read by the other: plain words, never a
+  // compare-and-swap.
+  volatile bool running_ = false, cancel_ = false;
+  volatile State state_ = State::Idle;
+  volatile uint32_t head_ = 0, tail_ = 0;
   volatile size_t textLen_ = 0, got_ = 0;
   volatile int size_ = -1;
   volatile uint32_t openMs_ = 0, stackFree_ = 0, startedAt_ = 0;
-  char error_[96] = "";
-  std::atomic<bool> running_{false}, cancel_{false};
-  std::atomic<State> state_{State::Idle};
-  uint8_t* ringStore_ = nullptr;
-  StaticStreamBuffer_t ringStatic_;
-  StreamBufferHandle_t ring_ = nullptr;
 };
 
 }  // namespace hw

@@ -5,10 +5,13 @@
 #include <esp_mac.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "blorb/dish.h"
 #include "blorb/founding.h"
@@ -73,19 +76,32 @@ class SerialLink : public blorb::Link {
   bool heard_ = false;
   // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
   // (one slot dropped all but the last). 128 bytes holds the longest, `DEBUG wifi
-  // set "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h).
+  // set "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h). The queue is
+  // made in PSRAM at the first DEBUG line: internal RAM is the scarce kind
+  // (a duel's radio takes about 37 KB of it), and a cable is rare.
   static constexpr uint8_t kDebugQueue = 8;
   static constexpr size_t kDebugLine = 128;
-  char debug_[kDebugQueue][kDebugLine] = {};
+  struct Queue {
+    char lines[kDebugQueue][kDebugLine];
+    char taken[kDebugLine];
+  };
+  Queue* q_ = nullptr;
   uint8_t debugHead_ = 0, debugTail_ = 0;
-  char taken_[kDebugLine] = "";
+
+  bool queue() {
+#if !defined(BADGE_BOARD_SIM)
+    if (!q_) q_ = static_cast<Queue*>(heap_caps_calloc(1, sizeof(Queue), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+    if (!q_) q_ = static_cast<Queue*>(std::calloc(1, sizeof(Queue)));
+    return q_ != nullptr;
+  }
 
  public:
   bool connected() override { return heard_; }
   const char* takeDebug() {
-    if (debugHead_ == debugTail_) return nullptr;
-    std::memcpy(taken_, debug_[debugTail_++ % kDebugQueue], sizeof(taken_));
-    return taken_;
+    if (debugHead_ == debugTail_ || !q_) return nullptr;
+    std::memcpy(q_->taken, q_->lines[debugTail_++ % kDebugQueue], sizeof(q_->taken));
+    return q_->taken;
   }
   std::optional<std::string_view> readLine() override {
     while (Serial.available() > 0) {
@@ -100,8 +116,9 @@ class SerialLink : public blorb::Link {
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
+        if (!queue()) continue;
         if (uint8_t(debugHead_ - debugTail_) >= kDebugQueue) ++debugTail_;   // full: the oldest goes
-        char* d = debug_[debugHead_++ % kDebugQueue];
+        char* d = q_->lines[debugHead_++ % kDebugQueue];
         const size_t k = std::min(n - 6, kDebugLine - 1);
         std::memcpy(d, line_ + 6, k);
         d[k] = 0;
@@ -140,6 +157,16 @@ static SerialLink phone;
 #if defined(BADGE_BOARD_SIM)
 static blorb::Link& host = phone;
 #else
+// Internal RAM is the scarce kind: a duel's radio takes about 37 KB of it,
+// Wi-Fi's TLS about 45 KB, and a phone's connection its share. Objects only
+// tasks touch (never an interrupt, and nothing in them is a lock or an
+// atomic) can live in PSRAM: made there at start-up, internal only if PSRAM
+// is not there (`[hw] psram: ...` at boot says where each landed).
+template <class T, class... A>
+static T& inPsram(A&&... a) {
+  if (void* p = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) return *new (p) T(std::forward<A>(a)...);
+  return *new T(std::forward<A>(a)...);
+}
 static hw::NusLink ble;
 // Updates over the air (docs/ota.md). The session answers OTA lines before
 // the Dish sees them; what it needs from the pet is DishOtaHost, below.
@@ -190,7 +217,8 @@ struct RadioGate : blorb::Air {
 };
 static hw::EspNowAir espNow;
 // `DEBUG net ...` makes the room worse between the gate and the radio (hw/net_faults.h).
-static hw::FaultAir faultAir(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
+static hw::FaultAir& faultAir =
+    inPsram<hw::FaultAir>(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
 static RadioGate radioGate(faultAir);
 // Survives ESP.restart() (not a power cut): `DEBUG reboot quiet` boots with the radio blacked out
 // from the first tick, so a soak sets its room before two badges can pair.
@@ -661,7 +689,7 @@ static hw::Feel shell{ORIENT_R0, homeRot, powerPolicy};
 //   DEBUG latency clear   starts over
 // A few KB and a few us a sample, so it is always on.
 namespace lat {
-static latency::Recorder rec;
+static latency::Recorder& rec = inPsram<latency::Recorder>();
 static latency::Watch watch;
 static uint32_t readUs = 0, peakUs = 0;   // the sample feel() is on: its read, and its peak's
 static void felt(const hw::Felt& f, bool button, bool woke) {
@@ -903,6 +931,8 @@ static void reportBoot() {
   Serial.printf("[hw] home rot=%u (USB-C %s, %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot), homeWhy,
                 hw::home::name(ORIENT_HOME));
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
+  Serial.printf("[hw] psram: faultAir=%d lat=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(&faultAir)),
+                int(esp_ptr_external_ram(&lat::rec)));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
