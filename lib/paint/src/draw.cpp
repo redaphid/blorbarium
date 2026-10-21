@@ -5,6 +5,7 @@
 #include "duel/duel_art.h"
 #include "figure.h"
 #include "paint/marquee.h"
+#include "paint/phases.h"
 #include "paint/sprite_pack.h"
 
 namespace paint {
@@ -1166,13 +1167,21 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
   halo(cv, a, pack, now.eyeCount ? now : body, p);
 }
 
+PhaseClock phaseClock;
+
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
+  phaseStart();
   background(cv, a.night);
+  phaseEnd(Phase::Background);
   if (a.sealed) {
     amber(cv, kAmberBehind);
+    phaseEnd(Phase::Background);
     drawCreature(a, pack, cv);
+    phaseEnd(Phase::Figure);
     sealedInAmber(cv, nowMs);
-    return mask(cv);
+    phaseEnd(Phase::Text);
+    mask(cv);
+    return phaseEnd(Phase::Mask);
   }
   switch (a.kind) {
     case Kind::Creature: drawCreature(a, pack, cv); break;
@@ -1180,16 +1189,21 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Remains: drawRemains(a, pack, cv); break;
     case Kind::Clutch: drawClutch(a, cv); break;
   }
+  phaseEnd(Phase::Figure);
   pips(cv, a.pantry);
   rimTokens(cv, a);
   hint(cv, a);
+  phaseEnd(Phase::Rim);
   // Low when he stands high in the dish, so the line never crosses his face.
   if (a.lobby) lobbyLine(cv, a, nowMs);
   else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
+  phaseEnd(Phase::Text);
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
   else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby
+  phaseEnd(Phase::Rings);
   mask(cv);
+  phaseEnd(Phase::Mask);
 }
 
 namespace {

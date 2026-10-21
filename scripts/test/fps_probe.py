@@ -7,8 +7,11 @@
     uv run scripts/test/fps_probe.py /dev/ttyACM0 --log fps.log
     uv run scripts/test/fps_probe.py /dev/ttyACM0 --clocks 40,80 --seconds 15
 
-For each SPI clock (`DEBUG lcd <MHz>`): settle, then `DEBUG fps` over a
-window at rest. Then low power and back: `DEBUG power low` must show no
+First `DEBUG fps bench`: a memset and a read of the whole canvas (its
+memory's speed) and the frame shown now drawn ten times, by phase, in us.
+Then, for each SPI clock (`DEBUG lcd <MHz>`): settle, then `DEBUG fps` over a
+window at rest, with the frame's ms by phase (bg, fig, rim, text, rings,
+mask, hint, over, push, and wait: the rest of the loop). Then low power and back: `DEBUG power low` must show no
 frames and the clock down, `DEBUG power wake` the clock at 240 again and
 frames running. Last, at each clock, a hang (`DEBUG hang`, the red ring
 filling), which may leave the badge in fight mode: a second hang ends it.
@@ -29,6 +32,8 @@ import serial
 
 CRASH = re.compile(r"Guru Meditation|abort\(\)|Backtrace:|panic|Brownout|stack overflow|WDT|rst:0x(7|8|9|f|10) ")
 FPS = re.compile(r"\[fps\] (fps=.*)")
+PHASES = re.compile(r"\[fps\] phases (.*)")
+BENCH = re.compile(r"\[fps\] bench (.*)")
 
 
 class Board:
@@ -39,6 +44,7 @@ class Board:
         self.p.dtr = self.p.rts = False
         self.p.open()
         self.lines, self.crashes = [], []
+        self.seen = 0   # lines up to here have answered an ask
         self.cv = threading.Condition()
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -58,13 +64,15 @@ class Board:
                     self.cv.notify_all()
 
     def ask(self, line, pattern, timeout=3.0):
+        """Sends `line` (None: sends nothing, waits on what comes) and waits for `pattern`."""
         with self.cv:
-            i = len(self.lines)
-        self.log.write("%8.2f >> %s\n" % (time.monotonic() - self.t0, line))
-        # badge128_pm light-sleeps in low power and loses a line's first bytes: '\r's first.
-        self.p.write(b"\r" * 8)
-        time.sleep(0.06)
-        self.p.write(line.encode() + b"\n")
+            i = len(self.lines) if line is not None else self.seen
+        if line is not None:
+            self.log.write("%8.2f >> %s\n" % (time.monotonic() - self.t0, line))
+            # badge128_pm light-sleeps in low power and loses a line's first bytes: '\r's first.
+            self.p.write(b"\r" * 8)
+            time.sleep(0.06)
+            self.p.write(line.encode() + b"\n")
         rx, end = re.compile(pattern), time.monotonic() + timeout
         with self.cv:
             while True:
@@ -72,6 +80,7 @@ class Board:
                     m = rx.search(self.lines[i])
                     i += 1
                     if m:
+                        self.seen = i
                         return m
                 left = end - time.monotonic()
                 if left <= 0:
@@ -79,7 +88,10 @@ class Board:
                 self.cv.wait(left)
 
     def fps(self):
-        return dict(kv.split("=", 1) for kv in self.ask("DEBUG fps", FPS.pattern).group(1).split())
+        f = dict(kv.split("=", 1) for kv in self.ask("DEBUG fps", FPS.pattern).group(1).split())
+        # The second line: a frame's ms by phase (paint/phases.h), and what is left of the loop.
+        f["phases"] = self.ask(None, PHASES.pattern).group(1)
+        return f
 
 
 def window(b, name, seconds, during=None):
@@ -90,6 +102,7 @@ def window(b, name, seconds, during=None):
     f = b.fps()
     print("%-14s fps=%-5s draw_ms=%-5s push_ms=%-5s worst_ms=%-4s rows=%-4s cpu_now=%-4s spi_mhz=%s" % (
         name, f["fps"], f["draw_ms"], f["push_ms"], f["worst_ms"], f["rows"], f["cpu_now"], f["spi_mhz"]))
+    print("%-14s   %s" % ("", f["phases"]))
     return f
 
 
@@ -104,6 +117,8 @@ def main():
         b = Board(a.port, log)
         time.sleep(1)
         b.ask("DEBUG power wake", r"\[power\] now power=full")
+        # The canvas's memory and the frame shown now, by phase, in us: where a frame's time goes.
+        print("bench          %s" % b.ask("DEBUG fps bench", BENCH.pattern, timeout=10).group(1))
         clocks = [int(m) for m in a.clocks.split(",")]
         for mhz in clocks:
             b.ask("DEBUG lcd %d" % mhz, r"\[hw\] lcd spi_mhz=%d" % mhz)

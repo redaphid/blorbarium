@@ -4,27 +4,16 @@
 // scripts/test/paint_bench.sh, which can build the same bench against another
 // commit's lib/paint to compare hashes.
 //
-// A pet of each species is hatched and lived for a while; every 100 ms tick's
-// Appearance is drawn, as the loop draws it, with the boot hint and the idle
-// bar over it, and now and then a thought crossing, a hang filling, fight
-// mode's lobby or the sealed amber. Then every duel moment for a few pairs.
+// The frames are scripts/test/paint_shots.h's: every species, egg to adult,
+// with the boot hint and the idle bar over each, as the loop draws them; then
+// every duel moment for a few pairs. Only the drawing is timed, not the hash.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <variant>
-#include <vector>
 
-#include "blorb/dish.h"
-#include "blorb/registry.h"
-#include "duel_scenes.h"
-#include "links.h"
-#include "mem_storage.h"
-#include "paint/duel.h"
+#include "paint/phases.h"
 #include "paint/sprite_pack.h"
-#include "traces.h"
-
-using namespace blorb;
+#include "paint_shots.h"
 
 namespace {
 
@@ -34,72 +23,57 @@ uint64_t fnv(const paint::Canvas240& cv, uint64_t h) {
   return h;
 }
 
-struct Timed { double us = 0; size_t frames = 0; };
+using Clock = std::chrono::steady_clock;
+double us(Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double, std::micro>(b - a).count(); }
+uint32_t nowNs() { return uint32_t(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count()); }
 
 }  // namespace
 
 int main(int argc, char** argv) {
   const int reps = argc > 1 ? std::atoi(argv[1]) : 3;
   static paint::Canvas240 cv;
-  std::vector<Appearance> shots;
-  for (uint8_t sp = 0; sp < kSpeciesCount; ++sp) {
-    blorbtest::MemStorage store;
-    blorbtest::NullLink link;
-    Dish dish(store, 7 + sp, 1, DishOptions{});
-    uint32_t ms = 0;
-    for (int s = 0; s < 6 * 3600 && !std::holds_alternative<Creature>(dish.occupant()); ++s) {
-      blorbtest::runFor(dish, link, ms, 1000);
-      if (s % 60 == 0) shots.push_back(dish.appearance());   // the egg, too
-    }
-    for (int i = 0; i < 400; ++i) {
-      blorbtest::runFor(dish, link, ms, 100);
-      Appearance a = dish.appearance();
-      a.species = SpeciesId{sp};
-      const int k = i % 100;
-      if (k < 20) {   // a thought crossing, as the marquee draws it
-        a.thinking = true;
-        std::snprintf(a.line, sizeof a.line, "I am thinking about pellets");
-        a.thoughtPhase = Fx{int32_t(int64_t(k) * Fx::kOne / 20)};
-      } else if (k < 40) {   // a hang filling up, to full
-        a.hangCharge = Fx{int32_t(int64_t(k - 20) * Fx::kOne / 19)};
-      } else if (k < 50) {   // fight mode, searching
-        a.lobby = true;
-        a.lobbyTicksLeft = uint16_t(3000 - i);
-      } else if (k < 53) {
-        a.sealed = true;
-      }
-      shots.push_back(a);
-    }
-  }
-  std::vector<paint::DuelScene> duels;
-  for (const blorbtest::DuelMoment& m : blorbtest::kDuelMoments)
-    for (uint8_t sp = 0; sp + 1 < kSpeciesCount; sp += 3)
-      duels.push_back(blorbtest::duelScene(m.name, SpeciesId{sp}, SpeciesId{uint8_t(sp + 1)}));
+  const std::vector<blorb::Appearance> shots = paintbench::dishShots();
+  const std::vector<paint::DuelScene> duels = paintbench::duelShots();
 
   uint64_t hash = 0;
-  Timed dish{1e18, 0}, duel{1e18, 0};
+  double dishBest = 1e18, duelBest = 1e18;
   for (int r = 0; r < reps; ++r) {
     hash = 0xCBF29CE484222325ull;
-    auto t0 = std::chrono::steady_clock::now();
+    double dishUs = 0, duelUs = 0;
     uint32_t now = 0;
-    for (const Appearance& a : shots) {
+    for (const blorb::Appearance& a : shots) {
+      const Clock::time_point t0 = Clock::now();
       paint::draw(a, paint::packFor(a.species), cv, now);
       paint::drawBootHint(cv, paint::rimHint(a.boot));
       paint::drawIdleBar(cv, uint16_t(now / 7 % 1001));
+      dishUs += us(t0, Clock::now());
       hash = fnv(cv, hash);
       now += 40;
     }
-    double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
-    if (us < dish.us) dish = {us, shots.size()};
-    t0 = std::chrono::steady_clock::now();
     for (const paint::DuelScene& sc : duels) {
+      const Clock::time_point t0 = Clock::now();
       paint::drawDuel(sc, paint::packFor(sc.me.look.species), paint::packFor(sc.them.look.species), cv, now);
+      duelUs += us(t0, Clock::now());
       hash = fnv(cv, hash);
     }
-    us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
-    if (us < duel.us) duel = {us, duels.size()};
+    dishBest = dishUs < dishBest ? dishUs : dishBest;
+    duelBest = duelUs < duelBest ? duelUs : duelBest;
   }
-  std::printf("dish_frames=%zu us_per_frame=%.1f duel_frames=%zu us_per_frame=%.1f hash=%016llx\n", dish.frames,
-              dish.us / double(dish.frames), duel.frames, duel.us / double(duel.frames), (unsigned long long)hash);
+  // One more pass of the dish with the phase clock on: where a frame's time goes.
+  paint::phaseClock.now = nowNs;
+  uint32_t now = 0;
+  for (const blorb::Appearance& a : shots) {
+    paint::draw(a, paint::packFor(a.species), cv, now);
+    paint::drawBootHint(cv, paint::rimHint(a.boot));
+    now += 40;
+  }
+  paint::phaseClock.now = nullptr;
+  const char* names[] = {"bg", "fig", "rim", "text", "rings", "mask", "hint"};
+  std::printf("phases us/frame:");
+  for (int i = 0; i < int(paint::Phase::Count); ++i)
+    std::printf(" %s=%.1f", names[i], paint::phaseClock.spent[i] / 1000.0 / double(shots.size()));
+  std::printf("\n");
+  std::printf("dish_frames=%zu us_per_frame=%.1f duel_frames=%zu us_per_frame=%.1f hash=%016llx\n", shots.size(),
+              dishBest / double(shots.size()), duels.size(), duelBest / double(duels.size()), (unsigned long long)hash);
   return 0;
 }

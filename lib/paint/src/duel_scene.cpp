@@ -2,6 +2,7 @@
 #include "blorb/registry.h"
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "paint/phases.h"
 #include "paint/duel.h"
 #include "paint/text.h"
 
@@ -1111,7 +1112,9 @@ RimHint rimHint(const blorb::BootHint& b) {
   return r;
 }
 
-void drawBootHint(Canvas240& cv, const RimHint& h) {
+namespace {
+
+void drawBootHintArt(Canvas240& cv, const RimHint& h) {
   if (!h.glyph || h.glyph >= kBootGlyphCount) return;
   const P at = kBootAt;
   // Something waits for its second, so a kid sees "once more" without a
@@ -1146,8 +1149,18 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
     }
 }
 
+}  // namespace
+
+void drawBootHint(Canvas240& cv, const RimHint& h) {
+  phaseStart();
+  drawBootHintArt(cv, h);
+  phaseEnd(Phase::Hint);
+}
+
 void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv) {
+  phaseStart();
   arena(cv);
+  phaseEnd(Phase::Background);
   for (int i = 0; i < s.propCount; ++i)
     if (behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
@@ -1159,10 +1172,13 @@ void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& min
     paintProp(cv, s.props[i], sc.ticks);
     gKeepOut = nullptr;
   }
+  phaseEnd(Phase::Figure);
   drawBootHint(cv, sc.boot);
+  phaseStart();
   for (int y = 0; y < kSide; ++y)
     for (int x = 0; x < kSide; ++x)
       if (!inDisc(x, y)) cv.px[y * kSide + x] = 0;
+  phaseEnd(Phase::Mask);
 }
 
 void drawDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv, uint32_t) {
