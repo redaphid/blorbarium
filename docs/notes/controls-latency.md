@@ -209,3 +209,115 @@ any sample a quarter g off 1 g (a knock, a jolt), and the 0.15 dead zone is
 unchanged. All 946 native cases pass unchanged, so no golden moved. Board
 before: 329/339 ms to the aim (and 543/586 in fight mode, where each lean
 started from the last).
+
+### Board: 78f704f on the puffkin, a new pet (`--revive`), `--reps 6`
+
+The old pet's lineage: `cause=injured age=118272`. Forensics: the
+baseline run's presses and knock knocks dropped pellets while he slept, they
+rotted (90 min), `DEBUG sleepiness 0` woke him for a fight, he ate them
+(rot is not checked when eating: 0.4 toxin a rotten bite, which becomes
+injury) and he died 20-30 min later. An old balance hole, not these builds;
+the probe is now made never to do it again (below).
+
+| control | seen | detect | ack | ack_panel | word | tick | frame | panel |
+|---|---|---|---|---|---|---|---|---|
+| knock knock | 18/23 | 74/82 | 99/110 | 103/124 | 493/510 | | | 600/629 |
+| knock | | | | 63/96 | | | | |
+| side hold | | 21/28 | 89/302 | 98/303 | | | | 2110/2178 |
+| hang | | 25/32 | | 58/96 | | | | 1311/1352 |
+| press | | | | 62/190 | | | | 192/287 |
+| double | | | | 42/70 | | | | 252/273 |
+| shake | | 3/21 | - | - | | 89/90 | 284/304 | 290/310 |
+| tilt (rest) | | 161/161 | - | - | 161 | | 403/530 | 409/554 |
+| wake | | | 77/82 (light) | | | | | 77/82 |
+
+Fight mode was skipped: the rest phase's last double press had left the
+lobby open, and the probe's hang to open it closed it. And each side hold
+tucked him in, so a hang woke him into a lobby he dozed out of seconds later.
+
+What it says:
+
+- The side hold's ring at p95 303 ms: the ring is drawn in eighths, and a
+  fill growing from zero over 2 s shows nothing for 250 ms.
+- The knock knock's flash 103/124: the second knock's ring-out wait (two
+  quiet samples) and then the frame.
+- Shake: the tick takes it at 89 ms, but the first frame that changes is
+  ~195 ms later. The trance's first ticks (the foresee face, intensity 1,
+  `exprTicks` 0) draw the same pixels as before; the face changes two ticks
+  on. That is the face's drawing, not the controls (open, for paint).
+- Tilt at rest has nothing to draw (no aim outside a duel or, soon, the
+  clutch): its "frame" is whatever next changed. The aim itself took 161 ms.
+
+### 6. The aim from gravity itself, with hysteresis (be1869d)
+
+The owner's priority (2026-10-21): tilt is the selection (the duel, and egg
+picking next, which reuses the duel's aim and lock), so it should react as
+fast as the IMU allows, without jitter or false re-aims: hysteresis, not
+heavy smoothing. `AimDetector` (senses.h): the lean from gravity, halfway
+to each sample; into a sector past 300 mg in the plane (DuelInput's dead
+zone), out under 200 mg, to another sector only once it leads the held one
+by 120 mg; a jolt is skipped. The tilt detector keeps rolling the food.
+
+- The duel takes the aim as the tilt at the sector's middle, so DuelInput
+  reads the same sector, and the side hold's "aim from before the turn"
+  history keeps working.
+- A knock locks the aim it was made at: the first knock's sample, not where
+  the hand drifted in the ~0.6 s the knock takes to be decided.
+- `Dish::duelView()` shows the aim as of the last sample: the HUD's
+  highlight moves a frame after the hand instead of at the next tick (up to
+  100 ms later). `Dish::aimNow()` is the same aim for egg picking.
+
+| | before (tilt loci) | after |
+|---|---|---|
+| a 30 degree lean to the aim, samples | 15 (1/16), 7 (1/8) | 2 |
+| board: lean to the aim read | 329/339 ms (1/16), 161 (1/8) | (next run) |
+| the highlight after that | the next tick: +0-100 ms | the next frame |
+| aim changes while a knock burst is under way, all recordings | 0 | 0 |
+| aim changes in all, all recordings (handling turns it) | 109 | 148 |
+
+A hand wobbling ±40 mg on the diagonal between two sectors flipped the old
+aim with every wobble and holds the new one (`Aim.AHandOnASectorsEdge...`).
+
+### 7. The knock knock heard on the first quiet sample; the ring's first eighth (bfae82d)
+
+- `KnockSense::knockKnock` on the first sample after the second knock that
+  is no spike and nothing knock-sized off gravity: on the recordings
+  20/100 ms after the second knock (from 40/140). The sim's still-badge
+  shake still never lights it. No count changes on any recording.
+- The hold ring starts at its first eighth (`GestureCues::kRingFirst`) and
+  fills to full as the hold fires, so it answers on the hold's first sample.
+
+### The probe, made safe (045b48c)
+
+Vitals (STATE and CHEM) at the start and the end, a loud FAIL if injury or
+toxin rose or life fell; feeding stops at two uneaten pellets; `DEBUG tidy`
+(new: every pellet taken, toxin and injury to 0) after every feeding section
+and at the end; the wake made with a short turn, which feeds nobody;
+sleepiness and the idle timeout put back; a death reported from the lineage
+before `--revive` goes past it; the side holds last; fight mode entered only
+if not already open, and why not when it cannot be.
+
+## What was weighed and not done
+
+- **Feeding the engine at sub-tick time.** A word waits for the next 100 ms
+  tick: 30-60 ms on the board (word to tick). A tick could be run at once
+  when a word arrives and the schedule kept by borrowing it from the next
+  (the tick count never drifts from the clock). The engine stays a pure
+  function of its tick inputs, so its replay is not broken in itself; but
+  which samples share a tick would then depend on when words land, the
+  smooth-motion tween interpolates by the time since the last tick (a
+  borrowed tick runs that clock ahead and jerks him), and the native
+  replays, the sim and its goldens tick on an exact 100 ms grid, so the
+  badge would group its inputs unlike every replay of the same trace. It
+  saves at most a tick, ~45 ms on average, on the engine's answer only;
+  the acknowledgements already land before the tick. Not done.
+- **Priorities.** The sense task (priority 2, either core) reads at 250 Hz
+  and hands on a sample every 20 ms; the loop (1, core 1) takes the queue
+  once a pass; the send task (1, core 0) sends rows under the radio's
+  tasks. Seen is 1-33 ms: the handoff (the decisive read up to 16 ms before
+  it) and the loop finishing the frame it is drawing. Raising a priority
+  changes neither: the loop is the consumer and it is mid-draw. Handing a
+  knock-sized read on at once would break the 50 Hz cadence every detector
+  times itself by. Not done.
+- **Low power's wake**: 77/82 ms from the waking read to the light, the
+  first frame at ~50 ms. Already within its target.

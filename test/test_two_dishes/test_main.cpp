@@ -963,6 +963,39 @@ TEST(NoButton, AWholeMortalDuelFinishedWithGesturesAlone) {
   FAIL() << "no seed under 30 finished a pet with gestures alone";
 }
 
+// The highlight follows the hand, not the tick: two samples into a lean
+// the duel shows its aim (Dish::duelView, AimDetector), though no tick has
+// run since, and the next tick locks that same aim.
+TEST(NoButton, TheDuelShowsTheAimTwoSamplesIntoALean) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  Device& d = bout.a;
+  for (int8_t want : {int8_t(0), int8_t(1), int8_t(2)}) {
+    BodySample level;
+    level.az = 1000;
+    for (int tick = 0; tick < 5; ++tick) {   // level and let go: no side hold under way (its aim is from before the turn)
+      for (int i = 0; i < 5; ++i) d.dish->sample(level, d.ms + 20 * i);
+      d.ms += 100;
+      d.dish->tick(d.ms, d.link);
+    }
+    EXPECT_EQ(d.dish->duelView().aim, -1);
+    const AimTilt& a = kAimTilt[want];
+    BodySample lean;
+    lean.ax = a.ax, lean.ay = a.ay, lean.az = a.az;
+    d.dish->sample(lean, d.ms + 20);
+    d.dish->sample(lean, d.ms + 40);
+    EXPECT_EQ(d.dish->duelView().aim, want) << "two samples in, before any tick";
+    for (int i = 3; i < 5; ++i) d.dish->sample(lean, d.ms + 20 * i);
+    d.ms += 100;
+    d.dish->tick(d.ms, d.link);
+    EXPECT_EQ(d.dish->duelView().aim, want) << "and the tick reads the same";
+  }
+}
+
 // Turning him onto his side tips the tilt, so while he is held there the
 // duel's aim is the one from before the turn: a heavy special lands where
 // the kid aimed, not wherever the turn left the tilt.
