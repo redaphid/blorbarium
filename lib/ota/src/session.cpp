@@ -82,11 +82,7 @@ bool Session::handle(std::string_view line, uint32_t now, Peer peer) {
   if (!is(sub, "ABORT") && !is(sub, "REBOOT")) return reply.err(400, "BAD_ARGS"), true;
   Owner* o = owner();
   if (o && (!token || *token != o->token)) return reply.err(403, "NOT_YOURS"), true;
-  if (is(sub, "ABORT")) {
-    if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) slot_.discard();
-    if (o) fail(Last::Aborted);
-    return reply.ok("state=idle"), true;
-  }
+  if (is(sub, "ABORT")) return abort(), reply.ok("state=idle"), true;
   Ready* r = std::get_if<Ready>(&state_);
   if (!r) return reply.err(409, "NOT_READY"), true;
   r->rebootAt = now + kRebootDelayMs;
@@ -122,22 +118,53 @@ void Session::begin(blorb::Args& args, blorb::Reply& reply, uint32_t now, Peer p
     return status(reply);
   }
 
+  if (const std::optional<Check> no = check(im, now, im.flags & kAllowOlder)) return reply.err(no->code, no->text);
+  state_ = Asking{im, Owner{*token, peer}, now};
+  status(reply);
+}
+
+std::optional<Session::Check> Session::check(const Image& im, uint32_t now, bool allowOlder) {
   // The cheap refusals first: the verify below stalls the loop for a moment.
-  if (std::strcmp(im.board, config_.board) != 0) return reply.err(403, "WRONG_BOARD");
-  if (!(config_.firmware < im.version) && !(im.flags & kAllowOlder)) return reply.err(409, "NOT_NEWER");
-  if (im.size == 0 || im.size > slot_.capacity()) return reply.err(413, "TOO_BIG");
+  if (std::strcmp(im.board, config_.board) != 0) return Check{403, "WRONG_BOARD"};
+  if (!(config_.firmware < im.version) && !allowOlder) return Check{409, "NOT_NEWER"};
+  if (im.size == 0 || im.size > slot_.capacity()) return Check{413, "TOO_BIG"};
   // An update on trial would overwrite the only slot known to boot: there
   // is no factory image, so a failed trial after that has nowhere to go.
-  if (host_.onTrial()) return reply.err(409, "TRIAL");
-  if (host_.busy()) return reply.err(409, "BUSY");
-  if (lastVerify_ && now - *lastVerify_ < kVerifyEveryMs) return reply.err(429, "TOO_SOON");
+  if (host_.onTrial()) return Check{409, "TRIAL"};
+  if (host_.busy()) return Check{409, "BUSY"};
+  if (lastVerify_ && now - *lastVerify_ < kVerifyEveryMs) return Check{429, "TOO_SOON"};
   lastVerify_ = now;
   char text[128];
   const size_t n = signedText(im, text, sizeof text);
   if (!n || !verifyP256(config_.publicKey, reinterpret_cast<const uint8_t*>(text), n, im.sig))
-    return reply.err(403, "BAD_SIGNATURE");
-  state_ = Asking{im, Owner{*token, peer}, now};
-  status(reply);
+    return Check{403, "BAD_SIGNATURE"};
+  return std::nullopt;
+}
+
+std::optional<Refusal> Session::install(const Image& im, const Token& token, uint32_t now, Peer peer) {
+  if (active()) return Refusal{"OTA_ACTIVE"};
+  if (const std::optional<Check> no = check(im, now, false)) return Refusal{no->text};
+  state_ = Asking{im, Owner{token, peer}, now};
+  accept(now);
+  if (std::holds_alternative<Receiving>(state_)) return std::nullopt;
+  return Refusal{lastName(last())};
+}
+
+void Session::abort() {
+  if (std::holds_alternative<Receiving>(state_) || std::holds_alternative<Ready>(state_)) slot_.discard();
+  if (active()) fail(Last::Aborted);
+}
+
+bool Session::ownedBy(Peer peer) const {
+  if (const Asking* a = std::get_if<Asking>(&state_)) return a->owner.peer == peer;
+  if (const Receiving* r = std::get_if<Receiving>(&state_)) return r->owner.peer == peer;
+  if (const Ready* r = std::get_if<Ready>(&state_)) return r->owner.peer == peer;
+  return false;
+}
+
+Last Session::last() const {
+  const Idle* idle = std::get_if<Idle>(&state_);
+  return idle ? idle->last : Last::None;
 }
 
 void Session::status(blorb::Reply& reply) {
@@ -159,10 +186,15 @@ void Session::status(blorb::Reply& reply) {
 }
 
 void Session::press(uint32_t now) {
-  Asking* a = std::get_if<Asking>(&state_);
+  const Asking* a = std::get_if<Asking>(&state_);
   if (!a || now - a->since < kMinAskMs) return;
-  const Image im = a->image;
-  const Owner owner = a->owner;
+  accept(now);
+}
+
+void Session::accept(uint32_t now) {
+  const Asking& a = std::get<Asking>(state_);
+  const Image im = a.image;
+  const Owner owner = a.owner;
   if (host_.onTrial()) return fail(Last::OnTrial);
   if (host_.busy()) return fail(Last::Busy);
   if (!host_.save()) return fail(Last::SaveFailed);

@@ -203,6 +203,19 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     </div>
   </section>
 
+  <!-- Wi-Fi: Improv over the same connection (improv.js, docs/wifi-ota.md).
+       Shown only for a dish that has the Improv service. -->
+  <section id="wifiBox" hidden>
+    <h2>Wi-Fi</h2>
+    <p class="hint">Give the dish your home Wi-Fi. When it is plugged in and nobody is playing with it, it checks for updates and installs them by itself.</p>
+    <form id="wifiForm" autocomplete="off">
+      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
+      <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
+      <button type="submit">Connect to Wi-Fi</button>
+    </form>
+    <p class="hint" id="wifiHint" role="status">The password goes to the dish and nowhere else.</p>
+  </section>
+
   <section id="drivesBox" hidden>
     <h2>How he feels</h2>
     <ul class="drives" id="drives"></ul>
@@ -300,6 +313,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
 </main>
 
 <script src="ota.js"></script>
+<script src="improv.js"></script>
 <script src="debug.js"></script>
 <script>
 "use strict";
@@ -446,7 +460,7 @@ class BleTransport {
   // The only chooser: every later open() is to this same device, whatever it advertises then.
   async pick(wide) {
     const filters = BlorbOta.chooserFilters(params.get("d"), wide);
-    this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS] });
+    this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS, BlorbImprov.SERVICE] });
     this.device.addEventListener("gattserverdisconnected", () => this.onDrop(this));
   }
   close() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
@@ -460,6 +474,9 @@ class BleTransport {
       this.feed = lineReader((line) => this.onLine(line));
       tx.addEventListener("characteristicvaluechanged", this.notify);
       await gattRetry(this.device, () => tx.startNotifications());
+      // Firmware before Wi-Fi has no Improv service: then the page offers no Wi-Fi.
+      const improv = await gattRetry(this.device, () => server.getPrimaryService(BlorbImprov.SERVICE)).catch(() => null);
+      this.improv = improv && new BlorbImprov.Client(improv, (op) => gattRetry(this.device, op));
       globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js); it waits its turn
     } catch (e) {
       // Never leave a half-open link holding the dish's one connection.
@@ -564,6 +581,15 @@ class MockTransport {
       for (let k = 0; k < len; k++) bytes.push((i * 37 + k * 11) & 255);
     });
     this.genome = new Uint8Array(bytes);
+    // Improv, pretend: the password "wrong" cannot join.
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    this.improv = {
+      join: async (ssid, password) => {
+        await pause(1500);
+        if (password === "wrong") throw Object.assign(new Error("IMPROV_ERROR_3"), { code: BlorbImprov.ERROR.unableToConnect });
+        return `https://blorb.hypnodroid.com/?d=${this.name}`;
+      },
+    };
   }
   async write(text) {
     if (!this.dish.connected) throw new Error("disconnected");
@@ -794,6 +820,7 @@ async function session({ offer = true } = {}) {
   ui.show("another", true);
   ui.show("nameBox", true);
   ui.show("sayBox", true);
+  ui.show("wifiBox", !!transport.improv);
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
     debugLog("err", `GENOME failed: ${e.message}`);
@@ -1106,6 +1133,7 @@ function leave() {
   ui.show("doing", false);
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
+  $("wifiPassword").value = "";
   for (const [el, text] of FRESH.hints) {
     el.textContent = text;
     el.dataset.tone = "";
@@ -1169,6 +1197,29 @@ $("nameForm").addEventListener("submit", async (e) => {
     }
     hint.dataset.tone = "err";
     hint.textContent = `The dish said no (${err.message}).`;
+  }
+});
+
+// --- Wi-Fi (improv.js) ---
+
+function wifiTell(tone, text) { $("wifiHint").dataset.tone = tone; $("wifiHint").textContent = text; }
+
+$("wifiForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
+  const improv = transport && transport.improv;
+  if (!improv || !ssid) return;
+  wifiTell("", `The dish is joining "${ssid}"…`);
+  try {
+    await improv.join(ssid, password);
+    $("wifiPassword").value = "";
+    wifiTell("ok", `The dish joined "${ssid}" and remembers it. When it is plugged in and left alone, it updates itself.`);
+  } catch (err) {
+    debugLog("err", `improv join: ${err.message}`);
+    wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
+      : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`
+      : err.code === "TIMEOUT" ? "The dish didn't answer. If it is in a fight, try again once it's over."
+      : `Something went wrong (${err.message}). Try again.`);
   }
 });
 
