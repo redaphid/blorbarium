@@ -97,6 +97,7 @@ kinstr / 240 ms on the board. `paint_bench_s3` now prints the duel's phases.
 | main d4c0a44 (perf-climb merged) | 9,426 | 39.3 | 4,146 | 5,154 | (in fig) | 89 |
 | + the burst's spikes once a burst (fdcc951, same bytes) | 8,486 | 35.4 | 4,146 | 4,213 | - | 89 |
 | + the HUD (this) | **6,902** | **28.8** | 4,146 | 2,564 | 103 | 55 |
+| rebased on main 4d18aeb (perf-climb's arena from tables) | **3,241** | **13.5** | 517 | 2,532 | 103 | 56 |
 
 The HUD (the clock and both pets' gauges) costs 103 kinstr a frame, about
 0.4 ms; the hearts it replaced cost more than that on their own (the host's
@@ -109,9 +110,10 @@ Same bytes where promised: the burst and the disc each checked alone against
 perf-climb's bench hash (9e8b4d7adc51ddc4); the HUD's frames are new bytes, held
 by the goldens.
 
-**What is left is the arena**: 4,146 of 6,902, 60% of a duel frame, a
-per-pixel gradient and two pools (`arena()` in duel_scene.cpp). perf-climb said
-it is working on it; everything else in a duel frame is now 2,756 kinstr, about 11.5 ms.
+The arena was then 4,146 of 6,902, 60% of a duel frame; perf-climb's arena
+from compile-time tables (main 4d18aeb) took it to 517, and the rebased branch
+draws a duel frame in 3,241 kinstr, about 13.5 ms. The home frames are the
+same bytes as main's (the bench's `dish_hash`, b67e1578b2b8da6b on both).
 
 Goldens re-blessed after looking at every one: `test/golden/duel_staging.txt`
 and 48 of the 54 `test/golden/duelscene_*.png` (all but fallen and spared,
