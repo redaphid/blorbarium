@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,6 +14,7 @@
 #include "paint/duel.h"
 #include "paint/sprite_pack.h"
 #include "../../lib/paint/src/figure.h"
+#include "../../lib/paint/src/hud.h"
 
 using blorb::Appearance;
 using blorb::SpeciesId;
@@ -54,6 +56,13 @@ std::string dump(const DuelStaging& st) {
       << int(f.tallPct) << " l" << int(f.leanPct) << " up" << int(f.lift) << " fl" << int(f.flash) << " a"
       << int(f.alpha) << " r" << int(f.remainsIn) << " face" << (f.hasFace ? int(f.face.v) : -1) << " new"
       << int(f.newScars) << '@' << int(f.scarIn);
+  }
+  for (int i = 0; i < 2; ++i) {
+    const paint::Gauges& g = st.gauge[i];
+    if (!g.shown) continue;
+    o << (i ? " | gauge them " : " | gauge me ") << int(g.hearts) << '/' << int(g.maxHearts) << '+' << int(g.assist) << " lose"
+      << int(g.losing) << '@' << int(g.drain) << " fl" << int(g.flash) << (g.meter ? " sp" : " -sp") << int(g.sparks) << '/'
+      << int(g.cost) << " pu" << int(g.pulse) << " sw" << int(g.sweep);
   }
   for (int i = 0; i < st.propCount; ++i) {
     const paint::Prop& p = st.props[i];
@@ -799,6 +808,52 @@ TEST(SceneOf, EachSideSeesTheSameDuelMirrored) {
     EXPECT_EQ(pa[i]->look.species, pb[i]->look.species);
   }
   EXPECT_EQ(sa.me.special, blorb::TurnReport::Special::Staggered) << "the fixture's fate survives the trip";
+}
+
+// ---- the infographics' arcs ----------------------------------------------------------
+
+// hud::arc fills a band row by row from tables and half-planes; held here to
+// the plain definition, per pixel in double: a pixel is in when its middle is
+// more than r0 and at most r1 from the centre and its angle is in [a0, a1).
+// Only pixels within a hair of an edge may disagree (the tables' rounding).
+TEST(Hud, AnArcIsItsBandAndItsWedge) {
+  struct Case { int cx2, cy2, r0, r1, a0, a1; };
+  const Case cases[] = {{240, 240, 98, 112, 64, 202},  {240, 240, 98, 112, 576, 714},  {240, 240, 112, 119, 900, 1792},
+                        {240, 240, 112, 119, 768, 800}, {395, 241, 32, 36, 48, 208},    {120, 61, -1, 13, 0, 1024},
+                        {240, 240, 0, 120, 1000, 1100}, {301, 77, 7, 11, 792, 1109}};
+  const double kPi = 3.14159265358979323846;
+  for (const Case& c : cases) {
+    Canvas240 cv{};
+    paint::hud::arc(cv, c.cx2, c.cy2, c.r0, c.r1, c.a0, c.a1, 0xFFFF);
+    int in = 0, off = 0, wrong = 0;
+    for (int y = 0; y < kSide; ++y)
+      for (int x = 0; x < kSide; ++x) {
+        const double dx = (2 * x + 1 - c.cx2) / 2.0, dy = (2 * y + 1 - c.cy2) / 2.0, d = std::sqrt(dx * dx + dy * dy);
+        double turn = std::atan2(dy, dx) / (2 * kPi) * 1024.0;
+        const double from = std::fmod(double(c.a0), 1024.0);
+        while (turn < from) turn += 1024.0;
+        const bool want = d > c.r0 && d <= c.r1 && (c.a1 - c.a0 >= 1024 || turn < from + (c.a1 - c.a0));
+        const bool got = cv.px[y * kSide + x] != 0;
+        in += want;
+        if (want == got) continue;
+        // Within half a pixel of a circle, or of an edge ray, the tables may round either way.
+        const double edge = std::min({std::fabs(d - c.r0), std::fabs(d - c.r1),
+                                      d * std::fabs(std::sin((turn - from) * 2 * kPi / 1024.0)),
+                                      d * std::fabs(std::sin((turn - from - (c.a1 - c.a0)) * 2 * kPi / 1024.0))});
+        (edge < 0.6 ? off : wrong)++;
+      }
+    EXPECT_EQ(wrong, 0) << "arc " << c.r0 << ".." << c.r1 << " at " << c.a0 << ".." << c.a1;
+    EXPECT_LE(off * 50, in) << "arc " << c.r0 << ".." << c.r1 << ": too many edge pixels disagree";
+  }
+}
+
+// Pieces of a band tile it: drawn as many arcs end to end with blending, no
+// pixel is drawn twice and none is left out.
+TEST(Hud, ArcsEndToEndTileTheBand) {
+  Canvas240 whole{}, parts{};
+  paint::hud::arc(whole, 240, 240, 90, 119, 0, 1024, 0xFFFF, 128);
+  for (int a = 37; a < 37 + 1024; a += 101) paint::hud::arc(parts, 240, 240, 90, 119, a, std::min(a + 101, 37 + 1024), 0xFFFF, 128);
+  EXPECT_EQ(0, std::memcmp(whole.px, parts.px, sizeof whole.px));
 }
 
 // ---- a friend egg in the clutch --------------------------------------------------------

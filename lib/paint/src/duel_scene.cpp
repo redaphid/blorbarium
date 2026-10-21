@@ -2,6 +2,7 @@
 #include "blorb/registry.h"
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "hud.h"
 #include "paint/phases.h"
 #include "paint/duel.h"
 #include "paint/text.h"
@@ -70,10 +71,10 @@ int bump(int t, int t0, int t1) {
 struct Home { int x, y, scalePct, leanPct; };
 constexpr Home kHome[2] = {{84, 208, 54, 8}, {162, 106, 42, -8}};
 
-// The rim arcs, in 1/256 turn: my hearts run down the lower right, the
-// friend's up the upper left, the same arc turned half round.
-constexpr int kHeartArc = 20, kHeartSpan = 44, kHeartStep = 10, kHeartR = 104;
-constexpr int kPipArc = 24, kPipStep = 7, kPipR = 86;
+// The rim, in 1/256 turn: my gauges run down the lower right, the friend's up
+// the upper left, the same arc turned half round (hud.cpp draws them). The
+// trophy's flight still aims at where the hearts used to start.
+constexpr int kHeartArc = 20;
 constexpr int kPowerAngle = 40, kPowerR = 62;
 constexpr int kFlip = 128;   // the friend's side of the disc
 
@@ -181,26 +182,30 @@ Figure atHome(int side) {
 }
 void face(Figure& f, blorb::ExprId e) { f.hasFace = true; f.face = e; }
 
-// Hearts down his arc: full, then the ones he has lost hollow. His assist
-// hearts are the last of his maximum and carry his cheer.
-void hearts(DuelStaging& s, const Fighter& f, int side, int blinkLost, int t) {
-  const int n = imin(f.maxHearts, 8);
-  const int step = n > 1 ? imin(kHeartStep, kHeartSpan / (n - 1)) : 0;
-  for (int i = 0; i < n; ++i) {
-    const P at = rim(kHeartArc + i * step + side * kFlip, kHeartR);
-    const bool lost = i >= f.hearts;
-    const bool assist = i >= n - f.assist;
-    int variant = lost ? 1 : (assist ? 2 : 0);
-    int alpha = 255;
-    // A heart lost this turn blinks between full and hollow before it settles.
-    if (lost && i < f.hearts + blinkLost && (t / 2) % 2 == 0) variant = assist ? 2 : 0;
-    add(s, prop(PropKind::Heart, variant, at, 100, alpha));
+// His gauges: hearts, and while they fight the spark meter. A hit landing
+// (`losing` of them) keeps those hearts full until the impact, then flashes
+// and drains them.
+Gauges gaugesOf(const Fighter& f, bool meter, int losing, int t, int sweep) {
+  Gauges g;
+  g.shown = true;
+  g.meter = meter;
+  g.maxHearts = uint8_t(clampi(f.maxHearts, 1, 8));
+  g.hearts = uint8_t(imin(f.hearts, g.maxHearts));
+  g.assist = uint8_t(imin(f.assist, g.maxHearts));
+  g.losing = uint8_t(clampi(losing, 0, g.maxHearts - g.hearts));
+  if (g.losing && t >= kImpact) {
+    g.drain = uint8_t(imax(1, ramp(t, kImpact + 1, kImpact + 9) * 255 / 256));
+    g.flash = uint8_t(255 - ramp(t, kImpact, kImpact + 4) * 255 / 256);
   }
+  g.sparks = uint8_t(imin(f.sparks, blorb::kMeterMax));
+  g.cost = powerFor(f).cost;
+  g.pulse = uint8_t(imin(255, bump(t % 10, 0, 10)));
+  g.sweep = uint8_t(sweep);
+  return g;
 }
 
+// The power's glyph at the meter's hub: small and dim until it is paid for.
 void meter(DuelStaging& s, const Fighter& f, int side, int t) {
-  for (int i = 0; i < blorb::kMeterMax; ++i)
-    add(s, prop(PropKind::Pip, i < f.sparks ? 0 : 1, rim(kPipArc + i * kPipStep + side * kFlip, kPipR)));
   const blorb::PowerInfo& pw = powerFor(f);
   const bool ready = f.sparks >= pw.cost;
   // Not yet: small and dim. Ready: full size and breathing. Armed: big, over his head (staged by the caller).
@@ -230,8 +235,9 @@ void telegraph(const Fighter& x, Figure& g, const Body& b, int side, int t, Duel
   add(s, prop(PropKind::Aura, int(powerOf(x)), mid, (side ? 70 : 100) + 15 * heavy, 120 + pulse * (now ? 135 : 70) / 256));
   const P head = headOf(g, b);
   const P over = side ? P{head.x - 42, head.y + 34} : P{head.x + 30, head.y - 8};   // the friend's clear of the top rim and the hint
-  add(s, prop(PropKind::Power, int(powerOf(x)), over, (now ? 150 : 115) + pulse * 20 / 256));
-  add(s, prop(PropKind::Countdown, x.landsIn, {over.x, over.y + (now ? 24 : 20)}, 100));
+  const int glyphPct = (now ? 150 : 115) + pulse * 20 / 256;
+  add(s, prop(PropKind::Power, int(powerOf(x)), over, glyphPct));
+  add(s, prop(PropKind::Countdown, x.landsIn, over, glyphPct, 255, now ? pulse : 0));
 }
 
 void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
@@ -271,7 +277,9 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const int fill = tier == int(Stakes::Mortal) && aimed ? sc.me.hold : 255;
     add(s, prop(PropKind::Tier, tier, at, scale, barred ? 110 : 255, fill));
     if (barred) add(s, prop(PropKind::Strike, 0, at, scale));
-    if (aimed && sc.me.confirmed) add(s, prop(PropKind::Tick, 0, {at.x + 14, at.y - 14}, 100));
+    // The reticle on the tier under the tilt: closed once confirmed, a ring
+    // filling while the Mortal confirm is held.
+    if (aimed) add(s, prop(PropKind::Reticle, sc.me.confirmed ? 1 : 0, at, scale, 255, sc.me.confirmed ? 255 : fill));
   }
   // Each pet wears the risk of the tier his kid aims at: a feather (play), a
   // plaster on his head (wounds), or a skull over him filled to his forecast.
@@ -292,7 +300,7 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
         face(s.fig[side], expr::alarmed);
         break;
     }
-    if (side == kThem && x.confirmed) add(s, prop(PropKind::Tick, 0, {head.x + 26, head.y + 12}, 90));
+    if (side == kThem && x.confirmed) add(s, prop(PropKind::Lock, 3, {head.x + 26, head.y + 12}));
   }
   // Both confirmed: the agreed tier, the lower of the two, in the middle.
   if (sc.me.confirmed && sc.them.confirmed)
@@ -313,7 +321,7 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     if (st == sc.lean && !sc.me.locked)
       add(s, prop(PropKind::Glow, 0, at, aimed ? 120 : 100, 90 + sc.whisper * 165 / 255 * (192 + bump(t % 12, 0, 12) / 4) / 256));
     add(s, prop(PropKind::Stance, st, at, aimed ? kAimedStancePct : kGlyphPct, aimed || sc.aim < 0 ? 255 : 150));
-    if (aimed && sc.me.locked) add(s, prop(PropKind::Tick, 0, {at.x + 19, at.y - 19}, 110));
+    if (aimed) add(s, prop(PropKind::Reticle, sc.me.locked ? 1 : 0, at, kAimedStancePct));
   }
   // My pet leans toward the stance under the tilt, his kid's hand in his body.
   if (sc.aim >= 0) {
@@ -323,10 +331,10 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   telegraph(sc.me, s.fig[kMe], b[kMe], kMe, t, s);
   telegraph(sc.them, s.fig[kThem], b[kThem], kThem, t, s);
-  // Over the friend: "..." while choosing, a tick once locked; never the stance.
+  // Over the friend: a spinner while he chooses, the ring closed once he has
+  // locked; never the stance.
   const P head = headOf(s.fig[kThem], b[kThem]);
-  if (sc.them.locked) add(s, prop(PropKind::Tick, 0, {head.x + 20, head.y - 6}, 110));
-  else add(s, prop(PropKind::Dots, (t / 4) % 3, {head.x + 22, head.y - 10}));
+  add(s, prop(PropKind::Lock, sc.them.locked ? 3 : (t / 4) % 3, {head.x + 26, head.y + 12}));
 }
 
 // A pet plays his own stance: a Pounce lunges at the other, a Guard curls up
@@ -418,14 +426,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
       g.x = int16_t(g.x + (home[lose].x - home[win].x) * back / 120);
       g.y = int16_t(g.y + (home[lose].y - home[win].y) * back / 120);
       if (t >= kImpact) face(g, expr::alarmed);
-      // The hearts he lost fly up off his arc.
-      for (int i = 0; i < f[lose]->hit && t >= kImpact; ++i) {
-        const Fighter& x = *f[lose];
-        const int n = imin(x.maxHearts, 8), step = n > 1 ? imin(kHeartStep, kHeartSpan / (n - 1)) : 0;
-        const P at = rim(kHeartArc + (x.hearts + i) * step + lose * kFlip, kHeartR);
-        const int up = ramp(t, kImpact, kImpact + 12);
-        add(s, prop(PropKind::Plea, 0, {at.x + (120 - at.x) * up / 1024, at.y - 30 * up / 256}, 140, 255 - up * 255 / 256));
-      }
+      // The hearts he lost flash and drain out of his gauge (DuelStaging::gauge).
     }
     if (t >= kImpact + 2) face(s.fig[win], expr::happy);
     // Staggered mid wind-up: knocked out of it, stars round his head.
@@ -460,6 +461,7 @@ void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
   add(s, prop(PropKind::Timer, 0, {120, 120}, 100, 255, sc.mercyTicks ? sc.mercyLeft * kTimerFillOf / sc.mercyTicks : 0));
   // The skull over the downed pet fills from the bottom while the winner holds BOOT.
   add(s, prop(PropKind::Tier, 2, kMercySkull[down], 190, 255, imax(sc.finishHold, 1)));
+  add(s, prop(PropKind::Reticle, 2, kMercySkull[down], 190, 255, imin(sc.finishHold, 254)));
   if (sc.won == Side::Me) {
     // Mine to decide, in the empty lower right: hold BOOT for the skull, or knock for the heart.
     add(s, prop(PropKind::Button, 0, {150, 164}, 100, 230));
@@ -671,13 +673,14 @@ DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpriteP
     case DuelAct::Fallen: fallen(sc, s, b); break;
     case DuelAct::Outcome: outcome(sc, s, b); break;
   }
-  // Hearts and the meter stay on the rim through the fight itself.
+  // The gauges stay on the rim through the fight itself, sweeping in as they meet.
   const bool fighting = sc.act == DuelAct::Choosing || sc.act == DuelAct::Clash || sc.act == DuelAct::Meeting;
   if (fighting || sc.act == DuelAct::Outcome) {
     const int t = sc.ticks;
     const bool clashing = sc.act == DuelAct::Clash;
-    hearts(s, sc.me, kMe, clashing && t >= kImpact && t < kSettle ? sc.me.hit : 0, t);
-    hearts(s, sc.them, kThem, clashing && t >= kImpact && t < kSettle ? sc.them.hit : 0, t);
+    const int sweep = sc.act == DuelAct::Meeting ? ramp(t, 6, 14) * 255 / 256 : 255;
+    s.gauge[kMe] = gaugesOf(sc.me, fighting, clashing ? sc.me.hit : 0, t, sweep);
+    s.gauge[kThem] = gaugesOf(sc.them, fighting, clashing ? sc.them.hit : 0, t, sweep);
     if (fighting) {
       meter(s, sc.me, kMe, t);
       meter(s, sc.them, kThem, t);
@@ -698,7 +701,7 @@ uint16_t c565(Rgb c) { return uint16_t(((c.r >> 3) << 11) | ((c.g >> 2) << 5) | 
 
 constexpr Rgb kInk{24, 14, 22};          // every prop's outline: a shape reads before its colour does
 constexpr Rgb kCream{255, 244, 214};
-constexpr Rgb kHeartRed{236, 52, 74}, kAssistGold{255, 200, 60}, kSpark{255, 226, 90};
+constexpr Rgb kSpark{255, 226, 90};
 constexpr Rgb kBurst{255, 225, 74}, kBurstEdge{196, 64, 16};
 constexpr Rgb kStrike{200, 30, 40};
 constexpr Rgb kGlowLight{255, 240, 170};
@@ -721,6 +724,9 @@ void put(Canvas240& cv, int x, int y, uint16_t c, int alpha) {
 
 void disc(Canvas240& cv, int cx, int cy, int r, Rgb c, int alpha) {
   const uint16_t k = c565(c);
+  // The same pixels as the test below, a run a row from hud's half-chords
+  // (x^2 + y^2 <= r^2 is the half-pixel grid's (2x)^2 + (2y)^2 <= (2r)^2).
+  if (!gKeepOut && r > 0 && r <= 120) return hud::arc(cv, 2 * cx + 1, 2 * cy + 1, -1, r, 0, hud::kTurn, k, alpha);
   for (int y = cy - r; y <= cy + r; ++y)
     for (int x = cx - r; x <= cx + r; ++x)
       if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) put(cv, x, y, k, alpha);
@@ -793,13 +799,6 @@ void sparkle(Canvas240& cv, int cx, int cy, int r, Rgb c, int alpha) {
   }
 }
 
-void heart(Canvas240& cv, const Prop& p) {
-  const int a = p.alpha + 1, k = 150 * p.scalePct / 100;
-  if (p.variant == 1) return bits(cv, kHeart, p.x, p.y, k, {250, 170, 180}, a, true);
-  bits(cv, kHeart, p.x, p.y, k, p.variant == 2 ? kAssistGold : kHeartRed, a, false);
-  if (p.variant == 2) sparkle(cv, p.x + 7, p.y - 7, 4, {255, 255, 255}, a);
-}
-
 void pip(Canvas240& cv, const Prop& p) {
   const uint16_t ink = c565(kInk), lit = c565(kSpark);
   for (int dy = -5; dy <= 5; ++dy)
@@ -813,12 +812,21 @@ void pip(Canvas240& cv, const Prop& p) {
 
 // A spiky comic burst with a word in it. The burst is the picture; the word
 // is for whoever can read it.
-bool spiky(int dx, int dy, int R, int inner, int n, int rot) {
+// Its spikes' directions, looked up once a burst, not once a pixel a spike.
+struct Spikes {
+  int n, c[12], s[12];
+  Spikes(int count, int rot) : n(count) {
+    for (int k = 0; k < n; ++k) c[k] = cosA(rot + k * 256 / n), s[k] = sinA(rot + k * 256 / n);
+  }
+};
+bool spiky(int dx, int dy, int R, int inner, const Spikes& sp) {
   if (dx * dx + dy * dy <= inner * inner) return true;
-  for (int k = 0; k < n; ++k) {
-    const int a = rot + k * 256 / n;
-    const int along = (dx * cosA(a) + dy * sinA(a)) / 4096, perp = iabs(dx * sinA(a) - dy * cosA(a)) / 4096;
-    if (along > 0 && along < R && perp * R <= inner * 6 / 10 * (R - along)) return true;
+  const int waist = inner * 6 / 10;
+  for (int k = 0; k < sp.n; ++k) {
+    const int along = (dx * sp.c[k] + dy * sp.s[k]) / 4096;
+    if (along <= 0 || along >= R) continue;
+    const int perp = iabs(dx * sp.s[k] - dy * sp.c[k]) / 4096;
+    if (perp * R <= waist * (R - along)) return true;
   }
   return false;
 }
@@ -873,12 +881,12 @@ void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
   // A whiff is a grey puff of air, not a hit.
   const bool whiff = p.variant == 7;
   const uint16_t edge = c565(whiff ? Rgb{90, 90, 110} : kBurstEdge), body = c565(whiff ? Rgb{200, 200, 215} : kBurst);
+  const Spikes spikes(whiff ? 7 : 12, rot);
   for (int y = p.y - R; y <= p.y + R; ++y)
     for (int x = p.x - R; x <= p.x + R; ++x) {
       const int dx = x - p.x, dy = y - p.y;
-      const int n = whiff ? 7 : 12;
-      if (!spiky(dx, dy, R, inner, n, rot)) continue;
-      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, n, rot) ? body : edge, p.alpha + 1);
+      if (!spiky(dx, dy, R, inner, spikes)) continue;
+      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, spikes) ? body : edge, p.alpha + 1);
     }
   if (p.scalePct >= 90 && p.alpha > 200) text(cv, kWords[v], p.x, p.y, kScale, {255, 255, 255});
 }
@@ -920,28 +928,6 @@ void dots(Canvas240& cv, const Prop& p) {
   for (int i = 0; i < 3; ++i) disc(cv, p.x - 7 + 7 * i, p.y - (i == p.variant ? 2 : 0), 2, kInk, 256);
 }
 
-// The rim clock: what is left is a thick lit band, what has gone a thin dim line.
-int angle256(int dx, int dy) {
-  const int ax = iabs(dx), ay = iabs(dy);
-  if (!ax && !ay) return 0;
-  int a = ax >= ay ? 32 * ay / ax : 64 - 32 * ax / ay;
-  if (dx < 0) a = 128 - a;
-  if (dy < 0) a = 256 - a;
-  return a & 255;
-}
-
-void timer(Canvas240& cv, const Prop& p) {
-  const uint16_t lit = c565(kCream), dim = c565({90, 80, 100});
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 > 236 * 236 || d2 < 222 * 222) continue;
-      const bool left = ((angle256(dx, dy) - 192) & 255) * 255 / 256 < p.fill;
-      if (left) put(cv, x, y, lit, 256);
-      else if (d2 >= 230 * 230) put(cv, x, y, dim, 256);
-    }
-}
-
 void stars(Canvas240& cv, const Prop& p) {
   for (int k = 0; k < 3; ++k) {
     const int a = p.variant * 16 + k * 85, r = 18 * p.scalePct / 100;
@@ -976,18 +962,6 @@ void aura(Canvas240& cv, const Prop& p) {
     }
 }
 
-// Turns to the landing: a diamond each; none left means it lands now (a bar).
-void countdown(Canvas240& cv, const Prop& p) {
-  const int n = p.variant;
-  if (n == 0) return inked(cv, p.x - 9, p.y, p.x + 9, p.y, 2, kCream, 256);
-  for (int i = 0; i < n; ++i) {
-    Prop q = p;
-    q.variant = 0;
-    q.x = int16_t(p.x + (2 * i - (n - 1)) * 7);
-    pip(cv, q);
-  }
-}
-
 void backed(Canvas240& cv, const Prop& p, int rPx) { disc(cv, p.x, p.y, rPx * p.scalePct / 100, kInk, 150 * (p.alpha + 1) / 256); }
 
 void art(Canvas240& cv, const FrameRef& f, const Prop& p) { drawArt(cv, f, p.x, p.y, p.scalePct, p.alpha + 1); }
@@ -995,7 +969,7 @@ void art(Canvas240& cv, const FrameRef& f, const Prop& p) { drawArt(cv, f, p.x, 
 void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
   if (p.scalePct < 8) return;
   switch (p.kind) {
-    case PropKind::Heart: return heart(cv, p);
+    case PropKind::Heart: return;   // the gauges draw hearts now (hud.cpp)
     case PropKind::Pip: return pip(cv, p);
     case PropKind::Stance:
       backed(cv, p, 15);
@@ -1023,15 +997,17 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
       const int r = 15 * p.scalePct / 100;
       return inked(cv, p.x - r, p.y + r, p.x + r, p.y - r, 3, kStrike, 256);
     }
-    case PropKind::Timer: return timer(cv, p);
+    case PropKind::Timer: return hud::clock(cv, p.fill);
     case PropKind::Stars: return stars(cv, p);
     case PropKind::Glow: return glow(cv, p);
     case PropKind::Aura: return aura(cv, p);
-    case PropKind::Countdown: return countdown(cv, p);
+    case PropKind::Countdown: return hud::countdown(cv, p);
     case PropKind::Button:
       disc(cv, p.x, p.y, 13, kInk, 170);
       return bits(cv, p.variant ? kKnock : kButton, p.x, p.y, 200 * p.scalePct / 100, kCream, p.alpha + 1, false);
     case PropKind::Plea: return bits(cv, kHeart, p.x, p.y, p.scalePct, {255, 120, 150}, p.alpha + 1, false);
+    case PropKind::Reticle: return hud::reticle(cv, p);
+    case PropKind::Lock: return hud::lock(cv, p);
   }
 }
 
@@ -1226,11 +1202,19 @@ void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& min
   phaseStart();
   arena(cv);
   phaseEnd(Phase::Background);
+  // The clock goes under everything (the infographics are the rim phase).
   for (int i = 0; i < s.propCount; ++i)
-    if (behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
+    if (s.props[i].kind == PropKind::Timer) paintProp(cv, s.props[i], sc.ticks);
+  phaseEnd(Phase::Rim);
+  for (int i = 0; i < s.propCount; ++i)
+    if (behind(s.props[i].kind) && s.props[i].kind != PropKind::Timer) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
   drawFigure(lookFor(sc.them, s.fig[kThem], sc.ticks), theirs, cv, s.fig[kThem]);
   drawFigure(lookFor(sc.me, s.fig[kMe], sc.ticks), mine, cv, s.fig[kMe]);
+  phaseEnd(Phase::Figure);
+  // The gauges over the pets, the props over the gauges.
+  for (int side = 0; side < 2; ++side) hud::gauges(cv, s.gauge[side], side);
+  phaseEnd(Phase::Rim);
   for (int i = 0; i < s.propCount; ++i) {
     if (behind(s.props[i].kind)) continue;
     gKeepOut = s.props[i].kind == PropKind::Burst ? s.face : nullptr;
