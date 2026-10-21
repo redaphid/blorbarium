@@ -2,7 +2,7 @@
 # The paint bench as the board's compiler builds it, run on Espressif's QEMU
 # (an ESP32-S3 machine; no board, no serial port): S3 instructions a frame by phase
 # for lib/paint as the badge builds it, and whether it draws the host's bytes.
-#   bash scripts/test/paint_bench_qemu.sh [every=8]
+#   bash scripts/test/paint_bench_qemu.sh [every=16]
 # QEMU is github.com/espressif/qemu's release, fetched once into outputs/tools
 # (esp-develop-9.2.2-20250817), or QEMU=/path/to/qemu-system-xtensa.
 # Under -icount a virtual nanosecond is an instruction: it counts the work,
@@ -25,7 +25,7 @@ bash "$root/scripts/test/paint_bench.sh" 1 > /dev/null   # the host objects the 
 g++ -std=c++17 -O2 -I"$root/lib/blorb/include" -I"$root/lib/blorb/src" -I"$root/lib/paint/include" -I"$root/lib/paint/src" \
     -I"$root/pets" -I"$root/pets/grungo" -I"$root/test/support" "$root/scripts/test/paint_shots_dump.cpp" \
     "$root"/outputs/paint_bench/common/blorb_*.o "$root"/outputs/paint_bench/paint/*.o -o "$out/dump"
-"$out/dump" "${1:-8}" "$out/shots.inc.new"
+"$out/dump" "${1:-16}" "$out/shots.inc.new"
 cmp -s "$out/shots.inc.new" "$out/shots.inc" || mv "$out/shots.inc.new" "$out/shots.inc"
 rm -f "$out/shots.inc.new"
 (cd "$root" && pio run -e paintbench_s3 -j 3 > "$out/build.log" 2>&1) || { tail -30 "$out/build.log"; exit 1; }
