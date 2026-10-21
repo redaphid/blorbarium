@@ -50,6 +50,12 @@ class BoardDisplay : public lgfx::LGFX_Device {
 static void boardButtonBegin() { pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP); }
 static bool boardButtonDown() { return digitalRead(PIN_BOOT_BUTTON) == LOW; }
 
+// The window is sent the whole frame every time, in place, so there is nothing
+// to repaint, nothing to wait for and no send task.
+static void boardRepaintAll() {}
+static void boardPanelIdle() {}
+static void boardPresentBegin(BoardDisplay&) {}
+
 // The canvas is native-endian RGB565 (lib/paint), which is rgb565_t to LGFX.
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
   display.keepSquare();

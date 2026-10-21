@@ -2,6 +2,7 @@
 #include "blorb/registry.h"
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "paint/phases.h"
 #include "paint/duel.h"
 #include "paint/text.h"
 
@@ -702,11 +703,6 @@ constexpr Rgb kBurst{255, 225, 74}, kBurstEdge{196, 64, 16};
 constexpr Rgb kStrike{200, 30, 40};
 constexpr Rgb kGlowLight{255, 240, 170};
 
-bool inDisc(int x, int y) {
-  const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide;
-  return dx * dx + dy * dy <= kSide * kSide;
-}
-
 // Where a burst may not paint: the two faces (drawStaged sets it while bursts draw).
 const Box* gKeepOut = nullptr;
 bool keptOut(int x, int y) {
@@ -1052,6 +1048,8 @@ void arena(Canvas240& cv) {
       const int t = d2 / (kSide * kSide / 256);
       Rgb c{40 - 22 * t / 256, 30 - 16 * t / 256, 56 - 26 * t / 256};
       for (const Pool& p : kPools) {
+        // A whole radius off on either axis puts |ex| or |ey| at 256 or more: no light, and no divisions to learn it.
+        if (iabs(x - p.x) >= p.rx || iabs(y - p.y) >= p.ry) continue;
         const int ex = (x - p.x) * 256 / p.rx, ey = (y - p.y) * 256 / p.ry, e = (ex * ex + ey * ey) >> 8;
         if (e < 256) { c.r += 26 * (256 - e) / 256; c.g += 30 * (256 - e) / 256; c.b += 24 * (256 - e) / 256; }
       }
@@ -1109,7 +1107,9 @@ RimHint rimHint(const blorb::BootHint& b) {
   return r;
 }
 
-void drawBootHint(Canvas240& cv, const RimHint& h) {
+namespace {
+
+void drawBootHintArt(Canvas240& cv, const RimHint& h) {
   if (!h.glyph || h.glyph >= kBootGlyphCount) return;
   const P at = kBootAt;
   // Something waits for its second, so a kid sees "once more" without a
@@ -1144,8 +1144,18 @@ void drawBootHint(Canvas240& cv, const RimHint& h) {
     }
 }
 
+}  // namespace
+
+void drawBootHint(Canvas240& cv, const RimHint& h) {
+  phaseStart();
+  drawBootHintArt(cv, h);
+  phaseEnd(Phase::Hint);
+}
+
 void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv) {
+  phaseStart();
   arena(cv);
+  phaseEnd(Phase::Background);
   for (int i = 0; i < s.propCount; ++i)
     if (behind(s.props[i].kind)) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
@@ -1157,10 +1167,15 @@ void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& min
     paintProp(cv, s.props[i], sc.ticks);
     gKeepOut = nullptr;
   }
+  phaseEnd(Phase::Figure);
   drawBootHint(cv, sc.boot);
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x)
-      if (!inDisc(x, y)) cv.px[y * kSide + x] = 0;
+  phaseStart();
+  for (int y = 0; y < kSide; ++y) {
+    const int from = kDish.from[y];
+    std::memset(&cv.px[y * kSide], 0, sizeof(uint16_t) * size_t(from));
+    std::memset(&cv.px[y * kSide + kSide - from], 0, sizeof(uint16_t) * size_t(from));
+  }
+  phaseEnd(Phase::Mask);
 }
 
 void drawDuel(const DuelScene& sc, const SpritePack& mine, const SpritePack& theirs, Canvas240& cv, uint32_t) {

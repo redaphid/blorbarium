@@ -16,8 +16,9 @@ Rebuild without the flag before a release. At run time `POWER idle <s>`
 
 | | Awake | Low power |
 |---|---|---|
-| Screen | drawn about 5 times a second, backlight at the pet's brightness | panel in sleep (SLPIN), backlight off, nothing drawn |
-| CPU | 240 MHz | 80 MHz, and the loop rests 20 ms a pass; on `badge128_pm`, light sleep between (below) |
+| Screen | drawn up to 50 times a second, only the rows that changed sent (below), backlight at the pet's brightness | panel in sleep (SLPIN), backlight off, nothing drawn |
+| CPU | 240 MHz, flat out | 80 MHz, and the loop rests 20 ms a pass; on `badge128_pm`, light sleep between (below) |
+| Panel SPI | 40 MHz (`BLORB_LCD_SPI_MHZ`) | idle |
 | The pet | lives | lives: every 100 ms tick still runs, so he ages, sleeps and gets hungry as before |
 | Body sensing | 50 Hz | 50 Hz (this is what wakes it) |
 | Bluetooth | advertising, connectable | the same: a phone still finds it |
@@ -53,7 +54,10 @@ stack: a badge flashed with it resumed its pet with the same genome and age.
 
 Light sleep is only on in low power (`esp_pm_configure` from `cpuPower` in
 `src/main.cpp`); awake, the clock is pinned at 240 MHz with no sleep, so the
-panel's SPI and the backlight never meet a gated clock. In low power the
+panel's SPI and the backlight never meet a gated clock. `esp_pm_configure`
+only records the limits (the clock moves at the next PM lock change), so
+awake also holds a `CPU_FREQ_MAX` lock ("awake"): taking it on waking puts
+the clock at 240 MHz at once, and giving it back on sleeping drops it at once. In low power the
 sense task's 50 Hz reads and the loop's 20 ms rests wake it; the pet ticks,
 motion and the button wake it as before.
 
@@ -72,6 +76,47 @@ wakes it first.
 Measured on badge 1, idle on the desk, low power: the chip light-slept about
 70% of the time with the cable quiet (11.3 s of 16.2 s), and 5.1 s of 8 with
 a phone connected over Bluetooth. Current draw is still to be measured.
+
+## Awake: full speed
+
+The badges spend most of their time in low power, so awake is allowed to
+cost more (owner, 2026-10-20: "We can go full speed on the chips when on").
+Awake, the CPU runs at 240 MHz and the loop draws a frame every 20 ms
+(`kFrameMs`; the simulator keeps 40 ms, the pace its goldens were filmed at).
+
+- **The renderer** (`lib/paint`) draws the same bytes it always did, without
+  the work that made a frame take ~190 ms on the board: a 64-bit square root
+  for every pixel of the dish's background (now only the rim's, in 32 bits),
+  a 64-bit division for every pixel a sprite covers (now stepped along the
+  row), a soft-float `atan2` for every pixel of the idle bar (now worked out
+  once) and of the hang's ring (now only at its edge), and the outline's
+  walk once per transform. `scripts/test/paint_bench.sh` draws thousands of
+  frames of every species, the duel's moments, a hang, fight mode and the
+  amber, and hashes every one: `REF=main bash scripts/test/paint_bench.sh`
+  builds the same bench with another commit's renderer to compare.
+- **The panel** keeps what it was sent, so `boardPresent` sends only the rows
+  whose hash changed: between the pet's 100 ms ticks most frames send
+  nothing, and a crossing thought sends its strip. Every 64th frame, and
+  every frame after the panel wakes, sends all of it.
+- **The SPI clock** is 40 MHz. The panel's clock pin (GPIO10) is not SPI2's
+  IO-MUX clock pin, so the bus goes through the GPIO matrix, which IDF 4.4
+  holds to 40 MHz; LovyanGFX does not clamp it, and a command byte garbled at
+  80 is not healed by a repaint. 80 (the wiki's figure, a whole frame in
+  11.5 ms against 23) is opt-in on a bench badge: `-DBLORB_LCD_SPI_MHZ=80`, or
+  `DEBUG lcd 80` until reset. `spi_mhz` reports the clock the divider really
+  gives (`lcd 30` runs at 26.6).
+
+The sense task (250 Hz awake) has a higher priority than the loop, so drawing
+never delays a sample; the loop takes the samples between frames, as before.
+
+`DEBUG fps` on the cable prints what frames cost since it last asked (the
+shape of the line; these numbers are not a measurement):
+
+    [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 cpu=240 cpu_now=240 spi_mhz=40.0 frame_ms=20 power=full
+
+`draw_ms` is the canvas, `push_ms` the panel, `rows` the rows sent a frame
+(240 is all of it), `cpu_now` the clock as it runs. In low power it reports
+no frames and `cpu_now=80` (or 40, between, on `badge128_pm`).
 
 ## The idle bar
 

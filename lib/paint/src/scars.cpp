@@ -135,4 +135,69 @@ int scarShade(const ScarLayer& layer, int rx, int ry) {
   return q;
 }
 
+namespace {
+
+int ceilDiv(int a, int b) { return -floorDiv(-a, b); }
+
+constexpr bool scarArtFits() {
+  for (size_t k = 0; k < sizeof duel_art::kScars / sizeof duel_art::kScars[0]; ++k)
+    for (size_t z = 0; z < sizeof duel_art::kScars[0] / sizeof duel_art::kScars[0][0]; ++z)
+      if (duel_art::kScars[k][z].h > ScarRows::kMaxArtRows) return false;
+  return true;
+}
+static_assert(scarArtFits(), "ScarRows holds kMaxArtRows rows of a scar's art");
+
+}  // namespace
+
+void ScarRows::begin(const ScarLayer& layer) {
+  layer_ = &layer;
+  for (int i = 0; i < layer.count; ++i) {
+    const ScarStamp& s = layer.stamp[i];
+    const FrameRef& art = *s.art;
+    Reach& r = reach_[i];
+    // ax = floorDiv(d * 256, zoom) + originX is in [0, w) exactly when d * 256
+    // is in [-originX * zoom, (w - originX) * zoom), by floor division's own
+    // definition: the columns (and likewise rows) the stamp can shade.
+    r.x0 = s.x + ceilDiv(-art.originX * layer.zoom, 256);
+    r.x1 = s.x + ceilDiv((art.w - art.originX) * layer.zoom, 256) - 1;
+    r.y0 = s.y + ceilDiv(-art.originY * layer.zoom, 256);
+    r.y1 = s.y + ceilDiv((art.h - art.originY) * layer.zoom, 256) - 1;
+    const uint8_t* p = art.rle;
+    for (int y = 0; y < art.h; ++y) {
+      r.rowAt[y] = uint16_t(p - art.rle);
+      for (int x = 0; x < art.w; x += p[0], p += 2) {}
+    }
+  }
+}
+
+void ScarRows::row(int ry) {
+  liveCount_ = 0;
+  for (int i = 0; i < layer_->count; ++i) {
+    const Reach& r = reach_[i];
+    if (ry < r.y0 || ry > r.y1) continue;
+    const ScarStamp& s = layer_->stamp[i];
+    const int ay = floorDiv((ry - s.y) * 256, layer_->zoom) + s.art->originY;
+    live_[liveCount_++] = {&s, s.art->rle + r.rowAt[ay], r.x0, r.x1};
+  }
+}
+
+int ScarRows::shade(int rx) const {
+  int q = 128;
+  for (int i = 0; i < liveCount_; ++i) {   // in stamp order, as scarShade multiplies
+    const Live& l = live_[i];
+    if (rx < l.x0 || rx > l.x1) continue;
+    const ScarStamp& s = *l.s;
+    const FrameRef& art = *s.art;
+    const int ax = floorDiv((rx - s.x) * 256, layer_->zoom) + art.originX;
+    uint8_t idx = 0;
+    const uint8_t* p = l.row;
+    for (int x = 0; x < art.w; x += p[0], p += 2)
+      if (ax < x + p[0]) { idx = p[1]; break; }
+    if (!idx) continue;
+    const int g = duel_art::kPalette[idx].r;
+    q = q * imax(16, 128 + (g - 128) * kDepth / 2 * s.strength / 255) / 128;
+  }
+  return q;
+}
+
 }  // namespace paint

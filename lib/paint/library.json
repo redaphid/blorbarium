@@ -1,0 +1,8 @@
+{
+  "name": "paint",
+  "description": "The renderer: an Appearance in, RGB565 pixels out. Built at -O2 on the board, whose framework builds at -Os: a frame is ~6M instructions there, and the hot loops want unrolling and inlining more than they want the flash (docs/notes/perf-climb.md).",
+  "build": {
+    "unflags": "-Os",
+    "flags": "-O2"
+  }
+}

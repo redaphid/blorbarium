@@ -56,7 +56,10 @@ arrow, then the act's existing glyph (pellet, moon, swords, skull, heart...):
   (tab at the bottom) with the red ring. Shake: it jiggles. Cuddle: a cupped
   hand under it. Face down: it flips over (moon).
 - **Frames take ~190 ms on the board** (about 5 fps): animate in 2-3 held key
-  poses (~400 ms each), never smooth motion.
+  poses (~400 ms each), never smooth motion. (Branch `framerate`, 2026-10-20:
+  the renderer is several times faster and awake frames come every 20 ms, so
+  motion on the clock can be smooth; `DEBUG fps` says what a board really
+  does. See docs/power.md, "Awake: full speed".)
 - Where: a strip at the bottom of the dish (y ~185-212 is clear of the rim
   tokens at (170..207, 170..207) and the pantry pips at the top). The thought
   marquee sometimes runs low (`kMarqueeStrip` mirrored when he stands high):

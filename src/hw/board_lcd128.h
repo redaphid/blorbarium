@@ -6,6 +6,9 @@
 
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
+#include <esp_heap_caps.h>
+
+#include <cstring>
 
 #include "paint/sprite_pack.h"
 
@@ -37,6 +40,19 @@ static constexpr int ORIENT_R0 = 1;
 static_assert(BLORB_ORIENT_HOME == 0 || BLORB_ORIENT_HOME == 2, "home is USB-C up (2) or USB-C down (0)");
 static constexpr uint8_t ORIENT_HOME = BLORB_ORIENT_HOME;
 
+// The panel's SPI write clock, in MHz: 40. The panel's clock is on GPIO10,
+// not SPI2's IO-MUX clock pin (GPIO12), so the bus goes through the GPIO
+// matrix, which IDF 4.4 holds to 40 MHz (spi_master.h) and LovyanGFX does not
+// clamp. A command byte (MADCTL, INVON, RASET) garbled at 80 is never healed by
+// a repaint, so 80 is opt-in, to try on a bench badge:
+//   PLATFORMIO_BUILD_FLAGS="-DBLORB_LCD_SPI_MHZ=80" pio run -e badge128
+// or `DEBUG lcd 80` until reset. The clock is the 80 MHz APB divided by a
+// whole number, so 80, 40, 26.7, 20 are what it can be; writeKhz() says which.
+#ifndef BLORB_LCD_SPI_MHZ
+#define BLORB_LCD_SPI_MHZ 40
+#endif
+static_assert(BLORB_LCD_SPI_MHZ >= 1 && BLORB_LCD_SPI_MHZ <= 80, "BLORB_LCD_SPI_MHZ: 1 to 80");
+
 class BoardDisplay : public lgfx::LGFX_Device {
   lgfx::Panel_GC9A01 panel_;
   lgfx::Bus_SPI bus_;
@@ -48,7 +64,7 @@ class BoardDisplay : public lgfx::LGFX_Device {
       auto cfg = bus_.config();
       cfg.spi_host = SPI2_HOST;
       cfg.spi_mode = 0;
-      cfg.freq_write = 40000000;   // proven on this board; the wiki allows 80, untried
+      cfg.freq_write = BLORB_LCD_SPI_MHZ * 1000000;
       cfg.freq_read = 16000000;
       cfg.spi_3wire = true;
       cfg.use_lock = true;
@@ -90,13 +106,148 @@ class BoardDisplay : public lgfx::LGFX_Device {
     }
     setPanel(&panel_);
   }
+  // Between frames only: the bus works out its divider again at the next write.
+  void setWriteMhz(uint32_t mhz) {
+    auto cfg = bus_.config();
+    cfg.freq_write = mhz * 1000000;
+    bus_.config(cfg);
+  }
+  // The clock the bus really runs at, kHz, worked out as LovyanGFX's divider
+  // is (FreqToClockDiv, platforms/esp32/common.cpp): the APB over (pre + 1)(n + 1).
+  uint32_t writeKhz() const {
+    const uint32_t apb = getApbFrequency(), asked = bus_.config().freq_write;
+    if (asked >= apb) return apb / 1000;
+    const uint32_t div = apb / (asked + 1), pre = std::min<uint32_t>(div / 64, 8191), n = std::min<uint32_t>(div / (pre + 1), 63);
+    return apb / ((pre + 1) * (n + 1)) / 1000;
+  }
 };
 
 static void boardButtonBegin() { pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP); }
 static bool boardButtonDown() { return digitalRead(PIN_BOOT_BUTTON) == LOW; }
 
+// The panel keeps what it was last sent in its own memory, so a frame sends
+// only the rows that changed since the last: the line crossing, his breath, a
+// hint filling, and none at all when nothing moved (between his 100 ms ticks,
+// most frames). A row is known by a hash of its pixels, so no copy of the last
+// frame is kept (115 KB the RAM does not have). Every kFullEvery frames, and
+// after the panel sleeps, every row goes, so nothing a hash missed lasts.
+namespace panelrows {
+constexpr uint16_t kFullEvery = 64;
+static uint32_t hash[CANVAS_H];
+static uint16_t sinceFull = 0;
+static bool stale = true;     // the next frame sends every row
+static uint32_t sent = 0;     // rows sent since boot, for DEBUG fps
+// FNV-1a over the row two pixels at a time, with the high bits folded back
+// down after each multiply: a multiply only carries upward, so without the fold
+// a change in a word's top bits (red at an odd x) was lost to the next word's
+// multiply ~3% of the time, and two of them 99%. scripts/test/row_hash.cpp
+// throws high-bit-only changes at every word: no misses.
+inline uint32_t of(const uint16_t* p) {
+  uint32_t h = 2166136261u;
+  for (int x = 0; x < CANVAS_W; x += 2) {
+    h = (h ^ (uint32_t(p[x]) | uint32_t(p[x + 1]) << 16)) * 16777619u;
+    h ^= h >> 15;
+  }
+  return h;
+}
+}  // namespace panelrows
+
+static void boardRepaintAll() { panelrows::stale = true; }
+static uint32_t boardRowsSent() { return panelrows::sent; }
+
+// The send runs on core 0 while the loop draws the next frame on core 1: a
+// frame's changed rows are copied into a shadow of the panel in PSRAM (the
+// canvas is internal and drawn over at once), and a task sends them from
+// there, so drawing waits on the panel only when the last frame's rows are
+// still going out. At 40 MHz a hang's ~95 rows are ~9 ms of SPI the draw no
+// longer waits through. No PSRAM, or `DEBUG lcd sync`: sent in place, as before.
+namespace panelsend {
+struct Run { uint8_t from, rows; };
+static uint16_t* shadow = nullptr;          // CANVAS_W x CANVAS_H in PSRAM, the panel's rows as last copied
+static Run runs[CANVAS_H / 2 + 1];          // runs of changed rows, at most every other row
+static int runCount = 0;
+static BoardDisplay* to = nullptr;
+static TaskHandle_t task = nullptr;
+static SemaphoreHandle_t idle = nullptr;    // held while a send is under way
+static bool async = true;
+static volatile uint32_t sendUs = 0;        // time on the bus since boot, us (the task's, for DEBUG fps)
+
+static void send(BoardDisplay& display, const uint16_t* px) {
+  display.startWrite();
+  for (int i = 0; i < runCount; ++i)
+    display.pushImage(0, runs[i].from, CANVAS_W, runs[i].rows,
+                      reinterpret_cast<const lgfx::rgb565_t*>(px + runs[i].from * CANVAS_W));
+  display.endWrite();
+}
+
+static void loop(void*) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    const uint32_t t0 = micros();
+    send(*to, shadow);
+    sendUs += micros() - t0;
+    xSemaphoreGive(idle);
+  }
+}
+}  // namespace panelsend
+
+// Before anything else talks to the panel (sleep, rotation, its clock): the last frame's send is done.
+static void boardPanelIdle() {
+  using namespace panelsend;
+  if (idle && xSemaphoreTake(idle, portMAX_DELAY) == pdTRUE) xSemaphoreGive(idle);
+}
+
+// After display.init(): the shadow and the send task, if PSRAM has room.
+static void boardPresentBegin(BoardDisplay& display) {
+  using namespace panelsend;
+  to = &display;
+  shadow = static_cast<uint16_t*>(heap_caps_malloc(sizeof(uint16_t) * CANVAS_W * CANVAS_H, MALLOC_CAP_SPIRAM));
+  idle = xSemaphoreCreateBinary();
+  if (!shadow || !idle) return void(async = false);
+  xSemaphoreGive(idle);
+  // Core 0, beside the radio's tasks (which outrank it); the loop and its drawing are core 1's.
+  if (xTaskCreatePinnedToCore(loop, "lcdsend", 3072, nullptr, 1, &task, 0) != pdPASS) async = false;
+}
+static bool boardSendAsync() { return panelsend::async && panelsend::task; }
+static void boardSetSendAsync(bool on) {
+  boardPanelIdle();
+  panelsend::async = on;
+}
+static uint32_t boardSendUs() { return panelsend::sendUs; }
+
 // The canvas is native-endian RGB565, which is rgb565_t to LGFX: pushImage
-// converts it to the panel's byte-swapped wire order on the way out.
+// converts it to the panel's byte-swapped wire order on the way out, a run of
+// changed rows at a time.
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
-  display.pushImage(0, 0, CANVAS_W, CANVAS_H, reinterpret_cast<const lgfx::rgb565_t*>(canvas.px));
+  using namespace panelrows;
+  using namespace panelsend;
+  const bool all = stale || ++sinceFull >= kFullEvery;
+  if (all) stale = false, sinceFull = 0;
+  const bool background = boardSendAsync();
+  if (background) xSemaphoreTake(idle, portMAX_DELAY);   // the last frame's rows are out; the shadow is free
+  runCount = 0;
+  int from = -1;   // the first row of the run being gathered
+  for (int y = 0; y <= CANVAS_H; ++y) {
+    bool changed = false;
+    if (y < CANVAS_H) {
+      const uint32_t h = of(&canvas.px[y * CANVAS_W]);
+      changed = all || h != hash[y];
+      hash[y] = h;
+    }
+    if (changed && from < 0) from = y;
+    if (!changed && from >= 0) {
+      runs[runCount++] = {uint8_t(from), uint8_t(y - from)};
+      sent += uint32_t(y - from);
+      from = -1;
+    }
+  }
+  if (!background) {
+    if (runCount) send(display, canvas.px);
+    return;
+  }
+  if (!runCount) return void(xSemaphoreGive(idle));
+  for (int i = 0; i < runCount; ++i)
+    std::memcpy(shadow + runs[i].from * CANVAS_W, canvas.px + runs[i].from * CANVAS_W,
+                sizeof(uint16_t) * CANVAS_W * runs[i].rows);
+  xTaskNotifyGive(task);   // the task gives idle back when the rows are out
 }
