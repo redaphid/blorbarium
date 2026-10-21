@@ -221,7 +221,8 @@ static uint32_t sleptMs();
 // nothing in them had (framememo). A second line splits a
 // frame's time by phase, ms a frame (paint/phases.h):
 //   [fps] phases look=0.9 bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
-// look= is the Dish working out his Appearance (draw_ms counts it), over= what
+// look= is the Dish working out his Appearance and memo= the overlays and the
+// frame memo's test (draw_ms counts both), over= what
 // is drawn over the dish after it (the update's screen, the debug link's
 // mark, the idle bar), wait= the rest of the loop between frames. push= is the
 // loop's part of sending (the row hashes, the copy to the send task, and any
@@ -233,11 +234,13 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
 static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0, sames = 0;
 static void same() { ++sames; }
-static uint64_t lookUs = 0, drawUs = 0, pushUs = 0;
+static uint64_t lookUs = 0, memoUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
-// look: the Dish's Appearance (the engine's), draw: the canvas, push: the panel.
-static void note(uint32_t look, uint32_t draw, uint32_t push) {
-  ++frames, lookUs += look, drawUs += draw, pushUs += push;
+// look: the Dish's Appearance (the engine's), memo: the overlays and whether
+// the frame changed, draw: the canvas, push: the panel.
+static void note(uint32_t look, uint32_t memo, uint32_t draw, uint32_t push) {
+  look += memo;   // draw_ms and worst count both, as before
+  ++frames, lookUs += look, memoUs += memo, drawUs += draw, pushUs += push;
   if (look + draw + push > worstUs) worstUs = look + draw + push;
 }
 // "a.b": tenths of a ms from a total of us over n.
@@ -261,19 +264,21 @@ static void report() {
   uint64_t painted = 0;
   for (int i = 0; i < int(Phase::Count); ++i) painted += spent[i];
   const uint64_t loopUs = uint64_t(over) * 1000;
-  char f[12][12];
+  char f[13][12];
   const Phase order[] = {Phase::Background, Phase::Figure, Phase::Rim, Phase::Text, Phase::Rings, Phase::Mask, Phase::Hint};
-  ms(f[0], sizeof f[0], lookUs, n);
+  ms(f[0], sizeof f[0], lookUs - memoUs, n);
+  ms(f[12], sizeof f[12], memoUs, n);
   for (int i = 0; i < 7; ++i) ms(f[1 + i], sizeof f[1 + i], spent[uint8_t(order[i])], n);
   ms(f[8], sizeof f[8], drawUs > painted ? drawUs - painted : 0, n);
   ms(f[9], sizeof f[9], pushUs, n);
   const uint64_t busy = lookUs + drawUs + pushUs;
   ms(f[10], sizeof f[10], loopUs > busy ? loopUs - busy : 0, n);
   ms(f[11], sizeof f[11], boardSendUs() - send0, n);
-  Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
+  Serial.printf("[fps] phases look=%s memo=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
                 "send=%s (%s)\n",
-                f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], boardSendAsync() ? "async" : "sync");
-  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0, send0 = boardSendUs();
+                f[0], f[12], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11],
+                boardSendAsync() ? "async" : "sync");
+  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = memoUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
@@ -292,16 +297,19 @@ static void bench() {
   }
   const uint32_t readUs = (now() - t0) / kReps;
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
+  t0 = now();
+  for (int i = 0; i < kReps; ++i) (void)shown();
+  const uint32_t lookUs = (now() - t0) / kReps;
   const blorb::Appearance a = shown();
   t0 = now();
   for (int i = 0; i < kReps; ++i) drawFrame(a, millis());
   const uint32_t drawUs = (now() - t0) / kReps;
   const uint32_t* spent = paint::phaseClock.spent;
   using paint::Phase;
-  Serial.printf("[fps] bench canvas=%s memset_us=%u read_us=%u (%u) draw_us=%u bg=%u fig=%u rim=%u text=%u rings=%u "
+  Serial.printf("[fps] bench canvas=%s memset_us=%u read_us=%u (%u) look_us=%u draw_us=%u bg=%u fig=%u rim=%u text=%u rings=%u "
                 "mask=%u hint=%u\n",
                 esp_ptr_internal(canvas.px) ? "internal" : "external", unsigned(setUs), unsigned(readUs), unsigned(sum & 1),
-                unsigned(drawUs), unsigned(spent[uint8_t(Phase::Background)] / kReps),
+                unsigned(lookUs), unsigned(drawUs), unsigned(spent[uint8_t(Phase::Background)] / kReps),
                 unsigned(spent[uint8_t(Phase::Figure)] / kReps), unsigned(spent[uint8_t(Phase::Rim)] / kReps),
                 unsigned(spent[uint8_t(Phase::Text)] / kReps), unsigned(spent[uint8_t(Phase::Rings)] / kReps),
                 unsigned(spent[uint8_t(Phase::Mask)] / kReps), unsigned(spent[uint8_t(Phase::Hint)] / kReps));
@@ -1562,6 +1570,7 @@ void loop() {
 #endif
     const blorb::Appearance look = shown();
 #if !defined(BADGE_BOARD_SIM)
+    const uint32_t shownAt = micros();
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
@@ -1585,7 +1594,7 @@ void loop() {
 #endif
       boardPresent(display, canvas);
 #if !defined(BADGE_BOARD_SIM)
-      fps::note(drawAt - lookAt, pushAt - drawAt, micros() - pushAt);
+      fps::note(shownAt - lookAt, drawAt - shownAt, pushAt - drawAt, micros() - pushAt);
 #endif
       ++framesDrawn;
     }
