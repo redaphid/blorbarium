@@ -12,6 +12,46 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
+## Where things stand (2026-10-20, night: flip, duel icons, lines, laptop OTA)
+
+A coordinator session: features done by agents in worktrees, merged to `main`
+(9d5612d and after), each pushed.
+
+- **Flip** (`flash.sh --flip`, env `badge128_flip`): `BLORB_ORIENT_HOME` in
+  `board_lcd128.h` picks home (2 = USB-C up, default; 0 = USB-C down). Owner:
+  "USB-C pointed down = up for these devices." The boot log says
+  `[hw] home rot=N`. Flipped and checked (Resumed): 5C94094497 mothwick,
+  5C94094999 puffkin, 5C94095003 mudge, all on 0.7.12 + the flip, not yet the
+  icons or lines. **An OTA of a normal release turns a flipped badge back**:
+  the flip is a build flag. Decide: make 0 the default, or keep it in NVS.
+- **Duel icons**: the aimed action drawn at 200% from 48 px twins (was 170%).
+  The stakes picker (Spar/Scrap/Mortal) still uses 170%.
+- **Pet lines**: "the sky is down" only when hanging from home (it fired after
+  any face-down moment, for minutes); teach lines goal first, per species; a
+  lone knock asks for a second. `Thoughts.TheSkyIsDownOnly...` pins it.
+- **`tools/ble_ota.py`** (docs/ota.md "From a laptop"): scan, status and push
+  over BlueZ. Never yet connected to a real badge. It pushes only releases
+  signed on soul; the owner hasn't chosen how laptop builds get signed (ssh to
+  soul is the recommendation).
+- **`tools/bench_watch.sh <checkout>`**: flashes every badge plugged in with
+  that checkout's `badge128_flip` and prints the boot. Builds use `-j 3`: at
+  8 jobs, parallel builds ran this 15 GB laptop out of memory (cc1plus ~2.4 GB
+  each on the art headers).
+
+**Open:**
+- **Low power never seen** (owner: "I have yet to see any device enter low
+  power mode"). Not yet looked at. Suspects: idle never reached (IMU noise or
+  the knock/hold detectors counting as activity, BLE), or the flipped home
+  making a resting badge read as held.
+- **`framerate`** branch (agent, not merged): 240 MHz and faster drawing while
+  awake. Check its last commit message for what's proven.
+- **`wifi-ota`** branch (pushed): builds, 945 native tests pass, never run on
+  a badge, one trivial conflict with main (`drawFrame`, keep both). Owner
+  questions open: a gesture before accepting a network? 6 h interval?
+- `pio run -e sim` fails on main (`main.cpp`: `KnockSense` not found), so the
+  sim film goldens can't run.
+- The stale `bench` branch on origin equals an older main; delete it.
+
 ## Where things stand (2026-10-19, evening: 0.7.12 released; next, on-screen cues)
 
 **Firmware 0.7.12 is live** at https://blorb.hypnodroid.com/fw/lcd128/manifest.json
