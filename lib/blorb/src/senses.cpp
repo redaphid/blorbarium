@@ -308,16 +308,15 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   out.set(locus::cradled, flag(cradled_));
 }
 
-// The pose is the shell's word (BodySample::invertedDown); this only gives
-// it timing and intent. A badge swung through upside down on its way
-// somewhere, tossed, or dropped never fires: it is off 1 g while it moves,
-// and those samples only pause him. The rest accumulate, a righting drains
-// them twice as fast, and the hanging locus is the progress itself, so a
-// screen can show the ask filling up before it lands.
 void AimDetector::sample(const BodySample& s, uint32_t, SenseOut&) {
   if (absMg(magnitudeMg(s) - kOneG) > kSteadyMg) return;   // a jolt says nothing about the lean
-  x_ = primed_ ? (x_ + s.ax) / 2 : s.ax;
-  y_ = primed_ ? (y_ + s.ay) / 2 : s.ay;
+  if (s.knocking) return;   // a knock burst: the badge rings in the hand, and a knock is what locks the aim
+  // The mean of this sample and the last steady one: one odd sample is
+  // halved, and a lean is all there on its second sample (a smoothing that
+  // only nears its target crawls the last of the way to a dead zone's edge).
+  x_ = primed_ ? (px_ + s.ax) / 2 : s.ax;
+  y_ = primed_ ? (py_ + s.ay) / 2 : s.ay;
+  px_ = s.ax, py_ = s.ay;
   primed_ = true;
   // How far the badge leans toward each sector (DuelInput::from: +x raises
   // the left edge, so left; -y is toward the kid).
@@ -334,6 +333,12 @@ void AimDetector::sample(const BodySample& s, uint32_t, SenseOut&) {
   }
 }
 
+// The pose is the shell's word (BodySample::invertedDown); this only gives
+// it timing and intent. A badge swung through upside down on its way
+// somewhere, tossed, or dropped never fires: it is off 1 g while it moves,
+// and those samples only pause him. The rest accumulate, a righting drains
+// them twice as fast, and the hanging locus is the progress itself, so a
+// screen can show the ask filling up before it lands.
 void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   const uint32_t dt = primed_ ? (ms - lastMs_ > 100 ? 100 : ms - lastMs_) : 0;
   primed_ = true;

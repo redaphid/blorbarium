@@ -321,3 +321,29 @@ if not already open, and why not when it cannot be.
   times itself by. Not done.
 - **Low power's wake**: 77/82 ms from the waking read to the light, the
   first frame at ~50 ms. Already within its target.
+
+### Board: 1ef6f1a on the puffkin, `--reps 6`
+
+No harm: injury 0, life 620 before and after, tidied. p50/p95 ms:
+knock knock ack_panel 102/111; hang ack_panel 79/90; side ack_panel 94/104;
+knock 86/119; double, shake (panel 105/161), wake pass. Tilt: the aim read
+100/207 at rest (from 161), 46/247 in fight mode, its panel 171/270 (from
+409/554). Press ack_panel 196/228: a 120 ms BOOT tap where a hold does
+nothing shows no ring (a tap is no hold), so its acknowledgement is the
+flash on its release, which the harness timed from the press.
+
+### 8. The aim's tail: two samples' mean, held through a knock
+
+The aim's p95 came from where the badge started: lying on the desk it leans
+~340 mg one way, just past the dead zone, and a smoothing that halves the
+distance each sample crawls the last of the way to a threshold (4-5
+samples to cross 300 mg toward 340). The aim now reads the mean of the last
+two steady samples, so a lean is all there on its second sample. That lets a
+knock's ringing in the hand through at half weight (4 re-aims in L4), so the
+aim holds while a knock burst is under way (`BodySample::knocking`): a knock
+is what locks the aim, and it never moves it. Recordings: 0 re-aims while
+knocked; 171 aim changes in all (148 with the halving, 109 the old tilt),
+all in handling, where the badge really turns.
+
+The harness now times a BOOT tap that showed nothing while down from its
+release (`Recorder::rebase`).
