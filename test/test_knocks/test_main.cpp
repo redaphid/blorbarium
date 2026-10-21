@@ -267,6 +267,58 @@ TEST(Waiting, TheHandsSawOneMoreBeforeEveryKnockKnock) {
   }
 }
 
+// "Heard" (KnockSense::knockKnock, what the rim flashes on): on from the
+// second knock, 0.6 s before the knock knock is reported, and off once it is;
+// never for one knock, and never for a burst that ran on into hammering.
+TEST(Heard, LightsOnTheSecondKnockLongBeforeTheReport) {
+  KnockSense k;
+  uint32_t lit = 0, reported = 0;
+  for (const auto& [ms, b] : held({1000, 1300}, 3000)) {
+    if (k.sample(b, ms)) reported = ms;
+    if (k.knockKnock() && !lit) lit = ms;
+    if (reported) EXPECT_FALSE(k.knockKnock()) << ms;
+  }
+  EXPECT_GE(lit, 1300u);
+  EXPECT_LE(lit, 1320u) << "on the second knock itself";
+  EXPECT_GE(reported, lit + KnockSense::kChainMs);
+}
+
+TEST(Heard, NeverForOneKnockOrForHammering) {
+  for (std::initializer_list<uint32_t> at : {std::initializer_list<uint32_t>{1000},
+                                             std::initializer_list<uint32_t>{1000, 1240, 1480, 1720, 1960}}) {
+    KnockSense k;
+    bool litAtEnd = false, litForOne = false;
+    for (const auto& [ms, b] : held(at, 4000)) {
+      k.sample(b, ms);
+      if (at.size() == 1) litForOne |= k.knockKnock();
+      if (ms > 1960 + 40) litAtEnd |= k.knockKnock();
+    }
+    EXPECT_FALSE(litForOne);
+    EXPECT_FALSE(litAtEnd) << "a fifth knock is hammering: the flash promised nothing more";
+  }
+}
+
+// Against the hands: every knock knock was heard before it was reported, and
+// handling with no knocks was never heard as one.
+TEST(Heard, TheHandsHeardEveryKnockKnockFirstAndNoHandling) {
+  for (const Segment& s : loadHands()) {
+    KnockSense k;
+    bool heard = false, prev = false;
+    int heardFirst = 0, kk = 0, episodes = 0;
+    for (const auto& [ms, b] : s.samples) {
+      const uint8_t code = k.sample(b, ms);
+      const bool h = k.knockKnock();
+      episodes += h && !prev;
+      prev = h;
+      heard |= h;
+      if (code == 2) ++kk, heardFirst += heard;
+      if (code) heard = false;
+    }
+    EXPECT_EQ(heardFirst, kk) << s.label;
+    if (s.label[0] >= '3' && s.label[0] <= '9') EXPECT_EQ(episodes, 0) << s.label << ": no knock knock here";
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

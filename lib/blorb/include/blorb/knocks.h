@@ -63,6 +63,17 @@ class KnockSense {
     return restN_ == 1;
   }
 
+  // A second knock is in, in a burst that can still count: a knock knock is
+  // on its way, though sample() reports it only once the burst is over
+  // (kChainMs after its last knock). True from the second knock until then;
+  // false again if the burst runs on into hammering. The shell carries it on
+  // the sample (BodySample::knockKnock) and the rim flashes at once, so a kid
+  // sees his knock knock heard as he makes it, not 0.6 s later.
+  bool knockKnock() const {
+    if (inBurst_ && steady_) return knocks_ >= 2 && knocks_ <= kMaxKnocks;
+    return restN_ >= 2 && restN_ <= kMaxKnocks;
+  }
+
   // Lying on a table, a knock barely moves the badge: a 150-500 mg blip in one
   // or two 250 Hz reads (test board, T1 2026-10-19), where in a hand it is
   // 1-4 g. So when the badge was resting dead still (kRestSdMg), a much

@@ -28,7 +28,14 @@ struct SimHand {
   int32_t tiltX = 0, tiltY = 0;        // !tilt: gravity in the screen plane
   bool lidded = false;                 // !lid: face down until a !tilt
   uint32_t lidUntil = 0, flipUntil = 0, holdUntil = 0, shakeUntil = 0;
-  uint8_t tap = 0;                     // 1 knock, 2 double; latched until read
+  uint8_t tap = 0;                     // the tap engine's register: 1 knock, 2 double; latched until read
+  // A knuckle through the face, as the samples carry it (blorb/knocks.h, which
+  // decides from them: the tap engine above is read and overruled). Each
+  // knock jolts az one 20 ms step up and the next down, as DEBUG knock does on
+  // a badge; `!dtap` is two of them 300 ms apart.
+  uint32_t knockAt[4] = {};
+  uint8_t knocks = 0;
+  void knock(uint32_t at) { knockAt[knocks++ % 4] = at ? at : 1; }
   int32_t dieMilliC = 25000;           // the IMU die warms in a hand
   uint32_t dieAt = 0;
 
@@ -36,6 +43,7 @@ struct SimHand {
   static constexpr int32_t kHoldY = -500, kHoldZ = 866;   // tipped 30 degrees toward you in a palm
   static constexpr int32_t kKeyTiltMg = 700;
   static constexpr int32_t kRoomMilliC = 25000, kHandMilliC = 29000;
+  static constexpr int32_t kKnockMg = 1800;
 
   static int32_t isqrt(int32_t v) {
     if (v <= 0) return 0;
@@ -65,6 +73,11 @@ struct SimHand {
       z = isqrt(1000000 - tx * tx - ty * ty);
     }
     if (shaking(now)) x += (now / 60) % 2 ? kShakeMg : -kShakeMg;
+    for (uint32_t at : knockAt) {
+      if (!at || simBefore(now, at)) continue;
+      if (now - at < 20) z += kKnockMg;
+      else if (now - at < 40) z -= kKnockMg;
+    }
   }
 
   // One degree a second up to the hand's warmth, a quarter of that back down.
@@ -90,8 +103,8 @@ class SimWire {
 
   void pollKeys() {
     const bool knock = simKey(SIM_PIN_KNOCK), dtap = simKey(SIM_PIN_DTAP);
-    if (knock && !wasKnock_) hand.tap = 1;
-    if (dtap && !wasDtap_) hand.tap = 2;
+    if (knock && !wasKnock_) hand.tap = 1, hand.knock(millis());
+    if (dtap && !wasDtap_) hand.tap = 2, hand.knock(millis()), hand.knock(millis() + 300);
     wasKnock_ = knock;
     wasDtap_ = dtap;
   }
