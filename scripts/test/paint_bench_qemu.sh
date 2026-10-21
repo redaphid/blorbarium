@@ -50,4 +50,7 @@ for _ in $(seq 2400); do   # 20 minutes at most
   sleep 0.5
 done
 kill "$pid" 2> /dev/null || true
-grep '\[bench\]\|assert\|Backtrace' "$out/run.log"
+grep '\[bench\]\|assert\|Backtrace' "$out/run.log" | sed 's/\r$//'
+# What a frame would take on the board, at about one instruction a cycle (240 MHz).
+sed -n 's/.*\[bench\] dish_frames=[0-9]* kinstr_per_frame=\([0-9]*\) duel_frames=[0-9]* kinstr_per_frame=\([0-9]*\).*/\1 \2/p' "$out/run.log" |
+  awk '{printf "[bench] ~board ms a frame at 240 MHz: home %.1f duel %.1f\n", $1 / 240, $2 / 240}'

@@ -1077,11 +1077,22 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   constexpr uint32_t kPulseMs = 1200;
   const int r = 70 + int(nowMs % kPulseMs) * 48 / int(kPulseMs);
   const int fade = 200 - int(nowMs % kPulseMs) * 180 / int(kPulseMs);
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = x - kSide / 2, dy = y - kSide / 2, d2 = dx * dx + dy * dy;
-      if (d2 >= (r - 3) * (r - 3) && d2 <= (r + 3) * (r + 3)) cv.px[y * kSide + x] = blend(cv.px[y * kSide + x], colour, fade);
-    }
+  // The pixels with (r - 3)^2 <= d2 <= (r + 3)^2 (from the pixel at 120,120):
+  // on each row, |dx| from n to m by two roots, not a test of every pixel.
+  const int lo2 = (r - 3) * (r - 3), hi2 = (r + 3) * (r + 3);
+  for (int y = 0; y < kSide; ++y) {
+    const int dy = y - kSide / 2, a = hi2 - dy * dy, b = lo2 - dy * dy;
+    if (a < 0) continue;
+    const int m = int(isqrt32(uint32_t(a)));                    // |dx| <= m
+    const int n = b <= 0 ? 0 : int(isqrt32(uint32_t(b - 1))) + 1;   // |dx| >= n: the least n with n * n >= b
+    uint16_t* row = &cv.px[y * kSide];
+    auto run = [&](int dx0, int dx1) {   // dx0..dx1, clipped to the canvas
+      for (int x = imax(0, kSide / 2 + dx0); x <= imin(kSide - 1, kSide / 2 + dx1); ++x) row[x] = blend(row[x], colour, fade);
+    };
+    if (n > m) continue;
+    if (n == 0) run(-m, m);
+    else run(-m, -n), run(n, m);
+  }
   Marquee strip = kMarqueeStrip;
   if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
   dimBand(cv, strip);
@@ -1102,26 +1113,48 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 
+// The red ring's band, 7 px round the rim with a 1 px dark inner edge, in
+// half pixels from the centre so it is round to the pixel: on row y, from the
+// left, [from, inner) is red, [inner, edge) the dark edge, and the right is
+// its mirror. Compile-time spans, so a ring is fills, not a test a pixel.
+constexpr int kRingWidth = 7;
+constexpr int kRingOuter = kSide * kSide, kRingInner = (kSide - 2 * kRingWidth) * (kSide - 2 * kRingWidth),
+              kRingEdge = (kSide - 2 * kRingWidth - 2) * (kSide - 2 * kRingWidth - 2);
+// Row y's first column with d2 below `limit` (kSide / 2 when none).
+constexpr DishSpans spansBelow(int limit) {
+  DishSpans s{};
+  for (int y = 0; y < kSide; ++y) {
+    const int dy = 2 * y + 1 - kSide;
+    int x = 0;
+    while (x < kSide / 2 && (2 * x + 1 - kSide) * (2 * x + 1 - kSide) + dy * dy >= limit) ++x;
+    s.from[y] = uint8_t(x);
+  }
+  return s;
+}
+constexpr DishSpans kRingFrom = spansBelow(kRingOuter), kRingRed = spansBelow(kRingInner), kRingDark = spansBelow(kRingEdge);
+constexpr int ringPixels() {
+  int n = 0;
+  for (int y = 0; y < kSide; ++y) n += 2 * (kRingDark.from[y] - kRingFrom.from[y]);
+  return n;
+}
+constexpr int kRingPixels = ringPixels();
+
 // Fight mode, still unpaired (resting included: he is still searching): a
 // solid red ring round the whole rim, 7 px, readable across a room, its
 // brightness breathing but always red. Over everything the dish draws; BOOT's
 // hint is drawn after it (main.cpp), so it stays legible. A dark inner edge
 // keeps it apart from a red pet.
 void searchingRing(Canvas240& cv, uint32_t nowMs) {
-  constexpr int kWidth = 7;
   constexpr uint32_t kBreathMs = 1600;
   const int phase = int(nowMs % kBreathMs), half = int(kBreathMs / 2);
   const int lift = phase < half ? phase : int(kBreathMs) - phase;   // 0..800
   const uint16_t red = to565({170 + lift * 85 / half, 0, 0}), edge = to565({50, 0, 0});
-  // In half pixels from the centre of the 240 px disc, so the ring is round to the pixel.
-  constexpr int kOuter = kSide * kSide, kInner = (kSide - 2 * kWidth) * (kSide - 2 * kWidth),
-                kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 >= kOuter || d2 < kEdge) continue;
-      cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
-    }
+  for (int y = 0; y < kSide; ++y) {
+    uint16_t* row = &cv.px[y * kSide];
+    const int from = kRingFrom.from[y], inner = kRingRed.from[y], dark = kRingDark.from[y];
+    for (int x = from; x < inner; ++x) row[x] = row[kSide - 1 - x] = red;
+    for (int x = inner; x < dark; ++x) row[x] = row[kSide - 1 - x] = edge;
+  }
 }
 
 // A hang filling up: the searching ring's band, swept clockwise from the
@@ -1129,32 +1162,48 @@ void searchingRing(Canvas240& cv, uint32_t nowMs) {
 // holding him upside down watches the ask land, and at full the ring
 // completes and fight mode opens (the lobby's breathing ring takes over).
 // It is a gauge, not a pulse: no breathing, so what fills is what he holds.
+//
+// Each band pixel's turn from the top is the single-precision atan2's (the
+// FPU's), worked out once, the first time a hang is drawn: 23 KB, from the
+// heap (PSRAM on the board). The double atan2 is soft float on the board,
+// thousands of cycles a pixel, and the float is within a millionth of a turn
+// of it, so only a pixel within kSure of the edge of the fill needs the double
+// to say which side it falls: the same pixels as a double a pixel.
 void hangRing(Canvas240& cv, Fx charge) {
-  constexpr int kWidth = 7;
-  constexpr int kOuter = kSide * kSide, kInner = (kSide - 2 * kWidth) * (kSide - 2 * kWidth),
-                kEdge = (kSide - 2 * kWidth - 2) * (kSide - 2 * kWidth - 2);
   const uint16_t red = to565({220, 0, 0}), edge = to565({50, 0, 0});
   const double filled = double(blorb::clamp01(charge).raw) / double(Fx::one().raw);
-  // The double atan2 is soft float on the board, thousands of cycles a pixel.
-  // The single-precision one (the FPU's) is within a millionth of a turn of
-  // it, so only a pixel within kSure of the edge of the fill needs the double
-  // to say which side it falls: the same pixels, at a sliver of the cost.
   constexpr float kSure = 1e-4f;
   const float filledF = float(filled);
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 >= kOuter || d2 < kEdge) continue;
-      float rough = std::atan2(float(dx), float(-dy)) / 6.2831853f;
-      if (rough < 0) rough += 1.0f;
-      if (rough > filledF + kSure) continue;
-      if (rough >= filledF - kSure) {
-        double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
-        if (sweep < 0) sweep += 1.0;
-        if (sweep > filled) continue;
-      }
-      cv.px[y * kSide + x] = d2 >= kInner ? red : edge;
+  // The band in the order drawn: each row's left run from the rim inward, then its mirror's.
+  auto band = [](auto&& visit) {
+    for (int y = 0; y < kSide; ++y) {
+      const int from = kRingFrom.from[y], dark = kRingDark.from[y];
+      for (int x = from; x < dark; ++x) visit(x, y);
+      for (int x = kSide - dark; x < kSide - from; ++x) visit(x, y);
     }
+  };
+  static float* turn = nullptr;
+  if (!turn) {
+    turn = new float[kRingPixels];
+    int k = 0;
+    band([&](int x, int y) {
+      float rough = std::atan2(float(2 * x + 1 - kSide), float(-(2 * y + 1 - kSide))) / 6.2831853f;
+      if (rough < 0) rough += 1.0f;
+      turn[k++] = rough;
+    });
+  }
+  int k = 0;
+  band([&](int x, int y) {
+    const float rough = turn[k++];
+    if (rough > filledF + kSure) return;
+    const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide;
+    if (rough >= filledF - kSure) {
+      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+      if (sweep < 0) sweep += 1.0;
+      if (sweep > filled) return;
+    }
+    cv.px[y * kSide + x] = dx * dx + dy * dy >= kRingInner ? red : edge;
+  });
 }
 
 // Boot::Sealed: a keepsake is on the flash and this boot could not open it.
