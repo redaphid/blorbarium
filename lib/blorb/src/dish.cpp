@@ -123,6 +123,7 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   // Each press, double and hold the detector fires, as it fires: the press it
   // ends was measured from BOOT's raw level by the samples before this one.
   lastFired_ = 0;
+  if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
     if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;
@@ -136,9 +137,11 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
     else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(cues_.lastPressMs()), unsigned(cues_.lastGapMs()));
   }
   cues_.sample(s, detectors_.side.holding(), nowMs);
+  feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
+  if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
   for (int n = 0; n < kMaxTicksPerCall && nowMs - lastTickMs_ >= kTickMs; ++n) {
     lastTickMs_ += kTickMs;
     runOneTick(link);
@@ -188,7 +191,10 @@ void Dish::runOneTick(Link& link) {
     save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
-    if (fired(out, stim::button)) live_.habitat.dropPellet(rules, live_.rng, tick_, out);
+    if (fired(out, stim::button)) {
+      const bool dropped = live_.habitat.dropPellet(rules, live_.rng, tick_, out);
+      feed_.pressed(lastTickMs_, dropped, tick_, c->body().asleep, c->chemistry().drive(drive::hunger));
+    }
     // Face down is bedtime, always (owner, 2026-10-19): the lid puts him to
     // sleep whatever his genes make of it, unless a duel holds him.
     if (fired(out, stim::lid_down) && !(out.remote & duelStimBit(stim::lid_down)) && !c->body().asleep &&
@@ -197,7 +203,11 @@ void Dish::runOneTick(Link& link) {
     c->keepAsleep(detectors_.lid.lidded() && !duel_.active());
     live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
     Stage before = c->stage();
+    const Mouthful mouth = c->body().mouth;
+    const Fx hunger = c->chemistry().drive(drive::hunger);
     c->tick(out, live_.habitat, behaviours_, tick_);
+    if (mouth == Mouthful::Nothing && c->body().mouth != Mouthful::Nothing)   // a bite, for the eyes
+      feed_.ate(lastTickMs_, c->body().mouth == Mouthful::RottenPellet, hunger);
     if (c->stage() != before) eventDirty_ = true;
     if (c->dead()) onDeath(*c);
     else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
@@ -434,6 +444,7 @@ Appearance Dish::appearance() const {
     a.lobbyTicksLeft = v.fightTicksLeft;
     a.lobbyDecline = v.myDecline;
   }
+  feedView(a);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
@@ -451,6 +462,33 @@ Appearance Dish::appearance() const {
   book.forEachFriend([&](const FriendSummary& f) { a.owesDebt = a.owesDebt || f.weOwe > 0; });
   if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
+}
+
+// Feeding as the eyes see it: FeedShow's ages, and what the habitat and he
+// say now. Reads only; nothing here reaches him.
+void Dish::feedView(Appearance& a) const {
+  a.feed = feed_.view(nowMs_);
+  const Creature* c = std::get_if<Creature>(&live_.occupant);
+  if (!c) return;
+  const HabitatRules& rules = c->phenotype().habitat;
+  a.feed.fullness = Fx::one() - clamp01(c->chemistry().drive(drive::hunger));
+  a.feed.pantryMax = rules.pantrySize;
+  const Habitat& h = live_.habitat;
+  if (h.pantry < rules.pantrySize && rules.refillTicks)
+    a.feed.refill = Fx::ratio(int32_t(std::min<uint32_t>(tick_ - h.pantryTick, rules.refillTicks)), int32_t(rules.refillTicks));
+  // The pellet in flight is the newest, while it is still news: its index
+  // among the items, which present() lists in the pantry's slot order.
+  uint32_t dropped = 0;
+  if (!feed_.dropTick(nowMs_, dropped)) return;
+  int8_t item = 0;
+  for (const Pellet& p : h.pellets) {
+    if (!p.present) continue;
+    if (p.droppedTick == dropped) {
+      a.feed.flying = item;
+      break;
+    }
+    ++item;
+  }
 }
 
 // ---- wall time and the unpowered catch-up --------------------------------------------

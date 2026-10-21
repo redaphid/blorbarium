@@ -96,4 +96,30 @@ void drawFigure(const blorb::Appearance&, const SpritePack&, Canvas240&, const F
 // `fillRows` < 255 draws only that share of its rows, from the bottom up: the skull filling.
 void drawArt(Canvas240&, const FrameRef&, int x, int y, int scalePct, int alpha, int fillRows = 255);
 
+// ---- feeding.cpp --------------------------------------------------------------------
+
+// Where draw.cpp put him and the newest pellet this frame, for what
+// feeding.cpp draws over the dish. Canvas pixels.
+struct DishSpots {
+  bool him = false;
+  int x = 0, y = 0;                         // his stand point, between his feet
+  int top = 0;                              // the top of his body frame, standing
+  bool mouth = false;
+  int mouthX = 0, mouthY = 0;               // the pellet in his mouth, while he chews
+  bool landing = false;
+  int landX = 0, landY = 0;                 // the newest pellet's stand point in the dish
+};
+
+// The newest pellet in the air (blorb::FeedView::flying), on its way from
+// the rim's pellet glyph to (landX, landY): where it is now and how big.
+// False once it has landed, and then draw.cpp draws it as any item.
+bool pelletAloft(const blorb::FeedView&, int landX, int landY, int& x, int& y, int& scalePct);
+// Under it while it is aloft: a warm glow and a fading trail, so it reads on
+// the dark dish. `frameH`: the pellet frame's height.
+void pelletGlow(Canvas240&, const blorb::FeedView&, int landX, int landY, int frameH);
+
+// Feeding over the dish (blorb/feed_show.h): the rim's flash, the landing,
+// a refusal, the chomp and the belly meter. Before the round mask.
+void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
+
 }  // namespace paint

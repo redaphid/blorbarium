@@ -682,6 +682,79 @@ TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
   EXPECT_EQ(countChanged(*parked, *centred), 0) << "a short said line does not park centred";
 }
 
+// ---- feeding (feed_show.h, feeding.cpp) ------------------------------------------------
+
+// Nothing heard, dropped, refused or eaten lately: the dish is drawn as it always was.
+TEST(Feeding, NoNewsDrawsNothing) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.1);
+  a.pantry = 2;
+  a.feed.pantryMax = 4;
+  a.feed.fullness = fx(0.5);
+  Appearance plain = a;
+  plain.feed = blorb::FeedView{};
+  EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
+}
+
+// The second knock: a ring on the rim, and nothing inside it.
+TEST(Feeding, TheKnockKnockFlashesTheRimOnly) {
+  const auto& pack = paint::placeholderPack();
+  Appearance plain = adult(), heard = plain;
+  heard.feed.heardMs = 0;
+  auto a = render(plain, pack), b = render(heard, pack);
+  int rim = 0, inside = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      if (a->px[y * kSide + x] == b->px[y * kSide + x]) continue;
+      const double r = std::hypot(x + 0.5 - 120, y + 0.5 - 120);
+      (r >= 100 ? rim : inside)++;
+    }
+  EXPECT_GT(rim, 1000) << "a whole ring";
+  EXPECT_EQ(inside, 0);
+  heard.feed.heardMs = 2000;
+  EXPECT_EQ(countChanged(*render(plain, pack), *render(heard, pack)), 0) << "and gone after";
+}
+
+// The belly meter up the left rim: fuller, more of it lit.
+TEST(Feeding, TheBellyMeterShowsHowFullHeIs) {
+  const auto& pack = paint::placeholderPack();
+  Appearance plain = adult();
+  plain.feed.pantryMax = 4;
+  auto lit = [&](double full) {
+    Appearance a = plain;
+    a.feed.meterMs = 100;
+    a.feed.fullness = fx(full);
+    auto cv = render(a, pack);
+    auto base = render(plain, pack);
+    int n = 0;
+    for (int y = 60; y < 152; ++y)
+      for (int x = 0; x < 30; ++x) n += cv->px[y * kSide + x] != base->px[y * kSide + x] && (((cv->px[y * kSide + x] >> 11) & 31) > 20);
+    return n;
+  };
+  EXPECT_GT(lit(0.8), lit(0.2) + 200);
+}
+
+// In the air, the newest pellet is not at its spot in the dish; landed, it is.
+TEST(Feeding, TheNewPelletIsTossedThenLands) {
+  const BlockPack pack;   // its pellet is a red chip, found by colour
+  Appearance a = adult(-0.6, -0.6);
+  a.itemCount = 1;
+  a.items[0] = {Appearance::Item::What::Pellet, {fx(0.5), fx(0.5)}};
+  Appearance none = a;
+  none.itemCount = 0;
+  Appearance aloft = a;
+  aloft.feed.flying = 0;
+  aloft.feed.droppedMs = 200;
+  Appearance landed = aloft;
+  landed.feed.droppedMs = 3000;
+  const Box spot = find(*render(a, pack), rgb565(200, 40, 40));
+  ASSERT_GT(spot.count, 0);
+  const Box air = find(*render(aloft, pack), rgb565(200, 40, 40));
+  ASSERT_GT(air.count, spot.count) << "bigger in the air";
+  EXPECT_LT(air.y1, spot.y0) << "above its spot, on its way down";
+  EXPECT_EQ(countChanged(*render(landed, pack), *render(a, pack)), 0) << "landed and old news: an item like any";
+}
+
 // PAINT_DUMP=<dir> writes a PPM per state for review.
 void writePpm(const std::string& path, const Canvas240& cv) {
   FILE* f = std::fopen(path.c_str(), "wb");

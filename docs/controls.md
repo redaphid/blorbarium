@@ -102,8 +102,47 @@ while awake is the way to add one later.
 - **While turned onto a side, the duel's aim is the aim from before the
   turn** (the tilt of 1.5 s before), since turning him tips the tilt: a
   heavy special lands where the kid aimed.
-- **The knock knock that wakes a dark badge only lights it**, as the press
-  that wakes it does: nobody feeds him unseen.
+- **Nobody feeds him unseen.** The press that wakes a dark badge only lights
+  it, and so does a knock knock decided on the sample that woke it. In a
+  hand the first knock's jolt usually wakes the badge, and the knock knock,
+  decided 0.6 s later, then feeds him on a lit screen
+  (`test_feeding` `KnockKnock.ADarkBadgeIsLitAndNeverFedInTheDark`).
+- **A question owns the knock knock as it owns BOOT**: while the update asks
+  "Turn me around!" (or the debug unlock asks), a knock knock answers
+  nothing and feeds nobody (`hw/feel.h`). Until 2026-10-21 it dropped a
+  pellet behind the update's screen, where it rotted unseen.
+
+## Feeding, as the kid sees it
+
+Owner, 2026-10-21: "The 'feeding' mechanism on double knock either doesn't
+work, or its effects are not obvious." It worked (`test/test_feeding` plays
+real knocks, the recordings included, through the shell and the Dish at
+either home and any frame rate), but almost nothing showed it: a 15 px
+pellet appeared somewhere, 0.6 s after the second knock, and he ate it only
+if he wanted it. Four pellets in the pantry and one back every two hours
+(the metabolism gene) meant a kid who knocked five times was then fed
+nothing, with only a greyed glyph to say so. Now (`blorb/feed_show.h`,
+`lib/paint/src/feeding.cpp`, presentation only: the engine is unchanged):
+
+| When | What shows |
+|---|---|
+| The second knock lands | a warm ring sweeps in from the rim, at once (`KnockSense::knockKnock`), before the knock knock is even decided |
+| A pellet leaves the pantry | it is tossed, big, from the rim's pellet glyph and lands in a puff; the pantry's pip goes |
+| He bites it | a burst and crumbs at his mouth, YUM! and three hearts (rotten: green, YUCK) |
+| Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
+| He is full (hunger under 0.15) | a bubble: the pellet struck through. The pellet still lies there |
+| He is asleep | a bubble: the moon, zz. The pellet waits for him |
+| The pantry is empty | a bubble: the grey pellet and the hourglass; the pantry's empty slots shake at the top, the next one filling like a clock |
+
+Previews: `FEEDING_DUMP=<dir> pio test -e native -f test_feeding` writes the
+frames (`FEEDING_PLAIN=1` for the screen as it was). The sim's `!knock`
+and `!dtap` now knock the raw samples, as a knuckle does (they had set the
+tap engine's register, which `KnockSense` overrules, so no sim knock had
+reached the pet since 0.7.12); `tests/feeds/knock_knock.txt` is filmed.
+
+Not changed, for the owner to decide: the pantry (4, one back every 2 h)
+and that a pellet drops for a full or sleeping pet (it rots in 90 min, and
+a starving pet that eats it later is poisoned).
 
 ## He teaches them
 

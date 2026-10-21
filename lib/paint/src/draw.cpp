@@ -619,6 +619,9 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
     }
 }
 
+// Where this frame put him and the newest pellet, for feeding.cpp (reset by draw()).
+DishSpots spots_;
+
 // Depth by the floor: an item standing higher in the dish than his feet is
 // behind him, one level with them or lower is in front. One standing on his
 // footprint (the floor his body covers, out to his shadow's front edge) is
@@ -627,6 +630,17 @@ void drawItems(const Appearance& a, const SpritePack& pack, Canvas240& cv, const
                const Place& him, int foot, bool front) {
   for (int i = 0; i < imin(a.itemCount, 8); ++i) {
     Place q = placeAt(a.items[i].at, d, Xf{});
+    if (i == a.feed.flying) {   // the newest pellet: in the air until it lands (feeding.cpp), over him
+      spots_.landing = true, spots_.landX = q.x, spots_.landY = q.y;
+      Place air = q;
+      int pct = 100;
+      if (pelletAloft(a.feed, q.x, q.y, air.x, air.y, pct)) {
+        air.xf.kx = air.xf.ky = kOne * pct / 100;
+        const FrameRef item = pack.item(a.items[i].what);
+        if (front) pelletGlow(cv, a.feed, q.x, q.y, item.h), blit(cv, item, air, col, 256, nullptr);
+        continue;
+      }
+    }
     bool inFront = q.y >= him.y;
     if (inFront != front) continue;
     if (iabs(q.x - him.x) <= foot && q.y - him.y >= -foot && q.y - him.y <= foot / 4) continue;
@@ -678,6 +692,7 @@ void pelletInMouth(Canvas240& cv, const SpritePack& pack, const Appearance& a, c
   q.x = p.x + floorDiv(c.x + 8, 16) + f.originX - f.w / 2;
   q.y = p.y + floorDiv(c.y + 8, 16) + f.originY - f.h / 2;
   blit(cv, f, q, col, 256, nullptr);
+  spots_.mouth = true, spots_.mouthX = q.x, spots_.mouthY = q.y - f.originY + f.h / 2;
 }
 
 // His scars, placed on his stage's resting body so they sit still on him
@@ -758,6 +773,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const int maxLift = memo.maxLift;
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
+  spots_.him = true, spots_.x = p.x, spots_.y = p.y, spots_.top = p.y - body.originY * base.ky / kOne;
   drawItems(a, pack, cv, d, col, p, foot, false);
 
   Motion m = motionOf(a, maxLift);
@@ -1287,6 +1303,7 @@ PhaseClock phaseClock;
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   phaseStart();
+  spots_ = DishSpots{};
   background(cv, a.night);
   phaseEnd(Phase::Background);
   if (a.sealed) {
@@ -1318,6 +1335,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
   else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby
   phaseEnd(Phase::Rings);
+  drawFeeding(cv, a, spots_);   // feeding.cpp: the knock knock heard, the pellet, the chomp, his belly
   mask(cv);
   phaseEnd(Phase::Mask);
 }

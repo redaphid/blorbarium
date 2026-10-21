@@ -10,6 +10,7 @@
 #include "blorb/boot.h"
 #include "blorb/creature.h"
 #include "blorb/duel_card.h"
+#include "blorb/feed_show.h"
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
@@ -85,6 +86,9 @@ struct Appearance {
   Item items[8]{};
   uint8_t itemCount = 0;
   uint8_t pantry = 0;               // drawn as rim pips so feeding is legible with no phone
+  // Feeding as the eyes see it (feed_show.h): the knock knock heard, the
+  // pellet's flight, a refusal and why, the chomp, and his belly. Ages in ms.
+  FeedView feed{};
 
   // Egg, remains and clutch
   Fx eggProgress{};                 // whole -> cracking -> hatching
