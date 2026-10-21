@@ -383,8 +383,10 @@ uint16_t scarred(uint16_t c, int q) {
 
 void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, int alpha, const Mottle* mottle,
           const ScarLayer* scars = nullptr) {
-  if (!drawable(f) || alpha <= 0) return;
   const Xf& v = p.xf;
+  // Every caller scales by at least 1 (imax(1, ...), kMinScale): the stepped
+  // columns below and the rows' floorDiv both divide by these.
+  if (!drawable(f) || alpha <= 0 || v.kx <= 0 || v.ky <= 0) return;
   int lean = iabs(v.shear) * (f.h * v.ky / kOne + v.lift + 2) / kOne + 1;
   int top = imax(0, p.y - v.lift + floorDiv(int64_t(-f.originY) * v.ky, kOne) - 1);
   int bottom = imin(kSide - 1, p.y - v.lift + ceilDiv(int64_t(f.h - f.originY) * v.ky, kOne) + 1);
@@ -395,7 +397,7 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   // Along a row the numerator grows by 2 kOne a pixel, so the quotient and its
   // remainder are stepped rather than divided: the same columns, with no
   // 64-bit division a pixel (a library call on the board).
-  const int den = 2 * v.kx;   // kx >= 1, so den > 0
+  const int den = 2 * v.kx;   // kx >= 1 (above), so den > 0
   const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
   for (int y = top; y <= bottom; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
@@ -1190,36 +1192,55 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   mask(cv);
 }
 
+namespace {
+
+// The idle bar's ring: in half pixels from the centre, the pixels whose centres
+// sit between 117 and 118 px out, the outermost the round glass shows whole.
+constexpr int kIdleOuter = (kSide - 2) * (kSide - 2), kIdleInner = (kSide - 4) * (kSide - 4);
+constexpr bool inIdleRing(int x, int y) {
+  const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+  return d2 < kIdleOuter && d2 >= kIdleInner;
+}
+constexpr int idleRingCount() {
+  int n = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) n += inIdleRing(x, y);
+  return n;
+}
+constexpr int kIdleRing = 764;
+static_assert(idleRingCount() == kIdleRing, "the idle bar's band holds kIdleRing pixels");
+
+// Each ring pixel and the least permille that lights it, worked out once at
+// start-up rather than inside the first frame: a double atan2 is soft float on
+// the board, thousands of cycles a pixel. 764 pixels, 3 KB.
+struct IdleLit { uint16_t at, from; };
+struct IdleRing { IdleLit px[kIdleRing]; };
+IdleRing buildIdleRing() {
+  IdleRing r{};
+  int n = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      if (!inIdleRing(x, y)) continue;
+      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide;
+      double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
+      if (sweep < 0) sweep += 1.0;
+      // Lit while sweep < permille / 1000.0, exactly as that test reads.
+      int from = int(sweep * 1000.0);
+      while (from > 0 && sweep < (from - 1) / 1000.0) --from;
+      while (from <= 1000 && !(sweep < from / 1000.0)) ++from;
+      r.px[n++] = {uint16_t(y * kSide + x), uint16_t(from)};
+    }
+  return r;
+}
+const IdleRing kIdleLit = buildIdleRing();
+
+}  // namespace
+
 void drawIdleBar(Canvas240& cv, uint16_t permille) {
   if (permille > 1000) permille = 1000;
-  // In half pixels from the centre: the ring of pixels whose centres sit
-  // between 117 and 118 px out, the outermost the round glass shows whole.
-  constexpr int kOuter = (kSide - 2) * (kSide - 2), kInner = (kSide - 4) * (kSide - 4);
-  // The ring's pixels and, for each, the least permille that lights it, worked
-  // out once: a double atan2 is soft float on the board, thousands of cycles a
-  // pixel, every frame. 764 pixels, 3 KB.
-  struct Lit { uint16_t at, from; };
-  constexpr int kRing = 764;   // the pixels whose centres lie in that band
-  static Lit ring[kRing];
-  static int n = -1;
-  if (n < 0) {
-    n = 0;
-    for (int y = 0; y < kSide; ++y)
-      for (int x = 0; x < kSide && n < kRing; ++x) {
-        const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-        if (d2 >= kOuter || d2 < kInner) continue;
-        double sweep = std::atan2(double(dx), double(-dy)) / 6.283185307179586;   // 0 at the top, clockwise
-        if (sweep < 0) sweep += 1.0;
-        // Lit while sweep < permille / 1000.0, exactly as that test reads.
-        int from = int(sweep * 1000.0);
-        while (from > 0 && sweep < (from - 1) / 1000.0) --from;
-        while (from <= 1000 && !(sweep < from / 1000.0)) ++from;
-        ring[n++] = {uint16_t(y * kSide + x), uint16_t(from)};
-      }
-  }
   const uint16_t c = to565({120, 150, 150});
-  for (int i = 0; i < n; ++i)
-    if (permille >= ring[i].from) cv.px[ring[i].at] = c;
+  for (const IdleLit& p : kIdleLit.px)
+    if (permille >= p.from) cv.px[p.at] = c;
 }
 
 }  // namespace paint
