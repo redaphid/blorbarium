@@ -217,10 +217,12 @@ struct Sample {
 
 // The aim a sample in the screen's frame points at, as DuelInput::from reads
 // the tilt loci (0.15 off level: 300 mg in the plane), with no smoothing:
-// where the hand is, not where the detector has got to. -1: level or a jolt.
+// where the hand is, not where the detector has got to. -1: level, a jolt,
+// or not face up (a badge on edge is a pose, not an aim: the side hold and
+// the hang are timed as theirs).
 inline int8_t rawAim(int16_t ax, int16_t ay, int16_t az) {
   const int32_t m2 = int32_t(ax) * ax + int32_t(ay) * ay + int32_t(az) * az;
-  if (m2 < 750 * 750 || m2 > 1250 * 1250) return -1;
+  if (m2 < 750 * 750 || m2 > 1250 * 1250 || az < 500) return -1;
   const int32_t x = ax < 0 ? -ax : ax, y = ay < 0 ? -ay : ay;
   if (x < 300 && y < 300) return -1;
   return x >= y ? (ax > 0 ? 0 : 1) : (ay < 0 ? 2 : 3);
@@ -272,6 +274,7 @@ class Watch {
     }
     // A tilt: from the hand reaching an aim to the detector reading it.
     if (s.rawAim >= 0 && s.rawAim != aim_) {
+      if (!r.has(Ctl::Tilt, St::Frame)) r.cancel(Ctl::Tilt);   // a new aim before the last showed: it was passed through
       r.begin(Ctl::Tilt, s.readUs, s.seenUs);
       target_ = s.rawAim;
     } else if (s.rawAim < 0 && s.rawPose >= 0 && r.isOpen(Ctl::Tilt) && !r.has(Ctl::Tilt, St::Word)) {

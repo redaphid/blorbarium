@@ -54,8 +54,9 @@ when one does not).
 Reliability first, as the owner asked: the hang that opens fight mode was
 already the model, a **pose held on edge** whose progress a kid can see.
 
-- **Turn and hold** is the hang's sibling: the panel's settled rotation
-  (`orient.h`: a quarter turn held 0.6 s, jolts and flat rejected), on edge
+- **Turn and hold** is the hang's sibling: a quarter turn from home, judged
+  from gravity itself (`src/hw/poses.h`: two steady samples past 45
+  degrees, jolts and flat rejected), held 2 s (`kSideHoldMs`), on edge
   (`|az| <= 500 mg`, so a badge lying slanted on a table holds nothing),
   only after he was the right way up (a badge switched on sideways holds
   nothing), one hold per turn, and **a release is never a press**, so a
@@ -70,11 +71,21 @@ already the model, a **pose held on edge** whose progress a kid can see.
   knock is a jump of about 1 g off gravity in one step, after the badge was
   steady, leaving it pointing the same way; on a table it is a 150-500 mg
   blip of under 100 ms with quiet around it (a desk rattles longer). Two to
-  four knocks within 0.6 s are a knock knock; one is a knock. While a burst
+  four knocks within 0.6 s are a knock knock (once two are in, a third is
+  waited for 0.4-0.6 s, in the rhythm of the first two:
+  `KnockSense::moreMs`); one is a knock. While a burst
   is under way the shake detector ignores the knock's bounce. Every
   recording is `test/fixtures/hands_2026-10-19.txt`, checked by
   `test/test_knocks` (2026-10-19: 17/17 held, 9/9 on a table, 0 false).
-- **The hang** is unchanged, except as below.
+- **The hang** is unchanged, except as below: upside down from home, judged
+  from gravity like the side hold, steady and on edge for 1.2 s in all
+  (`kHangHoldMs`).
+- **Each shows from the first frame** (2026-10-21,
+  `docs/notes/controls-latency.md`): the hold ring and the hang's charge
+  start ~20 ms after the turn (they waited ~0.85 s for the panel rotation's
+  settle), and the rim flashes ~40 ms after the second knock of a knock
+  knock. The holds took the settle's place, so every recording fires
+  exactly as it did.
 - **One fire per pose** (`PoseRearm`): after a side hold or a hang fires,
   the same gesture waits until the badge has been the right way up and
   steady for 0.4 s, so a badge laid on its side, or leaning upside down,
@@ -93,19 +104,18 @@ while awake is the way to add one later.
 
 ### Details that came from the hardware
 
-- **The rotation lags a turn back** by about 1.5 s (`orient.h`'s settle and
-  smoothing). Through that lag the sample in the screen's frame already
-  shows gravity off the screen's down, so a pose counts only while gravity
-  is within about 45 degrees of it (`kPoseDownMg`). Found on badge 1: a 1 s
-  turn held at 2.4 s, after the kid had let go. The hang had the same lag
-  and now has the same rule.
+- **The rotation lagged a turn back** by about 1.5 s (`orient.h`'s settle
+  and smoothing): found on badge 1, a 1 s turn held at 2.4 s, after the kid
+  had let go. The poses no longer read the rotation (`src/hw/poses.h`), so
+  a turn back lets go within two samples; the update's "Turn me around!"
+  still reads it.
 - **While turned onto a side, the duel's aim is the aim from before the
   turn** (the tilt of 1.5 s before), since turning him tips the tilt: a
   heavy special lands where the kid aimed.
 - **Nobody feeds him unseen.** The press that wakes a dark badge only lights
   it, and so does a knock knock decided on the sample that woke it. In a
   hand the first knock's jolt usually wakes the badge, and the knock knock,
-  decided 0.6 s later, then feeds him on a lit screen
+  decided 0.4-0.6 s later, then feeds him on a lit screen
   (`test_feeding` `KnockKnock.ADarkBadgeIsLitAndNeverFedInTheDark`).
 - **A question owns the knock knock as it owns BOOT**: while the update asks
   "Turn me around!" (or the debug unlock asks), a knock knock answers
