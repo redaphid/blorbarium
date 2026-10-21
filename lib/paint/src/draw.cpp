@@ -786,43 +786,94 @@ int dishFrom(int y) { return kDish.from[y]; }
 
 // A dark bog-teal dish, lighter at the middle, with a faint glassy rim,
 // ordered-dithered so the gradient does not band in RGB565.
+constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+constexpr int kBgStep = kSide * kSide / 256;   // d2 per step of t
+constexpr int kRimFrom = 228 * 228;            // d2 below this has no rim: |isqrt(d2) - 233| >= 6
+constexpr int kInnerT = (kRimFrom - 1) / kBgStep + 1;   // the steps of t inside the rim: 0..231
+
+// d2 / kBgStep as a multiply and a shift (no divide) for every d2 inside the
+// rim; checked for each at compile time.
+constexpr uint32_t kBgRecip = (uint32_t(1) << 24) / kBgStep + 1;
+constexpr uint32_t bgT(uint32_t d2) { return d2 * kBgRecip >> 24; }
+constexpr bool bgTExact() {
+  for (uint32_t d2 = 0; d2 < uint32_t(kRimFrom); ++d2)
+    if (bgT(d2) != d2 / kBgStep) return false;
+  return true;
+}
+static_assert(bgTExact(), "bgT is d2 / kBgStep inside the rim");
+
+// Row y's first column with d2 < kRimFrom (kSide / 2 when none): the dish
+// inside the rim, where no pixel needs a root or a clamp.
+constexpr DishSpans rimSpans() {
+  DishSpans s{};
+  for (int y = 0; y < kSide; ++y) {
+    const int dy = 2 * y + 1 - kSide;
+    int x = 0;
+    while (x < kSide / 2 && (2 * x + 1 - kSide) * (2 * x + 1 - kSide) + dy * dy >= kRimFrom) ++x;
+    s.from[y] = uint8_t(x);
+  }
+  return s;
+}
+constexpr DishSpans kRimSpans = rimSpans();
+
 void background(Canvas240& cv, Fx night) {
-  static constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
-  constexpr int kStep = kSide * kSide / 256;   // d2 per step of t
-  constexpr int kRimFrom = 228 * 228;          // d2 below this has no rim: |isqrt(d2) - 233| >= 6
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);
   // The dish lit, at each step out from the middle. The rim's glass and the
   // dither land per pixel; inside the rim no channel comes near 255, so the
-  // clamp is the rim's alone. One row of these is what every pixel used to work out.
+  // clamp is the rim's alone.
   static uint8_t litR[257], litG[257], litB[257];
   for (int t = 0; t <= 256; ++t) {
     litR[t] = uint8_t((22 - 10 * t / 256) * lit / 256);
     litG[t] = uint8_t((58 - 22 * t / 256) * lit / 256);
     litB[t] = uint8_t((56 - 20 * t / 256) * lit / 256);
   }
-  for (int y = 0; y < kSide; ++y) {
-    uint16_t* row = &cv.px[y * kSide];
-    const int from = dishFrom(y), to = kSide - from;   // [from, to) is inside
-    std::memset(row, 0, sizeof(uint16_t) * size_t(from));
-    std::memset(row + to, 0, sizeof(uint16_t) * size_t(kSide - to));
-    const int dy = 2 * y + 1 - kSide;
-    const uint8_t* bayer = kBayer[y & 3];
-    int s = -1;   // isqrt(d2) at the last rim pixel: the next is a step or two from it
-    for (int x = from; x < to; ++x) {
-      const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
-      const int t = d2 / kStep, d = bayer[x & 3];
-      if (d2 < kRimFrom) {
-        row[x] = uint16_t(((litR[t] + d / 2) >> 3) << 11 | ((litG[t] + d / 4) >> 2) << 5 | (litB[t] + d / 2) >> 3);
-        continue;
+  // Inside the rim a pixel is its step of t and its dither, nothing else: one
+  // row of the dither at a time, every pixel for each step and each of the
+  // row's four dithers is worked out once (1.9 KB), and the rows that share
+  // that dither look theirs up. A row is symmetric about the middle, so each
+  // step is found once for a pixel and its mirror (whose dither column is 3 - its own).
+  static uint16_t lut[kInnerT][4];
+  for (int by = 0; by < 4; ++by) {
+    for (int t = 0; t < kInnerT; ++t)
+      for (int k = 0; k < 4; ++k) {
+        const int d = kBayer[by][k];
+        lut[t][k] = uint16_t(((litR[t] + d / 2) >> 3) << 11 | ((litG[t] + d / 4) >> 2) << 5 | (litB[t] + d / 2) >> 3);
       }
-      Rgb c{22 - 10 * t / 256, 58 - 22 * t / 256, 56 - 20 * t / 256};
-      if (s < 0) s = int(isqrt32(uint32_t(d2)));
-      while (s * s > d2) --s;
-      while ((s + 1) * (s + 1) <= d2) ++s;
-      int rim = 6 - iabs(s - 233);
-      if (rim > 0) { c.r += 4 * rim; c.g += 8 * rim; c.b += 7 * rim; }
-      row[x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
-                      imin(255, c.b * lit / 256 + d / 2)});
+    for (int y = by; y < kSide; y += 4) {
+      uint16_t* row = &cv.px[y * kSide];
+      const int from = kDish.from[y], to = kSide - from;   // [from, to) is inside
+      const int in = kRimSpans.from[y];                    // [in, kSide - in) is inside the rim
+      std::memset(row, 0, sizeof(uint16_t) * size_t(from));
+      std::memset(row + to, 0, sizeof(uint16_t) * size_t(kSide - to));
+      const int dy = 2 * y + 1 - kSide;
+      const uint8_t* bayer = kBayer[by];
+      int s = -1;   // isqrt(d2) at the last rim pixel: the next is a step or two from it
+      auto rim = [&](int x) {
+        const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
+        const int t = d2 / kBgStep, d = bayer[x & 3];
+        Rgb c{22 - 10 * t / 256, 58 - 22 * t / 256, 56 - 20 * t / 256};
+        if (s < 0) s = int(isqrt32(uint32_t(d2)));
+        while (s * s > d2) --s;
+        while ((s + 1) * (s + 1) <= d2) ++s;
+        int rim = 6 - iabs(s - 233);
+        if (rim > 0) { c.r += 4 * rim; c.g += 8 * rim; c.b += 7 * rim; }
+        row[x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
+                        imin(255, c.b * lit / 256 + d / 2)});
+      };
+      for (int x = from; x < in; ++x) rim(x);
+      for (int x = kSide - in; x < to; ++x) rim(x);
+      // Inside the rim, from its left edge to the middle, each pixel and its mirror.
+      uint32_t d2 = uint32_t((2 * in + 1 - kSide) * (2 * in + 1 - kSide) + dy * dy);
+      uint32_t step = uint32_t(4 * (2 * in + 1 - kSide) + 4);   // d2 at x + 1 less d2 at x, a 2's complement step
+      int x = in;
+      auto pair = [&](int k) {
+        const uint16_t* l = lut[bgT(d2)];
+        row[x] = l[k];
+        row[kSide - 1 - x] = l[3 - k];
+        d2 += step, step += 8, ++x;
+      };
+      while (x < kSide / 2 && (x & 3)) pair(x & 3);
+      while (x < kSide / 2) pair(0), pair(1), pair(2), pair(3);
     }
   }
 }
