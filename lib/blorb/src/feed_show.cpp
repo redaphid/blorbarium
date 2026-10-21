@@ -38,7 +38,7 @@ FeedView FeedShow::view(uint32_t nowMs) const {
   v.chompMs = age(chomp_, nowMs);
   v.rotten = rotten_;
   v.fullnessFrom = fullnessFrom_;
-  for (uint16_t a : {v.heardMs, v.droppedMs, v.refusedMs, v.chompMs})
+  for (uint16_t a : {v.droppedMs, v.refusedMs, v.chompMs})   // not on the knocks alone: food first
     if (a < v.meterMs) v.meterMs = a;
   return v;
 }

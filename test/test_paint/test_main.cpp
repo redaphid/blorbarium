@@ -12,8 +12,10 @@
 #include "blorb/appearance.h"
 #include "blorb/dish_duel.h"
 #include "blorb/registry.h"
+#include "blorb/thoughts.h"
 #include "paint/duel.h"
 #include "paint/marquee.h"
+#include "paint/text.h"
 #include "paint/sprite_pack.h"
 
 using blorb::Appearance;
@@ -758,23 +760,45 @@ TEST(Feeding, NoNewsDrawsNothing) {
   EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
 }
 
-// The second knock: a ring on the rim, and nothing inside it.
-TEST(Feeding, TheKnockKnockFlashesTheRimOnly) {
+// The second knock says FOOD at once: a cookie springs out of the rim's
+// pellet glyph (top right) and waits there; nothing else on the screen moves.
+// With the pantry empty, no cookie comes.
+TEST(Feeding, TheKnockKnockBringsACookieOutOfThePantryGlyph) {
   const auto& pack = paint::placeholderPack();
-  Appearance plain = adult(), heard = plain;
-  heard.feed.heardMs = 0;
+  Appearance plain = adult();
+  plain.pantry = 3;
+  Appearance heard = plain;
+  heard.feed.heardMs = 400;
   auto a = render(plain, pack), b = render(heard, pack);
-  int rim = 0, inside = 0;
+  const Box food = find(*b, kCookieEdge);
+  ASSERT_GT(food.count, 40) << "a cookie, big";
+  EXPECT_GT(food.x0, 110) << "under the glyph at the top right";
+  EXPECT_LT(food.y1, 80);
+  int far = 0;
   for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      if (a->px[y * kSide + x] == b->px[y * kSide + x]) continue;
-      const double r = std::hypot(x + 0.5 - 120, y + 0.5 - 120);
-      (r >= 100 ? rim : inside)++;
-    }
-  EXPECT_GT(rim, 1000) << "a whole ring";
-  EXPECT_EQ(inside, 0);
-  heard.feed.heardMs = 2000;
-  EXPECT_EQ(countChanged(*render(plain, pack), *render(heard, pack)), 0) << "and gone after";
+    for (int x = 0; x < kSide; ++x)
+      far += a->px[y * kSide + x] != b->px[y * kSide + x] && (x < 100 || y > 90);
+  EXPECT_EQ(far, 0) << "nothing round the whole screen: no ring, no meter yet";
+  heard.pantry = 0;
+  EXPECT_EQ(find(*render(heard, pack), kCookieEdge).count, 0) << "none left: no cookie";
+  heard.pantry = 3;
+  heard.feed.heardMs = 2400;
+  EXPECT_EQ(countChanged(*render(plain, pack), *render(heard, pack)), 0) << "nothing came of the knocks: it went back in";
+}
+
+// Everything the pet says, and the feeding's own words, draws with glyphs the
+// badge's font has (thoughts.h inFont is what the lines are checked against):
+// a character outside it would draw as nothing, or as some other symbol.
+TEST(Font, HasEveryCharacterTheLinesMayUse) {
+  const paint::Font& f = paint::kFreeSans9pt7b;
+  for (int c = 1; c < 128; ++c) {
+    if (!blorb::inFont(char(c))) continue;
+    ASSERT_GE(c, f.first) << char(c);
+    ASSERT_LE(c, f.last) << char(c);
+    const paint::Glyph& g = f.glyphs[c - f.first];
+    EXPECT_GT(g.xAdvance, 0) << char(c);
+    if (c != ' ') EXPECT_GT(g.width * g.height, 0) << "'" << char(c) << "' has no ink";
+  }
 }
 
 // The belly meter up the left rim: fuller, more of it lit.

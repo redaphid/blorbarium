@@ -6,15 +6,15 @@
 // if he wants it. This is what the screen shows of that, so a six-year-old
 // sees every step and never a silent nothing:
 //
-//   heard    the knock knock landed: the rim flashes on the second knock
-//            (KnockSense::knockKnock), about 0.6 s before it is decided, or
-//            at once for a BOOT press;
-//   dropped  a pellet left the pantry: it flies from the rim's pellet glyph
-//            down to where it lands in the dish, and the pantry's empty slot
-//            shows where it came from;
-//   refused  the press fed nobody now, and why: the pantry is empty (its
-//            empty slots shake, the next one filling), he is asleep (zzz: the
-//            pellet waits for him), or he is full (no thanks);
+//   heard    the knock knock landed: on the second knock (KnockSense::
+//            knockKnock), about 0.5 s before it is decided, or at once for a
+//            BOOT press, the rim's pellet glyph pops and a cookie springs out;
+//   dropped  a pellet left the pantry: that cookie is tossed down to where
+//            it lands in the dish, and the pantry's empty slot shows where it
+//            came from;
+//   refused  the press fed nobody now, and he says why in a bubble: ALL
+//            GONE! (the pantry's empty slots shake, the next one filling),
+//            ZZZ... (the pellet waits for him), or I'M FULL!;
 //   chomp    he bit a pellet: crumbs and hearts (a rotten one: yuck), and his
 //            belly meter rises.
 //
@@ -40,7 +40,7 @@ struct FeedView {
   FeedRefusal refused = FeedRefusal::None;   // ...and why
   uint16_t chompMs = kNever;        // since he bit a pellet
   bool rotten = false;              // that bite was rotten: yuck
-  uint16_t meterMs = kNever;        // since the last of the above: the belly meter shows a while after
+  uint16_t meterMs = kNever;        // since the last drop, refusal or bite: the belly meter shows a while after
   Fx fullness{};                    // his belly now: 1 - hunger
   Fx fullnessFrom{};                // and just before the bite, for the meter to rise from
   uint8_t pantryMax = 0;            // the pantry's slots (the metabolism gene)

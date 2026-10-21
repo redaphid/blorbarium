@@ -132,14 +132,21 @@ feet or behind him, and it goes into his mouth:
 
 | When | What shows |
 |---|---|
-| The second knock lands | a warm ring sweeps in from the rim as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided |
-| A pellet leaves the pantry | a cookie, big, is tossed from the rim's pellet glyph, its shadow waiting below, and lands in a puff; the pantry's pip goes |
+| The second knock lands | as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided: a small ring round the rim's pellet glyph, and a cookie springs out of it and waits there (none if the pantry is empty) |
+| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry's pip goes |
 | It lies in the dish | as a cookie; one that would lie on, under or behind him, or by his feet, is set down beside him, clear of his body |
 | He bites it | it is at his mouth (held up by his eyes when a species' mouth is tagged low, as the octopus's), a bite out of it each third of the chew; a burst and crumbs, YUM! and three hearts (rotten: grey-green, YUCK) |
 | Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
-| He is full (hunger under 0.15) | a bubble beside his head: the cookie struck through. It still lies there |
-| He is asleep | a bubble: the moon, zz. The cookie waits for him |
-| The pantry is empty | a bubble: a grey cookie and the hourglass; the pantry's empty slots shake at the top, the next one filling like a clock |
+| He is full (hunger under 0.15) | he says I'M FULL! in a bubble. The cookie still lies there |
+| He is asleep | ZZZ... in a bubble. The cookie waits for him |
+| The pantry is empty | ALL GONE! in a bubble; the pantry's empty slots shake at the top, the next one filling like a clock |
+
+The first version (2026-10-21, 94e22a3) flashed a gold ring round the whole
+rim on the second knock ("a little much, and didn't help me understand I was
+feeding it") and said a refusal in pictures: the owner, knocking until the
+pantry was empty, read its grey cookie and hourglass as "two emojis, the
+globe and something else". Both are gone: the knock brings a cookie, and a
+refusal is words (checked against the font, `test_paint` `Font.*`).
 
 **The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
 declared in `lib/paint/src/figure.h`): every cookie on screen goes through
