@@ -62,13 +62,16 @@ void KnockSense::endBlip() {
     return;
   }
   if (b.n > kBlipMaxSamples) restN_ = 0;   // a rattle: the desk, not a knuckle
-  else if (b.max >= kRestNextMg && b.start - restLast_ >= kFastMs) ++restN_, restLast_ = b.start;
+  else if (b.max >= kRestNextMg && b.start - restLast_ >= kFastMs) {
+    if (++restN_ == 2) restGap_ = b.start - restLast_;
+    restLast_ = b.start;
+  }
 }
 
 uint8_t KnockSense::restSample(int32_t peakJerk, uint32_t ms) {
   uint8_t out = 0;
   if (inBlip_ && peakJerk < kBlipMg && ms - blip_.end > 40) endBlip();
-  if (restN_ && !inBlip_ && ms - restLast_ > kChainMs) {
+  if (restN_ && !inBlip_ && ms - restLast_ > (restN_ >= 2 ? moreMs(restGap_) : kChainMs)) {
     out = restN_ <= kMaxKnocks ? (restN_ >= 2 ? 2 : 1) : 0;
     restN_ = 0;
   }
@@ -97,7 +100,7 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
   const int32_t kx = s.hasPeak ? s.peakAx : s.ax, ky = s.hasPeak ? s.peakAy : s.ay, kz = s.hasPeak ? s.peakAz : s.az;
   const int32_t jerk = primed_ ? iabs32(kx - px_) + iabs32(ky - py_) + iabs32(kz - pz_) : 0;
   uint8_t out = 0;
-  if (inBurst_ && ms - last_ > kChainMs) out = decide();
+  if (inBurst_ && ms - last_ > (knocks_ >= 2 ? moreMs(gap_) : kChainMs)) out = decide();
   int32_t gx = g0x_, gy = g0y_, gz = g0z_;
   const bool known = inBurst_ || histN_ == kHistory;
   if (histN_ == kHistory && !inBurst_) gravityBefore(gx, gy, gz);
@@ -113,7 +116,8 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
     if (inBurst_ && ms - onset_ <= kMergeMs && !fast) {
       last_ = ms;   // its bounce
     } else if (inBurst_) {
-      ++knocks_, last_ = onset_ = ms;
+      if (++knocks_ == 2) gap_ = ms - onset_;
+      last_ = onset_ = ms;
     } else {
       inBurst_ = true, knocks_ = 1, last_ = onset_ = ms;
       g0x_ = gx, g0y_ = gy, g0z_ = gz;

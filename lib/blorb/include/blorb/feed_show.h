@@ -7,7 +7,7 @@
 // sees every step and never a silent nothing:
 //
 //   heard    the knock knock landed: the rim flashes on the second knock
-//            (KnockSense::knockKnock), about 0.6 s before it is decided, or
+//            (KnockSense::knockKnock), 0.3-0.5 s before it is decided, or
 //            at once for a BOOT press;
 //   dropped  a pellet left the pantry: it flies from the rim's pellet glyph
 //            down to where it lands in the dish, and the pantry's empty slot

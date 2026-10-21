@@ -38,7 +38,7 @@ struct BodySample {
   // "one more" while it lasts, so a kid who knocked once sees it was felt.
   bool knockWaiting = false;
   // A second knock landed and a knock knock is on its way (KnockSense::
-  // knockKnock): it is reported only once the burst is over, about 0.6 s
+  // knockKnock): it is reported only once the burst is over, 0.4-0.6 s
   // later, so the Dish flashes the rim now (feed_show.h), and the kid sees
   // his knock knock heard the moment he makes it.
   bool knockKnock = false;

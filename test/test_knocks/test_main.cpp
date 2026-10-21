@@ -153,8 +153,9 @@ TEST(Scripted, TwoKnocksAreAKnockKnockReportedOnceItIsOver) {
   for (const auto& [ms, b] : held({1000, 1300}, 3000))
     if (uint8_t c = k.sample(b, ms)) code = c, when = ms;
   EXPECT_EQ(code, 2);
-  EXPECT_GT(when, 1300 + KnockSense::kChainMs);
-  EXPECT_LE(when, 1340 + KnockSense::kChainMs + 20) << "the last knock rings to 1340";
+  EXPECT_GT(when, 1300 + KnockSense::moreMs(300));
+  EXPECT_LE(when, 1340 + KnockSense::moreMs(300) + 20) << "the last knock rings to 1340";
+  EXPECT_LT(KnockSense::moreMs(300), KnockSense::kChainMs) << "two knocks in: a third is waited for in their rhythm";
 }
 
 TEST(Scripted, OneKnockIsASingleAndTwoToFourAreAKnockKnock) {
@@ -281,7 +282,7 @@ TEST(Heard, LightsOnTheSecondKnockLongBeforeTheReport) {
   }
   EXPECT_GE(lit, 1300u + KnockSense::kHeardQuietMs);
   EXPECT_LE(lit, 1340u + KnockSense::kHeardQuietMs + 20) << "once the second knock has rung out";
-  EXPECT_GE(reported, lit + KnockSense::kChainMs - KnockSense::kHeardQuietMs - 60) << "well before the report";
+  EXPECT_GE(reported, lit + KnockSense::moreMs(300) - KnockSense::kHeardQuietMs - 60) << "well before the report";
 }
 
 TEST(Heard, NeverForOneKnockOrForHammering) {
