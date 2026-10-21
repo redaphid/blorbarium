@@ -1,6 +1,7 @@
 // Frames between ticks (paint/tween.h): what the screen draws while the pet's
 // next 100 ms tick has not come, and the idle layer on top.
 #include <gtest/gtest.h>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <variant>
@@ -45,6 +46,37 @@ bool same(const Canvas240& a, const Canvas240& b) { return std::memcmp(a.px, b.p
 
 }  // namespace
 
+namespace {
+
+// Where on the canvas he is: the middle of the pixels he (and his shadow)
+// change over an empty dish, in px. The idle layer off, so only his place moves.
+struct Spot { double x, y; };
+Spot spotOf(Appearance a) {
+  a.lively = false;
+  a.itemCount = 0, a.pantry = 0, a.hasHint = false, a.thinking = false, a.trophyCount = 0;
+  Appearance empty = a;
+  empty.kind = Appearance::Kind::Clutch;
+  empty.eggCount = 0;
+  const auto him = drawn(a), none = drawn(empty);
+  double sx = 0, sy = 0, n = 0;
+  for (int y = 0; y < 240; ++y)
+    for (int x = 0; x < 240; ++x)
+      if (him->px[y * 240 + x] != none->px[y * 240 + x]) sx += x, sy += y, ++n;
+  return {n ? sx / n : -1, n ? sy / n : -1};
+}
+
+// Him, walking, at `x` across the dish.
+Appearance walkingAt(const Appearance& him, Fx x, blorb::PoseId pose = blorb::pose::walk) {
+  Appearance a = him;
+  a.reflexActive = false;
+  a.asleep = false;
+  a.pose = pose;
+  a.at = {x, Fx::ratio(1, 10)};
+  return a;
+}
+
+}  // namespace
+
 TEST(Tween, TheScreenRunsAFifthFasterThanHisLife) {
   EXPECT_EQ(paint::kScreenSpeedQ8, 307u);   // kScreenSpeed = 1.2, the owner's knob
   EXPECT_EQ(paint::tickShare(0), 0);
@@ -58,7 +90,7 @@ TEST(Tween, TheScreenRunsAFifthFasterThanHisLife) {
 // behind arrives at the tick it was eased toward.
 TEST(Tween, EachTickPicksUpWhereTheFramesBeforeItLeftOff) {
   const std::vector<Appearance> t = ticksOfHim(40);
-  int compared = 0;
+  int compared = 0, turned = 0;
   for (size_t i = 1; i + 1 < t.size(); ++i) {
     if (t[i + 1].pose != t[i].pose || t[i].reflexActive || t[i + 1].reflexActive || t[i].thinking) continue;
     if (t[i + 1].expression != t[i].expression) continue;
@@ -69,10 +101,22 @@ TEST(Tween, EachTickPicksUpWhereTheFramesBeforeItLeftOff) {
     const Appearance start = paint::between(t[i], t[i + 1], tick + 100, tick + 100);
     EXPECT_EQ(end.poseTick, start.poseTick) << i;
     EXPECT_EQ(end.poseSub, start.poseSub) << i;
+    // Walking, his feet ran ahead at last tick's step: exact when he walks on
+    // straight, and a turn of his wander (a tenth of a half turn at most)
+    // moves the guess by a fraction of a step: a pixel at most, as it rounds.
+    const bool walked = t[i].pose == blorb::pose::walk || t[i].pose == blorb::pose::flee;
+    const bool straight = t[i + 1].at.x - t[i].at.x == t[i].at.x - t[i - 1].at.x &&
+                          t[i + 1].at.y - t[i].at.y == t[i].at.y - t[i - 1].at.y;
+    if (walked && !straight) {
+      const Spot a = spotOf(end), b = spotOf(start);
+      EXPECT_LE(std::abs(a.x - b.x) + std::abs(a.y - b.y), 1.5) << "a jump at tick " << i;
+      ++turned;
+      continue;
+    }
     EXPECT_TRUE(same(*drawn(end, tick + 100), *drawn(start, tick + 100))) << "a jump at tick " << i;
     ++compared;
   }
-  EXPECT_GT(compared, 10);
+  EXPECT_GT(compared + turned, 10);
 }
 
 // Between ticks an awake pet is a new frame every frame; one asleep is his
@@ -133,6 +177,74 @@ TEST(Tween, WhereHeStandsIsEasedOneTickBehind) {
   EXPECT_EQ(mid.behind, 128);
   EXPECT_EQ(end.behind, 0);
   EXPECT_EQ(paint::between(now, now, 0, 50).behind, 0);
+}
+
+
+// Walking, his feet run on ahead at the step he took, so a tilt moves him the
+// frame it lands with no lag. Walking on, the next tick picks up where the
+// guess left him; stopping, he is corrected by at most the step; turning
+// round, by twice it.
+TEST(Tween, WalkingHeRunsAheadAndATickCorrectsTheGuess) {
+  const Appearance him = ticksOfHim(1)[0];
+  const Fx step = Fx::ratio(6, 100);   // four kWalk steps, so a pixel or so shows clearly
+  const Appearance t0 = walkingAt(him, Fx::zero()), t1 = walkingAt(him, step), t2 = walkingAt(him, step + step);
+  const Appearance mid = paint::between(t0, t1, 1000, 1050);
+  EXPECT_EQ(mid.ahead, 128);
+  EXPECT_EQ(mid.behind, 0);
+  const Spot at1 = spotOf(paint::between(t0, t1, 1000, 1000)), at2 = spotOf(paint::between(t1, t2, 1100, 1100));
+  const double stepPx = at2.x - at1.x;
+  ASSERT_GT(stepPx, 1.5);
+  // Half a tick on, half a step ahead of where the tick put him: no lag.
+  EXPECT_NEAR(spotOf(mid).x - at1.x, stepPx / 2, 1.0);
+  // Walking on: the last frame of a tick is where the next tick starts him.
+  const Spot end = spotOf(paint::between(t0, t1, 1000, 1100));
+  EXPECT_NEAR(end.x, at2.x, 1.0);
+  // Stopped: where he stopped at once, at most a step back from the guess.
+  Appearance stopped = t1;
+  stopped.pose = blorb::pose::idle;
+  const Spot stop = spotOf(paint::between(t1, stopped, 1100, 1100));
+  EXPECT_EQ(paint::between(t1, stopped, 1100, 1120).behind, 0);
+  EXPECT_EQ(paint::between(t1, stopped, 1100, 1120).ahead, 0);
+  EXPECT_LE(std::abs(end.x - stop.x), stepPx + 1.0);
+  // Turned round: back a step, so the guess was two steps out.
+  const Spot back = spotOf(paint::between(t1, t0, 1100, 1100));
+  EXPECT_LE(std::abs(end.x - back.x), 2 * stepPx + 1.0);
+  // Fleeing runs ahead too; any other way he moves is eased behind.
+  EXPECT_EQ(paint::between(walkingAt(him, Fx::zero(), blorb::pose::flee), walkingAt(him, step, blorb::pose::flee), 0, 50).ahead, 128);
+  EXPECT_EQ(paint::between(walkingAt(him, Fx::zero(), blorb::pose::curl), walkingAt(him, step, blorb::pose::curl), 0, 50).behind, 128);
+}
+
+// A guess past the rim is held to the circle he can stand in: never off the glass.
+TEST(Tween, AGuessAheadNeverTakesHimOffTheGlass) {
+  const Appearance him = ticksOfHim(1)[0];
+  const Appearance rim0 = walkingAt(him, Fx::ratio(94, 100)), rim1 = walkingAt(him, Fx::ratio(99, 100));
+  Appearance edge = walkingAt(him, Fx::one());
+  const Spot most = spotOf(paint::between(edge, edge, 0, 0));   // as far out as he can stand
+  const Spot guess = spotOf(paint::between(rim0, rim1, 0, 99));  // a step on would be 1.04
+  EXPECT_LE(guess.x, most.x + 1.0);
+  // ...and every pixel he lights is inside the dish.
+  Appearance a = paint::between(rim0, rim1, 0, 99);
+  a.lively = false;
+  const auto cv = drawn(a);
+  for (int y = 0; y < 240; ++y)
+    for (int x = 0; x < 240; ++x) {
+      const double dx = x + 0.5 - 120, dy = y + 0.5 - 120;
+      if (dx * dx + dy * dy > 120.0 * 120.0) EXPECT_EQ(cv->px[y * 240 + x], 0) << x << "," << y;
+    }
+}
+
+// The hang's ring never lags the hands filling it: a tick on it is already
+// where the next tick will put it, and it never passes full. Emptying, it eases.
+TEST(Tween, TheHangRingFillsAheadAndEmptiesBehind) {
+  Appearance was, now;
+  was.hangCharge = Fx::ratio(3, 10);
+  now.hangCharge = Fx::ratio(4, 10);
+  EXPECT_EQ(paint::between(was, now, 0, 0).hangCharge, now.hangCharge);
+  EXPECT_NEAR(double(paint::between(was, now, 0, 50).hangCharge.raw) / Fx::kOne, 0.45, 1e-4);
+  now.hangCharge = Fx::ratio(95, 100);
+  EXPECT_EQ(paint::between(was, now, 0, 99).hangCharge, Fx::one());
+  std::swap(was, now);   // let go: it drains from where it was
+  EXPECT_EQ(paint::between(was, now, 0, 0).hangCharge, was.hangCharge);
 }
 
 // Nothing the screen does reaches the engine: the tween reads Appearances,
