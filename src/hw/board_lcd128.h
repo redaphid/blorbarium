@@ -134,10 +134,17 @@ static uint32_t hash[CANVAS_H];
 static uint16_t sinceFull = 0;
 static bool stale = true;     // the next frame sends every row
 static uint32_t sent = 0;     // rows sent since boot, for DEBUG fps
-// FNV-1a over the row two pixels at a time: any one word changed always changes it.
+// FNV-1a over the row two pixels at a time, with the high bits folded back
+// down after each multiply: a multiply only carries upward, so without the fold
+// a change in a word's top bits (red at an odd x) was lost to the next word's
+// multiply ~3% of the time, and two of them 99%. scripts/test/row_hash.cpp
+// throws high-bit-only changes at every word: no misses.
 inline uint32_t of(const uint16_t* p) {
   uint32_t h = 2166136261u;
-  for (int x = 0; x < CANVAS_W; x += 2) h = (h ^ (uint32_t(p[x]) | uint32_t(p[x + 1]) << 16)) * 16777619u;
+  for (int x = 0; x < CANVAS_W; x += 2) {
+    h = (h ^ (uint32_t(p[x]) | uint32_t(p[x + 1]) << 16)) * 16777619u;
+    h ^= h >> 15;
+  }
   return h;
 }
 }  // namespace panelrows
