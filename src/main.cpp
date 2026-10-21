@@ -53,9 +53,11 @@ using PetStorage = hw::NvsFsStorage;
 #include "hw/feel.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
+#include "hw/poses.h"
 #include "hw/power.h"
 #include "hw/turn_yes.h"
 #include "debug_verbs.h"
+#include "latency.h"
 
 // The cable's last byte, for light sleep (main.cpp, "Low power"): a byte holds it off a while.
 static uint32_t cableHeardAt = 0;
@@ -435,7 +437,7 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
 // every detector times gestures as designed however long a frame takes.
 // The task is the IMU's only reader; the Dish is still only the loop's.
 namespace bodyq {
-struct Timed { blorb::BodySample s; uint32_t ms; bool remote; };
+struct Timed { blorb::BodySample s; uint32_t ms; bool remote; uint32_t us = 0, peakUs = 0; };   // us: its read, micros(); peakUs: its peak's
 constexpr uint8_t kRing = 128;   // 2.5 s of samples: only a save or warp longer than that drops the newest, never blocks
 static Timed ring[kRing];
 static uint8_t head = 0, tail = 0;
@@ -470,6 +472,10 @@ static volatile int8_t hangSide = 0;   // 0: upside down; +1/-1: on a side
 // `DEBUG knock [1|2]`: one knock, or two 300 ms apart, as a knuckle jolts the
 // raw sample through the face (blorb::KnockSense decides, as for a hand).
 static volatile uint8_t knockCode = 0;
+// `DEBUG shake`: a hand starts moving (so no knock is heard in it), then
+// swings hard both ways, 100 ms a swing: MotionDetector's five jolts.
+static volatile uint32_t shakeAt = 0;
+static volatile bool shaking = false;
 static volatile uint32_t knockAt = 0;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
   if (knockCode && int32_t(ms - knockAt) >= 0) {
@@ -480,6 +486,12 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
       else if (off < 40) s.az = int16_t(s.az - 1800);
     }
     if (since > 300u * knockCode + 100) knockCode = 0;
+  }
+  if (shaking && int32_t(ms - shakeAt) >= 0) {
+    const uint32_t t = ms - shakeAt;
+    if (t < 300) s.ax = int16_t(s.ax + (t / 40 % 2 ? -400 : 400));
+    else if (t < 1100) s.ax = int16_t(s.ax + ((t - 300) / 100 % 2 ? -1100 : 1100));
+    else shaking = false;
   }
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
@@ -553,23 +565,24 @@ static void sense(void*) {
   bool primed = false, far = false;
   int64_t best = -1;
   int16_t pk[3] = {};
+  uint32_t pkUs = 0;
   uint8_t sub = 0;
   for (;;) {
     const bool fast = fastSense;
     vTaskDelayUntil(&wake, pdMS_TO_TICKS(fast ? kSubMs : blorb::kSampleMs));
-    const uint32_t ms = millis();
+    const uint32_t ms = millis(), us = micros();
     bool farNow = false;
     blorb::BodySample s = readBody(ms, &farNow);
     far = far || farNow;
     const int64_t dx = s.ax - handed.ax, dy = s.ay - handed.ay, dz = s.az - handed.az;
     const int64_t d = dx * dx + dy * dy + dz * dz;
-    if (d > best) best = d, pk[0] = s.ax, pk[1] = s.ay, pk[2] = s.az;
+    if (d > best) best = d, pk[0] = s.ax, pk[1] = s.ay, pk[2] = s.az, pkUs = us;
     if (fast && ++sub < blorb::kSampleMs / kSubMs) continue;
     sub = 0;
     s.hasPeak = primed;
     s.peakAx = pk[0], s.peakAy = pk[1], s.peakAz = pk[2];
     portENTER_CRITICAL(&mux);
-    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms, far};
+    if (uint8_t(head - tail) < kRing) ring[head++ % kRing] = Timed{s, ms, far, us, pkUs};
     portEXIT_CRITICAL(&mux);
     handed = s, primed = true, best = -1, far = false;
   }
@@ -635,12 +648,81 @@ static bool petFeels(bool down, bool remote) {
 // The knocks, the power policy's input, the poses and the turn into the
 // screen's frame, for every sample (hw/feel.h, pure so test_feeding replays it).
 static hw::Feel shell{ORIENT_R0, ORIENT_HOME, powerPolicy};
+
+#if !defined(BADGE_BOARD_SIM)
+// How long each control takes to show, stage by stage (src/latency.h):
+//   DEBUG latency         [lat] <control> n= words= silent= noack= seen=p50/p95/max ... panel=...  (ms after In)
+//   DEBUG latency last    [lat] last <control> seen=... panel=...   the newest of each
+//   DEBUG latency clear   starts over
+// A few KB and a few us a sample, so it is always on.
+namespace lat {
+static latency::Recorder rec;
+static latency::Watch watch;
+static uint32_t readUs = 0, peakUs = 0;   // the sample feel() is on: its read, and its peak's
+static void felt(const hw::Felt& f, bool button, bool woke) {
+  const uint64_t fired = dish->firedLastSample();
+  const auto has = [&](blorb::StimId id) { return id.v < 64 && (fired >> id.v & 1); };
+  latency::Sample s;
+  s.readUs = readUs, s.peakUs = peakUs, s.seenUs = micros();
+  s.button = button;
+  s.knockWaiting = f.screen.knockWaiting, s.knockKnock = f.screen.knockKnock;
+  s.rawPose = hw::Poses::raw(f.screen);
+  s.rawAim = latency::rawAim(f.screen.ax, f.screen.ay, f.screen.az);
+  s.sideHolding = dish->sideHolding(), s.hangCharging = dish->hangCharging(), s.aimNow = dish->aimNow();
+  s.woke = woke;
+  s.press = has(blorb::stim::button), s.dbl = has(blorb::stim::button_double), s.hold = has(blorb::stim::button_hold);
+  s.hang = has(blorb::stim::hang), s.shake = has(blorb::stim::shake), s.knock = has(blorb::stim::knock);
+  s.knockKnockWord = has(blorb::stim::double_knock);
+  watch.sample(s, rec);
+}
+// What a frame acknowledges before the engine has: a bit per control.
+static uint32_t acks(const blorb::Appearance& a) {
+  using latency::Ctl;
+  using latency::flag;
+  uint32_t m = 0;
+  if (a.feed.heardMs <= 300) m |= flag(Ctl::KnockKnock) | flag(Ctl::Press) | flag(Ctl::Double);   // the rim's flash (feed_show.h)
+  if (a.boot.knockWait) m |= flag(Ctl::Knock);                                                 // "one more"
+  if (a.boot.holdFill || a.boot.holdVoid) m |= flag(Ctl::Side) | flag(Ctl::Hold) | flag(Ctl::Press);   // the hold ring
+  if (a.hangCharge > blorb::Fx::zero() || a.boot.doubleFill) m |= flag(Ctl::Hang) | flag(Ctl::Double);   // the charge, the bars
+  if (rec.isOpen(Ctl::Tilt) && a.dueling && watch.tiltTarget() >= 0 && dish->duelView().aim == watch.tiltTarget())
+    m |= flag(Ctl::Tilt);   // the duel's aimed action
+  return m;
+}
+// After every frame handed to the panel: seqBefore is boardFrameSeq() before it.
+static void framed(const blorb::Appearance& a, uint32_t seqBefore) {
+  const uint32_t seq = boardFrameSeq();
+  rec.framed(micros(), seq != seqBefore ? seq : 0, acks(a));
+}
+// Every loop: the rows the send task has put on the panel, and events open too long.
+static void poll() {
+  static uint32_t polled = 0;   // each frame's own time, though the loop looks only once a pass
+  const uint32_t seq = boardPanelDoneSeq();
+  for (uint32_t k = seq - polled > 8 ? seq - 7 : polled + 1; int32_t(seq - k) >= 0; ++k) rec.panelDone(k, boardPanelDoneAt(k));
+  polled = seq;
+  rec.expire(micros());
+}
+static void verb(const char* a) {
+  if (!std::strcmp(a, "clear")) {
+    rec.clear();
+    Serial.printf("[lat] cleared\n");
+    return;
+  }
+  const bool last = !std::strcmp(a, "last");
+  char line[400];
+  for (uint8_t i = 0; i < latency::kCtls; ++i)
+    if (last ? rec.last(i, line, sizeof line) : (rec.count(latency::Ctl(i)) && rec.line(i, line, sizeof line)))
+      Serial.printf("[lat] %s\n", line);
+  Serial.printf("[lat] done\n");
+}
+}  // namespace lat
+#endif
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
 #if !defined(BADGE_BOARD_SIM)
   const bool asking = updater.asking() || debugAsks();   // a question owns BOOT, and its twin with it
 #else
   constexpr bool asking = false;
 #endif
+  const bool wasLow = powerPolicy.low();
   hw::Felt f = shell.sample(sensed, ms, asking);
   lastBody = f.body;
   // The screen no longer turns with the badge (owner, 2026-10-19: a turning
@@ -668,6 +750,9 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
   traceSample(f.body, f.screen, f.rot, ms);
+  lat::felt(f, sensed.buttonDown, wasLow && !powerPolicy.low());
+#else
+  (void)wasLow;
 #endif
 }
 
@@ -676,14 +761,21 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
 static void step(uint32_t now) {
 #if !defined(BADGE_BOARD_SIM)
   const uint32_t ahead = now - millis();   // a DEBUG warp runs the loop's clock ahead of millis()
-  while (std::optional<bodyq::Timed> t = bodyq::take()) feel(t->s, t->ms + ahead, t->remote);
+  while (std::optional<bodyq::Timed> t = bodyq::take()) {
+    lat::readUs = t->us, lat::peakUs = t->s.hasPeak ? t->peakUs : t->us;
+    feel(t->s, t->ms + ahead, t->remote);
+  }
 #else
   if (now - lastSample >= blorb::kSampleMs) {
     feel(readBody(now), now);
     lastSample = now;
   }
 #endif
+  [[maybe_unused]] const uint32_t ticks = dish->tickCount();
   dish->tick(now, host);
+#if !defined(BADGE_BOARD_SIM)
+  if (dish->tickCount() != ticks) lat::rec.ticked(micros());   // what spoke is taken
+#endif
 }
 
 #if !defined(BADGE_BOARD_SIM)
@@ -1207,6 +1299,12 @@ static void cradleFor(uint32_t ms) {
   Serial.printf("[hw] debug cradle %u ms\n", unsigned(ms));
 }
 
+static void shake() {
+  bodyq::shakeAt = millis() + 40;   // on a read to come
+  bodyq::shaking = true;
+  Serial.printf("[hw] debug shake\n");
+}
+
 static void cradle(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 5000;
   if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug cradle: want [ms 1..30000]\n");
@@ -1219,6 +1317,18 @@ static void nap() {
   if (!c) return (void)Serial.printf("[hw] debug nap: no creature\n");
   c->force(blorb::action::sleep);
   Serial.printf("[hw] debug nap: forced sleep\n");
+}
+
+// `DEBUG tidy`: what a test run leaves behind, taken away: every pellet on
+// the floor (they rot, and he eats them rotten: a probe that fed a sleeping
+// pet killed him, 2026-10-21), and his toxin and injury back to none, as
+// `DEBUG stage` settles them. The pantry is left as it is.
+static void tidy() {
+  unsigned pellets = 0;
+  for (blorb::Pellet& p : dish->habitat().pellets) pellets += p.present, p.present = false;
+  blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
+  if (c) c->inject(blorb::chem::toxin, blorb::Fx::zero()), c->inject(blorb::chem::injury, blorb::Fx::zero());
+  Serial.printf("[hw] debug tidy: %u pellets taken, %s\n", pellets, c ? "toxin and injury 0" : "no creature");
 }
 
 // `DEBUG sleepiness <pct>`: sets his sleepiness drive, so a soak can make him
@@ -1309,9 +1419,19 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "trace") == 0) return traceFor(a);
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
+  if (std::strcmp(verb, "shake") == 0) return shake();
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
+  if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
+  if (std::strcmp(verb, "latency") == 0) return lat::verb(a);
+  if (std::strcmp(verb, "warp") == 0) {   // `DEBUG warp <minutes>`: the pet's time runs ahead (a vigil to its clutch)
+    const long min = std::strtol(a, nullptr, 10);
+    if (min < 1 || min > 600) return (void)Serial.printf("[hw] debug warp: want <minutes 1..600>\n");
+    warp(uint32_t(min) * blorb::kTicksPerMinute);
+    return (void)Serial.printf("[hw] debug warp %ld min: occupant=%s ctx=%u\n", min, summarize(dish->occupant()).kind,
+                               unsigned(dish->bootContext()));
+  }
   if (std::strcmp(verb, "fps") == 0) return std::strcmp(a, "bench") == 0 ? fps::bench() : fps::report();
   if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
   if (std::strcmp(verb, "cores") == 0) {   // `DEBUG cores 1|2`: draw on one core or both, until reset
@@ -1341,7 +1461,7 @@ static void runDebug(const char* line) {
   }
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
-                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
+                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
                   "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
     return;
   }
@@ -1607,19 +1727,27 @@ void loop() {
       else dbgfw::draw(canvas);
       paint::drawIdleBar(canvas, idleBar);
       framememo::drew(look, idleBar, overlay);
-      const uint32_t pushAt = micros();
+      const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
 #endif
       boardPresent(display, canvas);
 #if !defined(BADGE_BOARD_SIM)
       fps::note(shownAt - lookAt, drawAt - shownAt, pushAt - drawAt, micros() - pushAt);
+      lat::framed(look, seqBefore);   // a frame the memo skipped showed nothing new: it is no frame here
 #endif
       ++framesDrawn;
     }
     lastFrame = now;
 #if !defined(BADGE_BOARD_SIM)
-    if (lightAfterFrame) lightAfterFrame = false, boardPanelIdle(), display.setBrightness(dish->settings().brightness);
+    if (lightAfterFrame) {   // the first frame since the wake is on the glass: now the light
+      lightAfterFrame = false, boardPanelIdle(), display.setBrightness(dish->settings().brightness);
+      lat::rec.mark(latency::Ctl::Wake, latency::St::Ack, micros());
+      lat::rec.mark(latency::Ctl::Wake, latency::St::AckPanel, micros());
+    }
 #endif
   }
+#if !defined(BADGE_BOARD_SIM)
+  lat::poll();
+#endif
 #if !defined(BADGE_BOARD_SIM)
   // The same anchor the Dish holds, so a soft reset's rtc reading counts only the unsaved gap.
   if (dish->timeKnown() && !hw::SystemClock::isSet())

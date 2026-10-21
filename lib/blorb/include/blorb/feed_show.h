@@ -7,7 +7,7 @@
 // sees every step and never a silent nothing:
 //
 //   heard    the knock knock landed: on the second knock (KnockSense::
-//            knockKnock), about 0.5 s before it is decided, or at once for a
+//            knockKnock), 0.3-0.5 s before it is decided, or at once for a
 //            BOOT press, the rim's pellet glyph pops and a cookie springs out;
 //   dropped  a pellet left the pantry: that cookie is tossed down to where
 //            it lands in the dish, and the pantry's empty slot shows where it

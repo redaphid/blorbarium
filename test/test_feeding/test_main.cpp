@@ -212,8 +212,8 @@ FeedView feedOf(Badge& b) { return b.dish->appearance().feed; }
 
 }  // namespace
 
-// The second knock flashes the rim at once: ~0.6 s before the knock knock is
-// decided and the pellet drops. Then the pellet is in the air, the newest item.
+// The second knock flashes the rim at once: ~0.4 s before the knock knock is
+// decided and the pellet drops (KnockSense::moreMs: a third knock is waited for). Then the pellet is in the air, the newest item.
 TEST(Show, TheSecondKnockFlashesTheRimBeforeThePelletDrops) {
   Badge b(kHomeUp);
   b.frameMs = 20;
@@ -223,7 +223,7 @@ TEST(Show, TheSecondKnockFlashesTheRimBeforeThePelletDrops) {
   EXPECT_LE(heardAt, b.hand.knocks[1] + 40 + KnockSense::kHeardQuietMs + 40) << "as the second knock rings out";
   EXPECT_EQ(feedOf(b).droppedMs, FeedView::kNever) << "the pellet is not out yet";
   ASSERT_TRUE(runUntil(b, [&] { return feedOf(b).droppedMs != FeedView::kNever; }, 2000));
-  EXPECT_GE(b.ms - heardAt, 500u) << "the flash came first, by the burst's window";
+  EXPECT_GE(b.ms - heardAt, KnockSense::moreMs(300) - 100) << "the flash came first, by the burst's window";
   const Appearance a = b.dish->appearance();
   ASSERT_GE(a.feed.flying, 0);
   ASSERT_LT(a.feed.flying, int(a.itemCount));

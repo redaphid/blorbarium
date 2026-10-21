@@ -124,6 +124,8 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   // ends was measured from BOOT's raw level by the samples before this one.
   lastFired_ = 0;
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
+  if (s.knockWaiting && !knockWaitWas_) knockAim_ = detectors_.aim.aim();   // the first knock: what it aims at
+  knockWaitWas_ = s.knockWaiting;
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
     if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;
@@ -131,7 +133,7 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
     // The twins (controls.h) say which gesture spoke, not BOOT.
     if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !cues_.buttonDown()) diag_.say("gesture knock_knock=press");
     else if (f == stim::button_hold && !cues_.buttonDown() && detectors_.side.holding())
-      diag_.say("gesture side=hold ms=%u", unsigned(kButtonHoldMs));
+      diag_.say("gesture side=hold ms=%u", unsigned(kSideHoldMs));
     else if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
     else if (what && cues_.lastGapMs() == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(cues_.lastPressMs()));
     else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(cues_.lastPressMs()), unsigned(cues_.lastGapMs()));
@@ -175,17 +177,25 @@ void Dish::runOneTick(Link& link) {
   routeBoot(bootContext(), out);
   const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
   const bool side = kSideHoldHolds && detectors_.side.holding();
+  // The duel reads the aim (AimDetector) as the tilt at its sector's middle,
+  // so DuelInput::from finds the same sector; a knock locks the aim it was
+  // made at, not where the hand drifted while it was decided.
+  const bool knocked = fired(out, stim::knock) || fired(out, stim::double_knock);
+  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+  constexpr Fx kMid = Fx::ratio(1, 2), kLean = Fx::ratio(1, 4);
+  const Fx tiltX = aim == 0 ? kMid + kLean : aim == 1 ? kMid - kLean : kMid;
+  const Fx tiltY = aim == 2 ? kMid - kLean : aim == 3 ? kMid + kLean : kMid;
   if (!histPrimed_) {
     histPrimed_ = true;
-    for (Fx* t : tiltHist_) t[0] = tiltX_, t[1] = tiltY_;
+    for (Fx* t : tiltHist_) t[0] = tiltX, t[1] = tiltY;
   }
   if (side && !sideWas_) {
     const Fx* before = tiltHist_[(tick_ - kAimBeforeTurn) % kAimHistory];
     sideTilt_[0] = before[0], sideTilt_[1] = before[1];
   }
   sideWas_ = side;
-  tiltHist_[tick_ % kAimHistory][0] = tiltX_, tiltHist_[tick_ % kAimHistory][1] = tiltY_;
-  const Fx aimX = side ? sideTilt_[0] : tiltX_, aimY = side ? sideTilt_[1] : tiltY_;
+  tiltHist_[tick_ % kAimHistory][0] = tiltX, tiltHist_[tick_ % kAimHistory][1] = tiltY;
+  const Fx aimX = side ? sideTilt_[0] : tiltX, aimY = side ? sideTilt_[1] : tiltY;
   if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
           .save)
     save();
@@ -430,8 +440,13 @@ Appearance Dish::appearance() const {
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
+  // The hang's charge as of the last sample, not the last tick: the rim fills
+  // with the hand, a frame after it, not up to 100 ms later. Whoever is in
+  // the dish: an egg or his remains refuse the fight in words, but the hand
+  // that asked sees it felt first.
+  a.hangCharge = clamp01(detectors_.hang.charge());
   const BootContext ctx = bootContext();
-  const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
+  const DuelView v = duel_.active() ? duelView() : DuelView{};   // the aim as of the last sample
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr);
   cues_.dress(a.boot, bootMeaning(ctx), a.hangCharge);
   if ((ctx == BootContext::Awake || ctx == BootContext::Asleep || ctx == BootContext::Lobby) && live_.habitat.pantry == 0)
@@ -462,6 +477,22 @@ Appearance Dish::appearance() const {
   book.forEachFriend([&](const FriendSummary& f) { a.owesDebt = a.owesDebt || f.weOwe > 0; });
   if (std::holds_alternative<Creature>(live_.occupant)) thinker_.show(a, tick_);
   return a;
+}
+
+// The aim the screen shows: what the next tick will lock. While turned onto
+// a side, the session's own (the aim from before the turn); while one knock
+// waits for its second, the aim it was made at; else the aim as of the last
+// sample (AimDetector), not the last tick.
+int8_t Dish::liveAim() const {
+  if (kSideHoldHolds && detectors_.side.holding()) return duel_.view(tick_).aim;
+  if (knockWaitWas_ && knockAim_ >= 0) return knockAim_;
+  return detectors_.aim.aim();
+}
+
+DuelView Dish::duelView() const {
+  DuelView v = duel_.view(tick_);
+  if (duel_.active()) v.aim = liveAim();
+  return v;
 }
 
 // Feeding as the eyes see it: FeedShow's ages, and what the habitat and he

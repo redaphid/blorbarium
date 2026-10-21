@@ -1,6 +1,6 @@
 // What the shell makes of each 50 Hz sample before the Dish feels it
 // (main.cpp feel()): the knocks found in the raw samples (blorb/knocks.h), the
-// power policy's input, the settled rotation and the poses, and the sample
+// power policy's input, the settled rotation, the poses (poses.h), and the sample
 // turned into the screen's frame at home. Pure: no Arduino, no clock, no
 // board, so test_feeding replays a real knuckle through the same steps the
 // badge takes, at either home (ORIENT_HOME 2, or 0 on badge128_flip).
@@ -22,6 +22,7 @@
 #include "blorb/knocks.h"
 #include "blorb/senses.h"
 #include "orient.h"   // beside this file, so a test that includes it by path finds them too
+#include "poses.h"
 #include "power.h"
 
 namespace hw {
@@ -54,8 +55,10 @@ class Feel {
     // The screen no longer turns with the badge (owner, 2026-10-19): the
     // engine feels it in the one frame of home, so left is left, always.
     f.screen = up_.toFrame(felt, home_);
-    f.screen.invertedDown = up_.inverted(felt, home_);   // upside down from home: the hang
-    f.screen.sideDown = up_.sideways(felt, home_);       // the hold's twin (SideHoldDetector, controls.h)
+    // The poses from gravity itself, not the settled rotation's lag (poses.h).
+    poses_.sample(f.screen);
+    f.screen.invertedDown = poses_.inverted();   // upside down from home: the hang
+    f.screen.sideDown = poses_.sideways();       // the hold's twin (SideHoldDetector, controls.h)
     f.screen.knocking = knocks_.busy();                  // a knock's bounce is no shake
     // One knock landed: the rim's "one more"; a second landed: the rim's flash.
     f.screen.knockWaiting = !asking && knocks_.waitingSecond();
@@ -64,10 +67,12 @@ class Feel {
   }
 
   const orient::Up& up() const { return up_; }
+  const Poses& poses() const { return poses_; }
 
  private:
   blorb::KnockSense knocks_;
   orient::Up up_;
+  Poses poses_;
   uint8_t home_;
   power::Policy& power_;
   bool wakePress_ = false;

@@ -17,7 +17,7 @@
 // step (kJerkMg) -- at 50 Hz a knock's peak often falls between samples, and
 // one on the rim moves the in-plane axes as much as az, so it is the whole
 // vector, not az's jerk alone; the next kMergeMs is its ringing; knocks
-// within kChainMs make one burst; the burst counts only if the badge was steady
+// within kChainMs (moreMs once two are in) make one burst; the burst counts only if the badge was steady
 // before it and points the same way after; and it is reported when it is over,
 // as the tap engine's code: 1 a single knock, 2 a knock knock (two to four
 // knocks: kids knock thrice). More is hammering, and counts as nothing. While a burst is under way (busy()), a knock's bounce in the hand
@@ -40,6 +40,17 @@ class KnockSense {
   static constexpr int32_t kFastDevMg = 1500;    //    and the new spike is this hard: a quick second knock
   static constexpr uint8_t kMaxKnocks = 4;       // more in one burst is hammering
   static constexpr uint32_t kChainMs = 600;      // the next knock of a knock knock comes within this (hands: 0.18-0.46 s)
+  // Once two knocks are in, a third comes in the kid's own rhythm: the burst
+  // is over moreMs(gap) after its last knock, the gap between the first two
+  // and some slack, not less than kMoreMinMs nor more than kChainMs. On the
+  // recordings a fixed 350 changed nothing and 320 split a triple; 400 is the
+  // floor with margin. A quick knock knock (0.25 s apart) feeds 0.2 s sooner
+  // (docs/notes/controls-latency.md); a slow one waits as long as before.
+  static constexpr uint32_t kMoreMinMs = 400;
+  static constexpr uint32_t kMoreSlackMs = 150;
+  static constexpr uint32_t moreMs(uint32_t gap) {
+    return gap + kMoreSlackMs < kMoreMinMs ? kMoreMinMs : gap + kMoreSlackMs > kChainMs ? kChainMs : gap + kMoreSlackMs;
+  }
   static constexpr int32_t kSteadySdMg = 110;    // before the first knock: the magnitude's spread...
   static constexpr int32_t kSteadyJerkMg = 300;  // ...and three in four samples' jerk under this
   static constexpr int32_t kDriftMg = 300;       // gravity before and after may differ this much (a rim knock shoves it)
@@ -63,16 +74,22 @@ class KnockSense {
     return restN_ == 1;
   }
 
-  // A second knock is in, in a burst that can still count, and the badge
-  // has gone quiet after it (kHeardQuietMs): a knock knock is on its way,
-  // though sample() reports it only once the burst is over (kChainMs after
-  // its last knock). True from about 0.1 s after the second knock until
-  // then; false again if the burst runs on into hammering. The shell carries
-  // it on the sample (BodySample::knockKnock) and the rim flashes at once, so
-  // a kid sees his knock knock heard as he makes it, not 0.6 s later. The
-  // quiet is what keeps a shake from a still badge (jolts every 60 ms, each
-  // one a "knock") from flashing it.
-  static constexpr uint32_t kHeardQuietMs = 80;
+  // A second knock is in, in a burst that can still count, and it has rung
+  // out: a knock knock is on its way, though sample() reports it only once
+  // the burst is over (moreMs after its last knock). True from the first
+  // sample after the second knock that is no spike (kHeardQuietMs) and
+  // nothing knock-sized off gravity (kNextDevMg), until then; it stays true
+  // through a third knock's ringing, and is false again if the burst runs on
+  // into hammering. The shell carries it on the sample
+  // (BodySample::knockKnock) and the rim flashes at once, so a kid sees his
+  // knock knock heard as he makes it, not 0.6 s later: on the recorded hands
+  // 20 ms after the second knock (p50; p95 100 ms, as a knock in a hand rings),
+  // where waiting out 80 ms with no spike at all took 80/200 ms, and as long
+  // as 580 ms when a bounce restarted the wait (docs/notes/controls-latency.md).
+  // A shake from a still badge (the sim's: 1.5 g along x, flipping every 60
+  // ms, each flip a "knock") never sits within kNextDevMg of gravity, so it
+  // never flashes.
+  static constexpr uint32_t kHeardQuietMs = 20;
   bool knockKnock() const {
     if (inBurst_ && steady_) return heard_;
     return restN_ >= 2 && restN_ <= kMaxKnocks;
@@ -84,6 +101,11 @@ class KnockSense {
   // smaller blip counts -- but only a short one with quiet around it: a desk
   // being typed on, a cup set down or a desk bumped rattles for 60 ms and more
   // (T2), and that is no knock (T3: 9 of 9 on a table, 0 from the desk). Only with the shell's 250 Hz peak.
+  // And a knock leaves the badge lying as it was: a blip after which gravity
+  // points elsewhere (kDriftMg) was the badge tipped, not knocked. A still
+  // badge tipped briskly to 30 degrees is one 150-600 mg step, a blip like
+  // a knock's (egg-ux, 2026-10-21: it fired a knock, which keeps an egg in the
+  // picker and locks a stance in a duel).
   static constexpr int32_t kRestSdMg = 15;       // the magnitude's spread before: lying on something hard
   static constexpr int32_t kBlipMg = 150;        // a read this far from the last sample is part of a blip
   static constexpr int32_t kRestFirstMg = 150;   // the first knock's blip reaches this (kids knock softly first, then harder)...
@@ -100,20 +122,20 @@ class KnockSense {
   // The burst under way.
   bool inBurst_ = false, steady_ = false, heard_ = false;
   uint8_t knocks_ = 0;
-  uint32_t last_ = 0, onset_ = 0;
+  uint32_t last_ = 0, onset_ = 0, gap_ = 0;   // gap_: from the first knock's onset to the second's
   int32_t dev1_ = 0, dev2_ = 0;                  // the last two samples' distance from gravity
   int32_t g0x_ = 0, g0y_ = 0, g0z_ = 0;          // gravity before it
   int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
 
   // The table's bursts, judged blip by blip.
-  struct Blip { uint32_t start = 0, end = 0; int32_t max = 0; uint8_t n = 0; bool steady = false; };
+  struct Blip { uint32_t start = 0, end = 0; int32_t max = 0; uint8_t n = 0; bool steady = false; int32_t gx = 0, gy = 0, gz = 0; };
   Blip blip_{}, lastBlip_{};
   bool inBlip_ = false, hadBlip_ = false;
   uint8_t restN_ = 0;
-  uint32_t restLast_ = 0;
+  uint32_t restLast_ = 0, restGap_ = 0;
   int32_t restSd2_ = 0;
-  void endBlip();
-  uint8_t restSample(int32_t peakJerk, uint32_t ms);
+  void endBlip(const BodySample& now);
+  uint8_t restSample(int32_t peakJerk, uint32_t ms, const BodySample& s);
   bool steadyBefore();
   int64_t spread2() const;
   void gravityBefore(int32_t& x, int32_t& y, int32_t& z) const;

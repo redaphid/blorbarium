@@ -54,10 +54,18 @@ TEST(GestureCues, TheSideHoldFillsTheRingAndIsTheDuelsLevel) {
   EXPECT_TRUE(c.holding());
   c.sample(body(), true, 1600);
   EXPECT_EQ(c.heldMs(), 600u);
-  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 600 * 255 / 1200);
-  c.sample(body(), true, 5000);
+  constexpr uint32_t kFirst = GestureCues::kRingFirst;
+  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, kFirst + 600 * (255 - kFirst) / kSideHoldMs)
+      << "full as the side hold fires, not BOOT's 1.2 s";
+  c.sample(body(), false, 5500);   // let go
+  c.sample(body(true), false, 6000);
+  c.sample(body(true), false, 6600);
+  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, kFirst + 600 * (255 - kFirst) / kButtonHoldMs)
+      << "BOOT's own hold fills to 1.2 s";
+  c.sample(body(), true, 7000);
+  c.sample(body(), true, 11000);
   EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 255) << "full, not wrapped";
-  c.sample(body(), false, 5020);
+  c.sample(body(), false, 11020);
   EXPECT_FALSE(c.holding());
   EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 0);
 }
@@ -74,6 +82,17 @@ TEST(GestureCues, AHoldThatDoesNothingHereShowsAFadedRingNotATap) {
   EXPECT_FALSE(dressed(c, BootContext::Awake).holdVoid) << "a hold that tucks him in is the real ring";
   EXPECT_FALSE(dressed(c, BootContext::MercyLoser).holdVoid) << "where a hold is the press, holding pleads";
   EXPECT_FALSE(dressed(c, BootContext::OtaQuestion).holdVoid);
+}
+
+// A turn onto a side is never a tap: its ring shows on its first sample,
+// grey where a hold does nothing (his remains, the lobby), or a sliver of
+// the real one where it tucks him in.
+TEST(GestureCues, ASideHoldShowsItsRingFromItsFirstSample) {
+  GestureCues c;
+  c.sample(body(), false, 900);
+  c.sample(body(), true, 1000);
+  EXPECT_TRUE(dressed(c, BootContext::Lobby).holdVoid) << "not after kVoidRingAfterMs: at once";
+  EXPECT_GE(dressed(c, BootContext::Awake).holdFill * 8 / 255, 1) << "the real ring's first eighth, on the first sample";
 }
 
 TEST(GestureCues, AFirstPressWaitsVisiblyForItsSecond) {

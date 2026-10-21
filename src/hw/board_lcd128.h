@@ -181,6 +181,15 @@ static TaskHandle_t task = nullptr;
 static SemaphoreHandle_t idle = nullptr;    // held while a send is under way
 static bool async = true;
 static volatile uint32_t sendUs = 0;        // time on the bus since boot, us (the task's, for DEBUG fps)
+// Frames that sent rows, numbered from 1, and the last one out on the panel
+// and when (micros), for DEBUG latency: a frame's rows reach the glass when
+// the send task is done with them, not when the loop hands them over.
+// The send task writes a frame's time before its number, so a reader on the
+// other core that sees the number finds its time (never the semaphore: the
+// loop's next frame holds it while the send runs, nearly always).
+static uint32_t queuedSeq = 0;
+static volatile uint32_t doneSeq = 0, sendingSeq = 0;
+static volatile uint32_t doneAt[8] = {};   // by seq % 8
 
 // Each window once (its columns and rows), then its rows' spans in turn: the
 // panel steps down the window by itself.
@@ -202,7 +211,11 @@ static void loop(void*) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     const uint32_t t0 = micros();
     send(*to, shadow);
-    sendUs += micros() - t0;
+    const uint32_t t1 = micros();
+    sendUs += t1 - t0;
+    const uint32_t seq = sendingSeq;
+    doneAt[seq % 8] = t1;
+    doneSeq = seq;
     xSemaphoreGive(idle);
   }
 }
@@ -231,6 +244,11 @@ static void boardSetSendAsync(bool on) {
   panelsend::async = on;
 }
 static uint32_t boardSendUs() { return panelsend::sendUs; }
+// The newest frame that sent the panel rows (0: none yet), the newest whose
+// rows are out, and when each of the last eight went out (micros).
+static uint32_t boardFrameSeq() { return panelsend::queuedSeq; }
+static uint32_t boardPanelDoneSeq() { return panelsend::doneSeq; }
+static uint32_t boardPanelDoneAt(uint32_t seq) { return panelsend::doneAt[seq % 8]; }
 
 // The canvas is native-endian RGB565, which is rgb565_t to LGFX: writePixels
 // converts it to the panel's byte-swapped wire order on the way out, a window
@@ -268,8 +286,9 @@ static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) 
     open = true;
   }
   for (int i = 0; i < runCount; ++i) sent += runs[i].rows, sentPx += uint32_t(runs[i].rows) * (runs[i].c1 + 1 - runs[i].c0) * kChunkW;
+  if (runCount) ++queuedSeq;
   if (!background) {
-    if (runCount) send(display, canvas.px);
+    if (runCount) send(display, canvas.px), doneAt[queuedSeq % 8] = micros(), doneSeq = queuedSeq;
     return;
   }
   if (!runCount) return void(xSemaphoreGive(idle));
@@ -279,5 +298,6 @@ static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) 
     for (int y = r.from; y < r.from + r.rows; ++y)
       std::memcpy(shadow + y * CANVAS_W + x0, canvas.px + y * CANVAS_W + x0, sizeof(uint16_t) * size_t(w));
   }
+  sendingSeq = queuedSeq;
   xTaskNotifyGive(task);   // the task gives idle back when the pixels are out
 }

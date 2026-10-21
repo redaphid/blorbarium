@@ -12,7 +12,6 @@ constexpr uint32_t kShakeRearmMs = 600;            // SHAKE_REARM_MS
 constexpr int32_t kHeldTiltMg = 300;               // HELD_TILT_G
 constexpr uint32_t kHeldOnMs = 400;                // HELD_ON_MS
 constexpr uint32_t kHeldOffMs = 1500;              // HELD_OFF_MS
-constexpr uint32_t kHangHoldMs = 900;              // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
 constexpr int32_t kHangFaceMg = 500;               // a hang is held up on edge: |az| past this (30 degrees off flat or flatter) is lying down
 constexpr uint32_t kHangRearmProgressMs = 200;
 constexpr uint32_t kSideLetGoMs = 150;
@@ -54,7 +53,7 @@ constexpr uint32_t kBumpMaskMs = 300;              // the tap engine reports 100
 constexpr int32_t kWarmSpanCx10 = 30;              // 3 C above the baseline is warmth 1
 constexpr int32_t kWarmBaselineSamples = 32768;    // about 11 minutes at 50 Hz
 constexpr int32_t kMotionFullMg = 500;
-constexpr Fx kTiltSmooth = Fx::ratio(1, 16);       // orient.h's 0.25 per 100 ms, at 50 Hz
+constexpr Fx kTiltSmooth = Fx::ratio(1, 8);
 constexpr Fx kMotionSmooth = Fx::ratio(1, 8);
 constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr Fx kHalfPi{26353589};                    // pi/2 in Q8.24
@@ -315,6 +314,26 @@ void HeldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
 // and those samples only pause him. The rest accumulate, a righting drains
 // them twice as fast, and the hanging locus is the progress itself, so a
 // screen can show the ask filling up before it lands.
+void AimDetector::sample(const BodySample& s, uint32_t, SenseOut&) {
+  if (absMg(magnitudeMg(s) - kOneG) > kSteadyMg) return;   // a jolt says nothing about the lean
+  x_ = primed_ ? (x_ + s.ax) / 2 : s.ax;
+  y_ = primed_ ? (y_ + s.ay) / 2 : s.ay;
+  primed_ = true;
+  // How far the badge leans toward each sector (DuelInput::from: +x raises
+  // the left edge, so left; -y is toward the kid).
+  const int32_t lean[4] = {x_, -x_, -y_, y_};
+  int8_t best = 0;
+  for (int8_t k = 1; k < 4; ++k)
+    if (lean[k] > lean[best]) best = k;
+  if (aim_ < 0) {
+    if (lean[best] >= kInMg) aim_ = best;
+  } else if (best != aim_ && lean[best] >= kInMg && lean[best] >= lean[aim_] + kSwitchMg) {
+    aim_ = best;
+  } else if (lean[aim_] < kOutMg) {
+    aim_ = lean[best] >= kInMg ? best : -1;
+  }
+}
+
 void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   const uint32_t dt = primed_ ? (ms - lastMs_ > 100 ? 100 : ms - lastMs_) : 0;
   primed_ = true;
@@ -343,8 +362,8 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   out.set(locus::hanging, Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)));
 }
 
-// The pose is the shell's (BodySample::sideDown: orient.h's 600 ms settle,
-// jolts and flat rejected); this adds the intent. On edge as for the hang,
+// The pose is the shell's (BodySample::sideDown: src/hw/poses.h, jolts and
+// flat rejected); this adds the intent. On edge as for the hang,
 // so a badge lying slanted on a table holds nothing; a jolt while held is a
 // small hand, not a let-go, and so is a moment past the edge.
 void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
@@ -368,7 +387,7 @@ void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
       return;
     }
   }
-  if (!fired_ && ms - since_ >= kButtonHoldMs) {
+  if (!fired_ && !off_ && ms - since_ >= kSideHoldMs) {   // never while let go: a turn back is no hold
     fired_ = true;
     rearm_.spend();   // one hold per turn: the right way up again before the next (PoseRearm)
     if (kSideHoldHolds) out.fire(stim::button_hold);

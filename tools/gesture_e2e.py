@@ -139,13 +139,13 @@ class Run:
         self.check(st1["pantry"] == st0["pantry"], "the pantry is untouched (%d -> %d)" % (st0["pantry"], st1["pantry"]))
 
     def sc_side_hold(self):
-        """Turned onto a side and held: the hold (tuck-in) once it lasts 1.2 s, nothing dropped, either side."""
+        """Turned onto a side and held: the hold (tuck-in) once it lasts 2 s, nothing dropped, either side."""
         for which in ("r", "l"):
             st0 = self.state()
             m = self.b.mark()
             self.b.send("DEBUG side 3500 %s" % which)
             t0 = time.monotonic()
-            g = self.b.wait(r"\[diag\] gesture side=hold ms=1200", 5, since=m)
+            g = self.b.wait(r"\[diag\] gesture side=hold ms=\d+", 5, since=m)
             took = time.monotonic() - t0
             self.check(bool(g), "side %s: the log says gesture side=hold (%.1f s after the turn)" % (which, took))
             self.check(1.5 <= took <= 3.2, "side %s: after the settle and the hold, not sooner (%.1f s)" % (which, took))

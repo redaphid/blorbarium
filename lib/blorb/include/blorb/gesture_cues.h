@@ -40,6 +40,9 @@ class GestureCues {
   // A hold that does nothing here draws its grey ring only after this long,
   // so a quick BOOT tap does not show it.
   static constexpr uint32_t kVoidRingAfterMs = 300;
+  // The hold ring's fill on a hold's first sample: one of the eight steps
+  // it is drawn in, so the ring answers the hand at once.
+  static constexpr uint32_t kRingFirst = 255 / 8 + 1;
 
   // Every sample. sideHolding: SideHoldDetector::holding(). It counts only
   // when the side hold is enabled (controls.h kSideHoldHolds).
