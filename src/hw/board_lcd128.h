@@ -133,18 +133,25 @@ static bool boardButtonDown() { return digitalRead(PIN_BOOT_BUTTON) == LOW; }
 // after the panel sleeps, every row goes, so nothing a hash missed lasts.
 namespace panelrows {
 constexpr uint16_t kFullEvery = 64;
-static uint32_t hash[CANVAS_H];
+// A row is known by eight hashes, one a 30 px chunk, so a frame sends not the
+// whole of a changed row but the chunks from its first changed to its last:
+// with his motion between ticks a hundred-odd rows change a frame, and he is
+// in the middle of them. 7.5 KB, for about half the bus.
+constexpr int kChunks = 8, kChunkW = CANVAS_W / kChunks;
+static_assert(CANVAS_W % kChunks == 0 && kChunkW % 2 == 0, "whole chunks of whole words");
+static uint32_t hash[CANVAS_H][kChunks];
 static uint16_t sinceFull = 0;
 static bool stale = true;     // the next frame sends every row
 static uint32_t sent = 0;     // rows sent since boot, for DEBUG fps
-// FNV-1a over the row two pixels at a time, with the high bits folded back
+static uint32_t sentPx = 0;   // and pixels
+// FNV-1a over a chunk two pixels at a time, with the high bits folded back
 // down after each multiply: a multiply only carries upward, so without the fold
 // a change in a word's top bits (red at an odd x) was lost to the next word's
 // multiply ~3% of the time, and two of them 99%. scripts/test/row_hash.cpp
 // throws high-bit-only changes at every word: no misses.
 inline uint32_t of(const uint16_t* p) {
   uint32_t h = 2166136261u;
-  for (int x = 0; x < CANVAS_W; x += 2) {
+  for (int x = 0; x < kChunkW; x += 2) {
     h = (h ^ (uint32_t(p[x]) | uint32_t(p[x + 1]) << 16)) * 16777619u;
     h ^= h >> 15;
   }
@@ -155,6 +162,7 @@ inline uint32_t of(const uint16_t* p) {
 static void boardRepaintAll() { panelrows::stale = true; }
 static bool boardStale() { return panelrows::stale; }   // the next frame must send every row
 static uint32_t boardRowsSent() { return panelrows::sent; }
+static uint32_t boardPixelsSent() { return panelrows::sentPx; }
 
 // The send runs on core 0 while the loop draws the next frame on core 1: a
 // frame's changed rows are copied into a shadow of the panel in PSRAM (the
@@ -163,9 +171,10 @@ static uint32_t boardRowsSent() { return panelrows::sent; }
 // still going out. At 40 MHz a hang's ~95 rows are ~9 ms of SPI the draw no
 // longer waits through. No PSRAM, or `DEBUG lcd sync`: sent in place, as before.
 namespace panelsend {
-struct Run { uint8_t from, rows; };
-static uint16_t* shadow = nullptr;          // CANVAS_W x CANVAS_H in PSRAM, the panel's rows as last copied
-static Run runs[CANVAS_H / 2 + 1];          // runs of changed rows, at most every other row
+// A window of changed pixels: rows [from, from + rows), chunks [c0, c1].
+struct Run { uint8_t from, rows, c0, c1; };
+static uint16_t* shadow = nullptr;          // CANVAS_W x CANVAS_H in PSRAM, the panel's pixels as last copied
+static Run runs[CANVAS_H];
 static int runCount = 0;
 static BoardDisplay* to = nullptr;
 static TaskHandle_t task = nullptr;
@@ -173,11 +182,18 @@ static SemaphoreHandle_t idle = nullptr;    // held while a send is under way
 static bool async = true;
 static volatile uint32_t sendUs = 0;        // time on the bus since boot, us (the task's, for DEBUG fps)
 
+// Each window once (its columns and rows), then its rows' spans in turn: the
+// panel steps down the window by itself.
 static void send(BoardDisplay& display, const uint16_t* px) {
+  using panelrows::kChunkW;
   display.startWrite();
-  for (int i = 0; i < runCount; ++i)
-    display.pushImage(0, runs[i].from, CANVAS_W, runs[i].rows,
-                      reinterpret_cast<const lgfx::rgb565_t*>(px + runs[i].from * CANVAS_W));
+  for (int i = 0; i < runCount; ++i) {
+    const Run& r = runs[i];
+    const int x0 = r.c0 * kChunkW, w = (r.c1 + 1 - r.c0) * kChunkW;
+    display.setWindow(x0, r.from, x0 + w - 1, r.from + r.rows - 1);
+    for (int y = r.from; y < r.from + r.rows; ++y)
+      display.writePixels(reinterpret_cast<const lgfx::rgb565_t*>(px + y * CANVAS_W + x0), w);
+  }
   display.endWrite();
 }
 
@@ -216,39 +232,52 @@ static void boardSetSendAsync(bool on) {
 }
 static uint32_t boardSendUs() { return panelsend::sendUs; }
 
-// The canvas is native-endian RGB565, which is rgb565_t to LGFX: pushImage
-// converts it to the panel's byte-swapped wire order on the way out, a run of
-// changed rows at a time.
+// The canvas is native-endian RGB565, which is rgb565_t to LGFX: writePixels
+// converts it to the panel's byte-swapped wire order on the way out, a window
+// of changed chunks at a time.
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
   using namespace panelrows;
   using namespace panelsend;
   const bool all = stale || ++sinceFull >= kFullEvery;
   if (all) stale = false, sinceFull = 0;
   const bool background = boardSendAsync();
-  if (background) xSemaphoreTake(idle, portMAX_DELAY);   // the last frame's rows are out; the shadow is free
+  if (background) xSemaphoreTake(idle, portMAX_DELAY);   // the last frame's pixels are out; the shadow is free
+  // A changed row joins the open window when widening it costs less than a
+  // window of its own (a window's commands are worth about kWindowPx pixels).
+  constexpr int kWindowPx = 24;
   runCount = 0;
-  int from = -1;   // the first row of the run being gathered
-  for (int y = 0; y <= CANVAS_H; ++y) {
-    bool changed = false;
-    if (y < CANVAS_H) {
-      const uint32_t h = of(&canvas.px[y * CANVAS_W]);
-      changed = all || h != hash[y];
-      hash[y] = h;
+  bool open = false;
+  for (int y = 0; y < CANVAS_H; ++y) {
+    int c0 = kChunks, c1 = -1;
+    for (int c = 0; c < kChunks; ++c) {
+      const uint32_t h = of(&canvas.px[y * CANVAS_W + c * kChunkW]);
+      if (all || h != hash[y][c]) c0 = c0 < c ? c0 : c, c1 = c;
+      hash[y][c] = h;
     }
-    if (changed && from < 0) from = y;
-    if (!changed && from >= 0) {
-      runs[runCount++] = {uint8_t(from), uint8_t(y - from)};
-      sent += uint32_t(y - from);
-      from = -1;
+    if (c1 < 0) { open = false; continue; }
+    if (open) {
+      Run& r = runs[runCount - 1];
+      const int u0 = c0 < r.c0 ? c0 : r.c0, u1 = c1 > r.c1 ? c1 : r.c1;
+      const int widen = ((u1 - u0) - (r.c1 - r.c0)) * kChunkW * r.rows + (u1 + 1 - u0) * kChunkW;
+      if (widen <= kWindowPx + (c1 + 1 - c0) * kChunkW) {
+        r.c0 = uint8_t(u0), r.c1 = uint8_t(u1), ++r.rows;
+        continue;
+      }
     }
+    runs[runCount++] = {uint8_t(y), 1, uint8_t(c0), uint8_t(c1)};
+    open = true;
   }
+  for (int i = 0; i < runCount; ++i) sent += runs[i].rows, sentPx += uint32_t(runs[i].rows) * (runs[i].c1 + 1 - runs[i].c0) * kChunkW;
   if (!background) {
     if (runCount) send(display, canvas.px);
     return;
   }
   if (!runCount) return void(xSemaphoreGive(idle));
-  for (int i = 0; i < runCount; ++i)
-    std::memcpy(shadow + runs[i].from * CANVAS_W, canvas.px + runs[i].from * CANVAS_W,
-                sizeof(uint16_t) * CANVAS_W * runs[i].rows);
-  xTaskNotifyGive(task);   // the task gives idle back when the rows are out
+  for (int i = 0; i < runCount; ++i) {
+    const Run& r = runs[i];
+    const int x0 = r.c0 * kChunkW, w = (r.c1 + 1 - r.c0) * kChunkW;
+    for (int y = r.from; y < r.from + r.rows; ++y)
+      std::memcpy(shadow + y * CANVAS_W + x0, canvas.px + y * CANVAS_W + x0, sizeof(uint16_t) * size_t(w));
+  }
+  xTaskNotifyGive(task);   // the task gives idle back when the pixels are out
 }

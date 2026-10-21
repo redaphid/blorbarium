@@ -217,7 +217,7 @@ static uint32_t sleptMs();
 // What frames cost, since `DEBUG fps` last asked (or boot): drawing the canvas,
 // sending the panel what changed, and the worst whole frame.
 //   DEBUG fps      [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 ...
-// rows= is the rows sent a frame (240 is a whole frame); cpu_now= the clock as
+// rows= is the rows sent a frame (240 is a whole frame), px= the pixels (57,600); cpu_now= the clock as
 // it runs, against cpu=, the clock it was set to. fps=, frames= and the ms are
 // the frames drawn, each one that changed; same= the frames not drawn because
 // nothing in them had (framememo). A second line splits a
@@ -234,7 +234,7 @@ static uint32_t sleptMs();
 static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
-static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0, sames = 0;
+static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, px0 = 0, send0 = 0, sames = 0;
 static void same() { ++sames; }
 static uint64_t lookUs = 0, memoUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
@@ -255,12 +255,12 @@ static void report() {
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
   const uint32_t draw = uint32_t((lookUs + drawUs) / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
-                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u cores=%d\n",
+                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u cores=%d px=%u\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
                 unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
                 unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeKhz() / 1000),
                 unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames),
-                paintcore0::on ? 2 : 1);
+                paintcore0::on ? 2 : 1, unsigned((boardPixelsSent() - px0) / n));
   using paint::Phase;
   const uint32_t* spent = paint::phaseClock.spent;
   uint64_t painted = 0;
@@ -280,7 +280,7 @@ static void report() {
                 "send=%s (%s)\n",
                 f[0], f[12], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11],
                 boardSendAsync() ? "async" : "sync");
-  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = memoUs = drawUs = pushUs = 0, send0 = boardSendUs();
+  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), px0 = boardPixelsSent(), lookUs = memoUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
