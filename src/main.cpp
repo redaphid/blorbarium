@@ -1374,6 +1374,13 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "latency") == 0) return lat::verb(a);
+  if (std::strcmp(verb, "warp") == 0) {   // `DEBUG warp <minutes>`: the pet's time runs ahead (a vigil to its clutch)
+    const long min = std::strtol(a, nullptr, 10);
+    if (min < 1 || min > 600) return (void)Serial.printf("[hw] debug warp: want <minutes 1..600>\n");
+    warp(uint32_t(min) * blorb::kTicksPerMinute);
+    return (void)Serial.printf("[hw] debug warp %ld min: occupant=%s ctx=%u\n", min, summarize(dish->occupant()).kind,
+                               unsigned(dish->bootContext()));
+  }
   if (std::strcmp(verb, "fps") == 0) return std::strcmp(a, "bench") == 0 ? fps::bench() : fps::report();
   if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
   if (std::strcmp(verb, "duel") == 0) return duelNow();
@@ -1395,7 +1402,7 @@ static void runDebug(const char* line) {
   }
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
-                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], "
+                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, "
                   "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], reboot, bletest <bytes>)\n", verb);
     return;
   }

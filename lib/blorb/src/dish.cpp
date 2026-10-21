@@ -431,8 +431,10 @@ Appearance Dish::appearance() const {
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
   // The hang's charge as of the last sample, not the last tick: the rim fills
-  // with the hand, a frame after it, not up to 100 ms later.
-  if (std::holds_alternative<Creature>(live_.occupant)) a.hangCharge = clamp01(detectors_.hang.charge());
+  // with the hand, a frame after it, not up to 100 ms later. Whoever is in
+  // the dish: an egg or his remains refuse the fight in words, but the hand
+  // that asked sees it felt first.
+  a.hangCharge = clamp01(detectors_.hang.charge());
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr);

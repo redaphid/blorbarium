@@ -81,6 +81,17 @@ TEST(GestureCues, AHoldThatDoesNothingHereShowsAFadedRingNotATap) {
   EXPECT_FALSE(dressed(c, BootContext::OtaQuestion).holdVoid);
 }
 
+// A turn onto a side is never a tap: its ring shows on its first sample,
+// grey where a hold does nothing (his remains, the lobby), or a sliver of
+// the real one where it tucks him in.
+TEST(GestureCues, ASideHoldShowsItsRingFromItsFirstSample) {
+  GestureCues c;
+  c.sample(body(), false, 900);
+  c.sample(body(), true, 1000);
+  EXPECT_TRUE(dressed(c, BootContext::Lobby).holdVoid) << "not after kVoidRingAfterMs: at once";
+  EXPECT_GT(dressed(c, BootContext::Awake).holdFill, 0) << "the real ring, a sliver, on the first sample";
+}
+
 TEST(GestureCues, AFirstPressWaitsVisiblyForItsSecond) {
   GestureCues c;
   c.sample(body(true), false, 1000);

@@ -24,7 +24,13 @@ Three phases, each read back with `DEBUG latency` and cleared first:
 
 Prints a table per phase (p50/p95 ms after In) and PASS/FAIL per control
 against TARGETS below. The port is opened once and held: on Linux an open
-resets the board. A pet that is an egg is hatched first (`DEBUG hatch`).
+resets the board.
+
+The controls mean what they mean to a living pet, awake or asleep: an egg
+is hatched first (`DEBUG hatch`), and anything else (his remains, a clutch)
+stops the probe unless --revive, which runs the pet's time past the vigil
+(`DEBUG warp`), keeps the first egg of the clutch with a side hold, hatches
+it and grows it to an adult (`DEBUG stage adult`): a new pet on the board.
 """
 import argparse
 import re
@@ -36,6 +42,7 @@ import serial
 
 CRASH = re.compile(r"Guru Meditation|abort\(\)|Backtrace:|panic|Brownout|stack overflow|WDT|rst:0x(7|8|9|f|10) ")
 LAT = re.compile(r"\[lat\] (\w+) n=(\d+) words=(\d+) silent=(\d+) noack=(\d+) (.*)")
+CLUTCH, VIGIL, ASLEEP, AWAKE = 11, 12, 14, 15   # blorb::BootContext
 STAGES = ["seen", "detect", "ack", "ack_panel", "word", "tick", "frame", "panel"]
 
 # ms after In, p95. Why each (docs/notes/controls-latency.md):
@@ -44,14 +51,14 @@ STAGES = ["seen", "detect", "ack", "ack_panel", "word", "tick", "frame", "panel"
 #   panel      the engine's answer on the glass: the word, then up to one
 #              100 ms tick, a frame and its send.
 TARGETS = {
-    "knock_knock": {"ack_panel": 50, "panel": 800},   # the flash on the 2nd knock; the pellet waits out a 3rd knock
+    "knock_knock": {"ack_panel": 100, "panel": 800},  # the 2nd knock rung out (~40 ms), a frame; the pellet waits out a 3rd knock
     "knock": {"ack_panel": 50},                       # "one more" on the first knock
     "side": {"ack_panel": 50},                        # the hold ring from the turn
     "hang": {"ack_panel": 50},                        # the hang's charge from the turn
     "press": {"ack_panel": 50, "panel": 400},         # the ring on BOOT down; the pellet after the release
     "double": {"panel": 900},
     "shake": {"panel": 200},                          # decided on its last jolt: the prophecy's first frame
-    "tilt": {"word": 400},                            # the aim read off the dead zone
+    "tilt": {"word": 250},                            # the aim read off the dead zone (smoothing 1/8 a sample)
     "wake": {"panel": 400, "ack_panel": 400},          # the first frame on the glass, and the light
 }
 
@@ -168,6 +175,7 @@ def main():
     ap.add_argument("--reps", type=int, default=6)
     ap.add_argument("--only", default="", help="controls to run, comma separated (default: all)")
     ap.add_argument("--log", default="latency_probe.log")
+    ap.add_argument("--revive", action="store_true", help="a dead pet's clutch: keep an egg, hatch it, grow it (a new pet)")
     a = ap.parse_args()
     only = set(x for x in a.only.split(",") if x)
     want = lambda c: not only or c in only
@@ -178,7 +186,23 @@ def main():
         b.ask("DEBUG power wake", r"\[power\] now power=full")
         b.ask("DEBUG power idle 3600", r"\[power\] now")
         b.ask("DEBUG hatch", r"\[hw\] debug hatch", timeout=20, need=False)
-        b.ask("DEBUG duel", r"\[duel\] now")
+        ctx = int(b.ask("DEBUG duel", r"\[duel\] now .*ctx=(\d+)")[1])
+        if ctx not in (ASLEEP, AWAKE):
+            if not a.revive:
+                sys.exit("the dish holds no living pet (boot context %d: 11 clutch, 12 his remains, 13 an egg): "
+                         "the controls mean other things there. --revive starts a new pet" % ctx)
+            if ctx == VIGIL:
+                b.ask("DEBUG warp 31", r"\[hw\] debug warp", timeout=120)
+                ctx = int(b.ask("DEBUG duel", r"\[duel\] now .*ctx=(\d+)")[1])
+            if ctx == CLUTCH:
+                b.ask("DEBUG side 3000 r", r"\[hw\] debug side")   # a hold keeps the egg
+                time.sleep(6.5)
+            b.ask("DEBUG hatch", r"\[hw\] debug hatch", timeout=60, need=False)
+            b.ask("DEBUG stage adult", r"\[hw\] debug stage", timeout=180)
+            ctx = int(b.ask("DEBUG duel", r"\[duel\] now .*ctx=(\d+)")[1])
+            if ctx not in (ASLEEP, AWAKE):
+                sys.exit("--revive: still no living pet (boot context %d)" % ctx)
+        b.ask("DEBUG sleepiness 0", r"\[hw\] debug sleepiness", need=False)
         ok = True
 
         # ---- at rest, awake on the dish
