@@ -50,6 +50,16 @@ inline std::vector<blorb::Appearance> dishShots() {
       }
       shots.push_back(a);
     }
+    // The same pet grown: 120 of those ticks again as an adult at full size,
+    // 40 as an elder. Living him there takes days of ticks, and the frames
+    // only need his stage's art at his size (a heavy pet is a big one).
+    const size_t baby = shots.size() - 400;
+    for (int i = 0; i < 160; ++i) {
+      Appearance a = shots[baby + 240 + size_t(i)];
+      a.stage = i < 120 ? Stage::Adult : Stage::Elder;
+      a.scalePct = 100;
+      shots.push_back(a);
+    }
   }
   return shots;
 }

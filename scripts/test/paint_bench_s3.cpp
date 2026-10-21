@@ -47,6 +47,9 @@ void setup() {
   constexpr size_t kCount = sizeof kShots / sizeof kShots[0];
   paint::phaseClock.now = cycles;
   uint64_t dishCycles = 0, hash = 0xCBF29CE484222325ull, dishUs = 0;
+  // Each species' frames by stage (0 the egg, then baby, child, adult, elder): the heavy pet is the one to beat.
+  uint64_t bySpecies[blorb::kSpeciesCount][5] = {}, worst[blorb::kSpeciesCount][5] = {};
+  uint32_t count[blorb::kSpeciesCount][5] = {};
   for (size_t i = 0; i < kCount; ++i) {
     blorb::Appearance a;
     std::memcpy(static_cast<void*>(&a), kShots[i].bytes, sizeof a);
@@ -54,8 +57,11 @@ void setup() {
     paint::draw(a, paint::packFor(a.species), cv, now);
     paint::drawBootHint(cv, paint::rimHint(a.boot));
     paint::drawIdleBar(cv, uint16_t(now / 7 % 1001));
-    dishCycles += cycles() - t0;
+    const uint32_t spent = cycles() - t0;
+    dishCycles += spent;
     dishUs += micros() - u0;
+    const int sp = a.species.v % blorb::kSpeciesCount, st = a.kind == blorb::Appearance::Kind::Egg ? 0 : 1 + int(a.stage) % 4;
+    bySpecies[sp][st] += spent, ++count[sp][st], worst[sp][st] = spent > worst[sp][st] ? spent : worst[sp][st];
     takePhases();
     hash = fnv(hash);
   }
@@ -83,7 +89,18 @@ void setup() {
   Serial.printf("[bench] phases kinstr/frame:");
   for (int i = 0; i < int(paint::Phase::Count); ++i)
     Serial.printf(" %s=%u", names[i], unsigned(double(phases[i]) * perCycle / kCount / 1000));
-  Serial.printf("\n[bench] done\n");
+  Serial.printf("\n[bench] kinstr a frame by species, mean/worst: egg baby child adult elder\n");
+  for (int sp = 0; sp < blorb::kSpeciesCount; ++sp) {
+    Serial.printf("[bench]   %-9s", blorb::SPECIES[sp].name);
+    for (int st = 0; st < 5; ++st)
+      if (count[sp][st])
+        Serial.printf(" %5u/%-5u", unsigned(double(bySpecies[sp][st]) * perCycle / count[sp][st] / 1000),
+                      unsigned(double(worst[sp][st]) * perCycle / 1000));
+      else
+        Serial.printf(" %11s", "-");
+    Serial.printf("\n");
+  }
+  Serial.printf("[bench] done\n");
 }
 
 void loop() { delay(1000); }

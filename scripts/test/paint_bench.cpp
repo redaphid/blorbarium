@@ -62,12 +62,27 @@ int main(int argc, char** argv) {
   // One more pass of the dish with the phase clock on: where a frame's time goes.
   paint::phaseClock.now = nowNs;
   uint32_t now = 0;
+  // And the figure by species and stage: a heavy pet's frame, not the average's, is what the badge shows.
+  double figBy[blorb::kSpeciesCount][5] = {}, figMax[blorb::kSpeciesCount][5] = {};
+  int figN[blorb::kSpeciesCount][5] = {};
   for (const blorb::Appearance& a : shots) {
+    const uint32_t fig0 = paint::phaseClock.spent[uint8_t(paint::Phase::Figure)];
     paint::draw(a, paint::packFor(a.species), cv, now);
     paint::drawBootHint(cv, paint::rimHint(a.boot));
+    const double us = (paint::phaseClock.spent[uint8_t(paint::Phase::Figure)] - fig0) / 1000.0;
+    const int sp = a.species.v % blorb::kSpeciesCount, st = a.kind == blorb::Appearance::Kind::Egg ? 0 : 1 + int(a.stage) % 4;
+    figBy[sp][st] += us, ++figN[sp][st], figMax[sp][st] = us > figMax[sp][st] ? us : figMax[sp][st];
     now += 40;
   }
   paint::phaseClock.now = nullptr;
+  std::printf("fig us by species (mean/max): egg, then each stage\n");
+  for (int sp = 0; sp < blorb::kSpeciesCount; ++sp) {
+    std::printf("  %-10s", blorb::SPECIES[sp].name);
+    for (int st = 0; st < 5; ++st)
+      if (figN[sp][st]) std::printf(" %6.1f/%-6.1f", figBy[sp][st] / figN[sp][st], figMax[sp][st]);
+      else std::printf(" %13s", "-");
+    std::printf("\n");
+  }
   const char* names[] = {"bg", "fig", "rim", "text", "rings", "mask", "hint"};
   std::printf("phases us/frame:");
   for (int i = 0; i < int(paint::Phase::Count); ++i)
