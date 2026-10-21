@@ -407,6 +407,9 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   // 64-bit division a pixel (a library call on the board).
   const int den = 2 * v.kx;   // kx >= 1 (above), so den > 0
   const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
+  const bool scarred_ = scars && scars->count;
+  static ScarRows scarRows;   // shared, like scratchColours: one blit at a time, off the loop task's stack
+  if (scarred_) scarRows.begin(*scars);
   for (int y = top; y <= bottom; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
     int sy = f.originY + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
@@ -414,6 +417,7 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
     if (sy >= f.h) break;
     const uint8_t* row = rows.seek(sy);
     int shift2 = floorDiv(int64_t(dy2) * v.shear, kOne);
+    if (scarred_) scarRows.row(sy - f.originY);
     const int64_t num = int64_t(2 * (left - p.x) + 1 + shift2) * kOne;
     int q = floorDiv(num, den), rem = int(num - int64_t(q) * den);   // 0 <= rem < den
     for (int x = left; x <= right; ++x, q += stepQ, rem += stepR) {
@@ -424,7 +428,10 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
       if (!i) continue;
       bool spot = mottle && col.region[i] == blorb::region::skin.v && spotted(*mottle, sx - f.originX, sy - f.originY);
       uint16_t c = spot ? col.spot[i] : col.base[i];
-      if (scars && scars->count && isHide(col.region[i])) c = scarred(c, scarShade(*scars, sx - f.originX, sy - f.originY));
+      if (scarred_ && isHide(col.region[i])) {
+        const int q = scarRows.shade(sx - f.originX);
+        if (q != 128) c = scarred(c, q);   // 128 leaves it as it is
+      }
       uint16_t& dst = cv.px[y * kSide + x];
       dst = alpha >= 256 ? c : blend(dst, c, alpha);
     }

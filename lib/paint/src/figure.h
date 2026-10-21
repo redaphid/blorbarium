@@ -47,6 +47,26 @@ ScarLayer placeScars(const blorb::Scars&, const FrameRef& body, const PaletteEnt
 // where no scar is. A crease is darker, its ridge a little lighter.
 int scarShade(const ScarLayer&, int rx, int ry);
 
+// scarShade, a row at a time, the same numbers: each stamp's reach worked out
+// once a blit and the stamps that cross a row once a row, so a hide pixel away
+// from every scar costs two compares a stamp, with no divide and no walk of
+// the scar's art from its first row.
+class ScarRows {
+ public:
+  static constexpr int kMaxArtRows = 32;   // the tallest scar art (scars.cpp checks)
+  void begin(const ScarLayer&);
+  void row(int ry);
+  int shade(int rx) const;
+
+ private:
+  struct Reach { int x0, x1, y0, y1; uint16_t rowAt[kMaxArtRows]; };
+  struct Live { const ScarStamp* s; const uint8_t* row; int x0, x1; };
+  const ScarLayer* layer_ = nullptr;
+  Reach reach_[blorb::kMaxScars];
+  Live live_[blorb::kMaxScars];
+  int liveCount_ = 0;
+};
+
 // ---- the round panel ----------------------------------------------------------------
 
 // Row y's first column inside the round panel (a pixel whose centre is within
