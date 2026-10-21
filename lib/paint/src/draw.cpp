@@ -1092,14 +1092,57 @@ constexpr DishSpans rimSpans() {
 }
 constexpr DishSpans kRimSpans = rimSpans();
 
+// The rim's band: each pixel left of the middle (its mirror has the same d2)
+// as its step of t from the band's first (231) and its glass (0..6, the
+// light the glass adds: 6 - |isqrt(d2) - 233| when positive), at compile
+// time: t * 7 + glass. 2.2 KB of flash, row after row from the dish's edge.
+constexpr int kRimT0 = kRimFrom / kBgStep, kRimTs = kSide * kSide / kBgStep - kRimT0 + 1, kRimGlass = 7;
+constexpr int rimPixels() {
+  int n = 0;
+  for (int y = 0; y < kSide; ++y) n += kRimSpans.from[y] - kDish.from[y];
+  return n;
+}
+struct RimCodes { uint16_t rowAt[kSide]; uint8_t code[rimPixels()]; };
+constexpr int isqrtC(int v) {
+  int lo = 0, hi = 256;   // the root is in [lo, hi): v is at most 240 * 240
+  while (hi - lo > 1) {
+    const int mid = (lo + hi) / 2;
+    if (mid * mid <= v) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+constexpr RimCodes rimCodes() {
+  RimCodes r{};
+  int n = 0;
+  for (int y = 0; y < kSide; ++y) {
+    r.rowAt[y] = uint16_t(n);
+    const int dy = 2 * y + 1 - kSide;
+    for (int x = kDish.from[y]; x < kRimSpans.from[y]; ++x) {
+      const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy, rim = 6 - iabs(isqrtC(d2) - 233);
+      r.code[n++] = uint8_t((d2 / kBgStep - kRimT0) * kRimGlass + (rim > 0 ? rim : 0));
+    }
+  }
+  return r;
+}
+constexpr RimCodes kRimCodes = rimCodes();
+static_assert(kRimTs * kRimGlass <= 256, "a rim code is a byte");
+
 // The dish lit, at each step out from the middle. The rim's glass and the
 // dither land per pixel; inside the rim no channel comes near 255, so the
 // clamp is the rim's alone.
 uint8_t litR[257], litG[257], litB[257];
+// The rim's colour, lit, before the dither, for each code (kRimCodes).
+uint8_t rimR[kRimTs * kRimGlass], rimG[kRimTs * kRimGlass], rimB[kRimTs * kRimGlass];
 void backgroundRows(Canvas240& cv, int lit, int half);
 
 void background(Canvas240& cv, Fx night) {
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);
+  for (int t = kRimT0; t < kRimT0 + kRimTs; ++t)
+    for (int glass = 0; glass < kRimGlass; ++glass) {
+      Rgb c{22 - 10 * t / 256 + 4 * glass, 58 - 22 * t / 256 + 8 * glass, 56 - 20 * t / 256 + 7 * glass};
+      const int i = (t - kRimT0) * kRimGlass + glass;
+      rimR[i] = uint8_t(c.r * lit / 256), rimG[i] = uint8_t(c.g * lit / 256), rimB[i] = uint8_t(c.b * lit / 256);
+    }
   for (int t = 0; t <= 256; ++t) {
     litR[t] = uint8_t((22 - 10 * t / 256) * lit / 256);
     litG[t] = uint8_t((58 - 22 * t / 256) * lit / 256);
@@ -1133,21 +1176,15 @@ void backgroundRows(Canvas240& cv, int lit, int half) {
       std::memset(row + to, 0, sizeof(uint16_t) * size_t(kSide - to));
       const int dy = 2 * y + 1 - kSide;
       const uint8_t* bayer = kBayer[by];
-      int s = -1;   // isqrt(d2) at the last rim pixel: the next is a step or two from it
-      auto rim = [&](int x) {
-        const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
-        const int t = d2 / kBgStep, d = bayer[x & 3];
-        Rgb c{22 - 10 * t / 256, 58 - 22 * t / 256, 56 - 20 * t / 256};
-        if (s < 0) s = int(isqrt32(uint32_t(d2)));
-        while (s * s > d2) --s;
-        while ((s + 1) * (s + 1) <= d2) ++s;
-        int rim = 6 - iabs(s - 233);
-        if (rim > 0) { c.r += 4 * rim; c.g += 8 * rim; c.b += 7 * rim; }
-        row[x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
-                        imin(255, c.b * lit / 256 + d / 2)});
-      };
-      for (int x = from; x < in; ++x) rim(x);
-      for (int x = kSide - in; x < to; ++x) rim(x);
+      // The rim's band, a pixel and its mirror (same code, its own dither).
+      const uint8_t* code = &kRimCodes.code[kRimCodes.rowAt[y]];
+      for (int x = from; x < in; ++x) {
+        const int c = code[x - from];
+        for (const int at : {x, kSide - 1 - x}) {
+          const int d = bayer[at & 3];
+          row[at] = to565({imin(255, rimR[c] + d / 2), imin(255, rimG[c] + d / 4), imin(255, rimB[c] + d / 2)});
+        }
+      }
       // Inside the rim, from its left edge to the middle, each pixel and its mirror.
       uint32_t d2 = uint32_t((2 * in + 1 - kSide) * (2 * in + 1 - kSide) + dy * dy);
       uint32_t step = uint32_t(4 * (2 * in + 1 - kSide) + 4);   // d2 at x + 1 less d2 at x, a 2's complement step
