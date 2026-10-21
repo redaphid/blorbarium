@@ -813,12 +813,21 @@ void pip(Canvas240& cv, const Prop& p) {
 
 // A spiky comic burst with a word in it. The burst is the picture; the word
 // is for whoever can read it.
-bool spiky(int dx, int dy, int R, int inner, int n, int rot) {
+// Its spikes' directions, looked up once a burst, not once a pixel a spike.
+struct Spikes {
+  int n, c[12], s[12];
+  Spikes(int count, int rot) : n(count) {
+    for (int k = 0; k < n; ++k) c[k] = cosA(rot + k * 256 / n), s[k] = sinA(rot + k * 256 / n);
+  }
+};
+bool spiky(int dx, int dy, int R, int inner, const Spikes& sp) {
   if (dx * dx + dy * dy <= inner * inner) return true;
-  for (int k = 0; k < n; ++k) {
-    const int a = rot + k * 256 / n;
-    const int along = (dx * cosA(a) + dy * sinA(a)) / 4096, perp = iabs(dx * sinA(a) - dy * cosA(a)) / 4096;
-    if (along > 0 && along < R && perp * R <= inner * 6 / 10 * (R - along)) return true;
+  const int waist = inner * 6 / 10;
+  for (int k = 0; k < sp.n; ++k) {
+    const int along = (dx * sp.c[k] + dy * sp.s[k]) / 4096;
+    if (along <= 0 || along >= R) continue;
+    const int perp = iabs(dx * sp.s[k] - dy * sp.c[k]) / 4096;
+    if (perp * R <= waist * (R - along)) return true;
   }
   return false;
 }
@@ -873,12 +882,12 @@ void burst(Canvas240& cv, const Prop& p, uint16_t ticks) {
   // A whiff is a grey puff of air, not a hit.
   const bool whiff = p.variant == 7;
   const uint16_t edge = c565(whiff ? Rgb{90, 90, 110} : kBurstEdge), body = c565(whiff ? Rgb{200, 200, 215} : kBurst);
+  const Spikes spikes(whiff ? 7 : 12, rot);
   for (int y = p.y - R; y <= p.y + R; ++y)
     for (int x = p.x - R; x <= p.x + R; ++x) {
       const int dx = x - p.x, dy = y - p.y;
-      const int n = whiff ? 7 : 12;
-      if (!spiky(dx, dy, R, inner, n, rot)) continue;
-      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, n, rot) ? body : edge, p.alpha + 1);
+      if (!spiky(dx, dy, R, inner, spikes)) continue;
+      put(cv, x, y, spiky(dx, dy, R - 4, inner - 4, spikes) ? body : edge, p.alpha + 1);
     }
   if (p.scalePct >= 90 && p.alpha > 200) text(cv, kWords[v], p.x, p.y, kScale, {255, 255, 255});
 }
