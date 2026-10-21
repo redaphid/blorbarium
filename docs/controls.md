@@ -124,25 +124,43 @@ if he wanted it. Four pellets in the pantry and one back every two hours
 nothing, with only a greyed glyph to say so. Now (`blorb/feed_show.h`,
 `lib/paint/src/feeding.cpp`, presentation only: the engine is unchanged):
 
+People who then played with the badges said the pellet "looks like
+pooping" and they could not tell if he ate: the pack's small dark pellet
+appeared on the floor by his feet. So the food is now a fat cookie drawn in
+code (golden, chocolate chips, a dark outline, a highlight), never by his
+feet or behind him, and it goes into his mouth:
+
 | When | What shows |
 |---|---|
-| The second knock lands | a warm ring sweeps in from the rim, at once (`KnockSense::knockKnock`), before the knock knock is even decided |
-| A pellet leaves the pantry | it is tossed, big, from the rim's pellet glyph and lands in a puff; the pantry's pip goes |
-| He bites it | a burst and crumbs at his mouth, YUM! and three hearts (rotten: green, YUCK) |
+| The second knock lands | a warm ring sweeps in from the rim as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided |
+| A pellet leaves the pantry | a cookie, big, is tossed from the rim's pellet glyph, its shadow waiting below, and lands in a puff; the pantry's pip goes |
+| It lies in the dish | as a cookie; one that would lie on, under or behind him, or by his feet, is set down beside him, clear of his body |
+| He bites it | it is at his mouth (held up by his eyes when a species' mouth is tagged low, as the octopus's), a bite out of it each third of the chew; a burst and crumbs, YUM! and three hearts (rotten: grey-green, YUCK) |
 | Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
-| He is full (hunger under 0.15) | a bubble: the pellet struck through. The pellet still lies there |
-| He is asleep | a bubble: the moon, zz. The pellet waits for him |
-| The pantry is empty | a bubble: the grey pellet and the hourglass; the pantry's empty slots shake at the top, the next one filling like a clock |
+| He is full (hunger under 0.15) | a bubble beside his head: the cookie struck through. It still lies there |
+| He is asleep | a bubble: the moon, zz. The cookie waits for him |
+| The pantry is empty | a bubble: a grey cookie and the hourglass; the pantry's empty slots shake at the top, the next one filling like a clock |
 
-Previews: `FEEDING_DUMP=<dir> pio test -e native -f test_feeding` writes the
-frames (`FEEDING_PLAIN=1` for the screen as it was). The sim's `!knock`
-and `!dtap` now knock the raw samples, as a knuckle does (they had set the
-tap engine's register, which `KnockSense` overrules, so no sim knock had
-reached the pet since 0.7.12); `tests/feeds/knock_knock.txt` is filmed.
+**The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
+declared in `lib/paint/src/figure.h`): every cookie on screen goes through
+it, so generated art can replace its body (a sprite at the centre and
+radius it is given) without touching the feeding. The packs' `item()`
+pellet frames are no longer drawn.
 
-Not changed, for the owner to decide: the pantry (4, one back every 2 h)
-and that a pellet drops for a full or sleeping pet (it rots in 90 min, and
-a starving pet that eats it later is poisoned).
+Previews: `bash scripts/test/feeding_film.sh` films a feeding (grungo,
+puffkin, a mudge hatchling, and the three refusals) on this checkout and on
+the commit before it, into `outputs/feeding/` (`sheet_<film>.png`: before
+above after). The sim's `!knock` and `!dtap` now knock the raw samples, as
+a knuckle does (they had set the tap engine's register, which `KnockSense`
+overrules, so no sim knock had reached the pet since 0.7.12); goldens
+`knock_knock` and `pellet_toss` film it.
+
+Not changed, for the owner to decide: the pantry (4, one back every 2 h);
+that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
+starving pet that eats it later is poisoned); where the engine drops it (a
+random spot within 0.6 of the middle, then it rolls downhill, to the bottom
+rim when the badge is held upright); and his mouth opening toward it (pose
+art).
 
 ## He teaches them
 

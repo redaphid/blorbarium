@@ -42,18 +42,20 @@ CASES = {
     "thought": 9000,        # a thought, partway through its one pass
     "prophecy": 9000,       # a prophecy after a shake: foresee face, no hop
     "sealed": 3000,         # a keepsake that would not open: asleep in amber, whatever the feed does
+    "knock_knock": 3450,    # a knock knock through the face (KnockSense): the rim's flash as the second rings out
+    "pellet_toss": 4250,    # the same feed: the pellet, a cookie, tossed in from the rim's glyph
 }
 
 # Cases that boot a different board, as the sim's own flags.
 FLAGS = {"sealed": ["--sealed"]}
 # Cases played on another case's feed.
-FEED_OF = {}
+FEED_OF = {"pellet_toss": "knock_knock"}
 
 # A case that must not look like another: a hop that drew as idle once passed
 # its golden because the golden was idle too. Share of the disc that must differ.
 UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01),
           "no_phone": ("idle", 0.01),
-          "sealed": ("sleep", 0.2)}
+          "sealed": ("sleep", 0.2), "knock_knock": ("idle", 0.02), "pellet_toss": ("idle", 0.01)}
 
 # One adult at rest per roster species, on idle's feed and clock with the
 # drawn species pinned (sim --species). Grungo's is idle itself. Each must not

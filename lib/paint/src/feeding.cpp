@@ -4,11 +4,13 @@
 // of seconds, and readable at the ~5 frames a second the badge drew before
 // the framerate work, where an effect gets two or three frames.
 //
+//   food      a fat cookie (drawFood, the one seam for food art), on the
+//             floor, in the air, at his mouth and in the bubbles;
 //   heard     a warm ring sweeps in from the rim;
-//   flight    the pellet, big, arcs from the rim's pellet glyph down to its
-//             spot, and lands in a puff;
-//   refused   a bubble over his head: the pellet struck through (full), the
-//             moon and zz (asleep), or the grey pellet and the hourglass
+//   flight    the cookie, big, arcs from the rim's pellet glyph down to its
+//             spot beside him, its shadow waiting, and lands in a puff;
+//   refused   a bubble beside his head: the cookie struck through (full),
+//             the moon and zz (asleep), or a grey cookie and the hourglass
 //             (the pantry is empty, its slots shaking at the top, the next
 //             one filling);
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
@@ -50,6 +52,7 @@ constexpr int kFromX = 142, kFromY = 50;      // just under the rim's pellet gly
 constexpr int kArcPx = 34;                    // how high the toss rises over the straight line
 constexpr int kMeterTop = 62, kMeterBottom = 150, kMeterIn = 100, kMeterOut = 114;   // up the left rim
 constexpr int kPantryR = 108;                 // the pantry's row (draw.cpp pips)
+constexpr int kFoodR = kFoodFloorR;          // a cookie on the floor: 19 px across (the pack's pellet was 15 x 13)
 
 struct Rgb { int r, g, b; };
 constexpr Rgb kWarm{255, 214, 90};
@@ -59,6 +62,8 @@ constexpr Rgb kWhite{255, 255, 255};
 constexpr Rgb kInk{52, 36, 24};
 constexpr Rgb kNo{226, 64, 52};
 constexpr Rgb kTrack{4, 10, 10};
+constexpr Rgb kFoodBody{236, 168, 76}, kFoodEdge{96, 52, 22}, kFoodChip{78, 42, 20};
+constexpr Rgb kFoodRot{150, 158, 88}, kFoodRotEdge{66, 74, 36};
 
 constexpr int imin(int a, int b) { return a < b ? a : b; }
 constexpr int imax(int a, int b) { return a > b ? a : b; }
@@ -104,6 +109,55 @@ void stroke(Canvas240& cv, int x0, int y0, int x1, int y1, int r, Rgb c, int alp
   const int n = imax(1, imax(x1 > x0 ? x1 - x0 : x0 - x1, y1 > y0 ? y1 - y0 : y0 - y1));
   for (int i = 0; i <= n; ++i) disc(cv, x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, r, c, alpha);
 }
+
+}  // namespace
+
+// ---- the food: one seam ---------------------------------------------------------
+// People who played with the badges said the pellet looked like he was
+// pooping and they could not tell if he ate: a small dark blob on the floor
+// by his feet. So the food is drawn here, everywhere it shows, as a fat round
+// cookie, golden with chocolate chips, a dark outline and a bright highlight,
+// that reads as food at arm's length. Procedural, in code: when art comes
+// for it, this function is the one place to swap (a sprite blit at (cx, cy),
+// `r` its radius), and nothing in the feeding changes.
+void drawFood(Canvas240& cv, int cx, int cy, int r, const Food& food, int alpha) {
+  if (r < 2 || alpha <= 0) return;
+  const Rgb body = food.grey ? Rgb{150, 150, 150} : food.rotten ? kFoodRot : kFoodBody;
+  const Rgb edge = food.grey ? Rgb{80, 80, 80} : food.rotten ? kFoodRotEdge : kFoodEdge;
+  const Rgb chip = food.grey ? Rgb{96, 96, 96} : food.rotten ? Rgb{60, 70, 36} : kFoodChip;
+  // Bites, taken from his side of it, one after another.
+  constexpr int kBite[3][2] = {{12, -4}, {10, 8}, {2, 12}};   // x16 of r, from the centre
+  const int bites = clampi(food.bites, 0, 3);
+  auto bitten = [&](int x, int y) {
+    for (int b = 0; b < bites; ++b) {
+      const int bx = cx + (food.biteLeft ? -1 : 1) * kBite[b][0] * r / 16, by = cy + kBite[b][1] * r / 16;
+      if ((x - bx) * (x - bx) + (y - by) * (y - by) <= r * r * 5 / 16) return true;
+    }
+    return false;
+  };
+  for (int y = cy - r - 1; y <= cy + r + 1; ++y)
+    for (int x = cx - r - 1; x <= cx + r + 1; ++x) {
+      const int d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+      if (d2 > (r + 1) * (r + 1) || bitten(x, y)) continue;
+      if (d2 > (r - 1) * (r - 1)) {
+        put(cv, x, y, edge, alpha);
+        continue;
+      }
+      // Lit from the top left: lighter there, darker toward the bottom right.
+      const int lit = 256 + 40 * ((cx - x) + (cy - y)) / r;
+      put(cv, x, y, {imin(255, body.r * lit / 256), imin(255, body.g * lit / 256), imin(255, body.b * lit / 256)}, alpha);
+    }
+  // Chocolate chips, and a highlight: a cookie, not a pebble.
+  constexpr int kChip[5][2] = {{-7, -1}, {1, -7}, {7, -2}, {-2, 4}, {5, 7}};   // scattered: never two eyes and a mouth
+  for (const auto& c : kChip) {
+    const int x = cx + c[0] * r / 16, y = cy + c[1] * r / 16;
+    if (!bitten(x, y)) disc(cv, x, y, imax(1, r / 6), chip, alpha);
+  }
+  if (!food.rotten && !food.grey)
+    for (int k = 0; k < 3; ++k) put(cv, cx - r / 2 + k, cy - r / 2 - 1 + (k == 1 ? -1 : 0), {255, 244, 214}, alpha);
+}
+
+namespace {
 
 // 0..256 at the start, fading out over the last kFadeMs of `life`.
 int fadeOut(int t, int life) { return t < life - kFadeMs ? 256 : imax(0, 256 * (life - t) / kFadeMs); }
@@ -219,7 +273,7 @@ void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
   const int pct = 120 * pop / 256;
   switch (f.refused) {
     case FeedRefusal::Full:   // no thanks: the pellet, struck through
-      drawArt(cv, duel_art::kBootPellet, x, y, pct, alpha);
+      drawFood(cv, x, y, 9 * pct / 120, Food{}, alpha);
       stroke(cv, x - 10 * pop / 256, y - 10 * pop / 256, x + 10 * pop / 256, y + 10 * pop / 256, 1, kNo, alpha);
       break;
     case FeedRefusal::Asleep:   // asleep: the moon, and zz
@@ -228,7 +282,7 @@ void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
       if (pop == 256 && t > 400) drawString(cv, kFreeSans9pt7b, "z", x + 12, y - 4, to565({70, 90, 170}), Clip{0, 0, kSide, kSide, 0});
       break;
     case FeedRefusal::Empty:   // none left yet: the grey pellet and the hourglass
-      drawArt(cv, duel_art::kBootPelletGrey, x - 10 * pop / 256, y, pct, alpha);
+      drawFood(cv, x - 10 * pop / 256, y, 7 * pct / 120, Food{0, false, true}, alpha);
       drawArt(cv, duel_art::kBootCountdown, x + 11 * pop / 256, y, pct, alpha);
       break;
     default: break;
@@ -317,7 +371,7 @@ void belly(Canvas240& cv, const FeedView& f) {
       put(cv, x, y, c, a);
     }
   }
-  drawArt(cv, duel_art::kBootPellet, 20, kMeterBottom + 11, 85, alpha);   // food goes in here
+  drawFood(cv, 22, kMeterBottom + 11, 6, Food{}, alpha);   // food goes in here
 }
 
 }  // namespace
@@ -331,17 +385,21 @@ bool pelletAloft(const FeedView& f, int landX, int landY, int& x, int& y, int& s
   return true;
 }
 
-void pelletGlow(Canvas240& cv, const FeedView& f, int landX, int landY, int frameH) {
+void foodAloft(Canvas240& cv, const FeedView& f, int landX, int landY, bool rotten) {
   // Where it was a moment ago, fading: a trail, so the toss reads as one.
-  for (int k = 3; k >= 0; --k) {
+  for (int k = 3; k >= 1; --k) {
     FeedView then = f;
     if (f.droppedMs < 50 * k) continue;
     then.droppedMs = uint16_t(f.droppedMs - 50 * k);
     int x = 0, y = 0, pct = 100;
-    if (!pelletAloft(then, landX, landY, x, y, pct)) continue;
-    const int r = frameH * pct / 200 + (k ? 1 : 5);
-    disc(cv, x, y - frameH * pct / 200, k ? r * (5 - k) / 5 : r, k ? kWarm : Rgb{255, 240, 190}, k ? 70 - 15 * k : 110);
+    if (pelletAloft(then, landX, landY, x, y, pct)) disc(cv, x, y - kFoodR * pct / 100, kFoodR * pct / 100 * (4 - k) / 4, kWarm, 80 - 20 * k);
   }
+  int x = 0, y = 0, pct = 100;
+  if (!pelletAloft(f, landX, landY, x, y, pct)) return;
+  // Its shadow waits where it will land, growing as it comes down.
+  const int near = 256 * f.droppedMs / kFlightMs;
+  ring(cv, landX, landY, 0, kFoodR * (4 + 6 * near / 256) / 10, {0, 0, 0}, 40 + 60 * near / 256, 90);
+  drawFood(cv, x, y - kFoodR * pct / 100, kFoodR * pct / 100, Food{0, rotten}, 256);
 }
 
 void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) {
