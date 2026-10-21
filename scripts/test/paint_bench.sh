@@ -2,7 +2,7 @@
 # Builds and runs scripts/test/paint_bench.cpp: host time per frame and the
 # hash of every frame drawn. Run it before and after a change to lib/paint;
 # the hash must not move.
-#   bash scripts/test/paint_bench.sh [reps]
+#   bash scripts/test/paint_bench.sh [reps] [threads|reverse]   (the renderer's halves on a second thread, or reversed)
 #   REF=main bash scripts/test/paint_bench.sh    also builds it with main's lib/paint (its sources and its
 #                                                own headers), and compares
 set -euo pipefail
@@ -29,7 +29,7 @@ objects() {
 
 objects "$out/common" "$root/lib/paint" "$root/scripts/test/paint_bench.cpp" "$root"/lib/blorb/src/*.cpp
 objects "$out/paint" "$root/lib/paint" "$root"/lib/paint/src/*.cpp
-g++ -o "$out/paint_bench" "$out"/common/*.o "$out"/paint/*.o
+g++ -pthread -o "$out/paint_bench" "$out"/common/*.o "$out"/paint/*.o
 echo "this tree: $("$out/paint_bench" "$@")"
 
 if [ -n "${REF:-}" ]; then
@@ -41,15 +41,19 @@ if [ -n "${REF:-}" ]; then
     cmp -s "$dst.new" "$dst" || mv "$dst.new" "$dst"
     rm -f "$dst.new"
   done
-  # A renderer from before paint/phases.h: its phases read zero.
+  # A renderer from before paint/phases.h or paint/parallel.h: its phases read
+  # zero, and it draws on one core whatever the bench lends it.
   stub=()
-  if ! grep -q "PhaseClock phaseClock" "$ref"/paint/src/*.cpp; then
-    mkdir -p "$ref/stub"
-    printf '#include "paint/phases.h"\nnamespace paint { PhaseClock phaseClock; }\n' > "$ref/stub/phases.cpp"
-    [ -f "$ref/stub/phases.o" ] || g++ -std=c++17 -O2 -I"$root/lib/paint/include" -c "$ref/stub/phases.cpp" -o "$ref/stub/phases.o"
-    stub=("$ref/stub/phases.o")
-  fi
+  for hook in "phases.h:PhaseClock phaseClock" "parallel.h:Parallel parallel"; do
+    if ! grep -q "${hook#*:};" "$ref"/paint/src/*.cpp; then
+      mkdir -p "$ref/stub"
+      name="${hook%%.h:*}"
+      printf '#include "paint/%s"\nnamespace paint { %s; }\n' "${hook%%:*}" "${hook#*:}" > "$ref/stub/$name.cpp"
+      [ -f "$ref/stub/$name.o" ] || g++ -std=c++17 -O2 -I"$root/lib/paint/include" -c "$ref/stub/$name.cpp" -o "$ref/stub/$name.o"
+      stub+=("$ref/stub/$name.o")
+    fi
+  done
   objects "$ref/obj" "$ref/paint" "$ref"/paint/src/*.cpp
-  g++ -o "$ref/paint_bench" "$out"/common/*.o "$ref"/obj/*.o "${stub[@]}"
+  g++ -pthread -o "$ref/paint_bench" "$out"/common/*.o "$ref"/obj/*.o "${stub[@]}"
   echo "$REF:      $("$ref/paint_bench" "$@")"
 fi

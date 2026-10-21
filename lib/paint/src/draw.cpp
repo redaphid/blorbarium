@@ -6,6 +6,7 @@
 #include "duel/duel_art.h"
 #include "figure.h"
 #include "paint/marquee.h"
+#include "paint/parallel.h"
 #include "paint/phases.h"
 #include "paint/sprite_pack.h"
 
@@ -419,6 +420,19 @@ uint16_t scarred(uint16_t c, int q) {
   return uint16_t((r << 11) | (g << 5) | b);
 }
 
+// One blit's rows, [top, split) in half 1 and [split, bottom] in half 0.
+struct BlitJob {
+  Canvas240& cv;
+  const FrameRef& f;
+  const Place& p;
+  const Colours& col;
+  int alpha;
+  const Mottle* mottle;
+  const ScarLayer* scars;
+  int top, bottom, left, right, split;
+  void rows(int half);
+};
+
 void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, int alpha, const Mottle* mottle,
           const ScarLayer* scars = nullptr) {
   const Xf& v = p.xf;
@@ -430,26 +444,45 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   int bottom = imin(kSide - 1, p.y - v.lift + ceilDiv(int64_t(f.h - f.originY) * v.ky, kOne) + 1);
   int left = imax(0, p.x + floorDiv(int64_t(-f.originX) * v.kx, kOne) - lean - 1);
   int right = imin(kSide - 1, p.x + ceilDiv(int64_t(f.w - f.originX) * v.kx, kOne) + lean + 1);
+  BlitJob job{cv, f, p, col, alpha, mottle, scars, top, bottom, left, right, top};
+  // A big sprite is drawn in two halves at once when a second core is lent
+  // (paint/parallel.h): the rows above `split` here, the rest there.
+  constexpr int kSplitPx = 4096;
+  if (parallel.run && (bottom - top + 1) * (right - left + 1) >= kSplitPx) {
+    job.split = top + (bottom - top + 1) / 2;
+    return bothHalves([](void* j, int half) { static_cast<BlitJob*>(j)->rows(half); }, &job);
+  }
+  job.split = bottom + 1;
+  job.rows(1);
+}
+
+void BlitJob::rows(int half) {
+  const Xf& v = p.xf;
+  const int y0 = half ? top : split, y1 = half ? split - 1 : bottom;
+  if (y0 > y1) return;
   RowReader rows(f);
   // Each pixel's source column is floorDiv((2 (x - p.x) + 1 + shift2) kOne, 2 kx).
   // Along a row the numerator grows by 2 kOne a pixel, so the quotient and its
   // remainder are stepped rather than divided: the same columns, with no
   // 64-bit division a pixel (a library call on the board).
-  const int den = 2 * v.kx;   // kx >= 1 (above), so den > 0
+  const int den = 2 * v.kx;   // kx >= 1 (blit), so den > 0
   const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
   const int fw = f.w, ox = f.originX, oy = f.originY;
   const bool scarred_ = scars && scars->count;
-  static ScarRows scarRows;   // shared, like scratchColours: one blit at a time, off the loop task's stack
+  // Each half's own, shared from blit to blit (one blit at a time, off the
+  // loop task's stack): the scars' rows, and each canvas column's source
+  // column. Along a row those depend on the row only through the lean, so
+  // with none they are worked out once a blit; and since they only climb,
+  // the columns that land inside the frame are one span, [xa, xb].
+  static ScarRows scarRowsOf[2];
+  static int16_t colsOf[2][kSide];
+  ScarRows& scarRows = scarRowsOf[half];
+  int16_t* const cols = colsOf[half];
   if (scarred_) scarRows.begin(*scars);
-  // Each canvas column's source column. Along a row they depend on the row
-  // only through the lean, so with none they are worked out once a blit; and
-  // since they only climb, the columns that land inside the frame are one
-  // span, [xa, xb]. Shared like scarRows.
-  static int16_t cols[kSide];
   static const Mottle kNone;
   SpotRow spots(mottle ? *mottle : kNone);
   int lastShift = INT_MIN, xa = 0, xb = -1;
-  for (int y = top; y <= bottom; ++y) {
+  for (int y = y0; y <= y1; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
     int sy = oy + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
     if (sy < 0) continue;
@@ -917,12 +950,14 @@ constexpr DishSpans rimSpans() {
 }
 constexpr DishSpans kRimSpans = rimSpans();
 
+// The dish lit, at each step out from the middle. The rim's glass and the
+// dither land per pixel; inside the rim no channel comes near 255, so the
+// clamp is the rim's alone.
+uint8_t litR[257], litG[257], litB[257];
+void backgroundRows(Canvas240& cv, int lit, int half);
+
 void background(Canvas240& cv, Fx night) {
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);
-  // The dish lit, at each step out from the middle. The rim's glass and the
-  // dither land per pixel; inside the rim no channel comes near 255, so the
-  // clamp is the rim's alone.
-  static uint8_t litR[257], litG[257], litB[257];
   for (int t = 0; t <= 256; ++t) {
     litR[t] = uint8_t((22 - 10 * t / 256) * lit / 256);
     litG[t] = uint8_t((58 - 22 * t / 256) * lit / 256);
@@ -933,8 +968,16 @@ void background(Canvas240& cv, Fx night) {
   // row's four dithers is worked out once (1.9 KB), and the rows that share
   // that dither look theirs up. A row is symmetric about the middle, so each
   // step is found once for a pixel and its mirror (whose dither column is 3 - its own).
-  static uint16_t lut[kInnerT][4];
-  for (int by = 0; by < 4; ++by) {
+  struct Job { Canvas240& cv; int lit; };
+  Job job{cv, lit};
+  // Two halves, dither rows 0 and 1 in one and 2 and 3 in the other, each with its table.
+  bothHalves([](void* j, int half) { backgroundRows(static_cast<Job*>(j)->cv, static_cast<Job*>(j)->lit, half); }, &job);
+}
+
+void backgroundRows(Canvas240& cv, int lit, int half) {
+  static uint16_t lutOf[2][kInnerT][4];
+  auto& lut = lutOf[half];
+  for (int by = 2 * half; by < 2 * half + 2; ++by) {
     for (int t = 0; t < kInnerT; ++t)
       for (int k = 0; k < 4; ++k) {
         const int d = kBayer[by][k];
@@ -1364,6 +1407,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
 }
 
 PhaseClock phaseClock;
+Parallel parallel;
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   phaseStart();

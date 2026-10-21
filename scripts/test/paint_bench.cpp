@@ -10,7 +10,10 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <thread>
 
+#include "paint/parallel.h"
 #include "paint/phases.h"
 #include "paint/sprite_pack.h"
 #include "paint_shots.h"
@@ -25,12 +28,24 @@ uint64_t fnv(const paint::Canvas240& cv, uint64_t h) {
 
 using Clock = std::chrono::steady_clock;
 double us(Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double, std::micro>(b - a).count(); }
+// The second core, as the board lends it (paint/parallel.h): "threads" runs
+// half 0 on a thread of its own, "reverse" runs the halves here, 1 then 0. Either
+// must draw the same bytes as none (both here, 0 then 1).
+void onThread(paint::Half half, void* job) {
+  std::thread other(half, job, 0);
+  half(job, 1);
+  other.join();
+}
+void reversed(paint::Half half, void* job) { half(job, 1), half(job, 0); }
+
 uint32_t nowNs() { return uint32_t(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count()); }
 
 }  // namespace
 
 int main(int argc, char** argv) {
   const int reps = argc > 1 ? std::atoi(argv[1]) : 3;
+  if (argc > 2 && !std::strcmp(argv[2], "threads")) paint::parallel.run = onThread;
+  if (argc > 2 && !std::strcmp(argv[2], "reverse")) paint::parallel.run = reversed;
   static paint::Canvas240 cv;
   const std::vector<blorb::Appearance> shots = paintbench::dishShots();
   const std::vector<paint::DuelScene> duels = paintbench::duelShots();
