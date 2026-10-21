@@ -155,6 +155,7 @@ struct Appearance {
   uint16_t poseSub = 0, exprSub = 0;   // 1/256 ticks past poseTick and exprTicks, 0..255
   bool lively = false;              // breath and the idle layer drawn on liveMs (paint/tween.h)
   uint32_t liveMs = 0;              // the screen's clock: wall ms run at the screen's speed
+  uint16_t ahead = 0;               // walking: drawn this far (0..256 of a step) on past `at`, at the step from `from`
 };
 
 Appearance present(const Occupant&, const Habitat&, const PetClock&, uint32_t tick);
