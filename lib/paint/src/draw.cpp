@@ -5,6 +5,7 @@
 #include "blorb/registry.h"
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "lively.h"
 #include "paint/marquee.h"
 #include "paint/parallel.h"
 #include "paint/phases.h"
@@ -108,6 +109,13 @@ int sin64(int i) {
   if (i < 32) return kQuarter[32 - i];
   if (i < 48) return -kQuarter[i - 32];
   return -kQuarter[64 - i];
+}
+
+// sin of q/256 of a 1/64 turn, Q12: sin64's steps joined by straight lines, so
+// a swing drawn between ticks moves every frame. sin64q(i * 256) == sin64(i).
+int sin64q(int q) {
+  const int i = q >> 8, f = q & 255, s0 = sin64(i);
+  return f ? s0 + (sin64(i + 1) - s0) * f / 256 : s0;
 }
 
 int unit256(Fx f) { return blorb::clamp01(f).raw >> 16; }   // 0..256
@@ -599,14 +607,16 @@ bool eyesGlow(const Appearance& a) { return a.foreseeing || a.glow >= kGlowingEy
 void halo(Canvas240& cv, const Appearance& a, const SpritePack& pack, const FrameRef& eyes, const Place& p) {
   int g8 = unit256(a.glow);
   if (g8 == 0 || !eyesGlow(a)) return;
-  int amp = imin(256, g8 * 3 / 2) * kPulse[a.poseTick % kPulseTicks] / 256;
+  // The pulse and the sparks run on poseTick and its 1/256s (paint/tween.h).
+  const int p0 = kPulse[a.poseTick % kPulseTicks], p1 = kPulse[(a.poseTick + 1) % kPulseTicks];
+  int amp = imin(256, g8 * 3 / 2) * (p0 + (p1 - p0) * a.poseSub / 256) / 256;
   int sparks = 0;
   if (a.glow > kSparkGlow) {
     int64_t span = Fx::one().raw - kSparkGlow.raw;
     sparks = int(imin(kSparkMax, int((int64_t(blorb::clamp01(a.glow).raw - kSparkGlow.raw) * kSparkMax + span - 1) / span)));
   }
   Rgb tint = haloColour(pack, a);
-  int turn = int(uint32_t(a.poseTick) * 64 / kSparkOrbitTicks + (a.lifeSeed & 63));
+  int turn = int((uint32_t(a.poseTick) * 256 + a.poseSub) * 64 / (kSparkOrbitTicks * 256) + (a.lifeSeed & 63));
   for (int e = 0; e < imin(eyes.eyeCount, 2); ++e) {
     Pt c = project(p.xf, eyes, eyes.eyes[e].x * 16 + 8, eyes.eyes[e].y * 16 + 8);
     c.x += p.x * 16;
@@ -676,6 +686,7 @@ int breathPx(const Appearance& a) {
 struct FaceShown { ExprId now, from; int mix; };   // mix: 0..256 of `now` over `from`
 
 bool blinking(const Appearance& a) {
+  if (a.lively) return livelyOf(a, 0).blink;   // on the screen's clock, at his species' tempo
   uint32_t t = a.poseTick + a.lifeSeed % kBlinkCycleTicks;
   return t % kBlinkCycleTicks == mix32(a.lifeSeed, t / kBlinkCycleTicks) % kBlinkJitterTicks;
 }
@@ -703,7 +714,7 @@ FaceShown faceFor(const Appearance& a) {
   if (!a.asleep && now == expr::neutral && yawning(a)) return {expr::yawn, expr::yawn, 256};
   if (!a.asleep && !resting && blinking(a)) return {expr::asleep, expr::asleep, 256};
   if (a.exprTicks < kCrossfadeTicks && awake(a.previous) != now)
-    return {now, awake(a.previous), (a.exprTicks + 1) * 256 / (kCrossfadeTicks + 1)};
+    return {now, awake(a.previous), (a.exprTicks * 256 + a.exprSub + 256) / (kCrossfadeTicks + 1)};
   return {now, now, 256};
 }
 
@@ -851,35 +862,21 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Colours& col = scratchColours();
   buildColours(pack, a.regions, a.stage == Stage::Elder, spotHue, col);
 
-  // Away from home he shrinks a little, easing with his distance from it, so
-  // he fits beside the dish's items; at home he fills the panel.
-  const int64_t ax = a.at.x.raw, ay = a.at.y.raw;
-  const int64_t away = imin(Fx::kOne, int(isqrt(uint64_t(ax * ax + ay * ay))));
-  const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
-  int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
-  Xf base{k, k, 0, 0};
-  if (a.stage == Stage::Baby || a.stage == Stage::Child) {
-    base.kx = k * kHatchlingWide / kOne;
-    base.ky = k * kHatchlingTall / kOne;
-  }
   const blorb::ReflexInfo* reflex = a.reflexActive ? reflexInfo(a.reflex) : nullptr;
   FrameRef bodies[2] = {pack.body(blorb::pose::idle, a.stage, a.poseTick),
                         pack.body(reflex ? reflex->pose : a.pose, a.stage, a.poseTick)};
   constexpr int kFaces = int(blorb::countOf(blorb::EXPRESSIONS));
   FrameRef eyed[2 + kFaces] = {bodies[0], bodies[1]};
   for (int i = 0; i < kFaces; ++i) eyed[2 + i] = pack.face(blorb::EXPRESSIONS[i].id, a.stage);
-
-  Xf variants[1 + kReflexMotionCount] = {base};
-  for (int i = 0; i < kReflexMotionCount; ++i) {
-    const Motion& w = kReflexMotions[i].widest;
-    variants[1 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
-  }
-  const Outline figure{bodies, 2, eyed, 2 + kFaces, variants, 1 + kReflexMotionCount};
   constexpr int kMarginQ4 = (kBreathPx + 1) * 16;
+
   // The envelope, the stand point and the headroom walk every row of both
   // bodies under every transform: a fifth of his frame on the board. They are
   // pure in his bodies, his faces (the pack's, for his stage), his size and
-  // where he stands, so they are worked out again only when one of those changes.
+  // where he stands, so they are worked out again only when one of those
+  // changes. Two are kept: between ticks he is drawn on the way from where he
+  // stood a tick ago to where he stands now (paint/tween.h), and each end is
+  // worked out once, the tick it is new.
   struct Memo {
     const SpritePack* pack = nullptr;
     Stage stage{};
@@ -890,7 +887,8 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     Place p;
     int maxLift = 0;
   };
-  static Memo memo;
+  static Memo memos[2];
+  static uint8_t newest = 0;
   auto same = [](const FrameRef& x, const FrameRef& y) {
     if (x.rle != y.rle || x.w != y.w || x.h != y.h || x.originX != y.originX || x.originY != y.originY ||
         x.eyeCount != y.eyeCount)
@@ -899,44 +897,96 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
       if (x.eyes[e].x != y.eyes[e].x || x.eyes[e].y != y.eyes[e].y || x.eyes[e].r != y.eyes[e].r) return false;
     return true;
   };
-  if (memo.pack != &pack || memo.stage != a.stage || memo.base.kx != base.kx || memo.base.ky != base.ky ||
-      !same(memo.bodies[0], bodies[0]) || !same(memo.bodies[1], bodies[1]) || memo.atX != a.at.x.raw ||
-      memo.atY != a.at.y.raw) {
-    memo.pack = &pack, memo.stage = a.stage, memo.base = base, memo.bodies[0] = bodies[0], memo.bodies[1] = bodies[1];
-    memo.atX = a.at.x.raw, memo.atY = a.at.y.raw;
-    memo.d = envelope(figure, middle(bodies[0], base), kMarginQ4);
-    memo.p = placeAt(a.at, memo.d, base);
-    memo.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, memo.p, kMarginQ4));
+  auto placed = [&](blorb::DishPos at) -> const Memo& {
+    // Away from home he shrinks a little, easing with his distance from it, so
+    // he fits beside the dish's items; at home he fills the panel.
+    const int64_t ax = at.x.raw, ay = at.y.raw;
+    const int64_t away = imin(Fx::kOne, int(isqrt(uint64_t(ax * ax + ay * ay))));
+    const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
+    int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
+    Xf base{k, k, 0, 0};
+    if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+      base.kx = k * kHatchlingWide / kOne;
+      base.ky = k * kHatchlingTall / kOne;
+    }
+    for (int i = 0; i < 2; ++i) {
+      const Memo& m = memos[i];
+      if (m.pack == &pack && m.stage == a.stage && m.base.kx == base.kx && m.base.ky == base.ky &&
+          same(m.bodies[0], bodies[0]) && same(m.bodies[1], bodies[1]) && m.atX == at.x.raw && m.atY == at.y.raw) {
+        newest = uint8_t(i);
+        return m;
+      }
+    }
+    Xf variants[1 + kReflexMotionCount] = {base};
+    for (int i = 0; i < kReflexMotionCount; ++i) {
+      const Motion& w = kReflexMotions[i].widest;
+      variants[1 + i] = {base.kx * w.wide / kOne, base.ky * w.tall / kOne, 0, 0};
+    }
+    const Outline figure{bodies, 2, eyed, 2 + kFaces, variants, 1 + kReflexMotionCount};
+    newest ^= 1;   // over the one used longer ago
+    Memo& m = memos[newest];
+    m.pack = &pack, m.stage = a.stage, m.base = base, m.bodies[0] = bodies[0], m.bodies[1] = bodies[1];
+    m.atX = at.x.raw, m.atY = at.y.raw;
+    m.d = envelope(figure, middle(bodies[0], base), kMarginQ4);
+    m.p = placeAt(at, m.d, base);
+    m.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, m.p, kMarginQ4));
+    return m;
+  };
+  const Memo& here = placed(a.at);
+  const Disc d = here.d;
+  Place p = here.p;
+  Xf base = here.base;
+  const int maxLift = here.maxLift;
+  if (a.behind && (a.from.x != a.at.x || a.from.y != a.at.y)) {
+    // `behind`/256 of the way back to where he stood a tick ago: his feet and his
+    // size eased (a size snapped to the tick's would flicker his edge at 10 Hz
+    // as he walks), his room (d, maxLift) now's.
+    const Memo& was = placed(a.from);
+    const int w = imin(a.behind, 256);
+    auto ease = [w](int to, int from) { return to + floorDiv(int64_t(from - to) * w + 128, 256); };
+    p.x = ease(p.x, was.p.x), p.y = ease(p.y, was.p.y);
+    base.kx = ease(base.kx, was.base.kx), base.ky = ease(base.ky, was.base.ky);
   }
-  const Disc d = memo.d;
-  Place p = memo.p;
-  const int maxLift = memo.maxLift;
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   spots_.him = true, spots_.x = p.x, spots_.y = p.y, spots_.top = p.y - body.originY * base.ky / kOne;
   drawItems(a, cv, d, p, foot, false);
 
   Motion m = motionOf(a, maxLift);
-  shadow(cv, p, foot, m.lift, maxLift);
-  p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift, 0};
-  if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
+  const Lively live = livelyOf(a, maxLift - m.lift);
+  shadow(cv, p, foot, m.lift + live.lift, maxLift);
+  p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift + live.lift, 0};
+  if (body.h && a.lively) {
+    // His breath and sway, from his feet: the height and lean are a share of the frame as drawn.
+    const int tallPx = imax(1, body.h * p.xf.ky / kOne);
+    p.xf.ky += live.breathQ4 * kOne / (16 * body.h);
+    p.xf.shear = live.swayQ4 * kOne / (16 * tallPx);
+  } else if (body.h) {
+    p.xf.ky += breathPx(a) * kOne / body.h;
+  }
   const Mottle* spots = mottle.density ? &mottle : nullptr;
   const ScarLayer scars = scarsOn(a, pack, base.kx);
   blit(cv, body, p, col, 256, spots, &scars);
   for (int i = 0; i < imin(a.markCount, 8); ++i)
     if (a.marks[i].layer != 0) blit(cv, pack.mark(a.marks[i].layer, a.marks[i].variant), p, col, 256, nullptr);
 
+  // His face, a pixel to the side when his eyes wander (the idle layer).
+  Place look = p;
+  look.x += live.gazeX;
   FaceShown face = faceFor(a);
   FrameRef now = pack.face(face.now, a.stage);
-  if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), p, col, 256, spots, &scars);
-  blit(cv, now, p, col, face.mix, spots, &scars);
-  halo(cv, a, pack, now.eyeCount ? now : body, p);
-  pelletInMouth(cv, pack, a, now, now.eyeCount ? now : body, p);
+  if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), look, col, 256, spots, &scars);
+  blit(cv, now, look, col, face.mix, spots, &scars);
+  halo(cv, a, pack, now.eyeCount ? now : body, look);
+  pelletInMouth(cv, pack, a, now, now.eyeCount ? now : body, look);
   drawItems(a, cv, d, p, foot, true);
 }
 
-int eggShear(Fx wobble, uint16_t tick, int lean) {
-  return lean * unit256(wobble) / 256 * sin64(tick * 8) / kOne;
+// The egg's rock: 8/64 of a turn a tick on poseTick (which an egg never moves,
+// so a still egg), or on the screen's clock when drawn lively (lively.h).
+int eggShear(const Appearance& a, Fx wobble, int lean) {
+  const int angleQ8 = a.lively ? livelyRockQ8(a) : int(a.poseTick) * 8 * 256;
+  return lean * unit256(wobble) / 256 * sin64q(angleQ8) / kOne;
 }
 
 void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
@@ -948,7 +998,7 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Place p = placeAt(a.at, d, Xf{});
   drawItems(a, cv, d, p, footHalfW(f, kOne), false);
   Fx shake = a.wobble + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
-  p.xf.shear = eggShear(shake, a.poseTick, kEggLean);
+  p.xf.shear = eggShear(a, shake, kEggLean);
   blit(cv, f, p, col, 256, nullptr);
   halo(cv, a, pack, f, p);
   drawItems(a, cv, d, p, footHalfW(f, kOne), true);
@@ -994,7 +1044,7 @@ void drawClutch(const Appearance& a, Canvas240& cv) {
     p.x = kSide / 2 + (2 * i - (n - 1)) * kClutchGapPx / 2;
     p.y = kSide / 2 + (f.originY - f.h / 2) * p.xf.ky / kOne;
     bool chosen = i == a.cursor;
-    if (chosen) p.xf.shear = eggShear(Fx::ratio(1, 3), a.poseTick, kEggLean);
+    if (chosen) p.xf.shear = eggShear(a, Fx::ratio(1, 3), kEggLean);
     blit(cv, f, p, col, 256, nullptr);
     if (chosen)
       for (int row = 0; row < 6; ++row) fill(cv, p.x - row, p.y + 5 + row, p.x + row + 1, p.y + 6 + row, cream, 256);
@@ -1484,7 +1534,9 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
   const FrameRef body = pack.body(a.pose, a.stage, a.poseTick);
   shadow(cv, p, footHalfW(body, base.kx), fig.lift, kHopMaxPx * base.ky / kOne);
   p.xf = {imax(1, base.kx * fig.widePct / 100), imax(1, base.ky * fig.tallPct / 100), fig.lift, fig.leanPct * kOne / 100};
-  if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
+  // The staging owns his motion here; of the idle layer only his breath goes on (and the blinks, in faceFor).
+  if (body.h && a.lively) p.xf.ky += livelyOf(a, 0).breathQ4 * kOne / (16 * body.h);
+  else if (body.h) p.xf.ky += breathPx(a) * kOne / body.h;
   const Mottle* spots = mottle.density ? &mottle : nullptr;
   const ScarLayer scars = scarsOn(a, pack, base.kx, fig.newScars, fig.scarIn);
   const int alpha = (fig.alpha + 1) * (256 - fig.remainsIn) / 256;

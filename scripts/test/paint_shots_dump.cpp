@@ -7,11 +7,18 @@
 // than 32 bits, so the S3 lays it out as the host does; the board side checks
 // its size and two offsets against the ones written here.
 //   built and run by scripts/test/paint_bench_qemu.sh
+// SMOOTH= draws the shots as frames between ticks (paint/tween.h), so the
+// board's bench counts what they cost: `badge`, each run of 4 as the badge
+// draws it, four frames 20 ms apart between the same two ticks, against
+// `hold`, the badge before them, one tick's own frame four times; `1`, every
+// frame between a new pair of ticks (the most the stand-point memo can miss).
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "paint/sprite_pack.h"
+#include "paint/tween.h"
 #include "paint_shots.h"
 
 namespace {
@@ -30,7 +37,21 @@ int main(int argc, char** argv) {
   FILE* out = std::fopen(argv[2], "w");
   if (!out || !every) return 1;
   static paint::Canvas240 cv;
-  const std::vector<blorb::Appearance> shots = paintbench::dishShots();
+  std::vector<blorb::Appearance> shots = paintbench::dishShots();
+  const char* mode = std::getenv("SMOOTH");
+  const std::vector<blorb::Appearance> raw = shots;
+  for (size_t i = 0; mode && i < shots.size(); ++i) {
+    const size_t run = i - i % 4;   // the dumped runs of 4 start on a multiple of 4
+    if (!std::strcmp(mode, "hold"))   // the badge before: one tick's own frame, four frames running
+      shots[i] = raw[run];
+    else if (!std::strncmp(mode, "badge", 5)) {   // the badge now: four frames 20 ms apart between the same two ticks
+      shots[i] = paint::between(raw[run ? run - 1 : 0], raw[run], uint32_t(run * 40), uint32_t(run * 40 + i % 4 * 20));
+      if (!std::strcmp(mode, "badge-no-idle")) shots[i].lively = false;   // what the idle layer costs
+      if (!std::strcmp(mode, "badge-no-ease")) shots[i].behind = 0;       // what easing where he stands costs
+    }
+    else   // every frame between a new pair of ticks: the most the memo can miss
+      shots[i] = paint::between(raw[i ? i - 1 : 0], raw[i], uint32_t(i * 40 - i * 13 % 101), uint32_t(i * 40));
+  }
   const std::vector<paint::DuelScene> duels = paintbench::duelShots();
   uint64_t dishHash = 0xCBF29CE484222325ull, duelHash = dishHash;
   size_t n = 0;

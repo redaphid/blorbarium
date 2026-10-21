@@ -6,7 +6,8 @@
 //
 // draw() is pure over (Appearance, pack, nowMs): every animation of him (bob,
 // blink, yawn, crossfade, the hop's squash-leap-land, the halo pulse and
-// sparks) is a function of poseTick, exprTicks, reflexPhase and lifeSeed, and
+// sparks) is a function of poseTick, exprTicks, reflexPhase and lifeSeed (and,
+// between ticks, their 1/256s and the idle layer's liveMs: paint/tween.h), and
 // the dish's own furniture (the sealed board's marquee) of nowMs, elapsed real
 // milliseconds, so it moves whatever the simulation is doing. That is what
 // makes the sim's headless shots byte-identical and the goldens stable.

@@ -12,8 +12,11 @@
 //   sim --script feed.txt                lines stamped `@<ms>`; brings the fixed clock
 //   sim --shot out.bmp --after 3000      one frame, then quit
 //   sim --record dir/ --fps 20 --for 8000   every frame to dir/, then quit
+//   sim --record dir/ --from 16000 ...   the first frame recorded at 16000 ms
 //   sim --sealed                         boot as a board whose keepsake would not open
 //   sim --species <slug|id>              draw the pet as that species (DEBUG species does it live)
+//   sim --frame-ms 20                    a frame every 20 ms, as the badge draws (40 by default, the goldens' pace)
+//   sim --steps                          each tick's own frame until the next, as before frames between ticks
 //
 // Keys with a window: space the button, k a knock, d a double knock, s held to
 // shake, arrows tilt.
@@ -222,6 +225,7 @@ static uint32_t shotAfterMs = 3000;
 static const char* recordDir = nullptr;
 static uint32_t recordEveryMs = 50;
 static uint32_t recordForMs = 6000;
+static uint32_t recordFromMs = 0;
 
 static int run(bool* running) {
   // A pin is for a device not yet booted, so `@0 DEBUG found <id>` lands
@@ -233,7 +237,7 @@ static int run(bool* running) {
   }
   setup();
   const uint32_t started = millis();
-  uint32_t nextFrameAt = 0, frameNo = 0;
+  uint32_t nextFrameAt = recordFromMs, frameNo = 0;
   while (*running) {
     const uint32_t frame = millis();
     const uint32_t since = frame - started - simWarpMs;   // the script's clock
@@ -273,10 +277,13 @@ int main(int argc, char** argv) {
     else if (!strcmp(a, "--record") && i + 1 < argc) { recordDir = argv[++i]; filming = true; }
     else if (!strcmp(a, "--fps") && i + 1 < argc) recordEveryMs = 1000 / uint32_t(atoi(argv[++i]));
     else if (!strcmp(a, "--for") && i + 1 < argc) recordForMs = uint32_t(atoi(argv[++i]));
+    else if (!strcmp(a, "--from") && i + 1 < argc) recordFromMs = uint32_t(atoi(argv[++i]));
     // SDL's dummy video driver: the panel still draws into its framebuffer, so
     // a shot is the same frame, but nothing asks for a display.
     else if (!strcmp(a, "--headless")) setenv("SDL_VIDEODRIVER", "dummy", 1);
     else if (!strcmp(a, "--sealed")) simSealed = true;
+    else if (!strcmp(a, "--steps")) smoothFrames = false;
+    else if (!strcmp(a, "--frame-ms") && i + 1 < argc) kFrameMs = uint32_t(atoi(argv[++i]));
     else if (!strcmp(a, "--species") && i + 1 < argc) {
       blorb::SpeciesId s;
       if (!debugverbs::speciesByName(argv[++i], s)) {

@@ -16,6 +16,7 @@
 #include "paint/parallel.h"
 #include "paint/phases.h"
 #include "paint/sprite_pack.h"
+#include "paint/tween.h"
 #include "paint_shots.h"
 
 namespace {
@@ -75,6 +76,39 @@ int main(int argc, char** argv) {
     dishBest = dishUs < dishBest ? dishUs : dishBest;
     duelBest = duelUs < duelBest ? duelUs : duelBest;
   }
+  // The same shots as the badge draws them between ticks (paint/tween.h): each
+  // shot from the one before it, at a share of the tick that walks round, with
+  // the idle layer on. Its own hash (smooth=), so hash= above stays the proof
+  // that a frame on a tick is the bytes it always was.
+  uint64_t smoothHash = 0;
+  double smoothBest = 1e18, tweenBest = 1e18;
+  for (int r = 0; r < reps; ++r) {
+    smoothHash = 0xCBF29CE484222325ull;
+    double drawUs = 0, tweenUs = 0;
+    uint32_t now = 0;
+    for (size_t i = 0; i < shots.size(); ++i) {
+      const Clock::time_point t0 = Clock::now();
+      const blorb::Appearance a = paint::between(shots[i ? i - 1 : 0], shots[i], now - uint32_t(i * 13 % 101), now);
+      const Clock::time_point t1 = Clock::now();
+      paint::draw(a, paint::packFor(a.species), cv, now);
+      paint::drawBootHint(cv, paint::rimHint(a.boot));
+      paint::drawIdleBar(cv, uint16_t(now / 7 % 1001));
+      tweenUs += us(t0, t1);
+      drawUs += us(t0, Clock::now());
+      smoothHash = fnv(cv, smoothHash);
+      now += 20;
+    }
+    for (size_t i = 0; i < duels.size(); ++i) {
+      paint::DuelScene sc = duels[i];
+      paint::between(sc, uint16_t(i * 77 % 257));
+      sc.me.look.lively = true;
+      sc.me.look.liveMs = uint32_t(i * 20);
+      paint::drawDuel(sc, paint::packFor(sc.me.look.species), paint::packFor(sc.them.look.species), cv, now);
+      smoothHash = fnv(cv, smoothHash);
+    }
+    smoothBest = drawUs < smoothBest ? drawUs : smoothBest;
+    tweenBest = tweenUs < tweenBest ? tweenUs : tweenBest;
+  }
   // One more pass of the dish with the phase clock on: where a frame's time goes.
   paint::phaseClock.now = nowNs;
   uint32_t now = 0;
@@ -107,5 +141,7 @@ int main(int argc, char** argv) {
   std::printf("dish_frames=%zu us_per_frame=%.1f duel_frames=%zu us_per_frame=%.1f hash=%016llx\n", shots.size(),
               dishBest / double(shots.size()), duels.size(), duelBest / double(duels.size()), (unsigned long long)hash);
   std::printf("dish_hash=%016llx\n", (unsigned long long)dishHash);
+  std::printf("between ticks: dish us_per_frame=%.1f (the tween itself %.2f) smooth=%016llx\n",
+              smoothBest / double(shots.size()), tweenBest / double(shots.size()), (unsigned long long)smoothHash);
   return 0;
 }

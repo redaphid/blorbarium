@@ -55,13 +55,25 @@ const Fighter& f(const DuelScene& sc, int side) { return side ? sc.them : sc.me;
 
 P rim(int angle, int r) { return {kSide / 2 + r * cosA(angle) / 4096, kSide / 2 + r * sinA(angle) / 4096}; }
 
+// An act's clock in 1/256 ticks: its ticks and the share of a tick since
+// (DuelScene::sub, paint/tween.h), so every ramp and bump moves each frame.
+// At a whole tick each is exactly what it was on whole ticks alone.
+struct Tq {
+  int q;
+  int whole() const { return q >> 8; }
+};
+Tq clockOf(const DuelScene& sc) { return {int(sc.ticks) * 256 + int(sc.sub & 255)}; }
+Tq operator%(Tq t, int n) { return {t.q % (n * 256)}; }
+
 // 0..256 through [t0, t1).
-int ramp(int t, int t0, int t1) { return t <= t0 ? 0 : (t >= t1 ? 256 : (t - t0) * 256 / (t1 - t0)); }
+int ramp(Tq t, int t0, int t1) {
+  return t.q <= t0 * 256 ? 0 : (t.q >= t1 * 256 ? 256 : (t.q - t0 * 256) / (t1 - t0));
+}
 // 0 -> 256 -> 0 through [t0, t1), peaking at the middle.
-int bump(int t, int t0, int t1) {
-  if (t <= t0 || t >= t1) return 0;
+int bump(Tq t, int t0, int t1) {
+  if (t.q <= t0 * 256 || t.q >= t1 * 256) return 0;
   const int m = (t0 + t1) / 2;
-  return t < m ? ramp(t, t0, m) : 256 - ramp(t, m, t1);
+  return t.q < m * 256 ? ramp(t, t0, m) : 256 - ramp(t, m, t1);
 }
 
 // ---- the layout: each a one-line change ------------------------------------------------
@@ -185,7 +197,7 @@ void face(Figure& f, blorb::ExprId e) { f.hasFace = true; f.face = e; }
 // His gauges: hearts, and while they fight the spark meter. A hit landing
 // (`losing` of them) keeps those hearts full until the impact, then flashes
 // and drains them.
-Gauges gaugesOf(const Fighter& f, bool meter, int losing, int t, int sweep) {
+Gauges gaugesOf(const Fighter& f, bool meter, int losing, Tq q, int sweep) {
   Gauges g;
   g.shown = true;
   g.meter = meter;
@@ -193,23 +205,23 @@ Gauges gaugesOf(const Fighter& f, bool meter, int losing, int t, int sweep) {
   g.hearts = uint8_t(imin(f.hearts, g.maxHearts));
   g.assist = uint8_t(imin(f.assist, g.maxHearts));
   g.losing = uint8_t(clampi(losing, 0, g.maxHearts - g.hearts));
-  if (g.losing && t >= kImpact) {
-    g.drain = uint8_t(imax(1, ramp(t, kImpact + 1, kImpact + 9) * 255 / 256));
-    g.flash = uint8_t(255 - ramp(t, kImpact, kImpact + 4) * 255 / 256);
+  if (g.losing && q.whole() >= kImpact) {
+    g.drain = uint8_t(imax(1, ramp(q, kImpact + 1, kImpact + 9) * 255 / 256));
+    g.flash = uint8_t(255 - ramp(q, kImpact, kImpact + 4) * 255 / 256);
   }
   g.sparks = uint8_t(imin(f.sparks, blorb::kMeterMax));
   g.cost = powerFor(f).cost;
-  g.pulse = uint8_t(imin(255, bump(t % 10, 0, 10)));
+  g.pulse = uint8_t(imin(255, bump(q % 10, 0, 10)));
   g.sweep = uint8_t(sweep);
   return g;
 }
 
 // The power's glyph at the meter's hub: small and dim until it is paid for.
-void meter(DuelStaging& s, const Fighter& f, int side, int t) {
+void meter(DuelStaging& s, const Fighter& f, int side, Tq q) {
   const blorb::PowerInfo& pw = powerFor(f);
   const bool ready = f.sparks >= pw.cost;
   // Not yet: small and dim. Ready: full size and breathing. Armed: big, over his head (staged by the caller).
-  const int pulse = ready ? 100 + bump(t % 10, 0, 10) * 15 / 256 : 70;
+  const int pulse = ready ? 100 + bump(q % 10, 0, 10) * 15 / 256 : 70;
   add(s, prop(PropKind::Power, int(pw.glyph), rim(kPowerAngle + side * kFlip, kPowerR), pulse, ready ? 255 : 120));
 }
 
@@ -223,14 +235,15 @@ P popAt(P head, int side) { return {head.x + (side ? 28 : -38), head.y + (side ?
 // in his power's colour gathers behind him, his power's glyph hangs over him
 // and pips under it count the turns to the landing. On the turn it lands he
 // shakes and the glyph swells. What stance it lands with is never shown.
-void telegraph(const Fighter& x, Figure& g, const Body& b, int side, int t, DuelStaging& s) {
+void telegraph(const Fighter& x, Figure& g, const Body& b, int side, Tq q, DuelStaging& s) {
   if (x.windup == blorb::Windup::None) return;
+  const int t = q.whole();
   const bool now = x.landsIn == 0;
   const int heavy = x.windup == blorb::Windup::Heavy;
   g.widePct = uint8_t(g.widePct + 6 + 4 * heavy);
   g.tallPct = uint8_t(g.tallPct - 6 - 4 * heavy);
   if (now) g.x = int16_t(g.x + ((t & 1) ? 1 : -1));
-  const int pulse = bump(t % (now ? 4 : 10), 0, now ? 4 : 10);
+  const int pulse = bump(q % (now ? 4 : 10), 0, now ? 4 : 10);
   const P mid = {g.x, g.y - b.h / 2};
   add(s, prop(PropKind::Aura, int(powerOf(x)), mid, (side ? 70 : 100) + 15 * heavy, 120 + pulse * (now ? 135 : 70) / 256));
   const P head = headOf(g, b);
@@ -242,12 +255,13 @@ void telegraph(const Fighter& x, Figure& g, const Body& b, int side, int t, Duel
 
 void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   // Each drops into his own spot from above and lands with a bounce, so the
   // first frame already shows both of them arriving.
   const int drop[2] = {44, 22};   // the friend's head is near the top of the glass
   for (int side = 0; side < 2; ++side) {
     Figure& f = s.fig[side];
-    f.lift = int8_t(drop[side] * (256 - ramp(t, 0, 7)) / 256 + bump(t, 7, 12) * 8 / 256);
+    f.lift = int8_t(drop[side] * (256 - ramp(q, 0, 7)) / 256 + bump(q, 7, 12) * 8 / 256);
     if (t >= 6 && t < 8) {   // the landing squash
       f.widePct = 114;
       f.tallPct = 86;
@@ -255,17 +269,18 @@ void meeting(const DuelScene& sc, DuelStaging& s, const Body* b) {
     face(f, t < 8 ? expr::alarmed : expr::happy);
   }
   if (t >= 8) {
-    add(s, prop(PropKind::Burst, 1, {124, 114}, 64 + ramp(t, 8, 11) * 40 / 256 - bump(t, 10, 14) * 10 / 256));
+    add(s, prop(PropKind::Burst, 1, {124, 114}, 64 + ramp(q, 8, 11) * 40 / 256 - bump(q, 10, 14) * 10 / 256));
     const blorb::Element e[2] = {blorb::speciesInfo(sc.me.look.species).element,
                                  blorb::speciesInfo(sc.them.look.species).element};
     for (int side = 0; side < 2; ++side)
-      add(s, prop(PropKind::Element, int(e[side]), rim(kPowerAngle + side * kFlip, kPowerR), 100, ramp(t, 10, 14)));
+      add(s, prop(PropKind::Element, int(e[side]), rim(kPowerAngle + side * kFlip, kPowerR), 100, ramp(q, 10, 14)));
   }
   (void)b;
 }
 
 void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   const Fighter* f[2] = {&sc.me, &sc.them};
   // The rim: the three tiers, mine big, a struck bar over any above my ceiling.
   for (int tier = 0; tier < 3; ++tier) {
@@ -286,7 +301,7 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
   for (int side = 0; side < 2; ++side) {
     const Fighter& x = *f[side];
     const P head = headOf(s.fig[side], b[side]);
-    const int bob = bump(t % 16, 0, 16) * 3 / 256;
+    const int bob = bump(q % 16, 0, 16) * 3 / 256;
     // Over my head; beside the friend's, whose head is near the top of the glass.
     const P over = side ? P{head.x - 40, head.y + 16} : P{head.x, head.y - 14};
     switch (x.chose) {
@@ -304,11 +319,12 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   // Both confirmed: the agreed tier, the lower of the two, in the middle.
   if (sc.me.confirmed && sc.them.confirmed)
-    add(s, prop(PropKind::Tier, int(sc.stakes), {120, 128}, 150 + bump(t % 20, 0, 20) * 20 / 256));
+    add(s, prop(PropKind::Tier, int(sc.stakes), {120, 128}, 150 + bump(q % 20, 0, 20) * 20 / 256));
 }
 
 void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   // The rim ring is the clock: it runs out round the glass.
   add(s, prop(PropKind::Timer, 0, {120, 120}, 100, 255,
               sc.turnTicks ? sc.ticksLeft * kTimerFillOf / sc.turnTicks : 0));
@@ -319,7 +335,7 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     // The lean: my pet's pick, a soft light under it, brighter with the assist.
     // Wider under the big one, so it still shows round its backing.
     if (st == sc.lean && !sc.me.locked)
-      add(s, prop(PropKind::Glow, 0, at, aimed ? 120 : 100, 90 + sc.whisper * 165 / 255 * (192 + bump(t % 12, 0, 12) / 4) / 256));
+      add(s, prop(PropKind::Glow, 0, at, aimed ? 120 : 100, 90 + sc.whisper * 165 / 255 * (192 + bump(q % 12, 0, 12) / 4) / 256));
     add(s, prop(PropKind::Stance, st, at, aimed ? kAimedStancePct : kGlyphPct, aimed || sc.aim < 0 ? 255 : 150));
     if (aimed) add(s, prop(PropKind::Reticle, sc.me.locked ? 1 : 0, at, kAimedStancePct));
   }
@@ -329,8 +345,8 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
     s.fig[kMe].x = int16_t(s.fig[kMe].x + (to.x - 120) / 12);
     s.fig[kMe].leanPct = int8_t(clampi(s.fig[kMe].leanPct + (to.x - 120) / 6, -24, 24));
   }
-  telegraph(sc.me, s.fig[kMe], b[kMe], kMe, t, s);
-  telegraph(sc.them, s.fig[kThem], b[kThem], kThem, t, s);
+  telegraph(sc.me, s.fig[kMe], b[kMe], kMe, q, s);
+  telegraph(sc.them, s.fig[kThem], b[kThem], kThem, q, s);
   // Over the friend: a spinner while he chooses, the ring closed once he has
   // locked; never the stance.
   const P head = headOf(s.fig[kThem], b[kThem]);
@@ -339,22 +355,22 @@ void choosing(const DuelScene& sc, DuelStaging& s, const Body* b) {
 
 // A pet plays his own stance: a Pounce lunges at the other, a Guard curls up
 // behind his shield, a Trick sidesteps and darts in from the side.
-void play(Figure& f, int stance, P toward, int t) {
+void play(Figure& f, int stance, P toward, Tq q) {
   const int dx = toward.x - f.x, dy = toward.y - f.y;
   if (stance == int(Stance::Pounce)) {
-    const int go = ramp(t, kMoveAt, kImpact) - ramp(t, kImpact + 2, kSettle);
+    const int go = ramp(q, kMoveAt, kImpact) - ramp(q, kImpact + 2, kSettle);
     f.x = int16_t(f.x + dx * 40 / 100 * go / 256);
     f.y = int16_t(f.y + dy * 40 / 100 * go / 256);
     f.widePct = uint8_t(100 - 10 * go / 256);
     f.tallPct = uint8_t(100 + 12 * go / 256);
-    f.lift = int8_t(10 * bump(t, kMoveAt, kImpact + 2) / 256);
+    f.lift = int8_t(10 * bump(q, kMoveAt, kImpact + 2) / 256);
   } else if (stance == int(Stance::Guard)) {
-    const int curl = ramp(t, kMoveAt, kMoveAt + 3) - ramp(t, kImpact + 4, kSettle);
+    const int curl = ramp(q, kMoveAt, kMoveAt + 3) - ramp(q, kImpact + 4, kSettle);
     f.widePct = uint8_t(100 + 18 * curl / 256);
     f.tallPct = uint8_t(100 - 18 * curl / 256);
   } else if (stance == int(Stance::Trick)) {
-    const int side = ramp(t, kMoveAt, kMoveAt + 2) - ramp(t, kImpact + 2, kSettle);
-    const int dart = bump(t, kMoveAt + 2, kImpact + 3);
+    const int side = ramp(q, kMoveAt, kMoveAt + 2) - ramp(q, kImpact + 2, kSettle);
+    const int dart = bump(q, kMoveAt + 2, kImpact + 3);
     f.x = int16_t(f.x - dy * 22 / 100 * side / 256 + dx * 25 / 100 * dart / 256);
     f.y = int16_t(f.y + dx * 22 / 100 * side / 256 + dy * 25 / 100 * dart / 256);
     f.leanPct = int8_t(f.leanPct + (dx > 0 ? 14 : -14) * side / 256);
@@ -363,6 +379,7 @@ void play(Figure& f, int stance, P toward, int t) {
 
 void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   const Fighter* f[2] = {&sc.me, &sc.them};
   const P home[2] = {{s.fig[kMe].x, s.fig[kMe].y}, {s.fig[kThem].x, s.fig[kThem].y}};
   // Where they meet: between my head and the friend's middle.
@@ -374,15 +391,15 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
     const bool bracing = x.windup != blorb::Windup::None && x.special != Special::Landed &&
                          x.special != Special::Riposted && x.special != Special::Whiffed;
     if (x.stance < 0) face(g, expr::asleep);   // dozed through it
-    else if (bracing) telegraph(x, g, b[side], side, t, s);
-    else play(g, x.special == Special::Landed || x.special == Special::Whiffed ? int(Stance::Pounce) : x.stance, other, t);
+    else if (bracing) telegraph(x, g, b[side], side, q, s);
+    else play(g, x.special == Special::Landed || x.special == Special::Whiffed ? int(Stance::Pounce) : x.stance, other, q);
     // His stance pops over his head, a power glyph with it when it fired.
     const P head = headOf(Figure{int16_t(home[side].x), int16_t(home[side].y)}, b[side]);
-    const int pop = imin(ramp(t, kPop, kPop + 4) * 140 / 256, 140 - ramp(t, kPop + 4, kPop + 6) * 20 / 256);
+    const int pop = imin(ramp(q, kPop, kPop + 4) * 140 / 256, 140 - ramp(q, kPop + 4, kPop + 6) * 20 / 256);
     if (x.stance >= 0 && !bracing) add(s, prop(PropKind::Stance, x.stance, popAt(head, side), pop));
     if (x.fired) {
       const blorb::PowerInfo& pw = powerFor(x);
-      add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 16}, 100 + bump(t, 0, 10) * 40 / 256, 255 - ramp(t, 16, 24) * 255 / 256));
+      add(s, prop(PropKind::Power, int(pw.glyph), {head.x, head.y - 16}, 100 + bump(q, 0, 10) * 40 / 256, 255 - ramp(q, 16, 24) * 255 / 256));
       if (t < kImpact) face(g, expr::foresee);
     }
   }
@@ -391,15 +408,15 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   if (win >= 0 && t >= kArrowAt && t < kImpact + 2) {   // gone by the hit, off the faces
     const P a = popAt(headOf(Figure{int16_t(home[win].x), int16_t(home[win].y)}, b[win]), win);
     const P z = popAt(headOf(Figure{int16_t(home[1 - win].x), int16_t(home[1 - win].y)}, b[1 - win]), 1 - win);
-    Prop arrow = prop(PropKind::Arrow, 0, {a.x + (z.x - a.x) / 4, a.y + (z.y - a.y) / 4}, 100, ramp(t, kArrowAt, kArrowAt + 2));
+    Prop arrow = prop(PropKind::Arrow, 0, {a.x + (z.x - a.x) / 4, a.y + (z.y - a.y) / 4}, 100, ramp(q, kArrowAt, kArrowAt + 2));
     arrow.x2 = int16_t(z.x - (z.x - a.x) / 4);
     arrow.y2 = int16_t(z.y - (z.y - a.y) / 4);
     add(s, arrow);
   }
   if (t >= kImpact && t < kSettle + 4) {
-    const int grow = 60 + ramp(t, kImpact, kImpact + 3) * 60 / 256;
+    const int grow = 60 + ramp(q, kImpact, kImpact + 3) * 60 / 256;
     // The burst holds its word for under a second and goes, so the pets read again.
-    const int fade = 255 - ramp(t, kImpact + 6, kImpact + 9) * 255 / 256;
+    const int fade = 255 - ramp(q, kImpact + 6, kImpact + 9) * 255 / 256;
     if (win < 0) {
       if (fade) add(s, prop(PropKind::Burst, 3, mid, grow - 10, fade));
       for (int side = 0; side < 2; ++side) add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[side], b[side]), side ? 80 : 100));
@@ -420,9 +437,9 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
     Figure& g = s.fig[lose];
     if (f[lose]->hit) {
       // Struck: a white flash, knocked back away from the winner, and the face says it.
-      g.flash = uint8_t(255 - ramp(t, kImpact, kImpact + 6) * 255 / 256);
+      g.flash = uint8_t(255 - ramp(q, kImpact, kImpact + 6) * 255 / 256);
       if (t < kImpact) g.flash = 0;
-      const int back = bump(t, kImpact, kSettle) * 14 / 256;
+      const int back = bump(q, kImpact, kSettle) * 14 / 256;
       g.x = int16_t(g.x + (home[lose].x - home[win].x) * back / 120);
       g.y = int16_t(g.y + (home[lose].y - home[win].y) * back / 120);
       if (t >= kImpact) face(g, expr::alarmed);
@@ -436,7 +453,7 @@ void clash(const DuelScene& sc, DuelStaging& s, const Body* b) {
   // A dodge: the special whiffs through where he was (Hush folds away into the dark).
   for (int side = 0; side < 2; ++side)
     if (f[1 - side]->special == Special::Whiffed)
-      s.fig[side].alpha = uint8_t(255 - bump(t, kMoveAt, kSettle) * 170 / 256);
+      s.fig[side].alpha = uint8_t(255 - bump(q, kMoveAt, kSettle) * 170 / 256);
 }
 
 // The downed pet: slumped, leaning away, eyes shut, stars round his head.
@@ -452,6 +469,7 @@ constexpr P kMercySkull[2] = {{100, 64}, {108, 58}};
 
 void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
   slump(s.fig[down], s.fig[down].x - s.fig[win].x);
   add(s, prop(PropKind::Stars, t % 16, headOf(s.fig[down], Body{b[down].top * 64 / 100, b[down].h, b[down].w}), down ? 80 : 100));
@@ -471,7 +489,7 @@ void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   // The downed pet's kid can only plead: a heart floats up toward the winner.
   if (sc.pleading) {
-    const int up = (t * 256 / 20) % 256;
+    const int up = q.q / 20 % 256;
     const P from = headOf(s.fig[down], b[down]), to = headOf(s.fig[win], b[win]);
     add(s, prop(PropKind::Plea, 0, {from.x + (to.x - from.x) * up / 256, from.y + (to.y - from.y) * up / 256 - 10}, 130,
                 255 - up * 200 / 256));
@@ -480,46 +498,48 @@ void mercy(const DuelScene& sc, DuelStaging& s, const Body* b) {
 
 void fallen(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
   face(s.fig[win], expr::happy);
   if (sc.verdict == Verdict::Finish) {
     // He is gone: his body fades to his remains, the full skull fades over him.
     Figure& g = s.fig[down];
     slump(g, g.x - s.fig[win].x);
-    g.remainsIn = uint8_t(ramp(t, 2, 14) * 255 / 256);
+    g.remainsIn = uint8_t(ramp(q, 2, 14) * 255 / 256);
     const P head = headOf(s.fig[down], b[down]);
-    add(s, prop(PropKind::Tier, 2, {(head.x + 120) / 2, imax(52, head.y - 22) - ramp(t, 0, 20) * 20 / 256}, 200,
-                255 - ramp(t, 10, 24) * 255 / 256));
+    add(s, prop(PropKind::Tier, 2, {(head.x + 120) / 2, imax(52, head.y - 22) - ramp(q, 0, 20) * 20 / 256}, 200,
+                255 - ramp(q, 10, 24) * 255 / 256));
     // The victor's kid takes the fallen's token: it floats to the victor's rim.
-    const int fly = ramp(t, 14, 30);
+    const int fly = ramp(q, 14, 30);
     const P from = {s.fig[down].x, s.fig[down].y - b[down].h / 2}, to = rim(kHeartArc + 4 + win * kFlip, 82);
     if (t >= 14)
       add(s, prop(PropKind::Trophy, int(f(sc, down).look.species.v),
-                  {from.x + (to.x - from.x) * fly / 256, from.y + (to.y - from.y) * fly / 256 - bump(t, 14, 30) * 20 / 256}, 120));
+                  {from.x + (to.x - from.x) * fly / 256, from.y + (to.y - from.y) * fly / 256 - bump(q, 14, 30) * 20 / 256}, 120));
   } else {
     // Spared: he sits up, still dazed, and his line owes the victor's a life.
     Figure& g = s.fig[down];
-    const int up = ramp(t, 0, 10);
+    const int up = ramp(q, 0, 10);
     g.tallPct = uint8_t(72 + 20 * up / 256);
     g.widePct = uint8_t(118 - 12 * up / 256);
     g.leanPct = int8_t((g.x < s.fig[win].x ? -20 : 20) * (256 - up) / 256);
     face(g, t < 10 ? expr::asleep : expr::sleepy);
-    add(s, prop(PropKind::Debt, 0, {120, 120 - ramp(t, 4, 16) * 16 / 256}, 100 + ramp(t, 4, 10) * 60 / 256, ramp(t, 4, 8)));
+    add(s, prop(PropKind::Debt, 0, {120, 120 - ramp(q, 4, 16) * 16 / 256}, 100 + ramp(q, 4, 10) * 60 / 256, ramp(q, 4, 8)));
   }
 }
 
 void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
+  const Tq q = clockOf(sc);
   if (sc.won == Side::Neither) {
     for (int side = 0; side < 2; ++side) face(s.fig[side], expr::sleepy);
   } else {
     const int win = sc.won == Side::Me ? kMe : kThem, down = 1 - win;
     // The winner hops for joy; the loser has fainted, stars round his head.
     Figure& w = s.fig[win];
-    const int ph = t % 10;
+    const Tq ph = q % 10;
     w.lift = int8_t(bump(ph, 1, 9) * 16 / 256);
-    w.widePct = uint8_t(ph < 1 || ph > 8 ? 112 : 100);
-    w.tallPct = uint8_t(ph < 1 || ph > 8 ? 88 : 100);
+    w.widePct = uint8_t(ph.whole() < 1 || ph.whole() > 8 ? 112 : 100);
+    w.tallPct = uint8_t(ph.whole() < 1 || ph.whole() > 8 ? 88 : 100);
     face(w, expr::happy);
     if (sc.stakes == Stakes::Mortal && sc.verdict == Verdict::Finish) {
       s.fig[down].remainsIn = 255;
@@ -534,7 +554,7 @@ void outcome(const DuelScene& sc, DuelStaging& s, const Body* b) {
   }
   // My new scars come in, darkening into his skin.
   s.fig[kMe].newScars = sc.newScars;
-  s.fig[kMe].scarIn = uint8_t(ramp(t, 0, 20) * 255 / 256);
+  s.fig[kMe].scarIn = uint8_t(ramp(q, 0, 20) * 255 / 256);
 }
 
 }  // namespace
@@ -676,14 +696,14 @@ DuelStaging stageDuel(const DuelScene& sc, const SpritePack& mine, const SpriteP
   // The gauges stay on the rim through the fight itself, sweeping in as they meet.
   const bool fighting = sc.act == DuelAct::Choosing || sc.act == DuelAct::Clash || sc.act == DuelAct::Meeting;
   if (fighting || sc.act == DuelAct::Outcome) {
-    const int t = sc.ticks;
+    const Tq q = clockOf(sc);
     const bool clashing = sc.act == DuelAct::Clash;
-    const int sweep = sc.act == DuelAct::Meeting ? ramp(t, 6, 14) * 255 / 256 : 255;
-    s.gauge[kMe] = gaugesOf(sc.me, fighting, clashing ? sc.me.hit : 0, t, sweep);
-    s.gauge[kThem] = gaugesOf(sc.them, fighting, clashing ? sc.them.hit : 0, t, sweep);
+    const int sweep = sc.act == DuelAct::Meeting ? ramp(q, 6, 14) * 255 / 256 : 255;
+    s.gauge[kMe] = gaugesOf(sc.me, fighting, clashing ? sc.me.hit : 0, q, sweep);
+    s.gauge[kThem] = gaugesOf(sc.them, fighting, clashing ? sc.them.hit : 0, q, sweep);
     if (fighting) {
-      meter(s, sc.me, kMe, t);
-      meter(s, sc.them, kThem, t);
+      meter(s, sc.me, kMe, q);
+      meter(s, sc.them, kThem, q);
     }
   }
   for (int side = 0; side < 2; ++side) s.face[side] = faceBox(s.fig[side], b[side], kHome[side].scalePct);
@@ -1109,9 +1129,15 @@ bool behind(PropKind k) { return k == PropKind::Timer || k == PropKind::Glow || 
 
 // His look for the duel: breathing on the duel's clock in his idle pose; the
 // power face glows only while his power fires.
-Appearance lookFor(const Fighter& f, const Figure& g, uint16_t ticks) {
+Appearance lookFor(const Fighter& f, const Figure& g, const DuelScene& sc) {
   Appearance a = f.look;
-  a.poseTick = uint16_t(a.poseTick + ticks);
+  // His own clock run on by the act's, 1/256s and all; both breathe on the
+  // screen's clock when mine is drawn lively (paint/tween.h), each at his own tempo.
+  const uint32_t sub = uint32_t(a.poseSub) + (sc.sub & 255);
+  a.poseTick = uint16_t(a.poseTick + sc.ticks + (sub >> 8));
+  a.poseSub = uint16_t(sub & 255);
+  a.lively = sc.me.look.lively;
+  a.liveMs = sc.me.look.liveMs;
   a.reflexActive = false;
   a.pose = blorb::pose::idle;
   const bool powered = g.hasFace && g.face == expr::foresee;
@@ -1209,8 +1235,8 @@ void drawStaged(const DuelScene& sc, const DuelStaging& s, const SpritePack& min
   for (int i = 0; i < s.propCount; ++i)
     if (behind(s.props[i].kind) && s.props[i].kind != PropKind::Timer) paintProp(cv, s.props[i], sc.ticks);
   // The friend is across the dish, so behind; mine is in front.
-  drawFigure(lookFor(sc.them, s.fig[kThem], sc.ticks), theirs, cv, s.fig[kThem]);
-  drawFigure(lookFor(sc.me, s.fig[kMe], sc.ticks), mine, cv, s.fig[kMe]);
+  drawFigure(lookFor(sc.them, s.fig[kThem], sc), theirs, cv, s.fig[kThem]);
+  drawFigure(lookFor(sc.me, s.fig[kMe], sc), mine, cv, s.fig[kMe]);
   phaseEnd(Phase::Figure);
   // The gauges over the pets, the props over the gauges.
   for (int side = 0; side < 2; ++side) hud::gauges(cv, s.gauge[side], side);
