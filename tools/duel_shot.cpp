@@ -1,9 +1,13 @@
 // The duel screen without a duel: draws test/support/duel_scenes.h's moments
 // for any two species, or plays a whole scripted duel as frames for a film.
 //
-//   duel_shot --moment mercy --mine gilly --theirs fizz --out mercy.bmp [--ticks 12] [--aim 0]
+//   duel_shot --moment mercy --mine gilly --theirs fizz --out mercy.bmp [--ticks 12] [--aim 0] [--sub 128]
 //             [--hearts 1] [--their-hearts 2]      either pet's hearts left, for low HP
 //   duel_shot --film outputs/duel-film --mine gilly --theirs fizz        frame_0000.bmp ... at 10 fps
+//   duel_shot --film outputs/duel-film --smooth 1 ...                    at 50 fps, between the ticks (paint/tween.h)
+//
+// --sub draws the moment that many 1/256 ticks past --ticks, as the badge
+// draws the frames between ticks: the act's motion and both pets' breath.
 //
 // Built by `pio run -e duelshot` (tools/duel_film.sh does it in WSL). The same
 // renderer as the badge, so a frame here is the frame on the glass.
@@ -100,14 +104,25 @@ constexpr Beat kFilm[] = {
     {"mercy", 44, mercyHold},   {"fallen", 34, noTweak},           {"outcome", 30, noTweak},
 };
 
-int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs) {
+// A scene `sub`/256 of a tick past its ticks, drawn as the badge draws between
+// ticks: the act's clock and both pets' breath on the screen's clock.
+void between(DuelScene& s, int sub) {
+  s.sub = uint16_t(sub);
+  s.me.look.lively = true;
+  s.me.look.liveMs = uint32_t((s.ticks * 256 + sub) * 100 / 256);
+}
+
+int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs, bool smooth) {
   auto cv = std::make_unique<paint::Canvas240>();
   int n = 0;
+  const int perTick = smooth ? 5 : 1;   // 50 fps between the ticks, or each tick's own frame at 10
   for (const Beat& b : kFilm)
-    for (int t = 0; t < b.frames; ++t) {
+    for (int f = 0; f < b.frames * perTick; ++f) {
+      const int t = f / perTick;
       DuelScene s = blorbtest::duelScene(b.moment, mine, theirs);
       s.ticks = uint16_t(t);
       b.tweak(s, t);
+      if (smooth) between(s, f % perTick * 256 / perTick);
       if (!std::strcmp(b.moment, "outcome")) {   // the film's ending is the mortal one
         s.stakes = blorb::Stakes::Mortal;
         s.verdict = blorb::Verdict::Finish;
@@ -120,7 +135,7 @@ int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs)
       std::snprintf(name, sizeof name, "/frame_%04d.bmp", n++);
       if (!writeBmp(*cv, dir + name)) { std::fprintf(stderr, "duel_shot: cannot write %s%s\n", dir.c_str(), name); return 1; }
     }
-  std::printf("%d frames at 10 fps in %s\n", n, dir.c_str());
+  std::printf("%d frames at %d fps in %s\n", n, 10 * perTick, dir.c_str());
   return 0;
 }
 
@@ -129,7 +144,7 @@ int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs)
 int main(int argc, char** argv) {
   std::string moment = "meeting", out = "duel.bmp", filmDir;
   blorb::SpeciesId mine = blorb::kGrungo, theirs = blorb::kGrungo;
-  int ticks = -1, aim = -2;   // --aim: the stance under the tilt (-1 none), else the moment's own
+  int ticks = -1, aim = -2, sub = -1, smooth = 0;   // --aim: the stance under the tilt (-1 none), else the moment's own
   int hearts = -1, theirHearts = -1;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
@@ -143,11 +158,13 @@ int main(int argc, char** argv) {
     else if (a == "--aim") aim = std::atoi(v);
     else if (a == "--hearts") hearts = std::atoi(v);
     else if (a == "--their-hearts") theirHearts = std::atoi(v);
+    else if (a == "--sub") sub = std::atoi(v) & 255;
+    else if (a == "--smooth") smooth = std::atoi(v);
     else if (a == "--mine" || a == "--theirs") {
       if (!species(v, a == "--mine" ? mine : theirs)) { std::fprintf(stderr, "duel_shot: %s is not a species\n", v); return 2; }
     } else { std::fprintf(stderr, "duel_shot: unknown %s\n", a.c_str()); return 2; }
   }
-  if (!filmDir.empty()) return film(filmDir, mine, theirs);
+  if (!filmDir.empty()) return film(filmDir, mine, theirs, smooth != 0);
   bool known = false;
   for (const blorbtest::DuelMoment& m : blorbtest::kDuelMoments) known |= moment == m.name;
   if (!known) { std::fprintf(stderr, "duel_shot: %s is not a moment\n", moment.c_str()); return 2; }
@@ -156,6 +173,7 @@ int main(int argc, char** argv) {
   if (aim >= -1) s.aim = int8_t(aim);
   if (hearts >= 0) s.me.hearts = uint8_t(hearts);
   if (theirHearts >= 0) s.them.hearts = uint8_t(theirHearts);
+  if (sub >= 0) between(s, sub);
   auto cv = std::make_unique<paint::Canvas240>();
   paint::drawDuel(s, paint::packFor(mine), paint::packFor(theirs), *cv, 0);
   return writeBmp(*cv, out) ? 0 : 1;

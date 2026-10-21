@@ -9,6 +9,9 @@ same bytes every run, and this is where that stays true. The frame is then
 held to its golden within a tolerance. A miss leaves <case>.actual.png and
 <case>.diff.png in outputs/misses/; every frame shot, 2x nearest-neighbour,
 is in outputs/frames/ for a person to look at.
+
+The older cases are each tick's own frame (sim --steps); the *_between cases
+are the frames between ticks the badge draws now (paint/tween.h, BETWEEN).
 """
 import hashlib
 import os
@@ -55,7 +58,9 @@ FEED_OF = {"pellet_toss": "knock_knock"}
 # its golden because the golden was idle too. Share of the disc that must differ.
 UNLIKE = {"shake_hop": ("idle", 0.02), "thought": ("idle", 0.01), "prophecy": ("thought", 0.01),
           "no_phone": ("idle", 0.01),
-          "sealed": ("sleep", 0.2), "knock_knock": ("idle", 0.01), "pellet_toss": ("idle", 0.01)}
+          "sealed": ("sleep", 0.2), "knock_knock": ("idle", 0.01), "pellet_toss": ("idle", 0.01),
+          # Between ticks he is not the tick's frame: breathing, swaying, a hop in the air.
+          "idle_between": ("idle", 0.002), "hop_between": ("idle_between", 0.02)}
 
 # One adult at rest per roster species, on idle's feed and clock with the
 # drawn species pinned (sim --species). Grungo's is idle itself. Each must not
@@ -66,6 +71,26 @@ for slug in ROSTER:
     FEED_OF["species_" + slug] = "idle"
     FLAGS["species_" + slug] = ["--species", slug]
     UNLIKE["species_" + slug] = ("idle", 0.05)
+
+# The cases above are each tick's own frame (sim --steps), as every frame was
+# drawn before frames between ticks (paint/tween.h): their goldens predate it
+# and still hold. These are the frames the badge draws now, at its 20 ms pace
+# and off the ticks' own milliseconds, so they land between two ticks: breath,
+# sway and the idle layer, a hop on its way up, a waddle, a line mid-crawl.
+BETWEEN = {
+    "idle_between": ("idle", 17650),
+    "hop_between": ("hop", 17250),      # the hop leaves the floor near 17120 and peaks near 17340
+    "walk_between": ("eating", 2050),   # on his way to the pellet
+    "thought_between": ("thought", 9050),
+    "mothwick_between": ("idle", 17650, ["--species", "mothwick"]),
+}
+STEPS = set(CASES)
+for case, spec in BETWEEN.items():
+    CASES[case] = spec[1]
+    FEED_OF[case] = spec[0]
+    FLAGS[case] = ["--frame-ms", "20"] + (spec[2] if len(spec) > 2 else [])
+for case in STEPS:
+    FLAGS[case] = FLAGS.get(case, []) + ["--steps"]
 
 # A pixel has moved when a channel is further off than this; the panel is
 # RGB565, so neighbouring colours are 4 to 8 counts apart.

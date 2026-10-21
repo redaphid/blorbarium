@@ -112,6 +112,8 @@ struct DuelScene {
   // Outcome
   uint8_t newScars = 0;             // my last n scars are new: drawn coming in
   RimHint boot;                     // every act shows what BOOT does now
+  // Last, so a renderer built before it reads the rest where it always was (paint_bench REF=).
+  uint16_t sub = 0;                 // 1/256 ticks past `ticks` (paint/tween.h): the motion runs smooth between ticks
 };
 
 // What D4's Outcome says, from my side: hearts and meters, the last resolved

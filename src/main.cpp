@@ -17,6 +17,7 @@
 #include "paint/phases.h"
 #include "paint/shot.h"
 #include "paint/sprite_pack.h"
+#include "paint/tween.h"
 
 #if defined(BADGE_BOARD_SIM)
 #include "board_sim.h"
@@ -112,13 +113,14 @@ class SerialLink : public blorb::Link {
 };
 
 // A frame at most every kFrameMs. Awake, the board runs flat out (240 MHz, the
-// panel's SPI at BLORB_LCD_SPI_MHZ) and draws up to 50 a second: his own
-// motion steps with the 100 ms ticks, but a hint filling, fight mode's line
-// and the rings move on the clock, and a frame that changed nothing sends the
-// panel nothing (boardPresent). Low power draws none. The simulator keeps the
-// 25 fps its frame goldens were filmed at.
+// panel's SPI at BLORB_LCD_SPI_MHZ) and draws up to 50 a second: he lives on
+// the 100 ms ticks, and every frame between them draws him on his way from one
+// to the next (paint/tween.h), so his motion, the hint filling, fight mode's
+// line and the rings all move on the clock; a frame that changed nothing sends
+// the panel nothing (boardPresent). Low power draws none. The simulator keeps
+// the 25 fps its frame goldens were filmed at (--frame-ms 20 films the badge's 50).
 #if defined(BADGE_BOARD_SIM)
-static constexpr uint32_t kFrameMs = 40;
+static uint32_t kFrameMs = 40;
 #else
 static constexpr uint32_t kFrameMs = 20;
 #endif
@@ -362,6 +364,30 @@ static blorb::Appearance shown() {
   return a;
 }
 
+// Frames between ticks (paint/tween.h): he moves every frame, not on the 100 ms
+// ticks, and his animations run at paint::kScreenSpeed. `DEBUG smooth off` (the
+// sim's --steps) draws each tick's own frame until the next, as before, to compare.
+static bool smoothFrames = true;
+static uint16_t tickShareAt(uint32_t now) { return paint::tickShare(now - dish->lastTickMs()); }
+
+// The look `now` drawn as the frame `now` ms is: between the look at the tick
+// before (kept here) and the look at this tick, `shown()` every frame. A frame
+// after a jump of more than one tick (a warp, a slow save) has no tick before
+// to come from, so it starts again from where he is.
+static blorb::Appearance onScreen(const blorb::Appearance& look, uint32_t now) {
+  static blorb::Appearance was, last;
+  static uint32_t lastTick = 0;
+  static bool seen = false;
+  const uint32_t tick = dish->tickCount();
+  if (!seen || tick != lastTick) {
+    was = seen && tick == lastTick + 1 ? last : look;
+    lastTick = tick, seen = true;
+  }
+  last = look;
+  if (!smoothFrames) return look;
+  return paint::between(was, look, dish->lastTickMs(), now);
+}
+
 // One frame of the dish, or of the duel while one has a scene. In the common
 // path, not behind a board, because the simulator draws (and films) exactly
 // what this draws. The scene is static: it holds two Appearances, which the
@@ -382,6 +408,7 @@ static void drawFrame(const blorb::Appearance& a, uint32_t now) {
     if (v.phase != blorb::DuelPhase::Lobby && v.phase != blorb::DuelPhase::Greeting) {
       duelScene = paint::sceneOf(v, a);
       duelScene.boot = hint;
+      if (smoothFrames) paint::between(duelScene, tickShareAt(now));   // the act's motion between its ticks
       paint::drawDuel(duelScene, paint::packFor(a.species), paint::packFor(v.them.species), canvas, now);
       return;
     }
@@ -1276,6 +1303,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "fps") == 0) return std::strcmp(a, "bench") == 0 ? fps::bench() : fps::report();
   if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
+  if (std::strcmp(verb, "smooth") == 0) {   // `DEBUG smooth [on|off]`: frames between ticks, or each tick's own (paint/tween.h)
+    if (*a) smoothFrames = std::strcmp(a, "off") != 0;
+    return (void)Serial.printf("[hw] smooth=%s speed=%u/256\n", smoothFrames ? "on" : "off", unsigned(paint::kScreenSpeedQ8));
+  }
   if (std::strcmp(verb, "duel") == 0) return duelNow();
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
@@ -1539,7 +1570,7 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
     const uint32_t lookAt = micros();
 #endif
-    const blorb::Appearance look = shown();
+    const blorb::Appearance look = onScreen(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
