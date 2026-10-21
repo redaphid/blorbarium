@@ -690,9 +690,41 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   }
   const Outline figure{bodies, 2, eyed, 2 + kFaces, variants, 1 + kReflexMotionCount};
   constexpr int kMarginQ4 = (kBreathPx + 1) * 16;
-  const Disc d = envelope(figure, middle(bodies[0], base), kMarginQ4);
-  Place p = placeAt(a.at, d, base);
-  const int maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, p, kMarginQ4));
+  // The envelope, the stand point and the headroom walk every row of both
+  // bodies under every transform: a fifth of his frame on the board. They are
+  // pure in his bodies, his faces (the pack's, for his stage), his size and
+  // where he stands, so they are worked out again only when one of those changes.
+  struct Memo {
+    const SpritePack* pack = nullptr;
+    Stage stage{};
+    Xf base;
+    FrameRef bodies[2]{};
+    int32_t atX = 0, atY = 0;
+    Disc d;
+    Place p;
+    int maxLift = 0;
+  };
+  static Memo memo;
+  auto same = [](const FrameRef& x, const FrameRef& y) {
+    if (x.rle != y.rle || x.w != y.w || x.h != y.h || x.originX != y.originX || x.originY != y.originY ||
+        x.eyeCount != y.eyeCount)
+      return false;
+    for (int e = 0; e < imin(x.eyeCount, 2); ++e)
+      if (x.eyes[e].x != y.eyes[e].x || x.eyes[e].y != y.eyes[e].y || x.eyes[e].r != y.eyes[e].r) return false;
+    return true;
+  };
+  if (memo.pack != &pack || memo.stage != a.stage || memo.base.kx != base.kx || memo.base.ky != base.ky ||
+      !same(memo.bodies[0], bodies[0]) || !same(memo.bodies[1], bodies[1]) || memo.atX != a.at.x.raw ||
+      memo.atY != a.at.y.raw) {
+    memo.pack = &pack, memo.stage = a.stage, memo.base = base, memo.bodies[0] = bodies[0], memo.bodies[1] = bodies[1];
+    memo.atX = a.at.x.raw, memo.atY = a.at.y.raw;
+    memo.d = envelope(figure, middle(bodies[0], base), kMarginQ4);
+    memo.p = placeAt(a.at, memo.d, base);
+    memo.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, memo.p, kMarginQ4));
+  }
+  const Disc d = memo.d;
+  Place p = memo.p;
+  const int maxLift = memo.maxLift;
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   drawItems(a, pack, cv, d, col, p, foot, false);
