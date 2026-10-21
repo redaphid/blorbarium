@@ -8,6 +8,7 @@
 #include <vector>
 #include "blorb/air.h"
 #include "blorb/appearance.h"
+#include "blorb/clutch_show.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
 #include "blorb/feed_show.h"
@@ -236,6 +237,10 @@ class Dish {
   // or hashed. nowMs_ is the newest time the shell has handed in, a sample's
   // or a tick call's: the frame drawn next is about then.
   FeedShow feed_;
+  // Choosing an egg as the eyes see it (clutch_show.h): presentation only,
+  // never saved or hashed. The tilt at each sample, not each tick, so the
+  // picker follows the hand with nothing added to the tilt's own smoothing.
+  ClutchShow clutchShow_;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn

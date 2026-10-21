@@ -297,18 +297,16 @@ TEST(Clutch, AFriendEggJoinsWithinThreeAndAFullClutchGivesUpItsLastSlot) {
 }
 
 namespace {
-std::optional<uint8_t> runClutch(Clutch& k, uint8_t knocks, bool hold) {
+// The vigil, then a tilt toward egg `aim` (the duel's sectors: the egg there,
+// creature.h eggAt); then a knock while still tilted, or nothing until the timeout.
+std::optional<uint8_t> runClutch(Clutch& k, int8_t aim, bool knock) {
   SenseOut none;
   for (uint32_t t = 0; t < Clutch::kVigilTicks; ++t) if (auto i = k.tick(none)) return i;
-  for (uint8_t i = 0; i < knocks; ++i) {
+  if (auto i = k.tick(none, aim)) return i;
+  if (knock) {
     SenseOut s;
     s.fire(stim::knock);
-    if (auto picked = k.tick(s)) return picked;
-  }
-  if (hold) {
-    SenseOut s;
-    s.fire(stim::button_hold);
-    return k.tick(s);
+    return k.tick(s, aim);
   }
   for (uint32_t t = 0; t <= Clutch::kPickTimeoutTicks; ++t) if (auto i = k.tick(none)) return i;
   return std::nullopt;
@@ -324,7 +322,7 @@ TEST(Clutch, TheTimeoutNeverPicksTheFriendEggButAKidMay) {
   Clutch a = withFriend(), b = withFriend(), c = withFriend(), plain = clutchOf(starterGenome(7), 3, 1);
   EXPECT_EQ(runClutch(a, 2, false), uint8_t(0)) << "the cursor left on the friend egg";
   EXPECT_EQ(runClutch(b, 1, false), uint8_t(1)) << "his own second egg";
-  EXPECT_EQ(runClutch(c, 2, true), uint8_t(2)) << "a kid's hold picks the friend egg";
+  EXPECT_EQ(runClutch(c, 2, true), uint8_t(2)) << "a kid's knock keeps the friend egg";
   EXPECT_EQ(runClutch(plain, 2, false), uint8_t(2)) << "with no friend egg the timeout takes the cursor";
 }
 

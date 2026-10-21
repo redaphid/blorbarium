@@ -17,6 +17,7 @@
 #include "paint/marquee.h"
 #include "paint/text.h"
 #include "paint/sprite_pack.h"
+#include "../../lib/paint/src/figure.h"   // the clutch picker's words
 
 using blorb::Appearance;
 using blorb::Fx;
@@ -799,6 +800,75 @@ TEST(Font, HasEveryCharacterTheLinesMayUse) {
     EXPECT_GT(g.xAdvance, 0) << char(c);
     if (c != ' ') EXPECT_GT(g.width * g.height, 0) << "'" << char(c) << "' has no ink";
   }
+}
+
+// The egg picker's words draw too.
+TEST(Font, HasTheEggPickersWords) {
+  for (const char* w : paint::kClutchWords)
+    for (const char* c = w; *c; ++c) EXPECT_TRUE(blorb::inFont(*c)) << w << ": '" << *c << "'";
+}
+
+namespace {
+Appearance picker(int8_t aim) {
+  Appearance a;
+  a.kind = Appearance::Kind::Clutch;
+  a.eggCount = 3;
+  a.eggs[1].cloak = blorb::Tint{40, 160, 100};
+  a.clutch.picking = true;
+  a.clutch.aim = aim;
+  a.clutch.shownMs = 400;
+  return a;
+}
+int differs(const Canvas240& a, const Canvas240& b, int x0, int y0, int x1, int y1) {
+  int n = 0;
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+  return n;
+}
+}  // namespace
+
+// The egg a tilt points at grows toward the middle the frame it is aimed at
+// (the slide only eases its size), and a knock closes a ring round it.
+TEST(Picker, TheAimedEggGrowsAndAKnockRingsIt) {
+  const auto& pack = paint::placeholderPack();
+  auto level = render(picker(-1), pack), left = render(picker(0), pack), right = render(picker(1), pack);
+  EXPECT_GT(differs(*left, *level, 0, 60, 120, 170), 1500) << "the left egg, aimed";
+  EXPECT_GT(differs(*right, *level, 120, 60, 240, 170), 1500) << "the right egg, aimed";
+  Appearance sliding = picker(0);
+  sliding.clutch.aimWas = 1;
+  sliding.clutch.aimMs = 20;
+  auto mid = render(sliding, pack);
+  EXPECT_GT(differs(*mid, *left, 0, 0, kSide, kSide), 200) << "20 ms into the slide it is not there yet";
+  Appearance knocked = picker(0);
+  knocked.clutch.knockMs = 300;
+  EXPECT_GT(differs(*render(knocked, pack), *left, 0, 40, 130, 190), 100) << "the ring closing";
+}
+
+// The hints play on the picker's own clock: two moments of it differ.
+TEST(Picker, TheHintsMoveOnTheirClock) {
+  const auto& pack = paint::placeholderPack();
+  for (int8_t aim : {int8_t(-1), int8_t(2)}) {
+    Appearance a = picker(aim), b = picker(aim);
+    b.clutch.shownMs = uint16_t(a.clutch.shownMs + 300);
+    EXPECT_GT(differs(*render(a, pack), *render(b, pack), 0, 0, kSide, kSide), 50) << "aim " << int(aim);
+  }
+}
+
+// Kept: the chosen moment over the egg screen, then the egg screen alone.
+TEST(Picker, TheChosenMomentHandsOverToTheEgg) {
+  const auto& pack = paint::placeholderPack();
+  Appearance egg;
+  egg.kind = Appearance::Kind::Egg;
+  Appearance chosen = egg;
+  chosen.eggCount = 3;
+  chosen.clutch.chosen = 2;
+  chosen.clutch.count = 3;
+  chosen.clutch.chosenMs = 200;
+  auto plain = render(egg, pack);
+  EXPECT_GT(differs(*render(chosen, pack), *plain, 0, 0, kSide, kSide), 1000) << "the chosen moment shows";
+  chosen.clutch.chosenMs = blorb::ClutchView::kNever;
+  chosen.clutch.chosen = -1;
+  EXPECT_EQ(differs(*render(chosen, pack), *plain, 0, 0, kSide, kSide), 0) << "then the plain egg";
 }
 
 // The belly meter up the left rim: fuller, more of it lit.

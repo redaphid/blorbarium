@@ -75,17 +75,16 @@ Offspring Clutch::child(uint8_t i) const {
   return mutate(parent, pol, heirlooms, rng);
 }
 
-std::optional<uint8_t> pickEgg(const SenseOut& senses, uint8_t& cursor, uint8_t count) {
+std::optional<uint8_t> pickEgg(const SenseOut& senses, int8_t aim, uint8_t& cursor, uint8_t count) {
   if (count <= 1) return uint8_t(0);
+  const int8_t egg = eggAt(aim, count);
+  if (egg < 0) return std::nullopt;
+  cursor = uint8_t(egg);
   for (uint8_t i = 0; i < senses.stimCount; ++i) {
-    StimId s = senses.stimuli[i];
-    // Keeping an egg is for good, so it is a hold: BOOT held, or its twin, turned
-    // onto a side and held (controls.h). A knock knock is a press (it arrives
-    // with its twin, a Button) and moves on; it no longer keeps.
-    if (s == stim::button_hold) return cursor;
-    // A quick second press arrives as a double (ButtonDetector), which means
-    // nothing here (boot.h): it is the second tap, so tapping through is never slowed.
-    if (s == stim::button || s == stim::button_double || s == stim::knock) cursor = uint8_t((cursor + 1) % count);
+    const StimId s = senses.stimuli[i];
+    // A knock knock arrives as a double knock with its twin, a Button
+    // (controls.h); a BOOT double press as a Button again (Dish::routeBoot).
+    if (s == stim::knock || s == stim::button || s == stim::button_hold) return cursor;
   }
   return std::nullopt;
 }
@@ -93,10 +92,10 @@ std::optional<uint8_t> pickEgg(const SenseOut& senses, uint8_t& cursor, uint8_t 
 // The vigil first; then the egg gestures (pickEgg), and the timeout picks the
 // cursor. The timeout never picks a friend egg: a kid chooses it or nobody
 // does, so a cursor left on it falls back to his own first egg.
-std::optional<uint8_t> Clutch::tick(const SenseOut& senses) {
+std::optional<uint8_t> Clutch::tick(const SenseOut& senses, int8_t aim) {
   ++sinceDeath;
   if (sinceDeath < kVigilTicks) return std::nullopt;
-  if (std::optional<uint8_t> kept = pickEgg(senses, cursor, count)) return kept;
+  if (std::optional<uint8_t> kept = pickEgg(senses, aim, cursor, count)) return kept;
   if (sinceDeath >= kVigilTicks + kPickTimeoutTicks) return friendSlot && cursor == friendSlot - 1 ? uint8_t(0) : cursor;
   return std::nullopt;
 }

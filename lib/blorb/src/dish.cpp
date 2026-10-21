@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
+#include "blorb/tilt_aim.h"
 #include <cstring>
 #include <utility>
 
@@ -140,6 +141,18 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   }
   cues_.sample(s, detectors_.side.holding(), nowMs);
   feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
+  // The picker's aim as of this sample (AimDetector), by the rule the next
+  // tick keeps by (pickEgg): while a knock waits, the aim it was made at;
+  // turned onto a side, the aim from before the turn, as a heavy special's.
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool picking = k && k->sinceDeath >= Clutch::kVigilTicks && k->count > 1;
+  int8_t egg = -1;
+  if (picking) {
+    int8_t aim = knockWaitWas_ && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+    if (kSideHoldHolds && detectors_.side.holding() && sideWas_) aim = tiltAim(sideTilt_[0], sideTilt_[1]);
+    egg = eggAt(aim, k->count);
+  }
+  clutchShow_.sample(s, egg, picking, nowMs);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -229,7 +242,8 @@ void Dish::runOneTick(Link& link) {
       const std::optional<FriendEgg> egg = k.friendSlot ? FriendEggStore::load(store_) : std::nullopt;
       k.derivePreviewStep(egg ? &*egg : nullptr);
     }
-    if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
+    // The tilt picker's aim, as the duel's: a knock's own, or from before a turn onto a side.
+    if (std::optional<uint8_t> i = k.tick(out, tiltAim(aimX, aimY))) onPicked(k, *i);
   }
   ++tick_;
 }
@@ -313,6 +327,7 @@ bool Dish::onPicked(Clutch& k, uint8_t i) {
   Egg egg(childOf(k, i, friendEgg ? &*friendEgg : nullptr), k.generation, tick_);
   if (friendEgg && !FriendEggStore::consume(store_)) return false;
   lineage_.recordBirth(egg, k, i, tick_);
+  clutchShow_.kept(k, i, nowMs_);   // before the egg replaces it: its eggs, for the chosen moment
   live_.occupant = std::move(egg);
   eventDirty_ = true;
   return true;
@@ -460,6 +475,7 @@ Appearance Dish::appearance() const {
     a.lobbyDecline = v.myDecline;
   }
   feedView(a);
+  a.clutch = clutchShow_.view(nowMs_, a.eggs, a.eggCount);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);

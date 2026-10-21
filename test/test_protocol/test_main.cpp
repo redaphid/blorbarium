@@ -733,13 +733,15 @@ TEST(Golden, Clutch) {
   elderDies(r);
   ASSERT_TRUE(std::holds_alternative<Clutch>(r.dish.occupant()));
   r.run(Clutch::kVigilTicks * kTickMs);
+  // A phone's knock moves nothing now: an egg is pointed at by tilting the
+  // badge (pickEgg), which no twist can do.
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
       "#6d + egg=0 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=2 mind=5",
       "#6d + egg=1 skin=40,128,128 cloak=0,128,118 shell=40,128,128 look=1 mind=7",
       "#6d + egg=2 skin=11,128,96 cloak=0,128,118 shell=11,128,96 look=2 mind=3",
-      "#6d OK eggs=3 cursor=1 previewed=3",
+      "#6d OK eggs=3 cursor=0 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);
   EXPECT_EQ(unchunk(r.send("#6e GENOME"), "#6e"), parent) << "a clutch answers with its parent's genome";

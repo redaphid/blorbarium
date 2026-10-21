@@ -1164,6 +1164,8 @@ constexpr int kHintPct = 125;
 
 }  // namespace
 
+void drawPickerProp(Canvas240& cv, const Prop& p) { paintProp(cv, p, 0); }
+
 RimHint rimHint(const blorb::BootHint& b) {
   RimHint r;
   r.glyph = uint8_t(b.glyph);

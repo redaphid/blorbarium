@@ -1305,11 +1305,15 @@ TEST(BootRows, FaceDownAlwaysPutsHimToSleep) {
   EXPECT_TRUE(slept) << "33 s face down";
 }
 
-// The clutch with no button: knock knocks step through the eggs, a side hold keeps one.
-TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
+// The clutch with no button, picked as a duel aims (owner, 2026-10-21):
+// level, a knock knock keeps nothing; tilted toward an egg it is the one, and
+// a knock keeps it.
+TEST(BootRows, NoButtonTheClutchIsTiltedThroughAndAKnockKeeps) {
   Alone a;
-  Frame kk, side;
-  kk.knock2 = true, side.side = true;
+  Frame kk, right, rightKnock;
+  kk.knock2 = true;
+  right.aim = 1;
+  rightKnock.aim = 1, rightKnock.tap = true;
   a.d.creature().fall();
   a.tick(), a.tick();
   Clutch& k = std::get<Clutch>(a.d.dish->occupant());
@@ -1317,11 +1321,41 @@ TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
   k.sinceDeath = Clutch::kVigilTicks;
   a.tick();
   a.tick(kk), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a knock knock: the next egg";
-  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "and it keeps nothing";
+  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "level, a knock knock keeps nothing";
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 0);
+  for (int t = 0; t < 10; ++t) a.tick(right);
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "tilted right: the right egg";
+  EXPECT_EQ(a.d.dish->appearance().clutch.aim, 1) << "and the screen points at it";
+  a.tick(rightKnock);
+  for (int t = 0; t < 10 && std::holds_alternative<Clutch>(a.d.dish->occupant()); ++t) a.tick(right);
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a knock keeps the egg tilted toward";
+  EXPECT_EQ(a.d.dish->appearance().clutch.chosen, 1) << "its chosen moment shows";
+  int chosen = -1;
+  a.d.dish->lineage().forEach([&](const LineageEntry& e) {
+    if (const auto* b = std::get_if<Birth>(&e)) chosen = b->chosen;
+  });
+  EXPECT_EQ(chosen, 1);
+}
+
+// A side hold keeps the egg tilted toward before the turn, as a heavy special
+// lands where the kid aimed before he turned the badge.
+TEST(BootRows, NoButtonASideHoldKeepsTheEggAimedBeforeTheTurn) {
+  Alone a;
+  Frame right, side;
+  right.aim = 1;
+  side.side = true;
+  a.d.creature().fall();
+  a.tick(), a.tick();
+  std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+  for (int t = 0; t < 20; ++t) a.tick(right);
   for (int t = 0; t < 22; ++t) a.tick(side);
   a.tick();
-  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps the egg";
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps an egg";
+  int chosen = -1;
+  a.d.dish->lineage().forEach([&](const LineageEntry& e) {
+    if (const auto* b = std::get_if<Birth>(&e)) chosen = b->chosen;
+  });
+  EXPECT_EQ(chosen, 1) << "the egg tilted toward before the turn";
 }
 
 // Asleep, a double press asks for a fight (he is woken for it); too sleepy,
@@ -1341,7 +1375,7 @@ TEST(BootRows, AsleepAndTooSleepyADoublePressIsAPelletAndAReason) {
   EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::TooSleepy);
 }
 
-TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
+TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTiltedThrough) {
   Alone a;
   a.d.creature().fall();
   a.tick(), a.tick();
@@ -1354,12 +1388,13 @@ TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
   a.tick();
   expectRow(*a.d.dish, BootContext::ClutchPick, "clutch");
   a.tick({-1, true}), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a press: the next egg";
   a.doublePress();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a quick double is two taps, round a clutch of two";
-  for (int t = 0; t < 14; ++t) a.tick({-1, true});
-  a.tick();
-  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a hold keeps the egg";
+  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "level, BOOT keeps nothing";
+  for (int t = 0; t < 20; ++t) a.tick({1});
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "tilted right: the right egg";
+  for (int t = 0; t < 14; ++t) a.tick({1, true});
+  a.tick({1});
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a hold keeps the egg tilted toward";
   expectRow(*a.d.dish, BootContext::Egg, "egg");
   a.tick({-1, true}), a.tick();
   EXPECT_EQ(a.d.dish->appearance().echo, BootAct::PeekEgg);

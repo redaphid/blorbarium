@@ -1469,8 +1469,13 @@ static void runDebug(const char* line) {
     return (void)Serial.printf("[hw] debug hatch: %s occupant=%s genome=%08x\n", ok ? "ok" : "no egg", o.kind,
                                unsigned(o.genome));
   }
+  if (std::strcmp(verb, "die") == 0) {   // he dies now, as the debug link's DIE: the vigil run out to the eggs, or `die remains`
+    const bool ok = debugble::die(*dish, std::strcmp(a, "remains") != 0, warp) == debugble::Jump::Done;
+    const OccupantSummary o = summarize(dish->occupant());
+    return (void)Serial.printf("[hw] debug die: %s occupant=%s\n", ok ? "ok" : "no creature", o.kind);
+  }
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, die [remains], species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
                   "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
     return;

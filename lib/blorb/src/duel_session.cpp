@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include "blorb/species.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 namespace {
@@ -13,7 +14,6 @@ using Special = TurnReport::Special;
 // woundFor's own clamp is turned off here: the Dish's Creature::wound clamps
 // to woundRoom, which only the Dish can read.
 constexpr Fx kNoClamp = Fx::one();
-constexpr Fx kAimDeadZone = Fx::ratio(15, 100);
 
 constexpr uint8_t u8(Stakes s) { return uint8_t(s); }
 uint8_t fill(uint16_t ticks, uint16_t of) { return uint8_t(std::min<uint32_t>(255, uint32_t(ticks) * 255 / of)); }
@@ -63,13 +63,7 @@ DuelInput DuelInput::from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx til
     else if (s.v == stim::lid_down.v) in.lid = true;
     else if (s.v == stim::dropped.v) in.dropped = true;
   }
-  // The loci read 0.5 level. tilt_x above it raises the +x edge, so things
-  // roll left: that is "tilt left". tilt_y below it rolls them toward the
-  // kid's edge: "toward you". D12 confirms both on the board.
-  const Fx dx = tiltX - Fx::ratio(1, 2), dy = tiltY - Fx::ratio(1, 2);
-  const Fx ax = dx < Fx::zero() ? -dx : dx, ay = dy < Fx::zero() ? -dy : dy;
-  if (ax >= kAimDeadZone || ay >= kAimDeadZone)
-    in.aim = ax >= ay ? (dx > Fx::zero() ? 0 : 1) : (dy < Fx::zero() ? 2 : 3);
+  in.aim = tiltAim(tiltX, tiltY);   // the tilt picker (tilt_aim.h), which the clutch shares
   return in;
 }
 
