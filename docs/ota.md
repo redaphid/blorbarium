@@ -291,6 +291,41 @@ so no chooser) and sending the same BEGIN. The dish answers with where it is.
 `web/public/ota.js` is this list as a state machine; `ON_DROP` there says what
 a drop means in each state.
 
+## From a laptop
+
+`tools/ble_ota.py` is the page's side again, in Python over BlueZ (bleak),
+for a Linux laptop with Bluetooth. Nothing on the badge changes: it is the
+same protocol, step for step, with the same window, rewinds, resume and
+CONFIRM.
+
+```
+uv run tools/ble_ota.py scan                  # name, address, RSSI; --probe also reads each one's fw
+uv run tools/ble_ota.py push mossby           # the site's release; several names (or --all) go one after another
+uv run tools/ble_ota.py status mossby         # STATUS, and the CONFIRM a trial this laptop began waits for
+uv run tools/ble_ota.py push --dry-run        # the whole flow against pretend badges (tests/test_ble_ota.py)
+```
+
+The firmware version is not advertised, so `scan` shows only what the
+badges advertise; `--probe` connects to read it. A badge is named by its
+advertised name or its address, which is its `badges.def` MAC plus one
+(mudge, `d4:05:92:77:1b:30`, advertises as `D4:05:92:77:1B:31`) and never
+changes with an update. Before each badge, `push` waits for Enter, so the
+person holding it is ready. Then it prints what that badge's question
+needs (a turn from 0.7.11, BOOT before), the progress, and the verdict:
+updated and kept, rolled back, still on trial, up to date, or why it
+stopped. A failed badge can be retried, and a retry resumes. The tokens are
+kept in `~/.config/blorbarium/ble-ota-tokens.json`, so a rerun after the
+tool itself died still owns its update. A session this laptop did not begin
+(a phone's, or a Wi-Fi install on firmware that has one) is reported and
+never aborted.
+
+It pushes only signed releases: the site's manifest by default, or one
+copied from soul (`--manifest`, or `--image` with its manifest beside it).
+The signing key stays on soul, so from the laptop there is no new build, no
+re-signed version or flags, no re-push of the version a badge already runs,
+and no downgrade unless soul signed it with `--allow-older`. It checks the
+signature against `src/hw/ota_pubkey.h` before it connects.
+
 ## Release layout
 
 ```
@@ -545,6 +580,7 @@ as the user's home directory.
 | Signing and releasing | `tools/ota_release.py` |
 | Build paths kept out of the image | `tools/strip_paths.py` |
 | The page's sender | `web/public/ota.js` |
+| The laptop's sender (BlueZ) | `tools/ble_ota.py`, tests in `tests/test_ble_ota.py` |
 | The mock dish for `?mock=1` | `web/public/ota-mock.js` |
 | Native tests | `test/test_ota` |
 | Page tests | `web/test/ota.test.mjs` (node), `web/test/ota_page.py` (Playwright) |
