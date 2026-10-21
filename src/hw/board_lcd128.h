@@ -28,8 +28,14 @@ static constexpr int ORIENT_R0 = 1;
 // their cases the USB-C port faces up, which is rotation 2 (native bottom up).
 // The hang is the opposite (USB-C down), the side hold a quarter turn either
 // way. The screen turns with the badge whatever this says; only the gestures
-// read it (main.cpp feel()).
-static constexpr uint8_t ORIENT_HOME = 2;
+// read it (main.cpp feel()). Some cases hold the board the other way round
+// (USB-C down is up): env badge128_flip builds with BLORB_ORIENT_HOME=0
+// (./flash.sh --flip).
+#ifndef BLORB_ORIENT_HOME
+#define BLORB_ORIENT_HOME 2
+#endif
+static_assert(BLORB_ORIENT_HOME == 0 || BLORB_ORIENT_HOME == 2, "home is USB-C up (2) or USB-C down (0)");
+static constexpr uint8_t ORIENT_HOME = BLORB_ORIENT_HOME;
 
 class BoardDisplay : public lgfx::LGFX_Device {
   lgfx::Panel_GC9A01 panel_;
