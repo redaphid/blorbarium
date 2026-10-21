@@ -13,12 +13,14 @@
 //    now (extrapolated) and are exact: the next tick lands where the frame
 //    before it already was. No lag, so a hop or a flinch starts the frame the
 //    tick that started it is drawn.
-//  - State that can change course any tick (where he stands, the pellets, the
-//    glow, the night) is drawn one tick behind, eased from the tick before to
-//    the tick now. Exact, never a guess that snaps back, at the cost of 100 ms
-//    of lag on where he arrives; a walk he starts shows in the next frame or
-//    two (it eases off from where he was at once). The hang's ring, a gauge
-//    a kid's hands fill, runs ahead while it fills, so it never lags them.
+//  - State that can change course any tick (the pellets, the glow, the night,
+//    where he stands unless he walks) is drawn one tick behind, eased from the
+//    tick before to the tick now: exact, never a guess that snaps back, 100 ms
+//    late. What a kid's hands drive runs ahead instead, so it never lags them:
+//    a walk or a flee (a tilt) at the step he just took, and the hang's ring
+//    while it fills. A guess a tick turns out wrong is corrected at that tick:
+//    a stop by at most the step (about 1.5 px at a walk), a turn by what it
+//    turned, and never off the glass.
 //  - Discrete things (which face, a blink, asleep, the pose) are the tick
 //    now's, at once. The face crossfade runs on the exprTicks clock.
 //
@@ -127,11 +129,19 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
   const bool filling = now.hangCharge > was.hangCharge && was.kind == now.kind;
   if (filling)
     a.hangCharge = blorb::fxMin(Fx::one(), now.hangCharge + Fx{int32_t(int64_t((now.hangCharge - was.hangCharge).raw) * share / 256)});
+  // Where he stands. Walking (a tilt walks him, fleeing too), he runs on ahead
+  // at the step he just took, so his feet answer a kid's hands with no lag; a
+  // stop or a turn at the next tick moves him by what the guess missed (a stop:
+  // at most the step, about 1.5 px at a walk). The tick he stops he is where
+  // he stopped, at once. Whatever else moves him is eased a tick behind.
+  auto walking = [](const blorb::Appearance& x) { return x.pose == blorb::pose::walk || x.pose == blorb::pose::flee; };
+  const bool moved = now.kind == blorb::Appearance::Kind::Creature && was.kind == now.kind && !now.sealed &&
+                     (was.at.x != now.at.x || was.at.y != now.at.y);
+  if (moved && walking(now)) a.from = was.at, a.ahead = share;
   // What can change course, one tick behind.
   const uint16_t behind = uint16_t(256 - share);
   if (!behind || was.kind != now.kind || was.sealed != now.sealed) return a;
-  if (now.kind == blorb::Appearance::Kind::Creature && (was.at.x != now.at.x || was.at.y != now.at.y))
-    a.from = was.at, a.behind = behind;
+  if (moved && !walking(now) && !walking(was)) a.from = was.at, a.behind = behind;
   a.glow = tween::back(now.glow, was.glow, behind);
   a.intensity = tween::back(now.intensity, was.intensity, behind);
   if (!filling) a.hangCharge = tween::back(now.hangCharge, was.hangCharge, behind);

@@ -356,7 +356,9 @@ int headroom(const Outline& o, const Place& p, int marginQ4) {
 
 // A dish position (the unit disc) to a stand point whose envelope stays inside
 // the round panel: the travel radius is the dish radius less the envelope's.
-Place placeAt(blorb::DishPos at, const Disc& d, const Xf& xf) {
+// The same stand point before it is rounded to a pixel (Q4, canvas), so a
+// frame between ticks can move him by less than one (drawCreature).
+Pt standQ4(blorb::DishPos at, const Disc& d) {
   int64_t x = at.x.raw, y = at.y.raw;
   uint64_t n2 = uint64_t(x * x) + uint64_t(y * y);
   if (n2 > (uint64_t(1) << 48)) {
@@ -366,9 +368,14 @@ Place placeAt(blorb::DishPos at, const Disc& d, const Xf& xf) {
   }
   int64_t travel = imax(0, kSide * 8 - d.r);
   int cx = kSide * 8 + int(x * travel / Fx::kOne), cy = kSide * 8 + int(y * travel / Fx::kOne);
+  return {cx - d.x, cy - d.y};
+}
+
+Place placeAt(blorb::DishPos at, const Disc& d, const Xf& xf) {
+  const Pt q = standQ4(at, d);
   Place p;
-  p.x = floorDiv(cx - d.x + 8, 16);
-  p.y = floorDiv(cy - d.y + 8, 16);
+  p.x = floorDiv(q.x + 8, 16);
+  p.y = floorDiv(q.y + 8, 16);
   p.xf = xf;
   return p;
 }
@@ -794,6 +801,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     int32_t atX = 0, atY = 0;
     Disc d;
     Place p;
+    Pt q{};   // p before rounding (Q4)
     int maxLift = 0;
   };
   static Memo memos[2];
@@ -838,6 +846,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     m.atX = at.x.raw, m.atY = at.y.raw;
     m.d = envelope(figure, middle(bodies[0], base), kMarginQ4);
     m.p = placeAt(at, m.d, base);
+    m.q = standQ4(at, m.d);
     m.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, m.p, kMarginQ4));
     return m;
   };
@@ -846,15 +855,28 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Place p = here.p;
   Xf base = here.base;
   const int maxLift = here.maxLift;
-  if (a.behind && (a.from.x != a.at.x || a.from.y != a.at.y)) {
-    // `behind`/256 of the way back to where he stood a tick ago: his feet and his
-    // size eased (a size snapped to the tick's would flicker his edge at 10 Hz
-    // as he walks), his room (d, maxLift) now's.
+  if ((a.behind || a.ahead) && (a.from.x != a.at.x || a.from.y != a.at.y)) {
+    // `behind`/256 of the way back to where he stood a tick ago, or walking,
+    // `ahead`/256 of a step on past where he stands at the step he took: his
+    // feet and his size together (a size snapped to the tick's would flicker
+    // his edge at 10 Hz as he walks), his room (d, maxLift) now's.
+    // Eased on the stand points before they were rounded to pixels, so he
+    // glides by sub-pixel steps rather than stopping and starting on whole
+    // ones, and a guess ahead is a straight line, not a pixel's rounding run on.
+    const Pt here_q = here.q;
     const Memo& was = placed(a.from);
-    const int w = imin(a.behind, 256);
+    const int w = a.ahead ? -imin(a.ahead, 256) : imin(a.behind, 256);
     auto ease = [w](int to, int from) { return to + floorDiv(int64_t(from - to) * w + 128, 256); };
-    p.x = ease(p.x, was.p.x), p.y = ease(p.y, was.p.y);
+    int64_t qx = ease(here_q.x, was.q.x), qy = ease(here_q.y, was.q.y);
     base.kx = ease(base.kx, was.base.kx), base.ky = ease(base.ky, was.base.ky);
+    if (a.ahead) {
+      // A step ahead can run past the travel circle his envelope fits in at
+      // the rim: held to it, so a guess never puts any of him off the glass.
+      const int64_t cx = qx + d.x - kSide * 8, cy = qy + d.y - kSide * 8;
+      const int64_t travel = imax(0, kSide * 8 - d.r), r = isqrt(uint64_t(cx * cx + cy * cy));
+      if (r > travel) qx = kSide * 8 + cx * travel / r - d.x, qy = kSide * 8 + cy * travel / r - d.y;
+    }
+    p.x = floorDiv(qx + 8, 16), p.y = floorDiv(qy + 8, 16);
   }
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
