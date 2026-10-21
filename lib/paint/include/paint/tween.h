@@ -14,10 +14,11 @@
 //    before it already was. No lag, so a hop or a flinch starts the frame the
 //    tick that started it is drawn.
 //  - State that can change course any tick (where he stands, the pellets, the
-//    glow, the hang's charge, the night) is drawn one tick behind, eased from
-//    the tick before to the tick now. Exact, never a guess that snaps back, at
-//    the cost of 100 ms of lag on where he is, which nothing a kid does
-//    reacts to faster than that.
+//    glow, the night) is drawn one tick behind, eased from the tick before to
+//    the tick now. Exact, never a guess that snaps back, at the cost of 100 ms
+//    of lag on where he arrives; a walk he starts shows in the next frame or
+//    two (it eases off from where he was at once). The hang's ring, a gauge
+//    a kid's hands fill, runs ahead while it fills, so it never lags them.
 //  - Discrete things (which face, a blink, asleep, the pose) are the tick
 //    now's, at once. The face crossfade runs on the exprTicks clock.
 //
@@ -119,6 +120,13 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
     const Fx step = now.thoughtPhase - was.thoughtPhase;
     a.thoughtPhase = blorb::fxMin(Fx::one(), Fx{int32_t(now.thoughtPhase.raw + int64_t(step.raw) * share / 256)});
   }
+  // The hang's ring is a kid's hands made visible, so it never lags them:
+  // filling, it runs on ahead at the step it took last tick (it can only
+  // overshoot by a step toward full, where fight mode opens on the next tick
+  // anyway); emptying, it eases behind like the rest below.
+  const bool filling = now.hangCharge > was.hangCharge && was.kind == now.kind;
+  if (filling)
+    a.hangCharge = blorb::fxMin(Fx::one(), now.hangCharge + Fx{int32_t(int64_t((now.hangCharge - was.hangCharge).raw) * share / 256)});
   // What can change course, one tick behind.
   const uint16_t behind = uint16_t(256 - share);
   if (!behind || was.kind != now.kind || was.sealed != now.sealed) return a;
@@ -126,7 +134,7 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
     a.from = was.at, a.behind = behind;
   a.glow = tween::back(now.glow, was.glow, behind);
   a.intensity = tween::back(now.intensity, was.intensity, behind);
-  a.hangCharge = tween::back(now.hangCharge, was.hangCharge, behind);
+  if (!filling) a.hangCharge = tween::back(now.hangCharge, was.hangCharge, behind);
   a.night = tween::back(now.night, was.night, behind);
   a.wobble = tween::back(now.wobble, was.wobble, behind);
   a.eggProgress = tween::back(now.eggProgress, was.eggProgress, behind);

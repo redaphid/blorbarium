@@ -135,6 +135,20 @@ TEST(Tween, WhereHeStandsIsEasedOneTickBehind) {
   EXPECT_EQ(paint::between(now, now, 0, 50).behind, 0);
 }
 
+// The hang's ring never lags the hands filling it: a tick on it is already
+// where the next tick will put it, and it never passes full. Emptying, it eases.
+TEST(Tween, TheHangRingFillsAheadAndEmptiesBehind) {
+  Appearance was, now;
+  was.hangCharge = Fx::ratio(3, 10);
+  now.hangCharge = Fx::ratio(4, 10);
+  EXPECT_EQ(paint::between(was, now, 0, 0).hangCharge, now.hangCharge);
+  EXPECT_NEAR(double(paint::between(was, now, 0, 50).hangCharge.raw) / Fx::kOne, 0.45, 1e-4);
+  now.hangCharge = Fx::ratio(95, 100);
+  EXPECT_EQ(paint::between(was, now, 0, 99).hangCharge, Fx::one());
+  std::swap(was, now);   // let go: it drains from where it was
+  EXPECT_EQ(paint::between(was, now, 0, 0).hangCharge, was.hangCharge);
+}
+
 // Nothing the screen does reaches the engine: the tween reads Appearances,
 // and an Appearance with its between-tick fields zero is the tick's own frame.
 TEST(Tween, ZeroBetweenFieldsAreTheTicksOwnFrame) {
