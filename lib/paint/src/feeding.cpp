@@ -9,9 +9,10 @@
 //   heard     the rim's pellet glyph pops and a cookie springs out of it;
 //   flight    the cookie, big, arcs from the rim's pellet glyph down to its
 //             spot beside him, its shadow waiting, and lands in a puff;
-//   refused   a bubble beside his head says why, in words: I'M FULL!,
-//             ZZZ..., or ALL GONE! (the pantry's slots shaking at the top,
-//             the next one filling);
+//   refused   beside his head, why: I'M FULL! or ZZZ... in a bubble, or, with
+//             the pantry empty, a cookie jar knocked over and empty, crumbs
+//             trickling out (and the pantry's slots shaking at the top, the
+//             next one filling);
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
 //             rotten one: green crumbs and YUCK);
 //   belly     a meter up the left rim, its level his fullness (1 - hunger),
@@ -279,24 +280,101 @@ void emptyPantry(Canvas240& cv, const FeedView& f, int t) {
   }
 }
 
-// What each refusal says, in words: the owner read the first pictures (a grey
-// cookie and an hourglass) as "two emojis, a globe and something else".
-// Short, so a six-year-old reads them, and in the font (thoughts.h inFont).
+// The pantry is empty: a cookie jar knocked over, empty, its lid off and a
+// few last crumbs falling out of it. Big and bold for a six-year-old at arm's
+// length, and no words (owner, 2026-10-21: "it needs to be an obvious icon
+// and not text"). The first picture, a grey cookie and an hourglass in a
+// bubble, read as "two emojis, a globe and something else", and ALL GONE!
+// after it was words. (cx, cy): the jar's middle; t: ms since the knock knock.
+constexpr Rgb kJarGlass{176, 228, 246}, kJarLine{24, 34, 70}, kJarDark{28, 44, 66}, kJarLid{226, 52, 48};
+
+// Inside a rounded box: centre (cx, cy), half sizes hw, hh, corner radius r.
+bool inRounded(int x, int y, int cx, int cy, int hw, int hh, int r) {
+  const int dx = imax(0, (x > cx ? x - cx : cx - x) - (hw - r)), dy = imax(0, (y > cy ? y - cy : cy - y) - (hh - r));
+  if ((x > cx ? x - cx : cx - x) > hw || (y > cy ? y - cy : cy - y) > hh) return false;
+  return dx * dx + dy * dy <= r * r;
+}
+bool inOval(int x, int y, int cx, int cy, int rx, int ry) {
+  return (x - cx) * (x - cx) * ry * ry + (y - cy) * (y - cy) * rx * rx <= rx * rx * ry * ry;
+}
+
+void emptyJar(Canvas240& cv, int cx, int cy, int t, int alpha) {
+  // It rocks where it fell, then lies still; the last crumbs keep trickling out.
+  cx += t < 900 ? wave(t, 300, 3) : 0;
+  cy += t < 200 ? -10 + 10 * easeOut(t, 200) / 256 : 0;   // it drops in
+  constexpr int hw = 28, hh = 19, r = 11, line = 3;        // the jar on its side, 62 x 44 with its outline
+  const int bx = cx - 6;                                   // its bottom to the left, its open mouth to the right
+  const int mx = bx + hw + 1;
+  // Its shadow on the dish.
+  for (int y = cy + hh + 2; y <= cy + hh + 8; ++y)
+    for (int x = bx - hw; x <= mx + 6; ++x)
+      if (inOval(x, y, (bx + mx) / 2, cy + hh + 5, hw + 4, 3)) put(cv, x, y, {0, 0, 0}, alpha * 90 / 256);
+  for (int y = cy - hh - line; y <= cy + hh + line; ++y)
+    for (int x = bx - hw - line; x <= mx; ++x) {
+      if (inRounded(x, y, bx, cy, hw, hh, r)) {
+        // Glass, lighter at the top: you see right through it, and nothing is in it.
+        const int lit = 256 + 50 * (cy - y) / hh;
+        put(cv, x, y, {imin(255, kJarGlass.r * lit / 256), imin(255, kJarGlass.g * lit / 256), imin(255, kJarGlass.b * lit / 256)},
+            alpha * 230 / 256);
+      } else if (inRounded(x, y, bx, cy, hw + line, hh + line, r + line)) {
+        put(cv, x, y, kJarLine, alpha);
+      }
+    }
+  // The glass's shine along the top, so it reads as a jar and not a box.
+  for (int x = bx - hw + 8; x <= bx + hw - 12; ++x)
+    put(cv, x, cy - hh + 4, kWhite, alpha), put(cv, x, cy - hh + 5, kWhite, alpha), put(cv, x, cy - hh + 6, kWhite, alpha * 120 / 256);
+  // Its label, with a cookie on it: the cookie jar.
+  for (int y = cy - 9; y <= cy + 7; ++y)
+    for (int x = bx - 11; x <= bx + 9; ++x)
+      if (inRounded(x, y, bx - 1, cy - 1, 10, 8, 4)) put(cv, x, y, kWhite, alpha * 235 / 256);
+  drawFood(cv, bx - 1, cy - 1, 6, Food{}, alpha);
+  // Only crumbs left, lying along its side.
+  constexpr int kLeft[4][2] = {{-18, 15}, {-9, 16}, {2, 15}, {12, 16}};
+  for (const auto& c : kLeft) disc(cv, bx + c[0], cy + c[1], 2, kPelletOrange, alpha);
+  // Its mouth: an open, dark, empty hole, with a thick rim.
+  for (int y = cy - hh - 3; y <= cy + hh + 3; ++y)
+    for (int x = mx - 10; x <= mx + 10; ++x) {
+      if (inOval(x, y, mx, cy, 5, hh - 2)) put(cv, x, y, kJarDark, alpha);
+      else if (inOval(x, y, mx, cy, 8, hh + 2)) put(cv, x, y, kJarLine, alpha);
+    }
+  // The lid, fallen off and lying under its mouth: bright red, a knob and a shine.
+  const int lx = mx + 6, ly = cy + hh + 6;
+  for (int y = ly - 12; y <= ly + 8; ++y)
+    for (int x = lx - 17; x <= lx + 17; ++x) {
+      if (inOval(x, y, lx, ly - 8, 4, 3)) put(cv, x, y, kJarLid, alpha);
+      else if (inOval(x, y, lx, ly - 8, 6, 5)) put(cv, x, y, kJarLine, alpha);
+      if (inOval(x, y, lx, ly, 13, 5)) put(cv, x, y, kJarLid, alpha);
+      else if (inOval(x, y, lx, ly, 16, 7) && y > ly - 6) put(cv, x, y, kJarLine, alpha);
+    }
+  for (int x = lx - 7; x <= lx - 2; ++x) put(cv, x, ly - 2, kWhite, alpha);
+  // The last crumbs, trickling out of its mouth and falling.
+  for (int k = 0; k < 4; ++k) {
+    const int u = (t + 220 * k) % 880;
+    const int x = mx + 6 + 18 * u / 880 + (k & 1) * 4, y = cy + 4 + 40 * u / 880 * u / 880;
+    disc(cv, x, y, 2, kPelletOrange, alpha * (880 - u) / 880);
+  }
+}
+
+// What the other refusals say, in words, short, and in the font (thoughts.h inFont).
 constexpr const char* kSaysFull = "I'M FULL!";
 constexpr const char* kSaysAsleep = "ZZZ...";
-constexpr const char* kSaysEmpty = "ALL GONE!";
 static_assert(blorb::writable(kSaysFull, blorb::kMaxThoughtText, "") && blorb::writable(kSaysAsleep, blorb::kMaxThoughtText, "") &&
-                  blorb::writable(kSaysEmpty, blorb::kMaxThoughtText, "") && blorb::writable("YUM!", blorb::kMaxThoughtText, "") &&
-                  blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
+                  blorb::writable("YUM!", blorb::kMaxThoughtText, "") && blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
               "what he says when fed is in the font");
 
 void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
   if (f.refused == FeedRefusal::None || f.refusedMs >= kRefusedMs) return;
   const int t = f.refusedMs;
-  if (f.refused == FeedRefusal::Empty) emptyPantry(cv, f, t);
-  const char* says = f.refused == FeedRefusal::Full ? kSaysFull : f.refused == FeedRefusal::Asleep ? kSaysAsleep : kSaysEmpty;
   int x = 0, y = 0, tx = 0, ty = 0;
   beside(s, x, y, tx, ty);
+  if (f.refused == FeedRefusal::Empty) {   // no words: the empty jar, and the pantry's empty slots shaking
+    emptyPantry(cv, f, t);
+    // Beside him at his shoulder, clear of his eyes, inside the glass.
+    const int side = tx >= x ? -1 : 1, hx = s.him ? s.x : kSide / 2, top = s.him ? s.top : 60;
+    emptyJar(cv, clampi(hx + side * 62, 58, kSide - 72), clampi(top + 72, 60, kSide - 60), t, fadeOut(t, kRefusedMs));
+    return;
+  }
+  const char* says = f.refused == FeedRefusal::Full ? kSaysFull : kSaysAsleep;
   y += wave(t, 1200, 2);
   const int pop = t < 160 ? 150 + 106 * t / 160 : 256;   // it pops in
   const int alpha = fadeOut(t, kRefusedMs) * 235 / 256;

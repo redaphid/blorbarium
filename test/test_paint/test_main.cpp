@@ -801,6 +801,26 @@ TEST(Font, HasEveryCharacterTheLinesMayUse) {
   }
 }
 
+// The pantry empty is a picture, not words, for a six-year-old: a red-lidded
+// cookie jar knocked over beside his head. I'M FULL! and ZZZ... stay words.
+TEST(Feeding, AnEmptyPantryIsAnEmptyJarNotWords) {
+  const auto& pack = paint::placeholderPack();
+  constexpr uint16_t kLid = (226 >> 3) << 11 | (52 >> 2) << 5 | (48 >> 3);
+  constexpr uint16_t kWords = (52 >> 3) << 11 | (36 >> 2) << 5 | (24 >> 3);   // feeding.cpp kInk
+  Appearance a = adult();
+  a.feed.pantryMax = 4;
+  a.feed.refused = blorb::FeedRefusal::Empty;
+  a.feed.refusedMs = 600;
+  auto cv = render(a, pack);
+  const Box lid = find(*cv, kLid);
+  EXPECT_GT(lid.count, 60) << "the jar's red lid, big";
+  EXPECT_EQ(find(*cv, kWords).count, 0) << "no words";
+  a.feed.refused = blorb::FeedRefusal::Full;
+  cv = render(a, pack);
+  EXPECT_EQ(find(*cv, kLid).count, 0);
+  EXPECT_GT(find(*cv, kWords).count, 20) << "I'M FULL! is still words";
+}
+
 // The belly meter up the left rim: fuller, more of it lit.
 TEST(Feeding, TheBellyMeterShowsHowFullHeIs) {
   const auto& pack = paint::placeholderPack();

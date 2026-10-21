@@ -12,9 +12,10 @@
 //   dropped  a pellet left the pantry: that cookie is tossed down to where
 //            it lands in the dish, and the pantry's empty slot shows where it
 //            came from;
-//   refused  the press fed nobody now, and he says why in a bubble: ALL
-//            GONE! (the pantry's empty slots shake, the next one filling),
-//            ZZZ... (the pellet waits for him), or I'M FULL!;
+//   refused  the press fed nobody now, and why: the pantry is empty (a
+//            cookie jar knocked over and empty, and the pantry's empty slots
+//            shaking, the next one filling), or he says ZZZ... (the pellet
+//            waits for him) or I'M FULL! in a bubble;
 //   chomp    he bit a pellet: crumbs and hearts (a rotten one: yuck), and his
 //            belly meter rises.
 //

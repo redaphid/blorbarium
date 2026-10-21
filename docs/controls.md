@@ -149,14 +149,16 @@ feet or behind him, and it goes into his mouth:
 | Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
 | He is full (hunger under 0.15) | he says I'M FULL! in a bubble. The cookie still lies there |
 | He is asleep | ZZZ... in a bubble. The cookie waits for him |
-| The pantry is empty | ALL GONE! in a bubble; the pantry's empty slots shake at the top, the next one filling like a clock |
+| The pantry is empty | no words: a cookie jar knocked over beside his head, empty, its red lid off and the last crumbs trickling out; the pantry's empty slots shake at the top, the next one filling like a clock |
 
 The first version (2026-10-21, 94e22a3) flashed a gold ring round the whole
 rim on the second knock ("a little much, and didn't help me understand I was
 feeding it") and said a refusal in pictures: the owner, knocking until the
 pantry was empty, read its grey cookie and hourglass as "two emojis, the
 globe and something else". Both are gone: the knock brings a cookie, and a
-refusal is words (checked against the font, `test_paint` `Font.*`).
+refusal is words (checked against the font, `test_paint` `Font.*`). Then
+the owner: "For that 'all gone', it needs to be an obvious icon and not
+text. For the 6 year old." So the empty pantry is the empty jar.
 
 **The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
 declared in `lib/paint/src/figure.h`): every cookie on screen goes through
