@@ -267,9 +267,10 @@ TEST(Waiting, TheHandsSawOneMoreBeforeEveryKnockKnock) {
   }
 }
 
-// "Heard" (KnockSense::knockKnock, what the rim flashes on): on from the
-// second knock, 0.6 s before the knock knock is reported, and off once it is;
-// never for one knock, and never for a burst that ran on into hammering.
+// "Heard" (KnockSense::knockKnock, what the rim flashes on): on once the
+// second knock has rung out, 0.5 s before the knock knock is reported, and
+// off once it is; never for one knock, never for a burst that ran on into
+// hammering, and never for a shake from a still badge.
 TEST(Heard, LightsOnTheSecondKnockLongBeforeTheReport) {
   KnockSense k;
   uint32_t lit = 0, reported = 0;
@@ -278,9 +279,9 @@ TEST(Heard, LightsOnTheSecondKnockLongBeforeTheReport) {
     if (k.knockKnock() && !lit) lit = ms;
     if (reported) EXPECT_FALSE(k.knockKnock()) << ms;
   }
-  EXPECT_GE(lit, 1300u);
-  EXPECT_LE(lit, 1320u) << "on the second knock itself";
-  EXPECT_GE(reported, lit + KnockSense::kChainMs);
+  EXPECT_GE(lit, 1300u + KnockSense::kHeardQuietMs);
+  EXPECT_LE(lit, 1340u + KnockSense::kHeardQuietMs + 20) << "once the second knock has rung out";
+  EXPECT_GE(reported, lit + KnockSense::kChainMs - KnockSense::kHeardQuietMs - 60) << "well before the report";
 }
 
 TEST(Heard, NeverForOneKnockOrForHammering) {
@@ -295,6 +296,17 @@ TEST(Heard, NeverForOneKnockOrForHammering) {
     }
     EXPECT_FALSE(litForOne);
     EXPECT_FALSE(litAtEnd) << "a fifth knock is hammering: the flash promised nothing more";
+  }
+}
+
+TEST(Heard, NeverForAShakeFromAStillBadge) {
+  KnockSense k;
+  for (uint32_t ms = 0; ms < 4000; ms += 20) {
+    BodySample b;
+    b.az = 1000;
+    if (ms >= 1000 && ms < 2200) b.ax = int16_t((ms / 60) % 2 ? 1500 : -1500);   // the sim's !shake
+    k.sample(b, ms);
+    EXPECT_FALSE(k.knockKnock()) << ms;
   }
 }
 
