@@ -208,7 +208,11 @@ static void scanned() {
     if (millis() - phaseAt > kScanMs) failWindow(Failure::Absent, "the scan took over %u s", unsigned(kScanMs / 1000));
     return;
   }
-  if (n < 0) return failWindow(Failure::Absent, "the scan failed");
+  if (n < 0) {   // a scan that failed is no proof of absence: try the newest network the driver's own way
+    say("the scan failed: joining \"%s\" without it", networks[0].ssid);
+    station.join(networks[0]);
+    return setPhase(Phase::Joining);
+  }
   const std::optional<size_t> pick = networks.pick(station.seen(), station.seenCount());
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(networks.size()), n);
   const improv::Credentials& c = networks[*pick];

@@ -27,7 +27,9 @@ namespace hw {
 
 class WifiStation {
  public:
-  static constexpr uint32_t kScanMsPerChannel = 120;   // active: about 1.6 s for the 13 channels
+  // Active: about 2 s for the 13 channels. The core calls a scan failed after
+  // 20 times this (3 s), so it must leave room for Bluetooth's share of the radio.
+  static constexpr uint32_t kScanMsPerChannel = 150;
   static constexpr uint8_t kSeenMax = 24;              // the strongest this many a scan finds are looked at
 
   bool up() {
