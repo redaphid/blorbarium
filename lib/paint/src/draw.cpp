@@ -385,6 +385,34 @@ bool spotted(const Mottle& m, int rx, int ry) {
   return lx * lx + ly * ly <= r2;
 }
 
+// spotted() along a row of the frame: the row's cell row once, and each 7 px
+// cell's hash once as the columns cross into it, not once a pixel.
+class SpotRow {
+ public:
+  explicit SpotRow(const Mottle& m) : m_(m) {}
+  void row(int ry) { ry_ = ry, cy_ = floorDiv7(ry), cx_ = INT_MIN; }
+  bool spotted(int rx) {
+    const int cx = floorDiv7(rx);
+    if (cx != cx_) {
+      cx_ = cx;
+      const uint32_t h = mix32(m_.seed ^ (uint32_t(cx) * 0x27D4EB2Du), uint32_t(cy_));
+      live_ = int(h & 255) < m_.density;
+      if (live_) {
+        const int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 2 + int((h >> 12) % 3);
+        const int ly = ry_ - cy_ * 7 - sy;
+        centre_ = cx * 7 + sx, room_ = r2 - ly * ly;
+      }
+    }
+    const int lx = rx - centre_;
+    return live_ && lx * lx <= room_;
+  }
+
+ private:
+  const Mottle& m_;
+  int ry_ = 0, cy_ = 0, cx_ = INT_MIN, centre_ = 0, room_ = 0;
+  bool live_ = false;
+};
+
 // A skin pixel under his scars, x/128 in each channel.
 uint16_t scarred(uint16_t c, int q) {
   const int r = imin(31, ((c >> 11) & 31) * q / 128), g = imin(63, ((c >> 5) & 63) * q / 128), b = imin(31, (c & 31) * q / 128);
@@ -418,6 +446,8 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   // since they only climb, the columns that land inside the frame are one
   // span, [xa, xb]. Shared like scarRows.
   static int16_t cols[kSide];
+  static const Mottle kNone;
+  SpotRow spots(mottle ? *mottle : kNone);
   int lastShift = INT_MIN, xa = 0, xb = -1;
   for (int y = top; y <= bottom; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
@@ -446,11 +476,12 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
       continue;
     }
     if (scarred_) scarRows.row(sy - oy);
+    if (mottle) spots.row(sy - oy);
     for (int x = xa; x <= xb; ++x) {
       const int sx = cols[x];
       const uint8_t i = row[sx];
       if (!i) continue;
-      const bool spot = mottle && col.region[i] == blorb::region::skin.v && spotted(*mottle, sx - ox, sy - oy);
+      const bool spot = mottle && col.region[i] == blorb::region::skin.v && spots.spotted(sx - ox);
       uint16_t c = spot ? col.spot[i] : col.base[i];
       if (scarred_ && isHide(col.region[i])) {
         const int q = scarRows.shade(sx - ox);
