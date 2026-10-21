@@ -366,9 +366,16 @@ Place placeAt(blorb::DishPos at, const Disc& d, const Xf& xf) {
 // Mottling (mark layer 0): a seeded spot in some 7 px cells of the skin, in
 // frame coordinates from the feet, so spots ride the body and siblings differ.
 struct Mottle { uint32_t seed = 0; int density = 0; };
+// floorDiv(a, 7) in 32 bits for |a| < 7 * 4096 (a frame is at most 320 px):
+// biased non-negative, so the compiler divides by multiplying, where
+// floorDiv's int64_t called __divdi3 twice a skin pixel on the board.
+constexpr int floorDiv7(int a) { return int(unsigned(a + 7 * 4096) / 7u) - 4096; }
+static_assert(floorDiv7(-1) == -1 && floorDiv7(-7) == -1 && floorDiv7(-8) == -2 && floorDiv7(6) == 0 && floorDiv7(7) == 1 &&
+                  floorDiv7(-7 * 4096) == -4096,
+              "floorDiv7 is floorDiv(a, 7)");
 bool spotted(const Mottle& m, int rx, int ry) {
   constexpr int kCell = 7;
-  int cx = floorDiv(rx, kCell), cy = floorDiv(ry, kCell);
+  int cx = floorDiv7(rx), cy = floorDiv7(ry);
   uint32_t h = mix32(m.seed ^ (uint32_t(cx) * 0x27D4EB2Du), uint32_t(cy));
   if (int(h & 255) >= m.density) return false;
   int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 2 + int((h >> 12) % 3);
