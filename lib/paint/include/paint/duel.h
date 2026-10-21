@@ -10,9 +10,11 @@
 //
 // The layout is the battle layout kids already know: the friend small in the
 // upper right, mine large in the lower left, each leaning toward the other,
-// each with their hearts on the rim on their own side of the disc. Every
-// state a kid must read has a shape, not only a colour: a lost heart is
-// hollow, a locked stance is stamped, a forbidden tier is struck through.
+// each with his gauges hugging the rim on his own side of the disc: hearts as
+// a segmented arc, the spark meter as a thinner one inside it, and the turn's
+// clock as a ring round the glass (docs/notes/duel-hud.md). Every state a kid
+// must read has a shape, not only a colour: a lost heart is an empty track, a
+// locked stance's reticle closes, a forbidden tier is struck through.
 #include <cstdint>
 #include "blorb/appearance.h"
 #include "blorb/duel.h"
@@ -147,8 +149,8 @@ struct Figure {
 };
 
 enum class PropKind : uint8_t {
-  Heart,      // variant: 0 full, 1 hollow (lost), 2 assist (full, with a cheer star)
-  Pip,        // spark meter: variant 0 full, 1 hollow
+  Heart,      // unused since the gauges (DuelStaging::gauge); kept so the kinds keep their numbers
+  Pip,        // unused since the gauges, likewise
   Stance,     // variant: blorb::Stance
   Power,      // variant: blorb::PowerGlyph
   Tier,       // variant: blorb::Stakes; `fill` is how full a Mortal skull is
@@ -158,16 +160,19 @@ enum class PropKind : uint8_t {
   Plaster,    // the Scrap risk, stuck on his head
   Burst,      // a spiky star: BONK, VS, SUPER, BOINK (heads), WHAM (a landing), NOPE (a riposte), OOF (a stagger), WHIFF
   Aura,       // a special winding up: light in its power's colour behind him; variant: PowerGlyph
-  Countdown,  // the turns until it lands, as pips under its glyph; variant: how many
+  Countdown,  // the turns until it lands, a ring of that many arcs round its glyph (at its scale); variant: how many, 0 = now (`fill` its pulse)
   Arrow,      // "beats": from (x, y) toward (x2, y2)
-  Tick,       // locked or confirmed
-  Dots,       // still choosing
+  Tick,       // unused in the duel since the reticle and the lock ring
+  Dots,       // unused in the duel since the lock ring
   Strike,     // a bar across a forbidden tier
-  Timer,      // the rim timer: `fill` of the circle left
+  Timer,      // the clock round the rim: `fill` of the circle left, the gap opening at 12 and sweeping clockwise
   Stars,      // dizzy stars orbiting a downed or fainted head
   Glow,       // the lean: soft light under a glyph
   Button,     // gesture hint: hold BOOT (variant 0), knock (variant 1)
   Plea,       // a cheer heart floating up from the downed pet
+  Reticle,    // round the icon a tilt points at (sized by scalePct as the icon is): variant 0 aiming (four
+              // brackets), 1 locked or confirmed (the ring closes), 2 a hold alone; `fill` < 255: a hold filling it
+  Lock,       // the friend's choice, over his head: variant 0..2 still choosing (a three-arc spinner, that arc lit), 3 made
 };
 
 struct Prop {
@@ -182,9 +187,25 @@ struct Prop {
 // A rectangle on the canvas, px, inclusive; empty when x0 > x1.
 struct Box { int16_t x0 = 1, y0 = 1, x1 = 0, y1 = 0; };
 
+// One pet's gauges on his side of the rim: hearts as a segmented arc, the
+// spark meter inside it with a spoke where his power is paid for. Mine run down
+// the lower right, the friend's up the upper left, the same arc turned half round.
+struct Gauges {
+  bool shown = false;
+  bool meter = false;               // the spark meter too (the fight itself)
+  uint8_t hearts = 0, maxHearts = 0, assist = 0;   // assist: the last of maxHearts, the fairness rule's
+  uint8_t losing = 0;               // hearts past `hearts` the hit on screen is taking
+  uint8_t drain = 0;                // 0..255 how far those have drained (0: not landed yet, still full)
+  uint8_t flash = 0;                // 0..255 the hit's flash on them
+  uint8_t sparks = 0, cost = 0;     // the meter, and where the spoke stands
+  uint8_t pulse = 0;                // 0..255 breathing: the last heart, a power that is ready
+  uint8_t sweep = 255;              // 0..255 of the arc drawn: the gauges sweep in at the meeting
+};
+
 struct DuelStaging {
   static constexpr int kMaxProps = 48;
   Figure fig[2];                    // [me, them]
+  Gauges gauge[2];                  // [me, them]
   Box face[2];                      // where each pet's face is: a burst never covers one
   Prop props[kMaxProps];
   uint8_t propCount = 0;
