@@ -55,6 +55,7 @@ ow
   OW. MY FLUFF IS RUFFLED.
 heard_you
   I HEARD YOU. I WAS HUMMING.
+  ONE KNOCK. HUMM. AND THE NEXT?
 ground_lies
   AAH! MY WINGS! MY DIGNITY!
 not_again
@@ -73,6 +74,7 @@ warm_hands
   WARM HANDS. LIKE A SOFT LAMP.
 sky_down
   THE MOON IS DOWN THERE NOW?
+  UPSIDE DOWN. MY DUST FALLS UP.
 heavy_eyes
   HUMMM... HMM... ZZ...
 dream_pellets
@@ -123,7 +125,7 @@ p_watched
 p_return
   THE GLOW WILL RETURN. HUMMM.
 p_tap
-  A TAP ON THE GLASS. SOON.
+  A KNOCK KNOCK. SOON. HUMMM.
 p_no
   NO. HUMMM. STILL NO.
 p_doom
@@ -308,3 +310,13 @@ sleep_warm
 dream_rain
   ZZZ... NOT RAIN... MY WINGS...
   ZZZ... DRIP... GO AWAY RAIN...
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK FOR SNACKS. HUMMM.
+teach_fight
+  A DUEL? HOLD ME UPSIDE DOWN.
+teach_hold
+  A NAP? HOLD ME SIDEWAYS. HUMM.
+teach_shake
+  SHAKE ME. I SEE LAMPS. AND YOU

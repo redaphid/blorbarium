@@ -57,6 +57,7 @@ ow
   OW. QUIETLY. OW.
 heard_you
   SHH. YES. I HEARD. SHH.
+  ONE KNOCK. TWO MEANS SNACKS.
 ground_lies
   THE WORLD SHAKES. I DO NOT.
 not_again
@@ -75,6 +76,7 @@ warm_hands
   WARM HANDS. I WILL ALLOW IT.
 sky_down
   THE SKY IS BELOW. CURIOUS.
+  I HANG LIKE A BAT. NOTED.
 heavy_eyes
   MY EYES CLOSE. SLOWLY. HOO.
 dream_pellets
@@ -125,7 +127,7 @@ p_watched
 p_return
   THEY WILL RETURN. AT DUSK.
 p_tap
-  A TAP WILL BREAK THE SILENCE.
+  A KNOCK WILL BREAK THE SILENCE
 p_no
   NO. SAY NOTHING MORE.
 p_doom
@@ -310,3 +312,13 @@ sleep_warm
 dream_rain
   ZZZ... SOFT RAIN. NO THUNDER
   ZZZ... QUIET RAIN... GOOD...
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME. FOOD. SHH.
+teach_fight
+  HOLD ME UPSIDE DOWN TO DUEL.
+teach_hold
+  TO SLEEP, HOLD ME SIDEWAYS.
+teach_shake
+  SHAKE ME. I WILL SEE THINGS.

@@ -56,6 +56,7 @@ ow
   OW, BUT I'M STILL FASTER!
 heard_you
   YEAH, YEAH, I HEARD!
+  ONE KNOCK, NOW TWO, FASTER!
 ground_lies
   WHOA, EARTHQUAKE LAP!
 not_again
@@ -74,6 +75,7 @@ warm_hands
   WARM HANDS, GOOD HALFTIME!
 sky_down
   UPSIDE DOWN, STILL WINNING!
+  UPSIDE DOWN, NEW TRACK, GO!
 heavy_eyes
   SO TIRED... ONE MORE LAP...
 dream_pellets
@@ -124,7 +126,7 @@ p_watched
 p_return
   THEY'RE COMING BACK, FAST!
 p_tap
-  A TAP, QUICK AS ME!
+  KNOCK KNOCK, SNACKS, GO GO GO!
 p_no
   NOPE, NOT A CHANCE!
 p_doom
@@ -309,3 +311,13 @@ sleep_warm
 dream_rain
   ZZZ... RAIN, SLIPPY TRACK, YES
   ZZZ... MUD TRACK, ZOOM...
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME, FUEL UP!
+teach_fight
+  DUEL ME, HOLD ME UPSIDE DOWN!
+teach_hold
+  NAP TIME, HOLD ME SIDEWAYS!
+teach_shake
+  SHAKE ME, I SEE THE FINISH!

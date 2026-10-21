@@ -54,6 +54,7 @@ ow
   OW! MY FLUFF IS FLAT!
 heard_you
   KNOCK KNOCK! WHO IS IT? YOU!
+  ONE KNOCK! TWO! DO TWO! TWO!
 ground_lies
   WHEE! ACHOO! WHEEEE!
 not_again
@@ -72,6 +73,7 @@ warm_hands
   WARM HANDS! MY FLUFF APPROVES.
 sky_down
   UPSIDE DOWN! FLUFF FALLS UP!
+  UPSIDE DOWN! WHEE! WHEE!
 heavy_eyes
   SO SLEEPY... SOFT... FLUFF...
 dream_pellets
@@ -122,7 +124,7 @@ p_watched
 p_return
   THEY'LL COME BACK! WITH HUGS!
 p_tap
-  YOU WILL TAP! TAP TAP TAP!
+  YOU WILL KNOCK! KNOCK KNOCK!
 p_no
   NOPE! NOPE NOPE! ACHOO!
 p_doom
@@ -307,3 +309,13 @@ sleep_warm
 dream_rain
   ZZZ... SOGGY... STILL BOUNCY
   ZZZ... PUDDLE... BOUNCE! SPLAT
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME! SNACKS!
+teach_fight
+  BATTLE? HOLD ME UPSIDE DOWN!
+teach_hold
+  NAP? HOLD ME SIDEWAYS! POOF!
+teach_shake
+  SHAKE ME! I SEE! ACHOO!
