@@ -22,7 +22,10 @@ hold ring serve both. The table and the switches are in
 home (`ORIENT_HOME` = 2 in `src/hw/board_lcd128.h`): the hang is USB-C
 **down**, the side hold USB-C to either side. (Until 2026-10-19 the firmware
 took the opposite for home, so the hang meant holding the case the right way
-up.) The screen turns with the badge whatever this says.
+up.) Badges whose cases hold them USB-C down build env `badge128_flip`
+(`BLORB_ORIENT_HOME=0`), and their hang is USB-C up. The screen no longer
+turns with the badge: it stays at home, so in the hang the kid sees him on
+his head.
 
 The rest is unchanged: tilt aims, one knock locks the aimed stance and
 spares, a shake tells the future, a cuddle hugs, a turn answers an update.
@@ -58,7 +61,7 @@ already the model, a **pose held on edge** whose progress a kid can see.
   nothing), one hold per turn, and **a release is never a press**, so a
   turn let go early does nothing at all. While it is held it is a level, as
   BOOT down is: the duel times its 3 s holds by it and the rim's ring fills.
-  The screen turns with the badge, so the kid watches the ring fill.
+  The ring is on the rim, so the kid watches it fill from any side.
 - **Knock knock** comes from the samples themselves (`blorb/knocks.h`,
   `KnockSense`), not the QMI8658's tap engine: with real hands the tap
   engine reported 0 of 5 deliberate knock knocks and about 34 double taps
@@ -106,10 +109,23 @@ while awake is the way to add one later.
 
 The pet says what nobody can guess: `KNOCK KNOCK ON ME FOR SNACKS`
 whenever he is hungry (at any age: it is the only way food reaches him),
-and on his first day `HOLD ME UPSIDE DOWN TO FIGHT`, `HOLD ME SIDEWAYS.
-NIGHT NIGHT` and `SHAKE ME. I SEE THINGS.` The fight mode line says `HOLD
-ME UPSIDE DOWN TO STOP`, and a hungry pet refused a fight says `TOO HUNGRY -
-KNOCK KNOCK ON ME TO FEED`.
+and on his first day `TO FIGHT, HOLD ME UPSIDE DOWN`, `BEDTIME? HOLD ME
+SIDEWAYS.` and `SHAKE ME. I SEE THINGS.` Each species says these in its own
+words (`personalities/<species>.txt`, `teach_*`), always as advice, goal
+first, so nobody reads them as "I am upside down". A lone knock gets a nudge
+toward the second (`WHO'S THERE? TRY KNOCK KNOCK!`). The fight mode line
+says `HOLD ME UPSIDE DOWN TO STOP`, and a hungry pet refused a fight says
+`TOO HUNGRY - KNOCK KNOCK ON ME TO FEED`.
+
+He says he is upside down (`sky_down`, `WHY IS THE SKY DOWN THERE`) only
+when he is: held in the hang's pose from home, either home
+(`HangDetector`'s `hanging` full). Until 2026-10-20 that line read
+`TiltDetector`'s `upside_down`, which is face down and stays set until the
+screen faces well up again, so a badge laid face down a moment and then
+held on edge or worn on a lanyard said it every five minutes the right way
+up; before 0.7.12 the IMU's inverted z made a badge lying face up on a desk
+say it too (`test_thoughts`
+`Thoughts.TheSkyIsDownOnlyWhenHeIsUpsideDownFromHome`).
 
 ## Testing
 

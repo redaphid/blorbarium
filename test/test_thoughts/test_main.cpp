@@ -10,6 +10,7 @@
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/lineage.h"
 #include "blorb/taught.h"
+#include "../../src/hw/orient.h"
 #include "links.h"
 #include "mem_storage.h"
 #include "traces.h"
@@ -728,6 +729,82 @@ TEST(Idle, AContentPetWithNoPhoneIsNeverQuietLongAndRarelyRepeats) {
       << "awake and content, he is never quiet for more than the longest quiet gap";
   EXPECT_GE(times.size(), 50u) << "a content day is varied";
   EXPECT_LE(most, int(kHours)) << "no line comes back more than about once an hour: " << top;
+}
+
+// "Why is the sky down there" is for a pet who really is upside down: the
+// badge turned half round from home (the hang), where the screen, held at
+// home, shows him on his head. It used to read TiltDetector's upside_down,
+// which is face down (the screen to the floor) and latched until the screen
+// faced well up again: a badge laid face down for a moment, then held up on
+// edge or worn on a lanyard, said it every five minutes the right way up (and
+// before 0.7.12 the IMU's z was inverted, so lying face up on a desk said it).
+//
+// The shell's half of main.cpp feel(): the raw IMU sample turned into the
+// screen held at `home`, and the poses judged from home.
+struct Shell {
+  orient::Up up{1};   // board_lcd128.h ORIENT_R0
+  uint8_t home;
+  explicit Shell(uint8_t h) : home(h) {}
+  BodySample feel(const BodySample& raw, uint32_t ms) {
+    up.sample(raw, ms);
+    BodySample s = up.toFrame(raw, home);
+    s.invertedDown = up.inverted(raw, home);
+    s.sideDown = up.sideways(raw, home);
+    return s;
+  }
+};
+
+BodySample raw(int ax, int ay, int az) {
+  BodySample s;
+  s.ax = int16_t(ax), s.ay = int16_t(ay), s.az = int16_t(az);
+  return s;
+}
+// Held still on edge with the native top, right, bottom, left edge up (test_orient's kHeld).
+BodySample edgeUp(uint8_t rot) {
+  constexpr int16_t kX[4] = {0, 1000, 0, -1000}, kY[4] = {-1000, 0, 1000, 0};
+  return raw(kX[rot & 3], kY[rot & 3], 0);
+}
+
+// Held in `pose` for `forMs`, through the shell, awake and content (so a
+// sleepy or hungry pet does not change the subject).
+void holdPose(Rig& r, Shell& sh, const BodySample& pose, uint32_t forMs) {
+  for (uint32_t end = r.ms + forMs; r.ms < end; r.ms += kSampleMs) {
+    if (r.ms % (10 * kSecond) == 0)
+      for (const DriveInfo& d : DRIVES) r.creature().inject(driveChem(d.id), Fx::zero());
+    r.dish.sample(sh.feel(pose, r.ms), r.ms);
+    r.dish.tick(r.ms, r.link);
+    if (r.ms % kTickMs == 0) r.observe();
+  }
+}
+
+TEST(Thoughts, TheSkyIsDownOnlyWhenHeIsUpsideDownFromHome) {
+  for (uint8_t home : {uint8_t(2), uint8_t(0)}) {   // USB-C up (badge128), USB-C down (badge128_flip)
+    SCOPED_TRACE(home == 2 ? "home USB-C up" : "home USB-C down");
+    Rig r;
+    r.pastWarmUp();
+    Shell sh(home);
+    const BodySample atHome = edgeUp(home);
+    const BodySample leaningBack = raw(edgeUp(home).ax * 866 / 1000, edgeUp(home).ay * 866 / 1000, 500);
+    holdPose(r, sh, atHome, 5 * kSecond);
+    for (int round = 0; round < 3; ++round) {
+      holdPose(r, sh, raw(0, 0, -1000), 5 * kSecond);   // face down a moment: not long enough to sleep
+      holdPose(r, sh, atHome, 6 * kMinute);              // held up the right way, or on a lanyard
+      holdPose(r, sh, raw(0, 0, -1000), 5 * kSecond);
+      holdPose(r, sh, leaningBack, 6 * kMinute);         // leaning back in a hand, looking at him
+      holdPose(r, sh, raw(0, 0, 1000), 6 * kMinute);     // face up on a desk
+      holdPose(r, sh, edgeUp(home + 1), 3 * kSecond);    // on a side (the side hold) and back
+      holdPose(r, sh, atHome, 2 * kSecond);
+      holdPose(r, sh, edgeUp(home + 3), 3 * kSecond);
+      holdPose(r, sh, atHome, 6 * kMinute);
+    }
+    ASSERT_TRUE(std::holds_alternative<Creature>(r.dish.occupant()));
+    ASSERT_FALSE(r.creature().body().asleep);
+    EXPECT_EQ(countOf(r.said, thought::sky_down), 0) << "the right way up, or face down, he is not upside down";
+    EXPECT_FALSE(r.said.empty()) << "he talked meanwhile";
+
+    holdPose(r, sh, edgeUp(home + 2), 10 * kSecond);   // the hang: half round from home
+    EXPECT_EQ(countOf(r.said, thought::sky_down), 1) << "upside down from home, he notices";
+  }
 }
 
 int main(int argc, char** argv) {
