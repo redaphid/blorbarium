@@ -342,8 +342,8 @@ void HangDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   out.set(locus::hanging, Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)));
 }
 
-// The pose is the shell's (BodySample::sideDown: orient.h's 600 ms settle,
-// jolts and flat rejected); this adds the intent. On edge as for the hang,
+// The pose is the shell's (BodySample::sideDown: src/hw/poses.h, jolts and
+// flat rejected); this adds the intent. On edge as for the hang,
 // so a badge lying slanted on a table holds nothing; a jolt while held is a
 // small hand, not a let-go, and so is a moment past the edge.
 void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
@@ -367,7 +367,7 @@ void SideHoldDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
       return;
     }
   }
-  if (!fired_ && ms - since_ >= kButtonHoldMs) {
+  if (!fired_ && !off_ && ms - since_ >= kSideHoldMs) {   // never while let go: a turn back is no hold
     fired_ = true;
     rearm_.spend();   // one hold per turn: the right way up again before the next (PoseRearm)
     if (kSideHoldHolds) out.fire(stim::button_hold);

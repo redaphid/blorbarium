@@ -131,7 +131,7 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
     // The twins (controls.h) say which gesture spoke, not BOOT.
     if (f == stim::button && s.tapCode == 2 && !s.buttonDown && !cues_.buttonDown()) diag_.say("gesture knock_knock=press");
     else if (f == stim::button_hold && !cues_.buttonDown() && detectors_.side.holding())
-      diag_.say("gesture side=hold ms=%u", unsigned(kButtonHoldMs));
+      diag_.say("gesture side=hold ms=%u", unsigned(kSideHoldMs));
     else if (f == stim::button_hold) diag_.say("boot hold ms=%u", unsigned(kButtonHoldMs));
     else if (what && cues_.lastGapMs() == UINT32_MAX) diag_.say("boot %s ms=%u gap=none", what, unsigned(cues_.lastPressMs()));
     else if (what) diag_.say("boot %s ms=%u gap=%u", what, unsigned(cues_.lastPressMs()), unsigned(cues_.lastGapMs()));
@@ -430,6 +430,9 @@ Appearance Dish::appearance() const {
     return a;
   }
   Appearance a = present(live_.occupant, live_.habitat, live_.clock, tick_);
+  // The hang's charge as of the last sample, not the last tick: the rim fills
+  // with the hand, a frame after it, not up to 100 ms later.
+  if (std::holds_alternative<Creature>(live_.occupant)) a.hangCharge = clamp01(detectors_.hang.charge());
   const BootContext ctx = bootContext();
   const DuelView v = duel_.active() ? duel_.view(tick_) : DuelView{};
   a.boot = bootHint(ctx, duel_.active() ? &v : nullptr);

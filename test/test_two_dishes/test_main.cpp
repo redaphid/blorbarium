@@ -1245,10 +1245,10 @@ TEST(BootRows, NoButtonAKnockKnockFeedsASideHoldTucksInAHangOpensTheLobby) {
   a.d.felt.clear();
   for (int t = 0; t < 6; ++t) a.tick(side);
   EXPECT_GT(a.d.dish->appearance().boot.holdFill, 0) << "while held on his side, the ring fills";
-  for (int t = 0; t < 8; ++t) a.tick(side);
+  for (int t = 0; t < 16; ++t) a.tick(side);
   a.tick();
   EXPECT_TRUE(a.d.felt.count(stim::button_hold.v)) << "a side hold is the tuck-in";
-  EXPECT_TRUE(has(diags(a.d), "gesture side=hold ms=1200"));
+  EXPECT_TRUE(has(diags(a.d), "gesture side=hold ms=2000"));
   EXPECT_EQ(pellets(*a.d.dish), before + 1) << "and drops nothing";
   for (int t = 0; t < 4; ++t) a.tick();
   for (int t = 0; t < 12; ++t) a.tick(hang);
@@ -1286,7 +1286,7 @@ TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
   a.tick(kk), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
   EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a knock knock: the next egg";
   ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "and it keeps nothing";
-  for (int t = 0; t < 14; ++t) a.tick(side);
+  for (int t = 0; t < 22; ++t) a.tick(side);
   a.tick();
   ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps the egg";
 }

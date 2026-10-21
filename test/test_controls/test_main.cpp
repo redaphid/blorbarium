@@ -146,8 +146,14 @@ Result play(const Segment& seg) {
       }
       heldPose = held, heldAt = ms;
     }
-    // Knock knock: heard on the second knock, decided when the burst is over.
-    if (f.screen.knockKnock && !heardWas) ++r.heard, heardAt = ms, kkOpen = true, r.kkAck.add(0);
+    // Knock knock: the second knock is where "one more" goes out with no
+    // word; heard (the rim's flash) once it has rung out; decided when the
+    // burst is over.
+    if (!f.screen.knockWaiting && waitWas && !f.body.tapCode) heardAt = ms, kkOpen = true;
+    if (f.screen.knockKnock && !heardWas) {
+      ++r.heard;
+      if (kkOpen) r.kkAck.add(ms - heardAt);
+    }
     heardWas = f.screen.knockKnock;
     if (f.screen.knockWaiting && !waitWas) ++r.oneMore;
     waitWas = f.screen.knockWaiting;
@@ -194,7 +200,7 @@ Result play(const Segment& seg) {
 // What each segment's hands meant, for the false fires: -1 any.
 struct Want { const char* prefix; int holds, hangs; };
 constexpr Want kWant[] = {
-    {"1_", 0, 0},  {"2b_", 0, 0}, {"3_", 0, 0}, {"4_", 4, 0}, {"5_", 4, 0}, {"6_", -1, 0},
+    {"1_", 0, 0},  {"2b_", 0, 0}, {"3_", 0, 0}, {"4_", 4, 0}, {"5_", 4, 0}, {"6_", 0, 0},
     {"7_", 0, 2},  {"8_", 0, -1}, {"9_", 1, 0}, {"L", 0, 0},  {"T", 0, 0},
 };
 
@@ -217,7 +223,12 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
     const Result r = play(s);
     std::printf("[ controls ] %-26s %3d %3d %5d %5d %6d | %5d %5d %5d %7d\n", s.label.c_str(), r.kk, r.singles, r.holds,
                 r.hangs, r.shakes, r.heard, r.oneMore, r.rings, r.charges);
-    if (std::getenv("CONTROLS_POSES")) std::printf("[ poses ] %-26s%s\n", s.label.c_str(), r.poses.c_str());
+    if (std::getenv("CONTROLS_POSES")) {
+      std::printf("[ poses ] %-26s%s\n", s.label.c_str(), r.poses.c_str());
+      std::string kk;
+      for (size_t i = 0; i < r.kkAck.v.size(); ++i) kk += " " + std::to_string(r.kkAck.v[i]);
+      std::printf("[ heard ] %-26s%s\n", s.label.c_str(), kk.c_str());
+    }
     merge(all.kkAck, r.kkAck), merge(all.kkWord, r.kkWord), merge(all.sideAck, r.sideAck);
     merge(all.sideWord, r.sideWord), merge(all.hangAck, r.hangAck), merge(all.hangWord, r.hangWord);
     const Want* w = want(s.label);
@@ -230,6 +241,13 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
   std::printf("[ latency ] knock knock  ack %-22s word %s\n", all.kkAck.str().c_str(), all.kkWord.str().c_str());
   std::printf("[ latency ] side hold    ack %-22s word %s\n", all.sideAck.str().c_str(), all.sideWord.str().c_str());
   std::printf("[ latency ] hang         ack %-22s word %s\n", all.hangAck.str().c_str(), all.hangWord.str().c_str());
+  // The pose is the hand's within two steady samples (src/hw/poses.h): the
+  // ring and the charge start with the turn, not ~0.8 s after it...
+  EXPECT_LE(all.sideAck.pct(95), 60u);
+  EXPECT_LE(all.hangAck.pct(50), 40u);
+  // ...and the words take about as long as they did (kSideHoldMs, kHangHoldMs).
+  EXPECT_GE(all.sideWord.pct(50), 1900u);
+  EXPECT_GE(all.hangWord.pct(50), 1100u);
 }
 
 // ---- the badge's harness (src/latency.h), driven by hand ---------------------------

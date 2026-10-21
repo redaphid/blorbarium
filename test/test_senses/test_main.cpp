@@ -303,8 +303,8 @@ TEST(Flip, AJoltWhileFaceDownIsNotARighting) {
   EXPECT_EQ(r.at(locus::upside_down), 1.0);
 }
 
-// The shell says the pose (invertedDown: its settled rotation is 180); the
-// detector gives it a kid's intent: held, steady, for a full second.
+// The shell says the pose (invertedDown: src/hw/poses.h); the detector gives
+// it a kid's intent: held, steady, for kHangHoldMs (1.2 s).
 TEST(Hang, HeldUpsideDownForASecondIsAHang) {
   Heard r = play(Gesture().still(2000).inverted(true).still(1500));
   EXPECT_EQ(r.count(stim::hang), 1);
@@ -327,11 +327,11 @@ TEST(Hang, OneHangPerHangAndAHangAgainAfterRighting) {
 }
 
 // Small hands wobble. A hang that drains instead of resetting still lands:
-// half a second upside down, a brief righting, and the rest of the second
+// half a second upside down, a brief righting, and the rest of the hang
 // is enough -- where a strict dwell would have started over twice.
 TEST(Hang, AWobblyHangStillLandsWithoutStartingOver) {
   Gesture g;
-  g.still(2000).inverted(true).still(500).inverted(false).still(150).inverted(true).still(800);
+  g.still(2000).inverted(true).still(500).inverted(false).still(150).inverted(true).still(1100);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::hang), 1);
 }
@@ -339,7 +339,7 @@ TEST(Hang, AWobblyHangStillLandsWithoutStartingOver) {
 // A jolt mid-hang pauses the ask rather than erasing it.
 TEST(Hang, AJoltPausesAHangInsteadOfErasingIt) {
   Gesture g;
-  g.still(2000).inverted(true).still(600).pose(0, -1400, 0).still(400).pose(0, -1000, 0).still(400);
+  g.still(2000).inverted(true).still(600).pose(0, -1400, 0).still(400).pose(0, -1000, 0).still(700);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::hang), 1);
 }
@@ -406,7 +406,7 @@ TEST(Twins, TurnedOntoASideAndHeldIsAHold) {
   Detectors d;
   SenseOut out;
   Gesture g;
-  g.still(2000).sided(true).still(1500);
+  g.still(2000).sided(true).still(kSideHoldMs + 500);
   int holds = 0, presses = 0;
   bool heldAtEnd = false;
   for (const Step& st : g.steps()) {
@@ -429,7 +429,7 @@ TEST(Twins, AShortTurnOntoASideIsNothing) {
 // One hold per turn: kept on his side he holds once; upright again, and the next turn holds again.
 TEST(Twins, OneHoldPerTurnAndAgainAfterUpright) {
   Gesture g;
-  g.still(2000).sided(true).still(5000).sided(false).still(500).sided(true).still(1500);
+  g.still(2000).sided(true).still(5000).sided(false).still(500).sided(true).still(kSideHoldMs + 500);
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::button_hold), 2);
 }
@@ -439,7 +439,7 @@ TEST(Twins, AJoltOrAWobbleDoesNotEndASideHold) {
   Detectors d;
   SenseOut out;
   Gesture g;
-  g.still(2000).sided(true).still(600).pose(0, -1500, 0).still(60).pose(0, -800, 600).still(80).pose(0, -1000, 0).still(800);
+  g.still(2000).sided(true).still(600).pose(0, -1500, 0).still(60).pose(0, -800, 600).still(80).pose(0, -1000, 0).still(1500);
   int holds = 0;
   for (const Step& st : g.steps()) d.sample(st.s, st.ms, out);
   for (uint8_t i = 0; i < out.stimCount; ++i) holds += out.stimuli[i] == stim::button_hold;
@@ -464,12 +464,12 @@ TEST(Twins, BootedOnASideHoldsNothingUntilTurned) {
   s.ay = -1000, s.sideDown = true;
   for (int i = 0; i < 200; ++i) g.raw(s);
   EXPECT_EQ(play(g).count(stim::button_hold), 0);
-  g.sided(false).still(500).sided(true).still(1500);
+  g.sided(false).still(500).sided(true).still(kSideHoldMs + 500);
   EXPECT_EQ(play(g).count(stim::button_hold), 1);
 }
 
-// The rotation's lag after a turn back is the shell's to hide: orient::Up's
-// inverted() and sideways() (test_orient, *Lag*).
+// The pose itself is the shell's: src/hw/poses.h, and test_controls against
+// the recorded hands.
 
 // Laid on its side and left there, leaning so the face sits right on the
 // on-edge line: it flickers in and out of the pose for ten minutes, and holds
@@ -486,7 +486,7 @@ TEST(Twins, LaidOnItsSideAndLeftItHoldsOnceNotOverAndOver) {
   }
   Heard r = play(g);
   EXPECT_EQ(r.count(stim::button_hold), 1);
-  g.sided(false).still(1000).sided(true).still(1500);
+  g.sided(false).still(1000).sided(true).still(kSideHoldMs + 500);
   EXPECT_EQ(play(g).count(stim::button_hold), 2) << "picked up the right way and turned again: another";
 }
 
@@ -509,7 +509,7 @@ TEST(Twins, TheHangAndTheSideHoldNeverCross) {
   Heard a = play(Gesture().still(2000).inverted(true).still(2000));
   EXPECT_EQ(a.count(stim::hang), 1);
   EXPECT_EQ(a.count(stim::button_hold), 0);
-  Heard b = play(Gesture().still(2000).sided(true).still(2000));
+  Heard b = play(Gesture().still(2000).sided(true).still(kSideHoldMs + 500));
   EXPECT_EQ(b.count(stim::hang), 0);
   EXPECT_EQ(b.count(stim::button_hold), 1);
 }

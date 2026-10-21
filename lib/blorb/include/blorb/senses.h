@@ -22,16 +22,12 @@ struct BodySample {
   bool buttonDown = false;           // BOOT on the 1.28, PWR on the 1.46
   bool touchDown = false;            // 1.46 only
   int16_t touchX = 0, touchY = 0;
-  // The shell's settled panel rotation is 180 from native: the badge is held
-  // upside down in its own plane. Only the shell can say so: it rotates the
-  // sample into the screen's frame before the Dish sees it (main.cpp feel()),
-  // which turns an upside-down badge's gravity into an upright one's, so no
-  // detector could ever derive this from ax/ay. A level, like buttonDown;
-  // HangDetector gives it its timing.
+  // The badge is held upside down from home, as the shell judges it from
+  // gravity (src/hw/poses.h: two steady samples past 45 degrees, jolts
+  // skipped). A level, like buttonDown; HangDetector gives it its timing.
   bool invertedDown = false;
-  // The settled rotation is a quarter turn from native: he is on one side.
-  // Hidden by the turn into the screen's frame for the same reason, so it
-  // rides the same way; SideHoldDetector gives it its timing.
+  // The same, a quarter turn from home: he is on one side. SideHoldDetector
+  // gives it its timing.
   bool sideDown = false;
   // A knock burst on a steady badge is under way (blorb::KnockSense, in the
   // shell): the knock's bounce in the hand jolts both ways like a tiny shake,
@@ -133,13 +129,24 @@ struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> hel
   int32_t prevX_ = 0, prevY_ = 0, prevZ_ = 0;
   bool held_ = false, cradled_ = false, primed_ = false;
 };
+// The body's twins, timed from the pose itself (the shell's, src/hw/poses.h,
+// which counts a pose on its second steady sample). Until 2026-10-21 the pose
+// was the panel's settled rotation, ~0.8 s behind the hand, and these ran on
+// top of that lag (1.2 s and 0.9 s); now the ring and the charge start with
+// the turn and these take the lag's place, so a gesture takes about as long
+// as before and the recordings fire exactly as they did
+// (docs/notes/controls-latency.md): the owner's short turns of 1.5-1.9 s hold
+// nothing, and handling upside down for 2 s is no hang.
+inline constexpr uint32_t kSideHoldMs = 2000;   // on a side this long: ButtonHold ("~2 s tucks him in")
+inline constexpr uint32_t kHangHoldMs = 1200;   // upside down, steady and on edge, this long in all: Hang
+
 // Held upside down -> Hang: the no-button way into (and out of) fight mode,
-// for a case that covers BOOT. The shell has already settled the pose
-// (orient.h: 600 ms dwell, jolts and flat rejected); this detector adds the
+// for a case that covers BOOT. The shell has already judged the pose
+// (src/hw/poses.h: jolts and flat rejected); this detector adds the
 // kid's intent on top, and it is forgiving on purpose: progress accumulates
 // while he is upside down and steady, pauses while he is jolted, and drains
 // at double speed when he is righted, so a wobbly small hand still lands it
-// in about a second and a half instead of restarting from zero at every
+// in about a second and a quarter instead of restarting from zero at every
 // tremor. One Hang per hang: the progress must drain away before another
 // can fire, so staying upside down in the lobby he just opened never
 // closes it again. The hanging locus is the progress itself, 0 to 1. Only
@@ -165,11 +172,10 @@ struct PoseRearm {
   bool armed_ = false;
 };
 
-inline constexpr uint32_t kHangHoldMs = 900;   // accumulated upside-down time that asks for a fight, on top of orient.h's 600 ms settle
 struct HangDetector : DetectorBase {
   void sample(const BodySample&, uint32_t ms, SenseOut&);
   // The progress now, 0 to 1: the hanging locus as of the last sample, not
-  // the last tick.
+  // the last tick (the rim's charge, drawn every frame).
   Fx charge() const { return Fx::ratio(int32_t(progress_), int32_t(kHangHoldMs)); }
  private: uint32_t progress_ = 0, lastMs_ = 0; bool hung_ = false, primed_ = false; PoseRearm rearm_;
 };
@@ -177,7 +183,7 @@ struct HangDetector : DetectorBase {
 // no-button twin of a BOOT hold, as the hang is the double press's. Held on
 // edge and steady, a quarter turn from upright, it is a level (holding()), as
 // BOOT down is: the Dish times the 3 s holds (Finish, the Mortal pick, the
-// hug) and fills the rim's ring by it, and once it has lasted kButtonHoldMs
+// hug) and fills the rim's ring by it, and once it has lasted kSideHoldMs
 // it fires ButtonHold, once. A turn let go sooner does nothing at all (a
 // release is never a press: the press's twin is the knock knock). Like the
 // hang, only after he has been the right way up: one hold per turn, and a

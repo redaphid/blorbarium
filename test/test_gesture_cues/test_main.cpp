@@ -54,10 +54,15 @@ TEST(GestureCues, TheSideHoldFillsTheRingAndIsTheDuelsLevel) {
   EXPECT_TRUE(c.holding());
   c.sample(body(), true, 1600);
   EXPECT_EQ(c.heldMs(), 600u);
-  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 600 * 255 / 1200);
-  c.sample(body(), true, 5000);
+  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 600 * 255 / kSideHoldMs) << "full as the side hold fires, not BOOT's 1.2 s";
+  c.sample(body(), false, 5500);   // let go
+  c.sample(body(true), false, 6000);
+  c.sample(body(true), false, 6600);
+  EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 600 * 255 / kButtonHoldMs) << "BOOT's own hold fills to 1.2 s";
+  c.sample(body(), true, 7000);
+  c.sample(body(), true, 11000);
   EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 255) << "full, not wrapped";
-  c.sample(body(), false, 5020);
+  c.sample(body(), false, 11020);
   EXPECT_FALSE(c.holding());
   EXPECT_EQ(dressed(c, BootContext::Awake).holdFill, 0);
 }
