@@ -127,6 +127,9 @@ static void poll() {
   if (board.rebootAt && int32_t(millis() - *board.rebootAt) >= 0) rebootNow(board.rebootQuiet);
 }
 
+// Whether draw() below draws anything (a frame with it is never skipped as unchanged).
+static bool drawing() { return console.unlock().asking(); }
+
 // The unlock's question, drawn as the update's is (lib/ota/src/screen.cpp):
 // a band over the pet, a rim ring that runs down, amber because it asks.
 static void draw(paint::Canvas240& cv) {

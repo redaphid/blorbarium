@@ -153,6 +153,7 @@ inline uint32_t of(const uint16_t* p) {
 }  // namespace panelrows
 
 static void boardRepaintAll() { panelrows::stale = true; }
+static bool boardStale() { return panelrows::stale; }   // the next frame must send every row
 static uint32_t boardRowsSent() { return panelrows::sent; }
 
 // The send runs on core 0 while the loop draws the next frame on core 1: a

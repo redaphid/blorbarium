@@ -67,13 +67,13 @@ void setup() {
   }
   const bool dishOk = hash == kDishHash;
   const std::vector<paint::DuelScene> duels = paintbench::duelShots();
-  uint64_t duelCycles = 0;
+  uint64_t duelCycles = 0, duelPhases[uint8_t(paint::Phase::Count)] = {};
   hash = 0xCBF29CE484222325ull;
   for (const paint::DuelScene& sc : duels) {
     const uint32_t t0 = cycles();
     paint::drawDuel(sc, paint::packFor(sc.me.look.species), paint::packFor(sc.them.look.species), cv, 0);
     duelCycles += cycles() - t0;
-    for (uint32_t& p : paint::phaseClock.spent) p = 0;
+    for (int i = 0; i < int(paint::Phase::Count); ++i) duelPhases[i] += paint::phaseClock.spent[i], paint::phaseClock.spent[i] = 0;
     hash = fnv(hash);
   }
   const bool duelOk = hash == kDuelHash;
@@ -89,6 +89,10 @@ void setup() {
   Serial.printf("[bench] phases kinstr/frame:");
   for (int i = 0; i < int(paint::Phase::Count); ++i)
     Serial.printf(" %s=%u", names[i], unsigned(double(phases[i]) * perCycle / kCount / 1000));
+  // The duel: bg is the arena, fig both pets and the props, hint the BOOT hint, mask the round mask.
+  Serial.printf("\n[bench] duel phases kinstr/frame:");
+  for (int i = 0; i < int(paint::Phase::Count); ++i)
+    Serial.printf(" %s=%u", names[i], unsigned(double(duelPhases[i]) * perCycle / duels.size() / 1000));
   Serial.printf("\n[bench] kinstr a frame by species, mean/worst: egg baby child adult elder\n");
   for (int sp = 0; sp < blorb::kSpeciesCount; ++sp) {
     Serial.printf("[bench]   %-9s", blorb::SPECIES[sp].name);

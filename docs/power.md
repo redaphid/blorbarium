@@ -118,6 +118,15 @@ shape of the line; these numbers are not a measurement):
 (240 is all of it), `cpu_now` the clock as it runs. In low power it reports
 no frames and `cpu_now=80` (or 40, between, on `badge128_pm`).
 
+A frame whose inputs (the Appearance byte for byte, the idle bar's step, no
+overlay, no duel, nothing on the clock: fight mode, the no-fight strip, the
+amber) are the last drawn frame's is not drawn or sent: the panel already
+shows it (`framememo`, src/main.cpp). So `fps` and the ms count the frames
+that changed, and `same=` the ones skipped; at rest between his 100 ms ticks
+most frames are the same. A second line splits a changed frame by phase
+(`look bg fig rim text rings mask hint over push wait send`), and
+`DEBUG fps bench` times the canvas's memory and the frame shown now by phase.
+
 ## The idle bar
 
 A 1 px arc one pixel in from the rim (`paint::drawIdleBar`, colour 120,150,150)
