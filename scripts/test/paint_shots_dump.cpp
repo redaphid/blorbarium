@@ -47,6 +47,7 @@ int main(int argc, char** argv) {
     else if (!std::strncmp(mode, "badge", 5)) {   // the badge now: four frames 20 ms apart between the same two ticks
       shots[i] = paint::between(raw[run ? run - 1 : 0], raw[run], uint32_t(run * 40), uint32_t(run * 40 + i % 4 * 20));
       if (!std::strcmp(mode, "badge-no-idle")) shots[i].lively = false;   // what the idle layer costs
+      if (!std::strcmp(mode, "badge-no-ease")) shots[i].behind = 0;       // what easing where he stands costs
     }
     else   // every frame between a new pair of ticks: the most the memo can miss
       shots[i] = paint::between(raw[i ? i - 1 : 0], raw[i], uint32_t(i * 40 - i * 13 % 101), uint32_t(i * 40));
