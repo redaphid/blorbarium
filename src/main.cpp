@@ -28,6 +28,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include <esp_heap_caps.h>
 #include <soc/soc_memory_layout.h>
 #include "hw/board_lcd128.h"
+#include "hw/paint_core0.h"
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
 #include "hw/air_espnow.h"
@@ -249,11 +250,12 @@ static void report() {
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
   const uint32_t draw = uint32_t((lookUs + drawUs) / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
-                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u\n",
+                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u cores=%d\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
                 unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
                 unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeKhz() / 1000),
-                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames));
+                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames),
+                paintcore0::on ? 2 : 1);
   using paint::Phase;
   const uint32_t* spent = paint::phaseClock.spent;
   uint64_t painted = 0;
@@ -968,6 +970,7 @@ void setup() {
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
   paint::phaseClock.now = fps::now;   // DEBUG fps's phases
+  paintcore0::begin();                // the renderer's second half on core 0
 #if defined(CONFIG_PM_ENABLE)
   Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
 #else
@@ -1290,6 +1293,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
   if (std::strcmp(verb, "fps") == 0) return std::strcmp(a, "bench") == 0 ? fps::bench() : fps::report();
   if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
+  if (std::strcmp(verb, "cores") == 0) {   // `DEBUG cores 1|2`: draw on one core or both, until reset
+    if (*a) paintcore0::use(std::strtol(a, nullptr, 10) >= 2);
+    return (void)Serial.printf("[hw] cores draw=%d\n", paintcore0::on ? 2 : 1);
+  }
   if (std::strcmp(verb, "duel") == 0) return duelNow();
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
@@ -1310,7 +1317,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
