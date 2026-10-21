@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <variant>
 
+#include "blorb/appearance.h"
 #include "blorb/dish.h"
 #include "links.h"
 #include "mem_storage.h"
@@ -30,5 +31,13 @@ int main() {
     n += a.kind == Appearance::Kind::Creature;
   }
   std::printf("appearance() us a call: %.2f (creature frames %d)\n", total / 2000, n);
+  // The vigil and the clutch express the parent's genome, stage by stage, every
+  // call (presentClutch); portrait() does the same work for an adult.
+  const Genome& g = std::get<Creature>(dish.occupant()).genome();
+  const auto t0 = Clock::now();
+  uint32_t keep = 0;
+  for (int i = 0; i < 2000; ++i) keep += portrait(g, Stage::Adult, 1, 0).lifeSeed;
+  std::printf("portrait(adult) us a call: %.2f (%u)\n",
+              std::chrono::duration<double, std::micro>(Clock::now() - t0).count() / 2000, unsigned(keep & 1));
   return 0;
 }
