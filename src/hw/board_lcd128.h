@@ -153,6 +153,7 @@ inline uint32_t of(const uint16_t* p) {
 }  // namespace panelrows
 
 static void boardRepaintAll() { panelrows::stale = true; }
+static bool boardStale() { return panelrows::stale; }   // the next frame must send every row
 static uint32_t boardRowsSent() { return panelrows::sent; }
 
 // The send runs on core 0 while the loop draws the next frame on core 1: a
@@ -174,9 +175,12 @@ static volatile uint32_t sendUs = 0;        // time on the bus since boot, us (t
 // Frames that sent rows, numbered from 1, and the last one out on the panel
 // and when (micros), for DEBUG latency: a frame's rows reach the glass when
 // the send task is done with them, not when the loop hands them over.
+// The send task writes a frame's time before its number, so a reader on the
+// other core that sees the number finds its time (never the semaphore: the
+// loop's next frame holds it while the send runs, nearly always).
 static uint32_t queuedSeq = 0;
-static volatile uint32_t doneSeq = 0, doneUs = 0;
-static volatile uint32_t sendingSeq = 0;
+static volatile uint32_t doneSeq = 0, sendingSeq = 0;
+static volatile uint32_t doneAt[8] = {};   // by seq % 8
 
 static void send(BoardDisplay& display, const uint16_t* px) {
   display.startWrite();
@@ -193,7 +197,9 @@ static void loop(void*) {
     send(*to, shadow);
     const uint32_t t1 = micros();
     sendUs += t1 - t0;
-    doneUs = t1, doneSeq = sendingSeq;
+    const uint32_t seq = sendingSeq;
+    doneAt[seq % 8] = t1;
+    doneSeq = seq;
     xSemaphoreGive(idle);
   }
 }
@@ -222,17 +228,11 @@ static void boardSetSendAsync(bool on) {
   panelsend::async = on;
 }
 static uint32_t boardSendUs() { return panelsend::sendUs; }
-// The newest frame that sent the panel rows (0: none yet), and the newest
-// whose rows are out, with when.
+// The newest frame that sent the panel rows (0: none yet), the newest whose
+// rows are out, and when each of the last eight went out (micros).
 static uint32_t boardFrameSeq() { return panelsend::queuedSeq; }
-static void boardPanelDone(uint32_t& seq, uint32_t& us) {
-  using namespace panelsend;
-  if (!idle) return void((seq = doneSeq, us = doneUs));   // no send task: sent in place
-  if (xSemaphoreTake(idle, 0) == pdTRUE) {   // not mid-send: doneSeq and doneUs agree
-    seq = doneSeq, us = doneUs;
-    xSemaphoreGive(idle);
-  }
-}
+static uint32_t boardPanelDoneSeq() { return panelsend::doneSeq; }
+static uint32_t boardPanelDoneAt(uint32_t seq) { return panelsend::doneAt[seq % 8]; }
 
 // The canvas is native-endian RGB565, which is rgb565_t to LGFX: pushImage
 // converts it to the panel's byte-swapped wire order on the way out, a run of
@@ -262,7 +262,7 @@ static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) 
   }
   if (runCount) ++queuedSeq;
   if (!background) {
-    if (runCount) send(display, canvas.px), doneUs = micros(), doneSeq = queuedSeq;
+    if (runCount) send(display, canvas.px), doneAt[queuedSeq % 8] = micros(), doneSeq = queuedSeq;
     return;
   }
   if (!runCount) return void(xSemaphoreGive(idle));

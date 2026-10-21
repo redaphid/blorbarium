@@ -217,7 +217,9 @@ static uint32_t sleptMs();
 // sending the panel what changed, and the worst whole frame.
 //   DEBUG fps      [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 ...
 // rows= is the rows sent a frame (240 is a whole frame); cpu_now= the clock as
-// it runs, against cpu=, the clock it was set to. A second line splits a
+// it runs, against cpu=, the clock it was set to. fps=, frames= and the ms are
+// the frames drawn, each one that changed; same= the frames not drawn because
+// nothing in them had (framememo). A second line splits a
 // frame's time by phase, ms a frame (paint/phases.h):
 //   [fps] phases look=0.9 bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
 // look= is the Dish working out his Appearance (draw_ms counts it), over= what
@@ -230,7 +232,8 @@ static uint32_t sleptMs();
 static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
-static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0;
+static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0, sames = 0;
+static void same() { ++sames; }
 static uint64_t lookUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
 // look: the Dish's Appearance (the engine's), draw: the canvas, push: the panel.
@@ -248,11 +251,11 @@ static void report() {
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
   const uint32_t draw = uint32_t((lookUs + drawUs) / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
-                "spi_mhz=%u.%u frame_ms=%u power=%s\n",
+                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
                 unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
                 unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeKhz() / 1000),
-                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full");
+                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames));
   using paint::Phase;
   const uint32_t* spent = paint::phaseClock.spent;
   uint64_t painted = 0;
@@ -270,7 +273,7 @@ static void report() {
   Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
                 "send=%s (%s)\n",
                 f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], boardSendAsync() ? "async" : "sync");
-  since = t, frames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0, send0 = boardSendUs();
+  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
@@ -306,6 +309,28 @@ static void bench() {
   boardRepaintAll();
 }
 }  // namespace fps
+
+// A frame drawn from the same inputs as the last one drawn is the same bytes
+// (paint::draw is pure in the Appearance, and the clock only moves fight
+// mode's line and pulse, the no-fight strip and the amber's words), so it is
+// not drawn or sent: between his 100 ms ticks, most of them. Not while an
+// overlay (the update's screen, the debug unlock) or a duel's scene (not in
+// the Appearance) is up, nor when the panel needs every row again.
+namespace framememo {
+static blorb::Appearance last;
+static uint16_t lastIdle = 0;
+static bool valid = false;
+static bool same(const blorb::Appearance& a, uint16_t idleBar, bool overlay) {
+  if (!valid || overlay || boardStale() || a.dueling || a.lobby || a.sealed || a.noFight != blorb::NoFight::None) return false;
+  // Byte for byte: equal bytes are equal values (padding can only make two equal frames look different).
+  return idleBar == lastIdle && std::memcmp(static_cast<const void*>(&a), static_cast<const void*>(&last), sizeof a) == 0;
+}
+static void drew(const blorb::Appearance& a, uint16_t idleBar, bool overlay) {
+  std::memcpy(static_cast<void*>(&last), static_cast<const void*>(&a), sizeof a);
+  lastIdle = idleBar;
+  valid = !overlay;   // the next frame without the overlay must draw over it
+}
+}  // namespace framememo
 
 // `DEBUG lcd [MHz]`: the panel's SPI write clock until reset (BLORB_LCD_SPI_MHZ is the default).
 // `DEBUG lcd sync|async`: send the rows from the loop, or from the send task on core 0 (the default).
@@ -633,9 +658,10 @@ static void framed(const blorb::Appearance& a, uint32_t seqBefore) {
 }
 // Every loop: the rows the send task has put on the panel, and events open too long.
 static void poll() {
-  uint32_t seq = 0, us = 0;
-  boardPanelDone(seq, us);
-  if (seq) rec.panelDone(seq, us);
+  static uint32_t polled = 0;   // each frame's own time, though the loop looks only once a pass
+  const uint32_t seq = boardPanelDoneSeq();
+  for (uint32_t k = seq - polled > 8 ? seq - 7 : polled + 1; int32_t(seq - k) >= 0; ++k) rec.panelDone(k, boardPanelDoneAt(k));
+  polled = seq;
   rec.expire(micros());
 }
 static void verb(const char* a) {
@@ -1615,22 +1641,34 @@ void loop() {
 #endif
     const blorb::Appearance look = shown();
 #if !defined(BADGE_BOARD_SIM)
-    const uint32_t drawAt = micros();
-#endif
-    drawFrame(look, now);
-#if !defined(BADGE_BOARD_SIM)
-    if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
-    else dbgfw::draw(canvas);
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
-    paint::drawIdleBar(canvas, uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs()));
-    const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
+    const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
+    const std::optional<ota::View> update = updater.view(millis());
+    const bool overlay = update || dbgfw::drawing();
+    const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
+    if (still) fps::same();
+#else
+    constexpr bool still = false;
 #endif
-    boardPresent(display, canvas);
+    if (!still) {
 #if !defined(BADGE_BOARD_SIM)
-    fps::note(drawAt - lookAt, pushAt - drawAt, micros() - pushAt);
-    lat::framed(look, seqBefore);
+      const uint32_t drawAt = micros();
 #endif
-    ++framesDrawn;
+      drawFrame(look, now);
+#if !defined(BADGE_BOARD_SIM)
+      if (update) ota::drawUpdate(canvas, *update);
+      else dbgfw::draw(canvas);
+      paint::drawIdleBar(canvas, idleBar);
+      framememo::drew(look, idleBar, overlay);
+      const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
+#endif
+      boardPresent(display, canvas);
+#if !defined(BADGE_BOARD_SIM)
+      fps::note(drawAt - lookAt, pushAt - drawAt, micros() - pushAt);
+      lat::framed(look, seqBefore);   // a frame the memo skipped showed nothing new: it is no frame here
+#endif
+      ++framesDrawn;
+    }
     lastFrame = now;
 #if !defined(BADGE_BOARD_SIM)
     if (lightAfterFrame) {   // the first frame since the wake is on the glass: now the light
