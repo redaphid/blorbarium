@@ -57,6 +57,28 @@ def glyph(draw, size=24):
     return k.sprite((size // 2, size // 2))
 
 
+class Twice(Sketch):
+    """The same drawing in the same units at twice the pixels: a glyph's sharp twin for
+    when it is drawn big, where blitting the 24 px one at 200% would show blocks."""
+
+    def __init__(self, cols, rows):
+        super().__init__(2 * cols, 2 * rows)
+
+    def mask(self, kind, *args, width=1.0):
+        if kind == "ellipse":
+            return super().mask(kind, *(2 * v for v in args))
+        return super().mask(kind, [(2 * x, 2 * y) for x, y in args[0]], width=2 * width)
+
+    def outline(self, m, width=1.0, colour=INK):
+        super().outline(m, 2 * width, colour)
+
+
+def twin(draw, size=24):
+    k = Twice(size, size)
+    draw(k)
+    return k.sprite((size, size))
+
+
 # ---- ART3: stances ------------------------------------------------------------------
 
 def pounce(k):
@@ -470,3 +492,9 @@ def frames():
     out["Vendetta"] = glyph(vendetta)
     out["Wounded"] = glyph(wounded, 16)
     return out
+
+
+def twins():
+    """The 48 px twins by header name: the stance a kid aims at is drawn big. They take
+    the palette the frames above make and add no colour to it, so no other frame moves."""
+    return {f"Stance{name.capitalize()}Big": twin(draw) for name, draw in STANCES}
