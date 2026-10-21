@@ -1,12 +1,11 @@
-"""The feeding frames (test_feeding's Film.DumpWhenAsked) as PNGs and contact sheets.
+"""The feeding film's frames (test/test_feeding_film) as PNGs and contact sheets.
 
-    FEEDING_DUMP=outputs/feeding/ppm_after .pio/build/native/program --gtest_filter='Film.*'
-    FEEDING_PLAIN=1 FEEDING_DUMP=outputs/feeding/ppm_before .pio/build/native/program --gtest_filter='Film.*'
     python3 scripts/test/feeding_sheet.py outputs/feeding
 
-(after `pio test -e native -f test_feeding`, so the program is test_feeding's.)
-Writes outputs/feeding/<name>.png (after, 2x), before/<name>.png, and
-sheet_fed.png / sheet_refused.png: before above after, frame by frame.
+scripts/test/feeding_film.sh runs it after filming both ppm_before/ and
+ppm_after/. Writes outputs/feeding/<name>.png (after, 2x), before/<name>.png,
+and sheet_<film>.png (grungo, puffkin, mudge_hatchling, refused): before
+above after, frame by frame.
 """
 import glob
 import os
@@ -22,8 +21,17 @@ def load(kind, name):
     return Image.open(os.path.join(out, "ppm_" + kind, name + ".ppm")).convert("RGB")
 
 
+def split(name):
+    """('puffkin', 3) for puffkin_3_landed; (name, 0) for a frame of no film."""
+    parts = name.split("_")
+    for i, p in enumerate(parts):
+        if p.isdigit():
+            return "_".join(parts[:i]), int(p)
+    return "refused", 0
+
+
 names = sorted((os.path.basename(p)[:-4] for p in glob.glob(os.path.join(out, "ppm_after", "*.ppm"))),
-               key=lambda n: (n.split("_")[0], int(n.split("_")[1]) if n.split("_")[1].isdigit() else 0, n))
+               key=lambda n: (split(n), n))
 for n in names:
     load("after", n).resize((480, 480), Image.NEAREST).save(os.path.join(out, n + ".png"))
     if os.path.exists(os.path.join(out, "ppm_before", n + ".ppm")):
@@ -42,6 +50,6 @@ def sheet(path, frames):
     img.save(path)
 
 
-sheet(os.path.join(out, "sheet_fed.png"), [n for n in names if n.startswith("fed_")])
-sheet(os.path.join(out, "sheet_refused.png"), [n for n in names if not n.startswith("fed_")])
-print("wrote %d frames and two sheets to %s" % (len(names), out))
+for film in sorted({split(n)[0] for n in names}):
+    sheet(os.path.join(out, "sheet_%s.png" % film), [n for n in names if split(n)[0] == film])
+print("wrote %d frames and their sheets to %s" % (len(names), out))

@@ -114,9 +114,21 @@ struct DishSpots {
 // the rim's pellet glyph to (landX, landY): where it is now and how big.
 // False once it has landed, and then draw.cpp draws it as any item.
 bool pelletAloft(const blorb::FeedView&, int landX, int landY, int& x, int& y, int& scalePct);
-// Under it while it is aloft: a warm glow and a fading trail, so it reads on
-// the dark dish. `frameH`: the pellet frame's height.
-void pelletGlow(Canvas240&, const blorb::FeedView&, int landX, int landY, int frameH);
+// It, aloft: a cookie with a trail, and its shadow waiting where it lands.
+void foodAloft(Canvas240&, const blorb::FeedView&, int landX, int landY, bool rotten);
+
+// The food, wherever it shows: on the floor, in the air, at his mouth, in a
+// bubble. THE seam for food art: a fat cookie drawn in code now; a sprite
+// can replace the body of drawFood (feeding.cpp) without touching the rest.
+// (cx, cy) its centre, r its radius in px.
+struct Food {
+  uint8_t bites = 0;        // 0..3 taken out of it (he is chewing it)
+  bool rotten = false;      // grey-green, no highlight
+  bool grey = false;        // none left: the pantry is empty
+  bool biteLeft = false;    // which side his bites come from
+};
+constexpr int kFoodFloorR = 9;   // on the floor
+void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 
 // Feeding over the dish (blorb/feed_show.h): the rim's flash, the landing,
 // a refusal, the chomp and the belly meter. Before the round mask.
