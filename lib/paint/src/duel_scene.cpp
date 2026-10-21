@@ -29,9 +29,9 @@ int beatWord(const Fighter& winner, const Fighter& loser, bool super) {
   return super ? kSuper : kBonk;
 }
 
-int imin(int a, int b) { return a < b ? a : b; }
-int imax(int a, int b) { return a > b ? a : b; }
-int iabs(int a) { return a < 0 ? -a : a; }
+constexpr int imin(int a, int b) { return a < b ? a : b; }
+constexpr int imax(int a, int b) { return a > b ? a : b; }
+constexpr int iabs(int a) { return a < 0 ? -a : a; }
 int clampi(int v, int lo, int hi) { return imax(lo, imin(hi, v)); }
 
 // sin of a/256 turn, Q12. Angles run clockwise from 3 o'clock, as y runs down.
@@ -1037,25 +1037,75 @@ void paintProp(Canvas240& cv, const Prop& p, uint16_t ticks) {
 
 // The arena: a dusky dish with a pool of light under each pet, so each stands
 // on his own ground; ordered-dithered so the gradient does not band.
-void arena(Canvas240& cv) {
-  static constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
-  struct Pool { int x, y, rx, ry; };
-  constexpr Pool kPools[2] = {{kHome[0].x, kHome[0].y, 50, 13}, {kHome[1].x, kHome[1].y, 36, 9}};
-  for (int y = 0; y < kSide; ++y)
-    for (int x = 0; x < kSide; ++x) {
-      const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
-      if (d2 > kSide * kSide) { cv.px[y * kSide + x] = 0; continue; }
-      const int t = d2 / (kSide * kSide / 256);
-      Rgb c{40 - 22 * t / 256, 30 - 16 * t / 256, 56 - 26 * t / 256};
-      for (const Pool& p : kPools) {
-        // A whole radius off on either axis puts |ex| or |ey| at 256 or more: no light, and no divisions to learn it.
-        if (iabs(x - p.x) >= p.rx || iabs(y - p.y) >= p.ry) continue;
-        const int ex = (x - p.x) * 256 / p.rx, ey = (y - p.y) * 256 / p.ry, e = (ex * ex + ey * ey) >> 8;
-        if (e < 256) { c.r += 26 * (256 - e) / 256; c.g += 30 * (256 - e) / 256; c.b += 24 * (256 - e) / 256; }
+struct Pool { int x, y, rx, ry; };
+constexpr Pool kPools[2] = {{kHome[0].x, kHome[0].y, 50, 13}, {kHome[1].x, kHome[1].y, 36, 9}};
+constexpr uint8_t kArenaBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+
+// One arena pixel, from scratch: the gradient, the pools' light, the dither.
+constexpr uint16_t arenaPixel(int x, int y) {
+  const int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide, d2 = dx * dx + dy * dy;
+  const int t = d2 / (kSide * kSide / 256);
+  int r = 40 - 22 * t / 256, g = 30 - 16 * t / 256, b = 56 - 26 * t / 256;
+  for (const Pool& p : kPools) {
+    // A whole radius off on either axis puts |ex| or |ey| at 256 or more: no light, and no divisions to learn it.
+    if (iabs(x - p.x) >= p.rx || iabs(y - p.y) >= p.ry) continue;
+    const int ex = (x - p.x) * 256 / p.rx, ey = (y - p.y) * 256 / p.ry, e = (ex * ex + ey * ey) >> 8;
+    if (e < 256) { r += 26 * (256 - e) / 256; g += 30 * (256 - e) / 256; b += 24 * (256 - e) / 256; }
+  }
+  const int d = kArenaBayer[y & 3][x & 3];
+  r = imin(255, r + d / 2), g = imin(255, g + d / 4), b = imin(255, b + d / 2);
+  return uint16_t(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}
+
+// Away from the pools an arena pixel is its step of t (d2 / 225, 0..256) and
+// its dither alone: the 257 steps x 16 dithers, at compile time (8 KB of flash).
+struct ArenaLut { uint16_t px[4][257][4]; };   // [dither row][t][dither column]
+constexpr ArenaLut arenaLut() {
+  ArenaLut l{};
+  for (int by = 0; by < 4; ++by)
+    for (int t = 0; t <= 256; ++t)
+      for (int k = 0; k < 4; ++k) {
+        int r = 40 - 22 * t / 256, g = 30 - 16 * t / 256, b = 56 - 26 * t / 256;
+        const int d = kArenaBayer[by][k];
+        r = imin(255, r + d / 2), g = imin(255, g + d / 4), b = imin(255, b + d / 2);
+        l.px[by][t][k] = uint16_t(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
       }
-      const int d = kBayer[y & 3][x & 3];
-      cv.px[y * kSide + x] = c565({imin(255, c.r + d / 2), imin(255, c.g + d / 4), imin(255, c.b + d / 2)});
+  return l;
+}
+constexpr ArenaLut kArenaLut = arenaLut();
+// d2 / 225 as a multiply and a shift, for every d2 of the dish (checked).
+constexpr uint32_t arenaT(uint32_t d2) { return d2 * 37283u >> 23; }
+constexpr bool arenaTExact() {
+  for (uint32_t d2 = 0; d2 <= uint32_t(kSide * kSide); ++d2)
+    if (arenaT(d2) != d2 / 225) return false;
+  return true;
+}
+static_assert(arenaTExact(), "arenaT is d2 / 225 across the dish");
+
+// The arena: a dusky dish with a pool of light under each pet, so each stands
+// on his own ground; ordered-dithered so the gradient does not band. Each row
+// from the table, a pixel and its mirror at once (the gradient is symmetric),
+// then the pools' boxes worked out pixel by pixel over it.
+void arena(Canvas240& cv) {
+  for (int y = 0; y < kSide; ++y) {
+    uint16_t* row = &cv.px[y * kSide];
+    const int from = kDish.from[y];
+    std::memset(row, 0, sizeof(uint16_t) * size_t(from));
+    std::memset(row + kSide - from, 0, sizeof(uint16_t) * size_t(from));
+    const int dy = 2 * y + 1 - kSide;
+    const auto& lut = kArenaLut.px[y & 3];
+    uint32_t d2 = uint32_t((2 * from + 1 - kSide) * (2 * from + 1 - kSide) + dy * dy);
+    uint32_t step = uint32_t(4 * (2 * from + 1 - kSide) + 4);   // d2 at x + 1 less d2 at x, a 2's complement step
+    for (int x = from; x < kSide / 2; ++x, d2 += step, step += 8) {
+      const uint16_t* l = lut[arenaT(d2)];
+      row[x] = l[x & 3];
+      row[kSide - 1 - x] = l[3 - (x & 3)];
     }
+    for (const Pool& p : kPools) {
+      if (iabs(y - p.y) >= p.ry) continue;
+      for (int x = imax(from, p.x - p.rx + 1); x <= imin(kSide - 1 - from, p.x + p.rx - 1); ++x) row[x] = arenaPixel(x, y);
+    }
+  }
 }
 
 // Light and the clock go under the pets; everything else over them.
