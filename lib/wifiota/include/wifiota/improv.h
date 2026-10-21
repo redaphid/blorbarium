@@ -6,14 +6,16 @@
 // drives them (test/test_wifi_ota). src/hw/improv_ble.h is the GATT service;
 // src/wifi_ota.h joins the network. docs/wifi-ota.md, "Provisioning".
 //
+//   authorization required --a hand says yes (consent.h)--> authorized
 //   authorized --Wi-Fi settings--> provisioning --joined--> provisioned (result: the page's URL)
 //                                               --failed--> authorized  (error: unable to connect)
+//   authorized or provisioned --the yes runs out, or the phone goes--> authorization required
 //
-// The badge needs no authorization step (the spec's state 1): see
-// docs/wifi-ota.md, "Security", for why and what a stranger could do. It
-// answers Wi-Fi settings and device info; identify and scan, both optional
-// in the spec, are left out (docs/wifi-ota.md "What was cut") and answer
-// unknown RPC, and the capabilities say no identify.
+// Wi-Fi settings before the yes answer "not authorized" (the spec's error 4)
+// and join nothing: docs/wifi-ota.md, "Security". Device info needs no yes.
+// Identify and scan, both optional in the spec, are left out
+// (docs/wifi-ota.md "What was cut") and answer unknown RPC, and the
+// capabilities say no identify.
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -88,6 +90,10 @@ class Machine {
   // The join's outcome. `url` is where the page goes next (the result's one string).
   void joined(std::string_view url);
   void couldNotJoin();
+  // A hand said yes (consent.h): Wi-Fi settings may come.
+  void authorize();
+  // The yes ran out or its phone went: the next phone must ask again. Not mid-join.
+  void requireAuthorization();
 
  private:
   void run(Command, const uint8_t* data, size_t n);
@@ -97,7 +103,7 @@ class Machine {
 
   Port& port_;
   DeviceInfo info_;
-  State state_ = State::Authorized;
+  State state_ = State::AuthorizationRequired;
   Error error_ = Error::None;
   uint8_t buf_[kMaxPacket] = {};
   size_t have_ = 0;

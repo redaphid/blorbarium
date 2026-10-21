@@ -1,68 +1,96 @@
-// Wi-Fi: Improv provisioning, the windows when the station is up, and the
-// unattended update over HTTPS (docs/wifi-ota.md). The decisions are pure and
-// tested natively (lib/wifiota, test/test_wifi_ota); the update itself is
-// the same ota::Session, signature check, trial and rollback as Bluetooth's
-// (lib/ota). main.cpp includes this once, after the loop's statics it uses
-// (dish, ble, updater, trial, trialPort, trialWatchdog, powerPolicy, espNow,
-// shot, debugAsks), so it is part of that one translation unit.
+// Wi-Fi: Improv provisioning (with a hand's yes), the windows when the
+// station is up, and the unattended update over HTTPS (docs/wifi-ota.md). The
+// decisions are pure and tested natively (lib/wifiota, test/test_wifi_ota);
+// the update itself is the same ota::Session, signature check, trial and
+// rollback as Bluetooth's (lib/ota). main.cpp includes this once, after the
+// loop's statics it uses (dish, ble, updater, trial, trialPort,
+// trialWatchdog, powerPolicy, espNow, shot, debugAsks), so it is part of that
+// one translation unit.
 //
-// Everything runs on the loop: no task, no timer. Every line it logs starts
-// "[wifi] ", and every change of window, phase, power or hold is one line.
+// Offline first (owner, 2026-10-21: "the use case is primarily offline car"):
+// with no remembered network in range a window is one scan of about 1.6 s,
+// while the badge is dark and nobody is there, a few times a day at most
+// (schedule.h), and nothing on the screen, the loop, Bluetooth or a duel
+// changes. Nothing here waits: the scan and the join are polled, the GET runs
+// on its own task (hw/net_job.h), and the image goes into the slot a few KB
+// a loop pass.
 //
-//   off --window opens--> joining --joined--> (manifest, read at once) --install--> image --ready--> off
-//                                 --15 s----> off                      --nothing--> off
+// Every line it logs starts "[wifi] ", and every change of window, phase or hold is one line.
+//
+//   off --window--> scanning --a remembered network--> joining --joined--> manifest --newer--> image --ready--> closing --> off
+//                            --none in range---------> closing                      --nothing--> closing
 #pragma once
 
 #include <esp_heap_caps.h>
 #include <esp_random.h>
+#include <esp_system.h>
 #include <mbedtls/platform.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstring>
 #include <optional>
+#include <tuple>
 
 #include "hw/battery.h"
 #include "hw/improv_ble.h"
+#include "hw/net_job.h"
 #include "hw/wifi_station.h"
 #include "hw/wifi_store.h"
+#include "paint/text.h"
+#include "wifiota/consent.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
-#include "wifiota/power_sense.h"
 #include "wifiota/remembered.h"
 #include "wifiota/schedule.h"
 
 namespace wififw {
 
 namespace improv = wifiota::improv;
+using wifiota::Failure;
 using wifiota::Window;
 
-constexpr uint32_t kJoinMs = 15000;            // the join, then the window closes
-constexpr uint32_t kStallMs = 15000;           // a download that hears nothing for this long has failed
+constexpr uint32_t kScanMs = 6000;             // a scan that has not finished by then has failed
+constexpr uint32_t kJoinMs = 12000;            // the join, then the window closes
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
-constexpr size_t kReadPerPassBytes = 16384;    // the image bytes one loop pass takes, so the loop keeps turning
+constexpr uint32_t kStuckMs = 60000;           // a GET that will not end after a cancel: its sockets are cut
+constexpr size_t kTakePerPassBytes = 8192;     // image bytes a loop pass writes: about two flash sectors
+constexpr uint32_t kBatteryEveryMs = 10 * 60 * 1000;
 constexpr const char* kSiteUrl = "https://blorb.hypnodroid.com/?d=";
 
-enum class Phase : uint8_t { Off, Joining, Image };
+enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing };
 const char* phaseName(Phase p) {
-  constexpr const char* kNames[] = {"off", "joining", "image"};
+  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing"};
   return kNames[uint8_t(p)];
 }
 
 static hw::WifiStation station;
-static hw::HttpsGet get;
+static hw::NetJob job;
 static hw::Battery battery;
-static wifiota::PowerSense powerSense;
 static wifiota::Schedule schedule;
-static std::optional<improv::Credentials> network;   // the one remembered
-static bool autoOn = true;                           // `DEBUG wifi on|off`, in NVS
-static std::optional<bool> powerOverride;            // `DEBUG wifi power on|off`, RAM only
+static wifiota::Networks networks;
+static bool autoOn = true;   // `DEBUG wifi on|off`, in NVS
 
 static Window window = Window::None;
 static Phase phase = Phase::Off;
 static wifiota::Hold lastHold = wifiota::Hold::Open;
-static uint32_t phaseAt = 0, powerReadAt = 0;
-static uint32_t imageAt = 0, heardAt = 0, saidAt = 0;   // the download: bytes handed to the session, when
-static char lastOutcome[96] = "none";
+static uint32_t phaseAt = 0, windowAt = 0, saidAt = 0, closingSince = 0;
+static bool cutSockets = false;
+static uint32_t imageAt = 0;   // bytes handed to the session
+static uint32_t darkSince = 0;
+static bool wasDark = false;
+static uint16_t cellMv = 0;
+static uint32_t cellAt = 0;
+static bool cellRead = false;
+static char lastOutcome[112] = "none";
+static uint32_t windows = 0, scans = 0;   // since boot, for DEBUG wifi
+
+// The window a restart came in the middle of (RTC memory lives through a
+// crash or a watchdog's reset, not a power cut): src/wifi_ota.h begin().
+constexpr uint32_t kWindowMagic = 0x3A1F1000u;
+RTC_NOINIT_ATTR static uint32_t inWindow;
+RTC_NOINIT_ATTR static uint32_t crashesInARow;
 
 // What is asked of the next window.
 static bool forced = false;
@@ -71,6 +99,10 @@ static std::optional<improv::Credentials> provisionAsked, provisioning;
 // On trial after an update over Wi-Fi: the token the old image handed over.
 static std::optional<ota::Token> confirmToken;
 static uint32_t confirmAt = 0;
+
+// A hand's yes before a phone may give it a network (wifiota/consent.h).
+static wifiota::Consent consent;
+static uint32_t consentGen = 0;   // the Bluetooth connection the yes is for
 
 static hw::ImprovBle improvBle(ble, improv::DeviceInfo{"blorbarium", blorb::kFirmwareVersion, "ESP32-S3", ble.name()});
 
@@ -92,97 +124,145 @@ static void outcome(const char* fmt, ...) {
   say("%s: %s", wifiota::windowName(window), lastOutcome);
 }
 
-static bool onPower() { return powerOverride.value_or(powerSense.onPower()); }
+static bool lowBattery() { return cellRead && cellMv >= 2500 && cellMv < wifiota::Schedule::kLowBatteryMv; }
 
-static wifiota::Facts facts() {
+static wifiota::Facts facts(uint32_t now) {
+  const bool dark = powerPolicy.low();
   return wifiota::Facts{
-      network.has_value() && autoOn,
-      onPower(),
-      powerPolicy.low(),
+      !networks.empty() && autoOn,
+      dark ? std::max<uint32_t>(1, now - darkSince) : 0,
       ble.connected() || updater.asking() || (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() ||
-          bool(shot),
+          consent.asking() || bool(shot),
       dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || espNow.isOpen(),
+      lowBattery(),
   };
 }
 
 static const char* manifestUrl() { return window == Window::Forced && forcedUrl[0] ? forcedUrl : wifiota::kManifestUrl; }
 
 static void setPhase(Phase p) {
-  say("%s: %s -> %s", wifiota::windowName(window), phaseName(phase), phaseName(p));
+  say("%s: %s -> %s (%u ms)", wifiota::windowName(window), phaseName(phase), phaseName(p), unsigned(millis() - phaseAt));
   phase = p;
   phaseAt = millis();
 }
 
-// The window ends: the fetch, the radio and an unfinished download all go at once.
-static void closeWindow() {
-  get.close();
+// The radio goes once the GET's task has ended (hw/net_job.h).
+static void radioDown() {
   station.down();
-  if (updater.ownedBy(kWifiPeer) && !updater.ready()) updater.abort();
-  provisioning.reset();
-  say("window %s closes (heap=%u minheap=%u)", wifiota::windowName(window), unsigned(ESP.getFreeHeap()),
-      unsigned(ESP.getMinFreeHeap()));
+  job.reset();
+  inWindow = 0;
+  crashesInARow = 0;
+  say("window %s closed after %u ms (heap=%u minheap=%u)", wifiota::windowName(window), unsigned(millis() - windowAt),
+      unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
   if (phase != Phase::Off) setPhase(Phase::Off);
   window = Window::None;
 }
 
-// A Check window that failed tries again later; a Provision window tells the phone.
-static void failWindow(const char* fmt, ...) {
+// The window ends: the GET is told to stop, an unfinished download is
+// dropped (the slot is not the running image's: the badge is as it was), and
+// the radio goes down once the GET's task has.
+static void closeWindow() {
+  if (phase == Phase::Closing || window == Window::None) return;
+  job.cancel();
+  if (updater.ownedBy(kWifiPeer) && !updater.ready()) updater.abort();
+  provisioning.reset();
+  if (!job.busy()) return radioDown();
+  closingSince = millis();
+  cutSockets = false;
+  setPhase(Phase::Closing);
+}
+
+// A Check that failed waits (schedule.h); a Provision tells the phone.
+static void failWindow(Failure why, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   std::vsnprintf(lastOutcome, sizeof lastOutcome, fmt, ap);
   va_end(ap);
-  say("%s: FAILED %s", wifiota::windowName(window), lastOutcome);
-  if (window == Window::Check) schedule.failed(millis());
+  if (window == Window::Check) schedule.failed(why, millis());
+  say("%s: FAILED %s%s", wifiota::windowName(window), lastOutcome,
+      window == Window::Check ? (why == Failure::Absent ? " (no network: next check later)" : " (the site: next check later)") : "");
   if (window == Window::Provision) improvBle.machine().couldNotJoin();
   closeWindow();
 }
 
 static void openWindow(Window w) {
   window = w;
-  const improv::Credentials& net = w == Window::Provision ? *provisioning : *network;
-  say("window %s opens: power=%s idle=%d network=\"%s\" heap=%u", wifiota::windowName(w), onPower() ? "on" : "battery",
-      int(powerPolicy.low()), net.ssid, unsigned(ESP.getFreeHeap()));
-  if (!station.up()) return failWindow("the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
-  station.join(net.ssid, net.password);
+  windowAt = phaseAt = millis();
+  ++windows;
+  inWindow = kWindowMagic;
+  say("window %s opens: dark=%d networks=%u heap=%u", wifiota::windowName(w), int(powerPolicy.low()),
+      unsigned(networks.size()), unsigned(ESP.getFreeHeap()));
+  if (!station.up()) return failWindow(Failure::Absent, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
+  if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
+    station.join(*provisioning);
+    return setPhase(Phase::Joining);
+  }
+  ++scans;
+  if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
+  setPhase(Phase::Scanning);
+}
+
+static void scanned() {
+  const int n = station.scanned();
+  if (n == WIFI_SCAN_RUNNING) {
+    if (millis() - phaseAt > kScanMs) failWindow(Failure::Absent, "the scan took over %u s", unsigned(kScanMs / 1000));
+    return;
+  }
+  if (n < 0) return failWindow(Failure::Absent, "the scan failed");
+  const std::optional<size_t> pick = networks.pick(station.seen(), station.seenCount());
+  if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(networks.size()), n);
+  const improv::Credentials& c = networks[*pick];
+  say("joining \"%s\" (%d networks seen)", c.ssid, n);
+  station.join(c);
   setPhase(Phase::Joining);
 }
 
-// The GET's blocking part, with the loop's numbers beside it.
-static bool openGet(const char* url) {
-  trialWatchdog.beat(millis());   // on trial, the stall below must not read as a hung image
-  const uint32_t t0 = millis();
-  const bool ok = get.open(url);
-  say("GET %s: %s in %u ms (heap=%u minheap=%u big=%u stack_free=%u)", url, ok ? "200" : get.error(),
-      unsigned(millis() - t0), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
-      unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
-      unsigned(uxTaskGetStackHighWaterMark(nullptr)));
-  trialWatchdog.beat(millis());
-  return ok;
+static bool startGet(const char* url, bool text) {
+  if (job.start(url, text)) return true;
+  failWindow(Failure::Server, "GET %s: %s", url, job.error());
+  return false;
+}
+
+static void joined() {
+  say("joined \"%s\" rssi=%d ch=%u ip=%s heap=%u", WiFi.SSID().c_str(), int(WiFi.RSSI()), unsigned(WiFi.channel()),
+      WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
+  if (window != Window::Provision) {
+    if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
+    return;
+  }
+  networks.remember(*provisioning);
+  const bool saved = hw::WifiStore::save(networks);
+  char url[64];
+  std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
+  improvBle.machine().joined(url);
+  outcome("provisioned \"%s\" (%s; %u remembered)", provisioning->ssid, saved ? "saved" : "SAVE FAILED",
+          unsigned(networks.size()));
+  consent.end();   // the next network needs another yes
+  closeWindow();
 }
 
 static void startImage(const wifiota::Manifest& m) {
   uint8_t random[12];
   esp_fill_random(random, sizeof random);
   if (const std::optional<ota::Refusal> no = updater.install(m.image, wifiota::wifiToken(random), millis(), kWifiPeer))
-    return failWindow("install refused: %s", no->why);
+    return failWindow(Failure::Server, "install refused: %s", no->why);
   char url[200];
-  if (!wifiota::imageUrl(manifestUrl(), m.file, url, sizeof url)) return failWindow("image url too long");
-  if (!openGet(url)) return failWindow("image: %s", get.error());
-  if (get.size() != int(m.image.size))
-    return failWindow("image: the server says %d bytes, the manifest %u", get.size(), unsigned(m.image.size));
+  if (!wifiota::imageUrl(manifestUrl(), m.file, url, sizeof url)) return failWindow(Failure::Server, "image url too long");
+  job.reset();
+  if (!startGet(url, false)) return;
   say("downloading %u bytes (signature ok, pet saved, slot open)", unsigned(m.image.size));
   imageAt = 0;
-  heardAt = saidAt = millis();
+  saidAt = millis();
   setPhase(Phase::Image);
 }
 
 static void readManifest() {
-  if (!openGet(manifestUrl())) return failWindow("manifest: %s", get.error());
-  if (get.size() > int(wifiota::kManifestMax)) return failWindow("manifest: %d bytes is not a manifest", get.size());
-  const String text = get.text();
-  get.close();
-  const std::optional<wifiota::Manifest> m = wifiota::parseManifest(std::string_view(text.c_str(), text.length()));
-  if (!m) return failWindow("manifest unreadable (%u bytes)", unsigned(text.length()));
+  if (job.state() == hw::NetJob::State::Failed) return failWindow(Failure::Server, "manifest: %s", job.error());
+  if (job.state() != hw::NetJob::State::Done) return;
+  say("GET manifest: %u bytes, open %u ms, task stack free %u", unsigned(job.textLen()), unsigned(job.openMs()),
+      unsigned(job.stackFree()));
+  const std::optional<wifiota::Manifest> m = wifiota::parseManifest(std::string_view(job.text(), job.textLen()));
+  if (!m) return failWindow(Failure::Server, "manifest unreadable (%u bytes)", unsigned(job.textLen()));
   const ota::Version& v = m->image.version;
   if (window == Window::Confirm) {
     // The trial's half the badge cannot check alone: the new image reached the site over Wi-Fi.
@@ -190,6 +270,7 @@ static void readManifest() {
     confirmToken.reset();
     outcome("trial confirmed over Wi-Fi (%s; the site has %u.%u.%u)", c == ota::Confirm::Confirmed ? "ok" : "not on trial",
             unsigned(v.major), unsigned(v.minor), unsigned(v.patch));
+    schedule.checked(millis());
     return closeWindow();
   }
   schedule.checked(millis());
@@ -205,42 +286,29 @@ static void readManifest() {
   startImage(*m);
 }
 
-static void joined() {
-  say("joined \"%s\" rssi=%d ch=%u ip=%s heap=%u", WiFi.SSID().c_str(), int(WiFi.RSSI()), unsigned(WiFi.channel()),
-      WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
-  if (window != Window::Provision) return readManifest();
-  network = provisioning;
-  const bool saved = hw::WifiStore::save(*network);
-  char url[64];
-  std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
-  improvBle.machine().joined(url);
-  outcome("provisioned \"%s\" (%s)", network->ssid, saved ? "saved" : "SAVE FAILED");
-  closeWindow();
-}
-
-// One pass of the download: what has arrived, up to kReadPerPassBytes, into
+// One pass of the download: what has arrived, up to kTakePerPassBytes, into
 // ota::Session::data() as offset-prefixed packets, the path a page's writes take.
 static void download() {
   uint8_t packet[4 + 1024];
-  for (size_t taken = 0; taken < kReadPerPassBytes && !updater.ready();) {
-    const int n = get.read(packet + 4, sizeof packet - 4);
-    if (n < 0) return failWindow("the connection closed at %u bytes", unsigned(imageAt));
-    if (n == 0) break;
+  for (size_t taken = 0; taken < kTakePerPassBytes && !updater.ready();) {
+    const size_t n = job.take(packet + 4, sizeof packet - 4);
+    if (!n) break;
     packet[0] = uint8_t(imageAt), packet[1] = uint8_t(imageAt >> 8), packet[2] = uint8_t(imageAt >> 16),
     packet[3] = uint8_t(imageAt >> 24);
-    updater.data(packet, 4 + size_t(n), millis(), kWifiPeer);
+    updater.data(packet, 4 + n, millis(), kWifiPeer);
     if (!updater.ownedBy(kWifiPeer))   // the session ended: a bad hash, a bad image, a flash error
-      return failWindow("update failed at %u bytes: %s", unsigned(imageAt), ota::lastName(updater.last()));
+      return failWindow(Failure::Server, "update failed at %u bytes: %s", unsigned(imageAt), ota::lastName(updater.last()));
     imageAt += uint32_t(n);
-    taken += size_t(n);
-    heardAt = millis();
+    taken += n;
   }
   if (updater.ready()) {
-    outcome("downloaded and verified in %u s; restarting into it once the badge is quiet",
+    outcome("downloaded and verified in %u s; restarting into it once the badge is dark and alone",
             unsigned((millis() - phaseAt) / 1000));
     return closeWindow();
   }
-  if (millis() - heardAt > kStallMs) return failWindow("the download stalled");
+  if (job.state() == hw::NetJob::State::Failed) return failWindow(Failure::Server, "image: %s", job.error());
+  if (job.state() == hw::NetJob::State::Done && !job.waiting())
+    return failWindow(Failure::Server, "image: all %u bytes came and the session is not ready", unsigned(imageAt));
   if (millis() - saidAt >= 5000) {
     saidAt = millis();
     say("image at %u bytes heap=%u minheap=%u", unsigned(imageAt), unsigned(ESP.getFreeHeap()),
@@ -248,30 +316,78 @@ static void download() {
   }
 }
 
-static void readPower(uint32_t now) {
-  const bool first = !powerReadAt;
-  if (!first && now - powerReadAt < wifiota::PowerSense::kEveryMs) return;
-  powerReadAt = now | 1;
-  const bool was = powerSense.onPower();
-  powerSense.reading(battery.cellMv(), now);
-  if (first || powerSense.onPower() != was)
-    say("power %s (vbat=%u mV pin=%u mV, %s)%s", powerSense.onPower() ? "on" : "battery", unsigned(powerSense.lastMv()),
-        unsigned(battery.pinMv()), wifiota::powerWhyName(powerSense.why()), powerOverride ? " [overridden]" : "");
+// The window is closing: the radio goes once the GET's task has ended.
+static void closing() {
+  if (!job.busy()) return radioDown();
+  if (!cutSockets && millis() - closingSince > kStuckMs) {
+    cutSockets = true;
+    say("the GET has not ended %u s after it was told to: cutting its connection", unsigned(kStuckMs / 1000));
+    WiFi.disconnect();
+  }
+}
+
+// The consent's question and its phone (wifiota/consent.h).
+static void pollConsent(uint32_t now) {
+  const uint32_t gen = ble.connected() ? ble.generation() : 0;
+  if ((consent.asking() || consent.granted()) && gen != consentGen) consent.end();   // its phone went
+  if (improvBle.takeOpened() && gen && improvBle.machine().state() == improv::State::AuthorizationRequired) {
+    if (!consent.asking()) say("improv: a phone opened the service: asking for a yes on the screen");
+    consent.ask(now);
+    consentGen = gen;
+  }
+  consent.tick(now);
+  switch (consent.take()) {
+    case wifiota::Consent::Event::Granted:
+      say("improv: yes (a turn or the button): the phone may send a network for %u s",
+          unsigned(wifiota::Consent::kGrantMs / 1000));
+      improvBle.machine().authorize();
+      break;
+    case wifiota::Consent::Event::Lapsed: say("improv: nobody said yes"); break;
+    case wifiota::Consent::Event::Expired: say("improv: the yes ran out"); break;
+    case wifiota::Consent::Event::None: break;
+  }
+  if (!consent.granted()) improvBle.machine().requireAuthorization();
+}
+
+static void readBattery(uint32_t now, bool force) {
+  if (!force && cellRead && now - cellAt < kBatteryEveryMs) return;
+  cellMv = battery.cellMv();
+  cellAt = now;
+  cellRead = true;
 }
 
 // Every loop.
 static void poll(uint32_t now) {
   improvBle.poll();
-  readPower(now);
-  const wifiota::Facts f = facts();
-  if (window != Window::None && !wifiota::Schedule::keep(window, f))
-    return failWindow("closed early: %s", f.radioBusy ? "the radio is wanted for a duel" : "someone is using the badge");
+  pollConsent(now);
+  const bool dark = powerPolicy.low();
+  if (dark && !wasDark) darkSince = now;
+  wasDark = dark;
+  const wifiota::Facts f = facts(now);
+  if (window != Window::None && phase != Phase::Closing && !wifiota::Schedule::keep(window, f)) {
+    say("%s: closed early: %s", wifiota::windowName(window),
+        f.radioBusy ? "the radio is wanted for a duel" : "someone is using the badge");
+    if (window == Window::Check) {   // not a failure: due again the next time it is dark and alone
+      std::snprintf(lastOutcome, sizeof lastOutcome, "closed early: someone came");
+    }
+    if (window == Window::Provision) improvBle.machine().couldNotJoin();
+    return closeWindow();
+  }
   switch (phase) {
+    case Phase::Scanning: return scanned();
     case Phase::Joining:
-      if (station.joined()) return joined();
-      if (millis() - phaseAt > kJoinMs) return failWindow("could not join \"%s\" in %u s", WiFi.SSID().c_str(), unsigned(kJoinMs / 1000));
+      switch (station.joining()) {
+        case hw::WifiStation::Join::Joined: return joined();
+        case hw::WifiStation::Join::Failed:
+          return failWindow(Failure::Absent, "could not join \"%s\" (status %d)", WiFi.SSID().c_str(), int(WiFi.status()));
+        case hw::WifiStation::Join::Trying:
+          if (millis() - phaseAt > kJoinMs) return failWindow(Failure::Absent, "could not join in %u s", unsigned(kJoinMs / 1000));
+          return;
+      }
       return;
+    case Phase::Manifest: return readManifest();
     case Phase::Image: return download();
+    case Phase::Closing: return closing();
     case Phase::Off: break;
   }
   // Off: what to open, the person waiting first.
@@ -288,23 +404,33 @@ static void poll(uint32_t now) {
   }
   if (forced && !f.radioBusy) {
     forced = false;
-    if (!network) return say("ota check: no network remembered (DEBUG wifi set <ssid> <password>)");
+    if (networks.empty()) return say("ota check: no network remembered (DEBUG wifi set <ssid> <password>)");
     return openWindow(Window::Forced);
   }
-  if (confirmToken && trial.onTrial() && network && int32_t(now - confirmAt) >= 0) {
+  if (confirmToken && trial.onTrial() && !networks.empty() && int32_t(now - confirmAt) >= 0) {
     confirmAt = now + kConfirmRetryMs;   // the next try, should this one fail
     return openWindow(Window::Confirm);
   }
-  const wifiota::Hold hold = schedule.checkHold(f, now);
-  if (hold != lastHold) say("hold %s -> %s", wifiota::holdName(lastHold), wifiota::holdName(hold));
+  wifiota::Hold hold = schedule.checkHold(f, now);
+  if (hold == wifiota::Hold::Open) {   // the battery, read only when it is the last thing in the way
+    readBattery(now, false);
+    if (lowBattery()) hold = wifiota::Hold::LowBattery;
+  }
+  if (hold != lastHold)
+    say("hold %s -> %s", wifiota::holdName(lastHold), wifiota::holdName(hold));
   lastHold = hold;
   if (hold == wifiota::Hold::Open) openWindow(Window::Check);
 }
 
 // A duel wants the radio: any window but the trial's gives it up now
-// (RadioGate::open, main.cpp). True while the radio is still Wi-Fi's.
+// (RadioGate::open, main.cpp). True while the radio is still Wi-Fi's: the
+// gate then waits, at most the GET's own timeouts.
 static bool yieldRadio() {
-  if (window != Window::None && window != Window::Confirm) failWindow("closed early: the radio is wanted for a duel");
+  if (window != Window::None && window != Window::Confirm && phase != Phase::Closing) {
+    say("%s: closed early: the radio is wanted for a duel", wifiota::windowName(window));
+    if (window == Window::Provision) improvBle.machine().couldNotJoin();
+    closeWindow();
+  }
   return station.isUp();
 }
 
@@ -330,43 +456,101 @@ static void* tlsCalloc(size_t n, size_t size) {
 }
 static void tlsFree(void* p) { heap_caps_free(p); }
 
-// Before ble.begin(): the network, the switch, and whether this boot is an
-// update over Wi-Fi on trial, which must reach the site again to keep itself.
-// Reads only: nothing is written before boot has decided (provision.h).
+// Before ble.begin(): the networks, the switch, whether the last boot ended
+// inside a window, and whether this boot is an update over Wi-Fi on trial,
+// which must reach the site again to keep itself. Reads only: nothing is
+// written before boot has decided (provision.h).
 static void begin() {
   mbedtls_platform_set_calloc_free(tlsCalloc, tlsFree);
   battery.begin();
-  network = hw::WifiStore::load();
+  if (const std::optional<wifiota::Networks> n = hw::WifiStore::load()) networks = *n;
   autoOn = hw::WifiStore::autoOn();
   improvBle.onJoin = [](const improv::Credentials& c) {
-    say("improv: a phone sent network \"%s\"", c.ssid);
+    say("improv: the phone sent network \"%s\"", c.ssid);
     provisionAsked = c;
   };
+  // A crash or a watchdog inside a window: wait the longest before the next, and
+  // after three in a row none this boot. A power cut clears RTC memory, and the count with it.
+  const esp_reset_reason_t why = esp_reset_reason();
+  if (why == ESP_RST_POWERON || why == ESP_RST_BROWNOUT) inWindow = 0, crashesInARow = 0;
+  if (inWindow == kWindowMagic) {
+    crashesInARow = crashesInARow < 100 ? crashesInARow + 1 : crashesInARow;
+    schedule.crashed(millis());
+    say("!!! the last boot ended inside a window (reset reason %d, %u in a row): next check in %u h%s", int(why),
+        unsigned(crashesInARow), unsigned(wifiota::Schedule::kAbsentMaxMs / 3600000),
+        crashesInARow >= 3 ? "; automatic checks off until a power cut" : "");
+    if (crashesInARow >= 3) autoOn = false;
+  } else {
+    crashesInARow = 0;
+  }
+  inWindow = 0;
   if (trial.onTrial())
     if (const std::optional<ota::Handover> h = trialPort.handover(); h && wifiota::isWifiToken(h->token)) {
       confirmToken = h->token;
       powerPolicy.sleepNow();   // restarted at a quiet moment: it stays dark
       say("on trial after an update over Wi-Fi: confirming over Wi-Fi, screen dark");
     }
-  say("network %s%s%s, automatic checks %s", network ? "\"" : "", network ? network->ssid : "none",
-      network ? "\"" : "", autoOn ? "on" : "OFF (DEBUG wifi on)");
+  char list[3 * 36] = "";
+  for (size_t i = 0; i < networks.size(); ++i)
+    std::snprintf(list + std::strlen(list), sizeof list - std::strlen(list), "%s\"%s\"", i ? " " : "", networks[i].ssid);
+  say("networks %u [%s], automatic checks %s", unsigned(networks.size()), list, autoOn ? "on" : "OFF (DEBUG wifi on)");
+}
+
+// This boot is an update over Wi-Fi on trial: it came in a quiet moment and
+// stays dark (main.cpp setup(), before the backlight).
+static bool quietBoot() {
+  if (!trialPort.pending()) return false;
+  const std::optional<ota::Handover> h = trialPort.handover();
+  return h && wifiota::isWifiToken(h->token);
+}
+
+// ---- the question on the screen ------------------------------------------------------
+
+static bool asks() { return consent.asking(); }
+// The button, or a turn (main.cpp TurnYes): true when the question took it.
+static bool press(uint32_t now) { return consent.yes(now); }
+static bool drawing() { return consent.asking(); }
+
+// Drawn as the update's question and the debug unlock's are: a band over the
+// pet, a rim ring that runs down, amber because it asks.
+static void draw(paint::Canvas240& cv) {
+  if (!consent.asking()) return;
+  const uint32_t left = consent.msLeft(millis());
+  constexpr uint16_t kAsk = 0xFDC6, kInk = 0xFFFF;   // ota/screen.cpp's amber and white
+  constexpr paint::Clip kAll{0, 0, 240, 240, 0};
+  for (int y = 82; y < 158; ++y)
+    for (int x = 0; x < 240; ++x) cv.px[y * 240 + x] = paint::blend(cv.px[y * 240 + x], 0, 200);
+  const int steps = int(1200 * uint64_t(left) / wifiota::Consent::kAskMs);
+  for (int i = 0; i < steps; ++i) {
+    const float a = float(i) / 1200 * 6.2831853f - 1.5707963f;
+    for (int r = 112; r <= 118; ++r) {
+      const int x = 120 + int(std::lround(r * std::cos(a))), y = 120 + int(std::lround(r * std::sin(a)));
+      if (x >= 0 && x < 240 && y >= 0 && y < 240) cv.px[y * 240 + x] = kAsk;
+    }
+  }
+  for (const auto& [text, y, colour] : {std::tuple{"Join Wi-Fi?", 106, kAsk}, std::tuple{"Turn me around!", 134, kInk}})
+    paint::drawString(cv, paint::kFreeSans9pt7b, text, 120 - paint::textWidth(paint::kFreeSans9pt7b, text) / 2, y,
+                      colour, kAll);
 }
 
 // ---- the cable's verbs ---------------------------------------------------------------
 
 static void statusLine() {
   const uint32_t now = millis();
-  say("window=%s phase=%s network=%s%s%s auto=%d power=%s (%s, vbat=%u mV pin=%u mV%s) hold=%s next_check_in=%us",
-      wifiota::windowName(window), phaseName(phase), network ? "\"" : "", network ? network->ssid : "none",
-      network ? "\"" : "", int(autoOn), onPower() ? "on" : "battery", wifiota::powerWhyName(powerSense.why()),
-      unsigned(powerSense.lastMv()), unsigned(battery.pinMv()), powerOverride ? ", overridden" : "",
-      wifiota::holdName(schedule.checkHold(facts(), now)), unsigned(schedule.dueIn(now) / 1000));
-  say("station=%s improv=%u/%u trial=%d confirm_pending=%d ota=%s owner=%s last=\"%s\" heap=%u minheap=%u",
+  readBattery(now, true);
+  char list[3 * 36] = "";
+  for (size_t i = 0; i < networks.size(); ++i)
+    std::snprintf(list + std::strlen(list), sizeof list - std::strlen(list), "%s\"%s\"", i ? " " : "", networks[i].ssid);
+  say("window=%s phase=%s networks=[%s] auto=%d hold=%s next_check_in=%us absent_streak=%u server_streak=%u vbat=%u mV (pin %u mV)%s",
+      wifiota::windowName(window), phaseName(phase), list, int(autoOn), wifiota::holdName(schedule.checkHold(facts(now), now)),
+      unsigned(schedule.dueIn(now) / 1000), unsigned(schedule.absentStreak()), unsigned(schedule.serverStreak()),
+      unsigned(cellMv), unsigned(battery.pinMv()), lowBattery() ? " LOW" : "");
+  say("station=%s improv=%u/%u consent=%s trial=%d confirm_pending=%d ota=%s owner=%s windows=%u scans=%u last=\"%s\" heap=%u minheap=%u",
       station.joined() ? "joined" : station.isUp() ? "up" : "off", unsigned(improvBle.machine().state()),
-      unsigned(improvBle.machine().error()), int(trial.onTrial()), int(bool(confirmToken)),
-      updater.active() ? (updater.ready() ? "ready" : "active") : "idle",
-      updater.ownedBy(kWifiPeer) ? "wifi" : updater.active() ? "page" : "none", lastOutcome,
-      unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
+      unsigned(improvBle.machine().error()), consent.asking() ? "asking" : consent.granted() ? "granted" : "none",
+      int(trial.onTrial()), int(bool(confirmToken)), updater.active() ? (updater.ready() ? "ready" : "active") : "idle",
+      updater.ownedBy(kWifiPeer) ? "wifi" : updater.active() ? "page" : "none", unsigned(windows), unsigned(scans),
+      lastOutcome, unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
 }
 
 // `"My Net" pass` or `MyNet pass`: the SSID, quoted if it has spaces, then the rest as the password.
@@ -386,38 +570,39 @@ static std::optional<improv::Credentials> parseSet(const char* s) {
   return wifiota::credentials(ssid, s);
 }
 
-// `DEBUG wifi [status|forget|set <ssid> [password]|on|off|power on|off|auto]`
+// `DEBUG wifi [status|set <ssid> [password]|forget [ssid]|on|off]`
 static void wifiVerb(const char* line) {
-  char what[12] = "", arg[12] = "";
-  std::sscanf(line, "%*s %11s %11s", what, arg);
+  char what[12] = "";
+  std::sscanf(line, "%*s %11s", what);
   if (!*what || !std::strcmp(what, "status")) return statusLine();
   if (!std::strcmp(what, "forget")) {
-    network.reset();
-    say("forgot the network (%s)", hw::WifiStore::forget() ? "erased" : "ERASE FAILED");
+    const char* rest = std::strstr(line, "forget") + 6;
+    while (*rest == ' ') ++rest;
+    if (*rest) {
+      const std::optional<improv::Credentials> c = parseSet(rest);   // the SSID, quoted or not
+      if (!c || !networks.forget(c->ssid)) return say("forget: no network \"%s\" (DEBUG wifi lists them)", rest);
+    } else {
+      networks.clear();
+    }
+    say("forgot %s (%s; %u remembered)", *rest ? "it" : "every network", hw::WifiStore::save(networks) ? "saved" : "SAVE FAILED",
+        unsigned(networks.size()));
     return;
   }
   if (!std::strcmp(what, "set")) {
     const std::optional<improv::Credentials> c = parseSet(std::strstr(line, "set") + 3);
     if (!c) return say("want: wifi set <ssid|\"ssid with spaces\"> [password]");
-    network = c;
-    say("network \"%s\" (%s password, %s); DEBUG ota check tries it", c->ssid, c->password[0] ? "with a" : "no",
-        hw::WifiStore::save(*c) ? "saved" : "SAVE FAILED");
+    networks.remember(*c);
+    say("network \"%s\" (%s password, %s; %u remembered, newest first); DEBUG ota check tries it now", c->ssid,
+        c->password[0] ? "with a" : "no", hw::WifiStore::save(networks) ? "saved" : "SAVE FAILED", unsigned(networks.size()));
     return;
   }
   if (!std::strcmp(what, "on") || !std::strcmp(what, "off")) {
     autoOn = !std::strcmp(what, "on");
+    if (autoOn) crashesInARow = 0;
     say("automatic checks %s (%s)", autoOn ? "on" : "off", hw::WifiStore::setAuto(autoOn) ? "saved" : "SAVE FAILED");
     return;
   }
-  if (!std::strcmp(what, "power")) {
-    if (!std::strcmp(arg, "on")) powerOverride = true;
-    else if (!std::strcmp(arg, "off")) powerOverride = false;
-    else if (!std::strcmp(arg, "auto")) powerOverride.reset();
-    else return say("want: wifi power on|off|auto");
-    say("power taken as %s%s", onPower() ? "on" : "battery", powerOverride ? " (overridden until reset)" : " (inferred)");
-    return;
-  }
-  say("want: wifi [status|forget|set <ssid> [password]|on|off|power on|off|auto]");
+  say("want: wifi [status|set <ssid> [password]|forget [ssid]|on|off]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

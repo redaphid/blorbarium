@@ -1,39 +1,35 @@
-// The Wi-Fi station and its one HTTPS GET at a time (docs/wifi-ota.md). The
-// station is off unless a window is open (wifiota/schedule.h): up() brings the
-// radio up in station mode, joined to nothing, with the credentials kept in
-// RAM only (WiFi.persistent(false): the core would otherwise copy them into
-// the driver's own NVS namespace); down() gives the heap back. ESP-NOW's duel
-// radio (src/hw/air_espnow.h) runs the same radio and never at the same time:
-// src/wifi_ota.h keeps the two apart.
+// The Wi-Fi station (docs/wifi-ota.md). Off unless a window is open
+// (wifiota/schedule.h): up() brings the radio up in station mode, joined to
+// nothing, with the credentials kept in RAM only (WiFi.persistent(false): the
+// core would otherwise copy them into the driver's own NVS namespace); down()
+// gives the heap back. ESP-NOW's duel radio (src/hw/air_espnow.h) runs the
+// same radio and never at the same time: src/wifi_ota.h keeps the two apart.
 //
-// Everything runs on the loop, no task of its own. open() blocks the loop for
-// the DNS lookup, the TCP connect, the TLS handshake and the response's
-// headers, each bounded by a timeout below (a second or two in practice; the
-// window logs how long). The body is then read without waiting: the socket
-// is non-blocking, so read() takes what has arrived and returns.
+// Nothing here waits: the scan runs on the driver's task and is polled, the
+// join is polled, and the HTTPS GET runs on its own task (net_job.h).
 #pragma once
 
 #include <Arduino.h>
-#include <HTTPClient.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <esp_pm.h>
 #endif
 
-#include <cstdarg>
-#include <cstdio>
+#include <algorithm>
 #include <cstring>
-#include <memory>
 
-#include "hw/tls_roots.h"
+#include "wifiota/improv.h"
+#include "wifiota/remembered.h"
 
 namespace hw {
 
 class WifiStation {
  public:
+  static constexpr uint32_t kScanMsPerChannel = 120;   // active: about 1.6 s for the 13 channels
+  static constexpr uint8_t kSeenMax = 24;              // the strongest this many a scan finds are looked at
+
   bool up() {
     if (up_) return true;
     const uint32_t before = ESP.getFreeHeap();
@@ -53,9 +49,11 @@ class WifiStation {
 
   void down() {
     if (!up_) return;
+    WiFi.scanDelete();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     up_ = false;
+    seen_ = 0;
 #if defined(CONFIG_PM_ENABLE)
     if (lock_) esp_pm_lock_release(lock_);
 #endif
@@ -63,86 +61,74 @@ class WifiStation {
   }
 
   bool isUp() const { return up_; }
-  void join(const char* ssid, const char* password) { WiFi.begin(ssid, password[0] ? password : nullptr); }
-  bool joined() { return up_ && WiFi.status() == WL_CONNECTED; }
+
+  // ---- the scan: what is in range ----
+  bool scan() {
+    seen_ = 0;
+    return WiFi.scanNetworks(true, false, false, kScanMsPerChannel) == WIFI_SCAN_RUNNING;
+  }
+  // -1 still scanning, -2 failed, else how many networks it found (the
+  // strongest kSeenMax of them copied for seen()).
+  int scanned() {
+    const int16_t n = WiFi.scanComplete();
+    if (n < 0) return n;
+    seen_ = 0;
+    for (int16_t i = 0; i < n; ++i) {
+      Ap a;
+      std::snprintf(a.ssid, sizeof a.ssid, "%s", WiFi.SSID(i).c_str());
+      a.rssi = int(WiFi.RSSI(i));
+      a.channel = uint8_t(WiFi.channel(i));
+      if (const uint8_t* b = WiFi.BSSID(i)) std::memcpy(a.bssid, b, 6);
+      if (seen_ < kSeenMax) aps_[seen_++] = a;
+      else {   // keep the strongest
+        Ap* weakest = std::min_element(aps_, aps_ + seen_, [](const Ap& x, const Ap& y) { return x.rssi < y.rssi; });
+        if (a.rssi > weakest->rssi) *weakest = a;
+      }
+    }
+    WiFi.scanDelete();
+    for (uint8_t i = 0; i < seen_; ++i) views_[i] = wifiota::Seen{aps_[i].ssid, aps_[i].rssi};
+    return n;
+  }
+  const wifiota::Seen* seen() const { return views_; }
+  uint8_t seenCount() const { return seen_; }
+
+  // ---- the join ----
+  enum class Join : uint8_t { Trying, Joined, Failed };
+  // The network's strongest access point from the last scan, straight to its
+  // channel and BSSID, so no second scan is needed.
+  void join(const wifiota::improv::Credentials& c) {
+    const Ap* best = nullptr;
+    for (uint8_t i = 0; i < seen_; ++i)
+      if (!std::strcmp(aps_[i].ssid, c.ssid) && (!best || aps_[i].rssi > best->rssi)) best = &aps_[i];
+    const char* pass = c.password[0] ? c.password : nullptr;
+    if (best) WiFi.begin(c.ssid, pass, best->channel, best->bssid);
+    else WiFi.begin(c.ssid, pass);
+  }
+  Join joining() const {
+    if (!up_) return Join::Failed;
+    switch (WiFi.status()) {
+      case WL_CONNECTED: return Join::Joined;
+      case WL_NO_SSID_AVAIL:
+      case WL_CONNECT_FAILED: return Join::Failed;
+      default: return Join::Trying;
+    }
+  }
+  bool joined() const { return up_ && WiFi.status() == WL_CONNECTED; }
 
  private:
+  struct Ap {
+    char ssid[33] = "";
+    int rssi = -127;
+    uint8_t channel = 0;
+    uint8_t bssid[6] = {};
+  };
   bool up_ = false;
+  Ap aps_[kSeenMax];
+  wifiota::Seen views_[kSeenMax];
+  uint8_t seen_ = 0;
 #if defined(CONFIG_PM_ENABLE)
   esp_pm_lock_handle_t lock_ = nullptr;
 #endif
-};
-
-class HttpsGet {
- public:
-  // The loop stalls for at most about the sum of these (and the DNS lookup)
-  // in open(): under the trial watchdog's 20 s (src/hw/ota_esp.h).
-  static constexpr uint16_t kConnectMs = 4000;
-  static constexpr uint32_t kHandshakeS = 6;
-  static constexpr uint16_t kHeadersMs = 4000;
-
-  // Connect, send the GET, read the response's headers. False, with error()
-  // saying why, for anything but a 200. https:// only with the pinned roots
-  // (tls_roots.h); http:// only for a cable's `DEBUG ota check http://...`.
-  bool open(const char* url) {
-    close();
-    error_[0] = 0;
-    if (std::strncmp(url, "https://", 8) == 0) {
-      auto* secure = new WiFiClientSecure;
-      secure->setCACert(kTlsRoots);
-      secure->setHandshakeTimeout(kHandshakeS);
-      client_.reset(secure);
-    } else {
-      client_.reset(new WiFiClient);
-    }
-    http_.setReuse(false);
-    http_.setConnectTimeout(kConnectMs);
-    http_.setTimeout(kHeadersMs);
-    http_.setUserAgent("blorbarium");
-    if (!http_.begin(*client_, url)) return fail("bad url");
-    const int code = http_.GET();
-    if (code != HTTP_CODE_OK) {
-      code < 0 ? fail("%s", HTTPClient::errorToString(code).c_str()) : fail("http %d", code);
-      close();
-      return false;
-    }
-    return true;
-  }
-
-  // Content-Length, or -1 when the server sent none (a chunked body).
-  int size() { return http_.getSize(); }
-  // The whole body as text, for the manifest: blocks until it is read (it is small).
-  String text() { return http_.getString(); }
-
-  // Up to `cap` bytes of the body that have already arrived, without waiting:
-  // 0 when none have yet, -1 when the connection has closed.
-  int read(uint8_t* out, size_t cap) {
-    WiFiClient* s = http_.getStreamPtr();
-    if (!s) return -1;
-    const int avail = s->available();
-    if (avail <= 0) return s->connected() ? 0 : -1;
-    return s->read(out, std::min(size_t(avail), cap));
-  }
-
-  void close() {
-    http_.end();
-    client_.reset();
-  }
-
-  const char* error() const { return error_; }
-
- private:
-  bool fail(const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    std::vsnprintf(error_, sizeof error_, fmt, ap);
-    va_end(ap);
-    return false;
-  }
-
-  std::unique_ptr<WiFiClient> client_;
-  HTTPClient http_;
-  char error_[80] = "";
 };
 
 }  // namespace hw

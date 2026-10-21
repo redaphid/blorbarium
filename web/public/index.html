@@ -207,7 +207,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
        Shown only for a dish that has the Improv service. -->
   <section id="wifiBox" hidden>
     <h2>Wi-Fi</h2>
-    <p class="hint">Give the dish your home Wi-Fi. When it is plugged in and nobody is playing with it, it checks for updates and installs them by itself.</p>
+    <p class="hint">Give the dish your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
     <form id="wifiForm" autocomplete="off">
       <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
       <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
@@ -1209,15 +1209,16 @@ $("wifiForm").addEventListener("submit", async (e) => {
   const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
   const improv = transport && transport.improv;
   if (!improv || !ssid) return;
-  wifiTell("", `The dish is joining "${ssid}"…`);
+  wifiTell("", `Asking the dish…`);
   try {
-    await improv.join(ssid, password);
+    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the dish: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
     $("wifiPassword").value = "";
-    wifiTell("ok", `The dish joined "${ssid}" and remembers it. When it is plugged in and left alone, it updates itself.`);
+    wifiTell("ok", `The dish joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
   } catch (err) {
     debugLog("err", `improv join: ${err.message}`);
     wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
       : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`
+      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the dish. Try again, and turn the dish around when it asks \u201cJoin Wi-Fi?\u201d"
       : err.code === "TIMEOUT" ? "The dish didn't answer. If it is in a fight, try again once it's over."
       : `Something went wrong (${err.message}). Try again.`);
   }

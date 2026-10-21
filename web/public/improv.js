@@ -1,8 +1,12 @@
 // Improv Wi-Fi over Web Bluetooth (https://www.improv-wifi.com/ble/): the
 // page hands the dish a Wi-Fi network, which it remembers and uses to update
-// itself when plugged in (docs/wifi-ota.md "Provisioning"). The dish's side is
-// lib/wifiota/include/wifiota/improv.h: it answers Wi-Fi settings only (no
-// identify, no scan). No UI text here; the page owns that.
+// itself when it is left alone at home (docs/wifi-ota.md "Provisioning"). The
+// dish's side is lib/wifiota/include/wifiota/improv.h: it answers Wi-Fi
+// settings only (no identify, no scan), and only after a hand on the dish says
+// yes: it starts in "authorization required", asks on its screen ("Join
+// Wi-Fi? Turn me around!") once the page opens the service, and says
+// "authorized" when it is turned or its button pressed. No UI text here; the
+// page owns that.
 "use strict";
 (function () {
   const SERVICE = "00467768-6228-2272-4663-277478268000";
@@ -14,7 +18,8 @@
   const STATE = { authorizationRequired: 1, authorized: 2, provisioning: 3, provisioned: 4 };
   const ERROR = { none: 0, invalidRpc: 1, unknownRpc: 2, unableToConnect: 3, notAuthorized: 4, unknown: 0xff };
   const COMMAND = { wifiSettings: 1, deviceInfo: 3 };
-  const JOIN_MS = 30000;   // the dish tries the network for 15 s
+  const JOIN_MS = 30000;   // the dish tries the network for 12 s
+  const ASK_MS = 32000;    // the dish asks for 30 s
 
   const checksum = (bytes) => bytes.reduce((sum, b) => (sum + b) & 0xff, 0);
 
@@ -63,6 +68,7 @@
       this.state = 0;
       this.error = 0;
       this.waiter = null;   // the one RPC in flight: { onState, onError, onResult }
+      this.authWaiter = null;
     }
 
     // Subscribes once, on the first RPC: a dish that is never given a network costs the link nothing.
@@ -80,6 +86,7 @@
 
     heard(what, bytes) {
       if (what === "state") this.state = bytes[0];
+      if (what === "state") this.authWaiter?.(bytes[0]);
       if (what === "error") this.error = bytes[0];
       const w = this.waiter;
       if (!w) return;
@@ -105,10 +112,27 @@
       });
     }
 
+    // Until a hand on the dish says yes: at once when it already has.
+    // `onAsk` runs when the dish is asking, so the page can say what to do.
+    // Rejects with code 4 (ERROR.notAuthorized) when nobody said yes in time.
+    async authorized(onAsk, ms = ASK_MS) {
+      await this.start();
+      const yes = (s) => s === STATE.authorized || s === STATE.provisioned;
+      if (yes(this.state)) return;
+      onAsk?.();
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { this.authWaiter = null; reject(Object.assign(new Error("NOT_AUTHORIZED"), { code: ERROR.notAuthorized })); }, ms);
+        this.authWaiter = (s) => { if (yes(s)) { clearTimeout(timer); this.authWaiter = null; resolve(); } };
+      });
+    }
+
     // Join this network. Resolves with the URL the dish answers once joined;
-    // rejects with code 3 (ERROR.unableToConnect) when it could not join.
-    join(ssid, password) {
-      return this.rpc(wifiSettings(ssid, password), JOIN_MS, (ok, no) => ({
+    // rejects with code 3 (ERROR.unableToConnect) when it could not join, and
+    // code 4 (ERROR.notAuthorized) when nobody on the dish said yes.
+    async join(ssid, password, { onAsk } = {}) {
+      const bytes = wifiSettings(ssid, password);   // a bad name or password throws before the dish is asked
+      await this.authorized(onAsk);
+      return this.rpc(bytes, JOIN_MS, (ok, no) => ({
         onError: no,
         onResult: (r) => { if (r.command === COMMAND.wifiSettings) ok(r.strings[0] || ""); },
       }));

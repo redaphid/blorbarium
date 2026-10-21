@@ -8,7 +8,7 @@ const char* windowName(Window w) {
 }
 
 const char* holdName(Hold h) {
-  constexpr const char* kNames[] = {"open", "disabled", "on_battery", "not_idle", "someone_there", "radio_busy", "not_due"};
+  constexpr const char* kNames[] = {"open", "disabled", "not_idle", "someone_there", "radio_busy", "low_battery", "not_due"};
   return kNames[uint8_t(h)];
 }
 

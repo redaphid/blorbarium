@@ -11,8 +11,8 @@
 // four zeros under 16-bit UUID 0x4677) takes the last 10. Its 128-bit UUID
 // goes in the scan response after the name, only if there is room (a name of
 // up to 11 characters; every species and blorb-xxxx fit), so it can never
-// push the name out. The advertised state is the boot's, Authorized: it is
-// not rewritten while the host task may be advertising.
+// push the name out. The advertised state is the boot's, Authorization
+// Required: it is not rewritten while the host task may be advertising.
 #pragma once
 
 #include <Arduino.h>
@@ -38,9 +38,13 @@ class ImprovBle : public wifiota::improv::Port {
 
   wifiota::improv::Machine& machine() { return machine_; }
 
+  // Once, after a phone read, subscribed to or wrote the service: it wants to
+  // provision, so the badge asks for a hand's yes (wifiota/consent.h).
+  bool takeOpened() { return opened_.exchange(false); }
+
   // Every loop: the RPC bytes written since the last pass.
   void poll() {
-    if (heard_.exchange(false)) nus_.spoke();
+    if (heard_.exchange(false)) nus_.spoke(), opened_ = true;
     uint8_t bytes[kRxMax];
     size_t n = 0;
     uint32_t gen = 0;
@@ -117,7 +121,7 @@ class ImprovBle : public wifiota::improv::Port {
   wifiota::improv::Machine machine_;
   Callbacks callbacks_{this};
   NimBLECharacteristic *state_ = nullptr, *error_ = nullptr, *result_ = nullptr;
-  std::atomic<bool> heard_{false};
+  std::atomic<bool> heard_{false}, opened_{false};
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   uint8_t rx_[kRxMax] = {};
   size_t rxLen_ = 0;

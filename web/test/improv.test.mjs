@@ -40,7 +40,7 @@ test("a result reads back its strings and refuses a bad checksum or length", () 
 });
 
 // The dish's service as Web Bluetooth shows it, answering as improv.cpp does.
-function fakeDish({ joins = true } = {}) {
+function fakeDish({ joins = true, asks = false, says = true } = {}) {
   const chars = {};
   const note = (uuid, value) => {
     const v = Uint8Array.from(value);
@@ -49,15 +49,22 @@ function fakeDish({ joins = true } = {}) {
   };
   for (const uuid of [CURRENT_STATE, ERROR_STATE, RPC_COMMAND, RPC_RESULT]) {
     chars[uuid] = {
-      listeners: [], notifying: false, value: Uint8Array.of(uuid === CURRENT_STATE ? STATE.authorized : 0),
+      listeners: [], notifying: false, value: Uint8Array.of(uuid === CURRENT_STATE ? (asks ? STATE.authorizationRequired : STATE.authorized) : 0),
       addEventListener(_, f) { this.listeners.push(f); },
       async startNotifications() { this.notifying = true; },
       async readValue() { return new DataView(this.value.buffer); },
     };
   }
   const written = [];
+  // Opening the service asks; a hand says yes a moment later (or never).
+  if (asks && says) chars[CURRENT_STATE].startNotifications = async function () {
+    this.notifying = true;
+    setTimeout(() => note(CURRENT_STATE, [STATE.authorized]), 5);
+  };
   chars[RPC_COMMAND].writeValueWithResponse = async (p) => {
     written.push([...p]);
+    if (p[0] === COMMAND.wifiSettings && chars[CURRENT_STATE].value[0] === STATE.authorizationRequired)
+      return note(ERROR_STATE, [ERROR.notAuthorized]);
     if (p[0] === COMMAND.wifiSettings) {
       note(CURRENT_STATE, [STATE.provisioning]);
       setTimeout(() => {
@@ -83,4 +90,28 @@ test("join rejects with unable to connect when the dish could not join", async (
   const c = new Client(fakeDish({ joins: false }).service);
   await assert.rejects(c.join("House", "wrong"), { code: ERROR.unableToConnect });
   assert.equal(c.state, STATE.authorized);
+});
+
+test("a dish that asks first: the page is told, waits for the yes, then sends", async () => {
+  const dish = fakeDish({ asks: true });
+  const c = new Client(dish.service);
+  let asked = 0;
+  assert.equal(await c.join("House", "hunter22", { onAsk: () => ++asked }), "https://blorb.hypnodroid.com/?d=puffkin");
+  assert.equal(asked, 1);
+  assert.equal(dish.written.length, 1, "nothing sent before the yes");
+});
+
+test("nobody says yes: rejected as not authorized, and the network never sent", async () => {
+  const dish = fakeDish({ asks: true, says: false });
+  const c = new Client(dish.service);
+  await assert.rejects(c.authorized(null, 30), { code: ERROR.notAuthorized });
+  assert.equal(dish.written.length, 0);
+});
+
+test("a bad name throws before the dish is asked", async () => {
+  const dish = fakeDish({ asks: true });
+  const c = new Client(dish.service);
+  let asked = 0;
+  await assert.rejects(c.join("", "x", { onAsk: () => ++asked }), { field: "ssid" });
+  assert.equal(asked, 0);
 });

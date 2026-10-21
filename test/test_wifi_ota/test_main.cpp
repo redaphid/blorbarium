@@ -21,6 +21,7 @@
 #include "wifiota/remembered.h"
 #include "wifiota/power_sense.h"
 #include "wifiota/schedule.h"
+#include "wifiota/consent.h"
 #include "../../src/hw/ota_pubkey.h"
 
 using Bytes = std::vector<uint8_t>;
@@ -114,7 +115,8 @@ TEST(Improv, CredentialsParseAndRefuseWhatIsMalformed) {
 TEST(Improv, CredentialsJoinThenProvisionedWithTheUrl) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
-  EXPECT_EQ(m.state(), improv::State::Authorized) << "no authorization step";
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
+  EXPECT_EQ(m.state(), improv::State::Authorized);
   const Bytes p = wifiSettings("Home", "secret99");
   m.write(p.data(), p.size());
   ASSERT_EQ(port.joins.size(), 1u);
@@ -131,6 +133,7 @@ TEST(Improv, CredentialsJoinThenProvisionedWithTheUrl) {
 TEST(Improv, AFailedJoinSaysUnableToConnectAndGoesBackToAuthorized) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes p = wifiSettings("Home", "wrong");
   m.write(p.data(), p.size());
   m.couldNotJoin();
@@ -146,6 +149,7 @@ TEST(Improv, AFailedJoinSaysUnableToConnectAndGoesBackToAuthorized) {
 TEST(Improv, APacketSplitAcrossWritesRunsOnceWhole) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes p = wifiSettings("A long network name", "and a long password too");
   for (size_t at = 0; at < p.size(); at += 20) {
     EXPECT_TRUE(port.joins.empty());
@@ -157,6 +161,7 @@ TEST(Improv, APacketSplitAcrossWritesRunsOnceWhole) {
 TEST(Improv, ABadChecksumOrLengthIsAnInvalidRpc) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   Bytes p = wifiSettings("Home", "pw");
   p.back() ^= 1;
   m.write(p.data(), p.size());
@@ -175,6 +180,7 @@ TEST(Improv, ABadChecksumOrLengthIsAnInvalidRpc) {
 TEST(Improv, AnUnknownCommandIsAnUnknownRpc) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes p = rpc(0x42, Bytes{});
   m.write(p.data(), p.size());
   EXPECT_EQ(port.errors, (std::vector<improv::Error>{improv::Error::UnknownRpc}));
@@ -183,6 +189,7 @@ TEST(Improv, AnUnknownCommandIsAnUnknownRpc) {
 TEST(Improv, ANewConnectionDropsTheLastOnesHalfPacket) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes p = wifiSettings("Home", "pw");
   m.write(p.data(), 5);
   m.reset();
@@ -194,6 +201,7 @@ TEST(Improv, ANewConnectionDropsTheLastOnesHalfPacket) {
 TEST(Improv, OneJoinAtATime) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes p = wifiSettings("Home", "pw");
   m.write(p.data(), p.size());
   m.write(p.data(), p.size());
@@ -204,6 +212,7 @@ TEST(Improv, OneJoinAtATime) {
 TEST(Improv, DeviceInfoAndNeitherIdentifyNorScan) {
   FakeImprovPort port;
   improv::Machine m(port, kInfo);
+  m.authorize(), port.states.clear();   // a hand said yes (consent.h)
   const Bytes info = rpc(3, Bytes{});
   m.write(info.data(), info.size());
   ASSERT_EQ(port.results.size(), 1u);
@@ -380,6 +389,150 @@ TEST(Remembered, TheStoredBlobRoundTripsAndRefusesJunk) {
   EXPECT_EQ(wifiota::encodeRemembered(longest, blob, sizeof blob - 1), 0u);
 }
 
+// ---- up to three networks --------------------------------------------------------------
+
+improv::Credentials net(const char* ssid, const char* pass = "pw") { return *wifiota::credentials(ssid, pass); }
+
+TEST(Networks, NewestFirstTheSameSsidReplacedAFourthPushesOutTheOldest) {
+  wifiota::Networks n;
+  EXPECT_TRUE(n.empty());
+  n.remember(net("Home"));
+  n.remember(net("Grandma"));
+  n.remember(net("Hotspot"));
+  ASSERT_EQ(n.size(), 3u);
+  EXPECT_STREQ(n[0].ssid, "Hotspot");
+  EXPECT_STREQ(n[2].ssid, "Home");
+  n.remember(net("Home", "new password"));
+  ASSERT_EQ(n.size(), 3u) << "the same network, not another";
+  EXPECT_STREQ(n[0].ssid, "Home");
+  EXPECT_STREQ(n[0].password, "new password");
+  n.remember(net("Cafe"));
+  ASSERT_EQ(n.size(), 3u);
+  EXPECT_FALSE(n.find("Grandma")) << "the oldest went";
+  EXPECT_TRUE(n.forget("Hotspot"));
+  EXPECT_FALSE(n.forget("Hotspot"));
+  EXPECT_EQ(n.size(), 2u);
+  EXPECT_STREQ(n[0].ssid, "Cafe");
+  EXPECT_STREQ(n[1].ssid, "Home");
+}
+
+TEST(Networks, PickTheStrongestRememberedInRangeOrNone) {
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  n.remember(net("Grandma"));
+  const wifiota::Seen car[] = {{"Starbucks", -40}, {"xfinitywifi", -60}};
+  EXPECT_FALSE(n.pick(car, 2)) << "a car: nothing of ours, so the window closes at once";
+  EXPECT_FALSE(n.pick(nullptr, 0));
+  const wifiota::Seen home[] = {{"Neighbour", -30}, {"Home", -70}, {"Grandma", -55}};
+  EXPECT_EQ(n.pick(home, 3), n.find("Grandma"));
+  const wifiota::Seen tie[] = {{"Home", -50}, {"Grandma", -50}};
+  EXPECT_EQ(n.pick(tie, 2), size_t(0)) << "a tie: the newer";
+  const wifiota::Seen twice[] = {{"Home", -80}, {"Home", -45}, {"Grandma", -50}};
+  EXPECT_EQ(n.pick(twice, 3), n.find("Home")) << "two access points of one network: its best";
+}
+
+TEST(Networks, TheStoredBlobRoundTripsReadsTheOldOneAndRefusesJunk) {
+  wifiota::Networks n;
+  n.remember(*wifiota::credentials(std::string(32, 's'), std::string(64, 'p')));
+  n.remember(net("Grandma", ""));
+  n.remember(net("Home", "correct horse"));
+  uint8_t blob[wifiota::kNetworksMax];
+  const size_t len = n.encode(blob, sizeof blob);
+  ASSERT_GT(len, 0u);
+  const std::optional<wifiota::Networks> back = wifiota::Networks::decode(blob, len);
+  ASSERT_TRUE(back);
+  ASSERT_EQ(back->size(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_STREQ((*back)[i].ssid, n[i].ssid);
+    EXPECT_STREQ((*back)[i].password, n[i].password);
+  }
+  EXPECT_EQ(len, 2u + (2 + 4 + 13) + (2 + 7 + 0) + (2 + 32 + 64));
+  EXPECT_LE(len, wifiota::kNetworksMax);
+  for (size_t cut = 0; cut < len; ++cut) EXPECT_FALSE(wifiota::Networks::decode(blob, cut)) << "cut at " << cut;
+  EXPECT_EQ(n.encode(blob, len - 1), 0u);
+  blob[1] = 4;
+  EXPECT_FALSE(wifiota::Networks::decode(blob, len)) << "more than three";
+  // The first branch's one-network blob is read as a list of one.
+  uint8_t old[wifiota::kRememberedMax];
+  const size_t oldLen = wifiota::encodeRemembered(net("Home", "pw"), old, sizeof old);
+  const std::optional<wifiota::Networks> one = wifiota::Networks::decode(old, oldLen);
+  ASSERT_TRUE(one);
+  ASSERT_EQ(one->size(), 1u);
+  EXPECT_STREQ((*one)[0].ssid, "Home");
+  // Nothing at all: a list of none, not junk.
+  wifiota::Networks none;
+  const size_t emptyLen = none.encode(blob, sizeof blob);
+  ASSERT_EQ(emptyLen, 2u);
+  ASSERT_TRUE(wifiota::Networks::decode(blob, emptyLen));
+  EXPECT_TRUE(wifiota::Networks::decode(blob, emptyLen)->empty());
+}
+
+// ---- a hand says yes before a phone gives it a network ---------------------------------
+
+TEST(Improv, ANetworkBeforeTheYesIsNotAuthorizedAndJoinsNothing) {
+  FakeImprovPort port;
+  improv::Machine m(port, kInfo);
+  EXPECT_EQ(m.state(), improv::State::AuthorizationRequired) << "a stranger in Bluetooth range";
+  const Bytes p = wifiSettings("Evil", "pw");
+  m.write(p.data(), p.size());
+  EXPECT_TRUE(port.joins.empty());
+  EXPECT_EQ(port.errors, (std::vector<improv::Error>{improv::Error::NotAuthorized}));
+  const Bytes info = rpc(3, Bytes{});
+  m.write(info.data(), info.size());
+  EXPECT_EQ(port.results.size(), 1u) << "device info needs no yes";
+  m.authorize();
+  EXPECT_EQ(m.state(), improv::State::Authorized);
+  m.write(p.data(), p.size());
+  EXPECT_EQ(port.joins.size(), 1u);
+  m.requireAuthorization();
+  EXPECT_EQ(m.state(), improv::State::Provisioning) << "never mid-join";
+  m.joined("u");
+  m.requireAuthorization();
+  EXPECT_EQ(m.state(), improv::State::AuthorizationRequired) << "the next phone asks again";
+  m.write(p.data(), p.size());
+  EXPECT_EQ(port.joins.size(), 1u);
+  EXPECT_EQ(port.errors.back(), improv::Error::NotAuthorized);
+}
+
+using wifiota::Consent;
+
+TEST(Consent, ATurnAfterTheQuestionShowsGrantsForTwoMinutes) {
+  Consent c;
+  EXPECT_FALSE(c.yes(0)) << "no question: a press is the pet's";
+  c.ask(1000);
+  EXPECT_TRUE(c.asking());
+  EXPECT_TRUE(c.yes(1500)) << "the question's, though too soon to count";
+  EXPECT_FALSE(c.granted()) << "a turn already under way is no yes";
+  EXPECT_TRUE(c.yes(1000 + Consent::kMinAskMs));
+  EXPECT_TRUE(c.granted());
+  EXPECT_FALSE(c.asking());
+  EXPECT_EQ(c.take(), Consent::Event::Granted);
+  EXPECT_EQ(c.take(), Consent::Event::None);
+  c.ask(5000);
+  EXPECT_FALSE(c.asking()) << "granted: no question again";
+  c.tick(1000 + Consent::kMinAskMs + Consent::kGrantMs - 1);
+  EXPECT_TRUE(c.granted());
+  c.tick(1000 + Consent::kMinAskMs + Consent::kGrantMs);
+  EXPECT_FALSE(c.granted());
+  EXPECT_EQ(c.take(), Consent::Event::Expired);
+}
+
+TEST(Consent, NobodyAnsweringLapsesAndTheCableEndsIt) {
+  Consent c;
+  c.ask(0);
+  c.ask(20000);
+  EXPECT_EQ(c.msLeft(20000), Consent::kAskMs - 20000) << "asking again does not restart it";
+  c.tick(Consent::kAskMs);
+  EXPECT_FALSE(c.asking());
+  EXPECT_EQ(c.take(), Consent::Event::Lapsed);
+  EXPECT_FALSE(c.yes(Consent::kAskMs + 1)) << "lapsed: the press is the pet's again";
+  c.ask(100000);
+  c.yes(100000 + Consent::kMinAskMs);
+  c.end();
+  EXPECT_FALSE(c.granted());
+  EXPECT_FALSE(c.asking());
+}
+
 // ---- knowing it is plugged in ----------------------------------------------------------
 
 using wifiota::PowerSense;
@@ -438,60 +591,113 @@ TEST(PowerSense, NoReadingIsBattery) {
 }
 
 // ---- the schedule ----------------------------------------------------------------------
+// Offline first (owner, 2026-10-21): "I don't want any problem if they can't
+// connect to wifi: the use case is primarily offline car."
 
 using wifiota::Facts;
+using wifiota::Failure;
 using wifiota::Hold;
 using wifiota::Schedule;
 using wifiota::Window;
-constexpr Facts kQuietOnPower{true, true, true, false, false};
+constexpr uint32_t kHour = 60u * 60 * 1000;
+constexpr Facts kDarkAndAlone{true, Schedule::kDarkMs, false, false, false};
 
-TEST(Schedule, ACheckIsDueAtOnceOnPowerIdleAndAlone) {
+TEST(Schedule, ACheckOpensOnlyDarkAloneAndDue) {
   Schedule s;
-  EXPECT_EQ(s.checkHold(kQuietOnPower, 5), Hold::Open);
-  Facts f = kQuietOnPower;
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 5), Hold::Open) << "due once dark after boot";
+  Facts f = kDarkAndAlone;
   f.enabled = false;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::Disabled);
-  f = kQuietOnPower, f.onPower = false;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::OnBattery);
-  f = kQuietOnPower, f.idle = false;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::NotIdle);
-  f = kQuietOnPower, f.someoneThere = true;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::SomeoneThere);
-  f = kQuietOnPower, f.radioBusy = true;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::RadioBusy);
+  EXPECT_EQ(s.checkHold(f, 5), Hold::Disabled) << "no network remembered, or DEBUG wifi off";
+  f = kDarkAndAlone, f.darkMs = 0;
+  EXPECT_EQ(s.checkHold(f, 5), Hold::NotIdle) << "awake: never, whatever else";
+  f = kDarkAndAlone, f.darkMs = Schedule::kDarkMs - 1;
+  EXPECT_EQ(s.checkHold(f, 5), Hold::NotIdle) << "not the moment it dims";
+  f = kDarkAndAlone, f.someoneThere = true;
+  EXPECT_EQ(s.checkHold(f, 5), Hold::SomeoneThere) << "a phone (the web app, ble_ota) or a question";
+  f = kDarkAndAlone, f.radioBusy = true;
+  EXPECT_EQ(s.checkHold(f, 5), Hold::RadioBusy) << "a duel or fight mode has the radio";
+  f = kDarkAndAlone, f.lowBattery = true;
+  EXPECT_EQ(s.checkHold(f, 5), Hold::LowBattery);
 }
 
-TEST(Schedule, AReadManifestWaitsSixHours) {
+TEST(Schedule, AReadManifestWaitsSixHoursAndStartsTheWaitsOver) {
   Schedule s;
+  s.failed(Failure::Absent, 0);
+  s.failed(Failure::Absent, 0);
   s.checked(1000);
-  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kCheckEveryMs - 1), Hold::NotDue);
-  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kCheckEveryMs), Hold::Open);
+  EXPECT_EQ(s.absentStreak(), 0u);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 1000 + Schedule::kCheckEveryMs - 1), Hold::NotDue);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 1000 + Schedule::kCheckEveryMs), Hold::Open);
+  EXPECT_EQ(Schedule::kCheckEveryMs, 6 * kHour);
 }
 
-TEST(Schedule, AFailureTriesAgainInTenMinutes) {
+// In a car no remembered network is ever in range: the waits double to 8 h,
+// so a day of it is a handful of scans, each a couple of seconds.
+TEST(Schedule, NoNetworkInRangeBacksOffToHours) {
   Schedule s;
-  s.failed(1000);
-  EXPECT_EQ(s.dueIn(1000), 10u * 60 * 1000);
-  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kRetryMs - 1), Hold::NotDue);
-  EXPECT_EQ(s.checkHold(kQuietOnPower, 1000 + Schedule::kRetryMs), Hold::Open);
-  s.failed(1000 + Schedule::kRetryMs);
-  EXPECT_EQ(s.dueIn(1000 + Schedule::kRetryMs), Schedule::kRetryMs) << "the same wait every time";
+  uint32_t now = 0;
+  std::vector<uint32_t> waits;
+  for (int i = 0; i < 8; ++i) {
+    s.failed(Failure::Absent, now);
+    waits.push_back(s.dueIn(now));
+    now += s.dueIn(now);
+  }
+  const uint32_t m = 60u * 1000;
+  EXPECT_EQ(waits, (std::vector<uint32_t>{15 * m, 30 * m, 60 * m, 120 * m, 240 * m, 480 * m, 480 * m, 480 * m}));
+  // A week in the car: at most how many scans?
+  Schedule week;
+  int scans = 0;
+  for (uint32_t t = 0; t < 7 * 24 * kHour; ++scans) {
+    week.failed(Failure::Absent, t);
+    t += week.dueIn(t);
+  }
+  EXPECT_LE(scans, 7 * 3 + 6) << "about three a day once backed off";
+}
+
+TEST(Schedule, ASiteThatFailsBacksOffOnItsOwnAndCountsTheNetworkAsThere) {
+  Schedule s;
+  s.failed(Failure::Absent, 0);
+  s.failed(Failure::Absent, 0);
+  EXPECT_EQ(s.absentStreak(), 2u);
+  s.failed(Failure::Server, 0);
+  EXPECT_EQ(s.dueIn(0), Schedule::kServerFirstMs);
+  EXPECT_EQ(s.absentStreak(), 0u) << "the network was in range";
+  for (int i = 0; i < 20; ++i) s.failed(Failure::Server, 0);
+  EXPECT_EQ(s.dueIn(0), Schedule::kServerMaxMs);
+  s.failed(Failure::Absent, 0);
+  EXPECT_EQ(s.dueIn(0), Schedule::kAbsentFirstMs) << "absence starts its own count";
+}
+
+TEST(Schedule, ARestartInsideAWindowWaitsTheLongest) {
+  Schedule s;
+  s.crashed(100);
+  EXPECT_EQ(s.dueIn(100), Schedule::kAbsentMaxMs);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 100 + Schedule::kAbsentMaxMs - 1), Hold::NotDue);
+}
+
+TEST(Schedule, TheClockWrappingDoesNotStopChecks) {
+  Schedule s;
+  const uint32_t nearWrap = 0xffffffffu - 1000;
+  s.failed(Failure::Absent, nearWrap);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, nearWrap + 1), Hold::NotDue);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, nearWrap + Schedule::kAbsentFirstMs), Hold::Open);
 }
 
 TEST(Schedule, ACheckClosesForAnyoneButTheTrialsConfirmNeverDoes) {
-  Facts f = kQuietOnPower;
+  Facts f = kDarkAndAlone;
   EXPECT_TRUE(Schedule::keep(Window::Check, f));
-  f.onPower = false;
+  f.lowBattery = true;
   EXPECT_TRUE(Schedule::keep(Window::Check, f)) << "a sagging reading does not cut a download";
-  f = kQuietOnPower, f.idle = false;
-  EXPECT_FALSE(Schedule::keep(Window::Check, f));
+  f = kDarkAndAlone, f.darkMs = 0;
+  EXPECT_FALSE(Schedule::keep(Window::Check, f)) << "picked up: the window goes at once";
   EXPECT_TRUE(Schedule::keep(Window::Forced, f)) << "DEBUG ota check runs with a hand on it";
-  f = kQuietOnPower, f.someoneThere = true;
+  f = kDarkAndAlone, f.someoneThere = true;
   EXPECT_FALSE(Schedule::keep(Window::Check, f));
   EXPECT_TRUE(Schedule::keep(Window::Provision, f)) << "the phone that sent the network is there";
-  f = kQuietOnPower, f.radioBusy = true;
+  f = kDarkAndAlone, f.radioBusy = true;
   for (Window w : {Window::Check, Window::Forced, Window::Provision}) EXPECT_FALSE(Schedule::keep(w, f)) << int(w);
   EXPECT_TRUE(Schedule::keep(Window::Confirm, f));
+  EXPECT_FALSE(Schedule::keep(Window::None, kDarkAndAlone));
 }
 
 // ---- the unattended update, through ota::Session ---------------------------------------

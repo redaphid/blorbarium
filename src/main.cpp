@@ -201,6 +201,10 @@ static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
 static bool debugAsks();
 static bool debugPress(uint32_t ms);
+// Wi-Fi's question, "Join Wi-Fi? Turn me around!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
+static bool wifiAsks();
+static bool wifiPress(uint32_t ms);
+static bool wifiQuietBoot();
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 // The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
@@ -371,7 +375,7 @@ static blorb::Appearance shown() {
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
+  if (updater.asking() || debugAsks() || wifiAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
 #endif
   return a;
 }
@@ -631,12 +635,13 @@ static bool petFeels(bool down, bool remote) {
   if (remote) {
     wasDown = down;
     otaOwns = false;
-    return down && !updater.asking() && !debugAsks();
+    return down && !updater.asking() && !debugAsks() && !wifiAsks();
   }
   const bool edge = down && !wasDown;
   if (updater.asking() && edge) updater.press(millis());
   const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
-  otaOwns = updater.asking() || debugAsks() || debugTook || (otaOwns && down);
+  const bool wifiTook = !updater.asking() && !debugTook && edge && wifiPress(millis());   // Wi-Fi's
+  otaOwns = updater.asking() || debugAsks() || wifiAsks() || debugTook || wifiTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
@@ -718,7 +723,7 @@ static void verb(const char* a) {
 #endif
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
 #if !defined(BADGE_BOARD_SIM)
-  const bool asking = updater.asking() || debugAsks();   // a question owns BOOT, and its twin with it
+  const bool asking = updater.asking() || debugAsks() || wifiAsks();   // a question owns BOOT, and its twin with it
 #else
   constexpr bool asking = false;
 #endif
@@ -740,9 +745,10 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
-  if (turnYes.sample(updater.asking(), f.rot, millis())) {
-    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(f.rot));
-    updater.press(millis());
+  if (turnYes.sample(updater.asking() || wifiAsks(), f.rot, millis())) {
+    Serial.printf("[%s] turned: yes (rot=%u)\n", updater.asking() ? "ota" : "wifi", unsigned(f.rot));
+    if (updater.asking()) updater.press(millis());
+    else wifiPress(millis());
   }
 #endif
   applyLean(f.screen, ms);
@@ -1076,7 +1082,9 @@ void setup() {
   [[maybe_unused]] bool panelUp = display.init();
   boardPresentBegin(display);   // the panel's send task, on core 0
 #if !defined(BADGE_BOARD_SIM)
-  display.setBrightness(dish->settings().brightness);
+  // An update over Wi-Fi restarts into its trial dark, in the night or on a
+  // shelf: the backlight stays off until someone wakes him (src/wifi_ota.h).
+  display.setBrightness(wifiQuietBoot() ? 0 : dish->settings().brightness);
   reportBoot();
 #if defined(BLORB_OTA_FAIL_TRIAL)
   // For the hardware proof only (docs/ota.md): an image that reports its panel
@@ -1612,7 +1620,7 @@ static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 M
 // or its question, the debug unlock's question, a DEBUG shot going out.
 static bool powerHeld() {
   return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 ||
-         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || bool(shot);
+         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || wifiAsks() || bool(shot);
 }
 
 static const char* powerLine(char* out, size_t n, uint32_t now) {
@@ -1705,10 +1713,13 @@ static void powerVerb(const char* a, const char* line) {
 static bool wifiYieldRadio() { return wififw::yieldRadio(); }
 static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
 static void wifiBegin() { wififw::begin(); }
+static bool wifiAsks() { return wififw::asks(); }
+static bool wifiQuietBoot() { return wififw::quietBoot(); }
+static bool wifiPress(uint32_t ms) { return wififw::press(ms); }
 
 // The debug link's PRESS and DOUBLE: never while a question owns the button.
 static bool remotePress(uint32_t ms, bool twice) {
-  if (updater.asking() || debugAsks()) return false;
+  if (updater.asking() || debugAsks() || wifiAsks()) return false;
   const uint32_t t = millis();
   bodyq::remote[0].ms = bodyq::remote[1].ms = 0;
   bodyq::remote[0].at = t;
@@ -1749,7 +1760,7 @@ void loop() {
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
-    const bool overlay = update || dbgfw::drawing();
+    const bool overlay = update || dbgfw::drawing() || wififw::drawing();
     const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
     if (still) fps::same();
 #else
@@ -1762,7 +1773,7 @@ void loop() {
       drawFrame(look, now);
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
-      else dbgfw::draw(canvas);
+      else dbgfw::draw(canvas), wififw::draw(canvas);
       paint::drawIdleBar(canvas, idleBar);
       framememo::drew(look, idleBar, overlay);
       const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();

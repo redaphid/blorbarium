@@ -63,6 +63,7 @@ void Machine::run(Command c, const uint8_t* data, size_t n) {
   switch (c) {
     case Command::WifiSettings: {
       if (state_ == State::Provisioning) return fail(Error::Unknown);   // one join at a time
+      if (state_ == State::AuthorizationRequired) return fail(Error::NotAuthorized);
       const std::optional<Credentials> creds = parseCredentials(data, n);
       if (!creds) return fail(Error::InvalidRpc);
       if (error_ != Error::None) port_.showError(error_ = Error::None);
@@ -88,6 +89,14 @@ void Machine::couldNotJoin() {
   if (state_ != State::Provisioning) return;
   fail(Error::UnableToConnect);
   set(State::Authorized);
+}
+
+void Machine::authorize() {
+  if (state_ == State::AuthorizationRequired) set(State::Authorized);
+}
+
+void Machine::requireAuthorization() {
+  if (state_ == State::Authorized || state_ == State::Provisioned) set(State::AuthorizationRequired);
 }
 
 void Machine::set(State s) {
