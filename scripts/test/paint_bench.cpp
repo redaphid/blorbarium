@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
   const std::vector<blorb::Appearance> shots = paintbench::dishShots();
   const std::vector<paint::DuelScene> duels = paintbench::duelShots();
 
-  uint64_t hash = 0;
+  uint64_t hash = 0, dishHash = 0;   // dishHash: the home frames alone, for a change that only moves the duel's
   double dishBest = 1e18, duelBest = 1e18;
   for (int r = 0; r < reps; ++r) {
     hash = 0xCBF29CE484222325ull;
@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
       hash = fnv(cv, hash);
       now += 40;
     }
+    dishHash = hash;
     for (const paint::DuelScene& sc : duels) {
       const Clock::time_point t0 = Clock::now();
       paint::drawDuel(sc, paint::packFor(sc.me.look.species), paint::packFor(sc.them.look.species), cv, now);
@@ -90,5 +91,6 @@ int main(int argc, char** argv) {
   std::printf("\n");
   std::printf("dish_frames=%zu us_per_frame=%.1f duel_frames=%zu us_per_frame=%.1f hash=%016llx\n", shots.size(),
               dishBest / double(shots.size()), duels.size(), duelBest / double(duels.size()), (unsigned long long)hash);
+  std::printf("dish_hash=%016llx\n", (unsigned long long)dishHash);
   return 0;
 }
