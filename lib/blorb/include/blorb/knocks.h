@@ -101,6 +101,11 @@ class KnockSense {
   // smaller blip counts -- but only a short one with quiet around it: a desk
   // being typed on, a cup set down or a desk bumped rattles for 60 ms and more
   // (T2), and that is no knock (T3: 9 of 9 on a table, 0 from the desk). Only with the shell's 250 Hz peak.
+  // And a knock leaves the badge lying as it was: a blip after which gravity
+  // points elsewhere (kDriftMg) was the badge tipped, not knocked. A still
+  // badge tipped briskly to 30 degrees is one 150-600 mg step, a blip like
+  // a knock's (egg-ux, 2026-10-21: it fired a knock, which keeps an egg in the
+  // picker and locks a stance in a duel).
   static constexpr int32_t kRestSdMg = 15;       // the magnitude's spread before: lying on something hard
   static constexpr int32_t kBlipMg = 150;        // a read this far from the last sample is part of a blip
   static constexpr int32_t kRestFirstMg = 150;   // the first knock's blip reaches this (kids knock softly first, then harder)...
@@ -123,14 +128,14 @@ class KnockSense {
   int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
 
   // The table's bursts, judged blip by blip.
-  struct Blip { uint32_t start = 0, end = 0; int32_t max = 0; uint8_t n = 0; bool steady = false; };
+  struct Blip { uint32_t start = 0, end = 0; int32_t max = 0; uint8_t n = 0; bool steady = false; int32_t gx = 0, gy = 0, gz = 0; };
   Blip blip_{}, lastBlip_{};
   bool inBlip_ = false, hadBlip_ = false;
   uint8_t restN_ = 0;
   uint32_t restLast_ = 0, restGap_ = 0;
   int32_t restSd2_ = 0;
-  void endBlip();
-  uint8_t restSample(int32_t peakJerk, uint32_t ms);
+  void endBlip(const BodySample& now);
+  uint8_t restSample(int32_t peakJerk, uint32_t ms, const BodySample& s);
   bool steadyBefore();
   int64_t spread2() const;
   void gravityBefore(int32_t& x, int32_t& y, int32_t& z) const;

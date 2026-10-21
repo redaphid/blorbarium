@@ -52,25 +52,28 @@ bool KnockSense::steadyBefore() {
 }
 
 // A blip is over: does it start, carry on, or spoil a burst on the table?
-void KnockSense::endBlip() {
+// `now` is the sample after it: a knock leaves the badge lying as it was.
+void KnockSense::endBlip(const BodySample& now) {
   inBlip_ = false;
   const Blip b = blip_;
   const bool quietBefore = !hadBlip_ || b.start - lastBlip_.end >= kRestQuietMs;
   hadBlip_ = true, lastBlip_ = b;
+  const int32_t dx = now.ax - b.gx, dy = now.ay - b.gy, dz = now.az - b.gz;
+  const bool tipped = int64_t(dx) * dx + int64_t(dy) * dy + int64_t(dz) * dz >= int64_t(kDriftMg) * kDriftMg;
   if (restN_ == 0) {
-    if (b.steady && quietBefore && b.n <= kBlipMaxSamples && b.max >= kRestFirstMg) restN_ = 1, restLast_ = b.start;
+    if (b.steady && quietBefore && !tipped && b.n <= kBlipMaxSamples && b.max >= kRestFirstMg) restN_ = 1, restLast_ = b.start;
     return;
   }
-  if (b.n > kBlipMaxSamples) restN_ = 0;   // a rattle: the desk, not a knuckle
+  if (b.n > kBlipMaxSamples || tipped) restN_ = 0;   // a rattle (the desk, not a knuckle), or the badge tipped
   else if (b.max >= kRestNextMg && b.start - restLast_ >= kFastMs) {
     if (++restN_ == 2) restGap_ = b.start - restLast_;
     restLast_ = b.start;
   }
 }
 
-uint8_t KnockSense::restSample(int32_t peakJerk, uint32_t ms) {
+uint8_t KnockSense::restSample(int32_t peakJerk, uint32_t ms, const BodySample& s) {
   uint8_t out = 0;
-  if (inBlip_ && peakJerk < kBlipMg && ms - blip_.end > 40) endBlip();
+  if (inBlip_ && peakJerk < kBlipMg && ms - blip_.end > 40) endBlip(s);
   if (restN_ && !inBlip_ && ms - restLast_ > (restN_ >= 2 ? moreMs(restGap_) : kChainMs)) {
     out = restN_ <= kMaxKnocks ? (restN_ >= 2 ? 2 : 1) : 0;
     restN_ = 0;
@@ -78,7 +81,8 @@ uint8_t KnockSense::restSample(int32_t peakJerk, uint32_t ms) {
   if (peakJerk >= kBlipMg) {
     if (!inBlip_) {
       inBlip_ = true;
-      blip_ = Blip{ms, ms, peakJerk, 1, histN_ == kHistory && spread2() < int64_t(kRestSdMg) * kRestSdMg};
+      blip_ = Blip{ms, ms, peakJerk, 1, histN_ == kHistory && spread2() < int64_t(kRestSdMg) * kRestSdMg, px_, py_, pz_};
+      if (histN_ == kHistory) gravityBefore(blip_.gx, blip_.gy, blip_.gz);
     } else {
       blip_.end = ms, blip_.max = std::max(blip_.max, peakJerk), ++blip_.n;
     }
@@ -133,7 +137,7 @@ uint8_t KnockSense::sample(const BodySample& s, uint32_t ms) {
   // On a table (rest path): only with the peak; a burst the hand path already
   // has is the hand path's, and whichever decides first speaks once.
   if (s.hasPeak) {
-    const uint8_t rest = restSample(jerk, ms);
+    const uint8_t rest = restSample(jerk, ms, s);
     if (inBurst_ && steady_) restN_ = 0;
     if (!out && rest) out = rest;
   }

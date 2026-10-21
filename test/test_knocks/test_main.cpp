@@ -300,6 +300,62 @@ TEST(Heard, NeverForOneKnockOrForHammering) {
   }
 }
 
+// A badge lying still, tipped briskly to 30 degrees (egg-ux, 2026-10-21):
+// on the table path a step of 150-600 mg in a sample or a few is a blip like a
+// knock's, and it fired a knock 0.6 s later, which keeps an egg in the picker
+// and locks a stance in a duel. A knock leaves the badge lying as it was; a
+// tip does not. And knocks on that badge, then tipped, still count.
+namespace {
+struct Table {
+  KnockSense k;
+  uint32_t ms = 0;
+  int codes[3] = {0, 0, 0};
+  bool waited = false;
+  // One 50 Hz sample at (ax, ay, az) with the hand's tremor, carrying its peak as the shell does.
+  void at(int16_t ax, int16_t ay, int16_t az, int16_t blip = 0) {
+    BodySample b;
+    const int16_t tremor = int16_t(ms / 20 % 3 * 6 - 6);   // +-6 mg, a desk's
+    b.ax = int16_t(ax + tremor), b.ay = ay, b.az = az;
+    b.hasPeak = true;
+    b.peakAx = b.ax, b.peakAy = b.ay, b.peakAz = int16_t(b.az + blip);
+    ++codes[k.sample(b, ms)];
+    waited = waited || k.waitingSecond();
+    ms += 20;
+  }
+  void still(uint32_t forMs, int16_t ax = 0, int16_t az = 1000) {
+    for (uint32_t end = ms + forMs; ms < end;) at(ax, 0, az);
+  }
+};
+}  // namespace
+
+TEST(Table, ATipIsNoKnock) {
+  for (uint32_t turnMs : {0u, 40u, 100u}) {
+    Table t;
+    t.still(1500);
+    const uint32_t steps = turnMs / 20 + 1;
+    for (uint32_t i = 1; i <= steps; ++i)   // flat to 30 degrees: (0, 0, 1000) to (500, 0, 866)
+      t.at(int16_t(500 * i / steps), 0, int16_t(1000 - 134 * i / steps));
+    t.still(2000, 500, 866);
+    EXPECT_EQ(t.codes[1] + t.codes[2], 0) << "tipped over " << turnMs << " ms";
+    EXPECT_FALSE(t.waited) << "tipped over " << turnMs << " ms: no \"one more\" either";
+  }
+}
+
+TEST(Table, AKnockKnockOnATableStillCountsAndATipAfterItDoesNotSpoilIt) {
+  Table t;
+  t.still(1500);
+  t.at(0, 0, 1000, 400);   // a knock: a 400 mg blip in one read
+  t.still(300);
+  t.at(0, 0, 1000, 400);
+  t.still(1000);
+  EXPECT_EQ(t.codes[2], 1) << "a knock knock on a table";
+  Table u;
+  u.still(1500);
+  u.at(0, 0, 1000, 400);
+  u.still(1000);
+  EXPECT_EQ(u.codes[1], 1) << "a single knock on a table";
+}
+
 TEST(Heard, NeverForAShakeFromAStillBadge) {
   KnockSense k;
   for (uint32_t ms = 0; ms < 4000; ms += 20) {
