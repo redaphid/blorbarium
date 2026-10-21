@@ -147,10 +147,21 @@ closes the window; a Check then backs off. The GET's own limits: 5 s
 connect, 8 s TLS handshake, 6 s headers, and 20 s with no byte in the body.
 A GET still running 60 s after it was told to stop has its connection cut.
 
-**Heap.** Bluetooth leaves about 76 KB of internal heap. TLS needs about 45
-KB: mbedtls blocks of 1 KB or more go to PSRAM (`tlsCalloc`). The GET's task
-stack is 12 KB of internal RAM, made for the GET and freed after; the image
-ring is 32 KB of PSRAM. Logs: `[wifi] radio up heap A -> B`, `GET manifest:
+**Internal RAM** is the scarce kind: bringing the radio up (for a window or
+a duel's ESP-NOW alike) takes about 37 KB of it, and TLS about 45 KB more.
+So Wi-Fi keeps nearly nothing in internal RAM: the GET's buffers and its
+32 KB image ring, the scan table, the networks and the outcome text are in
+PSRAM, made at first use; the image ring is a plain one (FreeRTOS's stream
+buffer puts 1.4 KB of code in IRAM); mbedtls blocks of 1 KB or more go to
+PSRAM (`tlsCalloc`). What Wi-Fi still costs internally: lwIP's DNS table
+(1.2 KB), mbedtls's tables (0.9 KB), Improv's GATT service and buffers (about
+2.5 KB), and while a GET runs, its task's 12 KB stack. To leave a duel more
+than before Wi-Fi, the cable's DEBUG queue, `FaultAir` and the latency
+recorder (about 10.5 KB, touched only by tasks, no locks or atomics) are made
+in PSRAM too; boot says where they landed (`[hw] psram: faultAir=1 lat=1`).
+Static internal RAM (badge128_flip, a753dec) is 7 KB under controls-latency's
+build and 17 KB under 291260b's, whose boot heap was 59.7 KB against main's
+71.5 KB. Logs: `[wifi] radio up heap A -> B`, `GET manifest:
 N bytes, open N ms, task stack free N`, `window ... closed after N ms (heap=
 minheap=)`.
 
