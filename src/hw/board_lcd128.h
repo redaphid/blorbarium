@@ -37,6 +37,17 @@ static constexpr int ORIENT_R0 = 1;
 static_assert(BLORB_ORIENT_HOME == 0 || BLORB_ORIENT_HOME == 2, "home is USB-C up (2) or USB-C down (0)");
 static constexpr uint8_t ORIENT_HOME = BLORB_ORIENT_HOME;
 
+// The panel's SPI write clock, in MHz. 40 is proven on this board; the wiki
+// allows 80, which halves a whole frame's push (23 ms at 40, 11.5 at 80). The
+// clock is the 80 MHz APB divided, so 80, 40, 26, 20 are what it can be. A
+// build may pin it without touching the code:
+//   PLATFORMIO_BUILD_FLAGS="-DBLORB_LCD_SPI_MHZ=40" pio run -e badge128
+// and `DEBUG lcd <MHz>` changes it until reset, to set the two side by side.
+#ifndef BLORB_LCD_SPI_MHZ
+#define BLORB_LCD_SPI_MHZ 80
+#endif
+static_assert(BLORB_LCD_SPI_MHZ >= 1 && BLORB_LCD_SPI_MHZ <= 80, "BLORB_LCD_SPI_MHZ: 1 to 80");
+
 class BoardDisplay : public lgfx::LGFX_Device {
   lgfx::Panel_GC9A01 panel_;
   lgfx::Bus_SPI bus_;
@@ -48,7 +59,7 @@ class BoardDisplay : public lgfx::LGFX_Device {
       auto cfg = bus_.config();
       cfg.spi_host = SPI2_HOST;
       cfg.spi_mode = 0;
-      cfg.freq_write = 40000000;   // proven on this board; the wiki allows 80, untried
+      cfg.freq_write = BLORB_LCD_SPI_MHZ * 1000000;
       cfg.freq_read = 16000000;
       cfg.spi_3wire = true;
       cfg.use_lock = true;
@@ -90,13 +101,64 @@ class BoardDisplay : public lgfx::LGFX_Device {
     }
     setPanel(&panel_);
   }
+  // Between frames only: the bus works out its divider again at the next write.
+  void setWriteMhz(uint32_t mhz) {
+    auto cfg = bus_.config();
+    cfg.freq_write = mhz * 1000000;
+    bus_.config(cfg);
+  }
+  uint32_t writeMhz() const { return bus_.config().freq_write / 1000000; }
 };
 
 static void boardButtonBegin() { pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP); }
 static bool boardButtonDown() { return digitalRead(PIN_BOOT_BUTTON) == LOW; }
 
+// The panel keeps what it was last sent in its own memory, so a frame sends
+// only the rows that changed since the last: the line crossing, his breath, a
+// hint filling, and none at all when nothing moved (between his 100 ms ticks,
+// most frames). A row is known by a hash of its pixels, so no copy of the last
+// frame is kept (115 KB the RAM does not have). Every kFullEvery frames, and
+// after the panel sleeps, every row goes, so nothing a hash missed lasts.
+namespace panelrows {
+constexpr uint16_t kFullEvery = 64;
+static uint32_t hash[CANVAS_H];
+static uint16_t sinceFull = 0;
+static bool stale = true;     // the next frame sends every row
+static uint32_t sent = 0;     // rows sent since boot, for DEBUG fps
+// FNV-1a over the row two pixels at a time: any one word changed always changes it.
+inline uint32_t of(const uint16_t* p) {
+  uint32_t h = 2166136261u;
+  for (int x = 0; x < CANVAS_W; x += 2) h = (h ^ (uint32_t(p[x]) | uint32_t(p[x + 1]) << 16)) * 16777619u;
+  return h;
+}
+}  // namespace panelrows
+
+static void boardRepaintAll() { panelrows::stale = true; }
+static uint32_t boardRowsSent() { return panelrows::sent; }
+
 // The canvas is native-endian RGB565, which is rgb565_t to LGFX: pushImage
-// converts it to the panel's byte-swapped wire order on the way out.
+// converts it to the panel's byte-swapped wire order on the way out, a run of
+// changed rows at a time.
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
-  display.pushImage(0, 0, CANVAS_W, CANVAS_H, reinterpret_cast<const lgfx::rgb565_t*>(canvas.px));
+  using namespace panelrows;
+  const bool all = stale || ++sinceFull >= kFullEvery;
+  if (all) stale = false, sinceFull = 0;
+  const auto* px = reinterpret_cast<const lgfx::rgb565_t*>(canvas.px);
+  display.startWrite();
+  int from = -1;   // the first row of the run being gathered
+  for (int y = 0; y <= CANVAS_H; ++y) {
+    bool changed = false;
+    if (y < CANVAS_H) {
+      const uint32_t h = of(&canvas.px[y * CANVAS_W]);
+      changed = all || h != hash[y];
+      hash[y] = h;
+    }
+    if (changed && from < 0) from = y;
+    if (!changed && from >= 0) {
+      display.pushImage(0, from, CANVAS_W, y - from, px + from * CANVAS_W);
+      sent += uint32_t(y - from);
+      from = -1;
+    }
+  }
+  display.endWrite();
 }

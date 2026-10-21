@@ -108,7 +108,17 @@ class SerialLink : public blorb::Link {
   }
 };
 
-static constexpr uint32_t kFrameMs = 40;   // 25 fps: the SPI push is 23 ms of every frame
+// A frame at most every kFrameMs. Awake, the board runs flat out (240 MHz, the
+// panel's SPI at BLORB_LCD_SPI_MHZ) and draws up to 50 a second: his own
+// motion steps with the 100 ms ticks, but a hint filling, fight mode's line
+// and the rings move on the clock, and a frame that changed nothing sends the
+// panel nothing (boardPresent). Low power draws none. The simulator keeps the
+// 25 fps its frame goldens were filmed at.
+#if defined(BADGE_BOARD_SIM)
+static constexpr uint32_t kFrameMs = 40;
+#else
+static constexpr uint32_t kFrameMs = 20;
+#endif
 
 static PetStorage store;
 #if defined(BADGE_BOARD_SIM)
@@ -198,6 +208,43 @@ static uint32_t cpuMaxMhz = 240;   // what the clock is set to run at (with DFS 
 static void pmBegin();             // below, with the rest of low power
 static const char* sleepState();
 static uint32_t sleptMs();
+
+// What frames cost, since `DEBUG fps` last asked (or boot): drawing the canvas,
+// sending the panel what changed, and the worst whole frame.
+//   DEBUG fps      [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 ...
+// rows= is the rows sent a frame (240 is a whole frame); cpu_now= the clock as
+// it runs, against cpu=, the clock it was set to.
+namespace fps {
+static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0;
+static uint64_t drawUs = 0, pushUs = 0;
+static void note(uint32_t draw, uint32_t push) {
+  ++frames, drawUs += draw, pushUs += push;
+  if (draw + push > worstUs) worstUs = draw + push;
+}
+static void report() {
+  const uint32_t now = millis(), over = now - since, n = frames ? frames : 1, rows = boardRowsSent() - rows0;
+  const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
+  const uint32_t draw = uint32_t(drawUs / n), push = uint32_t(pushUs / n);
+  Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
+                "spi_mhz=%u frame_ms=%u power=%s\n",
+                unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
+                unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
+                unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeMhz()),
+                unsigned(kFrameMs), powerPolicy.low() ? "low" : "full");
+  since = now, frames = 0, worstUs = 0, rows0 = boardRowsSent(), drawUs = pushUs = 0;
+}
+}  // namespace fps
+
+// `DEBUG lcd [MHz]`: the panel's SPI write clock until reset (BLORB_LCD_SPI_MHZ is the default).
+static void lcdVerb(const char* a) {
+  if (*a) {
+    const long mhz = std::strtol(a, nullptr, 10);
+    if (mhz < 1 || mhz > 80) return (void)Serial.printf("[hw] want: lcd <MHz 1..80>\n");
+    display.setWriteMhz(uint32_t(mhz));
+    boardRepaintAll();   // the next frame whole, at the new clock: what to look at
+  }
+  Serial.printf("[hw] lcd spi_mhz=%u (built %u)\n", unsigned(display.writeMhz()), unsigned(BLORB_LCD_SPI_MHZ));
+}
 #endif
 
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
@@ -1134,6 +1181,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
   if (std::strcmp(verb, "power") == 0) return powerVerb(a, line);
+  if (std::strcmp(verb, "fps") == 0) return fps::report();
+  if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
   if (std::strcmp(verb, "duel") == 0) return duelNow();
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
@@ -1154,7 +1203,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, cradle, nap, net, duel, "
-                  "power [low|wake|idle <s>], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|idle <s>], fps, lcd [MHz], reboot, bletest <bytes>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1173,7 +1222,9 @@ static void runDebug(const char* line) {
 // Asleep: the backlight is off and the panel in SLPIN, no frame is drawn, the
 // CPU runs at 80 MHz and the loop rests between passes. The pet still ticks,
 // the sense task still samples at 50 Hz (that is what wakes it), Bluetooth
-// still advertises. Awake: 240 MHz, SLPOUT, a fresh frame, then the light.
+// still advertises. Awake: 240 MHz, SLPOUT, a fresh frame, then the light,
+// and as many frames as are useful (kFrameMs): a badge is awake a little and
+// low most of the time, so awake may spend (owner, 2026-10-20).
 static constexpr uint32_t kFullMhz = 240, kLowMhz = 80;
 static constexpr uint32_t kLowRestMs = 20;   // the loop's rest a pass in low power
 static bool panelLow = false, lightAfterFrame = false;
@@ -1224,6 +1275,13 @@ static uint32_t sleptMs() {
 #endif
   return last;
 }
+// esp_pm_configure only records the new limits: the clock moves at the next
+// lock taken or given back. So awake holds a CPU_FREQ_MAX lock, taken right
+// after the limits go up and given back right after they come down: the clock
+// is 240 MHz the moment the badge wakes and drops the moment it sleeps, not
+// whenever some driver next takes a lock.
+static esp_pm_lock_handle_t awakeLock = nullptr;
+static bool awakeHeld = false;
 static void cpuPower(bool low) {
   esp_pm_config_esp32s3_t c{};
   c.max_freq_mhz = low ? int(kLowMhz) : int(kFullMhz);
@@ -1232,9 +1290,15 @@ static void cpuPower(bool low) {
   const esp_err_t e = esp_pm_configure(&c);
   if (e != ESP_OK) Serial.printf("[power] esp_pm_configure failed err=%d\n", int(e));
   cpuMaxMhz = uint32_t(c.max_freq_mhz);
+  if (awakeLock && awakeHeld == low) {
+    awakeHeld = !low;
+    if (awakeHeld) esp_pm_lock_acquire(awakeLock);
+    else esp_pm_lock_release(awakeLock);
+  }
 }
 static void pmBegin() {
   esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "cable", &cableLock);
+  esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "awake", &awakeLock);
   uart_set_wakeup_threshold(UART_NUM_0, 3);
   esp_sleep_enable_uart_wakeup(0);
   cpuPower(false);
@@ -1248,7 +1312,7 @@ static void cpuPower(bool low) {
   cpuMaxMhz = low ? kLowMhz : kFullMhz;
   setCpuFrequencyMhz(cpuMaxMhz);
 }
-static void pmBegin() {}
+static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 MHz
 #endif
 
 // What needs the screen awake: a fight (searching, waiting or on), an update
@@ -1283,6 +1347,7 @@ static void applyPower(uint32_t now) {
   } else {
     cpuPower(false);
     display.getPanel()->setSleep(false);   // SLPOUT; the light waits for a fresh frame
+    boardRepaintAll();                     // all of it: the panel's memory is not trusted across SLPIN
     lastFrame = now - kFrameMs;            // drawn this very pass
     lightAfterFrame = true;
   }
@@ -1376,14 +1441,21 @@ void loop() {
   constexpr bool dark = false;
 #endif
   if (!dark && !holdFrame && now - lastFrame >= kFrameMs) {
+#if !defined(BADGE_BOARD_SIM)
+    const uint32_t drawAt = micros();
+#endif
     drawFrame(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
     if (std::optional<ota::View> v = updater.view(millis())) ota::drawUpdate(canvas, *v);
     else dbgfw::draw(canvas);
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     paint::drawIdleBar(canvas, uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs()));
+    const uint32_t pushAt = micros();
 #endif
     boardPresent(display, canvas);
+#if !defined(BADGE_BOARD_SIM)
+    fps::note(pushAt - drawAt, micros() - pushAt);
+#endif
     ++framesDrawn;
     lastFrame = now;
 #if !defined(BADGE_BOARD_SIM)
