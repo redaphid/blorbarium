@@ -24,7 +24,7 @@ resting frame in 25.9 ms: bg 13.4, fig 11.0, mask 0.9, hint 0.6, look and over
 6.2M cycles for its frame put it near one instruction a cycle: no PSRAM (the
 canvas is internal, a 115 KB memset is 168 µs), no stall to speak of. The
 board is slow because it does the work, so the S3 instruction count is the
-stick, and µs on the board is about kinstr / 240 · 1000.
+stick, and a frame on the board takes about kinstr / 240 ms.
 
 ## The climb
 
@@ -32,3 +32,5 @@ stick, and µs on the board is about kinstr / 240 · 1000.
 |---|------|---------------|-----------------|-----------------|------|
 | 0 | baseline (`framerate` + review fixes, -Os) | 519.9 | 6,774 (bg 2,634, fig 3,036, mask 151) | 25.9 ms on the board | - |
 | 1 | the dish's row spans at compile time (`kDish`), for the background, the masks and the amber | 519.9 → 520.2 | 6,774 → 6,422 (bg -150, mask -151) | `dishFrom` walked up to 120 `inDish` tests a row, twice a frame; the duel tested every pixel | kept |
+| 2 | lib/paint at -O2 on the board (`lib/paint/library.json`: the framework builds everything -Os) | n/a (host is -O2) | 6,422 → 5,439 (bg 2,484 → 2,287, fig 2,993 → 2,370; duel 11,968 → 10,736) | inlining (blend, to565, floorDiv, the outline's lambdas) and loop unrolling; +14 KB flash, no RAM | kept |
+| 2b | -O3 instead | n/a | 5,439 → 5,312 (duel 10,736 → 9,286) | another 17 KB of flash and a bigger I-cache footprint (16 KB) for 2%; tried again once the loops are hand-tuned | deferred |
