@@ -12,6 +12,17 @@
 
 namespace blorbtest {
 
+// 0.4.0's recipe numbers where today's starter differs: sleepiness made
+// around the clock (its chem's half-life and initial level, and the emitter's
+// locus, gain, fill and flags), a fuller first energy, a dimmer happy face
+// and a 30-minute egg. One body byte each, the same for every seed; read off
+// 0.4.0's starter before the recipe changed.
+struct Byte040 { uint16_t uid; uint8_t at, value; };
+inline constexpr Byte040 kRecipe040[] = {
+    {9, 1, 0x9b},  {9, 2, 0x00},  {10, 0, 0x00}, {10, 2, 0x00}, {10, 3, 0xc9},
+    {10, 4, 0x01}, {24, 2, 0xcc}, {82, 1, 0x8c}, {105, 0, 0x1e},
+};
+
 inline blorb::Genome foundingGenome040(uint32_t speciesSeed) {
   using namespace blorb;
   // Byte ranges inside the grungo pack's bands (hue byte = 128 + band hue), so
@@ -24,15 +35,15 @@ inline blorb::Genome foundingGenome040(uint32_t speciesSeed) {
       {region::cloak.v, 112, 164, 96, 176, 96, 160},
       {region::eye.v, 120, 158, 112, 160, 112, 176},
   };
-  const Genome starter = starterGenome(speciesSeed);
-  GenomeBuilder b0 = GenomeBuilder::from(starter);
+  GenomeBuilder b0 = GenomeBuilder::from(starterGenome(speciesSeed));
+  for (const Byte040& r : kRecipe040) b0.setByte(GeneUid{r.uid}, r.at, r.value);
   // 0.4.0's recipe still carried the marble: a stimulus gene at uid 63 (a
   // marble hit eases boredom) and the chase instinct at uid 77. The current
   // recipe retired both -- its lines stand empty there (skip) so every other
   // uid is unchanged -- but a field badge's founder has them, byte for byte
   // as 0.4.0 wrote them. They are inert in this firmware: no def row names
   // stimulus 19, locus 16 or action 9 any more. Headers and bodies are the
-  // old starter's own, read off starterGenome(15048) before the cut.
+  // old starter's own, read off 0.4.0's starter before the cut.
   {
     constexpr uint8_t kStimulusBody[] = {0x13, 0x00, 0x03, 0x00, 0x00, 0x5a, 0x80, 0x80};
     constexpr uint8_t kInstinctBody[] = {0x10, 0xff, 0xff, 0x09, 0x02, 0x33, 0x8c};

@@ -151,7 +151,7 @@ in. That puts it in download mode, and then it flashes the same way.
 - `boot=Resumed` means **the pet came back**. `occupant=creature` with its
   `age` shows it is the same creature. `boot=Fresh` means a new egg.
   `species=` is what booted. A pet that 0.4.0 founded reads `grungo` here
-  until it adopts its badge's species.
+  until it adopts its badge's species (on board 237c, grungo too).
 - `ble name=mossby` is the creature's species, which is also the name a
   phone sees over Bluetooth. Firmware 0.4.0 said `ble name=blorb-1b3c`
   instead. `flash_batch.py` reads both.
@@ -165,7 +165,7 @@ in. That puts it in download mode, and then it flashes the same way.
 
 ## 7. Which badge is which creature
 
-From firmware 0.7.0 the 8 badges and the gift device each get their own
+From firmware 0.7.0 the nine boards below each get their own
 species from a fixed MAC table (`lib/blorb/include/blorb/defs/badges.def`,
 from `docs/notes/decisions-2026-10-15.md` D3). The USB serial is
 what `pio device list` shows without touching the board. The MAC is what
@@ -181,11 +181,13 @@ what `pio device list` shows without touching the board. The MAC is what
 | 6 | 5C94095002 | d4:05:92:77:1b:40 | blorb-1b40 | fizz |
 | 7 | 5C94094576 | d4:05:92:77:22:58 | blorb-2258 | hushwing |
 | 8 | 5C94094581 | d4:05:92:77:22:40 | blorb-2240 | tinker |
-| gift | | d4:05:92:77:23:7c (assumed from its name) | blorb-237c | grungo |
+| 0 | | d4:05:92:77:23:7c (read from its name) | blorb-237c | grungo |
 
-The original gift device (`blorb-237c`) is the one grungo. It has no
-updater, so any update needs a cable. Each species appears once in the
-table, and any board that is not in it is a grungo.
+Board 237c is an ordinary board in the table, flashed like any other. Each
+species of the regular cast appears once in the table. A board that is not
+in it takes a species of the regular cast from a hash of its MAC, the same
+one every time (`founding.h` `badgeSpecies`); the octopus, a one-off
+variant, comes only by name (`DEBUG found octopus` on a fresh board).
 
 ## Re-pack the art (optional)
 

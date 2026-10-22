@@ -37,7 +37,7 @@ A species is data in two places, and no engine code branches on its id.
 
 The type bytes avoid v2's reserved 0x14 to 0x19, 0x23 and 0x33.
 
-Expression is total. The first expressed SpeciesGene is the body, and none means grungo. The first expressed PowerGene is the power, and none means the body's own power. Every genome alive today, including the device's grungo `d30f00d1`, therefore reads as a pure-bred grungo with Foresee. It needs no migration, and its hash does not move.
+Expression is total. The first expressed SpeciesGene is the body, and none means grungo. The first expressed PowerGene is the power, and none means the body's own power. Every genome alive today therefore reads as a pure-bred grungo with Foresee. It needs no migration, and its hash does not move.
 
 Species and power are two genes, not one, and they sit far apart in the starter's gene order. That is what lets a friend egg's crossover give a pet one parent's body and the other's power (see "Crossing").
 
@@ -95,7 +95,7 @@ The lineage's Birth entry replays without the friend's genome, and `lineage.log`
 The build unit's tests (`BATTLES.md`, units D1, D3, D7, D10):
 
 - all nine starters pass `viability()`, and each expresses its own species and power;
-- a genome with no SpeciesGene expresses grungo with Foresee, and the `d30f00d1` fixture's hash and phenotype are unchanged;
+- a genome with no SpeciesGene expresses grungo with Foresee, and the starter fixture's hash and phenotype are unchanged;
 - 10,000 mutations never move a species or power byte;
 - `apply(mine, crossDiff + mutateDiff) == child` over 10,000 seeds and all 81 species pairs;
 - every friend egg passes viability or falls back;

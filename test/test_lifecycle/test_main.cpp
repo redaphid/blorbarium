@@ -247,7 +247,7 @@ TEST(Egg, WarmthHatchesFaster) {
     return n;
   };
   uint32_t cold = ticksToHatch(false), warm = ticksToHatch(true);
-  EXPECT_EQ(cold, 30 * kTicksPerMinute);
+  EXPECT_EQ(cold, 15 * kTicksPerMinute);   // the starter's 15-minute egg
   EXPECT_LT(warm, cold * 7 / 10);
 }
 

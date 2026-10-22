@@ -14,7 +14,7 @@ using namespace blorbtest;
 
 namespace {
 
-constexpr uint32_t kGiftSeed = 15048;
+constexpr uint32_t kStarterSeed = 15048;
 constexpr const char* kV1 = "test/fixtures/keepsake_v1.bin";
 constexpr const char* kScarsFixture = "test/fixtures/keepsake_v1_scars.bin";
 constexpr const char* kFriendFixture = "test/fixtures/keepsake_v1_friend_egg.bin";
@@ -490,14 +490,14 @@ TEST(Accept, RefusesDamageAWrongHashAndAStranger) {
 // ---- the keepsake's trailing bytes ----------------------------------------------------------
 
 // Nothing new is written for a pet with no scars and no friend egg: the
-// committed fixture and the gift genome's egg, creature and clutch.
+// committed fixture and the starter's egg, creature and clutch.
 TEST(Keepsake, AnOrdinaryPetWritesNoTrailingBytes) {
   const std::vector<uint8_t> v1 = readFile(kV1);
   ASSERT_FALSE(v1.empty()) << kV1 << " is missing (run from the project root)";
   EXPECT_EQ(Keepsake::encode(decoded(v1)), v1) << "the v1 fixture re-encodes to its own bytes";
   EXPECT_EQ(findChunk(chunksOf(v1), Chunk::Body)->n, kBodyFixedLen) << "the fixture holds no bite";
 
-  Creature c(Egg(Offspring{starterGenome(kGiftSeed), {}}, 1, 0), 0, 0);
+  Creature c(Egg(Offspring{starterGenome(kStarterSeed), {}}, 1, 0), 0, 0);
   Habitat h;
   Behaviours bh;
   for (uint32_t t = 0; t < 300; ++t) c.tick(SenseOut{}, h, bh, t);
@@ -516,9 +516,9 @@ TEST(Keepsake, AnOrdinaryPetWritesNoTrailingBytes) {
   for (const std::vector<uint8_t>* blob : {&creature, &clutch, &egg})
     EXPECT_EQ(Keepsake::encode(decoded(*blob)), *blob);
   if (const char* dir = std::getenv("BLORB_D7_PLAIN_DIR")) {   // tools/old_reader.sh hands these to 0.4.0
-    writeFile(std::string(dir) + "/gift_creature.bin", creature);
-    writeFile(std::string(dir) + "/gift_clutch.bin", clutch);
-    writeFile(std::string(dir) + "/gift_egg.bin", egg);
+    writeFile(std::string(dir) + "/starter_creature.bin", creature);
+    writeFile(std::string(dir) + "/starter_clutch.bin", clutch);
+    writeFile(std::string(dir) + "/starter_egg.bin", egg);
   }
 }
 

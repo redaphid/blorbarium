@@ -256,8 +256,10 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // the pet clock's two new fields in the hash, a hand rousing him, his idles
   // over a rest (their rng draws, drives, faces) and the 2/5 sleep cut.
   // ea029709 once rot is refused unless he is starving (#21): food_near counts
-  // only what he would eat, and he sniffs rot and turns away.
-  constexpr uint32_t kCommitted = 0xea029709u;
+  // only what he would eat, and he sniffs rot and turns away. 6fce18b3 with
+  // the one starter recipe (#36): Dish(.., 7) founds starterGenome(7), now the
+  // recipe every board founds from (sleep as pressure, a 15-minute egg).
+  constexpr uint32_t kCommitted = 0x6fce18b3u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -268,7 +270,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=ea029709 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=6fce18b3 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

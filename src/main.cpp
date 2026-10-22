@@ -987,7 +987,7 @@ static void reportStatus(uint32_t now) {
 
 // A device that has never had a pet waits a moment on its first boot for
 // `DEBUG found <species>`: tools/flash_fleet.sh --species sends it, so each
-// gift hatches the creature chosen for its kid. The pin must land before the
+// badge hatches the creature chosen for its kid. The pin must land before the
 // founding below, and storage is blank until this boot formats it, so there
 // is no earlier moment to write it. A device with a pet never waits.
 [[maybe_unused]] static void awaitFoundPin() {
@@ -1003,8 +1003,8 @@ static void reportStatus(uint32_t now) {
 }
 
 #if !defined(BADGE_BOARD_SIM)
-// The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
-// badge table will adopt him as (founding.h advertisedSpecies), whatever the
+// The Bluetooth name is the species (docs/ble.md): the pet's, or the one his
+// board will adopt him as (founding.h advertisedSpecies), whatever the
 // owner named him. An image on trial keeps the old image's blorb-xxxx, so a
 // trial looks to the page exactly as the board it updated: the page served
 // before rel-site keys its OTA token by device name, and a reloaded one must
@@ -1019,39 +1019,28 @@ static const char* bleName(const uint8_t mac[6]) {
   return name;
 }
 
-// A pet 0.4.0 founded becomes his badge's species (founding.h), once the
-// flash can be written: on an OTA trial, only after the trial keeps the
-// image, so the trial's pet check and a rollback both meet the pet the old
-// image saved. Then, under the same rule, a pet 0.7.0 adopted with the Gift
-// recipe's sleep takes FirstHours' (founding.h retuneFirstHours). Asked once
-// a second until the Dish says each is done. A board not in the table, and
-// the gift grungo (row 0), are neither adopted nor retuned.
-static void adoptTableSpecies(uint32_t now) {
-  static bool adopted = false, retuned = false;
+// A pet from before species (0.4.0 founded them) becomes his board's species
+// (founding.h badgeSpecies: the table's, else one of the regular cast from
+// the MAC), once the flash can be written: on an OTA trial, only after the
+// trial keeps the image, so the trial's pet check and a rollback both meet
+// the pet the old image saved. Asked once a second until the Dish says it is
+// done. Every board is treated alike, grungo's included.
+static void adoptBoardSpecies(uint32_t now) {
+  static bool adopted = false;
   static uint32_t askedAt = 0;
-  if ((adopted && retuned) || trial.onTrial() || now - askedAt < 1000) return;
+  if (adopted || trial.onTrial() || now - askedAt < 1000) return;
   askedAt = now;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
-  if (!adopted) {
-    const blorb::Dish::Adoption a =
-        species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
-    if (a == blorb::Dish::Adoption::NotYet) return;
-    adopted = true;
-    if (a == blorb::Dish::Adoption::Adopted) {
-      const OccupantSummary o = summarize(dish->occupant());
-      Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
-                    blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
-    }
+  const blorb::SpeciesId species = blorb::badgeSpecies(mac);
+  const blorb::Dish::Adoption a = dish->adoptSpecies(species, paint::bandsFor(species));
+  if (a == blorb::Dish::Adoption::NotYet) return;
+  adopted = true;
+  if (a == blorb::Dish::Adoption::Adopted) {
+    const OccupantSummary o = summarize(dish->occupant());
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+                  blorb::speciesInfo(species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
   }
-  const uint32_t was = summarize(dish->occupant()).genome;
-  const blorb::Dish::Adoption r = species ? dish->retuneFirstHours(*species) : blorb::Dish::Adoption::NotNeeded;
-  if (r == blorb::Dish::Adoption::NotYet) return;
-  retuned = true;
-  if (r == blorb::Dish::Adoption::Adopted)
-    Serial.printf("[hw] retuned first-hours sleep species=%s genome=%08x->%08x\n", blorb::speciesInfo(*species).name,
-                  unsigned(was), unsigned(summarize(dish->occupant()).genome));
 }
 #endif
 
@@ -1102,8 +1091,8 @@ void setup() {
   options.sealed = simSealed;
 #endif
   // A fresh board founds its own species: found.pin's, else the badge
-  // table's, else grungo (founding.h). The sim founds the starter, as
-  // it always has, so its goldens hold.
+  // table's, else one of the regular cast from its MAC (founding.h). The
+  // sim founds the starter, as it always has.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
   std::optional<blorb::Genome> founder;
 #if !defined(BADGE_BOARD_SIM)
@@ -1837,7 +1826,7 @@ void loop() {
     dishStore.hold(false);
     dish->flush();
   }
-  adoptTableSpecies(millis());
+  adoptBoardSpecies(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;

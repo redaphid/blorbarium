@@ -15,8 +15,7 @@ Every run logs what the screen shows: each line said, face changes (asleep is th
 # the sweep: 9 species x 4 seeds x 2 owners x 6 h, about 90 s; timelines to OUT
 MSYS_NO_PATHCONV=1 wsl -d survivor --exec env FIRST_HOURS_SWEEP=1 FIRST_HOURS_SEEDS=4 \
   FIRST_HOURS_OUT=/mnt/c/somewhere bash tools/wsl_test.sh test_first_hours
-# FIRST_HOURS_HOURS=30 for longer runs; FIRST_HOURS_FOUNDING_HOUR=0 for the old clock;
-# FIRST_HOURS_GIFT=1 founds starterGenome() (the Gift recipe) instead
+# FIRST_HOURS_HOURS=30 for longer runs; FIRST_HOURS_FOUNDING_HOUR=0 for the old clock
 ```
 
 "Before" is 0.7.0 (`origin/main` db465ef) with only the driver added. "After" is this branch merged with it. Both runs used the same driver, seeds 0x5EED0000 + 7919k for k = 0..3. Sections 1 to 3 below were found on `release-0.7`, before 0.7.0's idle rows existed.
@@ -33,8 +32,8 @@ MSYS_NO_PATHCONV=1 wsl -d survivor --exec env FIRST_HOURS_SWEEP=1 FIRST_HOURS_SE
 | Where | What | Old -> new | Why |
 |---|---|---|---|
 | `DishOptions::foundingHour`, `kUnaskedFoundingHour` (dish.h, dish.cpp), set in main.cpp beside `askForTime = false` | the pet hour a fresh founding's clock starts at | 0 -> 9 on a board that never asks for the time; 0 elsewhere | Hatches him into a pet day with 12 h before pet night. It is saved in the snapshot's `phaseOffsetTicks`, so a replug resumes it and never re-applies it. A phone's TIME still snaps it to the wall. The sim and tests keep 0 (the sim still asks for the time), so no sim golden moved. |
-| `kSleepOnset` (creature.cpp) | a sleep the brain chooses starts only with `sleep_gate` at least this | none -> 0.75 (sleepiness about 0.475). It still runs until the gate is under 0.5 (sleepiness 0.35). | The gap between them is the nap. Forced sleeps (tests, sim scripts) are exempt. It applies to every pet, including the Gift genome; see "Effect on pets alive today". |
-| `authorStarter(..., Recipe)` (genes.h, starter_genome.cpp) | the recipe has two sets of numbers | new `Recipe::Gift` and `Recipe::FirstHours` | `starterGenome()` is pinned byte for byte to the gift device's grungo d30f00d1 (test_species `Gift.*`, test_founding), and it is what an unpicked nest founds. Gift keeps those bytes. `starterGenomeOf(species)` gets FirstHours. Same genes, same uids, so a friend egg's cross still pairs them. |
+| `kSleepOnset` (creature.cpp) | a sleep the brain chooses starts only with `sleep_gate` at least this | none -> 0.75 (sleepiness about 0.475). It still runs until the gate is under 0.5 (sleepiness 0.35). | The gap between them is the nap. Forced sleeps (tests, sim scripts) are exempt. It applies to every pet, including the old starter's; see "Effect on pets alive today". |
+| `authorStarter` (genes.h, starter_genome.cpp) | the starter's numbers | the rows below | At the time `starterGenome()` kept the old numbers and only `starterGenomeOf(species)` took these. Since 2026-10-21 (issue #36) there is one recipe: `starterGenome()` and every species' founder take these numbers. Same genes, same uids, so a friend egg's cross still pairs them. |
 | FirstHours: sleepiness tonic | emitter locus, rate, half-life, start | `always`, 0.10 equilibrium, 2 h half-life, starts 0 -> `asleep` inverted (made only while awake), 0.52 equilibrium (0.58 for a species that sleeps by day), 90 min half-life, starts 0.25 | Sleepiness becomes pressure that builds while he is awake and drains while he sleeps, so a pet day has naps. Day species nap about 40 min after every 2.3 h awake, and night-sleepers after every 1.8 h (30 h runs). That is species character from the existing `nocturnal` column ("sleeps by day"). |
 | FirstHours: energy at hatching | `chem(energy, 4 h, initial)` | 0.80 -> 0.45 | Hunger reaches the feed hint (0.5) about 3 h after hatching instead of after 6 h, so the feed hint, a BOOT press, the bite and "BRRRUP. CRUNCH." all fall inside a flight. Left alone he is starving (0.8 or more) from about 4.5 h, with injury 0.05 by 6 h, which one BOOT press fixes. |
 | FirstHours: happy face | `face(happy, weight, ...)` | 0.55 -> 0.60 | A content pet now clears the 0.1 hysteresis over neutral and shows happy, then blep as hunger rises. |
@@ -43,7 +42,7 @@ MSYS_NO_PATHCONV=1 wsl -d survivor --exec env FIRST_HOURS_SWEEP=1 FIRST_HOURS_SE
 
 Tests changed on purpose:
 - `Starter.CarriesEveryGeneKindAndExpressesEachAtSomeStage`: the egg is 15 minutes, not 30.
-- `Gift.GrungosStarterIsTheOldStarterPlusOnlyTheSpeciesGenes` became `...RetunedPlusTheSpeciesGenes`. The Gift recipe is still `starterGenome()` byte for byte, with the same uids, types and lengths, and exactly 5 genes retuned.
+- The test that compared grungo's founder with `starterGenome()` counted exactly 5 genes retuned, with the same uids, types and lengths. Since issue #36 it is `Starter.GrungosStarterIsTheStarterPlusOnlyTheSpeciesGenes`: one recipe, so none differ.
 - `Replay.TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash`: dca5e44a -> 8a7f68fc, from `kSleepOnset`. The device computes it with the same code.
 
 New guards are in `test_first_hours`:
@@ -86,7 +85,7 @@ Over 30 h (one seed, all species), nothing died after the change. Day species sl
 ## Effect on pets alive today
 
 A pet already on a board keeps its genome and its clock: the founding hour and the FirstHours numbers reach only fresh foundings, so a board still in the pet-night hours of an old founding stays there until its pet morning. Two changes do reach existing pets:
-- `kSleepOnset`: on the Gift genome over 30 h, bedtime moves about 65 min later (night 1 02:43 -> 03:48, night 2 22:49 -> 23:55) and wake time is unchanged (09:47). The zero-length doze-and-wake flickers go too.
+- `kSleepOnset`: on the old starter over 30 h, bedtime moves about 65 min later (night 1 02:43 -> 03:48, night 2 22:49 -> 23:55) and wake time is unchanged (09:47). The zero-length doze-and-wake flickers go too.
 - The see_damp cooldown.
 
 ## Not changed, and why
@@ -100,4 +99,4 @@ A pet already on a board keeps its genome and its clock: the founding hour and t
 ## Evidence
 
 - Native suite: release-0.7 + driver 727 cases, 726 passed, 1 skipped. This branch merged with 0.7.0: 779 cases, 777 passed, 2 skipped, exit 0.
-- Sim film goldens: 22 of 22 frames match, nothing re-blessed (the sim founds `starterGenome()`, the Gift recipe, and asks for the time).
+- Sim film goldens: 22 of 22 frames match, nothing re-blessed (the sim founded `starterGenome()`, then on the old numbers, and asks for the time).

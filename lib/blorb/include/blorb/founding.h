@@ -1,12 +1,17 @@
 #pragma once
 // How a device gets its species (docs/notes/decisions-2026-10-15.md D3): one
-// per badge, from a fixed MAC table (defs/badges.def), so the eight badges
-// and the gift device hold the nine species once each. Any other board is a
-// grungo. No chooser: a kid is handed the badge's creature, and the same
-// board always founds the same pet.
+// per board, from a fixed MAC table (defs/badges.def), so the nine boards in
+// it hold the regular cast's nine species once each. Any other board takes a
+// species of the regular cast from a hash of its MAC (castSpecies). No
+// chooser: a kid is handed the badge's creature, and the same board always
+// founds the same pet.
+//
+// The regular cast is every species.def row but the octopus, a one-off
+// variant: a board gets one only by name (a table row or found.pin), and an
+// egg is one only when a parent was. Nothing picks it by chance.
 //
 // First boot only. A keepsake or a lineage, in any state, means no founding
-// ever, so the gift device's grungo is never founded again. The firmware
+// ever, so a pet that lives is never founded again. The firmware
 // asks needsFounding() before the Dish exists and founds the Dish from
 // foundingGenome(foundingSpecies(...)); the line takes the species' name
 // (lineage.cpp).
@@ -16,8 +21,8 @@
 // website cannot: the founding runs before the Dish and its Bluetooth exist.
 //
 // The badges flashed with 0.4.0 founded grungos with no SpeciesGene, before
-// species existed. adoptSpecies makes such a pet its table species, once,
-// keeping the pet (Dish::adoptSpecies).
+// species existed. adoptSpecies makes such a pet his board's species
+// (badgeSpecies, grungo included), once, keeping the pet (Dish::adoptSpecies).
 #include <cstdint>
 #include <optional>
 #include "blorb/genome.h"
@@ -31,7 +36,11 @@ class Creature;   // creature.h
 
 // The table's species for this MAC; nullopt for a board not in it.
 std::optional<SpeciesId> tableSpecies(const uint8_t mac[6]);
-// The table's species, else grungo.
+// True for every species but the octopus, the one-off variant.
+constexpr bool inRegularCast(SpeciesId s) { return s != species::octopus; }
+// The regular cast's species number `n` modulo its size, in species.def order.
+SpeciesId castSpecies(uint32_t n);
+// The board's species: the table's, else castSpecies(fnv1a of the MAC).
 SpeciesId badgeSpecies(const uint8_t mac[6]);
 
 // True when the Dish would found: no snapshot slot, no rescued slot and no
@@ -67,26 +76,17 @@ bool predatesSpecies(const Genome&);
 // egg's cross lines them up with any other badge's. Then the bytes the
 // species owns in the recipe are written: the founder's rolled look and the
 // row's starter bytes (boldness, sleep, appetite; the voice follows the
-// SpeciesGene). Age, chemistry, brain, scars and every other byte stay his.
-// False, and nothing changes, unless predatesSpecies, or when `species` is
-// grungo: a genome from before species already is one, and the gift device's
-// grungo stays byte for byte as he is. The caller records the lineage
-// Checkpoint and saves.
+// SpeciesGene). A row byte is written only where he still holds grungo's
+// recipe value, so a byte his own recipe wrote differently (a pet founded by
+// an older recipe) stays his. Age, chemistry, brain, scars and every other
+// byte stay his. Grungo is adopted like any species: he gains grungo's
+// SpeciesGene and the rest, and the rolled look. False, and nothing changes,
+// unless predatesSpecies. The caller records the lineage Checkpoint and saves.
 bool adoptSpecies(Creature&, SpeciesId, uint32_t speciesSeed, const LookBands&);
 
-// An adopted pet that still sleeps by the Gift recipe takes the FirstHours
-// recipe's bytes (genes.h Recipe): sleep as pressure, so a day has naps, not
-// hours of sleep, plus the energy, happy-face and egg bytes. 0.7.0 adopted
-// with the Gift bytes and adoption never runs twice, so this is its own
-// step. It writes only when he is `species`, `species` is not grungo, and
-// every byte the two recipes differ in still holds the Gift value: an owner
-// edit, a mutation or a pet already retuned is left as he is. False, and
-// nothing changes, otherwise. The caller records the lineage Checkpoint and saves.
-bool retuneFirstHours(Creature&, SpeciesId, uint32_t speciesSeed);
-
 // The species a board shows the world as (its Bluetooth name): its pet's, or
-// the table's for a pet the table will adopt. pet is null when the pet was
-// not read (a sealed board): then badgeSpecies.
+// the board's for a pet from before species, which the board will adopt. pet
+// is null when the pet was not read (a sealed board): then badgeSpecies.
 SpeciesId advertisedSpecies(const Genome* pet, const uint8_t mac[6]);
 
 }  // namespace blorb

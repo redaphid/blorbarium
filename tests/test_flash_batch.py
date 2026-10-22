@@ -233,11 +233,24 @@ class MacTable(unittest.TestCase):
     def test_it_is_the_decisions_d3_table(self):
         text = (Path(ROOT) / "docs/notes/decisions-2026-10-15.md").read_text()
         rows = re.findall(r"^\s*\| \d \| ([0-9a-f:]{17}) \| blorb-\w+ \| (\w+) \|", text, re.M)
-        self.assertEqual(len(rows), 8)
-        self.assertEqual(dict(rows), {m: s for m, s in fb.BADGE_SPECIES.items() if s != "grungo"})
+        self.assertEqual(len(rows), 9)
+        self.assertEqual(dict(rows), fb.BADGE_SPECIES)
         self.assertEqual(len(fb.BADGE_SPECIES), 9)                               # read from badges.def
-        self.assertEqual(fb.BADGE_SPECIES["d4:05:92:77:23:7c"], "grungo")     # the gift, badges.def row 0
+        self.assertEqual(fb.BADGE_SPECIES["d4:05:92:77:23:7c"], "grungo")     # board 237c, badges.def row 0
         self.assertEqual(sorted(fb.BADGE_SPECIES.values()), sorted(fb.SPECIES))   # each species once
+
+    def test_a_board_off_the_table_takes_a_regular_species_from_its_mac(self):
+        self.assertEqual(fb.board_species("d4:05:92:77:1b:3c"), "mossby")
+        self.assertEqual(fb.board_species("d4:05:92:77:23:7c"), "grungo")
+        seen = set()
+        for n in range(4096):
+            mac = "02:00:00:%02x:%02x:%02x" % (n >> 16, (n >> 8) & 255, n & 255)
+            s = fb.board_species(mac)
+            self.assertEqual(s, fb.board_species(mac))
+            self.assertEqual(s, fb.SPECIES[fb.fnv1a(bytes.fromhex(mac.replace(":", ""))) % 9])
+            seen.add(s)
+        self.assertEqual(seen, set(fb.SPECIES))
+        self.assertNotIn("octopus", fb.SPECIES)
 
 
 class Log(unittest.TestCase):
@@ -276,8 +289,8 @@ class DryRun(unittest.TestCase):
         rows, text = self.run_loop()
         self.assertEqual([r["badge"] for r in rows], ["4", "5", "6"])
         self.assertTrue(all(r["result"] == "ok" and r["boot"] == "Resumed" and r["pet"] == "keep" for r in rows))
-        self.assertEqual([r["species"] for r in rows], ["mossby", "puffkin", "gilly"])
-        self.assertEqual([r["note"] for r in rows], ["the pet adopted species %s" % s for s in ("mossby", "puffkin", "gilly")])
+        self.assertEqual([r["species"] for r in rows], ["grungo", "mossby", "puffkin"])   # badges.def order
+        self.assertEqual([r["note"] for r in rows], ["the pet adopted species %s" % s for s in ("grungo", "mossby", "puffkin")])
         self.assertNotIn("!!", text)
         self.assertEqual(len({r["port"] for r in rows}), 3)
         self.assertIn("KEEPING each badge's pet", text)
@@ -316,12 +329,12 @@ class OneBadge(unittest.TestCase):
         self.assertIn("PET NOT FOUND", str(e.exception))
 
     def test_a_duplicate_species_is_noted(self):
-        bench, p = self.bench([line.replace("gilly", "mossby") for line in RESUMED])   # badge 1, mossby
+        bench, p = self.bench([line.replace("gilly", "mossby") for line in RESUMED])   # board 237c's MAC, booting as mossby
         rows = [{"badge": "9", "mac": "d4:05:92:00:00:09", "species": "mossby", "ble_name": "mossby", "result": "ok"}]
         with redirect_stdout(io.StringIO()):
             row = fb.one_badge(bench, 1, p, rows)
         self.assertIn("DUPLICATE SPECIES mossby", row["note"])
-        self.assertEqual((row["mac"], row["species"], row["pet"]), ("d4:05:92:77:1b:3c", "mossby", "keep"))
+        self.assertEqual((row["mac"], row["species"], row["pet"]), ("d4:05:92:77:23:7c", "mossby", "keep"))
 
 
 if __name__ == "__main__":

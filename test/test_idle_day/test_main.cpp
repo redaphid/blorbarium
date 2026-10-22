@@ -22,6 +22,7 @@
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/registry.h"
 #include "blorb/species.h"
+#include "founding_040.h"
 #include "links.h"
 #include "mem_storage.h"
 #include "time_sources.h"
@@ -118,7 +119,7 @@ struct DayRun {
   Clock clock = Clock::None;
   Night night = Night::Nightstand;
   uint8_t foundingHour = 9;
-  bool gift = false;
+  bool founded040 = false;   // founded by the 0.4.0 recipe (founding_040.h): the long sleeper
   double hours = 24;
   double asleepMin[96]{};                   // per wall hour since the start
   std::map<std::string, uint32_t> actionTicks[96];
@@ -152,16 +153,16 @@ std::string looks(const Creature& c) {
 }
 
 DayRun live(SpeciesId species, uint32_t seed, Clock clock, Night night, uint8_t foundingHour, double hours,
-         bool gift = false) {
+         bool founded040 = false) {
   DayRun r;
   r.species = speciesInfo(species).name;
-  r.clock = clock, r.night = night, r.foundingHour = foundingHour, r.hours = hours, r.gift = gift;
+  r.clock = clock, r.night = night, r.foundingHour = foundingHour, r.hours = hours, r.founded040 = founded040;
   MemStorage store;
   NullLink link;
   FakeRtc rtc;   // a flat battery: never any wall time
   uint32_t ms = 0;
   rtc.poweredMs = &ms;
-  const Genome founder = gift ? starterGenome(seed) : starterGenomeOf(species, seed);
+  const Genome founder = founded040 ? foundingGenome040(seed) : starterGenomeOf(species, seed);
   DishOptions opt;
   opt.rtc = &rtc;
   opt.founder = &founder;
@@ -216,7 +217,7 @@ double nightAsleepPct(const DayRun& r) { return r.nightTicks ? 100.0 * r.nightAs
 
 std::string label(const DayRun& r) {
   char b[96];
-  std::snprintf(b, sizeof b, "%-8s%s %-7s %-6s pet%02u", r.species.c_str(), r.gift ? "(gift)" : "", clockName(r.clock),
+  std::snprintf(b, sizeof b, "%-8s%s %-7s %-6s pet%02u", r.species.c_str(), r.founded040 ? "(0.4.0)" : "", clockName(r.clock),
                 nightName(r.night), unsigned(r.foundingHour));
   return b;
 }
@@ -239,7 +240,7 @@ std::string chart(const DayRun& r) {
 void writeCsv(const DayRun& r) {
   const char* dir = std::getenv("IDLE_DAY_OUT");
   if (!dir) return;
-  std::string name = r.species + (r.gift ? "-gift" : "") + "-" + clockName(r.clock) + "-" + nightName(r.night) + "-pet" +
+  std::string name = r.species + (r.founded040 ? "-040" : "") + "-" + clockName(r.clock) + "-" + nightName(r.night) + "-pet" +
                      std::to_string(r.foundingHour) + ".csv";
   if (FILE* f = std::fopen((std::string(dir) + "/" + name).c_str(), "w")) {
     std::fprintf(f, "hour,wall_hour,asleep_min,actions\n");
@@ -261,7 +262,7 @@ double envHours() {
 
 // The measurement: species of both kinds (day and night sleepers), each clock,
 // face up and tucked in, a fresh no-phone founding (pet 09:00) and an old one
-// (pet 00:00, a 0.4.0 board), and the Gift recipe.
+// (pet 00:00, a 0.4.0 board), and a grungo 0.4.0 founded by its own recipe.
 TEST(Sweep, DaysAndNightsOnADesk) {
   if (!std::getenv("IDLE_DAY_SWEEP")) GTEST_SKIP() << "IDLE_DAY_SWEEP=1 runs it";
   const double hours = envHours();
@@ -278,7 +279,7 @@ TEST(Sweep, DaysAndNightsOnADesk) {
           writeCsv(r);
         }
   for (Clock c : {Clock::None, Clock::Phone}) {
-    const DayRun r = live(SpeciesId{0}, 0x5EED0000u, c, Night::Nightstand, 0, hours, /*gift=*/true);
+    const DayRun r = live(SpeciesId{0}, 0x5EED0000u, c, Night::Nightstand, 0, hours, /*founded040=*/true);
     std::printf("%s\n", chart(r).c_str());
     writeCsv(r);
   }

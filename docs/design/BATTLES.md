@@ -428,7 +428,7 @@ The owner's ruling removed "never kills". What remains binding, and where each r
 
 All in `pio test -e native` in WSL `survivor`, except the sim film.
 
-1. **`test_species`** (D3): nine viable starters, each expressing its own species and power; no SpeciesGene expresses grungo; the `d30f00d1` fixture unchanged; the nest holds one egg per element.
+1. **`test_species`** (D3): nine viable starters, each expressing its own species and power; no SpeciesGene expresses grungo; the starter fixture unchanged; the nest holds one egg per element.
 2. **`test_duel_resolve`** (D4): golden battles (fixed cards, seed and logs give a fixed `Outcome::hash`); the mirror property over 10,000 random battles; prefix monotonicity (resolving N+1 turns never changes turns 0 to N); a short meter plays plain; hearts stay within 0 to max; one case per power, including Gadget's draw and the two-turn counters.
 3. **`test_duel_wire`** (D6): round trips; the size asserts; a fuzz of 1,000,000 random buffers (decode never crashes; a bad CRC is refused); a newer version refused.
 4. **`test_duel_session`** (D6): two sessions on one `Ether` with seeded weather (30 percent drop, 10 percent doubles, 20 percent reorder, up to 0.8 s late). Over 1,000 seeds both Meetings exist, name the same `BattleId` and `outcomeHash`, and mirror `me`. Silence fizzles both within 20 s. A lid on one side ends both. A late packet from bout n never reaches bout n+1. A peer under -62 dBm is never matched, and a declining one is never matched. Only the coincident pair of three devices matches on a clink. `closedDeviceIsDeaf` holds. A refused `Air::open` (OTA) leaves the session closed. The genome swap completes at 30 percent loss and fizzles cleanly when cut off.
@@ -579,7 +579,7 @@ Only product calls. Each has the default this design ships. Your ruling that pet
 4. **Who decides each device's species?** Default: each kid picks from a nest of three (one per element), rolled from the MAC. The alternative is that you pin one species per device over the cable before handing them out (`DEBUG found <id>`), so the family covers all nine.
 5. **Friend eggs: yes?** Default: yes, after both kids hug, one waiting at a time, never picked by the clutch timeout.
 6. **Hybrids** (one species' body with another's power): fine? Default: yes.
-7. **May grungo `d30f00d1` receive the duel feeling genes once, on his first duel, recorded in his lineage?** Default: yes. Without it, wounds, scars and death still apply, but his chemistry does not react to duels.
+7. **May a pet from before species receive the duel feeling genes once, on his first duel, recorded in his lineage?** Default: yes. Without it, wounds, scars and death still apply, but his chemistry does not react to duels.
 8. **Scars:** for one life, or heritable as a family mark? Default: one life. The lineage remembers them in words. A heritable scar would be a mark gene added at the Birth, and v2 parts (A11) could carry it.
 9. **Vendetta:** three generations or until avenged? Default: yes. Longer feuds are one number.
 10. **Pulling the cable to save a downed pet:** allowed, as "fled"? Default: yes. The alternative is saving a pending verdict across reboots, which is more code and a death that waits on a power cut.

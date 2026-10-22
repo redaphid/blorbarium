@@ -179,17 +179,16 @@ TEST(FromTheGenes, EveryStarterDrawsItsOwnArtNotTheFrog) {
   }
 }
 
-// starterGenome(15048) is the gift device's grungo (test_species): it has no
-// species gene, so it draws exactly as it did when grungoPack() was the only pack.
-TEST(FromTheGenes, TheGiftDrawsAsGrungoByteForByte) {
-  const blorb::Genome gift = blorb::starterGenome(15048);
-  ASSERT_EQ(gift.hash(), 0x3df10dafu);
+// starterGenome() has no species gene, so it draws exactly as it did when
+// grungoPack() was the only pack.
+TEST(FromTheGenes, TheStarterDrawsAsGrungoByteForByte) {
+  const blorb::Genome starter = blorb::starterGenome(15048);
   const blorb::Habitat h;
   const blorb::PetClock clock;
-  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{gift, {}}, uint16_t(0), 0u};
+  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{starter, {}}, uint16_t(0), 0u};
   const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
   std::vector<Appearance> shown = {present(egg, h, clock, 0), present(hatched, h, clock, 0)};
-  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(gift, blorb::Stage(st), 0, 0));
+  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(starter, blorb::Stage(st), 0, 0));
   for (const Appearance& a : shown) {
     EXPECT_EQ(a.species, blorb::kGrungo);
     EXPECT_TRUE(sameCanvas(*render(a), *renderWith(a, grungoPack())));

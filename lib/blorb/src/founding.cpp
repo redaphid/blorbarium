@@ -70,7 +70,24 @@ std::optional<SpeciesId> tableSpecies(const uint8_t mac[6]) {
   return std::nullopt;
 }
 
-SpeciesId badgeSpecies(const uint8_t mac[6]) { return tableSpecies(mac).value_or(kGrungo); }
+constexpr size_t castSize() {
+  size_t n = 0;
+  for (const SpeciesInfo& row : SPECIES) n += inRegularCast(row.id);
+  return n;
+}
+static_assert(castSize() > 0, "species.def: a regular cast to found unknown boards from");
+
+SpeciesId castSpecies(uint32_t n) {
+  n %= uint32_t(castSize());
+  for (const SpeciesInfo& row : SPECIES)
+    if (inRegularCast(row.id) && n-- == 0) return row.id;
+  return kGrungo;   // not reached
+}
+
+SpeciesId badgeSpecies(const uint8_t mac[6]) {
+  if (std::optional<SpeciesId> s = tableSpecies(mac)) return *s;
+  return castSpecies(fnv1a(mac, 6));
+}
 
 bool needsFounding(Storage& s) {
   for (const char* f : kPetFiles)
@@ -121,7 +138,7 @@ bool predatesSpecies(const Genome& g) {
 }
 
 bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const LookBands& bands) {
-  if (species == kGrungo || !predatesSpecies(c.genome())) return false;
+  if (!predatesSpecies(c.genome())) return false;
   const Genome founder = foundingGenome(species, speciesSeed, bands);
   const Genome grungo = starterGenome(speciesSeed);
 
@@ -139,8 +156,9 @@ bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const Lo
   if (!g || !c.extendGenome(std::move(*g))) return false;
 
   // The recipe bytes the species owns: the founder's rolled look, and every
-  // byte where the species' starter differs from grungo's. Collected first,
-  // because each edit replaces the genome the views point into.
+  // byte where the species' starter differs from grungo's and he still holds
+  // grungo's. Collected first, because each edit replaces the genome the
+  // views point into.
   struct Edit { GeneUid uid; uint8_t at, value; };
   std::vector<Edit> edits;
   founder.forEach([&](const GeneView& f) {
@@ -151,32 +169,10 @@ bool adoptSpecies(Creature& c, SpeciesId species, uint32_t speciesSeed, const Lo
         base->header.len != f.header.len)
       return;
     for (uint8_t i = 0; i < f.header.len; ++i)
-      if ((rollOf(f, i, bands) || base->body[i] != f.body[i]) && mine->body[i] != f.body[i])
+      if ((rollOf(f, i, bands) || (base->body[i] != f.body[i] && mine->body[i] == base->body[i])) &&
+          mine->body[i] != f.body[i])
         edits.push_back(Edit{f.header.uid, i, f.body[i]});
   });
-  for (const Edit& e : edits) c.editGene(e.uid, e.at, e.value);
-  return true;
-}
-
-bool retuneFirstHours(Creature& c, SpeciesId species, uint32_t speciesSeed) {
-  if (species == kGrungo || predatesSpecies(c.genome()) || speciesOf(c.genome()) != species) return false;
-  GenomeBuilder gift, first;
-  authorStarter(gift, speciesInfo(species).starter, speciesSeed, kNeglectCanKill, Recipe::Gift);
-  authorStarter(first, speciesInfo(species).starter, speciesSeed, kNeglectCanKill, Recipe::FirstHours);
-  const Genome from = *gift.build(), to = *first.build();
-  struct Edit { GeneUid uid; uint8_t at, value; };
-  std::vector<Edit> edits;
-  bool gifted = true;
-  from.forEach([&](const GeneView& g) {
-    const std::optional<GeneView> f = to.find(g.header.uid), mine = c.genome().find(g.header.uid);
-    for (uint8_t i = 0; f && i < g.header.len; ++i) {
-      if (f->body[i] == g.body[i]) continue;
-      if (!mine || mine->header.type != g.header.type || mine->header.len != g.header.len || mine->body[i] != g.body[i])
-        gifted = false;
-      edits.push_back(Edit{g.header.uid, i, f->body[i]});
-    }
-  });
-  if (!gifted || edits.empty()) return false;
   for (const Edit& e : edits) c.editGene(e.uid, e.at, e.value);
   return true;
 }
@@ -189,8 +185,7 @@ SpeciesId speciesOf(const Genome& g) {
 
 SpeciesId advertisedSpecies(const Genome* pet, const uint8_t mac[6]) {
   if (!pet) return badgeSpecies(mac);
-  if (predatesSpecies(*pet))
-    if (std::optional<SpeciesId> s = tableSpecies(mac)) return *s;
+  if (predatesSpecies(*pet)) return badgeSpecies(mac);
   return speciesOf(*pet);
 }
 

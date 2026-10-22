@@ -26,10 +26,11 @@ longest slug, 8 characters, takes 10 of its 31 bytes.
 Which species (`advertisedSpecies` in `founding.h`):
 
 - The pet's own species.
-- For a pet from 0.4.0, which has no species yet, the species the badge table
-  will adopt him as (`Dish::adoptSpecies`).
-- For a sealed board, whose pet was not read, the badge's table species, else
-  grungo.
+- For a pet from 0.4.0, which has no species yet, the species his board
+  will adopt him as (`Dish::adoptSpecies`): the table's, else one of the
+  regular cast from a hash of the MAC (`badgeSpecies`).
+- For a sealed board, whose pet was not read, the board's species
+  (`badgeSpecies`).
 - An image on an OTA trial still advertises the old `blorb-xxxx` (the last
   two bytes of its MAC, lower-case hex), so a trial looks the same as the
   board the page updated. The page from rel-site keys its OTA token by the
