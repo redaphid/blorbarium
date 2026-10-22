@@ -68,6 +68,23 @@ bool fired(const SenseOut& s, StimId id) {
   return false;
 }
 
+// The badge was moved or touched this tick: a gesture of the body's own
+// (never the phone's), or more motion than a table's. A badge lying still
+// reads under 5 mg off gravity (senses.cpp), the motion locus about 0.01; a
+// hand holding it shakes it past 15 mg.
+constexpr Fx kHandledMotion = Fx::ratio(3, 100);
+bool handled(const SenseOut& s) {
+  for (uint8_t i = 0; i < s.stimCount; ++i) {
+    const StimId id = s.stimuli[i];
+    if (id.v >= 64 || (s.remote & (uint64_t(1) << id.v))) continue;
+    for (const StimInfo& row : STIMULI)
+      if (row.id == id && row.source == StimSource::Body) return true;
+  }
+  for (uint8_t i = 0; i < s.lociCount; ++i)
+    if (s.loci[i].locus == locus::motion && s.loci[i].value >= kHandledMotion) return true;
+  return false;
+}
+
 void copyName(char (&to)[16], const char* from) {
   std::memset(to, 0, sizeof to);
   for (size_t i = 0; i + 1 < sizeof to && from[i]; ++i) to[i] = from[i];
@@ -168,7 +185,10 @@ void Dish::runOneTick(Link& link) {
     ++tick_;
     return;
   }
-  live_.clock.advance(detectors_.lid.lidded());
+  // The pet hours are believed while they are the wall's (senses.h PetClock).
+  live_.clock.trusted = live_.clock.aligned && wallKnown_;
+  const bool wasDim = live_.clock.dim(), touched = handled(out);
+  live_.clock.advance(detectors_.lid.lidded(), touched);
   detectors_.tick(TickContext{live_.clock, link.connected(), tick_}, out);
   for (uint8_t i = 0; i < out.lociCount; ++i) {
     if (out.loci[i].locus == locus::tilt_x) tiltX_ = out.loci[i].value;
@@ -211,7 +231,11 @@ void Dish::runOneTick(Link& link) {
         !duel_.active())
       c->force(action::sleep);
     c->keepAsleep(detectors_.lid.lidded() && !duel_.active());
-    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
+    // A long untouched stretch put him to bed; the hand that ends it gets him
+    // up, unless it is the wall's night (he goes back to sleep).
+    if (wasDim && touched && c->body().asleep && !live_.clock.night()) c->rouse();
+    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out,
+                       c->chemistry().drive(drive::hunger) >= kEatsRotAt);   // rot is food only to the starving
     Stage before = c->stage();
     const Mouthful mouth = c->body().mouth;
     const Fx hunger = c->chemistry().drive(drive::hunger);

@@ -18,12 +18,21 @@
 #include "blorb/habitat.h"
 #include "blorb/mutate.h"
 #include "blorb/senses.h"
+#include "blorb/idle.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
 
 namespace blorb {
 
 struct EggRules { uint32_t incubateTicks; Fx warmthBoost; uint8_t hatchBurstDreams; };
+
+// Starving: hunger this high and he eats a rotten pellet (actions.h Picky).
+// It is where the starter's kStarving receptor (starter_genome.cpp, hunger
+// 0.8) starts turning hunger into injury: below it going without hurts him
+// less than a rotten bite (0.4 toxin, most of it injury within minutes), so
+// he waits for a fresh one; past it he is already being hurt, and rot feeds
+// him. A pet left with only rot still eats it in the end, and is poisoned.
+constexpr Fx kEatsRotAt = Fx::ratio(8, 10);
 
 // What gene expression built. Grows at each stage; never shrinks in a life.
 struct Phenotype {
@@ -116,6 +125,12 @@ class Creature {
   const LifeStats& stats() const { return stats_; }
   const FaceState& face() const { return face_; }
   ActionId action() const { return action_; }
+  // His idle, while he plays one (idle.h) over a rest; idles::none otherwise.
+  const IdleState& idle() const { return idle_; }
+  const Picky& picky() const { return picky_; }
+  bool playing() const { return !actionDone_ && idle_.active(); }
+  // What STATE says he is doing: the idle he plays, else the action's name.
+  const char* doing() const;
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
   void inject(ChemId, Fx);             // sim scripts, tests and the prophecy_treat twist; clamps to 0..1
@@ -125,6 +140,10 @@ class Creature {
   // Ends his sleep at the next tick, as a stimulus that wakes would (a
   // double press for a fight). Not saved.
   void wake() { wakeAsked_ = true; }
+  // Gets him up at the next tick as a kid's hand does (a knock, a pick-up):
+  // awake, his sleepiness down under the nap's onset and, where it is light,
+  // the night's melatonin gone, so he stays up. Not while lidded. Not saved.
+  void rouse() { rouseAsked_ = true; }
   // Face down (the lid): a sleep keeps going whatever his sleep gate says, so
   // bedtime is bedtime for every pet's genes. The Dish sets it every tick
   // from the lid; not saved.
@@ -176,9 +195,12 @@ class Creature {
   bool actionDone_ = false;            // its behaviour finished and stopped; the brain picks next
   std::optional<ActionId> forced_;     // force(), applied at the next tick
   bool wakeAsked_ = false;             // wake(), applied at the next tick
+  bool rouseAsked_ = false;            // rouse(), applied at the next tick
   bool keepAsleep_ = false;            // keepAsleep(): not saved, not hashed
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
+  IdleState idle_;                     // saved after the occupant record's rng (keepsake.cpp)
+  Picky picky_;                        // saved after the idle
 };
 
 class Egg {

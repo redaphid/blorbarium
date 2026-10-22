@@ -81,12 +81,22 @@ the link its request came from, so serial traffic never reaches the phone.
 #2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0
 #2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1
 #2b + body life=1000 injury=0 glow=436 dreaming=0
-#2b + dish pantry=4 pellets=0 night=1 time=unknown
+#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=0
 #2b OK
 ```
 
 Levels are thousandths (1000 is full). `time=unknown` turns `known` once a
 `TIME` has been accepted this boot.
+
+`action` is what he is doing: an action's name, or while he plays on his own
+the idle's (`lib/blorb/include/blorb/defs/idles.def`: `dance`, `juggle`,
+`dig`, `sing`, `peek`, `stargaze` and the rest).
+
+`night` is the wall's night: 1 only once a phone's `TIME` has set his pet
+hours and wall time is known this boot. A board with no clock never has a
+night of its own. `dark` is what he lives by (no light, so melatonin and
+sleep): the wall's night, lying face down (lidded), or nobody having moved the
+badge for `still` minutes past 45 (`PetClock::kDimAfterTicks`).
 
 A board whose keepsake would not open at boot (see HANDOFF, issue #2) ends the
 first line with ` sealed=1`. Its occupant is then a placeholder egg that never

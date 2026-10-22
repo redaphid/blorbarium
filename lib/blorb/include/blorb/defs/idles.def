@@ -1,0 +1,54 @@
+// Idles: what he does on his own, awake with nothing pressing (owner,
+// 2026-10-21: "I need them to do more interesting things at idle. Wide variety
+// please."). When the brain picks something that would only show him
+// standing about (a rest, a wander, a tilt-follow on a level desk, a curl with
+// nothing to fear), his liveliness often makes it play instead: the action
+// stays a rest (the brain learns what playing did as a rest's, and no brain
+// column or save format moves), and idle.cpp picks one of these by his
+// species' favourites (idle.cpp kAffinity), his own genes (a per-genome nudge
+// on every favourite), his drives (boredom romps, loneliness shows off for the
+// kid, curiosity noses about, sleepiness muses) and the cooldowns, never the
+// same one twice running. STATE says it as action=<name>.
+//
+//   family   Romp (bouncy play: eases boredom, tires him a little, so a nap
+//            follows play), Nose (curious), Show (for the kid at the glass:
+//            eases loneliness), Muse (calm), Night (only when it is dark)
+//   seconds  about how long it runs (idle.cpp stretches it 0.8x to 1.3x)
+//   cooldown seconds before the same one may come again
+//   face     the face he wears through it (idle.cpp may move it mid-act)
+//   move     Stay in place, Rim (out to the edge and round it), Spin (a tight
+//            circle), Home (to the middle, nearest the glass), Roam (a few
+//            steps, a pause, again), Push (a toy ahead of him), Zoom (laps
+//            of the rim, flat out)
+//
+// A kid's hand (a knock, a pick-up, the badge turned back up) gets a
+// greeting: the next play is one of his Show idles or a dance, whatever its
+// cooldown, at most once a minute (idle.cpp). Other pets near him are #33's:
+// IdleMood::friendsNear is the hook for idles of their own.
+//
+// How each one looks is paint's (lively.cpp moves him, idle_props.cpp draws
+// its prop). Ids are stable: never renumber, never reuse.
+// BLORB_IDLE(id, name, family, seconds, cooldown, face, move)
+BLORB_IDLE( 0, explore,     Nose,  12, 180, neutral, Rim)    // round the dish's edge, looking out
+BLORB_IDLE( 1, chase_tail,  Romp,   6, 150, happy,   Spin)   // round and round after his own tail
+BLORB_IDLE( 2, dance,       Romp,   8, 150, happy,   Stay)   // a wiggle, side to side, notes about him
+BLORB_IDLE( 3, juggle,      Romp,   8, 150, happy,   Stay)   // bats a pebble up, and again
+BLORB_IDLE( 4, dig,         Nose,   7, 180, blep,    Stay)   // digs at the floor, dirt flying
+BLORB_IDLE( 5, stretch,     Muse,   5, 240, neutral, Stay)   // up tall, then a yawn
+BLORB_IDLE( 6, look_around, Nose,   6,  90, neutral, Stay)   // this way, that way, a "?"
+BLORB_IDLE( 7, peek,        Show,   6, 120, happy,   Home)   // up to the glass to peek at the kid
+BLORB_IDLE( 8, sing,        Show,   8, 180, croak,   Stay)   // a hum, notes rising
+BLORB_IDLE( 9, shadow_box,  Romp,   7, 150, annoyed, Stay)   // practises his duel stance: jabs at the air
+BLORB_IDLE(10, sniff,       Nose,   9, 120, blep,    Roam)   // nose down, a few steps, sniff
+BLORB_IDLE(11, tidy,        Muse,  10, 240, neutral, Roam)   // sweeps the dish
+BLORB_IDLE(12, wave,        Show,   5, 150, happy,   Home)   // waves at the kid
+BLORB_IDLE(13, roll_over,   Romp,   5, 180, happy,   Stay)   // over on his back and up again
+BLORB_IDLE(14, daydream,    Muse,  10, 200, neutral, Stay)   // a thought bubble: what he dreams of
+BLORB_IDLE(15, stargaze,    Night, 12, 120, happy,   Stay)   // eyes up at the stars, only in the dark
+BLORB_IDLE(16, toy,         Romp,  10, 180, happy,   Push)   // pushes his ball about the dish
+BLORB_IDLE(17, sneeze,      Muse,   4, 240, sleepy,  Stay)   // ah... ah... CHOO (sparkles, for a puffball)
+BLORB_IDLE(18, discover,    Nose,   8, 240, neutral, Stay)   // a little flower or a beetle at his feet: "!" and delight
+BLORB_IDLE(19, boo,         Show,   7, 300, neutral, Home)   // sneaks up to the glass, low, and BOO!
+BLORB_IDLE(20, hide,        Show,   8, 300, neutral, Stay)   // hides in his hood, shell or wings, then pops out
+BLORB_IDLE(21, hiccup,      Muse,   5, 400, alarmed, Stay)   // hic! a hop with each one
+BLORB_IDLE(22, zoomies,     Romp,   6, 360, happy,   Zoom)   // a burst of laps round the rim, flat out

@@ -137,7 +137,7 @@ Fx toUnit(Fx v) { return clamp01((v + Fx::one()) * kHalf); }
 
 Fx PetClock::dayFraction() const { return Fx::ratio(int32_t(timeOfDay(*this)), int32_t(kDayTicks)); }
 
-bool PetClock::night() const {
+bool PetClock::nightHours() const {
   uint32_t t = timeOfDay(*this);
   return t >= kNightStartTick || t < kNightEndTick;
 }
@@ -145,12 +145,13 @@ bool PetClock::night() const {
 // Lidded through pet day, past the nap threshold, pet time runs at double
 // speed in the afternoon (night comes sooner) and stands still in the morning
 // (dawn comes later), until an hour of phase is spent for this pet day.
-void PetClock::advance(bool lidded) {
+void PetClock::advance(bool lidded, bool handled) {
   ++petTicks;
   darkRunTicks = lidded ? darkRunTicks + 1 : 0;
+  stillRunTicks = handled ? 0 : stillRunTicks == UINT32_MAX ? stillRunTicks : stillRunTicks + 1;
   uint32_t t = timeOfDay(*this);
   if (t == 0) entrainedTicks = 0;
-  if (!lidded || night() || darkRunTicks < kEntrainAfterTicks || entrainedTicks >= kEntrainMaxTicks) return;
+  if (!lidded || nightHours() || darkRunTicks < kEntrainAfterTicks || entrainedTicks >= kEntrainMaxTicks) return;
   shiftPhase(*this, t >= kMidDayTick ? 1 : -1);
   ++entrainedTicks;
 }
@@ -163,6 +164,7 @@ void PetClock::alignToWall(uint32_t unixSeconds, int16_t tzMinutes) {
   int64_t have = petTicks % kDayTicks;
   phaseOffsetTicks = int32_t(((want - have) % kDayTicks + kDayTicks) % kDayTicks);
   entrainedTicks = 0;
+  aligned = true;
 }
 
 // ---- sense output -------------------------------------------------------------------
@@ -474,11 +476,16 @@ void TouchDetector::sample(const BodySample& s, uint32_t, SenseOut& out) {
 }
 
 void DayDetector::tick(const TickContext& ctx, SenseOut& out) {
-  bool night = ctx.clock.night();
-  out.set(locus::light, flag(!night && ctx.clock.darkRunTicks == 0));
+  // Dusk and dawn are the wall's night, or a long untouched stretch and the
+  // hand that ends it; lidding has its own edges (LidDown, LidUp).
+  bool night = ctx.clock.night() || ctx.clock.dim();
+  out.set(locus::light, flag(!ctx.clock.dark()));
+  // His sense of the hour is the wall's only while the pet hours are; with no
+  // clock both read the middle, no hour at all, so how a sleepy pet weighs
+  // sleep does not swing with a pet day that has nothing to do with the room.
   SinCos sc = sinCosOfTurn(timeOfDay(ctx.clock), PetClock::kDayTicks);
-  out.set(locus::day_sin, toUnit(sc.s));
-  out.set(locus::day_cos, toUnit(sc.c));
+  out.set(locus::day_sin, ctx.clock.trusted ? toUnit(sc.s) : kHalf);
+  out.set(locus::day_cos, ctx.clock.trusted ? toUnit(sc.c) : kHalf);
   if (primed_ && night != wasNight_) out.fire(night ? stim::dusk : stim::dawn);
   wasNight_ = night;
   primed_ = true;

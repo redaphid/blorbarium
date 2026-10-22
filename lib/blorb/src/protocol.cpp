@@ -115,8 +115,9 @@ void stateLine(Line& l, const Dish& dish) {
   const Occupant& o = dish.occupant();
   l.add("phase=%s gen=%u", kPhases[o.index()], unsigned(generationOf(o)));
   if (const Creature* c = std::get_if<Creature>(&o)) {
+    // action= is what he is doing: an idle he plays (idles.def) by its own name.
     l.add(" stage=%s age=%u action=%s face=%s asleep=%d", stageName(c->stage()), unsigned(c->stats().ageTicks),
-          nameOf(ACTIONS, c->action()), nameOf(EXPRESSIONS, c->face().current), int(c->body().asleep));
+          c->doing(), nameOf(EXPRESSIONS, c->face().current), int(c->body().asleep));
   } else if (const Egg* e = std::get_if<Egg>(&o)) {
     l.add(" progress=%d", permille(e->progress()));
   } else {
@@ -344,8 +345,12 @@ void cmd_state(Dish& dish, const Request&, Reply& r) {
   }
   unsigned pellets = 0;
   for (const Pellet& p : dish.habitat().pellets) pellets += p.present;
-  r.line("dish pantry=%u pellets=%u night=%d time=%s", unsigned(dish.habitat().pantry), pellets,
-         int(dish.clock().night()), dish.timeKnown() ? "known" : "unknown");
+  // night: the wall's (a phone set the pet hours); dark: what he lives by
+  // (night, lidded, or untouched `still` minutes past PetClock::kDimAfterTicks).
+  const PetClock& clock = dish.clock();
+  r.line("dish pantry=%u pellets=%u night=%d time=%s dark=%d still=%u", unsigned(dish.habitat().pantry), pellets,
+         int(clock.night()), dish.timeKnown() ? "known" : "unknown", int(clock.dark()),
+         unsigned(clock.stillRunTicks / kTicksPerMinute));
   r.ok();
 }
 

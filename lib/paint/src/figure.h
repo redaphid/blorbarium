@@ -134,4 +134,12 @@ void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 // a refusal, the chomp and the belly meter. Before the round mask.
 void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
 
+// ---- idle_props.cpp -----------------------------------------------------------------
+
+// What he plays with while he plays an idle (blorb/idle.h): the notes of a
+// song or a dance, the pebble he juggles, the dirt he digs, the ball he
+// pushes, a daydream's bubble, the stars he gazes at. Drawn in code, over him,
+// on the idle's clock (Appearance::idleTicks), so it moves between ticks.
+void drawIdleProps(Canvas240&, const blorb::Appearance&, const DishSpots&);
+
 }  // namespace paint

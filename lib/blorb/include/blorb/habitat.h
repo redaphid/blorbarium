@@ -38,12 +38,20 @@ class Habitat {
   uint32_t pantryTick = 0;
 
   // Each tick: refill, rot, roll by tilt; writes food_near, food_rotten,
-  // pantry.
-  void step(const HabitatRules&, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut&);
+  // pantry. food_near is the nearest pellet he would eat: a rotten one only
+  // when `rotIsFood` (he is starving, creature.h kEatsRotAt), so a pet that
+  // turns rot down never learns that food near him fails to feed him.
+  // food_rotten is 1 while the nearest pellet of all is rotten.
+  void step(const HabitatRules&, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut&,
+            bool rotIsFood = true);
   bool dropPellet(const HabitatRules&, Rng&, uint32_t tick, SenseOut&);   // false when the pantry is empty
   struct Bite { Fx food; bool rotten; };
-  std::optional<Bite> bite(const HabitatRules&, DishPos creature, uint32_t tick);
+  // The nearest pellet in reach, eaten; a rotten one only when `rotIsFood`.
+  std::optional<Bite> bite(const HabitatRules&, DishPos creature, uint32_t tick, bool rotIsFood = true);
   std::optional<DishPos> nearestPellet(DishPos from) const;
+  // The nearest he would eat (fresh, or any when `rotIsFood`), and the nearest rotten one.
+  std::optional<DishPos> nearestFood(const HabitatRules&, DishPos from, uint32_t tick, bool rotIsFood) const;
+  std::optional<DishPos> nearestRotten(const HabitatRules&, DishPos from, uint32_t tick) const;
   uint32_t hash() const;
 };
 

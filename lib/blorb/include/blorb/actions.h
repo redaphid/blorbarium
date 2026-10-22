@@ -8,6 +8,7 @@
 #include <optional>
 #include "blorb/fixed.h"
 #include "blorb/habitat.h"
+#include "blorb/idle.h"
 #include "blorb/registry.h"
 
 namespace blorb {
@@ -35,6 +36,20 @@ struct Body {
   Mouthful mouth = Mouthful::Nothing;
 };
 
+// Rot, turned down (owner, 2026-10-21: "refusing rotten food unless
+// starving"): with only rotten pellets in the dish, a hungry pet who is not
+// starving walks up to one, sniffs it and turns away with a "yuck", so the kid
+// sees why he will not eat. The creature's, saved after its idle.
+struct Picky {
+  static constexpr uint16_t kSniffTicks = 15;                       // nose to it, 1.5 s
+  static constexpr uint32_t kShowTicks = 25;                        // the yuck face after it, 2.5 s
+  static constexpr uint32_t kAgainTicks = 10 * kTicksPerMinute;     // he goes to sniff rot at most this often
+  uint32_t refusedAt = 0;   // ageTicks + 1 at the last turn-down; 0 = never
+  uint16_t sniff = 0;       // ticks into the sniff now
+  bool mayRefuse(uint32_t age) const { return !refusedAt || age + 1 - refusedAt >= kAgainTicks; }
+  bool showing(uint32_t age) const { return sniff || (refusedAt && age + 1 - refusedAt < kShowTicks); }
+};
+
 struct ActionCtx {
   Habitat& habitat;
   const HabitatRules& rules;
@@ -43,6 +58,10 @@ struct ActionCtx {
   Rng& rng;
   SenseOut& out;          // self-stimuli and loci (asleep, eating, foreseeing), applied by the creature next tick
   Fx foodEaten{};
+  IdleState* idle = nullptr;   // the creature's: which idle Play runs, and how far in
+  bool rotIsFood = true;       // he is starving (creature.h kEatsRotAt): a rotten pellet is food
+  Picky* picky = nullptr;      // the creature's: his last turn-down of a rotten pellet
+  uint32_t age = 0;            // the creature's ageTicks
 };
 
 enum class Status : uint8_t { Running, Done };
@@ -55,7 +74,7 @@ struct Base {
 struct Rest : Base { Status step(Body&, ActionCtx&); };                 // idle, breathe
 struct Wander : Base { Status step(Body&, ActionCtx&); };               // random walk inside the rim
 struct Eat : Base {                                                     // to the nearest pellet, bite(), chew; eating locus
-  void start(Body&, ActionCtx&); Status step(Body&, ActionCtx&);
+  void start(Body&, ActionCtx&); Status step(Body&, ActionCtx&); void stop(Body&, ActionCtx&);
 };
 struct Sleep : Base {                                                   // asleep locus; Done when sleep_gate drops
   void start(Body&, ActionCtx&); Status step(Body&, ActionCtx&); void stop(Body&, ActionCtx&);
@@ -68,6 +87,9 @@ struct Curl : Base { Status step(Body&, ActionCtx&); };                 // hood 
 struct FollowTilt : Base { Status step(Body&, ActionCtx&); };           // downhill
 struct FleeTilt : Base { Status step(Body&, ActionCtx&); };             // uphill
 struct HopCircles : Base { Status step(Body&, ActionCtx&); };           // happy hops
+// The idle the creature chose (idle.h), played to its end over a rest. Not an
+// actions.def row: the creature runs it in place of the rest's step.
+struct Play : Base { Status step(Body&, ActionCtx&); };
 }  // namespace behave
 
 // Every behaviour, generated from defs/actions.def and dispatched by stable

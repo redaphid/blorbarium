@@ -425,3 +425,51 @@ teach_feed      hungry
 
 teach_hold      young
   BEDTIME? HOLD ME SIDEWAYS.
+
+la_la           singing
+  LA LA LAAA. LA. HUM.
+
+dance_break     dancing
+  DANCE BREAK! NOBODY LOOK.
+
+tail_get        chasing_tail
+  COME BACK HERE, TAIL!
+
+treasure        digging
+  TREASURE? TREASURE!
+
+peekaboo        peeking
+  PEEKABOO! I SEE YOU!
+
+hyah            shadow_boxing
+  HYAH! TAKE THAT, AIR!
+
+pebble          juggling
+  ONE PEBBLE. TWO PEBBLE.
+
+dream_big       daydreaming
+  WHAT IF... A BIGGER DISH?
+
+wish_star       stargazing
+  THAT STAR IS MINE. AND THAT.
+
+achoo           sneezing
+  AH... AH... CHOO!
+
+boo_hee         booing
+  BOO! HEE HEE. GOT YOU.
+
+hic             hiccuping
+  HIC! EXCUSE ME. HIC!
+
+zoom            zooming
+  ZOOM ZOOM ZOOM!
+
+ooh_what        discovering
+  OOH. WHAT IS THIS?
+
+cant_see        hiding
+  YOU CAN'T SEE ME.
+
+yuck            refusing_rot
+  YUCK. NOT THAT ONE.

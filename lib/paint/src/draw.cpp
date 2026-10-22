@@ -977,7 +977,8 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Motion m = motionOf(a, maxLift);
   const Lively live = livelyOf(a, maxLift - m.lift);
   shadow(cv, p, foot, m.lift + live.lift, maxLift);
-  p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift + live.lift, 0};
+  p.xf = {imax(1, base.kx * m.wide / kOne * (1024 + live.wide) / 1024),
+          imax(1, base.ky * m.tall / kOne * (1024 + live.tall) / 1024), m.lift + live.lift, 0};   // an idle's squash (lively.h)
   if (body.h && a.lively) {
     // His breath and sway, from his feet: the height and lean are a share of the frame as drawn.
     const int tallPx = imax(1, body.h * p.xf.ky / kOne);
@@ -995,6 +996,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   // His face, a pixel to the side when his eyes wander (the idle layer).
   Place look = p;
   look.x += live.gazeX;
+  look.y += live.gazeY;
   FaceShown face = faceFor(a);
   FrameRef now = pack.face(face.now, a.stage);
   if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), look, col, 256, spots, &scars);
@@ -1628,7 +1630,10 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     return phaseEnd(Phase::Mask);
   }
   switch (a.kind) {
-    case Kind::Creature: drawCreature(a, pack, cv); break;
+    case Kind::Creature:
+      drawCreature(a, pack, cv);
+      drawIdleProps(cv, a, spots_);   // idle_props.cpp: what he plays with
+      break;
     case Kind::Egg: drawEgg(a, pack, cv); break;
     case Kind::Remains: drawRemains(a, pack, cv); break;
     case Kind::Clutch: drawClutch(a, cv); break;
