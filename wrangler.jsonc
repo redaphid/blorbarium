@@ -18,7 +18,8 @@
   // Workers AI: the calls that write a pet's character, lines and diary (#37, #39).
   "ai": { "binding": "AI" },
   // Every badge, creature, personality, pack, stat, diary entry and queued action (web/migrations).
-  "d1_databases": [{ "binding": "DB", "database_name": "blorbarium", "migrations_dir": "web/migrations" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "blorbarium", "database_id": "75d6e526-cca9-443f-a9a9-6352a42ba41a",
+                     "migrations_dir": "web/migrations" }],
   // Per badge (keyed by MAC): a few requests a minute.
   "ratelimits": [{ "name": "PET_LINES_LIMITER", "namespace_id": "3701", "simple": { "limit": 6, "period": 60 } }],
   // Every 10 minutes: the packs a badge asked for without waiting (and eggs, #40).

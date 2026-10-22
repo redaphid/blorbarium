@@ -73,13 +73,19 @@ After a change to `thoughts.def`, `personalities/` or the genes, regenerate the 
     python3 tools/ai_lines_catalog.py                 # web/src/catalog.json (--check: stale?)
     bash scripts/test/ai_lines/build_trait_sheet.sh   # baselines.json and the fixtures, through the engine
 
-### Deploying (the owner's go-ahead first; none of this has been done)
+### Deploying
 
-1. From the repo root (the Worker config is `wrangler.jsonc` there): `npx wrangler d1 create blorbarium`, then put the printed `database_id` into it.
-2. `npx wrangler d1 migrations apply blorbarium --remote`.
-3. `npx wrangler secret put ADMIN_TOKEN`. Optionally `npx wrangler secret put PACK_SIGNING_KEY`, a P-256 PKCS#8 key in base64 that never goes in the repo. The badge can only check signatures once its firmware holds the public key.
-4. `npx wrangler deploy`. This also deploys the site, now through a Worker with `main`; static paths behave as before. The account is already on Workers Paid, which Kimi K2.6 requires.
-5. Smoke test: `curl -X POST https://blorb.hypnodroid.com/api/pet-lines -d '{"mac":"…","genome":"…"}'`.
+All of this runs from the repo root, where the Worker's config, `wrangler.jsonc`, lives. Workers Builds deploys `main` on every push, after `scripts/ci/cloudflare-build.sh`.
+
+**Done on 2026-10-22:**
+- The D1 database `blorbarium` (id `75d6e526-cca9-443f-a9a9-6352a42ba41a`) was created and its id put in `wrangler.jsonc`.
+- `npx wrangler d1 migrations apply DB --remote` applied `0001_creatures.sql`.
+- `ADMIN_TOKEN` is set as a Worker secret. Its value is only in the owner's git-ignored `/home/redaphid/Projects/blorbarium/.env` as `admin_token=`; type it at `/admin`.
+
+**Still to do:**
+- Optionally, `npx wrangler secret put PACK_SIGNING_KEY` with a P-256 PKCS#8 key in base64 that never goes in the repo. The badge can only check signatures once its firmware holds the public key.
+- A new migration file under `web/migrations/` needs `npx wrangler d1 migrations apply DB --remote` before the deploy that uses it.
+- After a deploy, smoke test: open `https://blorb.hypnodroid.com/admin`, and run `curl -X POST https://blorb.hypnodroid.com/api/pet-lines -d '{"mac":"…","genome":"…"}'`.
 
 To try it without touching production, run `npx wrangler dev` (local D1, real Workers AI) after `npx wrangler d1 migrations apply blorbarium --local`.
 
