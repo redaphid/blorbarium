@@ -274,7 +274,7 @@ def main():
     print(f"# {args.families} families x 9 badges, {args.generations} generations, clutch {args.clutch}, "
           f"selfing {args.selfing}, friend eggs {args.friend} (kept {args.pick_friend}), kids pick '{args.policy}'")
     traits = [t for _, al, _ in LOCI for t, _, _ in al] + [x for _, lo, hi in POLY for x in (lo, hi) if x] + ["Shiny"]
-    cols = [0, 1, 2, 5, args.generations]
+    cols = sorted({g for g in (0, 1, 2, 5, args.generations) if g <= args.generations})
     print("\n% of pets showing each trait, by generation (gen 0 = the founding nest's pick)")
     print(f"{'trait':14} {'rarity':10} " + " ".join(f"g{g:<5}" for g in cols) + "  carried@g0  came back*  seen as")
     for t in traits:
