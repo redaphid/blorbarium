@@ -158,7 +158,7 @@ class Releases(unittest.TestCase):
 
     def test_an_image_without_a_manifest_is_refused_with_why(self):
         (self.dir / "firmware.bin").write_bytes(self.image)
-        with self.assertRaisesRegex(ValueError, "no signature.*soul"):
+        with self.assertRaisesRegex(ValueError, "no signature.*ota_release"):
             bo.load_release(image_path=self.dir / "firmware.bin", pubkey_h=self.pub)
 
     def test_a_manifest_for_another_image_is_refused(self):
