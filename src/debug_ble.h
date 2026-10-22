@@ -65,10 +65,10 @@ struct Board : debugble::Board {
     char line[96];
     std::snprintf(line, sizeof line, "net%.*s", int(args.size()), args.data());
     if (!::net(line)) return false;
-    const hw::FaultAir::Config& c = faultAir.cfg;
+    const hw::FaultAir::Config& c = faultAir->cfg;
     std::snprintf(report, n, "rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u ghosts=%u blackout=%d open=%d",
-                  c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs, c.ghosts, int(c.deaf || faultAir.blackedOut()),
-                  int(faultAir.isOpen()));
+                  c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs, c.ghosts, int(c.deaf || faultAir->blackedOut()),
+                  int(faultAir->isOpen()));
     return true;
   }
   bool reboot(bool quiet) override {

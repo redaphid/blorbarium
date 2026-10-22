@@ -30,7 +30,10 @@ class EspNowAir : public blorb::Air {
   static constexpr UBaseType_t kQueueDepth = 24;
   // 20 dBm (quarter-dBm units): fight mode pairs with any badge the radio
   // reaches. 10 dBm and an arm's-length RSSI gate lost badges in one room.
-  static constexpr int8_t kTxQuarterDbm = 80;
+#ifndef BLORB_AIR_TX_QDBM   // #53's A/B: a build may lower it, e.g. -DBLORB_AIR_TX_QDBM=52 (13 dBm)
+#define BLORB_AIR_TX_QDBM 80
+#endif
+  static constexpr int8_t kTxQuarterDbm = BLORB_AIR_TX_QDBM;
 
   bool open() override {
     if (open_) return true;
@@ -55,9 +58,11 @@ class EspNowAir : public blorb::Air {
     esp_wifi_get_mac(WIFI_IF_STA, me_.mac);
     open_ = true;
     rx_ = tx_ = dropped_ = sendErrors_ = 0;
-    Serial.printf("[hw] air open ch=%u heap %u -> %u minheap=%u big=%u\n", kChannel, unsigned(before),
+    int8_t power = 0;
+    esp_wifi_get_max_tx_power(&power);
+    Serial.printf("[hw] air open ch=%u heap %u -> %u minheap=%u big=%u tx_qdbm=%d\n", kChannel, unsigned(before),
                   unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
-                  unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+                  unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)), int(power));
     return true;
   }
 
