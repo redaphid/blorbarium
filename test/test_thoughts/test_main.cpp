@@ -76,6 +76,13 @@ struct Rig {
       observe();
     }
   }
+  // A knock on the glass through the IMU: a kid's hand.
+  void knock() {
+    BodySample k = still();
+    k.tapCode = 1;
+    dish.sample(k, ms);
+    run(500);
+  }
   int prophecies() const {
     int n = 0;
     for (const Line& l : said) n += l.prophecy;
@@ -181,10 +188,14 @@ TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
     for (const Line& l : r.said) n += l.id == thought::miss_phone;
     return n;
   };
+  // Fed, and knocked on now and then (a kid's hand), so he is never left
+  // alone in the dim for hours: left alone, he sleeps it out (sleep-idle),
+  // and a sleeper misses nothing.
   auto play = [&r](uint32_t forMs) {
     for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
       r.dish.fire(stim::button);
-      r.run(20 * kMinute);
+      r.knock();
+      r.run(20 * kMinute - 500);
     }
   };
   play(11 * 60 * kMinute);

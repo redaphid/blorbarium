@@ -124,6 +124,22 @@ int32_t lean(IdleId id, const IdleMood& m) {
   if (row.family == IdleFamily::Muse) w = w * (384 + bulk) / 384;
   // His temperament's dreams: a long dreamer muses more.
   if (row.family == IdleFamily::Muse) w = w * (120 + clampi(m.dreamLenTicks, 0, 240)) / 150;
+  // What his genes make him (traits.h; 100 is one doubling of a gene's rate):
+  // a playful one romps more, an affectionate one shows off for the kid and
+  // begs more, a sleepy one muses more, a night owl takes to the evening and
+  // the dark, a cheerful one beams, a nervous one hides and looks about, a
+  // bold one boos, boxes and zooms. Curiosity is explore's, in familyPull.
+  const Traits& t = m.traits;
+  auto by = [](int32_t v, int32_t trait, int32_t per) { return v * clampi(1000 + trait * 1000 / per, 400, 2500) / 1000; };
+  if (row.family == IdleFamily::Romp) w = by(w, t.playfulness, 200);
+  if (row.family == IdleFamily::Show || id == idles::beg) w = by(w, t.affection, 200);
+  if (row.family == IdleFamily::Muse) w = by(w, t.sleepiness, 200);
+  if ((m.part == DayPart::Evening || m.part == DayPart::Night) &&
+      (row.family == IdleFamily::Night || id == idles::fireflies || id == idles::sing))
+    w = by(w, t.nightOwl, 200);
+  if (id == idles::beam) w = by(w, t.cheer, 150);
+  if (id == idles::hide || id == idles::look_around) w = by(w, t.nerves - t.boldness / 2, 200);
+  if (id == idles::boo || id == idles::shadow_box || id == idles::zoomies) w = by(w, t.boldness - t.nerves / 2, 200);
   if (id == idles::sunbathe && m.dark) return 0;
   if (id == idles::tumble && m.stage >= Stage::Adult) return 0;     // a little one's
   if (id == idles::reminisce && m.stage != Stage::Elder) return 0;  // an old one's
@@ -154,7 +170,9 @@ constexpr int16_t kHourSin[24] = {0,    259,  500,  707,  866,  966,  1000, 966,
 
 Fx idleLiveliness(const IdleMood& m) {
   const uint16_t base = kLively[m.species.v < kSpeciesCount ? m.species.v : 0];
-  return clamp01(Fx::ratio(base, 1000) + m.boredom * Fx::ratio(3, 10));
+  // A playful one (traits.h) plays the more often, a sleepy one the less.
+  const int32_t genes = clampi(int32_t(m.traits.playfulness) - m.traits.sleepiness / 2, -300, 300);
+  return clamp01(Fx::ratio(clampi(int32_t(base) + genes / 2, 50, 950), 1000) + m.boredom * Fx::ratio(3, 10));
 }
 
 const char* dayPartName(DayPart p) { return uint8_t(p) < kDayPartCount ? kPartNames[uint8_t(p)] : "?"; }
@@ -213,6 +231,7 @@ uint8_t idlePace(const IdleMood& m) {
   static constexpr uint8_t kStagePace[4] = {115, 110, 100, 80};
   p = p * kStagePace[uint8_t(m.stage) & 3] / 100;
   p = p * (512 - (int32_t(m.bulk) - 128)) / 512;   // a big one slower, a small one quicker
+  p = p * clampi(1000 + m.traits.playfulness / 2 - m.traits.sleepiness / 2, 700, 1300) / 1000;   // playful brisk, sleepy slow
   p = p * (1000 - 7 * past(m.sleepiness, Fx::ratio(3, 10)) / 10) / 1000;
   p = p * (1000 - 5 * past(fxMax(fxMax(m.pain, m.discomfort), m.injury), Fx::ratio(2, 10)) / 10) / 1000;
   p = p * (1000 - permille(m.toxin) / 2) / 1000;
@@ -259,7 +278,7 @@ IdleId pickIdle(const IdleState& s, const IdleMood& m, Rng& rng) {
         uint32_t(uint64_t(row.cooldownS) * kTicksPerSecond * coolPct / 100 * 1000 / uint32_t(clampi(keen, 350, 4000)));
     if (!m.greeting && s.startedAt[i] && m.age + 1 - s.startedAt[i] < cooldown) continue;
     // His own taste: each favourite 0.75x to 1.25x his species', from his genome.
-    const uint32_t mine = 75 + mix(m.genomeHash, uint32_t(i)) % 51;
+    const uint32_t mine = 75 + mix(m.taste, uint32_t(i)) % 51;
     uint32_t w = uint32_t(fav[i]) * mine * uint32_t(pull) / 100;
     w = uint32_t(uint64_t(w) * when / 10);
     w = uint32_t(uint64_t(w) * uint32_t(lent) / 1000);

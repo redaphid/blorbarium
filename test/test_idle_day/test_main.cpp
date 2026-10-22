@@ -858,7 +858,7 @@ std::map<std::string, uint32_t> chooserMix(const IdleMood& m, int n = 4000) {
 }
 IdleMood calmMood(SpeciesId sp) {
   IdleMood m;
-  m.species = sp, m.genomeHash = 0x1234u, m.age = 100000;
+  m.species = sp, m.taste = 0x1234u, m.age = 100000;
   m.boredom = m.loneliness = m.needTouch = m.sleepiness = Fx::ratio(2, 10);
   m.explore = Fx::ratio(66, 100), m.habituation = Fx::ratio(43, 100), m.content = Fx::ratio(7, 10);
   return m;
@@ -939,6 +939,17 @@ TEST(Genes, EachMovesTheMixTheWayItsNameSays) {
     return romps;
   };
   EXPECT_GT(again(Fx::ratio(5, 100)), 2 * again(Fx::ratio(8, 10)));
+  // What his genes make him (traits.h, #60): one doubling of a gene's rate.
+  IdleMood playful = base, affectionate = base, sleepy = base, owl = base, plain = base;
+  playful.traits.playfulness = 100, affectionate.traits.affection = 100, sleepy.traits.sleepiness = 100;
+  owl.traits.nightOwl = 100;
+  owl.part = plain.part = DayPart::Evening;
+  EXPECT_GT(frac(chooserMix(playful), "romp"), 1.2 * frac(chooserMix(base), "romp"));
+  EXPECT_GT(frac(chooserMix(affectionate), "show"), 1.2 * frac(chooserMix(base), "show"));
+  EXPECT_GT(frac(chooserMix(sleepy), "muse"), 1.2 * frac(chooserMix(base), "muse"));
+  EXPECT_GT(frac(chooserMix(owl), "fireflies"), 1.2 * frac(chooserMix(plain), "fireflies"));
+  EXPECT_GT(idleLiveliness(playful), idleLiveliness(base));
+  EXPECT_GT(idlePace(playful), idlePace(sleepy));
 }
 
 // The owner's ask, whole: two pets of one kind, the same seed, the same desk

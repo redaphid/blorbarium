@@ -48,6 +48,19 @@ constexpr StageStep kStageSteps[] = {
     {Stage::Adult, locus::become_elder, Stage::Elder},
 };
 
+// His own taste in idles (IdleMood::taste), from genes a child nearly always
+// shares with his parent: his belly, eye and glow colours and his knack.
+// Founders roll those per board, so two founders differ; an egg changes its
+// coat and a Mind byte, which once reshuffled every favourite (genome hash).
+uint32_t tasteOf(const Phenotype& p) {
+  uint32_t h = 2166136261u ^ p.species.knackOrder;
+  for (const Phenotype::Paint& c : p.palette) {
+    if (c.region != region::belly && c.region != region::eye && c.region != region::glow) continue;
+    h = (h ^ (uint32_t(c.region.v) << 24 | uint32_t(uint8_t(c.tint.hue)) << 16 | uint32_t(c.tint.sat) << 8 | c.tint.val)) * 16777619u;
+  }
+  return h;
+}
+
 // Stage and die loci fire at 0.5 or more; a reflex starts as its locus rises past 0.5.
 bool fires(Fx level) { return level >= kHalf; }
 
@@ -178,7 +191,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   auto mood = [&] {
     IdleMood m;
     m.species = pheno_.species.body;
-    m.genomeHash = genome_.hash();
+    m.taste = tasteOf(pheno_);
     m.boredom = chem_.drive(drive::boredom);
     m.loneliness = chem_.drive(drive::loneliness);
     m.needTouch = chem_.drive(drive::need_touch);
@@ -203,6 +216,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     m.habituation = pheno_.temperament.habituation;
     m.dreamLenTicks = pheno_.temperament.dreamLenTicks;
     m.bulk = pheno_.size.base ? pheno_.size.base : 128;
+    m.traits = pheno_.traits;
     m.pressed = !calm();
     return m;
   };

@@ -10,6 +10,7 @@
 #include "blorb/habitat.h"
 #include "blorb/registry.h"
 #include "blorb/species.h"
+#include "blorb/traits.h"
 
 namespace blorb {
 
@@ -107,7 +108,10 @@ int8_t hourOfDayLoci(Fx daySin, Fx dayCos);
 // What the chooser weighs.
 struct IdleMood {
   SpeciesId species = kGrungo;
-  uint32_t genomeHash = 0;             // his own favourites, about his species'
+  // His own favourites, about his species': a seed from the genes a child
+  // nearly always shares with his parent (creature.cpp tasteOf), so a family
+  // shares its habits and two founders still differ.
+  uint32_t taste = 0;
   Fx boredom, loneliness, needTouch, sleepiness, explore;
   bool dark = false;                   // night, lidded or dim (PetClock::dark): the night idles
   uint32_t age = 0;                    // ageTicks, for the cooldowns
@@ -122,6 +126,7 @@ struct IdleMood {
   Fx habituation;                      // temperament: tires of a thing sooner (longer cooldowns, less of one family)
   uint16_t dreamLenTicks = 30;         // temperament: a dreamer muses more
   uint8_t bulk = 128;                  // size gene base: a big one romps less and moves slower, a small one more and quicker
+  Traits traits{};                     // what his genes make him (traits.h, #60): playful, affectionate, sleepy, a night owl ...
   // #33 (pets near other pets) hooks here: how many friends' pets he can
   // hear. Nothing sets it yet, and no idle reads it.
   uint8_t friendsNear = 0;
