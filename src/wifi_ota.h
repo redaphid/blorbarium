@@ -71,6 +71,7 @@ static hw::NetJob job;
 static hw::Battery battery;
 static wifiota::Schedule schedule;
 static bool autoOn = true;   // `DEBUG wifi on|off`, in NVS
+static volatile uint32_t tlsInternal = 0;   // mbedtls blocks that fell back to internal RAM (tlsCalloc)
 
 // What only Wi-Fi's own moments read, in PSRAM, made at boot (begin()):
 // internal RAM is the scarce kind (a duel's radio takes about 37 KB of it).
@@ -242,6 +243,9 @@ static void scanned() {
 }
 
 static bool startGet(const char* url, bool text) {
+  say("GET %s: heap=%u big=%u before the task (stack %u B)", std::strncmp(url, "https://", 8) == 0 ? "https" : "http",
+      unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+      unsigned(std::strncmp(url, "https://", 8) == 0 ? hw::NetJob::stackTlsBytes : hw::NetJob::kStackHttpBytes));
   if (job.start(url, text)) return true;
   failWindow(Failure::Server, "GET %s: %s", url, job.error());
   return false;
@@ -283,9 +287,11 @@ static void startImage(const wifiota::Manifest& m) {
 static void readManifest() {
   if (job.busy()) return;   // the GET's task has ended: what it left is all there is
   if (job.state() != hw::NetJob::State::Done) return failWindow(Failure::Server, "manifest: %s", job.error());
-  say("GET manifest: %u bytes, open %u ms, task stack %u B with %u never used, heap=%u minheap=%u", unsigned(job.textLen()),
-      unsigned(job.openMs()), unsigned(job.stackBytes()), unsigned(job.stackFree()), unsigned(ESP.getFreeHeap()),
-      unsigned(ESP.getMinFreeHeap()));
+  say("GET manifest: %u bytes, open %u ms, task stack %u B with %u never used; after the handshake heap=%u big=%u; "
+      "now heap=%u minheap=%u; mbedtls blocks in internal RAM %u",
+      unsigned(job.textLen()), unsigned(job.openMs()), unsigned(job.stackBytes()), unsigned(job.stackFree()),
+      unsigned(job.heapAfterOpen()), unsigned(job.bigAfterOpen()), unsigned(ESP.getFreeHeap()),
+      unsigned(ESP.getMinFreeHeap()), unsigned(tlsInternal));
   const std::optional<wifiota::Manifest> m = wifiota::parseManifest(std::string_view(job.text(), job.textLen()));
   if (!m) return failWindow(Failure::Server, "manifest unreadable (%u bytes)", unsigned(job.textLen()));
   const ota::Version& v = m->image.version;
@@ -387,6 +393,10 @@ static void readBattery(uint32_t now, bool force) {
 // Every loop.
 static void poll(uint32_t now) {
   improvBle.poll();
+  // Advertising paused while a GET opens (DNS, connect, TLS handshake,
+  // headers), so the radio's time is the handshake's: only with no phone.
+  ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image) && job.busy() &&
+                      job.state() == hw::NetJob::State::Opening && !ble.connected());
   pollConsent(now);
   const bool dark = powerPolicy.low();
   if (dark && !wasDark) darkSince = now;
@@ -474,18 +484,18 @@ static bool mayRestart() { return !updater.ownedBy(kWifiPeer) || (powerPolicy.lo
 static bool updateHoldsRadio() { return updater.active() && !(updater.ownedBy(kWifiPeer) && updater.ready()); }
 
 // The framework allocates mbedtls from internal RAM only, and a TLS session
-// takes two 16 KB record buffers and a handshake's worth more: about 45 KB of
-// a heap that has under 100 KB free with Bluetooth up. Blocks of kTlsPsramFrom
-// bytes or more go to PSRAM instead (the AES and SHA engines bounce PSRAM
-// buffers through internal RAM themselves); small ones, the bignums of a
-// signature check among them, stay internal. If TLS ever misbehaves on the
-// board, raising this past any block (SIZE_MAX) puts everything back inside.
-constexpr size_t kTlsPsramFrom = 1024;
+// takes two 16 KB record buffers and a handshake's worth more (the parsed
+// roots, the chain, the bignums): far more than the ~27 KB Bluetooth and the
+// Wi-Fi driver leave (#27's board run: minheap 5.6 KB, "esp-aes: Failed to
+// allocate memory"). So every mbedtls block goes to PSRAM; internal RAM only
+// if PSRAM has none. What still needs internal RAM is the AES engine's DMA
+// bounce of PSRAM records (about 3 KB, its own) and the GET task's stack.
+// tlsInternal counts the blocks that fell back, for the GET's log line.
 static void* tlsCalloc(size_t n, size_t size) {
   if (n && size > SIZE_MAX / n) return nullptr;
-  void* p = n * size >= kTlsPsramFrom ? heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
-  if (!p) p = heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  return p ? p : heap_caps_calloc(n, size, MALLOC_CAP_8BIT);
+  void* p = heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!p && (p = heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT))) ++tlsInternal;
+  return p;
 }
 static void tlsFree(void* p) { heap_caps_free(p); }
 
@@ -653,13 +663,22 @@ static void wifiVerb(const char* line) {
         unsigned(std::strlen(n.password)));
     return;
   }
+  // `DEBUG wifi stack <KB>`: the TLS GET task's stack until reset (each GET logs what it never used).
+  if (!std::strcmp(what, "stack")) {
+    char kb[8] = "";
+    std::sscanf(line, "%*s %*s %7s", kb);
+    const long k = std::strtol(kb, nullptr, 10);
+    if (k >= 5 && k <= 20) hw::NetJob::stackTlsBytes = uint32_t(k) * 1024;
+    else if (*kb) return say("stack: want 5..20 (KB)");
+    return say("TLS GET stack %u B (default %u)", unsigned(hw::NetJob::stackTlsBytes), unsigned(hw::NetJob::kStackTlsDefault));
+  }
   if (!std::strcmp(what, "on") || !std::strcmp(what, "off")) {
     autoOn = !std::strcmp(what, "on");
     if (autoOn) crashesInARow = 0;
     say("automatic checks %s (%s)", autoOn ? "on" : "off", hw::WifiStore::setAuto(autoOn) ? "saved" : "SAVE FAILED");
     return;
   }
-  say("want: wifi [status|set <ssid> [password]|forget [ssid]|verify <ssid> [password]|on|off]");
+  say("want: wifi [status|set <ssid> [password]|forget [ssid]|verify <ssid> [password]|stack <KB>|on|off]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

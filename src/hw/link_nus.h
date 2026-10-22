@@ -147,7 +147,21 @@ class NusLink : public blorb::Link {
     return done;
   }
 
-  // Advertising restarts if it ever stops, and the interval is asked for once per connection.
+ public:
+  // Wi-Fi's TLS handshake (src/wifi_ota.h) holds advertising off while it
+  // runs, so the radio's time and the controller's buffers are the handshake's:
+  // only ever with no phone connected. Released, it restarts at the next poll.
+  void holdAdvertising(bool hold) {
+    if (hold == advHeld_) return;
+    advHeld_ = hold;
+    if (hold && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
+    lastPoll_ = millis() - 250;   // a release restarts it at once
+  }
+  bool advertisingHeld() const { return advHeld_; }
+
+ private:
+
+  // Advertising restarts if it ever stops (unless Wi-Fi holds it), and the interval is asked for once per connection.
   void poll() {
     const uint32_t now = millis();
     if (now - lastPoll_ < 250) return;
@@ -173,7 +187,7 @@ class NusLink : public blorb::Link {
     const bool live = liveConnections(server) > 0;
     if (!live) {
       up_ = false;
-      if (!NimBLEDevice::getAdvertising()->isAdvertising()) {
+      if (!advHeld_ && !NimBLEDevice::getAdvertising()->isAdvertising()) {
         if (server->getConnectedCount()) Serial.println("[hw] ble: a stale peer, advertising again");
         NimBLEDevice::getAdvertising()->start();
       }
@@ -260,6 +274,7 @@ class NusLink : public blorb::Link {
   std::function<void(NimBLEService*)> extend_;
   std::function<void(NimBLEServer*, NimBLEAdvertising*)> serve_;
   bool advLogged_ = false;
+  bool advHeld_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;

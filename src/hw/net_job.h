@@ -48,10 +48,14 @@ class NetJob {
 
   static constexpr size_t kTextMax = 2048;              // a manifest is a few hundred bytes
   static constexpr size_t kRingBytes = 32 * 1024;
-  // The task's stack, internal RAM while it runs: a TLS handshake needs about
-  // 7 KB of it, a plain HTTP GET (a cable's `DEBUG ota check http://...`) far less.
-  static constexpr uint32_t kStackTlsBytes = 12 * 1024;
+  // The task's stack, internal RAM while it runs (FreeRTOS on this framework
+  // refuses a PSRAM stack): a TLS handshake through the P-384 chain needs some
+  // KB of it, a plain HTTP GET (a cable's `DEBUG ota check http://...`) less.
+  // The TLS one is `DEBUG wifi stack <KB>` (RAM only) to find the least that
+  // holds: every GET logs the bytes its task never used.
+  static constexpr uint32_t kStackTlsDefault = 10 * 1024;
   static constexpr uint32_t kStackHttpBytes = 6 * 1024;
+  static inline uint32_t stackTlsBytes = kStackTlsDefault;
   static constexpr uint16_t kConnectMs = 5000;
   static constexpr uint32_t kHandshakeS = 8;
   static constexpr uint16_t kHeadersMs = 6000;
@@ -81,7 +85,7 @@ class NetJob {
     state_ = State::Opening;
     running_ = true;
     startedAt_ = millis();
-    stackBytes_ = std::strncmp(url, "https://", 8) == 0 ? kStackTlsBytes : kStackHttpBytes;
+    stackBytes_ = std::strncmp(url, "https://", 8) == 0 ? stackTlsBytes : kStackHttpBytes;
     if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", stackBytes_, this, 1, nullptr, 1) != pdPASS) {
       running_ = false;
       state_ = fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap()));
@@ -104,6 +108,9 @@ class NetJob {
   uint32_t openMs() const { return openMs_; }           // DNS, connect, TLS and headers
   uint32_t stackFree() const { return stackFree_; }     // the task's stack never used, at its end
   uint32_t stackBytes() const { return stackBytes_; }
+  // Internal heap and its largest block just after the handshake and headers.
+  uint32_t heapAfterOpen() const { return heapAfterOpen_; }
+  uint32_t bigAfterOpen() const { return bigAfterOpen_; }
 
   // The loop: up to `cap` streamed bytes that have arrived, without waiting.
   size_t take(uint8_t* out, size_t cap) {
@@ -177,6 +184,8 @@ class NetJob {
     if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
     const int code = http.GET();
     openMs_ = millis() - t0;
+    heapAfterOpen_ = ESP.getFreeHeap();
+    bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (cancel_) return finish(fail("cancelled"), http);
     if (code != HTTP_CODE_OK)
       return finish(code < 0 ? fail("%s", HTTPClient::errorToString(code).c_str()) : fail("http %d", code), http);
@@ -252,6 +261,7 @@ class NetJob {
   volatile int size_ = -1;
   volatile uint32_t openMs_ = 0, stackFree_ = 0, startedAt_ = 0;
   uint32_t stackBytes_ = 0;
+  volatile uint32_t heapAfterOpen_ = 0, bigAfterOpen_ = 0;
 };
 
 }  // namespace hw
