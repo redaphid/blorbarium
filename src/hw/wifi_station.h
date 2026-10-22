@@ -39,7 +39,7 @@ class WifiStation {
   // on under the join and refused it.
   static constexpr uint32_t kScanMsPerChannel = 120;
   static constexpr uint8_t kSeenMax = 24;   // the strongest this many a scan finds are looked at
-  static constexpr uint32_t kQuietMinMs = 200, kQuietMaxMs = 2500;   // stop() to off()
+  static constexpr uint32_t kQuietMinMs = 200, kQuietAfterJoinMs = 1000, kQuietMaxMs = 3000;   // stop() to off()
 
   bool up() {
     if (up_) return true;
@@ -52,8 +52,10 @@ class WifiStation {
     if (!WiFi.mode(WIFI_STA)) return false;
     WiFi.setAutoReconnect(false);   // the window decides when to try again
     up_ = true;
+    everUp_ = true;
     stopping_ = false;
     attempted_ = false;
+    joinedOnce_ = false;
 #if defined(CONFIG_PM_ENABLE)
     // Light sleep between packets would hold a download to the AP's beacons.
     if (!lock_) esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "wifi", &lock_);
@@ -78,7 +80,9 @@ class WifiStation {
   bool quiet() const {
     if (!up_) return true;
     const uint32_t since = millis() - stopAt_;
-    if (since < kQuietMinMs) return false;
+    // After a connection, longer: TCP's last segments and the disconnect must
+    // be done before the driver goes ("wifi:timeout when WiFi un-init").
+    if (since < (joinedOnce_ ? kQuietAfterJoinMs : kQuietMinMs)) return false;
     if (since >= kQuietMaxMs) return true;
     const bool scanning = WiFi.getStatusBits() & WIFI_SCANNING_BIT;
     return !scanning && (!attempted_ || disconnects_ != disconnectsAtStop_);
@@ -99,6 +103,7 @@ class WifiStation {
   }
 
   bool isUp() const { return up_; }
+  bool everUp() const { return everUp_; }   // this boot: the core's tasks and netifs exist already
 
   // ---- the scan: what is in range ----
   bool scan() {
@@ -173,7 +178,7 @@ class WifiStation {
   Join joining() const {
     if (!up_) return Join::Failed;
     if (beginStatus_ == WL_CONNECT_FAILED) return Join::Failed;   // esp_wifi_connect refused at once
-    if (WiFi.status() == WL_CONNECTED) return Join::Joined;
+    if (WiFi.status() == WL_CONNECTED) return joinedOnce_ = true, Join::Joined;
     // A disconnect since the join, other than the core's own one retry's: the reason says why.
     if (disconnects_ != disconnectsAtJoin_ && (reason_ == WIFI_REASON_AUTH_FAIL || reason_ == WIFI_REASON_NO_AP_FOUND ||
                                                reason_ == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
@@ -184,7 +189,11 @@ class WifiStation {
     }
     return Join::Trying;
   }
-  bool joined() const { return up_ && WiFi.status() == WL_CONNECTED; }
+  bool joined() {
+    const bool j = up_ && WiFi.status() == WL_CONNECTED;
+    joinedOnce_ = joinedOnce_ || j;
+    return j;
+  }
   // The last disconnect's reason (the driver's wifi_err_reason_t), 0 for none, and how many since the join.
   uint8_t reason() const { return reason_; }
   const char* reasonName() const { return reason_ ? WiFi.disconnectReasonName(wifi_err_reason_t(reason_)) : "none"; }
@@ -231,7 +240,8 @@ class WifiStation {
   static inline volatile uint32_t scansDone_ = 0, scanStatus_ = 0, disconnects_ = 0;
   static inline volatile uint8_t reason_ = 0;
 
-  bool up_ = false, handler_ = false, stopping_ = false, attempted_ = false;
+  bool up_ = false, everUp_ = false, handler_ = false, stopping_ = false, attempted_ = false;
+  mutable bool joinedOnce_ = false;
   uint32_t stopAt_ = 0, scansAtStart_ = 0, disconnectsAtStop_ = 0, disconnectsAtJoin_ = 0;
   int beginStatus_ = 0;
   Ap* aps_ = nullptr;

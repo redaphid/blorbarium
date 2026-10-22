@@ -1095,6 +1095,15 @@ static void adoptTableSpecies(uint32_t now) {
 }
 #endif
 
+#if !defined(BADGE_BOARD_SIM)
+// Internal heap at each step of boot (#27: an image built on badge128_pm had
+// about 25 KB less on trial than badge128, too little for Wi-Fi's driver).
+static void heapMark(const char* step) {
+  Serial.printf("[hw] heap %s: free=%u big=%u\n", step, unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
+#endif
+
 void setup() {
 #if !defined(BADGE_BOARD_SIM)
   // A line on the cable is queued, not waited out: with only the UART's
@@ -1107,6 +1116,7 @@ void setup() {
 #endif
   Serial.begin(115200);
 #if !defined(BADGE_BOARD_SIM)
+  heapMark("start");
   // In PSRAM (InPsram above), before anything uses them.
   if (BLORB_HEAP_BALLAST) {   // #53's A/B: never freed, never touched
     static void* ballast = heap_caps_malloc(BLORB_HEAP_BALLAST, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -1131,6 +1141,7 @@ void setup() {
   const bool onTrial = trialPort.pending();
   storageState = store.begin(onTrial);
   dishStore.hold(onTrial);
+  heapMark("storage");
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
   // No battery: no wall time is coming, so a fresh pet hatches into his
@@ -1165,6 +1176,9 @@ void setup() {
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
 #if !defined(BADGE_BOARD_SIM)
+  heapMark("dish");
+#endif
+#if !defined(BADGE_BOARD_SIM)
   // This badge's own home, before the first frame or sample (src/hw/home.h).
   {
     const hw::home::AtBoot h = hw::home::atBoot(hw::HomeStore::load(), ORIENT_HOME);
@@ -1175,6 +1189,9 @@ void setup() {
 #endif
   [[maybe_unused]] bool panelUp = display.init();
   boardPresentBegin(display);   // the panel's send task, on core 0
+#if !defined(BADGE_BOARD_SIM)
+  heapMark("panel");
+#endif
 #if !defined(BADGE_BOARD_SIM)
   // An update over Wi-Fi restarts into its trial dark, in the night or on a
   // shelf: the backlight stays off until someone wakes him (src/wifi_ota.h).
@@ -1201,8 +1218,10 @@ void setup() {
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
+  heapMark("sense+pm");
   paint::phaseClock.now = fps::now;   // DEBUG fps's phases
   paintcore0::begin();                // the renderer's second half on core 0
+  heapMark("paint core0");
 #if defined(CONFIG_PM_ENABLE)
   Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
 #else

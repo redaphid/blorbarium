@@ -55,6 +55,13 @@ using wifiota::Window;
 constexpr uint32_t kScanMs = 10000;            // a scan the driver has not finished by then is stopped
 constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then the window closes
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
+constexpr uint32_t kConfirmFirstMs = 10000;    // on trial: the first try, once boot's own allocations have settled
+// Internal RAM a window wants free before it starts the Wi-Fi driver: the
+// first time in a boot the core also makes its event and TCP/IP tasks and the
+// netifs (about 16 KB that stay); a TLS GET wants 7 KB of stack and its
+// handshake about 6 KB more. Board, #27: about 37 KB the first time, 21 after.
+constexpr uint32_t kRadioNeedFirst = 52 * 1024;
+constexpr uint32_t kRadioNeedAgain = 36 * 1024;
 constexpr uint32_t kStuckMs = 60000;           // a GET that will not end after a cancel: its sockets are cut
 constexpr size_t kTakePerPassBytes = 8192;     // image bytes a loop pass writes: about two flash sectors
 constexpr uint32_t kBatteryEveryMs = 10 * 60 * 1000;
@@ -214,7 +221,14 @@ static void openWindow(Window w) {
   inWindow = kWindowMagic;
   say("window %s opens: dark=%d networks=%u heap=%u", wifiota::windowName(w), int(powerPolicy.low()),
       unsigned(mem().networks.size()), unsigned(ESP.getFreeHeap()));
-  if (!station.up()) return failWindow(Failure::Absent, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
+  // Never start the driver short of RAM: a half-made init ("Expected to init 4
+  // rx buffer") leaves it unable to start or stop until a restart (#27).
+  const uint32_t need = station.everUp() ? kRadioNeedAgain : kRadioNeedFirst;
+  const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (have < need)
+    return failWindow(Failure::Server, "not enough internal RAM to bring the radio up (%u free, %u wanted%s)",
+                      unsigned(have), unsigned(need), station.everUp() ? "" : ", the first time");
+  if (!station.up()) return failWindow(Failure::Server, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
     say("provision: joining the phone's network without a scan");
     station.join(*mem().provisioning);
@@ -541,6 +555,7 @@ static void begin() {
   if (trial.onTrial())
     if (const std::optional<ota::Handover> h = trialPort.handover(); h && wifiota::isWifiToken(h->token)) {
       confirmToken = h->token;
+      confirmAt = millis() + kConfirmFirstMs;
       powerPolicy.sleepNow();   // restarted at a quiet moment: it stays dark
       hw::WifiStore::source(mem().forcedUrl, sizeof mem().forcedUrl);
       say("on trial after an update over Wi-Fi: confirming over Wi-Fi at %s, screen dark",
@@ -599,11 +614,8 @@ static void draw(paint::Canvas240& cv) {
 static void statusLine() {
   const uint32_t now = millis();
   readBattery(now, true);
-  char list[3 * 36] = "";
-  for (size_t i = 0; i < mem().networks.size(); ++i)
-    std::snprintf(list + std::strlen(list), sizeof list - std::strlen(list), "%s\"%s\"", i ? " " : "", mem().networks[i].ssid);
-  say("window=%s phase=%s networks=[%s] auto=%d hold=%s next_check_in=%us absent_streak=%u server_streak=%u vbat=%u mV (pin %u mV)%s",
-      wifiota::windowName(window), phaseName(phase), list, int(autoOn), wifiota::holdName(schedule.checkHold(facts(now), now)),
+  say("window=%s phase=%s networks=%u auto=%d hold=%s next_check_in=%us absent_streak=%u server_streak=%u vbat=%u mV (pin %u mV)%s",
+      wifiota::windowName(window), phaseName(phase), unsigned(mem().networks.size()), int(autoOn), wifiota::holdName(schedule.checkHold(facts(now), now)),
       unsigned(schedule.dueIn(now) / 1000), unsigned(schedule.absentStreak()), unsigned(schedule.serverStreak()),
       unsigned(cellMv), unsigned(battery.pinMv()), lowBattery() ? " LOW" : "");
   say("station=%s improv=%u/%u consent=%s trial=%d confirm_pending=%d ota=%s owner=%s windows=%u scans=%u last=\"%s\" heap=%u minheap=%u",
@@ -674,6 +686,14 @@ static void wifiVerb(const char* line) {
         unsigned(std::strlen(n.password)));
     return;
   }
+  // `DEBUG wifi list`: the remembered networks by name, newest first. The only
+  // line that names them (with set's and forget's own replies).
+  if (!std::strcmp(what, "list")) {
+    for (size_t i = 0; i < mem().networks.size(); ++i)
+      say("network #%u \"%s\" (%s password)", unsigned(i + 1), mem().networks[i].ssid,
+          mem().networks[i].password[0] ? "with a" : "no");
+    return say("networks %u of %u", unsigned(mem().networks.size()), unsigned(wifiota::kMaxNetworks));
+  }
   // `DEBUG wifi stack <KB>`: the TLS GET task's stack until reset (each GET logs what it never used).
   if (!std::strcmp(what, "stack")) {
     char kb[8] = "";
@@ -689,7 +709,7 @@ static void wifiVerb(const char* line) {
     say("automatic checks %s (%s)", autoOn ? "on" : "off", hw::WifiStore::setAuto(autoOn) ? "saved" : "SAVE FAILED");
     return;
   }
-  say("want: wifi [status|set <ssid> [password]|forget [ssid]|verify <ssid> [password]|stack <KB>|on|off]");
+  say("want: wifi [status|set <ssid> [password]|list|forget [ssid]|verify <ssid> [password]|stack <KB>|on|off]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

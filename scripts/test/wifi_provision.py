@@ -19,7 +19,7 @@ Steps, each waiting for the badge's answer (a board that was just reset, or
 is still booting, drops a line sent too early):
   1. `DEBUG wifi` until the badge answers its status (up to --ready seconds);
   2. `DEBUG wifi set "<ssid>" <password>`, and its reply printed;
-  3. `DEBUG wifi` again, and a verdict: is the network in `networks=[...]`?
+  3. `DEBUG wifi list`, and a verdict: is the network among them?
      Then `DEBUG wifi verify` the same: does the stored password match .env
      byte for byte (the badge answers lengths and yes or no only)?
   4. with --check or --check-url, `DEBUG ota check [url]`.
@@ -154,10 +154,11 @@ def main():
         b.say("!!! no reply to wifi set in 5 s")
 
     # 3. Is it remembered?
-    b.send("DEBUG wifi", "DEBUG wifi")
-    status = b.until(5, lambda t: "[wifi] window=" in t)
-    saved = bool(status) and f'"{ssid}"' in status.split("networks=[", 1)[-1].split("]", 1)[0]
-    b.say(f"=== the network is {'REMEMBERED' if saved else 'NOT remembered'} (networks=[...] in DEBUG wifi)")
+    b.send("DEBUG wifi list", "DEBUG wifi list")
+    names = []
+    b.until(5, lambda t: names.append(t) or t.startswith("[wifi] networks "))
+    saved = any(t.startswith("[wifi] network #") and f'"{ssid}"' in t for t in names)
+    b.say(f"=== the network is {'REMEMBERED' if saved else 'NOT remembered'} (DEBUG wifi list)")
     if saved:   # byte for byte, answered with lengths and yes or no only
         b.send(f'DEBUG wifi verify "{ssid}" {password}', 'DEBUG wifi verify "<ssid>" <password>')
         verdict = b.until(5, lambda t: "[wifi] verify:" in t)
