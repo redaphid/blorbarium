@@ -23,7 +23,7 @@ export const MODELS = {
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { opts: {}, price: [0.293, 2.253] },
   "@cf/openai/gpt-oss-120b": { opts: { reasoning_effort: "low" }, thinkTokens: 2000, price: [0.35, 0.75] },
   "@cf/qwen/qwen3.8-27b": { opts: { chat_template_kwargs: { enable_thinking: false } }, price: [0.45, 3.2] },
-  "@cf/deepseek-ai/deepseek-v4-pro-0813": { opts: { reasoning_effort: "low" }, thinkTokens: 2000, price: [1.32, 3.96] },
+  "@cf/deepseek-ai/deepseek-v4-pro-0813": { opts: { reasoning_effort: "none" }, price: [1.32, 3.96] },
   "@cf/zai-org/glm-5.3": { opts: {}, thinkTokens: 6000, price: [1.4, 4.4] },
   "@cf/zai-org/glm-5.3-flash": { opts: {}, thinkTokens: 6000, price: [0.15, 0.5] },
 };
@@ -133,7 +133,7 @@ export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DE
   const log = [];
   const t0 = Date.now();
   const traits = pet.traits ?? traitSheet(pet.raw, { generation: pet.generation, name: pet.name });
-  const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "" };
+  const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "", history: pet.history ?? "" };
   // An edited personality (the phone #43, the dashboard #41) skips call 1: the
   // owner's words are the bible, and his catchphrases are kept if given.
   const { bible, catchphrases, attempts: bibleAttempts } = pet.bible

@@ -64,18 +64,21 @@ function packReply(row, creature, extra = {}) {
 // Writes and stores one generation for a creature; returns the stored pack row.
 // `bible` given (an edit from the phone or the dashboard): the lines are written
 // from it and call 1 is skipped. Only a genes-only pack is shared by cache key.
-export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy } = {}) {
+export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy, carried } = {}) {
   const bytes = hexToBytes(creature.genome_hex);
   const raw = rawSheet(bytes, { stage: creature.stage ?? "adult", feats: creature.feats ?? 0 });
+  const full = creature.parent_id === undefined
+    ? await env.DB.prepare("SELECT parent_id FROM creatures WHERE id = ?1").bind(creature.id).first() : creature;
+  const history = await store.familyHistory(env.DB, { parent_id: full?.parent_id ?? null }, carried);
   const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash,
-                bible, catchphrases };
+                bible, catchphrases, history };
   pet.traits = traitSheet(raw, { generation: pet.generation, name: pet.name });
   const pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt });
   const { log, ...provenance } = pack.provenance;
   const stored = await store.storeGeneration(env.DB, creature.id, {
     source, bible: pack.bible, catchphrases: pack.catchphrases, model: s.model, prompt: s.prompt, editedBy,
-    inputs: { dice: provenance.dice, traits: pet.traits.text },
-    cacheKey: source === "genes" ? cacheKey(creature.genome_hash, s) : `${creature.genome_hash}:${source}:${Date.now()}`,
+    inputs: { dice: provenance.dice, traits: pet.traits.text, history: history || undefined },
+    cacheKey: source === "genes" && !history ? cacheKey(creature.genome_hash, s) : `${creature.genome_hash}:${source}:${Date.now()}`,
     lines: pack.lines, fallback: pack.fallback, provenance: { ...provenance, attempts: log },
   });
   const sig = await signPack(packText({ genomeHash: creature.genome_hash, version: stored.version, lines: pack.lines }),
@@ -110,6 +113,7 @@ async function postPetLines(request, env) {
     mac, genomeHash: hash, genomeHex: body.genome.toLowerCase(), species: raw.species, generation,
     lineage: body.lineage ?? null, stage: raw.stage, name, feats: Number(body.feats) || 0, fw: body.fw ?? null,
     raw, traits: traits.text, status: body.egg ? "egg" : "alive",
+    parentHash: /^[0-9a-f]{64}$/.test(String(body.parent_genome_hash ?? "")) ? body.parent_genome_hash : null,
   });
   const creature = await store.findCreature(env.DB, mac, hash);
 
@@ -137,11 +141,11 @@ async function postPetLines(request, env) {
   if (await store.generationsSince(env.DB, mac, Date.now() - DAY_MS) >= s.dailyCap) {
     return fail(429, "this badge has had its packs for today");
   }
-  const job = await store.openJob(env.DB, creature.id, "lines", null);
+  const job = await store.openJob(env.DB, creature.id, body.egg ? "hatch" : "lines", body.parents ? { parents: body.parents } : null);
   if (body.wait === false) return json({ status: "queued", job, retry_after_s: 60 }, 202, { "retry-after": "60" });
   await store.setJob(env.DB, job, { status: "running", attempt: true });
   try {
-    const row = await generateFor(env, creature, { s });
+    const row = await generateFor(env, creature, { s, source: body.egg ? "hatch" : "genes", carried: body.parents });
     await store.setJob(env.DB, job, { status: "done", packId: row.id });
     return json(packReply(row, creature, { cached: false, created: up.created }));
   } catch (e) {
@@ -232,8 +236,10 @@ export async function runQueuedJobs(env, limit = 3) {
   for (const j of jobs) {
     await store.setJob(env.DB, j.job_id, { status: "running", attempt: true });
     try {
+      const input = (j.input_json && JSON.parse(j.input_json)) || {};
       const row = await generateFor(env, { id: j.creature_id, genome_hex: j.genome_hex, genome_hash: j.genome_hash,
-        stage: j.stage, generation: j.generation, name: j.name, feats: j.feats }, { source: j.kind === "lines" ? "genes" : j.kind });
+        stage: j.stage, generation: j.generation, name: j.name, feats: j.feats },
+        { source: j.kind === "lines" ? "genes" : j.kind, carried: input.parents, bible: input.bible, editedBy: input.editedBy });
       await store.setJob(env.DB, j.job_id, { status: "done", packId: row.id });
     } catch (e) {
       await store.setJob(env.DB, j.job_id, { status: j.attempts + 1 >= 3 ? "failed" : "queued", error: String(e.message ?? e) });

@@ -26,10 +26,13 @@ export async function upsertCreature(db, c) {
     return { ...have, created: false };
   }
   // The previous life on this lineage, if the badge says which lineage it is.
-  const parent = c.lineage
-    ? await db.prepare("SELECT id FROM creatures WHERE lineage_id = ?1 AND generation < ?2 ORDER BY generation DESC LIMIT 1")
-        .bind(c.lineage, c.generation ?? 0).first()
-    : null;
+  // The parent: named by its genome hash (an egg's report, #40), else the newest earlier life on this lineage.
+  const parent = c.parentHash
+    ? await db.prepare("SELECT id FROM creatures WHERE genome_hash = ?1 ORDER BY id DESC LIMIT 1").bind(c.parentHash).first()
+    : c.lineage
+      ? await db.prepare("SELECT id FROM creatures WHERE lineage_id = ?1 AND generation < ?2 ORDER BY generation DESC LIMIT 1")
+          .bind(c.lineage, c.generation ?? 0).first()
+      : null;
   const r = await db.prepare(
     `INSERT INTO creatures (mac, genome_hash, genome_hex, species, generation, lineage_id, parent_id, stage, name, feats,
        status, fw, raw_json, traits_json, first_seen, last_seen)
@@ -148,4 +151,24 @@ export async function exportAll(db, { mac } = {}) {
       packs: packs.filter((p) => p.creature_id === c.id).map(parse),
     })),
   };
+}
+
+// The parent's life in a few lines, for a new egg's personality (#40): its
+// bible, its last stats and its last diary entries, plus what the egg itself
+// carried (the parents' summary the badge sends).
+export async function familyHistory(db, creature, carried) {
+  const out = [];
+  if (creature.parent_id) {
+    const p = await db.prepare("SELECT species, name, generation, status FROM creatures WHERE id = ?1").bind(creature.parent_id).first();
+    const bible = await db.prepare("SELECT bible FROM personalities WHERE creature_id = ?1 ORDER BY version DESC LIMIT 1").bind(creature.parent_id).first();
+    const stats = await db.prepare("SELECT stats_json FROM life_stats WHERE creature_id = ?1 ORDER BY id DESC LIMIT 1").bind(creature.parent_id).first();
+    const diary = (await db.prepare("SELECT day, entry FROM diary_entries WHERE creature_id = ?1 ORDER BY day DESC LIMIT 4")
+      .bind(creature.parent_id).all()).results ?? [];
+    if (p) out.push(`Parent: ${p.name ? `${p.name}, ` : ""}a ${p.species}, generation ${p.generation ?? "?"} (${p.status}).`);
+    if (bible) out.push(`The parent's character: ${bible.bible}`);
+    if (stats) out.push(`The parent's life in numbers: ${stats.stats_json.slice(0, 600)}`);
+    for (const d of diary.reverse()) out.push(`From the parent's diary, ${d.day}: ${d.entry}`);
+  }
+  if (carried && typeof carried === "object") out.push(`What the egg carries about its parents: ${JSON.stringify(carried).slice(0, 600)}`);
+  return out.join("\n");
 }

@@ -55,6 +55,30 @@ test("the daily cron writes one entry per pet with new stats, from what changed"
   assert.match(d.entries[0].entry, /fed 7 times/, "the newest entry speaks of the 7 new feeds");
 });
 
+test("an egg reported before hatching gets its personality from its genes and its parent's life (#40)", async () => {
+  const env = fakeEnv();
+  const parentHash = await petWithPack(env, fixtures[2]);
+  await req(env, "/api/stats", { mac: MAC, genome_hash: parentHash, stats: { feeds: 30, fights_won: 4 } });
+  await runDiaries(env, { day: "2099-03-01" });
+  const r = await req(env, "/api/pet-lines", { mac: MAC, genome: fixtures[3].genome, egg: true, wait: false,
+    parent_genome_hash: parentHash, generation: 3, parents: { mother: { feeds: 30 } } });
+  assert.equal(r.status, 202);
+  const db = env.DB.raw;
+  const egg = db.prepare("SELECT * FROM creatures ORDER BY id DESC LIMIT 1").get();
+  assert.equal(egg.status, "egg");
+  assert.equal(egg.parent_id, db.prepare("SELECT id FROM creatures WHERE genome_hash = ?").get(parentHash).id);
+  assert.equal(db.prepare("SELECT kind FROM jobs ORDER BY id DESC").get().kind, "hatch");
+  const before = env.AI.calls.length;
+  await worker.scheduled({ cron: "*/10 * * * *" }, env, { waitUntil() {} });
+  const bibleCall = env.AI.calls.slice(before).find((c) => /character bible/.test(c.input.messages.at(-1).content));
+  const prompt = bibleCall.input.messages.at(-1).content;
+  assert.match(prompt, /From the parent's diary, 2099-03-01: Dear diary/);
+  assert.match(prompt, /fights_won/);
+  assert.match(prompt, /What the egg carries/);
+  const p = db.prepare("SELECT source FROM personalities WHERE creature_id = ?").get(egg.id);
+  assert.equal(p.source, "hatch");
+});
+
 test("flatten and delta", () => {
   assert.deepEqual(flatten({ a: 1, b: { c: 2, d: [5, 6] }, e: "x" }).map((m) => m.metric), ["a", "b.c", "b.d", "b.d"]);
   assert.deepEqual(statsDelta({ feeds: 9, knocks: 2 }, { feeds: 4, knocks: 2 }), { feeds: 5 });

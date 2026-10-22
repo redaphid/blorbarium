@@ -50,7 +50,10 @@ ${input.traits.text}
 
 Fixed facts about this pet (drawn from his genome; use at least two):
 ${dice}
-
+${input.history ? `
+His family (#40: the parent's life, as the server knows it; family lore he may brag about, dread or ignore):
+${input.history}
+` : ""}
 Write his character bible, about 120 words: who he is, his quirks, what he loves and fears, how he talks (rhythm, pet words, the kind of joke he makes). Turn the gene facts into personality: a timid one jumps at nothing, a hybrid brags about or puzzles over his borrowed power, a pet who loves being shaken asks for it, an ancestor's lesson is family lore. He must still sound like his species, but like no other pet of it.
 
 Also give 3 catchphrases of at most ${MAX_TEXT} characters.
