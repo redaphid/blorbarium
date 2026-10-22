@@ -11,6 +11,7 @@
 // default 24), and IDLE_DAY_OUT=<dir> writes each run's hours as CSV.
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -1035,6 +1036,28 @@ TEST(Film, TheDaysActs) {
       }
     }
   }
+}
+
+// What each act costs to draw, on this host, against him standing about and
+// sleep-idle's acts: DAY_ACTS_COST=1. A ratio, not the badge's milliseconds.
+TEST(Film, TheDaysActsCost) {
+  if (!std::getenv("DAY_ACTS_COST")) GTEST_SKIP() << "DAY_ACTS_COST=1 times them";
+  static paint::Canvas240 cv;
+  Desk d(SpeciesId{2});
+  auto cost = [&](IdleId id) {
+    Appearance a = d.dish->appearance();
+    a.lively = true, a.reflexActive = false, a.asleep = false, a.pose = pose::idle, a.idle = id;
+    a.idleLength = id == idles::none ? 0 : uint16_t(IDLES[id.v].seconds * 10);
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int k = 0; k < 300; ++k) {
+      a.idleTicks = uint16_t(a.idleLength ? k % a.idleLength : 0), a.liveMs = 10000 + k * 20;
+      paint::draw(a, paint::packFor(a.species), cv, a.liveMs);
+    }
+    return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / 300;
+  };
+  const double plain = cost(idles::none);
+  std::printf("standing about: %.0f us a frame\n", plain);
+  for (uint8_t id = 0; id < kIdleCount; ++id) std::printf("%-12s %.2fx\n", IDLES[id].name, cost(IdleId{id}) / plain);
 }
 
 int main(int argc, char** argv) {
