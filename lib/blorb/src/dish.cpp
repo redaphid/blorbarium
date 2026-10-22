@@ -157,6 +157,32 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   }
   cues_.sample(s, detectors_.side.holding(), nowMs);
   feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
+  carry_.sample(s, nowMs, carryContext(s));
+}
+
+// What the carry show (carry_show.h) needs to know beyond the sample: whether
+// he can react at all (awake at home, not fighting or eating), whether a
+// gesture is under way or just spoke, and who he is.
+CarryContext Dish::carryContext(const BodySample& s) const {
+  CarryContext c;
+  const auto fired = [&](StimId id) { return id.v < 64 && ((lastFired_ >> id.v) & 1); };
+  c.posing = s.sideDown || s.invertedDown || detectors_.side.holding() || detectors_.hang.charge() > Fx::zero();
+  c.shook = fired(stim::shake);
+  c.gestured = fired(stim::button) || fired(stim::button_hold) || fired(stim::button_double) || fired(stim::hang) ||
+               fired(stim::knock) || fired(stim::double_knock);
+  c.poseWord = fired(stim::button_hold) || fired(stim::hang);
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  if (!cr) return c;
+  c.canReact = !sealed() && !duel_.active() && !cr->body().asleep && cr->body().mouth == Mouthful::Nothing &&
+               !detectors_.lid.lidded();
+  c.species = cr->phenotype().species.body.v;
+  c.seed = cr->genome().hash();
+  return c;
+}
+
+void Dish::forceCarry(Carry k) {
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  carry_.force(k, nowMs_, cr ? cr->genome().hash() : 0);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -472,6 +498,7 @@ Appearance Dish::appearance() const {
     a.lobbyDecline = v.myDecline;
   }
   feedView(a);
+  if (std::holds_alternative<Creature>(live_.occupant)) a.carry = carry_.view(nowMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
