@@ -44,6 +44,7 @@ struct Hand {
   uint8_t home = kHomeUp;
   Pose pose = Pose::Held;
   std::vector<uint32_t> knocks;
+  std::optional<uint32_t> pickupAt;   // `DEBUG pickup` from then: its pose (debugverbs::pickupPose) over this one
   Rng rng = Rng::seeded(7);
   Read at(uint32_t ms) {
     const int16_t up = home == 2 ? 1000 : -1000;   // raw +y is up at home 2 (orient.h)
@@ -66,6 +67,9 @@ struct Hand {
         r.az = int16_t(r.az - 1700);
       }
     }
+    BodySample p;   // `DEBUG pickup` over the hand's own reading, as main.cpp's posed() lays it
+    p.ax = r.ax, p.ay = r.ay, p.az = r.az;
+    if (pickupAt && ms >= *pickupAt && debugverbs::pickupPose(ms - *pickupAt, home, rng.next(), p)) r = {p.ax, p.ay, p.az};
     return r;
   }
 };
@@ -75,6 +79,7 @@ struct Count {
   int pelletsInTheDark = 0;   // ...while the panel was dark
   int presses = 0;            // stim::button the Dish took (a knock knock, as a press)
   bool oneMore = false;       // the rim's "one more" lit
+  uint64_t fired = 0;         // every stimulus the Dish took, a bit each (ids < 64)
 };
 
 // One badge: the IMU, the sense task, the shell and the Dish, on one clock.
@@ -136,6 +141,7 @@ struct Badge {
       dish->sample(f.screen, ring.front().second);
       count.oneMore = count.oneMore || f.screen.knockWaiting;
       if (dish->firedLastSample() >> stim::button.v & 1) ++count.presses;
+      count.fired |= dish->firedLastSample();
     }
     const uint8_t before = dish->habitat().pantry;
     dish->tick(ms, link);

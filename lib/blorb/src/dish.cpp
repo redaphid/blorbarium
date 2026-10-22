@@ -99,6 +99,7 @@ constexpr const char* kAdoptedFile = "adopted.flag";   // beside the keepsake, n
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
     : store_(store), keep_(store), rtc_(options.rtc), air_(options.air), hatchNeedsPhone_(options.hatchNeedsPhone) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
+  mac_ = options.mac;
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
   live_.settings.speciesSeed = speciesSeed;

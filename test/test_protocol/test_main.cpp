@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/species.h"
 #include "links.h"
 #include "mem_storage.h"
 #include "traces.h"
@@ -491,13 +492,29 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=flee_tilt face=neutral asleep=0",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=flee_tilt face=neutral asleep=0 species=grungo mac=none",
       "#2b + drives hunger=301 sleepiness=252 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
       "#2b + body life=1000 injury=0 glow=0 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=1",
       "#2b OK",
   };
   EXPECT_EQ(got, want);
+}
+
+// The board's own MAC, as the firmware hands it in (DishOptions::mac), and
+// the egg's species: on STATE's reply, never on the ! STATE event.
+TEST(Golden, StateNamesTheBoardAndTheSpecies) {
+  MemStorage store;
+  ScriptedLink link;
+  const Genome founder = starterGenomeOf(SpeciesId{1}, 7);
+  DishOptions o{nullptr, &founder};
+  o.mac = 0x3c0f026f2aecull;
+  Dish dish(store, 7, 0x9f31c2d04a7bull, o);
+  link.inbound.push_back("#2c STATE");
+  dish.tick(0, link);
+  ASSERT_FALSE(link.sent.empty());
+  EXPECT_EQ(link.sent[0], std::string("#2c + phase=egg gen=0 progress=0 species=") + speciesInfo(SpeciesId{1}).name +
+                              " mac=3c:0f:02:6f:2a:ec");
 }
 
 TEST(Golden, Diff) {

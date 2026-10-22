@@ -6,6 +6,7 @@
 #include <iterator>
 #include <type_traits>
 #include "blorb/dish.h"
+#include "blorb/founding.h"
 #include "blorb/genes.h"
 #include "blorb/seams.h"
 
@@ -333,6 +334,15 @@ void cmd_schema(Dish&, const Request&, Reply& r) {
 void cmd_state(Dish& dish, const Request&, Reply& r) {
   Line state;
   stateLine(state, dish);
+  // Appended after the occupant's (STATE only, not the ! STATE event):
+  // species= what the pet is (as the boot line says it; none while sealed,
+  // when the occupant is a placeholder), and mac= the board's own.
+  state.add(" species=%s", dish.sealed() ? "none" : speciesInfo(speciesOf(genomeOf(dish.occupant()))).name);
+  if (const uint64_t m = dish.mac())
+    state.add(" mac=%02x:%02x:%02x:%02x:%02x:%02x", unsigned(m >> 40 & 0xFF), unsigned(m >> 32 & 0xFF),
+              unsigned(m >> 24 & 0xFF), unsigned(m >> 16 & 0xFF), unsigned(m >> 8 & 0xFF), unsigned(m & 0xFF));
+  else
+    state.add(" mac=none");
   r.line("%s", state.b);
   if (const Creature* c = std::get_if<Creature>(&dish.occupant())) {
     Line drives;

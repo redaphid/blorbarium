@@ -54,13 +54,6 @@ const Row* rowNamed(const Row (&rows)[N], std::string_view w) {
   return nullptr;
 }
 
-std::optional<blorb::ChemId> chemNamed(std::string_view w) {
-  for (const blorb::DriveInfo& d : blorb::DRIVES)
-    if (w == d.name) return blorb::driveChem(d.id);
-  if (const blorb::ChemInfo* c = rowNamed(blorb::CHEMICALS, w)) return c->id;
-  return std::nullopt;
-}
-
 // Any species this firmware has a row for.
 std::optional<blorb::SpeciesId> speciesNamed(std::string_view w) {
   const blorb::SpeciesInfo* s = rowNamed(blorb::SPECIES, w);
@@ -293,8 +286,7 @@ void verb_warp(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
 }
 
 void verb_chem(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
-  struct Set { blorb::ChemId chem; blorb::Fx level; };
-  Set sets[kMaxChems];
+  ChemSet sets[kMaxChems];
   size_t n = 0;
   // Every pair is read before one is applied, so a refused line changes nothing.
   while (std::optional<std::string_view> w = a.word()) {
@@ -302,13 +294,10 @@ void verb_chem(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
     if (!permille || n == kMaxChems) return r.err(400, "BAD_ARGS");
     const std::optional<blorb::ChemId> chem = chemNamed(*w);
     if (!chem) return r.err(416, "OUT_OF_RANGE");
-    sets[n++] = Set{*chem, blorb::Fx::ratio(int32_t(*permille), 1000)};
+    sets[n++] = ChemSet{*chem, blorb::Fx::ratio(int32_t(*permille), 1000)};
   }
   if (n == 0) return r.err(400, "BAD_ARGS");
-  blorb::Creature* cr = creatureOf(c.dish);
-  if (!cr) return r.err(409, "NO_CREATURE");
-  for (size_t i = 0; i < n; ++i) cr->inject(sets[i].chem, sets[i].level);
-  c.dish.markDirty();
+  if (setChems(c.dish, sets, n) != Jump::Done) return r.err(409, "NO_CREATURE");
   r.ok("%u", unsigned(n));
 }
 

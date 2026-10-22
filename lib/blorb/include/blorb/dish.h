@@ -73,6 +73,10 @@ struct DishOptions {
   // adopts it from the page (ADOPT), or the debug link's FREEHATCH lifts it.
   // The firmware sets it; the sim and tests keep eggs on their own clock.
   bool hatchNeedsPhone = false;
+  // The board's own MAC (the firmware's esp_read_mac, its six bytes high to
+  // low), for STATE's mac=: the board, not the lineage a keepsake carries.
+  // 0: none (tests, the sim).
+  uint64_t mac = 0;
 };
 
 // The morning a no-phone board founds into (DishOptions::foundingHour): a
@@ -107,6 +111,7 @@ class Dish {
   Lineage& lineage() { return lineage_; }
   Protocol& protocol() { return proto_; }
   const Settings& settings() const { return live_.settings; }
+  uint64_t mac() const { return mac_; }   // DishOptions::mac: the board's own, 0 when none
   PetClock& clock() { return live_.clock; }
   const PetClock& clock() const { return live_.clock; }
   uint32_t tickCount() const { return tick_; }
@@ -261,6 +266,7 @@ class Dish {
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
   bool hatchNeedsPhone_ = false, hatchFree_ = false, adopted_ = false;
+  uint64_t mac_ = 0;
 };
 
 }  // namespace blorb

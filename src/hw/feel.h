@@ -67,6 +67,10 @@ class Feel {
     return f;
   }
 
+  // Home can change at run time: set at boot from NVS (hw/home.h), and by `DEBUG home`.
+  void setHome(uint8_t home) { home_ = home; }
+  uint8_t home() const { return home_; }
+
   const orient::Up& up() const { return up_; }
   const Poses& poses() const { return poses_; }
 

@@ -79,7 +79,7 @@ the link its request came from, so serial traffic never reaches the phone.
 
 ```
 #2b STATE
-#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0
+#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0 species=grungo mac=3c:0f:02:6f:2a:ec
 #2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1
 #2b + body life=1000 injury=0 glow=436 dreaming=0
 #2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=0
@@ -88,6 +88,11 @@ the link its request came from, so serial traffic never reaches the phone.
 
 Levels are thousandths (1000 is full). `time=unknown` turns `known` once a
 `TIME` has been accepted this boot.
+
+The first line ends with `species=`, what the pet is (as the boot line's
+`species=`; `none` while sealed), and `mac=`, the board's own MAC (`none`
+in the sim and the host tests). They are on `STATE`'s reply only, not on the
+`! STATE` event.
 
 `action` is what he is doing: an action's name, or while he plays on his own
 the idle's (`lib/blorb/include/blorb/defs/idles.def`: `dance`, `juggle`,
