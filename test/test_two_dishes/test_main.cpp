@@ -1052,7 +1052,7 @@ TEST(NoButton, BothSideHoldHugsLayAFriendEgg) {
 // ---- the graft, consent, and what is written at once ----------------------------------
 
 namespace {
-// One device alone in the room, founded on the gift's starter: no duel genes.
+// One device alone in the room, founded on the starter: no duel genes.
 struct Alone {
   Ether ether{1, Weather{}};
   Device d{ether, 1};

@@ -1,8 +1,7 @@
 # HANDOFF
 
 blorbarium is a little artificial-life creature on a round ESP32-S3 screen.
-It began as a single gift for a friend and is now a family of devices: the
-owner is giving **8** of them to the owner's niece and nephews (aged 6-13) and their
+It is a family of devices: the owner is giving **8** of them to the owner's niece and nephews (aged 6-13) and their
 parents, and their pets duel each other over ESP-NOW. It shares ancestry
 with [redaphid/claude-notification-screen](https://github.com/redaphid/claude-notification-screen)
 but must not depend on it at build or run time (owner, 2026-10-13: "Make
@@ -227,9 +226,10 @@ and sim 22/22 (no_phone re-blessed for its new line). 0.7.0 (daf4f19) and
 `docs/notes/decisions-2026-10-15.md`.
 
 What 0.7.x is: main + `battles` (nine species, ESP-NOW duels) + one species
-per badge from `lib/blorb/include/blorb/defs/badges.def` (the 8 batch
-badges take the 8 non-grungo species; the gift `blorb-237c` and any
-unknown MAC are grungo) + adoption of the 0.4.0 grungo pets after the OTA
+per badge from `lib/blorb/include/blorb/defs/badges.def` (nine boards, the
+nine species of the regular cast once each, board `blorb-237c` grungo; an
+unknown MAC takes a regular species from a hash of its MAC, never the
+octopus, a one-off variant; issue #36) + adoption of the 0.4.0 grungo pets after the OTA
 trial keeps the image + species BLE names (`blorb-xxxx` only while on
 trial) + thoughts with no phone (TAP ME removed, idle talk; a phone adds
 wall-clock, name and taught lines) + debug link 6E400005 with a
@@ -294,7 +294,7 @@ ComfyUI art queue (below).
 | `battles-d9` | 60f2f1b | D9, the duel inside the pet: a double press opens a duel, BOOT routing from `kBoot` with a rim hint on every screen, wounds/scars/fall/meeting/friend egg saved at once, the one-Checkpoint duel-gene graft, friend.egg consumed before the Birth (power-cut tested), slayer feat, war paint, vendetta, the losing-streak cuddle. Already merges `battles` 5aa2372 (its own `sceneOf` dropped for D11's). **Owed before landing:** a full native run at this tip (the last full run, 711/715, predates its pickEgg fix) and the guard rerun (stopped at 5/14). Left: the 50 Hz nest loop in `setup()`. |
 | `battles-d13` | 4ebe148 | Film tooling: two simulators over `sim/serial_air.h` (a fake radio with loss, doubles and lateness), scripted kids in `sim/duel_bot.h`, `tools/duel_video.{py,sh}`, scripts in `tools/duels/`. |
 | `roster-art` | 455a897 | `tools/comfy_queue.py` and `tools/art_sheets.py`, the ComfyUI candidate queue. |
-| `flash3` | 2f8fd00 | What the first gift device (an adult Grungo, genome `d30f00d1`) runs. See "The first gift device" below. |
+| `flash3` | 2f8fd00 | Firmware 0.3.0 from bring-up, with no updater (docs/ota.md). |
 
 ### Delivery plan to Thursday
 
@@ -310,7 +310,7 @@ ship. Anything not ready by Thursday reaches the devices over the air later.
    its acceptance test.
 3. **R2, Wednesday.** D12: a real ESP-NOW duel between COM11 and COM12.
    This gates battles at the visit.
-4. **R3, Thursday morning.** Flash all 8 gift devices, one on the cable at a
+4. **R3, Thursday morning.** Flash all 8 badges, one on the cable at a
    time, with the newest release that soaked, then check OTA from the
    phone. Never flash a build that did not soak. Write
    `tools/flash_fleet.sh` first: it refuses COM11/COM12, flashes, waits for
@@ -414,8 +414,7 @@ Beacon 77 B, State 111 B, Genome 224 B. Pets dying is the owner's decision
 - For the owner: the layout defaults (42/54 sizes, stances at 9/3/6, strike
   bar only, assist hearts lost first, NOPE! for a riposte), a word for the
   "immortals" reversal, whether the new creatures are too cute next to
-  Grungo and whether Mudge reads as a bird, and whether to graft duel genes
-  into the first gift device's Grungo. Settled: BOOT is behind the screen,
+  Grungo and whether Mudge reads as a bird. Settled: BOOT is behind the screen,
   so the rim hint stays at about 1 o'clock.
 
 ### Rules for agents
@@ -446,21 +445,15 @@ its own `main()`. Scripts are mode 100644, so run them with `bash`.
 ## Bring-up history (2026-10-03, historical)
 
 - **Board:** Waveshare ESP32-S3-LCD-1.28, usually COM10 on the owner's desk.
-  It runs `flash3` 2f8fd00 with an adult Grungo, generation 0, genome
-  `d30f00d1`, advertising as `blorb-237c`. He lives in `pet`
-  (`snap.a`, `snap.b`) and on `petfs` (`lineage.log`). A cable flash of a
-  merged `.hex` never touches them.
+  A pet lives in `pet` (`snap.a`, `snap.b`) and on `petfs` (`lineage.log`).
+  A cable flash of a merged `.hex` never touches them.
 - **Website:** https://blorb.hypnodroid.com (branch `web`), public through a
   Cloudflare Access bypass application. Check the Zero Trust dashboard
   before changing Access.
 - **Backups** in `D:\projects\bak\blorbarium\`: the whole original 16 MB
   flash (`flash-backup-lcd128-2026-10-03.bin`, sha256
   `b06cdfa43cafa6142a7980bd1bf3ce0469bb86cdde9e17431a6b4b1c8bd63dec`),
-  `gift-ble-e9a1689.hex`, `gift-2431fea.hex`, `fallback-d1336ad.hex` and
-  `flash3-2f8fd00.hex`.
-- To reflash a known-good build, which keeps the pet because the hex has gaps:
-
-      ~/.platformio/penv/Scripts/python.exe ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port COM10 -b 921600 write_flash 0x0 D:/projects/bak/blorbarium/gift-ble-e9a1689.hex
+  `fallback-d1336ad.hex` and `flash3-2f8fd00.hex`.
 
 - To restore the original badge firmware, which **erases blorbarium and the
   pet**:
@@ -566,7 +559,7 @@ All paths below are in that repo.
   pet's blank petfs was never formatted. The pet marks are bytes every save already
   has: `BLRB` at a 32-byte NVS entry, and a LittleFS superblock of petfs's
   own geometry (4096 x 1440) at offset 8 of block 0 or 1. So a board saved
-  before this rule (the gift device) is recognised with no new marker. The
+  before this rule is recognised with no new marker. The
   boot log names each partition: `[hw] storage pet: ok`, `formatted: it was
   blank`, `formatted: it held another firmware's bytes and never a pet`.
   The slots go through IDF's `nvs_*` calls, never Arduino's Preferences:

@@ -152,26 +152,10 @@ struct Report {
 
 // A badge flashed with 0.4.0 on 2026-10-15: founded from foundingGenome040
 // with the pet clock at 00:00, lived `adoptAfterH` on 0.4.0, then updated
-// over the air and adopted to its table species (Dish::adoptSpecies). On
-// 0.7.0 the species founder still had the Gift recipe's sleep, energy, face
-// and egg bytes (giftSleep); from 0.7.1 adoption writes FirstHours'.
-struct FieldPet { double adoptAfterH = 1.0; bool giftSleep = false, retune = false; };
-
-// The recipe bytes FirstHours retunes, as the species' Gift recipe has them.
-void keepGiftRecipe(Dish& dish, SpeciesId species, uint32_t seed) {
-  GenomeBuilder gift, first;
-  authorStarter(gift, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::Gift);
-  authorStarter(first, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::FirstHours);
-  const Genome g = *gift.build(), f = *first.build();
-  struct Edit { GeneUid uid; uint8_t at, value; };
-  std::vector<Edit> edits;
-  g.forEach([&](const GeneView& v) {
-    const std::optional<GeneView> w = f.find(v.header.uid);
-    for (uint8_t i = 0; w && i < v.header.len; ++i)
-      if (w->body[i] != v.body[i]) edits.push_back({v.header.uid, i, v.body[i]});
-  });
-  for (const Edit& e : edits) dish.editGene(e.uid, e.at, e.value);
-}
+// over the air and adopted to its table species (Dish::adoptSpecies).
+// Adoption keeps 0.4.0's own recipe numbers (founding_040.h kRecipe040), so
+// he sleeps as 0.4.0 founded him.
+struct FieldPet { double adoptAfterH = 1.0; };
 
 double pm(Fx v) { return double(v.raw) / double(Fx::kOne); }
 
@@ -186,9 +170,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
   FakeRtc rtc;   // a flat battery: never any wall time
   uint32_t ms = 0;
   rtc.poweredMs = &ms;
-  // FIRST_HOURS_GIFT=1: the Gift recipe (starterGenome), what an unpicked nest still founds.
-  const Genome founder = field ? foundingGenome040(seed)
-                         : std::getenv("FIRST_HOURS_GIFT") ? starterGenome(seed) : starterGenomeOf(species, seed);
+  const Genome founder = field ? foundingGenome040(seed) : starterGenomeOf(species, seed);
   DishOptions opt;
   opt.rtc = &rtc;
   opt.founder = &founder;
@@ -230,9 +212,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
     if (!adopted && ms >= uint32_t(field->adoptAfterH * 60 * kMinuteMs) &&
         dish.adoptSpecies(species, paint::bandsFor(species)) != Dish::Adoption::NotYet) {
       adopted = true;
-      if (field->giftSleep) keepGiftRecipe(dish, species, seed);
       log("ADOPTED");
-      if (field->retune && dish.retuneFirstHours(species) == Dish::Adoption::Adopted) log("RETUNED");
     }
     if (dish.tickCount() == lastTick) continue;
     lastTick = dish.tickCount();
@@ -475,22 +455,20 @@ TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
 
 // The badges in the field (FIELD_PETS_SWEEP=1): each table species, 0.4.0's
 // founding and an adoption after FIELD_PETS_ADOPT_H (1), FIELD_PETS_HOURS (12)
-// of powered time, both owners, as adopted on 0.7.0 and on 0.7.1. Per hour:
-// minutes asleep, lines awake, lines asleep.
+// of powered time, both owners. Per hour: minutes asleep, lines awake, lines
+// asleep.
 TEST(Sweep, FieldPetsHourByHour) {
   if (!std::getenv("FIELD_PETS_SWEEP")) GTEST_SKIP() << "FIELD_PETS_SWEEP=1 runs it";
   const char* h = std::getenv("FIELD_PETS_HOURS");
   const char* adopt = std::getenv("FIELD_PETS_ADOPT_H");
   const double hours = h ? std::atof(h) : 12.0;
   for (size_t sp = 1; sp < kSpeciesCount; ++sp)
-    for (int v : {0, 1, 2})
+    if (inRegularCast(SPECIES[sp].id))
       for (Owner o : {Owner::Nobody, Owner::Seated}) {
         FieldPet f;
-        f.giftSleep = v < 2;
-        f.retune = v == 1;
         if (adopt) f.adoptAfterH = std::atof(adopt);
         Report r = live(SPECIES[sp].id, 0x5EED0000u, o, hours, &f);
-        r.species += v == 0 ? "@070" : v == 1 ? "@070+retune" : "@071";
+        r.species += "@040";
         std::printf("%s\n", row(r).c_str());
         std::printf("  hour   :");
         for (int i = 0; i < int(hours); ++i) std::printf(" %4d", i);
@@ -511,8 +489,7 @@ TEST(Sweep, FieldPetsHourByHour) {
 // until a phone woke him. Asleep, he murmurs: every few minutes, in his voice.
 TEST(FieldPets, ASleepingPetStillTalks) {
   GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
-  FieldPet f;
-  f.giftSleep = true;   // adopted on 0.7.0, the longest sleeper
+  FieldPet f;   // adopted, sleeping by 0.4.0's numbers: the longest sleeper
   for (SpeciesId sp : {SpeciesId{1}, SpeciesId{5}, SpeciesId{7}}) {
     const Report r = live(sp, 0x5EED0000u, Owner::Nobody, 8.0, &f);
     const std::string at = row(r);

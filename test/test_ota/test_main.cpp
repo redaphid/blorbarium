@@ -638,7 +638,7 @@ TEST(OtaVersion, ParsesOnlyThreeNumbers) {
 // ---- the trial ----------------------------------------------------------------------
 
 namespace {
-const PetMark kPet{3, 0xd30f00d1};
+const PetMark kPet{3, 0x5eed0b07};
 TrialFacts healthy(uint32_t ranMs, bool confirmed) { return {true, true, true, true, kPet, kPet, ranMs, confirmed}; }
 }  // namespace
 
@@ -657,7 +657,7 @@ TEST(OtaTrial, RollsBackAnImageThatLostThePet) {
   TrialFacts f = healthy(kTrialMs, true);
   f.now = PetMark{0, 0x12345678};
   EXPECT_EQ(judge(f), Verdict::RollBack) << "a fresh founder";
-  f.now = PetMark{4, 0xd30f00d1};
+  f.now = PetMark{4, 0x5eed0b07};
   EXPECT_EQ(judge(f), Verdict::RollBack) << "another generation";
   f = healthy(kTrialMs, true);
   f.resumed = false;

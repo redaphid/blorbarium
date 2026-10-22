@@ -35,12 +35,14 @@ mutant() {   # mutant <name> <file> <sed expression> <test that must catch it>
 }
 
 F=lib/blorb/src/founding.cpp V=src/debug_verbs.h
-mutant "the table is ignored" $F 's/return tableSpecies(mac).value_or(kGrungo);/return kGrungo;/'   "Table.TheNineDevicesHoldTheNineSpeciesOnceEach"
-mutant "an unknown board is not a grungo" $F 's/return tableSpecies(mac).value_or(kGrungo);/return tableSpecies(mac).value_or(species::fizz);/'   "Table.AnyOtherBoardIsAGrungo"
+H=lib/blorb/include/blorb/founding.h
+mutant "the table is ignored" $F 's/  if (std::optional<SpeciesId> s = tableSpecies(mac)) return \*s;//'   "Table.NineAssignedDevicesKeepTheirSpeciesOnceEach"
+mutant "an unknown board is a grungo" $F 's/  return castSpecies(fnv1a(mac, 6));/  return kGrungo;/'   "Table.AnyOtherBoardTakesARegularSpeciesFromItsMac"
+mutant "the octopus joins the regular cast" $H 's/return s != species::octopus;/return true;/'   "Founding.TheOctopusComesOnlyByName"
 mutant "a rescued slot is no pet" $F 's/"rescue\/snap.a.0", //' \
   "NeedsFounding.AnyKeepsakeOrLineageMeansAPetLivesHere"
 mutant "the lineage alone is no pet" $F 's/"lineage.log",//' \
-  "NeedsFounding.TheGiftDevicesGrungoIsNeverFoundedAgain"
+  "NeedsFounding.APetThatLivesIsNeverFoundedAgain"
 mutant "the pin is ignored" $F 's/if (std::optional<SpeciesId> pin = readFoundPin(s)) return \*pin;//' \
   "Founding.ThePinIsTheOwnersOverrideOverTheTable"
 mutant "a pin past the roster is read" $F 's/if (b\[5\] >= kSpeciesCount) return std::nullopt;//' \
@@ -50,7 +52,7 @@ mutant "a pin of any length is read" $F 's/\*n != kPinLen || //' \
 mutant "off leaves the pin" $F 's/|| s.rename(kPinFile, kPinAside)/|| true/' \
   "Pin.OffGivesTheTableBackAndDeletesNothing"
 mutant "the verb writes on a pet's flash" $V 's/if (!blorb::needsFounding(store)) return "a pet lives here: a pin only seeds a fresh founding";//' \
-  "NeedsFounding.TheGiftDevicesGrungoIsNeverFoundedAgain"
+  "NeedsFounding.APetThatLivesIsNeverFoundedAgain"
 mutant "the verb pins a species with no row" $V 's/ || s.v >= blorb::kSpeciesCount//' \
   "Pin.ANameOrNumberWithNoRowIsRefusedAndWritesNothing"
 exit $failed

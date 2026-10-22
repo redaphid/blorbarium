@@ -136,15 +136,11 @@ class Dish {
   // for grungo takes the species' name, and an owner's name stays. NotYet
   // while nothing could be written (an OTA trial's held storage), a duel is
   // open, or the pet is an egg or a clutch, so the caller asks again.
-  // NotNeeded once he has a species, when `species` is grungo (he already is
-  // one), and on a sealed board. Running it again after a power cut finds
-  // the saved pet adopted, or adopts the unsaved one the same way.
+  // NotNeeded once he has a species, and on a sealed board. Grungo is adopted
+  // like any species. Running it again after a power cut finds the saved pet
+  // adopted, or adopts the unsaved one the same way.
   enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
   Adoption adoptSpecies(SpeciesId, const LookBands&);
-  // The one-time step after adoption (founding.h retuneFirstHours), recorded
-  // and saved the same way. NotYet as adoptSpecies; NotNeeded once he sleeps
-  // by FirstHours or when he is not the Gift recipe's `species`.
-  Adoption retuneFirstHours(SpeciesId);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
 
   // Duels (dish_duel.h). The view is plain data for the duel scene and the
