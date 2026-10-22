@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 #include "blorb/air.h"
+#include "blorb/carry_show.h"
 #include "blorb/appearance.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
@@ -159,6 +160,10 @@ class Dish {
   // tick (-1 level). Reads only.
   bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
   int8_t aimNow() const { return detectors_.aim.aim(); }
+  // Carried about, as the eyes see it (carry_show.h): presentation only. The
+  // cable's `DEBUG carry <kind>` plays one now; tests count what started.
+  const CarryShow& carry() const { return carry_; }
+  void forceCarry(Carry k);
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
@@ -236,6 +241,9 @@ class Dish {
   // or hashed. nowMs_ is the newest time the shell has handed in, a sample's
   // or a tick call's: the frame drawn next is about then.
   FeedShow feed_;
+  // Carried about (carry_show.h): presentation only, never saved or hashed.
+  CarryShow carry_;
+  CarryContext carryContext(const BodySample&) const;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn

@@ -50,6 +50,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 using PetStorage = hw::NvsFsStorage;
 #endif
 
+#include "hw/carry_ride.h"
 #include "hw/feel.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
@@ -477,7 +478,17 @@ static volatile uint8_t knockCode = 0;
 static volatile uint32_t shakeAt = 0;
 static volatile bool shaking = false;
 static volatile uint32_t knockAt = 0;
+// `DEBUG ride <kind> [ms]`: a motion from hw/carry_ride.h in place of the
+// IMU's reading, through the real sense path (the carried reactions'
+// detectors, the knocks, the poses), from rideAt for rideMs.
+static volatile uint32_t rideAt = 0, rideMs = 0;
+static volatile uint8_t rideKind = 0;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
+  if (rideMs && int32_t(ms - rideAt) >= 0 && ms - rideAt < rideMs) {
+    const blorb::BodySample r = hw::ride::toRaw(hw::ride::at(hw::ride::Kind(rideKind), ms - rideAt), ORIENT_HOME, ORIENT_R0);
+    s.ax = r.ax, s.ay = r.ay, s.az = r.az;
+    return true;
+  }
   if (knockCode && int32_t(ms - knockAt) >= 0) {
     const uint32_t since = ms - knockAt;
     for (uint8_t i = 0; i < knockCode; ++i) {
@@ -1311,6 +1322,44 @@ static void cradle(const char* a) {
   cradleFor(uint32_t(ms));
 }
 
+// `DEBUG ride <bumpy|turn|spin|swing|walk|jolt|shake|settle|still> [ms]`:
+// that motion (hw/carry_ride.h) through the real IMU path for its own
+// length, or ms; `DEBUG ride` alone lists them. The carried reactions
+// (blorb/carry_show.h) are chances, not certainties: see `DEBUG carry`.
+static void rideVerb(const char* line) {
+  char kind[16] = "";
+  long ms = 0;
+  std::sscanf(line, "%*s %15s %ld", kind, &ms);
+  const hw::ride::Info* r = *kind ? hw::ride::find(kind) : nullptr;
+  if (!r || ms < 0 || ms > 60000) {
+    for (const hw::ride::Info& k : hw::ride::kRides) Serial.printf("[hw] ride %s (%u ms): %s\n", k.name, unsigned(k.ms), k.what);
+    return (void)Serial.printf("[hw] debug ride: want <kind> [ms 1..60000]\n");
+  }
+  bodyq::rideMs = 0;
+  bodyq::rideKind = uint8_t(r->kind);
+  bodyq::rideAt = millis() + 40;   // on a read to come
+  bodyq::rideMs = ms ? uint32_t(ms) : r->ms;
+  Serial.printf("[hw] debug ride %s %u ms\n", r->name, unsigned(bodyq::rideMs));
+}
+
+// `DEBUG carry [kind|none]`: that carried reaction now (cling, dizzy, jelly,
+// whee, glance, settle), whatever the motion: a preview of how it looks. With
+// none named, what the carry show measures and how many of each have played.
+static void carryVerb(const char* a) {
+  blorb::Carry k = blorb::Carry::None;
+  if (*a && (std::strcmp(a, "none") == 0 || blorb::carryFromName(a, k))) {
+    dish->forceCarry(k);
+    return (void)Serial.printf("[hw] debug carry %s\n", blorb::carryName(k));
+  }
+  const blorb::CarryShow& c = dish->carry();
+  const blorb::CarryShow::Signals& g = c.signals();
+  Serial.printf("[hw] carry playing=%s jerk=%d pull=%d off=%d push=%d ride_ms=%u still_ms=%u steps=%u swings=%u spin=%d",
+                blorb::carryName(c.playing(millis())), g.jerk, g.pull, g.off, g.push, unsigned(g.rideMs), unsigned(g.stillMs),
+                unsigned(g.steps), unsigned(g.swings), g.spinDeg);
+  for (uint8_t i = 1; i < blorb::kCarryKinds; ++i) Serial.printf(" %s=%u", blorb::carryName(blorb::Carry(i)), unsigned(c.started(blorb::Carry(i))));
+  Serial.printf("\n");
+}
+
 // `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
 static void nap() {
   blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
@@ -1420,6 +1469,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "shake") == 0) return shake();
+  if (std::strcmp(verb, "ride") == 0) return rideVerb(line);
+  if (std::strcmp(verb, "carry") == 0) return carryVerb(a);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);

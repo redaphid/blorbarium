@@ -116,6 +116,7 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
   a.feed.refusedMs = fast(now.feed.refusedMs);
   a.feed.chompMs = fast(now.feed.chompMs);
   a.feed.meterMs = fast(now.feed.meterMs);
+  a.carry.ageMs = fast(now.carry.ageMs);   // carried about (carried.cpp): its reaction too
   // The same line a tick on: it crawls at the step it took last tick (a reading pace, not sped up).
   if (now.thinking && was.thinking && was.thought == now.thought && now.thoughtPhase > was.thoughtPhase &&
       std::memcmp(was.line, now.line, sizeof now.line) == 0) {
