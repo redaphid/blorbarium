@@ -591,7 +591,7 @@ void cmd_stats(Dish& dish, const Request& req, Reply& r) {
   if (!a.done() || (w && *w != "json")) return r.err(400, "BAD_ARGS");
   if (dish.sealed()) return r.err(409, "SEALED");   // nothing was read: the pet is on the flash
   if (w) {
-    const std::string json = lifeStatsJson(dish);
+    const BigString json = lifeStatsJson(dish);   // in the big heap (PSRAM), never internal RAM
     return r.chunks(reinterpret_cast<const uint8_t*>(json.data()), json.size());
   }
   const LifeTally& t = dish.tally();

@@ -20,6 +20,7 @@
 // open bucket and a few KB at most.
 #include <cstdint>
 #include <memory>
+#include "blorb/big_heap.h"
 #include <optional>
 #include <string>
 #include <string_view>
@@ -81,7 +82,7 @@ struct AnalyticsBucket {
   uint32_t span = 0;           // powered seconds it covers
   uint32_t wallFirst = 0, wallLast = 0;   // unix seconds of its first and last second with wall time known; 0: none
   uint32_t count[kAnalyticCount]{};
-  std::vector<uint32_t> extra;            // a newer firmware's slots, carried
+  BigVector<uint32_t> extra;            // a newer firmware's slots, carried
   uint32_t bins[kHistogramCount][kMaxBins]{};
   void merge(const AnalyticsBucket& newer);   // newer comes after this one
   void reset();                               // empty, in place (no ~0.5 KB temporary on the stack)
@@ -94,7 +95,7 @@ class Analytics {
   static constexpr uint8_t kMaxBuckets = 16;   // closed and open; then the oldest two merge
 
   Analytics();
-  Analytics(const Analytics& o) : powered_(o.powered_), nextSeq_(o.nextSeq_), open_(new AnalyticsBucket(*o.open_)), closed_(o.closed_) {}
+  Analytics(const Analytics& o) : powered_(o.powered_), nextSeq_(o.nextSeq_), open_(makeBig<AnalyticsBucket>(*o.open_)), closed_(o.closed_) {}
   Analytics(Analytics&&) = default;
   Analytics& operator=(const Analytics& o) { return *this = Analytics(o); }
   Analytics& operator=(Analytics&&) = default;
@@ -122,8 +123,8 @@ class Analytics {
   uint32_t poweredSeconds() const { return powered_; }
   // Oldest first, the open one last; each decoded once, for the JSON and tests.
   template <class F> void forEach(F&& f) const {
-    const std::unique_ptr<AnalyticsBucket> b(new AnalyticsBucket);   // the heap's: a bucket is ~0.5 KB
-    for (const std::vector<uint8_t>& c : closed_)
+    const BigPtr<AnalyticsBucket> b(makeBig<AnalyticsBucket>());   // a bucket is ~0.5 KB: the big heap's, never the stack's
+    for (const BigBytes& c : closed_)
       if (decodeBucket(c.data(), c.size(), *b)) f(*b, false);
     f(*open_, true);
   }
@@ -131,22 +132,23 @@ class Analytics {
   size_t closedCount() const { return closed_.size(); }
 
   // ---- the file section (life_tally.h writes it) ----
-  std::vector<uint8_t> encode() const;
+  BigBytes encode() const;
   bool decode(const uint8_t*, size_t);   // false: left as constructed
-  static std::vector<uint8_t> encodeBucket(const AnalyticsBucket&);
+  static BigBytes encodeBucket(const AnalyticsBucket&);
   static bool decodeBucket(const uint8_t*, size_t, AnalyticsBucket&);
 
  private:
   void close();
   uint32_t powered_ = 0, nextSeq_ = 1;
-  // On the heap, as every bucket here: about 0.5 KB each, and the boot's
-  // decode runs on the loop task's 8 KB stack (test_dish's Budget).
-  std::unique_ptr<AnalyticsBucket> open_;
-  std::vector<std::vector<uint8_t>> closed_;
+  // Off the stack (about 0.5 KB a bucket, and the boot's decode runs on the
+  // loop task's 8 KB stack: test_dish's Budget) and out of internal RAM
+  // (big_heap.h: PSRAM on the badge, #53), as everything the stats hold.
+  BigPtr<AnalyticsBucket> open_;
+  BigVector<BigBytes> closed_;
 };
 
 // "analytics":{...}, appended to a JSON document (life_tally.cpp's lifeStatsJson).
-void analyticsJson(const Analytics&, std::string& out);
+void analyticsJson(const Analytics&, BigString& out);
 // The server's answer to an upload, {"ack":<seq>,...}: the seq to hand
 // Dish::ackStats (its "closed_upto" once it has stored them). nullopt when it
 // names none: keep everything.

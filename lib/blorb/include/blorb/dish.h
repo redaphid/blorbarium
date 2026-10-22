@@ -280,7 +280,10 @@ class Dish {
   Taught taught_;                  // its own file, read once at boot; never saved with him or hashed
   // life.stats, as taught_: counted here, written with the keepsake at most
   // every Stats::kSaveEveryTicks, at once after a life event or a flush.
-  Stats stats_;
+  // The whole record lives in the big heap (big_heap.h: PSRAM on the badge,
+  // never the internal RAM a duel's radio needs, #53); the Dish holds a pointer.
+  BigPtr<Stats> statsBox_ = makeBig<Stats>();
+  Stats& stats_ = *statsBox_;
   uint32_t statsSavedTick_ = 0, battleStart_ = 0, refusedTick_ = UINT32_MAX;
   bool statsUrgent_ = false, duelWas_ = false;
   uint8_t secondTicks_ = 0, seenTurn_ = 0xFF, seenEnd_ = 0;

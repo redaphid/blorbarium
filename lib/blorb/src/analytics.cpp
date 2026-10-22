@@ -9,7 +9,7 @@ namespace blorb {
 namespace {
 
 // Unsigned LEB128: most counts are small, so a day's bucket is about 100 bytes.
-void putVar(std::vector<uint8_t>& b, uint32_t v) {
+void putVar(BigBytes& b, uint32_t v) {
   while (v >= 0x80) b.push_back(uint8_t(v | 0x80)), v >>= 7;
   b.push_back(uint8_t(v));
 }
@@ -32,7 +32,7 @@ struct Reader {
 
 uint32_t sum(uint32_t a, uint32_t b) { return a > UINT32_MAX - b ? UINT32_MAX : a + b; }
 
-void appendf(std::string& s, const char* fmt, ...) {
+void appendf(BigString& s, const char* fmt, ...) {
   char b[96];
   va_list ap;
   va_start(ap, fmt);
@@ -72,7 +72,7 @@ bool AnalyticsBucket::operator==(const AnalyticsBucket& o) const {
   return true;
 }
 
-Analytics::Analytics() : open_(new AnalyticsBucket) { open_->first = open_->last = nextSeq_++; }
+Analytics::Analytics() : open_(makeBig<AnalyticsBucket>()) { open_->first = open_->last = nextSeq_++; }
 
 void Analytics::second(std::optional<uint32_t> wall) {
   ++powered_;
@@ -91,7 +91,7 @@ void Analytics::close() {
   open_->poweredStart = powered_;
   // Weeks offline: the oldest two become one, so the file has a fixed size and nothing counted goes.
   while (closed_.size() + 1 > kMaxBuckets) {
-    const std::unique_ptr<AnalyticsBucket> a(new AnalyticsBucket), b(new AnalyticsBucket);
+    const BigPtr<AnalyticsBucket> a(makeBig<AnalyticsBucket>()), b(makeBig<AnalyticsBucket>());
     if (!decodeBucket(closed_[0].data(), closed_[0].size(), *a) || !decodeBucket(closed_[1].data(), closed_[1].size(), *b)) {
       closed_.erase(closed_.begin());   // unreadable cannot happen to bytes we wrote; never loop on it
       continue;
@@ -104,9 +104,9 @@ void Analytics::close() {
 
 bool Analytics::ack(uint32_t seq) {
   const size_t before = closed_.size();
-  const std::unique_ptr<AnalyticsBucket> b(new AnalyticsBucket);
+  const BigPtr<AnalyticsBucket> b(makeBig<AnalyticsBucket>());
   closed_.erase(std::remove_if(closed_.begin(), closed_.end(),
-                               [&](const std::vector<uint8_t>& c) {
+                               [&](const BigBytes& c) {
                                  return decodeBucket(c.data(), c.size(), *b) && b->last <= seq;
                                }),
                 closed_.end());
@@ -116,8 +116,8 @@ bool Analytics::ack(uint32_t seq) {
 // A bucket: first, last, poweredStart, span, wallFirst, wallLast, the count
 // of slots and each, then the count of histograms and each one's bin count
 // and bins; all LEB128.
-std::vector<uint8_t> Analytics::encodeBucket(const AnalyticsBucket& b) {
-  std::vector<uint8_t> o;
+BigBytes Analytics::encodeBucket(const AnalyticsBucket& b) {
+  BigBytes o;
   for (uint32_t v : {b.first, b.last, b.poweredStart, b.span, b.wallFirst, b.wallLast}) putVar(o, v);
   putVar(o, uint32_t(kAnalyticCount + b.extra.size()));
   for (uint32_t c : b.count) putVar(o, c);
@@ -156,16 +156,16 @@ bool Analytics::decodeBucket(const uint8_t* p, size_t n, AnalyticsBucket& b) {
 
 // The section: powered seconds, the next sequence number, the closed
 // buckets (each length-prefixed), then the open one.
-std::vector<uint8_t> Analytics::encode() const {
-  std::vector<uint8_t> o;
+BigBytes Analytics::encode() const {
+  BigBytes o;
   putVar(o, powered_);
   putVar(o, nextSeq_);
   putVar(o, uint32_t(closed_.size()));
-  for (const std::vector<uint8_t>& c : closed_) {
+  for (const BigBytes& c : closed_) {
     putVar(o, uint32_t(c.size()));
     o.insert(o.end(), c.begin(), c.end());
   }
-  const std::vector<uint8_t> open = encodeBucket(*open_);
+  const BigBytes open = encodeBucket(*open_);
   putVar(o, uint32_t(open.size()));
   o.insert(o.end(), open.begin(), open.end());
   return o;
@@ -190,7 +190,7 @@ bool Analytics::decode(const uint8_t* p, size_t n) {
   return true;
 }
 
-void analyticsJson(const Analytics& a, std::string& s) {
+void analyticsJson(const Analytics& a, BigString& s) {
   appendf(s, "\"analytics\":{\"powered_s\":%u,\"bucket_s\":%u,\"hist_edges\":{", unsigned(a.poweredSeconds()),
           unsigned(Analytics::kBucketSeconds));
   for (uint8_t h = 0; h < kHistogramCount; ++h) {

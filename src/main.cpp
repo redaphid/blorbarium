@@ -923,9 +923,10 @@ static void reportBoot() {
                 kReleaseStamp.board.data());
   Serial.printf("[hw] home rot=%u (USB-C %s)\n", unsigned(ORIENT_HOME), ORIENT_HOME == 2 ? "up" : "down");
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
-  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(faultAir.get())),
-                int(esp_ptr_external_ram(lat::rec.get())), int(esp_ptr_external_ram(boardRowHashes())),
-                int(esp_ptr_external_ram(boardShadow())));
+  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d stats=%d (1: in PSRAM)\n",
+                int(esp_ptr_external_ram(faultAir.get())), int(esp_ptr_external_ram(lat::rec.get())),
+                int(esp_ptr_external_ram(boardRowHashes())), int(esp_ptr_external_ram(boardShadow())),
+                int(esp_ptr_external_ram(&dish->stats())));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
@@ -1063,6 +1064,13 @@ void setup() {
   faultAir.make(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
   radioGate.inner = faultAir.get();
   lat::rec.make();
+  // The life stats and analytics (#38, #50) take everything they hold from
+  // PSRAM, before the Dish that owns them is built: internal RAM is the radio's (#53).
+  blorb::bigHeap = {[](size_t n) -> void* {
+                      void* p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                      return p ? p : malloc(n);
+                    },
+                    [](void* p) { heap_caps_free(p); }};
 #endif
   boardButtonBegin();
 #if !defined(BADGE_BOARD_SIM)

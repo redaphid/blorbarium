@@ -36,9 +36,19 @@ constexpr Fx kSickOn = Fx::ratio(3, 10), kSickOff = Fx::ratio(15, 100);
 constexpr Fx kHurtOn = Fx::ratio(4, 10), kHurtOff = Fx::ratio(2, 10);
 constexpr Fx kHeld = Fx::ratio(1, 2);
 
+// The life section's writer: logframes::Out's, into the big heap (big_heap.h).
+struct Out {
+  BigBytes b;
+  void u8(uint8_t v) { b.push_back(v); }
+  void u16(uint16_t v) { u8(uint8_t(v)), u8(uint8_t(v >> 8)); }
+  void u32(uint32_t v) { u16(uint16_t(v)), u16(uint16_t(v >> 16)); }
+  void u64(uint64_t v) { u32(uint32_t(v)), u32(uint32_t(v >> 32)); }
+  void raw(const void* p, size_t n) { b.insert(b.end(), static_cast<const uint8_t*>(p), static_cast<const uint8_t*>(p) + n); }
+};
+
 uint32_t sat(uint64_t v) { return v > UINT32_MAX ? UINT32_MAX : uint32_t(v); }
 
-void putLife(logframes::Out& o, const LifeCounters& c) {
+void putLife(Out& o, const LifeCounters& c) {
   const size_t slots = std::min<size_t>(kLifeStatCount + c.extra.size(), 255);
   o.u8(uint8_t(slots));
   for (size_t i = 0; i < slots; ++i) o.u32(i < kLifeStatCount ? c.v[i] : c.extra[i - kLifeStatCount]);
@@ -61,7 +71,7 @@ const char* const kStageNames[] = {"baby", "child", "adult", "elder"};
 
 // One JSON document, built in place.
 struct Json {
-  std::string s;
+  BigString s;
   void add(const char* fmt, ...) {
     char b[160];
     va_list ap;
@@ -96,7 +106,7 @@ struct Json {
 
 const char* kB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-void base64(const std::vector<uint8_t>& in, std::string& out) {
+void base64(const std::vector<uint8_t>& in, BigString& out) {   // the genome's bytes, into the big heap
   for (size_t i = 0; i < in.size(); i += 3) {
     const size_t n = in.size();
     const uint32_t v = uint32_t(in[i]) << 16 | (i + 1 < n ? uint32_t(in[i + 1]) << 8 : 0) | (i + 2 < n ? in[i + 2] : 0);
@@ -121,8 +131,8 @@ bool LifeCounters::operator==(const LifeCounters& o) const {
 
 // ---- the life section ----------------------------------------------------------------------
 
-std::vector<uint8_t> LifeTally::encode() const {
-  logframes::Out o;
+BigBytes LifeTally::encode() const {
+  Out o;
   o.u8(spells);
   o.u64(lineageId);
   o.u16(generation);
@@ -177,12 +187,12 @@ LifeTally LifeTally::laid(uint16_t childGeneration) const {
 
 // ---- the file ------------------------------------------------------------------------------
 
-std::vector<uint8_t> Stats::encode() const {
-  logframes::Out o;
+BigBytes Stats::encode() const {
+  Out o;
   o.raw(kMagic, sizeof kMagic);
   o.u8(kVersion);
   o.u32(seq);
-  auto section = [&](uint8_t tag, const std::vector<uint8_t>& bytes) {
+  auto section = [&](uint8_t tag, const BigBytes& bytes) {
     o.u8(tag);
     o.u16(uint16_t(bytes.size()));
     o.raw(bytes.data(), bytes.size());
@@ -216,7 +226,7 @@ std::optional<Stats::Loaded> Stats::decode(const uint8_t* b, size_t n) {
       if (!a.decode(p, len)) return std::nullopt;
       l.analytics = std::move(a);
     } else {
-      l.unknown.push_back(Section{tag, std::vector<uint8_t>(p, p + len)});
+      l.unknown.push_back(Section{tag, BigBytes(p, p + len)});
     }
     in.at += len;
   }
@@ -227,7 +237,7 @@ std::optional<Stats::Loaded> Stats::decode(const uint8_t* b, size_t n) {
 std::optional<Stats::Loaded> Stats::load(Storage& s) {
   const size_t size = s.size(kFile);
   if (size == 0 || size > kMaxFile) return std::nullopt;
-  std::vector<uint8_t> b(size);
+  BigBytes b(size);
   const std::optional<size_t> n = s.read(kFile, 0, b.data(), size);
   if (!n || *n != size) return std::nullopt;
   return decode(b.data(), size);
@@ -235,7 +245,7 @@ std::optional<Stats::Loaded> Stats::load(Storage& s) {
 
 bool Stats::save(Storage& s) {
   ++seq;
-  const std::vector<uint8_t> b = encode();
+  const BigBytes b = encode();
   if (s.writeAtomic(kFile, b.data(), b.size())) return true;
   --seq;
   analytics.add(anx::stats_save_failed);
@@ -391,7 +401,7 @@ const char* lifeStatCauseName(uint32_t code) {
   return kCauseNames[std::min<uint32_t>(code - 1, 4)];
 }
 
-std::string lifeStatsJson(const Dish& dish, const StatsIdentity& id) {
+BigString lifeStatsJson(const Dish& dish, const StatsIdentity& id) {
   const Stats& st = dish.stats();
   const LifeTally& t = st.life;
   const Occupant& o = dish.occupant();

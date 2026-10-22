@@ -160,7 +160,7 @@ uint64_t total(const Analytics& a) {
 TEST(File, RoundTripsWithItsAncestorsAndAnalytics) {
   Stats s = sampleFile();
   ASSERT_EQ(s.analytics.closedCount(), 3u);
-  const std::vector<uint8_t> b = s.encode();
+  const BigBytes b = s.encode();
   EXPECT_LT(b.size(), 2048u) << "a few days fit well inside one 4 KB block";
   std::optional<Stats::Loaded> back = Stats::decode(b.data(), b.size());
   ASSERT_TRUE(back && back->life && back->analytics);
@@ -178,9 +178,9 @@ TEST(File, RoundTripsWithItsAncestorsAndAnalytics) {
 }
 
 TEST(File, ATornForeignOrNewerFileIsNotRead) {
-  const std::vector<uint8_t> good = sampleFile().encode();
+  const BigBytes good = sampleFile().encode();
   for (size_t i = 0; i < good.size(); ++i) {
-    std::vector<uint8_t> b = good;
+    std::vector<uint8_t> b(good.begin(), good.end());
     b[i] ^= 0x10;
     EXPECT_FALSE(Stats::decode(b.data(), b.size())) << "a flipped bit at " << i;
   }
@@ -203,7 +203,7 @@ TEST(File, ATornForeignOrNewerFileIsNotRead) {
 TEST(File, AnUnknownSectionIsCarried) {
   Stats s = sampleFile();
   s.unknown.push_back(Stats::Section{9, {1, 2, 3}});
-  const std::vector<uint8_t> b = s.encode();
+  const BigBytes b = s.encode();
   std::optional<Stats::Loaded> l = Stats::decode(b.data(), b.size());
   ASSERT_TRUE(l);
   ASSERT_EQ(l->unknown.size(), 1u);
@@ -239,13 +239,13 @@ TEST(File, FewerSlotsReadAsZeroAndMoreAreCarried) {
   ASSERT_TRUE(b);
   ASSERT_EQ(b->life.extra.size(), 3u);
   EXPECT_EQ(b->life.extra[2], 500u + kLifeStatCount + 2);
-  EXPECT_EQ(b->encode(), newer) << "a rollback writes a newer firmware's slots back as they were";
+  EXPECT_TRUE(b->encode() == BigBytes(newer.begin(), newer.end())) << "a rollback writes a newer firmware's slots back as they were";
 
   AnalyticsBucket k;
   k.first = k.last = 3;
   k.count[anx::frames] = 1000;
   k.extra = {7, 8};
-  std::vector<uint8_t> kb = Analytics::encodeBucket(k);
+  BigBytes kb = Analytics::encodeBucket(k);
   AnalyticsBucket back;
   ASSERT_TRUE(Analytics::decodeBucket(kb.data(), kb.size(), back));
   EXPECT_TRUE(back == k) << "a bucket keeps a newer firmware's slots too";
@@ -572,7 +572,7 @@ TEST(Protocol, StatsAsLinesAndAsJson) {
   const std::vector<std::string> json = p.send("#8 STATS json");
   ASSERT_GE(json.size(), 2u);
   EXPECT_EQ(json.back().rfind("#8 OK ", 0), 0u);
-  const std::string doc = lifeStatsJson(*p.box.dish);
+  const BigString doc = lifeStatsJson(*p.box.dish);
   EXPECT_EQ(doc.front(), '{');
   EXPECT_EQ(doc.back(), '}');
   EXPECT_EQ(json.back(), "#8 OK " + std::to_string(doc.size()) + " " + [&] {
@@ -587,7 +587,7 @@ TEST(Protocol, StatsAsLinesAndAsJson) {
   EXPECT_EQ(doc.find("\"parent\""), std::string::npos) << "a founder has no parent";
   EXPECT_EQ(doc.find("\"mac\""), std::string::npos) << "the phone knows which badge it reads";
 
-  const std::string up = lifeStatsJson(*p.box.dish, StatsIdentity{"d4:05:92:77:1b:44", true});
+  const BigString up = lifeStatsJson(*p.box.dish, StatsIdentity{"d4:05:92:77:1b:44", true});
   EXPECT_NE(up.find("\"mac\":\"d4:05:92:77:1b:44\""), std::string::npos);
   EXPECT_NE(up.find("\"genome\":\""), std::string::npos);
 
@@ -618,9 +618,42 @@ TEST(Protocol, ANameIsEscapedInTheJson) {
   Phone p;
   p.box.boot();
   p.box.dish->rename("Bo\"b\\");
-  const std::string doc = lifeStatsJson(*p.box.dish);
+  const BigString doc = lifeStatsJson(*p.box.dish);
   EXPECT_NE(doc.find("\"name\":\"Bo\\\"b\\\\\""), std::string::npos) << doc;
   EXPECT_NE(doc.find("\"phase\":\"egg\""), std::string::npos);
+}
+
+// ---- where the memory comes from (#53: never the badge's internal RAM) ---------------------
+
+namespace bigcount {
+long live = 0, calls = 0;
+void* alloc(size_t n) {
+  ++calls, ++live;
+  return std::malloc(n);
+}
+void release(void* p) {
+  if (p) --live;
+  std::free(p);
+}
+}  // namespace bigcount
+
+// Everything the stats hold, and every buffer they use for a moment, comes
+// from bigHeap (the firmware's PSRAM), and all of it goes back to it.
+TEST(Memory, TheStatsTakeEveryByteFromTheBigHeapAndGiveItBack) {
+  bigHeap = {bigcount::alloc, bigcount::release};
+  bigcount::live = bigcount::calls = 0;
+  {
+    Phone p;
+    p.box.boot();
+    p.box.run(Analytics::kBucketSeconds * 1000u + 31 * 60000);   // a closed bucket, saves on the way
+    p.box.boot();
+    p.send("#1 STATS json");
+    p.send("#2 STATS");
+    EXPECT_GT(bigcount::live, 0) << "the record and its buckets live there";
+  }
+  EXPECT_GT(bigcount::calls, 10);
+  EXPECT_EQ(bigcount::live, 0) << "and every allocation went back to it";
+  bigHeap = {};
 }
 
 // ---- what it costs (printed for the report; the bounds are loose, for a slow host) --------

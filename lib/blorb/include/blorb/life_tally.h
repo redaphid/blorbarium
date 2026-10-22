@@ -59,7 +59,7 @@ static_assert(lifeStatSlotsInOrder(), "life_stats.def: each row's slot is its po
 // wrote that this one does not know, so a rollback writes them back.
 struct LifeCounters {
   uint32_t v[kLifeStatCount]{};
-  std::vector<uint32_t> extra;
+  BigVector<uint32_t> extra;
   uint32_t operator[](uint8_t slot) const { return v[slot]; }
   bool operator==(const LifeCounters& o) const;
 };
@@ -79,13 +79,13 @@ struct LifeTally {
   uint16_t generation = 0;    // the life counted: the egg's or creature's; a clutch's is its dead parent's
   LifeCounters life;
   // Index 0 the parent, 1 the grandparent; absent for a founding life.
-  std::vector<AncestorLife> ancestors;
+  BigVector<AncestorLife> ancestors;
   // Spells under way, so a reboot mid-spell does not count it twice. Saved.
   enum Spell : uint8_t { kStarving = 1, kSick = 2, kHurt = 4, kAsleep = 8, kAimed = 16 };
   uint8_t spells = 0;
 
   // The file's life section (Stats).
-  std::vector<uint8_t> encode() const;
+  BigBytes encode() const;
   static std::optional<LifeTally> decode(const uint8_t*, size_t);
 
   // The record a boot keeps, given what the flash held: this life's, or the
@@ -106,23 +106,23 @@ class Stats {
   static constexpr uint8_t kVersion = 1;
   static constexpr uint32_t kSaveEveryTicks = 30 * kTicksPerMinute;
   enum Tag : uint8_t { kLife = 1, kAnalytics = 2 };
-  struct Section { uint8_t tag; std::vector<uint8_t> bytes; };
+  struct Section { uint8_t tag; BigBytes bytes; };
 
   uint32_t seq = 0;            // writes so far, across lives: the server keeps the highest
   LifeTally life;
   Analytics analytics;
-  std::vector<Section> unknown;
+  BigVector<Section> unknown;
 
   // ---- the file ----
   struct Loaded {
     uint32_t seq = 0;
     std::optional<LifeTally> life;
     std::optional<Analytics> analytics;
-    std::vector<Section> unknown;
+    BigVector<Section> unknown;
   };
   static std::optional<Loaded> load(Storage&);   // nullopt: missing, torn, or not ours
   static std::optional<Loaded> decode(const uint8_t*, size_t);
-  std::vector<uint8_t> encode() const;
+  BigBytes encode() const;
   bool save(Storage&);        // seq + 1 on a write that landed
   // Boot: what the flash held, made this life's (LifeTally::resume).
   void resume(std::optional<Loaded>, uint64_t lineageId, uint16_t generation);
@@ -165,6 +165,6 @@ const char* lifeStatCauseName(uint32_t deathCode);   // "starved", or "" while a
 // upload (the phone knows which badge it reads); `withGenome`: the genome
 // itself, base64, for a server that has never seen it.
 struct StatsIdentity { const char* mac = nullptr; bool withGenome = false; };
-std::string lifeStatsJson(const Dish&, const StatsIdentity& = {});
+BigString lifeStatsJson(const Dish&, const StatsIdentity& = {});
 
 }  // namespace blorb
