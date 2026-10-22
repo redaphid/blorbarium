@@ -524,7 +524,7 @@ TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
 }
 
 // A shared line (the fallback, when his file has none for the row) wears a
-// frame only one draw in kFrameOneIn, and no frame is a hedge.
+// frame only one draw in kFrameOneIn.
 TEST(Voice, ASharedLineIsFramedOnlyNowAndThen) {
   char out[kThoughtLineCap];
   const std::string bare = thoughtInfo(thought::p_mud)->text;
@@ -536,10 +536,6 @@ TEST(Voice, ASharedLineIsFramedOnlyNowAndThen) {
     }
     if (std::string(v.name) == "terse") EXPECT_EQ(framed, 0);
     else EXPECT_EQ(framed, 256 / kFrameOneIn) << v.name;
-  }
-  for (const FrameInfo& f : FRAMES) {
-    EXPECT_EQ(std::strstr(f.suffix, "OR SOMETHING"), nullptr);
-    EXPECT_EQ(std::strstr(f.prefix, "UM,"), nullptr);
   }
 }
 

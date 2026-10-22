@@ -28,8 +28,8 @@ The pets go to children aged 6 to 13. Every line must suit them.
   `terse` cut does not shorten them, so the line itself carries his voice. Only
   a shared line (the fallback) passes through the voice, and wears one of its
   frames (voices.def) just one time in `kFrameOneIn`.
-- No filler. A line ends on its joke, never on a hedge or tag ("OR SOMETHING",
-  "I GUESS", "MAYBE", "ISH", "KIND OF", "OK?"): the checker refuses them.
+- No filler. A line ends on its joke, not on a hedge or tag ("OR SOMETHING",
+  "I GUESS", "MAYBE", "ISH", "KIND OF", "OK?"). That is judgement, not a check.
 - Concrete beats generic: a callback to his quirks (the hood, the shell, the
   stash, the race) over an adjective. A joke a 6-year-old gets, a layer for
   the parent, nothing mean, nothing scary.

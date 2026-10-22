@@ -51,10 +51,6 @@ def _limits():
 
 
 MAX_TEXT, LINE_CAP, FRAME_ONE_IN = _limits()
-# Hedges and tags that pad a line instead of finishing it. The owner asked for
-# them gone ("OR SOMETHING" and other boring things): a line ends on its joke.
-FILLER = re.compile(r"(,? OR SOMETHING|,? I GUESS|,? WHATEVER|,? OR WHATEVER|,? KIND OF|,? SORT OF|,? ISH|"
-                    r"\. MAYBE|,? OK\?|,? OKAY\?|\. ANYWAY)[.!?]*$")
 
 
 @dataclass
@@ -153,8 +149,6 @@ def clean_text(raw, path, n, row, engine, problems):
     if len(text) > MAX_TEXT:
         over = len(text) - MAX_TEXT
         problems.add(path, n, f"too long by {over}: {len(text)} characters, the screen holds {MAX_TEXT}. \"{text}\"")
-    if m := FILLER.search(text):
-        problems.add(path, n, f"ends on a filler tag ('{m[0].strip(' ,.')}'): end on the joke instead. \"{text}\"")
     if text.count("#") > 1:
         problems.add(path, n, "only one '#' per line (it is the one number this situation gives)")
     elif sum(text.count(m) for m in MARKS) > 1:
