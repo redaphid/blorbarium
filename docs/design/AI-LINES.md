@@ -83,6 +83,17 @@ After a change to `thoughts.def`, `personalities/` or the genes, regenerate the 
 
 To try it without touching production, run `npx wrangler dev` (local D1, real Workers AI) after `npx wrangler d1 migrations apply blorbarium --local`.
 
+### Built on the same Worker since
+
+| Issue | Route or job | What it does |
+|---|---|---|
+| #38, #50 | `POST /api/stats` `{mac, genome_hash, stats_version, stats, parents, analytics, fw}` | Stores a pet's life stats (versioned, with the parents' summary). Analytics are stored raw and flattened into one row per metric for charts. |
+| #39 | cron `0 4 * * *` | Writes a 50 to 90 word diary entry, in the pet's voice, for each pet with new stats. It uses the counters that changed, his bible and his last entry. `GET /api/diary?mac=&genome_hash=` returns the entries. |
+| #40 | `POST /api/pet-lines` with `egg: true, wait: false, parent_genome_hash, parents` | Registers the egg and links its parent. A `hatch` job writes its bible and lines from its genes, the parent's bible, stats and diary, and what the egg carries. |
+| #47 | the same nightly cron, after the diaries | Rewrites a pet whose life has moved on: a new stage, fights or hunger since, or a week of diary. The new pack version is queued for the badge. |
+| #41, #49 | `/admin` (page) and `/api/admin/*` (ADMIN_TOKEN) | The dashboard. It covers badges, creatures by lineage, personality versions with edit and rewrite, packs (push any version), settings and commands for one badge or all, OTA rollouts (pause or kill), and analytics charts. The badge pulls its queue from `GET /api/badge/actions?mac=&via=` and reports each result to `POST /api/badge/actions/:id`. |
+| #42, #43 | `GET /api/pet?genome_hash=`, `POST /api/personality` `{genome, bible}` | The phone (Web Bluetooth never shows the MAC, so it uses the genome it reads) shows the pet's personality, a few lines, the journal and the family. It can save the owner's own words for him, which rewrites his lines (call 1 skipped) and queues the pack. |
+
 ## The badge (design; after Wi-Fi #26/#27)
 
 **When.** The pack is fetched in the first successful Wi-Fi window after the creature exists, and again only when the server flags a newer version. In a Wi-Fi window the badge does the following:
@@ -112,4 +123,10 @@ Pack lines are said exactly as written, like a species' own lines after #34: no 
 
 **A new generation or species.** A pack belongs to one genome. When a new egg hatches, the old `pack.lines` stops matching (by the genome-hash prefix) and is ignored, then deleted at the next successful fetch for the new creature. The new pet speaks its built-in lines until its own pack arrives. With #40 that pack is written while the egg incubates, so it is usually ready at hatching. A friend egg's hybrid is just another genome. A changed species changes everything the server reads, so it gets its own pack.
 
-**Newer versions.** An edit from the phone (#43), a nightly revision or the dashboard (#41) makes a new pack version and sets `pending_device`. In its nightly Wi-Fi window the badge uploads its stats and asks `GET /api/pet-lines`. If the version is newer than the one stored, it fetches, verifies, replaces and acknowledges. The phone can also push the pack over BLE as the same signed text, with the same checks.
+**Newer versions.** An edit from the phone (#43), a nightly revision (#47) or the dashboard (#41) makes a new pack version, sets `pending_device`, and queues a `line_pack` action for the badge. Once a night, in a normal Wi-Fi window, the badge does the following (offline-first rules unchanged, nothing on the frame loop):
+
+1. `POST /api/stats` with its counters and analytics (#38, #50).
+2. `GET /api/badge/actions?mac=&via=wifi`. For a `line_pack` action it fetches `GET /api/pet-lines?mac=&genome_hash=&version=`, verifies, replaces and acknowledges. An `ota` action goes through the existing signed `ota::Session` path; `settings` and `command` are applied if allowed.
+3. `POST /api/badge/actions/:id` with `{mac, ok, result}` for each action.
+
+The phone can also deliver a pack over BLE, as the same signed text with the same checks. That needs a new firmware verb (for example `PACK` in chunks, as `GENOME` is read), which does not exist yet.
