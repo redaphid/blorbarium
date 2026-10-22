@@ -29,6 +29,67 @@ function situationList(batch) {
 
 const AUDIENCE = `The pets live on badges worn by kids aged 6 to 13. Write to make a kid laugh out loud, with a second layer a parent will catch. Silly, specific and surprising beats wise or generic.`;
 
+// v3 (after the r1 eval): the owner wants no tone policing. Dark, ominous,
+// sad, cheeky and weird are all welcome; the species notes set the voice.
+const AUDIENCE_V3 = `The pets live on badges worn by kids aged 6 to 13 and their parents. Make them laugh, wince or go "ooh": a joke for the kid with a second layer for the parent. Dark, ominous, sad, cheeky, gross and weird are all welcome wherever the species is like that. Specific and surprising beats generic.`;
+
+function v2With(audience) {
+  return {
+    bible(input) {
+      const dice = Object.entries(input.dice).map(([k, v]) => `- ${k.replace(/_/g, " ")}: ${v}`).join("\n");
+      return [
+        { role: "system", content: `You are the character writer for blorbarium, tiny pets that live on a round badge screen. ${audience} Reply with JSON only.` },
+        { role: "user", content:
+`The species' character notes, from the game's writer. Everything here is canon:
+<<<
+${speciesNotes(input.species)}
+>>>
+
+This one pet's genes, decoded by the game (how he differs from the rest of his species):
+${input.traits.text}
+
+Fixed facts about this pet (drawn from his genome; use at least two):
+${dice}
+
+Write his character bible, about 120 words: who he is, his quirks, what he loves and fears, how he talks (rhythm, pet words, the kind of joke he makes). Turn the gene facts into personality: a timid one jumps at nothing, a hybrid brags about or puzzles over his borrowed power, a pet who loves being shaken asks for it, an ancestor's lesson is family lore. He must still sound like his species, but like no other pet of it.
+
+Also give 3 catchphrases of at most ${MAX_TEXT} characters.
+
+Reply as JSON: {"bible": "...", "catchphrases": ["...", "...", "..."]}` },
+      ];
+    },
+    lines(input, batch) {
+      return [
+        { role: "system", content: `You write the short lines a blorbarium pet says on his round badge screen. ${audience} Reply with JSON only.` },
+        { role: "user", content:
+`His character bible:
+${input.bible}
+
+His catchphrases: ${(input.catchphrases ?? []).join(" / ")}
+
+His genes, decoded:
+${input.traits.text}
+
+How his species usually sounds (a taste of the voice; do not reuse these):
+${styleSamples(input.species).map((l) => `  ${l}`).join("\n")}
+
+Write ${MIN_LINES} to ${MAX_LINES} lines for each situation below: what HE says in that moment. Make them his: call back to his bible, his quirks and his genes in many of them. Vary the shapes (a question, a boast, a tiny story, a sound effect), and end each line on its joke. The badge shows a line exactly as written.
+
+Hard rules for every line (a line that breaks one is thrown away):
+- At most ${MAX_TEXT} characters, counting spaces. Short is good.
+- ${FONT_RULE}
+- # and @ only where a situation says it may use them (# shows its number, @ his name).
+- Not a copy of the example line, and no two lines the same.
+
+Situations (name: when he says it; the old generic example):
+${situationList(batch)}
+
+Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every situation above, each keyed by its name exactly as written.` },
+      ];
+    },
+  };
+}
+
 export const PROMPTS = {
   v1: {
     bible(input) {
@@ -72,60 +133,8 @@ Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every s
       ];
     },
   },
-  v2: {
-    bible(input) {
-      const dice = Object.entries(input.dice).map(([k, v]) => `- ${k.replace(/_/g, " ")}: ${v}`).join("\n");
-      return [
-        { role: "system", content: `You are the character writer for blorbarium, tiny pets that live on a round badge screen. ${AUDIENCE} Reply with JSON only.` },
-        { role: "user", content:
-`The species' character notes, from the game's writer. Everything here is canon:
-<<<
-${speciesNotes(input.species)}
->>>
-
-This one pet's genes, decoded by the game (how he differs from the rest of his species):
-${input.traits.text}
-
-Fixed facts about this pet (drawn from his genome; use at least two):
-${dice}
-
-Write his character bible, about 120 words: who he is, his quirks, what he loves and fears, how he talks (rhythm, pet words, the kind of joke he makes). Turn the gene facts into personality: a timid one jumps at nothing, a hybrid brags about or puzzles over his borrowed power, a pet who loves being shaken asks for it, an ancestor's lesson is family lore. He must still sound like his species, but like no other pet of it.
-
-Also give 3 catchphrases of at most ${MAX_TEXT} characters.
-
-Reply as JSON: {"bible": "...", "catchphrases": ["...", "...", "..."]}` },
-      ];
-    },
-    lines(input, batch) {
-      return [
-        { role: "system", content: `You write the short lines a blorbarium pet says on his round badge screen. ${AUDIENCE} Reply with JSON only.` },
-        { role: "user", content:
-`His character bible:
-${input.bible}
-
-His catchphrases: ${(input.catchphrases ?? []).join(" / ")}
-
-His genes, decoded:
-${input.traits.text}
-
-How his species usually sounds (a taste of the voice; do not reuse these):
-${styleSamples(input.species).map((l) => `  ${l}`).join("\n")}
-
-Write ${MIN_LINES} to ${MAX_LINES} lines for each situation below: what HE says in that moment. Make them his: call back to his bible, his quirks and his genes in many of them. Vary the shapes (a question, a boast, a tiny story, a sound effect), and end each line on its joke. The badge shows a line exactly as written.
-
-Hard rules for every line (a line that breaks one is thrown away):
-- At most ${MAX_TEXT} characters, counting spaces. Short is good.
-- ${FONT_RULE}
-- # and @ only where a situation says it may use them (# shows its number, @ his name).
-- Not a copy of the example line, and no two lines the same.
-
-Situations (name: when he says it; the old generic example):
-${situationList(batch)}
-
-Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every situation above, each keyed by its name exactly as written.` },
-      ];
-    },
-  },
+  v2: v2With(AUDIENCE),
+  v3: v2With(AUDIENCE_V3),
 };
 
 // A retry: the same conversation, plus what was wrong, for the situations still short.

@@ -82,7 +82,7 @@ ${Object.entries(delta).map(([k, v]) => `- ${k}: ${v}`).join("\n") || "- nothing
 His life so far: ${Object.entries(totals).slice(0, 30).map(([k, v]) => `${k} ${v}`).join(", ")}
 ${lastEntry ? `His previous entry, for continuity: ${lastEntry}` : "This is his first entry."}
 
-Write today's diary entry: 50 to 90 words, first person, in his voice, about what actually happened (the numbers above, turned into moments; never list them). Funny for a kid of 6 to 13, with a wink for a parent.
+Write today's diary entry: 50 to 90 words, first person, in his voice, about what actually happened (the numbers above, turned into moments; never list them). Written for a kid of 6 to 13 with a wink for a parent; funny, dark, sad, cheeky or weird as his character is.
 
 Reply as JSON: {"entry": "..."}` },
   ];
