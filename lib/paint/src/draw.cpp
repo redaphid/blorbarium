@@ -52,12 +52,10 @@ constexpr int kPulse[kPulseTicks] = {256, 242, 208, 174, 160, 174, 208, 242};
 constexpr uint16_t kSparkOrbitTicks = 30;
 constexpr int kSparkMax = 6;
 constexpr Fx kSparkGlow = Fx::ratio(6, 10);
-constexpr int kMaxPips = 12;
-constexpr uint8_t kPipColour[3] = {214, 150, 70};
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-// The empty band above his head, under the pantry pips: the sibling's label
+// The empty band above his head, under the pantry bar: the sibling's label
 // strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
 // over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
@@ -1093,18 +1091,6 @@ void mask(Canvas240& cv) {
   }
 }
 
-// Pantry pellets as pips along the top of the rim.
-void pips(Canvas240& cv, uint8_t pantry) {
-  const int n = imin(pantry, kMaxPips);
-  const Rgb c{kPipColour[0], kPipColour[1], kPipColour[2]};
-  for (int k = 0; k < n; ++k) {
-    int dx = (2 * k - (n - 1)) * 9 / 2;
-    int x = kSide / 2 + dx, y = kSide / 2 - int(isqrt(uint64_t(108 * 108 - dx * dx)));
-    fill(cv, x - 1, y - 2, x + 1, y + 2, c, 256);
-    fill(cv, x - 2, y - 1, x + 2, y + 1, c, 256);
-  }
-}
-
 // 9x9 gesture glyphs, drawn at 2x: what the body should do, and how many
 // knocks it takes -- a dot per knock under the glyph (controls.h), so a child
 // can learn knock once versus knock knock by counting, not reading.
@@ -1495,7 +1481,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutch(a, cv); break;
   }
   phaseEnd(Phase::Figure);
-  pips(cv, a.pantry);
+  pantryBar(cv, a);   // feeding.cpp: the pantry, a bar on the rim (it was pips)
   rimTokens(cv, a);
   hint(cv, a);
   phaseEnd(Phase::Rim);

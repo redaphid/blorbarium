@@ -134,4 +134,11 @@ void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 // a refusal, the chomp and the belly meter. Before the round mask.
 void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
 
+// The pantry: a bar on the rim from about ten to twelve o'clock, its fill the
+// pellets left, green full to red empty (pantryColour, `full` 0..256), a feed
+// draining it a step, an empty try shaking it red. Over the dish, before the
+// round mask; it took the place of the pantry's pips.
+void pantryBar(Canvas240&, const blorb::Appearance&);
+uint16_t pantryColour(int full);
+
 }  // namespace paint

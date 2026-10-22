@@ -55,7 +55,7 @@ class SpritePack {
 // marks, face (crossfade from previous), then the foresee halo: a teal ring
 // around each eye anchor, tinted by the glow region, radius r * (1.5 + 0.5 *
 // glow), pulsing at 1.25 Hz, with up to six orbiting sparks once glow > 0.6;
-// then rim pips (pantry), the care-hint glyph and the thought line;
+// then the pantry bar on the rim, the care-hint glyph and the thought line;
 // then the round mask.
 void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 

@@ -16,6 +16,7 @@
 #include "paint/duel.h"
 #include "paint/marquee.h"
 #include "paint/text.h"
+#include "../../lib/paint/src/figure.h"   // pantryColour
 #include "paint/sprite_pack.h"
 
 using blorb::Appearance;
@@ -748,16 +749,20 @@ TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
 
 // ---- feeding (feed_show.h, feeding.cpp) ------------------------------------------------
 
-// Nothing heard, dropped, refused or eaten lately: the dish is drawn as it always was.
-TEST(Feeding, NoNewsDrawsNothing) {
+// Nothing heard, dropped, refused or eaten lately: no meter, no bubble, no
+// cookie; only the pantry bar, which is always there.
+TEST(Feeding, NoNewsDrawsNothingButThePantry) {
   const auto& pack = paint::placeholderPack();
   Appearance a = adult(0.1, 0.1);
   a.pantry = 2;
   a.feed.pantryMax = 4;
   a.feed.fullness = fx(0.5);
-  Appearance plain = a;
-  plain.feed = blorb::FeedView{};
-  EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
+  Appearance hungry = a;
+  hungry.feed.fullness = fx(0.1);
+  EXPECT_EQ(countChanged(*render(a, pack), *render(hungry, pack)), 0) << "no meter";
+  Appearance none = a;
+  none.feed.pantryMax = 0;
+  EXPECT_GT(countChanged(*render(a, pack), *render(none, pack)), 200) << "the pantry bar";
 }
 
 // The second knock says FOOD at once: a cookie springs out of the rim's
@@ -801,24 +806,97 @@ TEST(Font, HasEveryCharacterTheLinesMayUse) {
   }
 }
 
-// The pantry empty is a picture, not words, for a six-year-old: a red-lidded
-// cookie jar knocked over beside his head. I'M FULL! and ZZZ... stay words.
-TEST(Feeding, AnEmptyPantryIsAnEmptyJarNotWords) {
+// The pantry empty is a thought of emoji, not words, for a six-year-old: a
+// thought bubble with the food he wants, a red NO over it, then a sad face.
+// I'M FULL! and ZZZ... stay words.
+TEST(Feeding, AnEmptyPantryIsAThoughtOfEmojiNotWords) {
   const auto& pack = paint::placeholderPack();
-  constexpr uint16_t kLid = (226 >> 3) << 11 | (52 >> 2) << 5 | (48 >> 3);
   constexpr uint16_t kWords = (52 >> 3) << 11 | (36 >> 2) << 5 | (24 >> 3);   // feeding.cpp kInk
+  constexpr uint16_t kNoRed = (232 >> 3) << 11 | (36 >> 2) << 5 | (36 >> 3), kSad = (255 >> 3) << 11 | (204 >> 2) << 5 | (40 >> 3);
   Appearance a = adult();
   a.feed.pantryMax = 4;
   a.feed.refused = blorb::FeedRefusal::Empty;
-  a.feed.refusedMs = 600;
-  auto cv = render(a, pack);
-  const Box lid = find(*cv, kLid);
-  EXPECT_GT(lid.count, 60) << "the jar's red lid, big";
-  EXPECT_EQ(find(*cv, kWords).count, 0) << "no words";
+  auto at = [&](int ms, uint8_t tries = 0) {
+    Appearance b = a;
+    b.feed.refusedMs = uint16_t(ms);
+    b.feed.emptyTries = tries;
+    return render(b, pack);
+  };
+  auto first = at(450);
+  EXPECT_GT(find(*first, 0xFFFF).count, 2500) << "a thought bubble, big";
+  EXPECT_EQ(find(*first, kWords).count, 0) << "no words";
+  EXPECT_GT(find(*at(1000), kNoRed).count, 80) << "NO slams over the food";
+  EXPECT_GT(find(*at(1900), kSad).count, 300) << "then a sad face";
+  EXPECT_GT(countChanged(*at(450, 0), *at(450, 2)), 200) << "another try, another picture";
+  EXPECT_EQ(countChanged(*at(5000), *render(a, pack)), 0) << "and then it is gone";
   a.feed.refused = blorb::FeedRefusal::Full;
-  cv = render(a, pack);
-  EXPECT_EQ(find(*cv, kLid).count, 0);
-  EXPECT_GT(find(*cv, kWords).count, 20) << "I'M FULL! is still words";
+  a.feed.refusedMs = 600;
+  EXPECT_GT(find(*render(a, pack), kWords).count, 20) << "I'M FULL! is still words";
+}
+
+// ---- the pantry bar -----------------------------------------------------------------
+
+// A pixel in the bar's band at `turn` (1/1024 turn clockwise from three o'clock).
+uint16_t barAt(const Canvas240& cv, int turn) {
+  const double t = turn * 6.283185307179586 / 1024;
+  const int x = int(std::lround(119.5 + 108 * std::cos(t))), y = int(std::lround(119.5 + 108 * std::sin(t)));
+  return cv.px[y * kSide + x];
+}
+int red(uint16_t p) { return ((p >> 11) & 31) * 255 / 31; }
+int greenOf(uint16_t p) { return ((p >> 5) & 63) * 255 / 63; }
+
+// Green full, through yellow and amber, to red with one left or none.
+TEST(Pantry, ItsColourGoesFromGreenToRed) {
+  EXPECT_GT(greenOf(paint::pantryColour(256)), red(paint::pantryColour(256)) + 60) << "full: green";
+  EXPECT_GT(red(paint::pantryColour(64)), greenOf(paint::pantryColour(64)) + 120) << "one left: red";
+  const uint16_t half = paint::pantryColour(128);
+  EXPECT_GT(red(half), 200);
+  EXPECT_GT(greenOf(half), 100) << "half: amber, between";
+  for (int f = 64; f < 256; f += 16) EXPECT_LE(greenOf(paint::pantryColour(f)), greenOf(paint::pantryColour(f + 16)) + 24) << f;
+}
+
+// Its fill is the pellets left: at each level the bar is lit that far along,
+// in that level's colour, and past it is the dark track.
+TEST(Pantry, TheBarIsFilledToThePelletsLeftInTheirColour) {
+  const auto& pack = paint::placeholderPack();
+  constexpr int kA0 = 668, kA1 = 762;   // feeding.cpp kBarA0, kBarA1
+  for (int left = 0; left <= 4; ++left) {
+    Appearance a = adult();
+    a.pantry = uint8_t(left);
+    a.feed.pantryMax = 4;
+    auto cv = render(a, pack);
+    const uint16_t want = paint::pantryColour(256 * left / 4);
+    const int lit = kA0 + (kA1 - kA0) * left / 4;
+    if (left > 0) EXPECT_EQ(barAt(*cv, kA0 + 4), want) << left << " left: lit from the start";
+    if (left > 0) EXPECT_EQ(barAt(*cv, lit - 4), want) << left << " left: up to its level";
+    if (left < 4) EXPECT_NE(barAt(*cv, lit + 6), want) << left << " left: dark past it";
+  }
+}
+
+// A knock knock on an empty pantry shakes it hard; nothing else does.
+TEST(Pantry, ItShakesOnlyWhenAKnockKnockFindsItEmpty) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult();
+  a.feed.pantryMax = 4;
+  auto bar = [&](const Canvas240& cv) {   // the bar's corner of the panel, clear of the thought bubble
+    std::vector<uint16_t> v;
+    for (int y = 4; y < 50; ++y)
+      for (int x = 30; x < 122; ++x) v.push_back(cv.px[y * kSide + x]);
+    return v;
+  };
+  Appearance still = a;
+  still.feed.refused = blorb::FeedRefusal::Empty;
+  still.feed.refusedMs = 2000;
+  Appearance shaken = still;
+  shaken.feed.refusedMs = 40;
+  EXPECT_NE(bar(*render(shaken, pack)), bar(*render(still, pack))) << "empty: it shakes";
+  Appearance full = a;
+  full.pantry = 3;
+  full.feed.refused = blorb::FeedRefusal::Full;
+  full.feed.refusedMs = 40;
+  Appearance fullLater = full;
+  fullLater.feed.refusedMs = 2000;
+  EXPECT_EQ(bar(*render(full, pack)), bar(*render(fullLater, pack))) << "a refusal with food in it: no shake";
 }
 
 // The belly meter up the left rim: fuller, more of it lit.

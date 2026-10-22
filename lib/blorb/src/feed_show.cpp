@@ -14,6 +14,7 @@ void FeedShow::pressed(uint32_t ms, bool dropped, uint32_t tick, bool asleep, Fx
   if (dropped) dropped_ = {ms, true}, dropTick_ = tick;
   why_ = !dropped ? FeedRefusal::Empty : asleep ? FeedRefusal::Asleep : hunger < kFull ? FeedRefusal::Full : FeedRefusal::None;
   refused_ = {ms, why_ != FeedRefusal::None};
+  if (why_ == FeedRefusal::Empty) ++emptyTries_;
 }
 
 void FeedShow::ate(uint32_t ms, bool rotten, Fx hunger) {
@@ -37,6 +38,7 @@ FeedView FeedShow::view(uint32_t nowMs) const {
   if (v.refusedMs != FeedView::kNever) v.refused = why_;
   v.chompMs = age(chomp_, nowMs);
   v.rotten = rotten_;
+  v.emptyTries = emptyTries_;
   v.fullnessFrom = fullnessFrom_;
   for (uint16_t a : {v.droppedMs, v.refusedMs, v.chompMs})   // not on the knocks alone: food first
     if (a < v.meterMs) v.meterMs = a;
