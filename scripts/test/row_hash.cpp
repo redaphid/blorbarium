@@ -1,4 +1,4 @@
-// The panel's row hash (src/hw/board_lcd128.h, panelrows::of) against the
+// The panel's chunk hash (src/hw/board_lcd128.h, panelrows::of) against the
 // changes it must never miss: a row that changed only in the high bits of its
 // words (red, and red at an odd x especially), one word or two. A miss is a
 // stale stripe on the panel for up to 64 frames.
@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <random>
 
-constexpr int CANVAS_W = 240;
+constexpr int CANVAS_W = 30;   // a chunk: panelrows hashes each 30 px of a row on its own
 
 uint32_t of(const uint16_t* p) {   // as panelrows::of
   uint32_t h = 2166136261u;

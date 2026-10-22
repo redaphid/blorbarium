@@ -32,6 +32,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include <esp_heap_caps.h>
 #include <soc/soc_memory_layout.h>
 #include "hw/board_lcd128.h"
+#include "hw/paint_core0.h"
 #include "hw/storage_nvs_fs.h"
 #include "hw/system_clock.h"
 #include "hw/air_espnow.h"
@@ -157,29 +158,6 @@ static SerialLink phone;
 #if defined(BADGE_BOARD_SIM)
 static blorb::Link& host = phone;
 #else
-// Internal RAM is the scarce kind: a duel's radio takes about 37 KB of it,
-// Wi-Fi's TLS about 45 KB, and a phone's connection its share. Objects only
-// tasks touch (never an interrupt, and nothing in them is a lock or an
-// atomic) can live in PSRAM. PSRAM joins the heap in initArduino(), after
-// the static constructors have run, so such an object is made by setup()'s
-// first lines (make()), not as a static: internal only if PSRAM is not there
-// (`[hw] psram: ...` at boot says where each landed).
-template <class T>
-class InPsram {
- public:
-  template <class... A>
-  void make(A&&... a) {
-    if (p_) return;
-    void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    p_ = m ? new (m) T(std::forward<A>(a)...) : new T(std::forward<A>(a)...);
-  }
-  T& operator*() const { return *p_; }
-  T* operator->() const { return p_; }
-  T* get() const { return p_; }
-
- private:
-  T* p_ = nullptr;
-};
 static hw::NusLink ble;
 // Updates over the air (docs/ota.md). The session answers OTA lines before
 // the Dish sees them; what it needs from the pet is DishOtaHost, below.
@@ -227,6 +205,46 @@ struct RadioGate : blorb::Air {
   void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner->send(to, p, n); }
   std::optional<blorb::Datagram> receive() override { return inner->receive(); }
 };
+// Internal RAM is the scarce kind: a duel's radio takes about 37 KB of it and
+// must find it free each time fight mode opens (#53). Objects only tasks touch
+// (never an interrupt, and nothing in them is a lock or an atomic) can live in
+// PSRAM. PSRAM joins the heap in initArduino(), after the static constructors
+// have run, so such an object is made by setup()'s first lines (make()), not
+// as a static: internal only if PSRAM is not there (`[hw] psram: ...` at boot
+// says where each landed). After wifi-ota-2's a602752.
+//
+// #53's A/B builds, one variable each (all default to this commit's choice):
+//   -DBLORB_PSRAM_OBJECTS=0   FaultAir and the latency recorder in internal RAM
+//   -DBLORB_SERIAL_TX=2048    the cable's TX queue
+//   -DBLORB_HEAP_BALLAST=N    N bytes of internal heap held from boot (to stand
+//                             where main's heap stood without moving anything back)
+//   -DBLORB_ROWHASH_PSRAM=0   the panel's chunk hashes in internal RAM (board_lcd128.h)
+//   -DBLORB_AIR_TX_QDBM=52    the air's TX power, quarter dBm (air_espnow.h)
+#ifndef BLORB_PSRAM_OBJECTS
+#define BLORB_PSRAM_OBJECTS 1
+#endif
+#ifndef BLORB_SERIAL_TX
+#define BLORB_SERIAL_TX 512
+#endif
+#ifndef BLORB_HEAP_BALLAST
+#define BLORB_HEAP_BALLAST 0
+#endif
+template <class T>
+class InPsram {
+ public:
+  template <class... A>
+  void make(A&&... a) {
+    if (p_) return;
+    void* m = BLORB_PSRAM_OBJECTS ? heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
+    p_ = m ? new (m) T(std::forward<A>(a)...) : new T(std::forward<A>(a)...);
+  }
+  T& operator*() const { return *p_; }
+  T* operator->() const { return p_; }
+  T* get() const { return p_; }
+
+ private:
+  T* p_ = nullptr;
+};
 static hw::EspNowAir espNow;
 // `DEBUG net ...` makes the room worse between the gate and the radio (hw/net_faults.h).
 static InPsram<hw::FaultAir> faultAir;   // made by setup()
@@ -271,13 +289,14 @@ static uint32_t sleptMs();
 // What frames cost, since `DEBUG fps` last asked (or boot): drawing the canvas,
 // sending the panel what changed, and the worst whole frame.
 //   DEBUG fps      [fps] fps=48.6 frames=486 over_ms=10001 draw_ms=11.9 push_ms=1.6 worst_ms=33 rows=21 ...
-// rows= is the rows sent a frame (240 is a whole frame); cpu_now= the clock as
+// rows= is the rows sent a frame (240 is a whole frame), px= the pixels (57,600); cpu_now= the clock as
 // it runs, against cpu=, the clock it was set to. fps=, frames= and the ms are
 // the frames drawn, each one that changed; same= the frames not drawn because
 // nothing in them had (framememo). A second line splits a
 // frame's time by phase, ms a frame (paint/phases.h):
 //   [fps] phases look=0.9 bg=4.1 fig=6.0 rim=0.2 text=0.0 rings=0.0 mask=0.4 hint=0.3 over=0.5 push=1.6 wait=8.2
-// look= is the Dish working out his Appearance (draw_ms counts it), over= what
+// look= is the Dish working out his Appearance and memo= the overlays and the
+// frame memo's test (draw_ms counts both), over= what
 // is drawn over the dish after it (the update's screen, the debug link's
 // mark, the idle bar), wait= the rest of the loop between frames. push= is the
 // loop's part of sending (the row hashes, the copy to the send task, and any
@@ -287,13 +306,15 @@ static uint32_t sleptMs();
 static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
-static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, send0 = 0, sames = 0;
+static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, px0 = 0, send0 = 0, sames = 0;
 static void same() { ++sames; }
-static uint64_t lookUs = 0, drawUs = 0, pushUs = 0;
+static uint64_t lookUs = 0, memoUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
-// look: the Dish's Appearance (the engine's), draw: the canvas, push: the panel.
-static void note(uint32_t look, uint32_t draw, uint32_t push) {
-  ++frames, lookUs += look, drawUs += draw, pushUs += push;
+// look: the Dish's Appearance (the engine's), memo: the overlays and whether
+// the frame changed, draw: the canvas, push: the panel.
+static void note(uint32_t look, uint32_t memo, uint32_t draw, uint32_t push) {
+  look += memo;   // draw_ms and worst count both, as before
+  ++frames, lookUs += look, memoUs += memo, drawUs += draw, pushUs += push;
   if (look + draw + push > worstUs) worstUs = look + draw + push;
 }
 // "a.b": tenths of a ms from a total of us over n.
@@ -306,29 +327,36 @@ static void report() {
   const uint32_t tenths = over ? uint32_t(uint64_t(frames) * 10000 / over) : 0;
   const uint32_t draw = uint32_t((lookUs + drawUs) / n), push = uint32_t(pushUs / n);
   Serial.printf("[fps] fps=%u.%u frames=%u over_ms=%u draw_ms=%u.%u push_ms=%u.%u worst_ms=%u rows=%u cpu=%u cpu_now=%u "
-                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u\n",
+                "spi_mhz=%u.%u frame_ms=%u power=%s same=%u cores=%d px=%u\n",
                 unsigned(tenths / 10), unsigned(tenths % 10), unsigned(frames), unsigned(over), unsigned(draw / 1000),
                 unsigned(draw % 1000 / 100), unsigned(push / 1000), unsigned(push % 1000 / 100), unsigned(worstUs / 1000),
                 unsigned(rows / n), unsigned(cpuMaxMhz), unsigned(getCpuFrequencyMhz()), unsigned(display.writeKhz() / 1000),
-                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames));
+                unsigned(display.writeKhz() % 1000 / 100), unsigned(kFrameMs), powerPolicy.low() ? "low" : "full", unsigned(sames),
+                paintcore0::on ? 2 : 1, unsigned((boardPixelsSent() - px0) / n));
   using paint::Phase;
   const uint32_t* spent = paint::phaseClock.spent;
   uint64_t painted = 0;
   for (int i = 0; i < int(Phase::Count); ++i) painted += spent[i];
   const uint64_t loopUs = uint64_t(over) * 1000;
-  char f[12][12];
+  char f[13][12];
   const Phase order[] = {Phase::Background, Phase::Figure, Phase::Rim, Phase::Text, Phase::Rings, Phase::Mask, Phase::Hint};
-  ms(f[0], sizeof f[0], lookUs, n);
+  ms(f[0], sizeof f[0], lookUs - memoUs, n);
+  ms(f[12], sizeof f[12], memoUs, n);
   for (int i = 0; i < 7; ++i) ms(f[1 + i], sizeof f[1 + i], spent[uint8_t(order[i])], n);
   ms(f[8], sizeof f[8], drawUs > painted ? drawUs - painted : 0, n);
   ms(f[9], sizeof f[9], pushUs, n);
   const uint64_t busy = lookUs + drawUs + pushUs;
   ms(f[10], sizeof f[10], loopUs > busy ? loopUs - busy : 0, n);
   ms(f[11], sizeof f[11], boardSendUs() - send0, n);
-  Serial.printf("[fps] phases look=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
+  Serial.printf("[fps] phases look=%s memo=%s bg=%s fig=%s rim=%s text=%s rings=%s mask=%s hint=%s over=%s push=%s wait=%s "
                 "send=%s (%s)\n",
-                f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], boardSendAsync() ? "async" : "sync");
-  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), lookUs = drawUs = pushUs = 0, send0 = boardSendUs();
+                f[0], f[12], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11],
+                boardSendAsync() ? "async" : "sync");
+  // What each task's stack never used yet, bytes (sized from these, #53).
+  Serial.printf("[fps] stack paint0=%u lcdsend=%u heap=%u big=%u\n", unsigned(paintcore0::stackFree()),
+                unsigned(boardSendStackFree()), unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), px0 = boardPixelsSent(), lookUs = memoUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
 // `DEBUG fps bench`: the canvas's memory (a whole-canvas memset, a read of
@@ -347,16 +375,19 @@ static void bench() {
   }
   const uint32_t readUs = (now() - t0) / kReps;
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
+  t0 = now();
+  for (int i = 0; i < kReps; ++i) (void)shown();
+  const uint32_t lookUs = (now() - t0) / kReps;
   const blorb::Appearance a = shown();
   t0 = now();
   for (int i = 0; i < kReps; ++i) drawFrame(a, millis());
   const uint32_t drawUs = (now() - t0) / kReps;
   const uint32_t* spent = paint::phaseClock.spent;
   using paint::Phase;
-  Serial.printf("[fps] bench canvas=%s memset_us=%u read_us=%u (%u) draw_us=%u bg=%u fig=%u rim=%u text=%u rings=%u "
+  Serial.printf("[fps] bench canvas=%s memset_us=%u read_us=%u (%u) look_us=%u draw_us=%u bg=%u fig=%u rim=%u text=%u rings=%u "
                 "mask=%u hint=%u\n",
                 esp_ptr_internal(canvas.px) ? "internal" : "external", unsigned(setUs), unsigned(readUs), unsigned(sum & 1),
-                unsigned(drawUs), unsigned(spent[uint8_t(Phase::Background)] / kReps),
+                unsigned(lookUs), unsigned(drawUs), unsigned(spent[uint8_t(Phase::Background)] / kReps),
                 unsigned(spent[uint8_t(Phase::Figure)] / kReps), unsigned(spent[uint8_t(Phase::Rim)] / kReps),
                 unsigned(spent[uint8_t(Phase::Text)] / kReps), unsigned(spent[uint8_t(Phase::Rings)] / kReps),
                 unsigned(spent[uint8_t(Phase::Mask)] / kReps), unsigned(spent[uint8_t(Phase::Hint)] / kReps));
@@ -645,14 +676,16 @@ static std::optional<Timed> take() {
 // `DEBUG trace <seconds>`: every 50 Hz sample on the cable as the IMU read it,
 // with what the shell and the detectors made of it, to set the gestures
 // against real hands (tools/imu_record.py). 0 stops it.
-//   [imu] ms ax ay az tap rot side inverted sideHeld button pk peakAx peakAy peakAz
+//   [imu] ms ax ay az tap rot side inverted sideHeld button pk peakAx peakAy peakAz aim a busy b ring r
+//         (aim: the aim the duel reads now; busy: a knock burst under way; ring: a knock ringing)
 //   [stim] ms name        each body stimulus, on the sample that fired it
 static uint32_t traceUntil = 0;
 static void traceSample(const blorb::BodySample& raw, const blorb::BodySample& screen, uint8_t rot, uint32_t ms) {
   if (!traceUntil || int32_t(traceUntil - millis()) <= 0) return;
-  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d pk %d %d %d\n", unsigned(ms), raw.ax, raw.ay, raw.az,
-                unsigned(raw.tapCode), unsigned(rot), int(screen.sideDown), int(screen.invertedDown),
-                int(dish->sideHolding()), int(raw.buttonDown), raw.peakAx, raw.peakAy, raw.peakAz);
+  Serial.printf("[imu] %u %d %d %d %u %u %d %d %d %d pk %d %d %d aim %d busy %d ring %d\n", unsigned(ms), raw.ax, raw.ay,
+                raw.az, unsigned(raw.tapCode), unsigned(rot), int(screen.sideDown), int(screen.invertedDown),
+                int(dish->sideHolding()), int(raw.buttonDown), raw.peakAx, raw.peakAy, raw.peakAz, int(dish->aimNow()),
+                int(screen.knocking), int(screen.knockRinging));
   const uint64_t fired = dish->firedLastSample();
   for (const blorb::StimInfo& st : blorb::STIMULI)
     if (st.id.v < 64 && (fired >> st.id.v & 1)) Serial.printf("[stim] %u %s\n", unsigned(ms), st.name);
@@ -942,8 +975,9 @@ static void reportBoot() {
   Serial.printf("[hw] home rot=%u (USB-C %s, %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot), homeWhy,
                 hw::home::name(ORIENT_HOME));
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
-  Serial.printf("[hw] psram: faultAir=%d lat=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(faultAir.get())),
-                int(esp_ptr_external_ram(lat::rec.get())));
+  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(faultAir.get())),
+                int(esp_ptr_external_ram(lat::rec.get())), int(esp_ptr_external_ram(boardRowHashes())),
+                int(esp_ptr_external_ram(boardShadow())));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
@@ -1062,9 +1096,22 @@ static void adoptTableSpecies(uint32_t now) {
 #endif
 
 void setup() {
+#if !defined(BADGE_BOARD_SIM)
+  // A line on the cable is queued, not waited out: with only the UART's
+  // 128-byte FIFO, the loop stood still while every longer line went out at
+  // 115200 baud (the 10 s status line, ~330 bytes: ~20 ms; a reply to the
+  // protocol: more), and a gesture's samples and frame waited with it
+  // (DEBUG latency: seen p95 51 ms while a probe asked STATE).
+  // 512 B: a status line's worth; every byte of it is internal RAM (#53).
+  Serial.setTxBufferSize(BLORB_SERIAL_TX);
+#endif
   Serial.begin(115200);
 #if !defined(BADGE_BOARD_SIM)
   // In PSRAM (InPsram above), before anything uses them.
+  if (BLORB_HEAP_BALLAST) {   // #53's A/B: never freed, never touched
+    static void* ballast = heap_caps_malloc(BLORB_HEAP_BALLAST, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    Serial.printf("[hw] heap ballast %u bytes %s\n", unsigned(BLORB_HEAP_BALLAST), ballast ? "held" : "FAILED");
+  }
   faultAir.make(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
   radioGate.inner = faultAir.get();
   lat::rec.make();
@@ -1155,6 +1202,7 @@ void setup() {
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
   paint::phaseClock.now = fps::now;   // DEBUG fps's phases
+  paintcore0::begin();                // the renderer's second half on core 0
 #if defined(CONFIG_PM_ENABLE)
   Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
 #else
@@ -1525,6 +1573,10 @@ static void runDebug(const char* line) {
   }
   if (std::strcmp(verb, "fps") == 0) return std::strcmp(a, "bench") == 0 ? fps::bench() : fps::report();
   if (std::strcmp(verb, "lcd") == 0) return lcdVerb(a);
+  if (std::strcmp(verb, "cores") == 0) {   // `DEBUG cores 1|2`: draw on one core or both, until reset
+    if (*a) paintcore0::use(std::strtol(a, nullptr, 10) >= 2);
+    return (void)Serial.printf("[hw] cores draw=%d\n", paintcore0::on ? 2 : 1);
+  }
   if (std::strcmp(verb, "smooth") == 0) {   // `DEBUG smooth [on|off]`: frames between ticks, or each tick's own (paint/tween.h)
     if (*a) smoothFrames = std::strcmp(a, "off") != 0;
     return (void)Serial.printf("[hw] smooth=%s speed=%u/256\n", smoothFrames ? "on" : "off", unsigned(paint::kScreenSpeedQ8));
@@ -1551,7 +1603,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], reboot, bletest <bytes>, home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
+                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1804,6 +1856,7 @@ void loop() {
 #endif
     const blorb::Appearance look = onScreen(shown(), now);
 #if !defined(BADGE_BOARD_SIM)
+    const uint32_t shownAt = micros();
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
@@ -1827,7 +1880,7 @@ void loop() {
 #endif
       boardPresent(display, canvas);
 #if !defined(BADGE_BOARD_SIM)
-      fps::note(drawAt - lookAt, pushAt - drawAt, micros() - pushAt);
+      fps::note(shownAt - lookAt, drawAt - shownAt, pushAt - drawAt, micros() - pushAt);
       lat::framed(look, seqBefore);   // a frame the memo skipped showed nothing new: it is no frame here
 #endif
       ++framesDrawn;

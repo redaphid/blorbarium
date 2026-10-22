@@ -530,6 +530,13 @@ static bool asks() { return consent.asking(); }
 // The button, or a turn (main.cpp TurnYes): true when the question took it.
 static bool press(uint32_t now) { return consent.yes(now); }
 static bool drawing() { return consent.asking(); }
+// TODO(#35): a hard shake dismisses what is modal (controls-latency 0f4434c,
+// not yet on main). Once it is, its dismiss list calls this, as it does
+// ota::Session::decline: the question goes as if unanswered, and the phone
+// waiting on it hears "not authorized" when its yes never comes.
+[[maybe_unused]] static void dismiss() {
+  if (consent.asking()) consent.end(), say("improv: dismissed (a shake)");
+}
 
 // Drawn as the update's question and the debug unlock's are: a band over the
 // pet, a rim ring that runs down, amber because it asks.

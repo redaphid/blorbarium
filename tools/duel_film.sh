@@ -13,7 +13,9 @@ dst="$HOME/.cache/blorbarium-build/$(printf '%s' "$src" | md5sum | cut -c1-12)"
 mkdir -p "$dst"
 rsync -a --delete --exclude .pio --exclude .git --exclude outputs "$src/" "$dst/"
 cd "$dst"
-~/.platformio/penv/bin/pio run -e duelshot -s
+# PIO: the laptop's one-compile-at-a-time wrapper when it is there, else the penv core.
+pio="${PIO:-/home/redaphid/Worktrees/blorbarium/pio}"; [ -x "$pio" ] || pio=~/.platformio/penv/bin/pio
+"$pio" run -e duelshot -s
 status=0
 case "${1:-}" in
   --sheet) shift; python3 tools/duel_sheet.py "$@" || status=$? ;;

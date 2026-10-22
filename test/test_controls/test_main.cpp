@@ -400,33 +400,106 @@ TEST(Aim, AKnockNeverReAims) {
   EXPECT_EQ(aimOf(a, lean(0, 500)), 3);
 }
 
-// On every recording, as the shell hands the samples on: how often each way
-// of reading the aim changes its mind, in all and while a knock burst is
-// under way. A knock must never re-aim (that is what a knock locks), and
-// nothing on the recordings re-aims more than the tilt did, but for the
+// On every recording, as the shell hands the samples on. A knock locks the
+// aim it was made at (Dish: the aim on the first knock's sample), so a knock
+// must never move that aim: on every first knock it is the aim the hand held
+// just before (three samples back). The burst's own sway after it is the
+// hand's (the lock and the screen keep the first knock's aim meanwhile); the
+// aim holds while a knock rings (KnockSense::ringing). And how often each way
+// of reading the aim changes its mind: more than the tilt did only in the
 // handling, where the badge really turns and the aim now follows it.
-TEST(Aim, OnTheRecordingsAKnockNeverReAims) {
-  int oldTotal = 0, newTotal = 0;
+TEST(Aim, OnTheRecordingsAKnockLocksTheAimTheHandHeld) {
+  int oldTotal = 0, newTotal = 0, firsts = 0;
   for (const Segment& seg : loadHands()) {
     ::power::Policy policy;
     hw::Feel shell(kR0, kHome, policy);
     OldAim old;
     AimDetector now;
     int8_t o = -1, n = -1;
-    int oldChanges = 0, newChanges = 0, oldKnocked = 0, newKnocked = 0;
+    int8_t before[3] = {-1, -1, -1};
+    bool waitWas = false;
+    int oldChanges = 0, newChanges = 0, moved = 0;
     for (const auto& [ms, b] : seg.samples) {
       const hw::Felt f = shell.sample(b, ms, false);
       const int8_t oa = old.sample(f.screen, ms), na = aimOf(now, f.screen);
       oldChanges += oa != o, newChanges += na != n;
-      if (f.screen.knocking) oldKnocked += oa != o, newKnocked += na != n;
       o = oa, n = na;
+      if (f.screen.knockWaiting && !waitWas) ++firsts, moved += na != before[0];
+      waitWas = f.screen.knockWaiting;
+      before[0] = before[1], before[1] = before[2], before[2] = na;
     }
-    std::printf("[ aim ] %-26s changes: tilt %3d, aim %3d; while knocked: tilt %d, aim %d\n", seg.label.c_str(),
-                oldChanges, newChanges, oldKnocked, newKnocked);
+    std::printf("[ aim ] %-26s changes: tilt %3d, aim %3d; first knocks that moved the aim: %d\n", seg.label.c_str(),
+                oldChanges, newChanges, moved);
     oldTotal += oldChanges, newTotal += newChanges;
-    EXPECT_EQ(newKnocked, 0) << seg.label << ": a knock re-aimed";
+    EXPECT_EQ(moved, 0) << seg.label << ": a knock moved the aim it locks";
   }
+  EXPECT_GE(firsts, 50) << "the recordings' first knocks";
   std::printf("[ aim ] all: tilt %d, aim %d\n", oldTotal, newTotal);
+}
+
+// A tilt right after a knock knock, or a single knock, is the aim within
+// ~60 ms: the aim holds only while a knock rings, never the burst's window
+// (on the board that held it 3.5 s in fight mode, 8029a0d).
+TEST(Aim, ATiltRightAfterAKnockIsTheAimAtOnce) {
+  for (int knocks : {1, 2}) {
+    ::power::Policy policy;
+    hw::Feel shell(kR0, kHome, policy);
+    AimDetector aim;
+    BodySample handed{};
+    bool primed = false;
+    const uint32_t knockAt = 2000, leanAt = knockAt + 300 * uint32_t(knocks - 1) + 250;
+    uint32_t aimedAt = 0;
+    for (uint32_t ms = 0; ms < 5000; ms += 20) {
+      BodySample s, best;
+      int64_t bd = -1;
+      for (uint32_t r = 4; r <= 20; r += 4) {   // the shell's five reads and their peak
+        const uint32_t t = ms + r;
+        s = BodySample{};
+        s.ax = int16_t(t / 4 % 3 * 8 - 8), s.ay = 990, s.az = -150;   // held, with a hand's tremor
+        for (int i = 0; i < knocks; ++i) {
+          const int32_t off = int32_t(t) - int32_t(knockAt + 300 * uint32_t(i));
+          if (off >= 0 && off < 20) s.az = int16_t(s.az + 1800);
+          else if (off >= 20 && off < 40) s.az = int16_t(s.az - 1700);
+        }
+        const int64_t dx = s.ax - handed.ax, dy = s.ay - handed.ay, dz = s.az - handed.az;
+        if (dx * dx + dy * dy + dz * dz > bd) bd = dx * dx + dy * dy + dz * dz, best = s;
+      }
+      s.hasPeak = primed, s.peakAx = best.ax, s.peakAy = best.ay, s.peakAz = best.az;
+      handed = s, primed = true;
+      hw::Felt f = shell.sample(s, ms + 20, false);
+      if (ms >= leanAt) f.screen.ax = 500, f.screen.ay = 0, f.screen.az = 866;   // DEBUG lean 0, in the screen's frame
+      if (aimOf(aim, f.screen) == 0 && !aimedAt && ms >= leanAt) aimedAt = ms;
+    }
+    ASSERT_GT(aimedAt, 0u) << knocks << " knock(s)";
+    EXPECT_LE(aimedAt - leanAt, 60u) << knocks << " knock(s): the aim " << aimedAt - leanAt << " ms after the lean";
+  }
+}
+
+// A badge set down or turned onto an aim in one step (a thump, or the cable's
+// injected poses) rings like a knock (#25: on the board the aim then waited
+// the ring out, 200-250 ms). It holds the aim only while the badge sways:
+// where it settles, it aims at once.
+TEST(Aim, AThumpOntoAnAimIsTheAimAtOnce) {
+  ::power::Policy policy;
+  hw::Feel shell(kR0, kHome, policy);
+  AimDetector aim;
+  int8_t target = -1;
+  uint32_t aimedAt = 0, ringing = 0;
+  for (uint32_t ms = 0; ms < 3000; ms += 20) {
+    BodySample s;
+    if (ms < 1500) s.ax = int16_t(ms / 20 % 3 * 6 - 6), s.ay = 0, s.az = 1000;   // lying flat on a table
+    else s.ax = 860, s.ay = 0, s.az = 510;                                        // tipped in one step (a knock-sized jolt) and left there
+    s.hasPeak = ms > 0, s.peakAx = s.ax, s.peakAy = s.ay, s.peakAz = s.az;
+    const hw::Felt f = shell.sample(s, ms, false);
+    ringing += f.screen.knockRinging;
+    if (ms == 1500) target = latency::rawAim(f.screen.ax, f.screen.ay, f.screen.az);
+    if (ms >= 1500 && !aimedAt && aimOf(aim, f.screen) == target) aimedAt = ms;
+    else if (ms < 1500 || aimedAt) aimOf(aim, f.screen);
+  }
+  ASSERT_GE(target, 0);
+  EXPECT_GT(ringing, 0u) << "the step rang like a knock";
+  ASSERT_GT(aimedAt, 0u);
+  EXPECT_LE(aimedAt - 1500, 40u) << "the aim " << aimedAt - 1500 << " ms after the step (" << ringing << " ringing samples)";
 }
 
 TEST(Latency, ARawAimIsTheDuelsSectors) {

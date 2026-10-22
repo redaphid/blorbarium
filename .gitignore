@@ -3,10 +3,10 @@ __pycache__/
 *.actual.png
 *.diff.png
 outputs/
-web/.wrangler/
+.wrangler/
 pets/*/pack-refs.png
 pets/*/regions-map.png
-web/node_modules/
+node_modules/
 *signing-key*
 web/public/fw/**/*.bin
 pet_backups/

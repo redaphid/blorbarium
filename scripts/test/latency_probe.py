@@ -184,6 +184,7 @@ class Board:
                     line = self.lines[i]
                     i += 1
                     if "[lat] done" in line:
+                        self.send("DEBUG latency last")   # the newest of each, into the log
                         return out
                     m = LAT.search(line)
                     if not m:
@@ -231,6 +232,8 @@ def main():
     ap.add_argument("--reps", type=int, default=6)
     ap.add_argument("--only", default="", help="controls to run, comma separated (default: all)")
     ap.add_argument("--log", default="latency_probe.log")
+    ap.add_argument("--trace-fight", action="store_true",
+                    help="DEBUG trace through the first fight rep (raw samples, the aim, knock burst and ringing): slows that rep")
     ap.add_argument("--revive", action="store_true", help="a dead pet's clutch: keep an egg, hatch it, grow it (a new pet)")
     a = ap.parse_args()
     only = set(x for x in a.only.split(",") if x)
@@ -329,6 +332,10 @@ def main():
             else:
                 b.ask("DEBUG latency clear", r"\[lat\] cleared")
                 for i in range(n):
+                    if i == 0 and a.trace_fight:
+                        b.ask("DEBUG trace 6", r"\[hw\] debug trace")
+                    if i == 1 and a.trace_fight:
+                        b.ask("DEBUG trace 0", r"\[hw\] debug trace")
                     if fed("fight knock_knock"):
                         b.ask("DEBUG knock 2", r"\[hw\] debug knock")
                         time.sleep(2.2)

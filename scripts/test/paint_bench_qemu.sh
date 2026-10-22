@@ -28,8 +28,10 @@ g++ -std=c++17 -O2 -I"$root/lib/blorb/include" -I"$root/lib/blorb/src" -I"$root/
 "$out/dump" "${1:-16}" "$out/shots.inc.new"
 cmp -s "$out/shots.inc.new" "$out/shots.inc" || mv "$out/shots.inc.new" "$out/shots.inc"
 rm -f "$out/shots.inc.new"
-pio="${PIO:-$HOME/.platformio/penv/bin/pio}"; [ -x "$pio" ] || pio=pio   # the penv core: an older one on PATH fights it over tool-scons
-(cd "$root" && "$pio" run -e paintbench_s3 -j 3 > "$out/build.log" 2>&1) || { tail -30 "$out/build.log"; exit 1; }
+# PIO: the laptop's one-compile-at-a-time wrapper (it waits its turn), else the
+# penv core (an older core on PATH fights it over tool-scons).
+pio="${PIO:-/home/redaphid/Worktrees/blorbarium/pio}"; [ -x "$pio" ] || pio=$HOME/.platformio/penv/bin/pio
+(cd "$root" && "$pio" run -e paintbench_s3 > "$out/build.log" 2>&1) || { tail -30 "$out/build.log"; exit 1; }
 build="$root/.pio/build/paintbench_s3"
 fw="$HOME/.platformio/packages/framework-arduinoespressif32"
 python3 - "$out/flash.bin" "$build/bootloader.bin" "$build/partitions.bin" "$fw/tools/partitions/boot_app0.bin" \

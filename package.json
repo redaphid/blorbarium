@@ -1,0 +1,14 @@
+{
+  "name": "blorbarium",
+  "private": true,
+  "description": "blorb.hypnodroid.com: the Worker and site in web/, configured by wrangler.jsonc. See web/README.md.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test web/test/*.test.mjs",
+    "check": "bash scripts/ci/cloudflare-build.sh"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}
