@@ -182,6 +182,13 @@ struct BattleCard {
   uint8_t prowess = 128;         // how well THIS KID has been playing (duel_book.h): the assist's only input
   uint64_t lineageId = 0;        // who this is in the friend book; the side's luck key
   CardLook look{};
+  // The spoils (#57, food.h): his pantry and its room as the duel froze the
+  // card. A win takes min(kSpoils, the loser's pantry, the winner's room),
+  // which both badges read off the same two cards. On the wire they ride in
+  // the look's fourth mark slot, which a card with under four marks leaves
+  // as zeros (duel_wire.cpp): a badge from before them sends 0 and 0, so
+  // spoils with it are none on both sides, and it never reads them.
+  uint8_t pantry = 0, room = 0;
 };
 
 // ---- the outcome ---------------------------------------------------------------------

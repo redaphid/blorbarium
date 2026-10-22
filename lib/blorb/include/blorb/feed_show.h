@@ -18,6 +18,15 @@
 //   chomp    he bit a pellet: crumbs and hearts (a rotten one: yuck), and his
 //            belly meter rises.
 //
+// And where food comes from (#57, food.h), so a kid knows how to get more:
+//   pantry   its slots along the rim, full ones filled; the next one fills
+//            like a clock as it comes back, and while he is hungry with none
+//            left the time it will take is written beside it (waiting);
+//   found    a snack he dug up sparkles where it lands;
+//   topped   coming home after a long time away: the slots it filled pop in;
+//   spoils   a battle won: a cookie flies in over the rim to the pantry; lost:
+//            one flies out of it and away (the friend's screen shows it land).
+//
 // Presentation only, like the Thinker: never saved, never hashed, and
 // nothing here reaches him. The Dish reports each event with its time; the
 // Appearance carries their ages (FeedView) and paint (feeding.cpp) draws them.
@@ -45,6 +54,14 @@ struct FeedView {
   Fx fullnessFrom{};                // and just before the bite, for the meter to rise from
   uint8_t pantryMax = 0;            // the pantry's slots (the metabolism gene)
   Fx refill{};                      // how far the next pellet is to coming back, 0..1
+  uint16_t refillSecs = 0;          // seconds until it is back (rounded up); 0 while the pantry is full
+  bool waiting = false;             // hungry, awake, the pantry empty and nothing he would eat in the dish
+  uint16_t foundMs = kNever;        // since he turned up a snack of his own (foraging)
+  int8_t found = -1;                // that snack's index in Appearance::items, while it is news
+  uint16_t toppedMs = kNever;       // since coming home topped the pantry up...
+  uint8_t topped = 0;               // ...by this many: the newest slots
+  uint16_t spoilsMs = kNever;       // since a battle's spoils were shown...
+  int8_t spoils = 0;                // ...won (> 0: into the pantry from the rim) or lost (< 0: out of it)
 };
 
 class FeedShow {
@@ -64,20 +81,30 @@ class FeedShow {
   void pressed(uint32_t ms, bool dropped, uint32_t tick, bool asleep, Fx hunger);
   // On the tick he bit a pellet. `hunger`: before the bite.
   void ate(uint32_t ms, bool rotten, Fx hunger);
+  // On the tick a snack he dug up landed (its pellet's droppedTick is `tick`).
+  void found(uint32_t ms, uint32_t tick);
+  // On the tick coming home put `n` pellets in the pantry.
+  void toppedUp(uint32_t ms, uint8_t n);
+  // A battle's spoils, once the dish is on the screen: `n` won (> 0) or lost (< 0).
+  void spoils(uint32_t ms, int8_t n);
 
   // The ages at `nowMs`; the Dish adds what the habitat and he say now
   // (flying, fullness, pantryMax, refill).
   FeedView view(uint32_t nowMs) const;
   // The tick the newest pellet dropped on, while it is still news.
   bool dropTick(uint32_t nowMs, uint32_t& tick) const;
+  // The tick the newest snack he found landed on, while it is still news.
+  bool foundTick(uint32_t nowMs, uint32_t& tick) const;
 
  private:
   struct Event { uint32_t ms = 0; bool seen = false; };
   static uint16_t age(const Event& e, uint32_t nowMs);
-  Event heard_, dropped_, refused_, chomp_;
+  Event heard_, dropped_, refused_, chomp_, found_, topped_, spoils_;
   FeedRefusal why_ = FeedRefusal::None;
   bool rotten_ = false, knockKnockWas_ = false;
-  uint32_t dropTick_ = 0;
+  uint32_t dropTick_ = 0, foundTick_ = 0;
+  uint8_t toppedN_ = 0;
+  int8_t spoilsN_ = 0;
   Fx fullnessFrom_{};
 };
 

@@ -21,9 +21,10 @@ struct Pellet { DishPos at; uint32_t droppedTick; bool present; };
 // any more; a format 2 retires this.
 struct Marble { DishPos at; Fx vx, vy; };
 
-// Decoded from the MetabolismGene so the habitat never reads genes.
+// Decoded from the MetabolismGene so the habitat never reads genes (food.h
+// has the scales).
 struct HabitatRules {
-  uint8_t pantrySize;
+  uint8_t pantrySize;      // 1..food::kMaxPantry
   uint32_t refillTicks;    // one pellet back every N ticks
   uint32_t rotTicks;       // older than this, eating it fires FedBad
   Fx biteSize;             // food added per bite
@@ -45,6 +46,17 @@ class Habitat {
   void step(const HabitatRules&, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut&,
             bool rotIsFood = true);
   bool dropPellet(const HabitatRules&, Rng&, uint32_t tick, SenseOut&);   // false when the pantry is empty
+  // A snack he turned up himself (food.h, foraging): a fresh pellet at `at`,
+  // not from the pantry. A full dish gives up its oldest, as a drop does.
+  void placeFound(DishPos at, uint32_t tick);
+  // The pantry gains up to `n`, as far as it has room; how many it took. The
+  // way in for coming home and, later, a fight's spoils or a friend's gift.
+  uint8_t give(const HabitatRules&, uint8_t n);
+  // The pantry loses up to `n`, as far as it has them; how many it lost (a
+  // lost fight's spoils, #46). The refill's clock runs on as it was.
+  uint8_t take(uint8_t n);
+  // Ticks until the next pellet comes back; 0 while the pantry is full.
+  uint32_t refillLeft(const HabitatRules&, uint32_t tick) const;
   struct Bite { Fx food; bool rotten; };
   // The nearest pellet in reach, eaten; a rotten one only when `rotIsFood`.
   std::optional<Bite> bite(const HabitatRules&, DishPos creature, uint32_t tick, bool rotIsFood = true);

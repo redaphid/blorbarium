@@ -5,6 +5,7 @@
 #include <cstring>
 #include <optional>
 #include "blorb/creature.h"
+#include "blorb/food.h"
 #include "blorb/protocol.h"
 #include "blorb/stakes.h"
 
@@ -345,14 +346,14 @@ void describe_egg(const GeneView& v, Describe& d) {
 const MutRule rules_metabolism[] = {N, N, N, N};
 void express_metabolism(const GeneView& v, Phenotype& p) {
   auto g = decode<MetabolismGene>(v);
-  p.habitat = HabitatRules{uint8_t(std::clamp<int>(g.pantrySize, 1, Habitat::kMaxPellets)),
-                           std::max<uint32_t>(1, g.refillHours) * kTicksPerHour / 4,
+  p.habitat = HabitatRules{uint8_t(std::clamp<int>(g.pantrySize * food::kPantryPerByte, 1, food::kMaxPantry)),
+                           std::max<uint32_t>(1, g.refill) * food::kRefillTicksPerByte,
                            std::max<uint32_t>(1, g.rotMinutes) * kTicksPerMinute, Fx::unitByte(g.biteSize)};
 }
 void describe_metabolism(const GeneView& v, Describe& d) {
   auto g = decode<MetabolismGene>(v);
   d.field("pantrySize", g.pantrySize);
-  d.field("refillHours", g.refillHours);
+  d.field("refill", g.refill);
   d.field("rotMinutes", g.rotMinutes);
   d.field("biteSize", g.biteSize);
 }

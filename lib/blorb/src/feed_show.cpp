@@ -22,6 +22,21 @@ void FeedShow::ate(uint32_t ms, bool rotten, Fx hunger) {
   fullnessFrom_ = Fx::one() - clamp01(hunger);
 }
 
+void FeedShow::found(uint32_t ms, uint32_t tick) {
+  found_ = {ms, true};
+  foundTick_ = tick;
+}
+
+void FeedShow::toppedUp(uint32_t ms, uint8_t n) {
+  topped_ = {ms, n > 0};
+  toppedN_ = n;
+}
+
+void FeedShow::spoils(uint32_t ms, int8_t n) {
+  spoils_ = {ms, n != 0};
+  spoilsN_ = n;
+}
+
 uint16_t FeedShow::age(const Event& e, uint32_t nowMs) {
   if (!e.seen) return FeedView::kNever;
   const int32_t d = int32_t(nowMs - e.ms);
@@ -38,6 +53,11 @@ FeedView FeedShow::view(uint32_t nowMs) const {
   v.chompMs = age(chomp_, nowMs);
   v.rotten = rotten_;
   v.fullnessFrom = fullnessFrom_;
+  v.foundMs = age(found_, nowMs);
+  v.toppedMs = age(topped_, nowMs);
+  if (v.toppedMs != FeedView::kNever) v.topped = toppedN_;
+  v.spoilsMs = age(spoils_, nowMs);
+  if (v.spoilsMs != FeedView::kNever) v.spoils = spoilsN_;
   for (uint16_t a : {v.droppedMs, v.refusedMs, v.chompMs})   // not on the knocks alone: food first
     if (a < v.meterMs) v.meterMs = a;
   return v;
@@ -46,6 +66,12 @@ FeedView FeedShow::view(uint32_t nowMs) const {
 bool FeedShow::dropTick(uint32_t nowMs, uint32_t& tick) const {
   if (age(dropped_, nowMs) == FeedView::kNever) return false;
   tick = dropTick_;
+  return true;
+}
+
+bool FeedShow::foundTick(uint32_t nowMs, uint32_t& tick) const {
+  if (age(found_, nowMs) == FeedView::kNever) return false;
+  tick = foundTick_;
   return true;
 }
 

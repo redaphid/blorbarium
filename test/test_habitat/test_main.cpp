@@ -208,6 +208,68 @@ TEST(Roll, ALevelDishLeavesEverythingWhereItIs) {
   EXPECT_NE(w.h.hash(), before);   // the pantry ticked on
 }
 
+// ---- #57: more ways in and out of the pantry ----------------------------------------
+
+// Coming home and a won fight give, up to the pantry's size; a lost fight
+// takes, down to empty. Each says how many moved.
+TEST(Pantry, GiveFillsOnlyToItsSizeAndTakeEmptiesOnlyToZero) {
+  World w;
+  w.h.pantry = 1;
+  EXPECT_EQ(w.h.give(kRules, 1), 1);
+  EXPECT_EQ(w.h.give(kRules, 5), 1) << "room for one more";
+  EXPECT_EQ(w.h.pantry, 3);
+  EXPECT_EQ(w.h.give(kRules, 2), 0);
+  EXPECT_EQ(w.h.take(2), 2);
+  EXPECT_EQ(w.h.take(2), 1) << "only what is there";
+  EXPECT_EQ(w.h.pantry, 0);
+  EXPECT_EQ(w.h.take(1), 0);
+}
+
+// The countdown: whole refill after a drop from full, ticking down, 0 when full.
+TEST(Pantry, RefillLeftCountsDownToTheNextPellet) {
+  World w;
+  w.fill();
+  EXPECT_EQ(w.h.refillLeft(kRules, w.tick), 0u) << "full: nothing is coming";
+  ASSERT_TRUE(w.drop());
+  w.step();
+  EXPECT_EQ(w.h.refillLeft(kRules, w.tick), kRules.refillTicks - 2) << "from the last tick it was full";
+  w.steps(40);
+  EXPECT_EQ(w.h.refillLeft(kRules, w.tick), kRules.refillTicks - 42);
+  w.steps(kRules.refillTicks);
+  EXPECT_EQ(w.h.pantry, 3);
+}
+
+// A coarse step (the unpowered catch-up, five minutes at a time) brings back
+// every pellet it covered, not one per step.
+TEST(Pantry, ACoarseStepBringsBackEveryPelletItCovered) {
+  Habitat h;
+  SenseOut out;
+  const HabitatRules rules{8, 10, 1000, Fx::ratio(1, 4)};
+  h.step(rules, kLevel, kLevel, DishPos{}, 35, out);
+  EXPECT_EQ(h.pantry, 3);
+  EXPECT_EQ(h.pantryTick, 30u) << "the part-way pellet keeps its progress";
+  h.step(rules, kLevel, kLevel, DishPos{}, 1000, out);
+  EXPECT_EQ(h.pantry, 8);
+}
+
+// A snack he found lands where it is put, fresh, and a full dish gives up its
+// oldest pellet for it, as a drop does.
+TEST(Pellets, AFoundSnackTakesASlotAndAFullDishGivesUpItsOldest) {
+  World w;
+  w.h.placeFound(at(0.2, 0.1), 7);
+  int present = 0;
+  for (const Pellet& p : w.h.pellets) present += p.present;
+  EXPECT_EQ(present, 1);
+  EXPECT_EQ(w.h.pantry, 0) << "not the pantry's";
+  for (uint32_t t = 10; t < 10 + Habitat::kMaxPellets; ++t) w.h.placeFound(at(0, 0), t);
+  for (const Pellet& p : w.h.pellets) EXPECT_NE(p.droppedTick, 7u) << "the oldest went";
+  w.h.placeFound(at(5, 0), 99);
+  bool inside = false;
+  for (const Pellet& p : w.h.pellets)
+    if (p.droppedTick == 99) inside = radius(p.at) <= 0.921;
+  EXPECT_TRUE(inside) << "kept inside the rim";
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

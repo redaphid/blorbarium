@@ -2,6 +2,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "blorb/food.h"
 #include "blorb/creature.h"
 #include "blorb/genes.h"
 #include "blorb/protocol.h"
@@ -121,11 +122,12 @@ TEST(Decode, CrossSliceContracts) {
 
   Phenotype m = expressed(oneGene(0x32, {0, 0, 0, 255}));
   EXPECT_EQ(m.habitat.pantrySize, 1);
-  EXPECT_EQ(m.habitat.refillTicks, kTicksPerHour / 4);
+  EXPECT_EQ(m.habitat.refillTicks, food::kRefillTicksPerByte);   // food.h: 40 s a unit, at least one
   EXPECT_EQ(m.habitat.rotTicks, kTicksPerMinute);
   EXPECT_EQ(m.habitat.biteSize, Fx::one());
-  EXPECT_EQ(expressed(oneGene(0x32, {200, 8, 90, 0})).habitat.pantrySize, Habitat::kMaxPellets);
-  EXPECT_EQ(expressed(oneGene(0x32, {200, 8, 90, 0})).habitat.refillTicks, 2 * kTicksPerHour);
+  EXPECT_EQ(expressed(oneGene(0x32, {200, 8, 90, 0})).habitat.pantrySize, food::kMaxPantry);
+  EXPECT_EQ(expressed(oneGene(0x32, {4, 8, 90, 0})).habitat.pantrySize, 8) << "the starter's 4 is 8 slots";
+  EXPECT_EQ(expressed(oneGene(0x32, {200, 8, 90, 0})).habitat.refillTicks, 8 * food::kRefillTicksPerByte);
 
   Phenotype e = expressed(oneGene(0x31, {30, 255, 12}));
   EXPECT_EQ(e.egg.incubateTicks, 30 * kTicksPerMinute);
@@ -186,7 +188,7 @@ TEST(Decode, EveryByteOfEveryBodyFieldExpressesAndDescribes) {
           for (const Reaction& r : p.chem.reactions) EXPECT_TRUE(r.rate >= Fx::zero() && r.rate.raw <= Fx::ratio(1, 10).raw + 1);
           for (const auto& x : p.palette) EXPECT_LT(x.region.v, kRegionCount);
           for (const Instinct& in : p.instincts) EXPECT_LE(in.cueCount, 3);
-          EXPECT_LE(p.habitat.pantrySize, Habitat::kMaxPellets);
+          EXPECT_LE(p.habitat.pantrySize, food::kMaxPantry);
         }
       }
     }

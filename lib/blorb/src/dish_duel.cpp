@@ -150,6 +150,9 @@ DuelSetup DishDuel::setupFor(const Creature* c, uint64_t lineageId, uint16_t pet
     genome_ = c->genome();
     setup.genome = &genome_;
     setup.card = cardOf(*c, lineageId, book_.level(c->generation()), book_.prowess());
+    // The spoils ride in the fourth mark slot (duel_wire.cpp): a pet wearing
+    // four marks has no room for them, and says none, as the friend reads it.
+    if (setup.card.look.markCount < 4) setup.card.pantry = pantry_, setup.card.room = room_;
     setup.skill = book_.skill(c->generation());
     setup.ceiling = ceilingFor(*c, deviceCeiling_);
     for (Stakes s : {Stakes::Spar, Stakes::Scrap, Stakes::Mortal}) setup.skull[uint8_t(s)] = forecast(*c, s).skull;
@@ -289,6 +292,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     fell_ = true;
     out.save = true;
   }
+  out.spoils = fx.spoils;
   if (fx.met) {
     battled_ = true;
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();

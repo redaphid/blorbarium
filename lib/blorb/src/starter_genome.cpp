@@ -269,7 +269,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.put(TemperamentGene{90, 24, 110, 140, 6, 4, 24}, kGene, Stage::Elder);
   g.put(MutationPolicyGene{40, 6, 4, 20, 6, 10, 3, 140}, kVital);
   g.put(EggGene{uint8_t(gift ? 30 : 15), 128, 12}, kVital);         // a 30- or 15-minute egg
-  g.put(MetabolismGene{4, 8, 90, unit(300)}, kVital);                // 4 pellets, one back every 2 h
+  g.put(MetabolismGene{4, 8, 90, unit(300)}, kVital);                // 8 pellets, one back every 5 min 20 s (food.h)
   NoteGene note{};
   const char motto[] = "it is WRITTEN";
   for (size_t i = 0; i + 1 < sizeof motto; ++i) note.text[i] = uint8_t(motto[i]);

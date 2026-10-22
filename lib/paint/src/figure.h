@@ -108,6 +108,8 @@ struct DishSpots {
   int mouthX = 0, mouthY = 0;               // the pellet in his mouth, while he chews
   bool landing = false;
   int landX = 0, landY = 0;                 // the newest pellet's stand point in the dish
+  bool found = false;
+  int foundX = 0, foundY = 0;               // a snack he dug up, while it is news (FeedView::found)
 };
 
 // The newest pellet in the air (blorb::FeedView::flying), on its way from
@@ -131,8 +133,17 @@ constexpr int kFoodFloorR = 9;   // on the floor
 void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 
 // Feeding over the dish (blorb/feed_show.h): the rim's flash, the landing,
-// a refusal, the chomp and the belly meter. Before the round mask.
-void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
+// a refusal, the chomp and the belly meter; a snack he found; and while he
+// waits on an empty pantry, when the next pellet comes. Before the round mask.
+void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&, uint32_t nowMs = 0);
+
+// The pantry along the rim, up and left of the pellet glyph (#57): a cookie
+// in each full slot, the next one filling like a clock as it comes back, the
+// rest hollow. In the rim phase, where the old pips were.
+void drawPantry(Canvas240&, const blorb::Appearance&, uint32_t nowMs);
+// Where pantry slot k sits (0 nearest the glyph), canvas pixels.
+void pantrySlot(int k, int& x, int& y);
+constexpr int kPantrySlots = 12;
 
 // ---- idle_props.cpp -----------------------------------------------------------------
 

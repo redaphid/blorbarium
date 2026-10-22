@@ -3,6 +3,7 @@
 #include "blorb/controls.h"
 
 #include <algorithm>
+#include "blorb/food.h"
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
 #include <cstring>
@@ -121,6 +122,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
     boot_ = loaded == SlotState::FellBack ? Boot::FellBack : Boot::Resumed;
+    untouched_ = food::kAwayTicks;   // the board was off: the first hand is coming home
     return;
   }
   // No readable snapshot: the line goes on from the newest genome the log can rebuild.
@@ -216,11 +218,40 @@ void Dish::runOneTick(Link& link) {
   sideWas_ = side;
   tiltHist_[tick_ % kAimHistory][0] = tiltX, tiltHist_[tick_ % kAimHistory][1] = tiltY;
   const Fx aimX = side ? sideTilt_[0] : tiltX, aimY = side ? sideTilt_[1] : tiltY;
-  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
-          .save)
-    save();
+  if (const Creature* c = std::get_if<Creature>(&live_.occupant)) {
+    const uint8_t size = c->phenotype().habitat.pantrySize, has = std::min(live_.habitat.pantry, size);
+    duel_.setPantry(has, uint8_t(size - has));
+  } else {
+    duel_.setPantry(0, 0);
+  }
+  const DuelStepped stepped =
+      duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_);
+  // The spoils of a battle (#57): the winner's pantry gains what the loser's
+  // loses, the same number on both badges (duel_session.cpp spoilsOf).
+  if (stepped.spoils) {
+    const HabitatRules* rules = std::holds_alternative<Creature>(live_.occupant)
+                                    ? &std::get<Creature>(live_.occupant).phenotype().habitat
+                                    : nullptr;
+    if (stepped.spoils > 0 && rules) live_.habitat.give(*rules, uint8_t(stepped.spoils));
+    if (stepped.spoils < 0) live_.habitat.take(uint8_t(-stepped.spoils));
+    spoilsShown_ = stepped.spoils;
+    eventDirty_ = true;
+  }
+  if (stepped.save) save();
+  // Shown once the dish is on the screen again (fight mode's lobby or none):
+  // a cookie flies out of the loser's pantry, into the winner's.
+  if (spoilsShown_ && (!duel_.active() || duel_.view(tick_).phase == DuelPhase::Lobby)) {
+    feed_.spoils(lastTickMs_, spoilsShown_);
+    spoilsShown_ = 0;
+  }
+  // Coming home (food.h): the first hand after a long time untouched, or
+  // after the board was off, tops the pantry up, before any press it makes.
+  const bool home = touched && untouched_ >= food::kAwayTicks;
+  untouched_ = touched ? 0 : untouched_ + (untouched_ < UINT32_MAX);
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
+    if (home)
+      if (const uint8_t n = live_.habitat.give(rules, food::kHomecoming)) feed_.toppedUp(lastTickMs_, n);
     if (fired(out, stim::button)) {
       const bool dropped = live_.habitat.dropPellet(rules, live_.rng, tick_, out);
       feed_.pressed(lastTickMs_, dropped, tick_, c->body().asleep, c->chemistry().drive(drive::hunger));
@@ -239,7 +270,9 @@ void Dish::runOneTick(Link& link) {
     Stage before = c->stage();
     const Mouthful mouth = c->body().mouth;
     const Fx hunger = c->chemistry().drive(drive::hunger);
+    const uint8_t newBefore = pelletsDroppedAt(tick_);
     c->tick(out, live_.habitat, behaviours_, tick_);
+    if (pelletsDroppedAt(tick_) > newBefore) feed_.found(lastTickMs_, tick_);   // he dug up a snack (foraging)
     if (mouth == Mouthful::Nothing && c->body().mouth != Mouthful::Nothing)   // a bite, for the eyes
       feed_.ate(lastTickMs_, c->body().mouth == Mouthful::RottenPellet, hunger);
     if (c->stage() != before) eventDirty_ = true;
@@ -531,19 +564,31 @@ void Dish::feedView(Appearance& a) const {
   const Habitat& h = live_.habitat;
   if (h.pantry < rules.pantrySize && rules.refillTicks)
     a.feed.refill = Fx::ratio(int32_t(std::min<uint32_t>(tick_ - h.pantryTick, rules.refillTicks)), int32_t(rules.refillTicks));
-  // The pellet in flight is the newest, while it is still news: its index
-  // among the items, which present() lists in the pantry's slot order.
-  uint32_t dropped = 0;
-  if (!feed_.dropTick(nowMs_, dropped)) return;
+  // The countdown to the next one, and whether he is waiting on it: hungry
+  // enough to ask (the feed hint's level), awake, and nothing he would eat.
+  a.feed.refillSecs = uint16_t(std::min<uint32_t>((h.refillLeft(rules, tick_) + kTicksPerSecond - 1) / kTicksPerSecond, 0xFFFF));
+  const Fx hunger = c->chemistry().drive(drive::hunger);
+  a.feed.waiting = h.pantry == 0 && !c->body().asleep && hunger >= food::kAsksForFood &&
+                   !h.nearestFood(rules, c->body().at, tick_, hunger >= kEatsRotAt);
+  // The pellet in flight is the newest, while it is still news, and so is a
+  // snack he found: their indices among the items, which present() lists in
+  // the dish's slot order.
+  uint32_t dropped = 0, found = 0;
+  const bool flying = feed_.dropTick(nowMs_, dropped), sparkling = feed_.foundTick(nowMs_, found);
   int8_t item = 0;
   for (const Pellet& p : h.pellets) {
     if (!p.present) continue;
-    if (p.droppedTick == dropped) {
-      a.feed.flying = item;
-      break;
-    }
+    if (flying && p.droppedTick == dropped && a.feed.flying < 0) a.feed.flying = item;
+    else if (sparkling && p.droppedTick == found && a.feed.found < 0) a.feed.found = item;
     ++item;
   }
+}
+
+// How many pellets in the dish landed on `tick`: a press's, and a snack he found.
+uint8_t Dish::pelletsDroppedAt(uint32_t tick) const {
+  uint8_t n = 0;
+  for (const Pellet& p : live_.habitat.pellets) n += p.present && p.droppedTick == tick;
+  return n;
 }
 
 // ---- wall time and the unpowered catch-up --------------------------------------------
@@ -635,6 +680,7 @@ void Dish::catchUp(uint32_t ticks) {
   if (sealed()) return;
   const uint64_t cap = uint64_t(kMaxCatchUpSteps) * kCatchUpStride;
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
+  untouched_ = uint32_t(std::min<uint64_t>(UINT32_MAX, uint64_t(untouched_) + ticks));   // nobody was there
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {
     uint32_t n = std::min(left, kCatchUpStride);
     if (Creature* c = std::get_if<Creature>(&live_.occupant)) {

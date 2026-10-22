@@ -1,5 +1,7 @@
 #include "blorb/actions.h"
 
+#include "blorb/food.h"
+
 namespace blorb {
 namespace {
 
@@ -17,6 +19,7 @@ constexpr uint16_t kChewTicks = 15;            // he holds the bite this long, s
 constexpr Fx kNoseSpeed = Fx::ratio(9, 100);   // ... so it rolls about half the dish against the habitat's rolling friction
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
 constexpr Fx kHalf = Fx::ratio(1, 2);
+constexpr Fx kFindReach = Fx::ratio(1, 10);    // a snack he digs up lands this far ahead of him: in bite range
 
 uint64_t isqrt64(uint64_t v) {
   uint64_t r = 0, bit = uint64_t(1) << 62;
@@ -295,6 +298,12 @@ Status Play::step(Body& b, ActionCtx& c) {
       walkOn(b, kWalk);
       b.pose = pose::walk;
       break;
+  }
+  // Foraging (food.h): the end of a dig now and then turns up a snack just
+  // ahead of him. An act cut short finds nothing.
+  if (t + 1u == s->length && s->now == idles::dig) {
+    if (c.rng.below(food::kDigFindsOneIn) == 0)
+      c.habitat.placeFound(DishPos{b.at.x + cosTurn(b.facing) * kFindReach, b.at.y + sinTurn(b.facing) * kFindReach}, c.tick);
   }
   return Status::Running;
 }

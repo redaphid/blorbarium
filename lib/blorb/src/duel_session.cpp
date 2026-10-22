@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include "blorb/food.h"
 #include "blorb/species.h"
 
 namespace blorb {
@@ -601,6 +602,7 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       if (o.downed[me]) {
         fx.fall = true;
         fx.met = meetingOf(b);
+        fx.spoils = spoilsOf(b);
         b.metSent = true;
       }
     }
@@ -610,6 +612,7 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       b.slain = true;
       addStim(fx, stim::duel_slew);
       fx.met = meetingOf(b);
+      fx.spoils = spoilsOf(b);
       b.metSent = true;
       b.phaseTick = tick;
     }
@@ -679,6 +682,21 @@ Meeting DuelSession::meetingOf(const Battle& b) const {
   return m;
 }
 
+// The spoils of a win (#57): pellets the winner's pantry gains and the
+// loser's loses, read off both frozen cards, so both badges agree. Only on
+// the rules' own endings (a faint, a Finish, a Spare); a battle that ended
+// in silence or a goodbye (finish(), below) moves no food, because then
+// neither badge can know what the other last heard.
+int8_t DuelSession::spoilsOf(const Battle& b) const {
+  const Outcome& o = b.outcome;
+  if (!o.over() || (o.ending != Ending::AWon && o.ending != Ending::BWon)) return 0;
+  const bool iWon = (o.ending == Ending::AWon) == (b.me == Side::A);
+  const BattleCard& winner = iWon ? setup_.card : b.theirs;
+  const BattleCard& loser = iWon ? b.theirs : setup_.card;
+  const uint8_t n = std::min({food::kSpoils, loser.pantry, winner.room});
+  return iWon ? int8_t(n) : int8_t(-int(n));
+}
+
 // The battle ended outside the rules' own ending: silence, a conflict or a
 // goodbye. Before turn 0 nothing was applied, so nothing is recorded. After
 // it, neither badge can know what the other last heard, so both call it a
@@ -706,7 +724,7 @@ void DuelSession::finish(Battle& b, Air& air, uint32_t tick, DuelEffects& fx, En
 }
 
 void DuelSession::enterFarewell(Battle& b, uint32_t tick, DuelEffects& fx) {
-  if (!b.metSent) fx.met = meetingOf(b);
+  if (!b.metSent) fx.met = meetingOf(b), fx.spoils = spoilsOf(b);
   b.metSent = true;
   addStim(fx, stim::duel_befriended);
   Farewell f;

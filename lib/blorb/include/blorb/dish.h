@@ -210,6 +210,7 @@ class Dish {
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
   void feedView(Appearance&) const;
+  uint8_t pelletsDroppedAt(uint32_t tick) const;
   void onHatch(Egg&);
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
@@ -238,6 +239,10 @@ class Dish {
   FeedShow feed_;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
+  // Ticks since a hand was last on the badge (food.h, coming home). Not
+  // saved: a resumed board starts it at kAwayTicks, as it was off.
+  uint32_t untouched_ = 0;
+  int8_t spoilsShown_ = 0;   // a battle's spoils not yet shown: the duel's screen was up
   // The duel's aim while turned onto a side is the aim from before the turn
   // (turning him tips the tilt): the last kAimHistory ticks of tilt.
   static constexpr uint8_t kAimHistory = 16;

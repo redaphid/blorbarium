@@ -494,7 +494,7 @@ TEST(Golden, State) {
       "#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0",
       "#2b + drives hunger=301 sleepiness=0 boredom=4 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
       "#2b + body life=1000 injury=0 glow=0 dreaming=0",
-      "#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=1",
+      "#2b + dish pantry=8 pellets=0 night=0 time=unknown dark=0 still=1",
       "#2b OK",
   };
   EXPECT_EQ(got, want);

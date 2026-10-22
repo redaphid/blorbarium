@@ -132,16 +132,16 @@ TEST(KnockKnock, HammeringFeedsNobodyAndTheNextKnockKnockDoes) {
   EXPECT_EQ(b.knock({0, 300}).pellets, 1);
 }
 
-// The pantry holds four and one comes back every two hours (the metabolism
-// gene): a fifth knock knock in a row finds it empty and drops nothing. This
-// is the likeliest "it doesn't work" on a badge a kid plays with, and the
-// screen must say so (feed_show.h).
+// The pantry holds eight and one comes back every 5 min 20 s (the
+// metabolism gene through food.h, #57): a ninth knock knock in a row finds it
+// empty and drops nothing. This is the likeliest "it doesn't work" on a badge
+// a kid plays with, and the screen must say so (feed_show.h).
 TEST(KnockKnock, AnEmptyPantryDropsNothing) {
   Badge b(kHomeUp);
   b.keepPantryFull = false;
   int dropped = 0;
-  for (int i = 0; i < 5; ++i) dropped += b.knock({0, 300}).pellets;
-  EXPECT_EQ(dropped, 4);
+  for (int i = 0; i < 9; ++i) dropped += b.knock({0, 300}).pellets;
+  EXPECT_EQ(dropped, 8);
   EXPECT_EQ(b.dish->habitat().pantry, 0);
 }
 
@@ -229,7 +229,7 @@ TEST(Show, TheSecondKnockFlashesTheRimBeforeThePelletDrops) {
   ASSERT_LT(a.feed.flying, int(a.itemCount));
   EXPECT_EQ(a.feed.refused, FeedRefusal::None) << "hungry: no refusal";
   EXPECT_LT(a.feed.meterMs, 200) << "the belly meter shows";
-  EXPECT_EQ(a.feed.pantryMax, 4);
+  EXPECT_EQ(a.feed.pantryMax, 8);
 }
 
 TEST(Show, ABootPressFlashesAtOnce) {
@@ -268,6 +268,8 @@ TEST(Show, ARefusalSaysWhy) {
     EXPECT_EQ(f.droppedMs, FeedView::kNever);
     EXPECT_GT(f.refill, Fx::zero()) << "the next pellet is on its way";
     EXPECT_LT(f.refill, Fx::one());
+    EXPECT_GT(f.refillSecs, 0) << "and the bubble says when (MORE IN m:ss)";
+    EXPECT_LE(f.refillSecs, 8 * 40);
   }
   {
     Badge b(kHomeUp);

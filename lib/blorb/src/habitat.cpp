@@ -68,11 +68,15 @@ int nearestIndex(const Pellet (&pellets)[Habitat::kMaxPellets], DishPos from, Ki
 
 void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut& out,
                    bool rotIsFood) {
+  // One back each refillTicks; a coarse step (the unpowered catch-up) brings
+  // back every one it covered. A full pantry holds its clock at now, so the
+  // next one is a whole refill after the first drop.
+  while (pantry < rules.pantrySize && tick - pantryTick >= rules.refillTicks) {
+    ++pantry;
+    pantryTick += rules.refillTicks;
+  }
   if (pantry >= rules.pantrySize) {
     pantry = rules.pantrySize;
-    pantryTick = tick;
-  } else if (tick - pantryTick >= rules.refillTicks) {
-    ++pantry;
     pantryTick = tick;
   }
 
@@ -91,14 +95,22 @@ void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creatu
   out.set(locus::pantry, Fx::ratio(pantry, rules.pantrySize));
 }
 
+namespace {
+// An empty slot, or the oldest pellet's: a full dish gives that one up.
+int freeSlot(const Pellet (&pellets)[Habitat::kMaxPellets], uint32_t tick) {
+  int slot = 0;
+  for (int i = 0; i < Habitat::kMaxPellets; ++i) {
+    if (!pellets[i].present) return i;
+    if (tick - pellets[i].droppedTick > tick - pellets[slot].droppedTick) slot = i;
+  }
+  return slot;
+}
+}  // namespace
+
 // A full dish replaces its oldest pellet, so rotten food can never lock the pantry out.
 bool Habitat::dropPellet(const HabitatRules&, Rng& rng, uint32_t tick, SenseOut& out) {
   if (pantry == 0) return false;
-  int slot = 0;
-  for (int i = 0; i < kMaxPellets; ++i) {
-    if (!pellets[i].present) { slot = i; break; }
-    if (tick - pellets[i].droppedTick > tick - pellets[slot].droppedTick) slot = i;
-  }
+  const int slot = freeSlot(pellets, tick);
   DishPos at{};
   do {
     at = DishPos{kDropRadius * (rng.unit() + rng.unit() - Fx::one()), kDropRadius * (rng.unit() + rng.unit() - Fx::one())};
@@ -107,6 +119,31 @@ bool Habitat::dropPellet(const HabitatRules&, Rng& rng, uint32_t tick, SenseOut&
   --pantry;
   out.fire(stim::pellet_dropped);
   return true;
+}
+
+void Habitat::placeFound(DishPos at, uint32_t tick) {
+  DishPos normal{};
+  keepInside(at, normal);
+  pellets[freeSlot(pellets, tick)] = Pellet{at, tick, true};
+}
+
+uint8_t Habitat::give(const HabitatRules& rules, uint8_t n) {
+  const uint8_t room = pantry >= rules.pantrySize ? 0 : uint8_t(rules.pantrySize - pantry);
+  const uint8_t got = n < room ? n : room;
+  pantry = uint8_t(pantry + got);
+  return got;
+}
+
+uint8_t Habitat::take(uint8_t n) {
+  const uint8_t lost = n < pantry ? n : pantry;
+  pantry = uint8_t(pantry - lost);
+  return lost;
+}
+
+uint32_t Habitat::refillLeft(const HabitatRules& rules, uint32_t tick) const {
+  if (pantry >= rules.pantrySize) return 0;
+  const uint32_t since = tick - pantryTick;
+  return since >= rules.refillTicks ? 1 : rules.refillTicks - since;
 }
 
 std::optional<Habitat::Bite> Habitat::bite(const HabitatRules& rules, DishPos creature, uint32_t tick, bool rotIsFood) {

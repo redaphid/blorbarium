@@ -11,7 +11,9 @@
 #include <optional>
 #include <set>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/food.h"
 #include "blorb/friend_egg.h"
+#include "blorb/genes.h"
 #include "blorb/species.h"
 #include "blorb/starter_duel.h"
 #include "paint/duel.h"
@@ -1160,6 +1162,129 @@ TEST(AtOnce, ADownedPetWhoseCableComesOutBeforeTheVerdictLivesAndFled) {
     }
   }
   FAIL() << "no seed under 30 downed a pet";
+}
+
+// ---- #57: a win's spoils, food taken from the loser's pantry for the winner's ------
+
+namespace {
+
+GeneUid metabolismOf(const Genome& g) {
+  GeneUid uid{};
+  g.forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<MetabolismGene>::value) uid = v.header.uid;
+  });
+  return uid;
+}
+
+// Both pantries at `a` and `b`, after a hand has been on each badge (so no
+// homecoming lands later), with the refill slowed to hours: what moves in
+// the duel is only the spoils.
+void setPantries(Bout& bout, uint8_t a, uint8_t b) {
+  for (Device* d : {&bout.a, &bout.b}) {
+    BodySample held;
+    held.ax = 450, held.az = 893;
+    for (int t = 0; t < 10; ++t) {
+      for (uint8_t i = 0; i < 5; ++i) d->dish->sample(held, d->ms + 20 * i);
+      d->dish->tick(d->ms += 100, d->link);
+    }
+    Creature& c = d->creature();
+    ASSERT_TRUE(d->dish->editGene(metabolismOf(c.genome()), 1, 250));
+    d->dish->habitat().pantry = d == &bout.a ? a : b;
+    d->dish->habitat().pantryTick = d->dish->tickCount();
+  }
+}
+
+// Who won, as both books say it; nullopt for a draw. Both must agree.
+std::optional<bool> aWon(Bout& bout) {
+  const std::optional<Meeting>& ma = bout.a.dish->lastMeeting();
+  const std::optional<Meeting>& mb = bout.b.dish->lastMeeting();
+  EXPECT_TRUE(ma && mb);
+  if (!ma || !mb) return std::nullopt;
+  EXPECT_EQ(ma->outcomeHash, mb->outcomeHash) << "one battle, one outcome";
+  if (ma->ending != Ending::AWon && ma->ending != Ending::BWon) return std::nullopt;
+  return (ma->ending == Ending::AWon) == (ma->me == Side::A);
+}
+
+// One Spar from pantries `pa` and `pb`, then a while after it. Returns how
+// many bouts were decided; checks the food on both badges.
+int spoilsBout(uint64_t seed, Weather w, uint8_t pa, uint8_t pb) {
+  Bout bout(seed, kGrungo, SpeciesId{6}, false, w);
+  setPantries(bout, pa, pb);
+  if (::testing::Test::HasFatalFailure()) return 0;
+  EXPECT_TRUE(bout.runDuel(9000)) << "seed " << seed;
+  const std::optional<bool> won = aWon(bout);
+  bool shownA = false, shownB = false;
+  for (int t = 0; t < 600; ++t) {   // a minute after: shown once the dish is back, and never again
+    bout.step();
+    shownA = shownA || bout.a.dish->appearance().feed.spoils != 0;
+    shownB = shownB || bout.b.dish->appearance().feed.spoils != 0;
+  }
+  const int na = bout.a.dish->habitat().pantry, nb = bout.b.dish->habitat().pantry;
+  const std::string at = "seed " + std::to_string(seed) + " a=" + std::to_string(na) + " b=" + std::to_string(nb);
+  EXPECT_EQ(na + nb, pa + pb) << "food moves, it is never made or lost: " << at;
+  if (!won) {
+    EXPECT_EQ(na, pa) << "a draw moves nothing: " << at;
+    return 0;
+  }
+  const int winnerHad = *won ? pa : pb, loserHad = *won ? pb : pa;
+  const int moved = std::min<int>({food::kSpoils, loserHad, 8 - winnerHad});
+  EXPECT_EQ(*won ? na : nb, winnerHad + moved) << "the winner gains: " << at;
+  EXPECT_EQ(*won ? nb : na, loserHad - moved) << "the loser loses the same: " << at;
+  if (moved) {
+    EXPECT_TRUE(shownA && shownB) << "both screens show the pellet go: " << at;
+  }
+  return 1;
+}
+
+}  // namespace
+
+TEST(Spoils, AWinTakesAPelletFromTheLoserForTheWinnerOnBothBadgesOnce) {
+  int decided = 0;
+  for (uint64_t seed = 1; seed <= 6; ++seed) decided += spoilsBout(seed, Weather{}, 3, 3);
+  EXPECT_GE(decided, 3) << "enough Spars ended in a win to see the spoils";
+}
+
+// Under BATTLES.md's storm (30% lost, 10% doubled, 20% late) both badges still
+// move the same food, once.
+TEST(Spoils, UnderAStormBothBadgesStillAgree) {
+  constexpr Weather kStorm{300, 100, 200, 8};
+  int decided = 0;
+  for (uint64_t seed = 1; seed <= 6; ++seed) decided += spoilsBout(seed, kStorm, 2, 5);
+  EXPECT_GE(decided, 2);
+}
+
+// Nothing to take, or no room to put it: nothing moves, on either badge.
+TEST(Spoils, AnEmptyLoserOrAFullWinnerMovesNothing) {
+  spoilsBout(2, Weather{}, 0, 0);
+  spoilsBout(2, Weather{}, 8, 8);
+}
+
+// A badge from before the spoils sends its card's fourth mark slot as zeros:
+// pantry 0 and room 0, so spoils with it are none, on both sides.
+TEST(Spoils, TheCardCarriesThemWhereAnOldBadgeSendsZeros) {
+  BattleCard c;
+  c.pantry = 5, c.room = 3;
+  c.look.markCount = 2;
+  c.look.marks[0] = {0, 4}, c.look.marks[1] = {1, 2};
+  uint8_t buf[kDatagramMax];
+  BeaconPacket beacon;
+  beacon.card = c;
+  const size_t n = encode(Packet{beacon}, buf);
+  ASSERT_EQ(n, kBeaconWireBytes) << "the frame is the same size";
+  const std::optional<Packet> back = decode(buf, n);
+  ASSERT_TRUE(back);
+  const BattleCard& got = std::get<BeaconPacket>(*back).card;
+  EXPECT_EQ(got.pantry, 5);
+  EXPECT_EQ(got.room, 3);
+  EXPECT_EQ(got.look.marks[3].layer, 0) << "the slot reads as no mark";
+  EXPECT_EQ(got.look.marks[0].variant, 4);
+  c.look.markCount = 4;   // a card with four marks has no slot for them: none
+  c.look.marks[3] = {2, 1};
+  beacon.card = c;
+  const std::optional<Packet> full = decode(buf, encode(Packet{beacon}, buf));
+  ASSERT_TRUE(full);
+  EXPECT_EQ(std::get<BeaconPacket>(*full).card.pantry, 0);
+  EXPECT_EQ(std::get<BeaconPacket>(*full).card.look.marks[3].layer, 2);
 }
 
 // The friend egg's life, cut after every write from the death to the hatch:

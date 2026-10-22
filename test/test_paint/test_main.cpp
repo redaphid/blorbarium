@@ -126,6 +126,20 @@ Box find(const Canvas240& cv, uint16_t colour) {
   return b;
 }
 
+// As find, but only pixels of `colour` in `after` that `before` did not have
+// (the pantry's slots draw cookies of their own along the rim, #57).
+Box findNew(const Canvas240& before, const Canvas240& after, uint16_t colour) {
+  Box b;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x)
+      if (after.px[y * kSide + x] == colour && before.px[y * kSide + x] != colour) {
+        b.x0 = std::min(b.x0, x); b.x1 = std::max(b.x1, x);
+        b.y0 = std::min(b.y0, y); b.y1 = std::max(b.y1, y);
+        ++b.count;
+      }
+  return b;
+}
+
 struct Spot { double x, y, r; };
 // Where a frame-space anchor lands, measured from the block's canvas box.
 Spot onCanvas(const Box& b, const paint::EyeAnchor& e) {
@@ -757,6 +771,7 @@ TEST(Feeding, NoNewsDrawsNothing) {
   a.feed.fullness = fx(0.5);
   Appearance plain = a;
   plain.feed = blorb::FeedView{};
+  plain.feed.pantryMax = a.feed.pantryMax;   // the pantry's slots are always drawn (#57)
   EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
 }
 
@@ -770,7 +785,7 @@ TEST(Feeding, TheKnockKnockBringsACookieOutOfThePantryGlyph) {
   Appearance heard = plain;
   heard.feed.heardMs = 400;
   auto a = render(plain, pack), b = render(heard, pack);
-  const Box food = find(*b, kCookieEdge);
+  const Box food = findNew(*a, *b, kCookieEdge);
   ASSERT_GT(food.count, 40) << "a cookie, big";
   EXPECT_GT(food.x0, 110) << "under the glyph at the top right";
   EXPECT_LT(food.y1, 80);
@@ -780,7 +795,9 @@ TEST(Feeding, TheKnockKnockBringsACookieOutOfThePantryGlyph) {
       far += a->px[y * kSide + x] != b->px[y * kSide + x] && (x < 100 || y > 90);
   EXPECT_EQ(far, 0) << "nothing round the whole screen: no ring, no meter yet";
   heard.pantry = 0;
-  EXPECT_EQ(find(*render(heard, pack), kCookieEdge).count, 0) << "none left: no cookie";
+  plain.pantry = 0;
+  EXPECT_EQ(findNew(*render(plain, pack), *render(heard, pack), kCookieEdge).count, 0) << "none left: no cookie";
+  plain.pantry = 3;
   heard.pantry = 3;
   heard.feed.heardMs = 2400;
   EXPECT_EQ(countChanged(*render(plain, pack), *render(heard, pack)), 0) << "nothing came of the knocks: it went back in";
@@ -799,6 +816,88 @@ TEST(Font, HasEveryCharacterTheLinesMayUse) {
     EXPECT_GT(g.xAdvance, 0) << char(c);
     if (c != ' ') EXPECT_GT(g.width * g.height, 0) << "'" << char(c) << "' has no ink";
   }
+}
+
+// ---- the pantry along the rim (#57) ----------------------------------------------------
+
+// Changed pixels, and whether every one lies inside the box.
+struct Diff { int n = 0; bool inside = true; };
+Diff diffIn(const Canvas240& a, const Canvas240& b, int x0, int y0, int x1, int y1) {
+  Diff d;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x)
+      if (a.px[y * kSide + x] != b.px[y * kSide + x]) {
+        ++d.n;
+        d.inside = d.inside && x >= x0 && x <= x1 && y >= y0 && y <= y1;
+      }
+  return d;
+}
+
+// Its slots up and left of the pellet glyph: a cookie in each full one, so
+// more full ones are more cookie; the next one fills like a clock, and only
+// that slot moves as it does.
+TEST(Pantry, EachFullSlotIsACookieAndTheNextOneFillsLikeAClock) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.3);
+  a.feed.pantryMax = 8;
+  a.pantry = 3;
+  Appearance more = a;
+  more.pantry = 6;
+  const Box three = find(*render(a, pack), kCookieEdge), six = find(*render(more, pack), kCookieEdge);
+  EXPECT_GT(six.count, three.count + 20) << "three more cookies";
+  EXPECT_LT(six.y1, 45) << "along the top-left rim";
+  EXPECT_LT(six.x1, 115) << "left of the pellet glyph";
+  Appearance filling = a;
+  filling.feed.refill = fx(0.6);
+  const Diff d = diffIn(*render(a, pack), *render(filling, pack), 84 - 6, 18 - 6, 84 + 6, 18 + 6);
+  EXPECT_GT(d.n, 4) << "the fourth slot's pie";
+  EXPECT_TRUE(d.inside) << "and nothing else";
+}
+
+// Hungry with none left, the time until the next one is written by the
+// slot, and it counts down; not waiting, nothing is written.
+TEST(Pantry, WaitingOnAnEmptyPantryShowsWhenTheNextComes) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.3);
+  a.feed.pantryMax = 8;
+  a.pantry = 0;
+  a.feed.refill = fx(0.4);
+  a.feed.refillSecs = 125;
+  Appearance waiting = a;
+  waiting.feed.waiting = true;
+  auto plain = render(a, pack), shown = render(waiting, pack);
+  const Diff d = diffIn(*plain, *shown, 60, 0, 160, 50);
+  EXPECT_GT(d.n, 150) << "a pill with 2:05 in it, and the slot's ring";
+  EXPECT_TRUE(d.inside) << "by the slot, at the top";
+  Appearance later = waiting;
+  later.feed.refillSecs = 64;
+  EXPECT_GT(countChanged(*shown, *render(later, pack)), 10) << "1:04: the clock moved";
+}
+
+// Pressed with none left, the bubble says when more comes.
+TEST(Pantry, AnEmptyPressSaysMoreInHowLong) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.3);
+  a.feed.pantryMax = 8;
+  a.feed.refused = blorb::FeedRefusal::Empty;
+  a.feed.refusedMs = 600;
+  a.feed.refillSecs = 300;
+  Appearance none = a;
+  none.feed.refillSecs = 0;   // nothing coming back: the old words
+  EXPECT_GT(countChanged(*render(a, pack), *render(none, pack)), 50) << "MORE IN 5:00, not ALL GONE!";
+}
+
+// A battle's spoils: a cookie in flight over the rim, in or out.
+TEST(Pantry, SpoilsFlyInOrOut) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult(0.1, 0.3);
+  a.feed.pantryMax = 8;
+  a.pantry = 4;
+  Appearance won = a, lost = a;
+  won.feed.spoils = 1, won.feed.spoilsMs = 450;
+  lost.feed.spoils = -1, lost.feed.spoilsMs = 120;
+  EXPECT_GT(findNew(*render(a, pack), *render(won, pack), kCookieEdge).count, 5) << "on its way in";
+  EXPECT_GT(findNew(*render(a, pack), *render(lost, pack), kCookieEdge).count, 5) << "on its way out";
 }
 
 // The belly meter up the left rim: fuller, more of it lit.

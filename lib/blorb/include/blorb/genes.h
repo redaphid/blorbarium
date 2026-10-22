@@ -37,7 +37,8 @@ struct SizeGene        { uint8_t base, growth, squash; };
 struct MarkGene        { uint8_t layer, variant, tint, chemBound; };                 // overlay variant mod the pack's count
 struct MutationPolicyGene { uint8_t point, dup, del, wake, sleep, wild, heirloomMax, heirloomConf; };
 struct EggGene         { uint8_t incubateMinutes, warmthBoost, hatchBurstDreams; };
-struct MetabolismGene  { uint8_t pantrySize, refillHours, rotMinutes, biteSize; };
+// pantrySize and refill are read through food.h's scales (x2 slots, 40 s a unit).
+struct MetabolismGene  { uint8_t pantrySize, refill, rotMinutes, biteSize; };
 struct NoteGene        { uint8_t text[24]; };                                         // family motto; owner-editable
 
 // ---- registry ------------------------------------------------------------------------

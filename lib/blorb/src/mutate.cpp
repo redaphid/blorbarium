@@ -6,6 +6,7 @@
 #include <memory>
 #include <type_traits>
 #include "blorb/creature.h"
+#include "blorb/food.h"
 #include "blorb/genes.h"
 
 namespace blorb {
@@ -393,14 +394,16 @@ Viability viability(const Genome& g) {
   });
   if (!lifeDecays || !oldAgeKills) return {false, "no old-age death"};
 
-  // 48 pet-hours, a pellet's worth of food each refill, and nothing else.
+  // 48 pet-hours, a pellet's worth of food each refill, and nothing else. The
+  // refill at its pace from before #57 (food.h): a slow keeper's, so what
+  // passed before passes now.
   constexpr struct { Stage from; LocusId trigger; Stage to; } kStages[] = {
       {Stage::Baby, locus::become_child, Stage::Child},
       {Stage::Child, locus::become_adult, Stage::Adult},
       {Stage::Adult, locus::become_elder, Stage::Elder},
   };
   Stage stage = Stage::Baby;
-  const uint32_t refill = p.habitat.refillTicks;
+  const uint32_t refill = p.habitat.refillTicks / food::kRefillTicksPerByte * food::kDryRunRefillTicksPerByte;
   for (uint32_t tick = 0; tick < kDryRunTicks; tick += kDryRunStride) {
     uint32_t meals = (tick + kDryRunStride + refill - 1) / refill - (tick + refill - 1) / refill;
     for (uint32_t i = 0; i < meals; ++i) c.add(chem::food, p.habitat.biteSize);

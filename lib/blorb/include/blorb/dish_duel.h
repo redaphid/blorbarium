@@ -50,6 +50,7 @@ BootHint bootHint(BootContext, const DuelView*);
 // What one tick of the duel asks of the Dish.
 struct DuelStepped {
   bool save = false;        // a wound, a scar, a downing, a fall, a graft, a meeting: save the keepsake now
+  int8_t spoils = 0;        // a won (> 0) or lost (< 0) battle's pellets for the pantry (#57, food.h)
 };
 
 class DishDuel {
@@ -74,6 +75,10 @@ class DishDuel {
   //    rechecked every tick; a pet who is no creature any more leaves it
   DuelStepped step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
                    uint64_t lineageId, uint16_t petDay, uint32_t tick);
+
+  // His pantry now and its room, for the card a friend reads (the spoils,
+  // #57). The Dish sets it each tick before step().
+  void setPantry(uint8_t pantry, uint8_t room) { pantry_ = pantry, room_ = room; }
 
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }
@@ -116,6 +121,7 @@ class DishDuel {
   // it points at this copy, never at the creature.
   Genome genome_;
   Stakes deviceCeiling_ = Stakes::Mortal;
+  uint8_t pantry_ = 0, room_ = 0;
   uint32_t opens_ = 0;
   uint32_t lastEndTick_ = 0;
   bool dueledThisBoot_ = false, faintedLast_ = false, fell_ = false, battled_ = false;

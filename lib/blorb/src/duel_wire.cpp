@@ -42,7 +42,13 @@ void putCard(Out& o, const BattleCard& c, bool withLineage) {
   o.u8(c.level), o.u8(c.prowess), o.u64(withLineage ? c.lineageId : 0);
   for (const Tint& t : c.look.regions) o.u8(uint8_t(t.hue)), o.u8(t.sat), o.u8(t.val);
   o.u8(c.look.scalePct), o.u8(uint8_t(c.look.stage)), o.u8(c.look.markCount);
-  for (const CardLook::Mark& k : c.look.marks) o.u8(k.layer), o.u8(k.variant);
+  // The fourth mark slot carries the spoils (duel.h BattleCard::pantry) when no mark fills it.
+  const bool spoils = c.look.markCount < 4;
+  for (uint8_t i = 0; i < 4; ++i) {
+    const CardLook::Mark& k = c.look.marks[i];
+    if (i == 3 && spoils) o.u8(c.pantry), o.u8(c.room);
+    else o.u8(k.layer), o.u8(k.variant);
+  }
   o.u32(c.look.lifeSeed);
 }
 // Species and power stay as heard: a friend on another roster still shows
@@ -56,6 +62,11 @@ bool getCard(In& in, BattleCard& c) {
   bool ok = enumIn(in, Stage::Elder, c.look.stage);
   c.look.markCount = in.u8();
   for (CardLook::Mark& k : c.look.marks) k.layer = in.u8(), k.variant = in.u8();
+  c.pantry = c.room = 0;
+  if (c.look.markCount < 4) {
+    c.pantry = c.look.marks[3].layer, c.room = c.look.marks[3].variant;
+    c.look.marks[3] = CardLook::Mark{};
+  }
   c.look.lifeSeed = in.u32();
   return ok && c.version == DuelRules::kCardVersion && c.knack.order < 6 && c.look.markCount <= 4;
 }

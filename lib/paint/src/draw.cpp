@@ -53,12 +53,10 @@ constexpr int kPulse[kPulseTicks] = {256, 242, 208, 174, 160, 174, 208, 242};
 constexpr uint16_t kSparkOrbitTicks = 30;
 constexpr int kSparkMax = 6;
 constexpr Fx kSparkGlow = Fx::ratio(6, 10);
-constexpr int kMaxPips = 12;
-constexpr uint8_t kPipColour[3] = {214, 150, 70};
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-// The empty band above his head, under the pantry pips: the sibling's label
+// The empty band above his head, under the pantry's slots: the sibling's label
 // strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
 // over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
@@ -760,6 +758,7 @@ void drawItems(const Appearance& a, Canvas240& cv, const Disc& d, const Place& h
     const bool byHim = spots_.him && iabs(dx) < clear && q.y >= spots_.top && q.y <= him.y + 2 * foot;
     if (byHim) x = imax(kSide / 2 - 100, imin(kSide / 2 + 100, him.x + (dx < 0 ? -clear : clear)));
     const bool rotten = a.items[i].what == Appearance::Item::What::RottenPellet;
+    if (i == a.feed.found) spots_.found = true, spots_.foundX = x, spots_.foundY = q.y;
     if (i == a.feed.flying) {   // the newest: in the air until it lands (feeding.cpp), over him
       spots_.landing = true, spots_.landX = x, spots_.landY = q.y;
       int ax = 0, ay = 0, pct = 100;
@@ -1233,18 +1232,6 @@ void mask(Canvas240& cv) {
   }
 }
 
-// Pantry pellets as pips along the top of the rim.
-void pips(Canvas240& cv, uint8_t pantry) {
-  const int n = imin(pantry, kMaxPips);
-  const Rgb c{kPipColour[0], kPipColour[1], kPipColour[2]};
-  for (int k = 0; k < n; ++k) {
-    int dx = (2 * k - (n - 1)) * 9 / 2;
-    int x = kSide / 2 + dx, y = kSide / 2 - int(isqrt(uint64_t(108 * 108 - dx * dx)));
-    fill(cv, x - 1, y - 2, x + 1, y + 2, c, 256);
-    fill(cv, x - 2, y - 1, x + 2, y + 1, c, 256);
-  }
-}
-
 // 9x9 gesture glyphs, drawn at 2x: what the body should do, and how many
 // knocks it takes -- a dot per knock under the glyph (controls.h), so a child
 // can learn knock once versus knock knock by counting, not reading.
@@ -1639,7 +1626,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutch(a, cv); break;
   }
   phaseEnd(Phase::Figure);
-  pips(cv, a.pantry);
+  drawPantry(cv, a, nowMs);   // feeding.cpp: the pantry's slots and the next one coming
   rimTokens(cv, a);
   hint(cv, a);
   phaseEnd(Phase::Rim);
@@ -1651,7 +1638,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
   else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby
   phaseEnd(Phase::Rings);
-  drawFeeding(cv, a, spots_);   // feeding.cpp: the knock knock heard, the pellet, the chomp, his belly
+  drawFeeding(cv, a, spots_, nowMs);   // feeding.cpp: the knock knock heard, the pellet, the chomp, his belly
   mask(cv);
   phaseEnd(Phase::Mask);
 }

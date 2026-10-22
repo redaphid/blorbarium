@@ -15,8 +15,13 @@
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
 //             rotten one: green crumbs and YUCK);
 //   belly     a meter up the left rim, its level his fullness (1 - hunger),
-//             rising as he eats; there after any of the above, then gone.
+//             rising as he eats; there after any of the above, then gone;
+//   pantry    its slots along the rim (#57): a cookie in each full one, the
+//             next one filling like a clock, and while he is hungry with
+//             none left, the time until it is back, in a dark pill;
+//   found     a snack he dug up: a ring and a twinkle where it lands.
 #include <cstdint>
+#include <cstdio>
 
 #include "duel/duel_art.h"
 #include "figure.h"
@@ -48,13 +53,21 @@ constexpr int kHeartGapMs = 260;   // ...three of them, this far apart
 constexpr int kRiseMs = 900;       // the belly meter rising to its new level
 constexpr int kMeterMs = 3600;     // the meter, after the last event
 constexpr int kFadeMs = 300;
+constexpr int kFoundMs = 1400;     // a snack he dug up twinkles this long
+constexpr int kToppedMs = 700;     // coming home: the slots it filled pop in
+constexpr int kWaitPulseMs = 1200; // the next slot breathes while he waits on it
+constexpr int kSpoilsMs = 900;     // a battle's spoils: the cookie's flight over the rim
 
 // ---- where -------------------------------------------------------------------
 constexpr int kGlyphX = 146, kGlyphY = 18;    // the rim's pellet glyph (duel_scene.cpp kBootAt), drawn over the dish
 constexpr int kFromX = 142, kFromY = 68;      // just under it, where the cookie waits and is tossed from (its stand point)
 constexpr int kArcPx = 34;                    // how high the toss rises over the straight line
 constexpr int kMeterTop = 62, kMeterBottom = 150, kMeterIn = 100, kMeterOut = 114;   // up the left rim
-constexpr int kPantryR = 108;                 // the pantry's row (draw.cpp pips)
+// The pantry's slots along the rim at radius 108, from just left of the
+// pellet glyph (7 degrees left of the top) round toward the belly meter, 4.2
+// degrees apart; twelve at most (food::kMaxPantry), clear of the meter's top.
+constexpr int kSlotAt[kPantrySlots][2] = {{107, 13}, {99, 14}, {91, 16}, {84, 18}, {76, 21}, {69, 25},
+                                          {62, 29}, {56, 33}, {50, 38}, {44, 43}, {38, 49}, {34, 55}};
 constexpr int kFoodR = kFoodFloorR;          // a cookie on the floor: 19 px across (the pack's pellet was 15 x 13)
 
 struct Rgb { int r, g, b; };
@@ -251,32 +264,39 @@ void puff(Canvas240& cv, const DishSpots& s, int t) {
   }
 }
 
+// ---- the pantry -------------------------------------------------------------------
+// A pie of radius r at (x, y), `filled` of 256 of it, clockwise from 12 o'clock.
+void pie(Canvas240& cv, int x, int y, int r, int filled, Rgb c, int alpha) {
+  for (int py = -r; py <= r; ++py)
+    for (int px = -r; px <= r; ++px) {
+      if (px * px + py * py > r * r) continue;
+      // How far round from 12 o'clock, clockwise, 0..256: a quarter per quadrant, linear within it.
+      const int ax = px < 0 ? -px : px, ay = py < 0 ? -py : py, sum = imax(1, ax + ay);
+      const int turn = px >= 0 && py < 0 ? 64 * ax / sum
+                       : px > 0 && py >= 0 ? 64 + 64 * ay / sum
+                       : px <= 0 && py > 0 ? 128 + 64 * ax / sum
+                                           : 192 + 64 * ay / sum;
+      if (turn <= filled) put(cv, x + px, y + py, c, alpha);
+    }
+}
+
+// The slots to draw: the pantry's size, or its count where no size was given.
+int slotsOf(const blorb::Appearance& a) { return imin(kPantrySlots, imax(a.feed.pantryMax, a.pantry)); }
+
+// "m:ss" until the next pellet, at most 99:59.
+void countdown(char (&out)[8], uint16_t secs) {
+  const int s = imin(secs, 99 * 60 + 59);
+  std::snprintf(out, sizeof out, "%d:%02d", s / 60, s % 60);
+}
+
 // ---- refused ------------------------------------------------------------------
-// The pantry's slots at the top of the rim, hollow and shaking: none left.
-// The first fills like a clock as the next pellet comes back.
-void emptyPantry(Canvas240& cv, const FeedView& f, int t) {
-  const int n = imin(f.pantryMax, 12);
+// The pantry's slots, ringed in red and shaking: none left. The next fills
+// like a clock as it comes back (drawPantry draws that).
+void emptyPantry(Canvas240& cv, const blorb::Appearance& a, int t) {
+  const int n = slotsOf(a);
   const int alpha = fadeOut(t, kRefusedMs) * 230 / 256;
   const int shake = t < 900 ? wave(t, 140, 3) : 0;
-  for (int k = 0; k < n; ++k) {
-    const int dx = (2 * k - (n - 1)) * 9 / 2;
-    const int x = kSide / 2 + dx + shake, y = kSide / 2 - isqrt(kPantryR * kPantryR - dx * dx);
-    ring(cv, x, y, 3, 5, kNo, alpha);
-    if (k != 0) continue;
-    // The next one coming back: a pie, clockwise from the top.
-    const int filled = unit256(f.refill);
-    for (int py = -3; py <= 3; ++py)
-      for (int px = -3; px <= 3; ++px) {
-        if (px * px + py * py > 9) continue;
-        // How far round from 12 o'clock, clockwise, 0..256: a quarter per quadrant, linear within it.
-        const int ax = px < 0 ? -px : px, ay = py < 0 ? -py : py, sum = imax(1, ax + ay);
-        const int turn = px >= 0 && py < 0 ? 64 * ax / sum
-                         : px > 0 && py >= 0 ? 64 + 64 * ay / sum
-                         : px <= 0 && py > 0 ? 128 + 64 * ax / sum
-                                             : 192 + 64 * ay / sum;
-        if (turn <= filled) put(cv, x + px, y + py, kPelletOrange, alpha);
-      }
-  }
+  for (int k = 0; k < n; ++k) ring(cv, kSlotAt[k][0] + shake, kSlotAt[k][1], 4, 6, kNo, alpha);
 }
 
 // What each refusal says, in words: the owner read the first pictures (a grey
@@ -285,16 +305,27 @@ void emptyPantry(Canvas240& cv, const FeedView& f, int t) {
 constexpr const char* kSaysFull = "I'M FULL!";
 constexpr const char* kSaysAsleep = "ZZZ...";
 constexpr const char* kSaysEmpty = "ALL GONE!";
+constexpr const char* kSaysMore = "MORE IN";   // + " 2:05": the empty pantry's answer while a pellet is coming back
 static_assert(blorb::writable(kSaysFull, blorb::kMaxThoughtText, "") && blorb::writable(kSaysAsleep, blorb::kMaxThoughtText, "") &&
                   blorb::writable(kSaysEmpty, blorb::kMaxThoughtText, "") && blorb::writable("YUM!", blorb::kMaxThoughtText, "") &&
+                  blorb::writable("MORE IN 99:59", blorb::kMaxThoughtText, "") &&
                   blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
               "what he says when fed is in the font");
 
-void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
+void refused(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) {
+  const FeedView& f = a.feed;
   if (f.refused == FeedRefusal::None || f.refusedMs >= kRefusedMs) return;
   const int t = f.refusedMs;
-  if (f.refused == FeedRefusal::Empty) emptyPantry(cv, f, t);
+  if (f.refused == FeedRefusal::Empty) emptyPantry(cv, a, t);
+  // None left: when the next one comes, in words (#57).
+  char more[20];
   const char* says = f.refused == FeedRefusal::Full ? kSaysFull : f.refused == FeedRefusal::Asleep ? kSaysAsleep : kSaysEmpty;
+  if (f.refused == FeedRefusal::Empty && f.refillSecs) {
+    char clock[8];
+    countdown(clock, f.refillSecs);
+    std::snprintf(more, sizeof more, "%s %s", kSaysMore, clock);
+    says = more;
+  }
   int x = 0, y = 0, tx = 0, ty = 0;
   beside(s, x, y, tx, ty);
   y += wave(t, 1200, 2);
@@ -421,7 +452,107 @@ void foodAloft(Canvas240& cv, const FeedView& f, int landX, int landY, bool rott
   drawFood(cv, x, y - kFoodR * pct / 100, kFoodR * pct / 100, Food{0, rotten}, 256);
 }
 
-void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) {
+void pantrySlot(int k, int& x, int& y) {
+  k = clampi(k, 0, kPantrySlots - 1);
+  x = kSlotAt[k][0], y = kSlotAt[k][1];
+}
+
+void drawPantry(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
+  const FeedView& f = a.feed;
+  const int n = slotsOf(a), full = imin(a.pantry, n);
+  for (int k = 0; k < n; ++k) {
+    const int x = kSlotAt[k][0], y = kSlotAt[k][1];
+    if (k < full) {
+      // Coming home: the newest slots it filled pop in, one after another.
+      int r = 4;
+      const int first = full - f.topped;
+      if (f.topped && k >= first && f.toppedMs != kNever) {
+        const int u = int(f.toppedMs) - 150 * (k - first);
+        if (u < 0) continue;
+        if (u < kToppedMs) {
+          r = 1 + 5 * easeOut(u, kToppedMs) / 256;   // overshoots to 6, then settles
+          if (u > kToppedMs / 2) r = imax(4, r - 2 * (u - kToppedMs / 2) / (kToppedMs / 2));
+          ring(cv, x, y, r + 2, r + 4, kWarm, 200 * (kToppedMs - u) / kToppedMs);
+        }
+      }
+      drawFood(cv, x, y, r, Food{});
+      continue;
+    }
+    ring(cv, x, y, 3, 4, kTrack, 220);   // a hollow slot, on any floor
+    ring(cv, x, y, 4, 5, kPelletOrange, k == full ? 150 : 70);
+    if (k != full) continue;
+    // The next one: a pie clockwise from the top as it comes back, and while
+    // he waits on it, a warm ring breathing round it.
+    pie(cv, x, y, 3, unit256(f.refill), kPelletOrange, 230);
+    if (f.waiting) {
+      const int w = wave(int(nowMs % kWaitPulseMs), kWaitPulseMs, 128);
+      const int breathe = 128 + w;   // 0..256
+      ring(cv, x, y, 6, 8, kWarm, 90 + breathe * 140 / 256);
+    }
+  }
+}
+
+// He waits on an empty pantry: when the next one comes, as m:ss in a dark
+// pill just inside the rim below its slot, over whatever else is there.
+void waitingClock(Canvas240& cv, const blorb::Appearance& a) {
+  const FeedView& f = a.feed;
+  if (!f.waiting || !f.refillSecs || a.pantry != 0 || slotsOf(a) == 0) return;
+  char clock[8];
+  countdown(clock, f.refillSecs);
+  const int w = textWidth(kFreeSans9pt7b, clock) + 12, h = 20;
+  const int cx = clampi(kSlotAt[0][0] - 4, 30 + w / 2, kSide - 30 - w / 2), cy = kSlotAt[0][1] + 20;
+  const int r = h / 2;
+  for (int y = cy - h / 2; y <= cy + h / 2; ++y)
+    for (int x = cx - w / 2; x <= cx + w / 2; ++x) {
+      const int ex = x < cx - w / 2 + r ? cx - w / 2 + r - x : x > cx + w / 2 - r ? x - (cx + w / 2 - r) : 0, ey = y - cy;
+      if (ex * ex + ey * ey <= r * r) put(cv, x, y, kInk, 225);
+    }
+  drawString(cv, kFreeSans9pt7b, clock, cx - w / 2 + 6, cy, to565(kWarm), Clip{0, 0, kSide, kSide, 0});
+}
+
+// A snack he dug up: a ring and four twinkles opening round it.
+void foundSnack(Canvas240& cv, const FeedView& f, const DishSpots& s) {
+  if (!s.found || f.foundMs >= kFoundMs) return;
+  const int t = f.foundMs, alpha = fadeOut(t, kFoundMs) * 230 / 256;
+  const int y = s.foundY - kFoodR;   // round the cookie, not its stand point
+  const int r = kFoodR + 2 + 10 * easeOut(t, kFoundMs) / 256;
+  ring(cv, s.foundX, y, r - 2, r, kWarm, alpha * (kFoundMs - t) / kFoundMs);
+  constexpr int kRay[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+  for (const auto& d : kRay) {
+    const int x = s.foundX + d[0] * (r + 4), yy = y + d[1] * (r + 4);
+    stroke(cv, x - d[1] * 3, yy - d[0] * 3, x + d[1] * 3, yy + d[0] * 3, 0, kWhite, alpha);
+    stroke(cv, x - d[0] * 3, yy - d[1] * 3, x + d[0] * 3, yy + d[1] * 3, 0, kWhite, alpha);
+  }
+}
+
+// A battle's spoils (#57): won, a cookie flies in over the rim, dips into
+// the dish and settles in the slot it filled; lost, one hops out of the slot
+// it left, into the dish a little, and away over the rim toward the friend,
+// whose screen shows it arrive.
+void spoilsFlight(Canvas240& cv, const blorb::Appearance& a) {
+  const FeedView& f = a.feed;
+  if (!f.spoils || f.spoilsMs >= kSpoilsMs + kPuffMs || slotsOf(a) == 0) return;
+  const bool won = f.spoils > 0;
+  int x = 0, y = 0;
+  pantrySlot(won ? imax(0, a.pantry - 1) : a.pantry, x, y);
+  // In from the slot toward the middle, and out past the glass straight from it.
+  const int dx = x - kSide / 2, dy = y - kSide / 2, r = imax(1, isqrt(dx * dx + dy * dy));
+  const int ix = x - dx * 22 / r, iy = y - dy * 22 / r, ox = kSide / 2 + dx * 140 / r, oy = kSide / 2 + dy * 140 / r;
+  const int t = f.spoilsMs;
+  if (t < kSpoilsMs) {
+    // p runs slot -> in -> out for a loss, and the other way for a win.
+    const int u = easeOut(t, kSpoilsMs), p = won ? 256 - u : u;
+    int fx = 0, fy = 0;
+    if (p < 100) fx = x + (ix - x) * p / 100, fy = y + (iy - y) * p / 100;
+    else fx = ix + (ox - ix) * (p - 100) / 156, fy = iy + (oy - iy) * (p - 100) / 156;
+    drawFood(cv, fx, fy, 4 + 3 * imin(p, 100) / 100, Food{});
+  }
+  // Where it landed or left from: a ring, warm for a win, red for a loss.
+  const int u = won ? t - kSpoilsMs : t;
+  if (u >= 0 && u < kPuffMs) ring(cv, x, y, 5 + 6 * u / kPuffMs, 7 + 6 * u / kPuffMs, won ? kWarm : kNo, 220 * (kPuffMs - u) / kPuffMs);
+}
+
+void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s, uint32_t) {
   const FeedView& f = a.feed;
   if (a.kind != blorb::Appearance::Kind::Creature || a.sealed) {
     if (f.heardMs < kPopMs) glyphPop(cv, f.heardMs);   // a knock knock is heard on any screen the dish draws
@@ -429,7 +560,10 @@ void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) 
   }
   belly(cv, f);
   if (f.droppedMs != kNever) puff(cv, s, f.droppedMs);
-  refused(cv, f, s);
+  foundSnack(cv, f, s);
+  refused(cv, a, s);
+  waitingClock(cv, a);
+  spoilsFlight(cv, a);
   chomp(cv, f, s);
   glyphPop(cv, f.heardMs);
   cookieOut(cv, f, a.pantry);

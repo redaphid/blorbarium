@@ -207,6 +207,10 @@ struct DuelEffects {
   std::optional<FriendEgg> egg;         // both hugged and the genome arrived: FriendEggStore::save
   std::optional<DuelSetup::Pin> rematch;   // both asked: fight mode searches for this friend first
   bool backToLobby = false;             // a battle (or a pairing) ended and fight mode searches again: refresh()
+  // The battle ended in a win, on the tick its Meeting went out: pellets my
+  // pantry gains (> 0, I won) or loses (< 0) as spoils (#57, food.h). Read
+  // off both cards, so both badges move the same food, once per battle.
+  int8_t spoils = 0;
   bool radioClosed = false;             // fight mode ended
   void stim(StimId s) { if (stimCount < 4) stimuli[stimCount++] = s; }
 };
@@ -361,6 +365,7 @@ class DuelSession {
   bool specialFits(const Battle&, Windup) const;
   uint8_t assistFor(const Battle&, uint8_t side) const;
   Meeting meetingOf(const Battle&) const;
+  int8_t spoilsOf(const Battle&) const;
 };
 
 }  // namespace blorb

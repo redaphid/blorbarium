@@ -172,8 +172,38 @@ a knuckle does (they had set the tap engine's register, which `KnockSense`
 overrules, so no sim knock had reached the pet since 0.7.12); goldens
 `knock_knock` and `pellet_toss` film it.
 
-Not changed, for the owner to decide: the pantry (4, one back every 2 h);
-that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
+### More food, and when it comes (#57)
+
+Owner, 2026-10-22: "I keep running out of food and I don't know how to get
+more but it keeps complaining about being starving." Measured
+(`test/test_food_balance`, `FOOD_SWEEP=1`): a kid who fed him only when he
+asked never ran dry, but one who also knocked for pellets for the fun of it
+found the pantry empty on 9 presses in 10, for two hours at a time. Every
+number is now in `lib/blorb/include/blorb/food.h`:
+
+| | Before | Now |
+|---|---|---|
+| Pantry | 4 | 8 (the metabolism gene's byte x2, at most 12) |
+| Refill | one every 2 h | one every 5 min 20 s (the byte x 40 s): empty to full in 43 min |
+| Foraging | none | the end of a dig turns up a snack 1 time in 40 (2 or 3 a day), at his feet, sparkling |
+| Coming home | none | the first hand after 2 h untouched, or after the board was off, tops the pantry up by 2 |
+| A fight won | nothing | a pellet from the loser's pantry to the winner's (both badges agree) |
+
+| When | What shows |
+|---|---|
+| Always | the pantry's slots along the top-left rim, from the pellet glyph: a cookie in each full one, the next one filling like a clock, the rest hollow |
+| A press with none left | MORE IN 2:05 in a bubble (ALL GONE! when nothing is coming), the slots ringed red and shaking |
+| He is hungry and none are left | the next slot breathes, and a dark pill under it counts down (2:05) |
+| He digs up a snack | a ring and twinkles round it where it lands |
+| Coming home | the slots it filled pop in |
+| A fight won or lost | once the dish is back on screen, a cookie flies in over the rim to the winner's pantry, and out of the loser's |
+
+The viability dry run (`mutate.cpp`) still feeds at the old two-hour pace
+on purpose, so mutations it passed before pass now. Starving is still the
+chemistry's: left untouched he is starving within 1.5 to 2 hours of his
+last ask and dies of it after about 2.4 days.
+
+Not changed, for the owner to decide: that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
 starving pet that eats it later is poisoned); where the engine drops it (a
 random spot within 0.6 of the middle, then it rolls downhill, to the bottom
 rim when the badge is held upright); and his mouth opening toward it (pose
