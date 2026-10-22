@@ -48,6 +48,11 @@ Offer judge(const Manifest&, const char* board, ota::Version running, uint32_t f
 // and 12 random bytes. The new image confirms its trial over Wi-Fi only for
 // a token like this, so a Wi-Fi fetch never confirms a page's Bluetooth update.
 ota::Token wifiToken(const uint8_t random[12]);
+
+// The manifest's own signature verifies with `publicKey` (the text
+// ota_release.py signs, rebuilt from the parsed fields). The trial's confirm
+// asks this too, so only the owner's manifest counts as reaching the site.
+bool signedBy(const Manifest&, const uint8_t publicKey[65]);
 bool isWifiToken(const ota::Token&);
 
 }  // namespace wifiota

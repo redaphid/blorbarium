@@ -256,6 +256,28 @@ TEST(Manifest, TheCommittedReleaseParsesAndItsSignatureVerifiesWithTheBuiltInKey
   EXPECT_TRUE(ota::verifyP256(hw::kOtaPublicKey, reinterpret_cast<const uint8_t*>(text), size_t(n), m->image.sig))
       << "the fields a badge reads over Wi-Fi are the ones the owner signed: " << text;
   EXPECT_TRUE(m->autoInstall);
+  EXPECT_TRUE(wifiota::signedBy(*m, hw::kOtaPublicKey)) << "signedBy is the same check";
+}
+
+// A manifest with any field changed is not the owner's, and the trial's confirm says no.
+TEST(Manifest, SignedByRefusesAnyChangedField) {
+  const std::optional<wifiota::Manifest> m = wifiota::parseManifest(readFile("web/public/fw/lcd128/manifest.json"));
+  ASSERT_TRUE(m);
+  ASSERT_TRUE(wifiota::signedBy(*m, hw::kOtaPublicKey));
+  wifiota::Manifest v = *m;
+  v.image.version.patch += 1;
+  EXPECT_FALSE(wifiota::signedBy(v, hw::kOtaPublicKey)) << "version";
+  v = *m, v.image.flags = 1;
+  EXPECT_FALSE(wifiota::signedBy(v, hw::kOtaPublicKey)) << "flags: a downgrade";
+  v = *m, v.image.size -= 1;
+  EXPECT_FALSE(wifiota::signedBy(v, hw::kOtaPublicKey)) << "size";
+  v = *m, v.image.sha256[0] ^= 1;
+  EXPECT_FALSE(wifiota::signedBy(v, hw::kOtaPublicKey)) << "image hash";
+  v = *m, v.image.sig[5] ^= 1;
+  EXPECT_FALSE(wifiota::signedBy(v, hw::kOtaPublicKey)) << "signature";
+  const std::optional<wifiota::Manifest> old = wifiota::parseManifest(kManifest);   // 0.7.12, the old key's
+  ASSERT_TRUE(old);
+  EXPECT_FALSE(wifiota::signedBy(*old, hw::kOtaPublicKey)) << "the retired key's release is not this key's";
 }
 
 TEST(Manifest, ReadsEveryField) {

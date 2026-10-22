@@ -1,6 +1,9 @@
 #include "wifiota/manifest.h"
 
+#include <cstdio>
 #include <cstring>
+
+#include "ota/crypto.h"
 
 namespace wifiota {
 namespace {
@@ -180,5 +183,17 @@ ota::Token wifiToken(const uint8_t random[12]) {
 }
 
 bool isWifiToken(const ota::Token& t) { return std::memcmp(t.b, kWifiMark, sizeof kWifiMark) == 0; }
+
+bool signedBy(const Manifest& m, const uint8_t publicKey[65]) {
+  char sha[44];
+  ota::b64url(m.image.sha256, sizeof m.image.sha256, sha);
+  char text[160];
+  const int n = std::snprintf(text, sizeof text, "blorbota2 %s %u.%u.%u %u %u %u %s", m.image.board,
+                              unsigned(m.image.version.major), unsigned(m.image.version.minor),
+                              unsigned(m.image.version.patch), unsigned(m.image.flags), unsigned(m.image.fmt),
+                              unsigned(m.image.size), sha);
+  return n > 0 && size_t(n) < sizeof text &&
+         ota::verifyP256(publicKey, reinterpret_cast<const uint8_t*>(text), size_t(n), m.image.sig);
+}
 
 }  // namespace wifiota

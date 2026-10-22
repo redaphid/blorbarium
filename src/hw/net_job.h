@@ -48,7 +48,10 @@ class NetJob {
 
   static constexpr size_t kTextMax = 2048;              // a manifest is a few hundred bytes
   static constexpr size_t kRingBytes = 32 * 1024;
-  static constexpr uint32_t kStackBytes = 12 * 1024;
+  // The task's stack, internal RAM while it runs: a TLS handshake needs about
+  // 7 KB of it, a plain HTTP GET (a cable's `DEBUG ota check http://...`) far less.
+  static constexpr uint32_t kStackTlsBytes = 12 * 1024;
+  static constexpr uint32_t kStackHttpBytes = 6 * 1024;
   static constexpr uint16_t kConnectMs = 5000;
   static constexpr uint32_t kHandshakeS = 8;
   static constexpr uint16_t kHeadersMs = 6000;
@@ -78,7 +81,8 @@ class NetJob {
     state_ = State::Opening;
     running_ = true;
     startedAt_ = millis();
-    if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", kStackBytes, this, 1, nullptr, 1) != pdPASS) {
+    stackBytes_ = std::strncmp(url, "https://", 8) == 0 ? kStackTlsBytes : kStackHttpBytes;
+    if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", stackBytes_, this, 1, nullptr, 1) != pdPASS) {
       running_ = false;
       state_ = fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap()));
       return false;
@@ -99,6 +103,7 @@ class NetJob {
   const char* error() const { return m_ ? m_->error : "no PSRAM"; }
   uint32_t openMs() const { return openMs_; }           // DNS, connect, TLS and headers
   uint32_t stackFree() const { return stackFree_; }     // the task's stack never used, at its end
+  uint32_t stackBytes() const { return stackBytes_; }
 
   // The loop: up to `cap` streamed bytes that have arrived, without waiting.
   size_t take(uint8_t* out, size_t cap) {
@@ -123,6 +128,7 @@ class NetJob {
     char url[200];
     char text[kTextMax + 1];
     char error[96];
+    uint8_t chunk[1024];   // off the task's stack
     uint8_t ring[kRingBytes];
   };
 
@@ -198,12 +204,12 @@ class NetJob {
     }
     if (size_ <= 0) return finish(fail("no length"), http);
     state_ = State::Body;
-    uint8_t buf[1024];
+    uint8_t* buf = m_->chunk;
     uint32_t heard = millis();
     while (got_ < size_t(size_) && !cancel_) {
       const int avail = s->available();
       if (avail > 0) {
-        const int n = s->read(buf, std::min(sizeof buf, size_t(avail)));
+        const int n = s->read(buf, std::min(sizeof m_->chunk, size_t(avail)));
         if (n <= 0) continue;
         put(buf, size_t(n));
         got_ = got_ + size_t(n);
@@ -245,6 +251,7 @@ class NetJob {
   volatile size_t textLen_ = 0, got_ = 0;
   volatile int size_ = -1;
   volatile uint32_t openMs_ = 0, stackFree_ = 0, startedAt_ = 0;
+  uint32_t stackBytes_ = 0;
 };
 
 }  // namespace hw

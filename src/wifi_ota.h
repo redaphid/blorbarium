@@ -283,13 +283,17 @@ static void startImage(const wifiota::Manifest& m) {
 static void readManifest() {
   if (job.busy()) return;   // the GET's task has ended: what it left is all there is
   if (job.state() != hw::NetJob::State::Done) return failWindow(Failure::Server, "manifest: %s", job.error());
-  say("GET manifest: %u bytes, open %u ms, task stack free %u", unsigned(job.textLen()), unsigned(job.openMs()),
-      unsigned(job.stackFree()));
+  say("GET manifest: %u bytes, open %u ms, task stack %u B with %u never used, heap=%u minheap=%u", unsigned(job.textLen()),
+      unsigned(job.openMs()), unsigned(job.stackBytes()), unsigned(job.stackFree()), unsigned(ESP.getFreeHeap()),
+      unsigned(ESP.getMinFreeHeap()));
   const std::optional<wifiota::Manifest> m = wifiota::parseManifest(std::string_view(job.text(), job.textLen()));
   if (!m) return failWindow(Failure::Server, "manifest unreadable (%u bytes)", unsigned(job.textLen()));
   const ota::Version& v = m->image.version;
   if (window == Window::Confirm) {
-    // The trial's half the badge cannot check alone: the new image reached the site over Wi-Fi.
+    // The trial's half the badge cannot check alone: the new image reached the
+    // site over Wi-Fi, and what answered is the owner's signed manifest.
+    if (!wifiota::signedBy(*m, hw::kOtaPublicKey))
+      return failWindow(Failure::Server, "confirm: the manifest that came back is not signed by the owner's key");
     const ota::Confirm c = trial.confirm(*confirmToken);
     confirmToken.reset();
     outcome("trial confirmed over Wi-Fi (%s; the site has %u.%u.%u)", c == ota::Confirm::Confirmed ? "ok" : "not on trial",
