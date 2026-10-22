@@ -234,7 +234,8 @@ void Dish::runOneTick(Link& link) {
     // A long untouched stretch put him to bed; the hand that ends it gets him
     // up, unless it is the wall's night (he goes back to sleep).
     if (wasDim && touched && c->body().asleep && !live_.clock.night()) c->rouse();
-    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
+    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out,
+                       c->chemistry().drive(drive::hunger) >= kEatsRotAt);   // rot is food only to the starving
     Stage before = c->stage();
     const Mouthful mouth = c->body().mouth;
     const Fx hunger = c->chemistry().drive(drive::hunger);

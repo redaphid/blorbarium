@@ -229,3 +229,34 @@ All from this change, re-blessed after looking:
 - Keepsake: the clock's two fields and the idle state are trailing bytes,
   written only when set, so the committed v1, scars and friend-egg fixtures
   re-encode byte for byte.
+
+## Rotten food, refused unless starving (#21)
+
+The owner: "go with refusing rotten food unless starving." Today's test pet
+died of it: every knock knock drops a pellet when the pantry has one, pellets
+rot after 90 minutes, Eat walked to the nearest pellet whatever it was (the
+starter genome never reads `food_rotten`), and each rotten bite is 0.4 toxin,
+about 90% of it injury within ten minutes (injury 0.9 kills). Knock pellets
+in while he sleeps, let him wake hungry, and he eats them all.
+
+- **Starving is hunger 0.8** (creature.h `kEatsRotAt`): where the starter's
+  `kStarving` receptor starts turning hunger into injury. Below it, going
+  without costs him nothing a rotten bite would not cost more; past it he is
+  being hurt anyway, and rot feeds him. A pet left with only rot still eats
+  it in the end and is poisoned, so neglect can still kill.
+- `food_near` counts only a pellet he would eat (habitat.cpp), so a pet who
+  turns rot down never learns that food near him fails to feed him;
+  `food_rotten` is unchanged. Eat goes for the nearest fresh pellet, any
+  pellet when starving.
+- **He shows it** (actions.h `Picky`): hungry (0.5) with only rot in the dish,
+  at most every 10 minutes, he walks up to the nearest rotten pellet, sniffs it
+  for 1.5 s, turns away with the annoyed face ("yuck", 2.5 s) and says
+  `YUCK. NOT THAT ONE.` (thoughts.def 151 `yuck`, situation `refusing_rot`).
+- Saved after the idle state as trailing bytes, only once he has turned
+  something down.
+
+Tests (test_idle_day `Rot.*`): grungo, puffkin, mudge and hushwing at hunger
+0.65 with only rot leave it and show the yuck; a fresh pellet beside the rot
+is the one eaten; starving (0.9) he eats rot and is poisoned; the puffkin's
+day (four knock knocks while he sleeps face down, two hours, then eight
+hours with no more food) is lived by puffkin, grungo and mudge.

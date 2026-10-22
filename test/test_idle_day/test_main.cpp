@@ -473,6 +473,104 @@ TEST(Idle, StateNamesItAndASaveKeepsIt) {
   EXPECT_EQ(std::get<Creature>(again.occupant()).doing(), name);
 }
 
+// ---- rot (#21; owner, 2026-10-21: "refusing rotten food unless starving") ---------
+
+// A pellet `ageTicks` old at `at`, in the first free slot.
+void putPellet(Desk& d, DishPos at, uint32_t ageTicks) {
+  for (Pellet& p : d.dish->habitat().pellets)
+    if (!p.present) {
+      p = Pellet{at, d.dish->tickCount() - ageTicks, true};
+      return;
+    }
+}
+uint32_t rotTicks(Desk& d) { return d.c().phenotype().habitat.rotTicks; }
+
+// Hungry but not starving, with only rot in the dish: he goes up to it, sniffs
+// it and turns away (the yuck face), and eats none of it. Several genomes.
+TEST(Rot, TurnedDownUnlessStarving) {
+  for (SpeciesId sp : {SpeciesId{0}, SpeciesId{2}, SpeciesId{5}, SpeciesId{7}}) {
+    Desk d(sp);
+    putPellet(d, DishPos{Fx::ratio(3, 10), Fx::ratio(2, 10)}, rotTicks(d) + 10);
+    const uint16_t fed = d.c().stats().fed;
+    bool yuck = false;
+    for (int i = 0; i < 20 * 600; ++i) {
+      d.c().inject(driveChem(drive::hunger), Fx::ratio(65, 100));   // hungry, short of kEatsRotAt
+      d.run(kTickMs, i % 6000 < 30 ? cradled() : still());           // looked at now and then
+      yuck = yuck || (d.c().picky().refusedAt && d.c().face().current == expr::annoyed);
+    }
+    EXPECT_EQ(d.c().stats().fed, fed) << speciesInfo(sp).name << " ate rot while not starving";
+    EXPECT_EQ(d.c().chemistry().chem[chem::toxin.v], Fx::zero()) << speciesInfo(sp).name;
+    EXPECT_TRUE(yuck) << speciesInfo(sp).name << " never sniffed it and turned away";
+  }
+}
+
+// A fresh pellet beside the rot: he eats the fresh one.
+TEST(Rot, TheFreshOneOverTheRot) {
+  Desk d(SpeciesId{2});
+  putPellet(d, DishPos{Fx::ratio(1, 10), Fx::zero()}, rotTicks(d) + 10);
+  putPellet(d, DishPos{Fx::ratio(-5, 10), Fx::ratio(2, 10)}, 10);
+  d.c().inject(driveChem(drive::hunger), Fx::ratio(7, 10));
+  for (int i = 0; i < 10 * 600 && d.c().stats().fed == 0; ++i) {
+    if (i % 50 == 0 && d.c().action() != action::eat) d.c().force(action::eat);
+    d.run(kTickMs);
+  }
+  ASSERT_GE(d.c().stats().fed, 1);
+  EXPECT_EQ(d.c().chemistry().chem[chem::toxin.v], Fx::zero()) << "he ate the rotten one";
+}
+
+// Starving, he eats rot, and it poisons him: neglect can still hurt.
+TEST(Rot, EatenWhenStarving) {
+  for (SpeciesId sp : {SpeciesId{0}, SpeciesId{5}}) {
+    Desk d(sp);
+    putPellet(d, DishPos{Fx::ratio(2, 10), Fx::zero()}, rotTicks(d) + 10);
+    const uint16_t fed = d.c().stats().fed;
+    for (int i = 0; i < 10 * 600 && d.c().stats().fed == fed; ++i) {
+      d.c().inject(driveChem(drive::hunger), Fx::ratio(9, 10));
+      if (i % 50 == 0 && d.c().action() != action::eat) d.c().force(action::eat);
+      d.run(kTickMs);
+    }
+    EXPECT_GT(d.c().stats().fed, fed) << speciesInfo(sp).name;
+    d.run(2000);
+    EXPECT_GT(d.c().chemistry().chem[chem::toxin.v] + d.c().chemistry().chem[chem::injury.v], Fx::zero())
+        << speciesInfo(sp).name << ": rot still poisons";
+  }
+}
+
+// The test puffkin's death (2026-10-21): a kid knocks pellets in while he
+// sleeps, they rot, he wakes hours later and eats them all. Now he turns them
+// down until he is starving, eats one then, and the days after are lived.
+TEST(Rot, PelletsKnockedInWhileHeSleptNoLongerKillHim) {
+  for (SpeciesId sp : {SpeciesId{2}, SpeciesId{0}, SpeciesId{5}}) {
+    Desk d(sp);
+    d.run(40 * 1000, faceDown());   // bedtime
+    ASSERT_TRUE(d.c().body().asleep);
+    for (int k = 0; k < 4; ++k) {   // four knock knocks, a pellet each
+      BodySample s = faceDown();
+      s.tapCode = 2;
+      d.dish->sample(s, d.ms);
+      d.run(3000, faceDown());
+    }
+    d.run(2 * 60 * kMinuteMs, faceDown());   // two hours: they rot
+    d.run(3000);                           // turned back up: morning
+    // Every pellet in the dish is rotten now: each bite he takes, he takes starving.
+    uint16_t fed = d.c().stats().fed;
+    Fx hunger = d.c().chemistry().drive(drive::hunger);
+    int bites = 0;
+    for (int t = 0; t < 8 * 3600 * 10; ++t) {
+      d.run(kTickMs, (t / 36000) % 2 ? still() : cradled());
+      ASSERT_TRUE(std::holds_alternative<Creature>(d.dish->occupant())) << speciesInfo(sp).name << " died at hour " << t / 36000;
+      if (d.c().stats().fed != fed) {
+        ++bites;
+        EXPECT_GE(hunger, kEatsRotAt - Fx::ratio(2, 100)) << speciesInfo(sp).name << " ate rot not starving, hour " << t / 36000;
+        fed = d.c().stats().fed;
+      }
+      hunger = d.c().chemistry().drive(drive::hunger);
+    }
+    EXPECT_LE(bites, 3) << speciesInfo(sp).name;
+    EXPECT_LT(d.c().chemistry().chem[chem::injury.v], Fx::ratio(9, 10)) << speciesInfo(sp).name;
+  }
+}
+
 void writePpm(const std::string& path, const paint::Canvas240& cv) {
   FILE* f = std::fopen(path.c_str(), "wb");
   if (!f) return;

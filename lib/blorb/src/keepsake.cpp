@@ -470,7 +470,9 @@ struct Keepsake::Codec {
         putRng(o, c->rng_);
         // After the rng, where an older reader stops, and only once he has
         // played, so a pet from before idles encodes as it always has.
-        if (played(c->idle_)) putIdle(o, c->idle_);
+        const bool picky = c->picky_.refusedAt || c->picky_.sniff;   // a turn-down of rot, after the idle
+        if (played(c->idle_) || picky) putIdle(o, c->idle_);
+        if (picky) o.u32(c->picky_.refusedAt), o.u16(c->picky_.sniff);
       });
       chunk(o, Chunk::Genome, [&] { o.raw(c->genome_.bytes().data(), c->genome_.bytes().size()); });
       chunk(o, Chunk::Chemistry, [&] {
@@ -548,6 +550,7 @@ struct Keepsake::Codec {
     c.pendingSelf_ = getSenseOut(in);
     c.rng_ = getRng(in);
     if (in.at < in.n) c.idle_ = getIdle(in);
+    if (in.n - in.at >= 6) c.picky_.refusedAt = in.u32(), c.picky_.sniff = in.u16();
     for (Fx& v : c.chem_.chem) v = chem->fx();
     for (Fx& v : c.chem_.locus) v = chem->fx();
     getBrain(*brain, c.brain_);

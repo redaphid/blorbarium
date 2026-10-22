@@ -132,6 +132,11 @@ void Eat::start(Body& b, ActionCtx&) {
   if (b.pose != pose::eat || b.poseTick + 1u >= kChewTicks) b.pose = pose::walk;
 }
 
+// A sniff cut short is no turn-down.
+void Eat::stop(Body&, ActionCtx& c) {
+  if (c.picky) c.picky->sniff = 0;
+}
+
 // To the nearest pellet and bite it, then chew for kChewTicks with the eating
 // locus up; done after the chew, or when there is nothing to eat. The chew
 // is timed by the eat pose's poseTick, so the behaviour keeps no state.
@@ -144,11 +149,25 @@ Status Eat::step(Body& b, ActionCtx& c) {
     c.out.set(locus::eating, Fx::one());
     return Status::Running;
   }
-  std::optional<DishPos> pellet = c.habitat.nearestPellet(b.at);
-  if (!pellet) return Status::Done;
+  std::optional<DishPos> pellet = c.habitat.nearestFood(c.rules, b.at, c.tick, c.rotIsFood);
+  if (!pellet) {
+    // Only rot, and he is not starving: up to it, a sniff, and away (Picky).
+    const std::optional<DishPos> rot = c.picky ? c.habitat.nearestRotten(c.rules, b.at, c.tick) : std::nullopt;
+    if (!rot) return Status::Done;
+    if (!walkTo(b, *rot, kWalk) && c.picky->sniff == 0) {
+      b.pose = pose::walk;
+      return Status::Running;
+    }
+    b.pose = pose::idle;
+    if (++c.picky->sniff < Picky::kSniffTicks) return Status::Running;
+    c.picky->sniff = 0;
+    c.picky->refusedAt = c.age + 1;
+    b.facing = wrapTurn(b.facing + Fx::one());   // he turns away from it
+    return Status::Done;
+  }
   b.pose = pose::walk;
   walkTo(b, *pellet, kWalk);
-  std::optional<Habitat::Bite> bite = c.habitat.bite(c.rules, b.at, c.tick);
+  std::optional<Habitat::Bite> bite = c.habitat.bite(c.rules, b.at, c.tick, c.rotIsFood);
   if (!bite) return Status::Running;
   b.pose = pose::eat;
   b.mouth = bite->rotten ? Mouthful::RottenPellet : Mouthful::Pellet;

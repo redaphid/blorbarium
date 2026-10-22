@@ -26,6 +26,14 @@ namespace blorb {
 
 struct EggRules { uint32_t incubateTicks; Fx warmthBoost; uint8_t hatchBurstDreams; };
 
+// Starving: hunger this high and he eats a rotten pellet (actions.h Picky).
+// It is where the starter's kStarving receptor (starter_genome.cpp, hunger
+// 0.8) starts turning hunger into injury: below it going without hurts him
+// less than a rotten bite (0.4 toxin, most of it injury within minutes), so
+// he waits for a fresh one; past it he is already being hurt, and rot feeds
+// him. A pet left with only rot still eats it in the end, and is poisoned.
+constexpr Fx kEatsRotAt = Fx::ratio(8, 10);
+
 // What gene expression built. Grows at each stage; never shrinks in a life.
 struct Phenotype {
   ChemRules chem;
@@ -119,6 +127,7 @@ class Creature {
   ActionId action() const { return action_; }
   // His idle, while he plays one (idle.h) over a rest; idles::none otherwise.
   const IdleState& idle() const { return idle_; }
+  const Picky& picky() const { return picky_; }
   bool playing() const { return !actionDone_ && idle_.active(); }
   // What STATE says he is doing: the idle he plays, else the action's name.
   const char* doing() const;
@@ -191,6 +200,7 @@ class Creature {
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
   IdleState idle_;                     // saved after the occupant record's rng (keepsake.cpp)
+  Picky picky_;                        // saved after the idle
 };
 
 class Egg {

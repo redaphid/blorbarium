@@ -271,6 +271,8 @@ TEST(Mouth, WhatHeBitIsWhatHeChews) {
     PetClock clock;
     uint32_t tick = c.phenotype().habitat.rotTicks + 100;
     h.pellets[0] = Pellet{c.body().at, bitten == Mouthful::RottenPellet ? 0 : tick, true};
+    // Only a starving pet eats rot (creature.h kEatsRotAt, #21).
+    if (bitten == Mouthful::RottenPellet) c.inject(driveChem(drive::hunger), Fx::ratio(9, 10));
     c.force(action::eat);
     int held = 0, other = 0;
     std::string atBite;
@@ -295,7 +297,7 @@ TEST(Mouth, WhatHeBitIsWhatHeChews) {
     EXPECT_EQ(c.body().mouth, Mouthful::Nothing) << "and then it is gone";
     if (bitten == Mouthful::RottenPellet)
       EXPECT_EQ(atBite,
-                "kind=1 gen=0 stage=0 seed=c9989e02 at=0,0 facing=0 scale=55 pose=2/0 face=0<0 349 t54100 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=0/0 0 stim=35+1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=0");
+                "kind=1 gen=0 stage=0 seed=c9989e02 at=0,0 facing=0 scale=55 pose=2/0 face=5<0 717 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=1/0 900 stim=35+1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=0");
   }
 }
 

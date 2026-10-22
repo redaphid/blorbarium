@@ -470,3 +470,6 @@ ooh_what        discovering
 
 cant_see        hiding
   YOU CAN'T SEE ME.
+
+yuck            refusing_rot
+  YUCK. NOT THAT ONE.

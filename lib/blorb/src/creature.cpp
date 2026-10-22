@@ -167,6 +167,9 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   ActionCtx ctx{habitat, pheno_.habitat, chem_.locus[locus::tilt_x.v], chem_.locus[locus::tilt_y.v], tick, rng_,
                 pendingSelf_};
   ctx.idle = &idle_;
+  ctx.rotIsFood = chem_.drive(drive::hunger) >= kEatsRotAt;
+  ctx.picky = &picky_;
+  ctx.age = stats_.ageTicks;
   auto calm = [&] {
     return !body_.asleep && chem_.drive(drive::hunger) < kPlayHunger && chem_.drive(drive::fear) < kPlayFear &&
            chem_.drive(drive::pain) < kPlayHurt && chem_.drive(drive::discomfort) < kPlayHurt &&
@@ -272,6 +275,17 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     bool held = !actionDone_ && stats_.ageTicks - actionStart_ < minTicksOf(action_);
     if (!held && (actionDone_ || d.action != action_)) {
       ActionId next = d.action;
+      // Hungry, with only rot in the dish and not starving: he goes to sniff
+      // it and turn it down (actions.h Picky), now and then, so a kid sees why.
+      const bool loose = next == action::rest || next == action::wander || next == action::foresee ||
+                         next == action::hop_circles || next == action::call;
+      const Fx hunger = chem_.drive(drive::hunger);
+      if (loose && hunger >= kHalf && hunger < kEatsRotAt && chem_.drive(drive::fear) < kPlayFear &&
+          picky_.mayRefuse(stats_.ageTicks) && !habitat.nearestFood(pheno_.habitat, body_.at, tick, false) &&
+          habitat.nearestRotten(pheno_.habitat, body_.at, tick)) {
+        next = action::eat;
+        brain_.relabel(next);
+      }
       // A rest or a wander, awake with nothing pressing, is often play: his
       // species' liveliness, more when bored (idle.h). He plays an idle, or
       // rests when every one is cooling down.
@@ -336,6 +350,8 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   if (body_.reflex) {
     const ReflexInfo* row = rowOf(REFLEXES, body_.reflex->kind);
     showFace(face_, row ? row->face : face_.current, body_.reflex->strength, tick);
+  } else if (picky_.showing(stats_.ageTicks)) {
+    showFace(face_, expr::annoyed, kIdleFace, tick);   // yuck
   } else if (playing()) {
     showFace(face_, idleFace(idle_.now, idle_.ticks, idle_.length), kIdleFace, tick);
   } else {
@@ -473,6 +489,7 @@ uint32_t Creature::hash() const {
   mix(uint32_t(idle_.anchor.x.raw)), mix(uint32_t(idle_.anchor.y.raw));
   for (uint32_t at : idle_.startedAt) mix(at);
   mix(uint32_t(idle_.greet)), mix(idle_.greetedAt);
+  mix(picky_.refusedAt), mix(picky_.sniff);
   return h;
 }
 

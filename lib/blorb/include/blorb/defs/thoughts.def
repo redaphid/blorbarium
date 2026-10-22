@@ -178,3 +178,5 @@ BLORB_THOUGHT(147, hic,           none,   hiccuping,     8,  600, "HIC! EXCUSE M
 BLORB_THOUGHT(148, zoom,          none,   zooming,       7,  300, "ZOOM ZOOM ZOOM!")
 BLORB_THOUGHT(149, ooh_what,      none,   discovering,   7,  300, "OOH. WHAT IS THIS?")
 BLORB_THOUGHT(150, cant_see,      none,   hiding,        6,  600, "YOU CAN'T SEE ME.")
+// A rotten pellet sniffed and turned down (actions.h Picky).
+BLORB_THOUGHT(151, yuck,          none,   refusing_rot,  8,  300, "YUCK. NOT THAT ONE.")

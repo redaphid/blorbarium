@@ -255,7 +255,9 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // (docs/notes/sleep-idle.md): no night with no clock, the still run and
   // the pet clock's two new fields in the hash, a hand rousing him, his idles
   // over a rest (their rng draws, drives, faces) and the 2/5 sleep cut.
-  constexpr uint32_t kCommitted = 0xc74fada3u;
+  // ea029709 once rot is refused unless he is starving (#21): food_near counts
+  // only what he would eat, and he sniffs rot and turns away.
+  constexpr uint32_t kCommitted = 0xea029709u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -266,7 +268,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=c74fada3 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=ea029709 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

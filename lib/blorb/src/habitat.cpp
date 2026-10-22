@@ -48,11 +48,16 @@ Fx nearness(Fx d2) { return clamp01(Fx::one() - fxDiv(fxSqrt(d2), kSenseRange));
 
 bool rotten(const Pellet& p, const HabitatRules& rules, uint32_t tick) { return tick - p.droppedTick > rules.rotTicks; }
 
-int nearestIndex(const Pellet (&pellets)[Habitat::kMaxPellets], DishPos from) {
+// Which pellets count: every one, only fresh ones, or only rotten ones.
+enum class Kind : uint8_t { Any, Fresh, Rotten };
+
+int nearestIndex(const Pellet (&pellets)[Habitat::kMaxPellets], DishPos from, Kind kind = Kind::Any,
+                 const HabitatRules* rules = nullptr, uint32_t tick = 0) {
   int best = -1;
   Fx bestD2{};
   for (int i = 0; i < Habitat::kMaxPellets; ++i) {
     if (!pellets[i].present) continue;
+    if (kind != Kind::Any && rotten(pellets[i], *rules, tick) != (kind == Kind::Rotten)) continue;
     Fx d2 = dist2(pellets[i].at, from);
     if (best < 0 || d2 < bestD2) { best = i; bestD2 = d2; }
   }
@@ -61,7 +66,8 @@ int nearestIndex(const Pellet (&pellets)[Habitat::kMaxPellets], DishPos from) {
 
 }  // namespace
 
-void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut& out) {
+void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creature, uint32_t tick, SenseOut& out,
+                   bool rotIsFood) {
   if (pantry >= rules.pantrySize) {
     pantry = rules.pantrySize;
     pantryTick = tick;
@@ -79,7 +85,8 @@ void Habitat::step(const HabitatRules& rules, Fx tiltX, Fx tiltY, DishPos creatu
   }
 
   int near = nearestIndex(pellets, creature);
-  out.set(locus::food_near, near < 0 ? Fx::zero() : nearness(dist2(pellets[near].at, creature)));
+  int food = nearestIndex(pellets, creature, rotIsFood ? Kind::Any : Kind::Fresh, &rules, tick);
+  out.set(locus::food_near, food < 0 ? Fx::zero() : nearness(dist2(pellets[food].at, creature)));
   out.set(locus::food_rotten, near >= 0 && rotten(pellets[near], rules, tick) ? Fx::one() : Fx::zero());
   out.set(locus::pantry, Fx::ratio(pantry, rules.pantrySize));
 }
@@ -102,8 +109,8 @@ bool Habitat::dropPellet(const HabitatRules&, Rng& rng, uint32_t tick, SenseOut&
   return true;
 }
 
-std::optional<Habitat::Bite> Habitat::bite(const HabitatRules& rules, DishPos creature, uint32_t tick) {
-  int i = nearestIndex(pellets, creature);
+std::optional<Habitat::Bite> Habitat::bite(const HabitatRules& rules, DishPos creature, uint32_t tick, bool rotIsFood) {
+  int i = nearestIndex(pellets, creature, rotIsFood ? Kind::Any : Kind::Fresh, &rules, tick);
   if (i < 0 || dist2(pellets[i].at, creature) > kBiteRange * kBiteRange) return std::nullopt;
   pellets[i].present = false;
   return Bite{rules.biteSize, rotten(pellets[i], rules, tick)};
@@ -111,6 +118,18 @@ std::optional<Habitat::Bite> Habitat::bite(const HabitatRules& rules, DishPos cr
 
 std::optional<DishPos> Habitat::nearestPellet(DishPos from) const {
   int i = nearestIndex(pellets, from);
+  if (i < 0) return std::nullopt;
+  return pellets[i].at;
+}
+
+std::optional<DishPos> Habitat::nearestFood(const HabitatRules& rules, DishPos from, uint32_t tick, bool rotIsFood) const {
+  int i = nearestIndex(pellets, from, rotIsFood ? Kind::Any : Kind::Fresh, &rules, tick);
+  if (i < 0) return std::nullopt;
+  return pellets[i].at;
+}
+
+std::optional<DishPos> Habitat::nearestRotten(const HabitatRules& rules, DishPos from, uint32_t tick) const {
+  int i = nearestIndex(pellets, from, Kind::Rotten, &rules, tick);
   if (i < 0) return std::nullopt;
   return pellets[i].at;
 }

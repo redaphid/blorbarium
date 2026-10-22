@@ -110,6 +110,7 @@ bool juggling(const Observed& o, uint16_t&) { return playingIdle(o, idles::juggl
 bool daydreaming(const Observed& o, uint16_t&) { return playingIdle(o, idles::daydream); }
 bool stargazing(const Observed& o, uint16_t&) { return playingIdle(o, idles::stargaze); }
 bool sneezing(const Observed& o, uint16_t&) { return playingIdle(o, idles::sneeze); }
+bool refusing_rot(const Observed& o, uint16_t&) { return awake(o) && o.c.picky().showing(o.c.stats().ageTicks); }
 bool booing(const Observed& o, uint16_t&) {
   return playingIdle(o, idles::boo) && o.c.idle().ticks * 100u >= o.c.idle().length * 55u;   // as he pops up
 }
