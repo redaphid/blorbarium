@@ -19,6 +19,7 @@
 // Closed buckets are kept encoded (about 100 bytes each), so RAM holds one
 // open bucket and a few KB at most.
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -83,6 +84,7 @@ struct AnalyticsBucket {
   std::vector<uint32_t> extra;            // a newer firmware's slots, carried
   uint32_t bins[kHistogramCount][kMaxBins]{};
   void merge(const AnalyticsBucket& newer);   // newer comes after this one
+  void reset();                               // empty, in place (no ~0.5 KB temporary on the stack)
   bool operator==(const AnalyticsBucket&) const;
 };
 
@@ -92,17 +94,21 @@ class Analytics {
   static constexpr uint8_t kMaxBuckets = 16;   // closed and open; then the oldest two merge
 
   Analytics();
+  Analytics(const Analytics& o) : powered_(o.powered_), nextSeq_(o.nextSeq_), open_(new AnalyticsBucket(*o.open_)), closed_(o.closed_) {}
+  Analytics(Analytics&&) = default;
+  Analytics& operator=(const Analytics& o) { return *this = Analytics(o); }
+  Analytics& operator=(Analytics&&) = default;
 
   // ---- the hot path: one increment ----
   void add(uint8_t slot, uint32_t n = 1) {
-    uint32_t& c = open_.count[slot];
+    uint32_t& c = open_->count[slot];
     c = c > UINT32_MAX - n ? UINT32_MAX : c + n;
   }
   void hist(uint8_t h, uint32_t value) {
     const HistogramInfo& info = HISTOGRAMS[h];
     uint8_t bin = 0;
     while (bin < info.edgeCount && value >= info.edges[bin]) ++bin;
-    uint32_t& b = open_.bins[h][bin];
+    uint32_t& b = open_->bins[h][bin];
     if (b != UINT32_MAX) ++b;
   }
   // One powered second went by (the Dish calls it every ten ticks), with the
@@ -116,13 +122,12 @@ class Analytics {
   uint32_t poweredSeconds() const { return powered_; }
   // Oldest first, the open one last; each decoded once, for the JSON and tests.
   template <class F> void forEach(F&& f) const {
-    for (const std::vector<uint8_t>& c : closed_) {
-      AnalyticsBucket b;
-      if (decodeBucket(c.data(), c.size(), b)) f(b, false);
-    }
-    f(open_, true);
+    const std::unique_ptr<AnalyticsBucket> b(new AnalyticsBucket);   // the heap's: a bucket is ~0.5 KB
+    for (const std::vector<uint8_t>& c : closed_)
+      if (decodeBucket(c.data(), c.size(), *b)) f(*b, false);
+    f(*open_, true);
   }
-  const AnalyticsBucket& open() const { return open_; }
+  const AnalyticsBucket& open() const { return *open_; }
   size_t closedCount() const { return closed_.size(); }
 
   // ---- the file section (life_tally.h writes it) ----
@@ -134,7 +139,9 @@ class Analytics {
  private:
   void close();
   uint32_t powered_ = 0, nextSeq_ = 1;
-  AnalyticsBucket open_;
+  // On the heap, as every bucket here: about 0.5 KB each, and the boot's
+  // decode runs on the loop task's 8 KB stack (test_dish's Budget).
+  std::unique_ptr<AnalyticsBucket> open_;
   std::vector<std::vector<uint8_t>> closed_;
 };
 

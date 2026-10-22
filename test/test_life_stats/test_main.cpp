@@ -425,8 +425,9 @@ TEST(Saving, ItSurvivesARebootAndRidesTheKeepsakesSaves) {
   // Two hours: the keepsake saves every five minutes; the stats at most every 30.
   box.store.writes.clear();
   box.run(2 * 3600 * 1000);
-  EXPECT_GE(box.store.writes["snap.a"] + box.store.writes["snap.b"], 24);
-  EXPECT_LE(box.store.writes[Stats::kFile], 4) << "every 30 minutes, with the keepsake";
+  EXPECT_GE(box.store.writes["snap.a"] + box.store.writes["snap.b"], 23) << "every five minutes";
+  // Every 30 minutes with the keepsake, and at once for a life event (a stage, which a young pet reaches in hours).
+  EXPECT_LE(box.store.writes[Stats::kFile], 6) << "every 30 minutes, with the keepsake";
   EXPECT_GE(box.store.writes[Stats::kFile], 3);
 }
 

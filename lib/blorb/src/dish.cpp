@@ -337,7 +337,7 @@ bool Dish::onPicked(Clutch& k, uint8_t i) {
   Egg egg(childOf(k, i, friendEgg ? &*friendEgg : nullptr), k.generation, tick_);
   if (friendEgg && !FriendEggStore::consume(store_)) return false;
   lineage_.recordBirth(egg, k, i, tick_);
-  stats_.life = stats_.life.laid(k.generation);   // the egg carries its parent's life, and its grandparent's
+  stats_.laid(k.generation);   // the egg carries its parent's life, and its grandparent's
   statsUrgent_ = true;
   live_.occupant = std::move(egg);
   eventDirty_ = true;
@@ -485,8 +485,9 @@ bool Dish::ackStats(uint32_t seq) {
 
 // The duel as the analytics see it: fight mode opened, an ask refused, each
 // turn as it resolves, and why a battle or fight mode ended. The view is only
-// built while a duel is open (and on the tick it closes).
-void Dish::countDuel() {
+// built while a duel is open (and on the tick it closes). Out of line, so its
+// view never widens runOneTick's frame under the deeper paths it calls.
+[[gnu::noinline]] void Dish::countDuel() {
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && r.tick != refusedTick_ && (r.why != Decline::None || r.kind != NoFight::None)) stats_.fightRefused();
   if (r.any) refusedTick_ = r.tick;
@@ -508,7 +509,7 @@ void Dish::countDuel() {
 }
 
 // The life a record belongs to: the egg's or the creature's, or a clutch's dead parent's.
-void Dish::resumeStats(bool fresh) {
+[[gnu::noinline]] void Dish::resumeStats(bool fresh) {
   const Occupant& o = live_.occupant;
   const Clutch* k = std::get_if<Clutch>(&o);
   const uint16_t gen = k ? uint16_t(k->generation ? k->generation - 1 : 0)

@@ -250,6 +250,8 @@ void Stats::resume(std::optional<Loaded> stored, uint64_t lineageId, uint16_t ge
   unknown = std::move(stored->unknown);
 }
 
+void Stats::laid(uint16_t childGeneration) { life = life.laid(childGeneration); }
+
 // ---- counting ----------------------------------------------------------------------------
 
 void Stats::add(uint8_t slot, uint32_t n) { life.life.v[slot] = sat(uint64_t(life.life.v[slot]) + n); }

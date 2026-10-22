@@ -43,6 +43,13 @@ void appendf(std::string& s, const char* fmt, ...) {
 
 }  // namespace
 
+void AnalyticsBucket::reset() {
+  first = last = poweredStart = span = wallFirst = wallLast = 0;
+  std::fill(std::begin(count), std::end(count), 0u);
+  extra.clear();
+  for (auto& h : bins) std::fill(std::begin(h), std::end(h), 0u);
+}
+
 void AnalyticsBucket::merge(const AnalyticsBucket& n) {
   last = n.last;
   span = sum(span, n.span);
@@ -65,42 +72,42 @@ bool AnalyticsBucket::operator==(const AnalyticsBucket& o) const {
   return true;
 }
 
-Analytics::Analytics() { open_.first = open_.last = nextSeq_++; }
+Analytics::Analytics() : open_(new AnalyticsBucket) { open_->first = open_->last = nextSeq_++; }
 
 void Analytics::second(std::optional<uint32_t> wall) {
   ++powered_;
-  ++open_.span;
+  ++open_->span;
   if (wall) {
-    if (!open_.wallFirst) open_.wallFirst = *wall;
-    open_.wallLast = *wall;
+    if (!open_->wallFirst) open_->wallFirst = *wall;
+    open_->wallLast = *wall;
   }
-  if (open_.span >= kBucketSeconds) close();
+  if (open_->span >= kBucketSeconds) close();
 }
 
 void Analytics::close() {
-  closed_.push_back(encodeBucket(open_));
-  open_ = AnalyticsBucket{};
-  open_.first = open_.last = nextSeq_++;
-  open_.poweredStart = powered_;
+  closed_.push_back(encodeBucket(*open_));
+  open_->reset();
+  open_->first = open_->last = nextSeq_++;
+  open_->poweredStart = powered_;
   // Weeks offline: the oldest two become one, so the file has a fixed size and nothing counted goes.
   while (closed_.size() + 1 > kMaxBuckets) {
-    AnalyticsBucket a, b;
-    if (!decodeBucket(closed_[0].data(), closed_[0].size(), a) || !decodeBucket(closed_[1].data(), closed_[1].size(), b)) {
+    const std::unique_ptr<AnalyticsBucket> a(new AnalyticsBucket), b(new AnalyticsBucket);
+    if (!decodeBucket(closed_[0].data(), closed_[0].size(), *a) || !decodeBucket(closed_[1].data(), closed_[1].size(), *b)) {
       closed_.erase(closed_.begin());   // unreadable cannot happen to bytes we wrote; never loop on it
       continue;
     }
-    a.merge(b);
-    closed_[1] = encodeBucket(a);
+    a->merge(*b);
+    closed_[1] = encodeBucket(*a);
     closed_.erase(closed_.begin());
   }
 }
 
 bool Analytics::ack(uint32_t seq) {
   const size_t before = closed_.size();
+  const std::unique_ptr<AnalyticsBucket> b(new AnalyticsBucket);
   closed_.erase(std::remove_if(closed_.begin(), closed_.end(),
                                [&](const std::vector<uint8_t>& c) {
-                                 AnalyticsBucket b;
-                                 return decodeBucket(c.data(), c.size(), b) && b.last <= seq;
+                                 return decodeBucket(c.data(), c.size(), *b) && b->last <= seq;
                                }),
                 closed_.end());
   return closed_.size() != before;
@@ -126,7 +133,7 @@ std::vector<uint8_t> Analytics::encodeBucket(const AnalyticsBucket& b) {
 
 bool Analytics::decodeBucket(const uint8_t* p, size_t n, AnalyticsBucket& b) {
   Reader in{p, n};
-  b = AnalyticsBucket{};
+  b.reset();
   b.first = in.var(), b.last = in.var(), b.poweredStart = in.var(), b.span = in.var();
   b.wallFirst = in.var(), b.wallLast = in.var();
   const uint32_t slots = in.var();
@@ -158,7 +165,7 @@ std::vector<uint8_t> Analytics::encode() const {
     putVar(o, uint32_t(c.size()));
     o.insert(o.end(), c.begin(), c.end());
   }
-  const std::vector<uint8_t> open = encodeBucket(open_);
+  const std::vector<uint8_t> open = encodeBucket(*open_);
   putVar(o, uint32_t(open.size()));
   o.insert(o.end(), open.begin(), open.end());
   return o;
@@ -174,10 +181,8 @@ bool Analytics::decode(const uint8_t* p, size_t n) {
   for (uint32_t i = 0; i <= closed; ++i) {
     const uint32_t len = in.var();
     if (!in.ok || len > n - in.at) return false;
-    AnalyticsBucket b;
-    if (!decodeBucket(p + in.at, len, b)) return false;
+    if (!decodeBucket(p + in.at, len, *a.open_)) return false;   // the last one decoded stays as the open one
     if (i < closed) a.closed_.emplace_back(p + in.at, p + in.at + len);
-    else a.open_ = b;
     in.at += len;
   }
   if (in.at != n) return false;

@@ -126,6 +126,7 @@ class Stats {
   bool save(Storage&);        // seq + 1 on a write that landed
   // Boot: what the flash held, made this life's (LifeTally::resume).
   void resume(std::optional<Loaded>, uint64_t lineageId, uint16_t generation);
+  void laid(uint16_t childGeneration);   // an egg was laid: the life becomes the child's (LifeTally::laid)
 
   // ---- counting: the Dish's calls, each where the event happens ----
   // Every tick, after the detectors: the body's stimuli (a phone's never
