@@ -151,6 +151,15 @@ A day's mix, `DAY_MIX=1` (four species, a phone's clock, 07:00 to 22:00):
     evening   look_around 10%  yawn 10%  fireflies 6%  sniff 6%  explore 6%  discover 5%  sing 5%
     night     look_around 14%  stargaze 13%  yawn 6%  sniff 6%  fireflies 6%  explore 5%
 
+Cost: badge128 RAM 217124 B (integration 3476b7d: 217044 B, +80 B: the 14
+new acts' cooldown slots and the day's fields in IdleState), flash +4 KB. On
+the host every new act draws at 0.7x to 1.3x the cost of him standing about,
+inside sleep-idle's range (its daydream 1.8x): `DAY_ACTS_COST=1`.
+
+Seen while testing: a pet left untouched in the dim goes to bed (sleep-idle)
+and can sleep on for many hours while his hunger climbs to 1.0; no hunger
+wakes him. Not changed here.
+
 ## Goldens and tests that moved
 
 - `Replay.TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash` (and the
@@ -159,6 +168,14 @@ A day's mix, `DAY_MIX=1` (four species, a phone's clock, 07:00 to 22:00):
   (sleepiness, boredom, a `recent_woke`), Clutch (the eggs follow the life
   before).
 - `test_present` Golden.Hatchling: 30 s after hatching he is waking, and yawns.
+- Sim frames (`tools/sim_film.sh`): 18 of 29 matched; the 7 known (#29:
+  eating, shake_hop, hatch, no_phone, thought, prophecy, pellet_toss) left
+  alone; re-blessed after looking, the four this change moved: idle_between,
+  mothwick_between, walk_between, thought_between (a breath or step at
+  another phase: the size gene's tempo and what he was doing).
+- `Tween.EachTickPicksUpWhereTheFramesBeforeItLeftOff`: 80 ticks, not 40. A
+  waking hatchling yawns and stretches, faces that move mid-act, and the test
+  skips a tick whose face changed, so 40 ticks held too few; no jump found.
 - `Thoughts.HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim`: a knock every
   20 minutes beside the button. Untouched, the pet goes to bed in the dim
   (sleep-idle) and sleeps it out; whether he ever woke inside those 17 hours
