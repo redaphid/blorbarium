@@ -332,3 +332,26 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
 }
 
 }  // namespace blorb
+
+namespace blorb {
+
+bool DishDuel::dismiss(Air* air, uint32_t tick, bool refusalShown) {
+  bool any = false;
+  if (session_.active() && air) {
+    const DuelPhase p = session_.view(tick).phase;
+    if (p == DuelPhase::Lobby || p == DuelPhase::Greeting || p == DuelPhase::Staking) {
+      session_.close(*air, EndReason::Left);
+      diag_.say("fight shake=1 phase=%s result=left", p == DuelPhase::Lobby ? "lobby" : p == DuelPhase::Greeting ? "greeting" : "staking");
+      any = true;
+    }
+  }
+  if (pendingSince_) {
+    pendingSince_.reset();
+    diag_.say("fight shake=1 result=cancelled");
+    any = true;
+  }
+  if (refusal_.any && (refusalShown || any)) refusal_ = Refusal{}, any = true;
+  return any;
+}
+
+}  // namespace blorb

@@ -380,6 +380,21 @@ TEST(OtaSession, NoPressWithinThirtySecondsEndsIt) {
   EXPECT_EQ(rig.host.saves, 0);
 }
 
+// A hard shake is a no (#35): the question lapses at once, as one left
+// unanswered, and nothing is written.
+TEST(OtaSession, ADeclineEndsTheQuestionAsUnanswered) {
+  Rig rig;
+  rig.send(Release{}.begin(rig.signer));
+  ASSERT_TRUE(rig.session.asking());
+  rig.link.sent.clear();
+  rig.session.decline(rig.now + 2000);
+  EXPECT_FALSE(rig.session.asking());
+  EXPECT_EQ(rig.link.sent, (Lines{"! OTA state=idle last=no_confirm"}));
+  rig.session.press(rig.now + 2100);
+  EXPECT_FALSE(rig.slot.opened) << "a press after the no starts nothing";
+  rig.session.decline(rig.now + 2200);   // nothing asked: nothing to say
+}
+
 TEST(OtaSession, DataBeforeThePressIsIgnored) {
   Rig rig;
   Release r;

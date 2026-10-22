@@ -235,6 +235,7 @@ RTC_NOINIT_ATTR static uint32_t quietBoot;
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
 static bool debugAsks();
+static void debugSaysNo();   // a hard shake answers the debug link's unlock question no (#35)
 static bool debugPress(uint32_t ms);
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
@@ -410,8 +411,16 @@ static void lcdVerb(const char* a) {
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
 
+#if !defined(BADGE_BOARD_SIM)
+static uint32_t shellDismissedAt = 0;   // a hard shake answered the shell's question no (#35): the whoosh
+#endif
+
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
+#if !defined(BADGE_BOARD_SIM)
+  if (shellDismissedAt && millis() - shellDismissedAt < 1000)
+    a.dismissedMs = uint16_t(std::min<uint32_t>(a.dismissedMs, millis() - shellDismissedAt));
+#endif
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
@@ -805,6 +814,13 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   f.screen.buttonDown = petFeels(f.screen.buttonDown, remote);
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
+  // A hard shake is a no to the shell's questions (#35): the update's "Turn
+  // me around!" lapses (not now), the debug link's unlock question goes.
+  if (dish->shakeDismisses() && (updater.asking() || debugAsks())) {
+    if (updater.asking()) updater.decline(millis()), Serial.printf("[ota] shaken: not now\n");
+    if (debugAsks()) debugSaysNo();
+    shellDismissedAt = millis() | 1;
+  }
   traceSample(f.body, f.screen, f.rot, ms);
   lat::felt(f, sensed.buttonDown, wasLow && !powerPolicy.low());
 #else
@@ -1584,6 +1600,8 @@ static void runDebug(const char* line) {
 
 #include "debug_ble.h"
 
+static void debugSaysNo() { dbgfw::console.unlock().cancelQuestion(); }
+
 // ---- Low power (src/hw/power.h, docs/power.md) ---------------------------------------
 // Asleep: the backlight is off and the panel in SLPIN, no frame is drawn, the
 // CPU runs at 80 MHz and the loop rests between passes. The pet still ticks,
@@ -1829,6 +1847,7 @@ void loop() {
       const uint32_t drawAt = micros();
 #endif
       drawFrame(look, now);
+      paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
       else dbgfw::draw(canvas);

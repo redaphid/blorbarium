@@ -221,6 +221,10 @@ void Session::finish(Receiving& r, uint32_t now) {
   event("state=ready");
 }
 
+void Session::decline(uint32_t) {
+  if (asking()) fail(Last::NoConfirm);
+}
+
 void Session::tick(uint32_t now) {
   if (const Asking* a = std::get_if<Asking>(&state_)) {
     if (now - a->since >= kConfirmMs) fail(Last::NoConfirm);

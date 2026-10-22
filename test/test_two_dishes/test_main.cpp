@@ -1029,6 +1029,90 @@ TEST(NoButton, ASideHoldKeepsTheAimFromBeforeTheTurn) {
   EXPECT_GE(checked, 6) << "the aim was looked at on his side";
 }
 
+// ---- a shake dismisses what is modal, never a duel (#35) ----------------------------
+
+namespace {
+
+// A hard shake in a hand, straight into one dish: ~1.1 s swung both ways
+// along x, a swing every 60 ms, as MotionDetector wants it.
+void shakeHard(Device& d) {
+  for (int i = 0; i < 55; ++i) {
+    BodySample s;
+    s.ax = int16_t(i / 3 % 2 ? -1500 : 1500), s.az = 1000;
+    d.dish->sample(s, d.ms + 20 * uint32_t(i % 5));
+    if (i % 5 == 4) d.ms += 100, d.dish->tick(d.ms, d.link);
+  }
+  d.ms += 100, d.dish->tick(d.ms, d.link);
+}
+
+// Five short jolts, quiet between: a Shake to the detector, as a pick-up from
+// face down was on the recordings, but no hard shake.
+void shakeSoft(Device& d) {
+  for (int i = 0; i < 50; ++i) {
+    BodySample s;
+    s.az = 1000;
+    if (i % 4 == 0) s.ax = int16_t(i / 4 % 2 ? -1300 : 1300);
+    d.dish->sample(s, d.ms + 20 * uint32_t(i % 5));
+    if (i % 5 == 4) d.ms += 100, d.dish->tick(d.ms, d.link);
+  }
+  d.ms += 100, d.dish->tick(d.ms, d.link);
+}
+
+DuelPhase phaseOf(Device& d) { return d.dish->duelView().phase; }
+
+}  // namespace
+
+TEST(Shake, AHardShakeLeavesFightModeAndShowsIt) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  bout.a.kid.wantDuel = true;
+  for (int i = 0; i < 40 && !bout.a.dish->duelActive(); ++i) bout.a.step();
+  ASSERT_TRUE(bout.a.dish->duelActive());
+  ASSERT_EQ(phaseOf(bout.a), DuelPhase::Lobby);
+  bout.a.kid.wantDuel = false;
+  shakeHard(bout.a);
+  EXPECT_FALSE(bout.a.dish->duelActive()) << "the lobby is left";
+  EXPECT_LT(bout.a.dish->appearance().dismissedMs, 1000) << "and the screen says so";
+}
+
+TEST(Shake, ASoftShakeLeavesNothing) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  bout.a.kid.wantDuel = true;
+  for (int i = 0; i < 40 && !bout.a.dish->duelActive(); ++i) bout.a.step();
+  ASSERT_TRUE(bout.a.dish->duelActive());
+  bout.a.kid.wantDuel = false;
+  shakeSoft(bout.a);
+  EXPECT_TRUE(bout.a.dish->duelActive()) << "a jolt or five is no dismissal";
+}
+
+TEST(Shake, AHardShakeBeforeTheStakesAreAgreedLeavesAndTheFriendHearsIt) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  int t = 0;
+  while (t++ < 3000 && phaseOf(bout.a) != DuelPhase::Staking) bout.step();
+  ASSERT_EQ(phaseOf(bout.a), DuelPhase::Staking);
+  shakeHard(bout.a);
+  EXPECT_FALSE(bout.a.dish->duelActive()) << "fight mode is left";
+  bool friendBack = false;
+  bout.a.kid.wantDuel = false;
+  for (int i = 0; i < 60 && !friendBack; ++i) {
+    bout.step();
+    friendBack = !bout.b.dish->duelActive() || phaseOf(bout.b) == DuelPhase::Lobby;
+  }
+  EXPECT_TRUE(friendBack) << "the friend heard it as leaving";
+}
+
+TEST(Shake, NeverOnceTheDuelHasStarted) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  int t = 0;
+  while (t++ < 3000 && !(phaseOf(bout.a) == DuelPhase::Choosing && !bout.a.dish->duelView().locked)) bout.step();
+  ASSERT_EQ(phaseOf(bout.a), DuelPhase::Choosing);
+  const uint8_t locks = bout.a.dish->duelView().locked;
+  shakeHard(bout.a);
+  EXPECT_TRUE(bout.a.dish->duelActive()) << "a shake never leaves a duel";
+  EXPECT_NE(phaseOf(bout.a), DuelPhase::Lobby);
+  EXPECT_EQ(bout.a.dish->duelView().locked, locks) << "and is no stance";
+  EXPECT_GE(bout.a.dish->appearance().dismissedMs, 1000) << "nothing dismissed";
+}
+
 // Spared, with no button: a knock spares as it always did, and nobody dies.
 TEST(NoButton, AMortalDuelSparedByAKnock) {
   for (uint64_t seed = 1; seed < 30; ++seed) {

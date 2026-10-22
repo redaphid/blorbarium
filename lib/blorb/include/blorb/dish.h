@@ -155,6 +155,11 @@ class Dish {
   // above 0, and the aim the tilt reads as of the last sample, not the last
   // tick (-1 level). Reads only.
   bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
+  // The last sample fired a shake hard enough to dismiss what is on the
+  // screen (#35): the shell's questions (the update's, the debug unlock's)
+  // take it for a no. The Dish's own (fight mode before a duel, a refusal's
+  // words) it dismisses at the next tick.
+  bool shakeDismisses() const { return (lastFired_ >> stim::shake.v & 1) && detectors_.motion.vigorous(); }
   int8_t aimNow() const { return detectors_.aim.aim(); }
   // Carried about, as the eyes see it (carry_show.h): presentation only. The
   // cable's `DEBUG carry <kind>` plays one now; tests count what started.
@@ -252,6 +257,9 @@ class Dish {
   // The aim a knock is made at: the aim on the first knock's sample, which
   // the lock takes when the knock is decided ~0.6 s later (a hand drifts).
   int8_t knockAim_ = -1;
+  // When a hard shake last dismissed something (#35), for the whoosh.
+  uint32_t dismissedAtMs_ = 0;
+  bool dismissed_ = false;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
   DiagLines diag_;

@@ -230,6 +230,7 @@ void Gravity::sample(const BodySample& s) {
 
 void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   grav_.sample(s);
+  hard_ = (hard_ << 1 | uint64_t(grav_.squared() >= kShakeJoltMg * kShakeJoltMg)) & ((uint64_t(1) << 50) - 1);
   int32_t mag = magnitudeMg(s);
   int32_t dev = absMg(mag - kOneG);
   energy_ += (Fx::ratio(dev < kOneG ? dev : kOneG, kOneG) - energy_) * kMotionSmooth;

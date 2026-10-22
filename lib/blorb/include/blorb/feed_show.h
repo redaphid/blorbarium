@@ -64,6 +64,12 @@ class FeedShow {
   // On the tick a press reached a pet: whether a pellet dropped (the tick it
   // did is `tick`), and how he was when it did.
   void pressed(uint32_t ms, bool dropped, uint32_t tick, bool asleep, Fx hunger);
+  // A hard shake dismisses a refusal's words (#35). True when one was shown.
+  bool dismiss(uint32_t nowMs) {
+    if (age(refused_, nowMs) == FeedView::kNever) return false;
+    refused_.seen = false;
+    return true;
+  }
   // On the tick he bit a pellet. `hunger`: before the bite.
   void ate(uint32_t ms, bool rotten, Fx hunger);
 

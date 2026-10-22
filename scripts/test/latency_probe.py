@@ -15,7 +15,10 @@ the decisive raw read (In) to the loop taking it (seen), the detector acting
 ack_panel), the word controls.h names (word), the engine tick that took it
 (tick), and the first frame after that and its rows out (frame, panel).
 
-Four phases, each read back with `DEBUG latency` and cleared first:
+Four phases, each read back with `DEBUG latency` and cleared first, and
+the radio's (--only radio for it alone): fight mode opened and closed
+--radio-cycles times, failing on "air open FAILED" or a Wi-Fi deinit that
+timed out (#53), with the free heap each time the air opens:
   rest   awake on the dish: every control N times but the side hold
   fight  fight mode (a hang opens the lobby): knock knock and tilt, then a
          hang to leave
@@ -230,6 +233,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("port")
     ap.add_argument("--reps", type=int, default=6)
+    ap.add_argument("--radio-cycles", type=int, default=10, help="fight mode opened and closed this many times (#53)")
     ap.add_argument("--only", default="", help="controls to run, comma separated (default: all)")
     ap.add_argument("--log", default="latency_probe.log")
     ap.add_argument("--trace-fight", action="store_true",
@@ -343,8 +347,41 @@ def main():
                     time.sleep(1.8)
                 b.ask("DEBUG tidy", r"\[hw\] debug tidy")
                 ok = table("fight", b.latency(), only) and ok
-                b.ask("DEBUG hang 2000", r"\[hw\] debug hang")
+                # A hard shake leaves fight mode before a duel has started (#35).
+                b.ask("DEBUG shake", r"\[hw\] debug shake")
+                time.sleep(2.5)
+                if b.ask("DEBUG duel", r"\[duel\] now active=(\d)")[1] != "0":
+                    print("FAIL fight: a hard shake did not leave fight mode (#35)")
+                    ok = False
+                    b.ask("DEBUG hang 2000", r"\[hw\] debug hang")
+                    time.sleep(5.5)
+                else:
+                    print("fight: a hard shake left fight mode (#35)")
+
+        # ---- the radio: fight mode opened and closed again and again (#53: the
+        # air's internal heap; a Wi-Fi deinit that times out fails the next open)
+        if want("radio"):
+            with b.cv:
+                first = len(b.lines)
+            opened = 0
+            for i in range(a.radio_cycles):
+                b.ask("DEBUG sleepiness 0", r"\[hw\] debug sleepiness", need=False)
+                if b.ask("DEBUG duel", r"\[duel\] now active=(\d)")[1] != "1":
+                    b.ask("DEBUG hang 2000", r"\[hw\] debug hang")
+                    time.sleep(5.5)
+                if b.ask("DEBUG duel", r"\[duel\] now active=(\d)")[1] == "1":
+                    opened += 1
+                b.ask("DEBUG hang 2000", r"\[hw\] debug hang")   # and leave it
                 time.sleep(5.5)
+            with b.cv:
+                bad = [l for l in b.lines[first:] if "air open FAILED" in l or "timeout when WiFi un-init" in l
+                       or "Failed to deinit Wi-Fi" in l]
+                heaps = [int(m[1]) for l in b.lines[first:] for m in [re.search(r"\[hw\] air open ch=\d+ heap \d+ -> (\d+)", l)] if m]
+            print("\n== radio: fight mode opened %d of %d times; free heap with the air open: %s" % (
+                opened, a.radio_cycles, ", ".join(map(str, heaps)) or "-"))
+            if bad or opened < a.radio_cycles:
+                print("FAIL radio: %s" % (bad[0] if bad else "fight mode did not open every time"))
+                ok = False
 
         # ---- side holds: last, as each tucks him in (asleep, he would doze out of a fight)
         if want("side"):
