@@ -278,6 +278,7 @@ todo
 brave
   I'M BRAVE! I'M ALSO SQUISHY!
 big_pond
+  ONE DAY: A BIG FOREST!
   ONE DAY: A TRAMPOLINE!
 floor
   THE FLOOR IS GREAT FOR BOUNCE!
@@ -334,6 +335,7 @@ outside
   IS OUTSIDE FLUFFY TOO?
 
 not_scared
+  IT'S DARK! I'M A BIT SCARED!
   DARK! I GLOW IN IT! A BIT!
 star_crumbs
   THE STARS ARE SPARKLY SNEEZES!

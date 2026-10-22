@@ -249,6 +249,7 @@ toes
 small_lot
   SMALL MOTH. BIG FLUFF.
 popped
+  A THOUGHT. IT FLEW OFF.
   A THOUGHT. OOH, A LIGHT. GONE.
 wiggle
   WING WIGGLE. DUST EVERYWHERE.
@@ -261,6 +262,7 @@ blinked
 important
   I AM A LANTERN. IMPORTANT.
 secret_mud
+  SECRET: I ATE A SOCK ONCE.
   I DID NOT EAT THE SOCK. SHH.
 nap_plan
   DAY NAP. A LONG ONE. HUMM.
@@ -291,6 +293,7 @@ ancestors
 ask_me
   ASK ME ABOUT LAMPS. ANY LAMP.
 legs
+  SIX LEGS. FOUR TOO MANY? NO.
   SIX LEGS. NONE OF THEM SOCKS.
 shiny
   SOMETHING SHINY. I MUST GO.
@@ -330,6 +333,7 @@ shadow
 big_sit
   BIG DAY. BIG YAWN.
 eye_snack
+  LIGHT. MY FAVOURITE SNACK.
   THE SUN: A LAMP I CAN'T REACH.
 outside
   IS THERE A PORCH OUTSIDE?

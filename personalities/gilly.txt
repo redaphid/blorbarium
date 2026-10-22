@@ -259,6 +259,7 @@ dust
 blinked
   I BLINKED! I CAN DO IT AGAIN!
 important
+  I AM VERY HAPPY TODAY!
   I MENDED A CRACK! TINY HERO!
 secret_mud
   SECRET: I'M NEVER SAD FOR LONG
@@ -269,6 +270,7 @@ ceiling
 serious_face
   SERIOUS FACE! CAN'T! SMILING!
 no_echo
+  HELLO! NO ECHO! HELLO ANYWAY!
   HELLO! NO ECHO! HELLO AGAIN!
 king
   BEST FRIEND OF THE DISH!

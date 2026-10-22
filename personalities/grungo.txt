@@ -39,6 +39,8 @@ I FORESAW THIS. HOOD UP. THE REEDS KNOW.
 # They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
+  I FORESEE FLIES. IN MY MOUTH.
+  MY HOOD HOLDS NO SNACKS.
   I FORESEE A SNACK. IN ME.
   MY TUMMY HAS HAD A VISION.
   A FLY WOULD FIX MY FUTURE.
@@ -248,10 +250,12 @@ small_lot
 popped
   A VISION CAME. IT POPPED.
 wiggle
+  A RITUAL WIGGLE. DONE.
   A SACRED WIGGLE. VERY HOLY.
 my_song
   CROAK. CROAK. MY BEST SONG.
 dust
+  A SPECK OF DUST. AN OMEN.
   A SPECK OF DUST. AN OMEN?
 blinked
   I BLINKED. THE FUTURE MOVED.

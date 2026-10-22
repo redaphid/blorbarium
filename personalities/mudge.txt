@@ -294,6 +294,7 @@ ask_me
 legs
   FINS ARE BETTER THAN LEGS!
 shiny
+  SOMETHING SHINY, RACE YOU!
   SOMETHING SHINY, A TROPHY?!
 guard
   DISH GUARD, ON DUTY!
@@ -327,6 +328,7 @@ sitting_time
 lunch_oclock
   LUNCH, THEN SPRINTS!
 shadow
+  MY SHADOW IS ALMOST AS FAST!
   MY SHADOW CHEATS, IT STARTS ME
 big_sit
   BIG DAY, BIG RACE!
