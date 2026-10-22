@@ -1502,6 +1502,23 @@ static bool net(const char* line) {
   return true;
 }
 
+// `DEBUG air [open|close]`: the duel's radio by hand, through RadioGate as
+// fight mode opens it (an open Wi-Fi window gives the radio up first; a trial
+// or an update refuses), to show the air still fits after a Wi-Fi window.
+// EspNowAir logs its own `[hw] air open ch=1 heap A -> B ... big=`.
+static void airVerb(const char* a) {
+  if (!std::strcmp(a, "open")) {
+    const bool ok = radioGate.open();
+    return (void)Serial.printf("[hw] debug air open: %s heap=%u minheap=%u big=%u\n", ok ? "ok" : radioGate.refusal(),
+                               unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                               unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  }
+  if (!std::strcmp(a, "close")) radioGate.close();
+  Serial.printf("[hw] debug air %s: open=%d heap=%u minheap=%u big=%u\n", *a ? a : "status", int(radioGate.isOpen()),
+                unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
+
 // `DEBUG duel`: where the duel stands right now, in one line.
 static void duelNow() {
   constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
@@ -1582,6 +1599,7 @@ static void runDebug(const char* line) {
     return (void)Serial.printf("[hw] smooth=%s speed=%u/256\n", smoothFrames ? "on" : "off", unsigned(paint::kScreenSpeedQ8));
   }
   if (std::strcmp(verb, "duel") == 0) return duelNow();
+  if (std::strcmp(verb, "air") == 0) return airVerb(a);
   if (std::strcmp(verb, "wifi") == 0) return wifiVerb(line);
   if (std::strcmp(verb, "ota") == 0) return otaVerb(line);
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
@@ -1603,7 +1621,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
+                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
     return;
   }
   const uint32_t t0 = millis();

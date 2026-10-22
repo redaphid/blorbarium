@@ -3,7 +3,7 @@
     uv run --with cryptography python tools/ota_release.py keygen
     uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build] [--env badge128_pm]
     uv run --with cryptography python tools/ota_release.py check web/public/fw/lcd128/manifest.json
-    uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json [--local]
+    uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json [--local] [--prefix lcd128-test]
     uv run --with cryptography python tools/ota_release.py fixture
 
 keygen makes the signing key, outside the repo, and writes its public half
@@ -209,11 +209,14 @@ def cmd_publish(args):
     m = json.loads(manifest_path.read_text())
     npx = shutil.which("npx") or shutil.which("npx.cmd") or sys.exit("publish needs npx (Node.js) for wrangler")
     where = "--local" if args.local else "--remote"
+    prefix = args.prefix or m["board"]
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", prefix):
+        sys.exit(f"--prefix {prefix!r}: one path part, lowercase letters, digits, '.', '_' or '-'")
     for name, kind in ((m["image"], "application/octet-stream"), ("manifest.json", "application/json")):
-        subprocess.run([npx, "wrangler", "r2", "object", "put", f"{FW_BUCKET}/{m['board']}/{name}",
+        subprocess.run([npx, "wrangler", "r2", "object", "put", f"{FW_BUCKET}/{prefix}/{name}",
                         "--file", str(manifest_path.parent / name), "--content-type", kind, where],
                        cwd=ROOT, check=True)
-    print(f"published {m['board']} {m['version']} to {FW_BUCKET} ({where[2:]})")
+    print(f"published {m['board']} {m['version']} to {FW_BUCKET}/{prefix} ({where[2:]}): /fw/{prefix}/manifest.json")
 
 
 def cmd_fixture(args):
@@ -255,6 +258,8 @@ def main():
     u = sub.add_parser("publish")
     u.add_argument("manifest")
     u.add_argument("--local", action="store_true", help="the bucket `wrangler dev` serves, not the site's")
+    u.add_argument("--prefix", help="the bucket folder (default: the board, the live /fw/<board>/); e.g. lcd128-test "
+                                    "for a test release no badge reads unless told its URL (DEBUG ota check <url>)")
     sub.add_parser("fixture")
     args = p.parse_args()
     {"keygen": cmd_keygen, "release": cmd_release, "check": cmd_check, "publish": cmd_publish,

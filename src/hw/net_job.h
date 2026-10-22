@@ -53,7 +53,10 @@ class NetJob {
   // KB of it, a plain HTTP GET (a cable's `DEBUG ota check http://...`) less.
   // The TLS one is `DEBUG wifi stack <KB>` (RAM only) to find the least that
   // holds: every GET logs the bytes its task never used.
-  static constexpr uint32_t kStackTlsDefault = 10 * 1024;
+  // 7 KB: #27's board run used 5,256 B of 10 KB for the manifest's handshake
+  // through the P-384 chain; the image's GET uses less (its reads decrypt, and
+  // the hash and the flash writes are the loop's).
+  static constexpr uint32_t kStackTlsDefault = 7 * 1024;
   static constexpr uint32_t kStackHttpBytes = 6 * 1024;
   static inline uint32_t stackTlsBytes = kStackTlsDefault;
   static constexpr uint16_t kConnectMs = 5000;
