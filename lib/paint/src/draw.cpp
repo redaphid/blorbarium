@@ -7,6 +7,7 @@
 #include "figure.h"
 #include "lively.h"
 #include "paint/marquee.h"
+#include "paint/parallel.h"
 #include "paint/phases.h"
 #include "paint/sprite_pack.h"
 
@@ -273,14 +274,39 @@ struct Outline {
   const Xf* variants; int variantCount;
 };
 
+bool sameFrame(const FrameRef& a, const FrameRef& b) {
+  if (a.rle != b.rle || a.w != b.w || a.h != b.h || a.originX != b.originX || a.originY != b.originY ||
+      a.eyeCount != b.eyeCount)
+    return false;
+  for (int e = 0; e < imin(a.eyeCount, 2); ++e)
+    if (a.eyes[e].x != b.eyes[e].x || a.eyes[e].y != b.eyes[e].y || a.eyes[e].r != b.eyes[e].r) return false;
+  return true;
+}
+
 // Each frame's rows are walked once and every transform visits that row's
-// corners; the callers keep only a max or a min, so the order is free.
+// corners. The callers keep only a max or a min of each coordinate or of the
+// distance from a point, so the order is free and a frame met twice (his idle
+// body, and the pose's when it is the same) is walked once. With no lean, a
+// run of rows whose left (or right) edge stays at one column is a vertical
+// segment: every corner on it projects to the same x, and y only climbs down
+// it, so its two ends are the only corners that can hold the max or min.
 template <class Visit>
 void visitOutline(const Outline& o, Visit&& visit) {
+  bool lean = false;
+  for (int v = 0; v < o.variantCount; ++v) lean |= o.variants[v].shear != 0;
   for (int i = 0; i < o.frameCount; ++i) {
     const FrameRef& f = o.frames[i];
     if (!drawable(f)) continue;
+    bool seen = false;
+    for (int j = 0; j < i && !seen; ++j) seen = sameFrame(o.frames[j], f);
+    if (seen) continue;
     const uint8_t* p = f.rle;
+    // The open segments: each edge's column and the row its run began on (-1: none open).
+    int loX = -1, loFrom = 0, hiX = -1, hiFrom = 0;
+    auto close = [&](int x, int from, int to) {   // the ends of a segment at column x, rows [from, to)
+      for (int v = 0; v < o.variantCount; ++v)
+        for (int sy : {from * 16, to * 16}) visit(project(o.variants[v], f, x * 16, sy), 0);
+    };
     for (int y = 0; y < f.h; ++y) {
       int x = 0, lo = -1, hi = -1;
       while (x < f.w) {
@@ -288,11 +314,21 @@ void visitOutline(const Outline& o, Visit&& visit) {
         x += p[0];
         p += 2;
       }
+      if (lean) {
+        if (lo < 0) continue;
+        for (int v = 0; v < o.variantCount; ++v)
+          for (int sy : {y * 16, (y + 1) * 16})
+            for (int sx : {lo * 16, hi * 16}) visit(project(o.variants[v], f, sx, sy), 0);
+        continue;
+      }
+      if (loX >= 0 && lo != loX) close(loX, loFrom, y), loX = -1;
+      if (hiX >= 0 && hi != hiX) close(hiX, hiFrom, y), hiX = -1;
       if (lo < 0) continue;
-      for (int v = 0; v < o.variantCount; ++v)
-        for (int sy : {y * 16, (y + 1) * 16})
-          for (int sx : {lo * 16, hi * 16}) visit(project(o.variants[v], f, sx, sy), 0);
+      if (loX < 0) loX = lo, loFrom = y;
+      if (hiX < 0) hiX = hi, hiFrom = y;
     }
+    if (loX >= 0) close(loX, loFrom, f.h);
+    if (hiX >= 0) close(hiX, hiFrom, f.h);
   }
   for (int v = 0; v < o.variantCount; ++v) {
     const Xf& xf = o.variants[v];
@@ -434,6 +470,19 @@ uint16_t scarred(uint16_t c, int q) {
   return uint16_t((r << 11) | (g << 5) | b);
 }
 
+// One blit's rows, [top, split) in half 1 and [split, bottom] in half 0.
+struct BlitJob {
+  Canvas240& cv;
+  const FrameRef& f;
+  const Place& p;
+  const Colours& col;
+  int alpha;
+  const Mottle* mottle;
+  const ScarLayer* scars;
+  int top, bottom, left, right, split;
+  void rows(int half);
+};
+
 void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, int alpha, const Mottle* mottle,
           const ScarLayer* scars = nullptr) {
   const Xf& v = p.xf;
@@ -445,26 +494,45 @@ void blit(Canvas240& cv, const FrameRef& f, const Place& p, const Colours& col, 
   int bottom = imin(kSide - 1, p.y - v.lift + ceilDiv(int64_t(f.h - f.originY) * v.ky, kOne) + 1);
   int left = imax(0, p.x + floorDiv(int64_t(-f.originX) * v.kx, kOne) - lean - 1);
   int right = imin(kSide - 1, p.x + ceilDiv(int64_t(f.w - f.originX) * v.kx, kOne) + lean + 1);
+  BlitJob job{cv, f, p, col, alpha, mottle, scars, top, bottom, left, right, top};
+  // A big sprite is drawn in two halves at once when a second core is lent
+  // (paint/parallel.h): the rows above `split` here, the rest there.
+  constexpr int kSplitPx = 4096;
+  if (parallel.run && (bottom - top + 1) * (right - left + 1) >= kSplitPx) {
+    job.split = top + (bottom - top + 1) / 2;
+    return bothHalves([](void* j, int half) { static_cast<BlitJob*>(j)->rows(half); }, &job);
+  }
+  job.split = bottom + 1;
+  job.rows(1);
+}
+
+void BlitJob::rows(int half) {
+  const Xf& v = p.xf;
+  const int y0 = half ? top : split, y1 = half ? split - 1 : bottom;
+  if (y0 > y1) return;
   RowReader rows(f);
   // Each pixel's source column is floorDiv((2 (x - p.x) + 1 + shift2) kOne, 2 kx).
   // Along a row the numerator grows by 2 kOne a pixel, so the quotient and its
   // remainder are stepped rather than divided: the same columns, with no
   // 64-bit division a pixel (a library call on the board).
-  const int den = 2 * v.kx;   // kx >= 1 (above), so den > 0
+  const int den = 2 * v.kx;   // kx >= 1 (blit), so den > 0
   const int stepQ = 2 * kOne / den, stepR = 2 * kOne % den;
   const int fw = f.w, ox = f.originX, oy = f.originY;
   const bool scarred_ = scars && scars->count;
-  static ScarRows scarRows;   // shared, like scratchColours: one blit at a time, off the loop task's stack
+  // Each half's own, shared from blit to blit (one blit at a time, off the
+  // loop task's stack): the scars' rows, and each canvas column's source
+  // column. Along a row those depend on the row only through the lean, so
+  // with none they are worked out once a blit; and since they only climb,
+  // the columns that land inside the frame are one span, [xa, xb].
+  static ScarRows scarRowsOf[2];
+  static int16_t colsOf[2][kSide];
+  ScarRows& scarRows = scarRowsOf[half];
+  int16_t* const cols = colsOf[half];
   if (scarred_) scarRows.begin(*scars);
-  // Each canvas column's source column. Along a row they depend on the row
-  // only through the lean, so with none they are worked out once a blit; and
-  // since they only climb, the columns that land inside the frame are one
-  // span, [xa, xb]. Shared like scarRows.
-  static int16_t cols[kSide];
   static const Mottle kNone;
   SpotRow spots(mottle ? *mottle : kNone);
   int lastShift = INT_MIN, xa = 0, xb = -1;
-  for (int y = top; y <= bottom; ++y) {
+  for (int y = y0; y <= y1; ++y) {
     int dy2 = 2 * (y - p.y) + 1;   // twice the pixel centre's offset from the stand point
     int sy = oy + floorDiv(int64_t(dy2 + 2 * v.lift) * kOne, 2 * v.ky);
     if (sy < 0) continue;
@@ -514,10 +582,16 @@ void ring(Canvas240& cv, Pt c, int rc, int g8, int amp, const Rgb& tint, int spa
   const int R = rc * (384 + 128 * g8 / 256) / 256;
   const int inner = imax(rc * 7 / 10, 16), outer = haloOuterQ4(rc);
   const int reach = R + outer;
+  // Light lands only where -inner < t < outer, t = isqrt(d2) - R: d2 in
+  // [lo2, hi2). The rest of the box is tested by its d2 alone, with no root.
+  const int64_t loR = imax(0, R - inner + 1), hiR = R + outer;
+  const int64_t lo2 = loR * loR, hi2 = hiR * hiR;
   for (int y = imax(0, floorDiv(c.y - reach, 16)); y <= imin(kSide - 1, (c.y + reach) / 16); ++y) {
     for (int x = imax(0, floorDiv(c.x - reach, 16)); x <= imin(kSide - 1, (c.x + reach) / 16); ++x) {
       int64_t dx = x * 16 + 8 - c.x, dy = y * 16 + 8 - c.y;
-      int t = int(isqrt(uint64_t(dx * dx + dy * dy))) - R;
+      const int64_t d2 = dx * dx + dy * dy;
+      if (d2 < lo2 || d2 >= hi2) continue;
+      int t = int(isqrt(uint64_t(d2))) - R;
       int i = t < 0 ? (-t >= inner ? 0 : amp * (inner + t) / inner) : (t >= outer ? 0 : amp * (outer - t) / outer);
       addLight(cv, x, y, tint, i);
     }
@@ -708,7 +782,7 @@ int footHalfW(const FrameRef& f, int kx) { return f.w * kx / kOne * kShadowWideP
 // The mouth's centre relative to the stand point, in frame pixels (Q4): the
 // mouth-region pixels of the face shown, or of every face of the stage when
 // that one has none (a closed mouth). False when the pack tags no mouth.
-bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
+bool mouthOfFrames(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
   uint16_t count = 0;
   const PaletteEntry* pal = pack.palette(count);
   int64_t sx = 0, sy = 0, n = 0;
@@ -730,6 +804,23 @@ bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, 
   if (n == 0) return false;
   out = {int(sx / n), int(sy / n)};
   return true;
+}
+
+// The same, kept from frame to frame while he eats: it reads every pixel of
+// the face (and of every face of his stage when that one shows no mouth), and
+// it is pure in the pack, the face and the stage.
+bool mouthOf(const SpritePack& pack, const FrameRef& shown, blorb::Stage stage, Pt& out) {
+  static const SpritePack* lastPack = nullptr;
+  static FrameRef lastFace{};
+  static blorb::Stage lastStage{};
+  static bool lastFound = false;
+  static Pt lastAt{};
+  if (lastPack != &pack || lastStage != stage || !sameFrame(lastFace, shown)) {
+    lastPack = &pack, lastFace = shown, lastStage = stage;
+    lastFound = mouthOfFrames(pack, shown, stage, lastAt);
+  }
+  if (lastFound) out = lastAt;
+  return lastFound;
 }
 
 // While he eats, the food he bit is in his mouth, in front of him, fresh or
@@ -1023,12 +1114,57 @@ constexpr DishSpans rimSpans() {
 }
 constexpr DishSpans kRimSpans = rimSpans();
 
+// The rim's band: each pixel left of the middle (its mirror has the same d2)
+// as its step of t from the band's first (231) and its glass (0..6, the
+// light the glass adds: 6 - |isqrt(d2) - 233| when positive), at compile
+// time: t * 7 + glass. 2.2 KB of flash, row after row from the dish's edge.
+constexpr int kRimT0 = kRimFrom / kBgStep, kRimTs = kSide * kSide / kBgStep - kRimT0 + 1, kRimGlass = 7;
+constexpr int rimPixels() {
+  int n = 0;
+  for (int y = 0; y < kSide; ++y) n += kRimSpans.from[y] - kDish.from[y];
+  return n;
+}
+struct RimCodes { uint16_t rowAt[kSide]; uint8_t code[rimPixels()]; };
+constexpr int isqrtC(int v) {
+  int lo = 0, hi = 256;   // the root is in [lo, hi): v is at most 240 * 240
+  while (hi - lo > 1) {
+    const int mid = (lo + hi) / 2;
+    if (mid * mid <= v) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+constexpr RimCodes rimCodes() {
+  RimCodes r{};
+  int n = 0;
+  for (int y = 0; y < kSide; ++y) {
+    r.rowAt[y] = uint16_t(n);
+    const int dy = 2 * y + 1 - kSide;
+    for (int x = kDish.from[y]; x < kRimSpans.from[y]; ++x) {
+      const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy, rim = 6 - iabs(isqrtC(d2) - 233);
+      r.code[n++] = uint8_t((d2 / kBgStep - kRimT0) * kRimGlass + (rim > 0 ? rim : 0));
+    }
+  }
+  return r;
+}
+constexpr RimCodes kRimCodes = rimCodes();
+static_assert(kRimTs * kRimGlass <= 256, "a rim code is a byte");
+
+// The dish lit, at each step out from the middle. The rim's glass and the
+// dither land per pixel; inside the rim no channel comes near 255, so the
+// clamp is the rim's alone.
+uint8_t litR[257], litG[257], litB[257];
+// The rim's colour, lit, before the dither, for each code (kRimCodes).
+uint8_t rimR[kRimTs * kRimGlass], rimG[kRimTs * kRimGlass], rimB[kRimTs * kRimGlass];
+void backgroundRows(Canvas240& cv, int lit, int half);
+
 void background(Canvas240& cv, Fx night) {
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);
-  // The dish lit, at each step out from the middle. The rim's glass and the
-  // dither land per pixel; inside the rim no channel comes near 255, so the
-  // clamp is the rim's alone.
-  static uint8_t litR[257], litG[257], litB[257];
+  for (int t = kRimT0; t < kRimT0 + kRimTs; ++t)
+    for (int glass = 0; glass < kRimGlass; ++glass) {
+      Rgb c{22 - 10 * t / 256 + 4 * glass, 58 - 22 * t / 256 + 8 * glass, 56 - 20 * t / 256 + 7 * glass};
+      const int i = (t - kRimT0) * kRimGlass + glass;
+      rimR[i] = uint8_t(c.r * lit / 256), rimG[i] = uint8_t(c.g * lit / 256), rimB[i] = uint8_t(c.b * lit / 256);
+    }
   for (int t = 0; t <= 256; ++t) {
     litR[t] = uint8_t((22 - 10 * t / 256) * lit / 256);
     litG[t] = uint8_t((58 - 22 * t / 256) * lit / 256);
@@ -1039,8 +1175,16 @@ void background(Canvas240& cv, Fx night) {
   // row's four dithers is worked out once (1.9 KB), and the rows that share
   // that dither look theirs up. A row is symmetric about the middle, so each
   // step is found once for a pixel and its mirror (whose dither column is 3 - its own).
-  static uint16_t lut[kInnerT][4];
-  for (int by = 0; by < 4; ++by) {
+  struct Job { Canvas240& cv; int lit; };
+  Job job{cv, lit};
+  // Two halves, dither rows 0 and 1 in one and 2 and 3 in the other, each with its table.
+  bothHalves([](void* j, int half) { backgroundRows(static_cast<Job*>(j)->cv, static_cast<Job*>(j)->lit, half); }, &job);
+}
+
+void backgroundRows(Canvas240& cv, int lit, int half) {
+  static uint16_t lutOf[2][kInnerT][4];
+  auto& lut = lutOf[half];
+  for (int by = 2 * half; by < 2 * half + 2; ++by) {
     for (int t = 0; t < kInnerT; ++t)
       for (int k = 0; k < 4; ++k) {
         const int d = kBayer[by][k];
@@ -1054,21 +1198,15 @@ void background(Canvas240& cv, Fx night) {
       std::memset(row + to, 0, sizeof(uint16_t) * size_t(kSide - to));
       const int dy = 2 * y + 1 - kSide;
       const uint8_t* bayer = kBayer[by];
-      int s = -1;   // isqrt(d2) at the last rim pixel: the next is a step or two from it
-      auto rim = [&](int x) {
-        const int dx = 2 * x + 1 - kSide, d2 = dx * dx + dy * dy;
-        const int t = d2 / kBgStep, d = bayer[x & 3];
-        Rgb c{22 - 10 * t / 256, 58 - 22 * t / 256, 56 - 20 * t / 256};
-        if (s < 0) s = int(isqrt32(uint32_t(d2)));
-        while (s * s > d2) --s;
-        while ((s + 1) * (s + 1) <= d2) ++s;
-        int rim = 6 - iabs(s - 233);
-        if (rim > 0) { c.r += 4 * rim; c.g += 8 * rim; c.b += 7 * rim; }
-        row[x] = to565({imin(255, c.r * lit / 256 + d / 2), imin(255, c.g * lit / 256 + d / 4),
-                        imin(255, c.b * lit / 256 + d / 2)});
-      };
-      for (int x = from; x < in; ++x) rim(x);
-      for (int x = kSide - in; x < to; ++x) rim(x);
+      // The rim's band, a pixel and its mirror (same code, its own dither).
+      const uint8_t* code = &kRimCodes.code[kRimCodes.rowAt[y]];
+      for (int x = from; x < in; ++x) {
+        const int c = code[x - from];
+        for (const int at : {x, kSide - 1 - x}) {
+          const int d = bayer[at & 3];
+          row[at] = to565({imin(255, rimR[c] + d / 2), imin(255, rimG[c] + d / 4), imin(255, rimB[c] + d / 2)});
+        }
+      }
       // Inside the rim, from its left edge to the middle, each pixel and its mirror.
       uint32_t d2 = uint32_t((2 * in + 1 - kSide) * (2 * in + 1 - kSide) + dy * dy);
       uint32_t step = uint32_t(4 * (2 * in + 1 - kSide) + 4);   // d2 at x + 1 less d2 at x, a 2's complement step
@@ -1472,6 +1610,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
 }
 
 PhaseClock phaseClock;
+Parallel parallel;
 
 void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uint32_t nowMs) {
   phaseStart();
