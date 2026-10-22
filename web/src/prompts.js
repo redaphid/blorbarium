@@ -33,6 +33,9 @@ const AUDIENCE = `The pets live on badges worn by kids aged 6 to 13. Write to ma
 // sad, cheeky and weird are all welcome; the species notes set the voice.
 const AUDIENCE_V3 = `The pets live on badges worn by kids aged 6 to 13 and their parents. Make them laugh, wince or go "ooh": a joke for the kid with a second layer for the parent. Dark, ominous, sad, cheeky, gross and weird are all welcome wherever the species is like that. Specific and surprising beats generic.`;
 
+// v4 (run r2): the owner wants "the most unhinged lines that still make sense".
+const AUDIENCE_V4 = `Make every line UNHINGED: wild, absurd, chaotic, surprising, a left turn nobody saw coming. But it must still MAKE SENSE: a kid of 6 to 13 reading it on the badge gets the joke or the picture at once, it reads as words a creature would say, and it fits the moment. Unhinged, never random noise. Dark, gross, ominous, sad, cheeky and weird are all welcome. Every line still sounds like this one pet, in his species' voice.`;
+
 function v2With(audience) {
   return {
     bible(input) {
@@ -138,6 +141,8 @@ Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every s
   },
   v2: v2With(AUDIENCE),
   v3: v2With(AUDIENCE_V3),
+  // Wilder sampling too: above 1 the next word is a less obvious one.
+  v4: { ...v2With(AUDIENCE_V4), sampling: { temperature: 1.15, topP: 0.95 } },
 };
 
 // A retry: the same conversation, plus what was wrong, for the situations still short.

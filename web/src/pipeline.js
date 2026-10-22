@@ -16,16 +16,28 @@ const BATCHES = 4;
 // short creative replies, and thinking tokens cost time and money) and prices
 // in USD per million tokens (the Workers AI catalog, 2026-10-21).
 export const MODELS = {
+  // The r1 six.
   "@cf/moonshotai/kimi-k2.6": { opts: { reasoning_effort: "none" }, price: [0.95, 4.0] },
   "@cf/deepseek-ai/deepseek-v4.1-flash-1017": { opts: { reasoning_effort: "none" }, price: [0.3, 1.2] },
   "@cf/google/gemma-4-26b-a4b-it": { opts: { chat_template_kwargs: { enable_thinking: false } }, price: [0.1, 0.3] },
   "@cf/mistralai/mistral-small-3.1-24b-instruct": { opts: {}, price: [0.351, 0.555] },
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { opts: {}, price: [0.293, 2.253] },
   "@cf/openai/gpt-oss-120b": { opts: { reasoning_effort: "low" }, thinkTokens: 2000, price: [0.35, 0.75] },
+  // The rest of the catalog's chat models (r2, 2026-10-22). GLM-5.x and QwQ always think.
+  "@cf/moonshotai/kimi-k2.7-code": { opts: { reasoning_effort: "none" }, price: [0.95, 4.0] },
+  "@cf/zai-org/glm-5.3": { opts: {}, thinkTokens: 8000, price: [1.4, 4.4] },
+  "@cf/zai-org/glm-5.2": { opts: {}, thinkTokens: 8000, price: [1.4, 4.4] },
+  "@cf/zai-org/glm-5.3-flash": { opts: {}, thinkTokens: 8000, price: [0.15, 0.5] },
+  "@cf/zai-org/glm-4.7-flash": { opts: { chat_template_kwargs: { enable_thinking: false } }, price: [0.0605, 0.4] },
+  "@cf/deepseek-ai/deepseek-v4-pro-0813": { opts: { reasoning_effort: "none" }, thinkTokens: 2000, price: [1.32, 3.96] },
+  "@cf/deepseek-ai/deepseek-v4-flash-0731": { opts: { reasoning_effort: "none" }, thinkTokens: 2000, price: [0.44, 1.32] },
   "@cf/qwen/qwen3.8-27b": { opts: { chat_template_kwargs: { enable_thinking: false } }, price: [0.45, 3.2] },
-  "@cf/deepseek-ai/deepseek-v4-pro-0813": { opts: { reasoning_effort: "none" }, price: [1.32, 3.96] },
-  "@cf/zai-org/glm-5.3": { opts: {}, thinkTokens: 6000, price: [1.4, 4.4] },
-  "@cf/zai-org/glm-5.3-flash": { opts: {}, thinkTokens: 6000, price: [0.15, 0.5] },
+  "@cf/qwen/qwen3-30b-a3b-fp8": { opts: { reasoning_effort: "low" }, thinkTokens: 1500, price: [0.0509, 0.335] },
+  "@cf/qwen/qwq-32b": { opts: {}, thinkTokens: 4000, price: [0.66, 1.0] },
+  "@cf/aisingapore/gemma-sea-lion-v4-27b-it": { opts: {}, price: [0.351, 0.555] },
+  "@cf/meta/llama-4-scout-17b-16e-instruct": { opts: {}, price: [0.27, 0.85] },
+  "@cf/openai/gpt-oss-20b": { opts: { reasoning_effort: "low" }, thinkTokens: 2000, price: [0.2, 0.3] },
+  "@cf/nvidia/nemotron-3-120b-a12b": { opts: { chat_template_kwargs: { enable_thinking: false } }, price: [0.5, 1.5] },
 };
 
 export function replyText(result) {
@@ -33,18 +45,19 @@ export function replyText(result) {
   if (typeof result === "string") return result;
   const msg = result.choices?.[0]?.message;
   if (msg && msg.content != null && msg.content !== "") return msg.content;
+  if (msg && !msg.content && /^\s*[{\[]/.test(msg.reasoning ?? msg.reasoning_content ?? "")) return msg.reasoning ?? msg.reasoning_content;
   if (result.response != null) return typeof result.response === "string" ? result.response : JSON.stringify(result.response);
   return "";
 }
 
 // One model call, timed and costed.
-const TRANSIENT_TRIES = 5;
-export async function call(ai, model, messages, { maxTokens = 2500, temperature = 0.9, meter, backoffMs = 2000 } = {}) {
+const TRANSIENT_TRIES = 7;   // with the backoff below, rides out about two minutes of outage
+export async function call(ai, model, messages, { maxTokens = 2500, temperature = 0.9, topP, meter, backoffMs = 2000 } = {}) {
   const spec = MODELS[model] ?? { opts: {}, price: [0, 0] };
   const t0 = Date.now();
   // JSON mode: every candidate accepts it, and it halves the malformed replies.
   // A model that thinks first spends tokens before the reply, so it gets more.
-  const input = { messages, max_tokens: maxTokens + (spec.thinkTokens ?? 0), temperature,
+  const input = { messages, max_tokens: maxTokens + (spec.thinkTokens ?? 0), temperature, ...(topP ? { top_p: topP } : {}),
                   response_format: { type: "json_object" }, ...spec.opts };
   let result;
   // A busy model (429 "capacity exceeded") or a 5xx is the platform, not the
@@ -57,7 +70,7 @@ export async function call(ai, model, messages, { maxTokens = 2500, temperature 
       const msg = String(e?.message ?? e);
       if (attempt >= TRANSIENT_TRIES - 1 || !/429|capacity|overloaded|HTTP 5\d\d|timed? ?out|abort|3040|internal|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|network/i.test(msg)) throw e;
       if (meter) meter.transient = (meter.transient ?? 0) + 1;
-      await new Promise((r) => setTimeout(r, backoffMs * 2 ** attempt * (0.5 + Math.random())));
+      await new Promise((r) => setTimeout(r, Math.min(60000, backoffMs * 2 ** attempt) * (0.5 + Math.random())));
     }
   }
   const usage = result?.usage ?? {};
@@ -78,7 +91,7 @@ export const newMeter = () => ({ calls: 0, ms: 0, inTok: 0, outTok: 0, usd: 0 })
 export async function writeBible(ai, input, { model, prompt, meter, log }) {
   let messages = input.life ? reviseMessages(input) : PROMPTS[prompt].bible(input);
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const reply = await call(ai, model, messages, { maxTokens: 900, meter });
+    const reply = await call(ai, model, messages, { maxTokens: 900, meter, ...(PROMPTS[prompt].sampling ?? {}) });
     const parsed = parseJsonReply(reply);
     const bible = typeof parsed?.bible === "string" ? parsed.bible.trim() : "";
     if (bible.split(/\s+/).length >= 40) {
@@ -105,7 +118,7 @@ async function writeBatch(ai, input, batch, { model, prompt, meter, log }) {
     if (attempt > 0) stats.retries++;
     let reply = "";
     try {
-      reply = await call(ai, model, messages, { maxTokens: 400 + 70 * needed.length, meter });
+      reply = await call(ai, model, messages, { maxTokens: 400 + 70 * needed.length, meter, ...(PROMPTS[prompt].sampling ?? {}) });
     } catch (e) {
       log?.push({ step: "lines", attempt, ok: false, why: String(e.message ?? e) });
       continue;

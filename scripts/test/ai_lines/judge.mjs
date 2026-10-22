@@ -56,3 +56,31 @@ export async function judgePair(ai, judgeModel, petA, packA, petB, packB) {
   }
   return null;
 }
+
+// Run r2's rubric (the owner: "the most unhinged lines that still make sense").
+export const RUBRIC_UNHINGED = `Score each axis from 1 to 5. Judge the LINES above all; the bible is context.
+
+UNHINGED: 5 = most lines are wild, absurd, chaotic or startling, left turns you did not see coming; 3 = some surprising lines among sensible ones; 1 = tame, predictable, ordinary pet talk.
+
+MAKES SENSE: 5 = every line lands at once: a reader gets the joke or the picture, it reads as words a creature would say, and it fits its situation; 3 = most land, some are word salad or miss their situation; 1 = mostly random words or nonsense.
+
+VOICE: 5 = unmistakably this species, as the notes describe it; 1 = generic.
+
+SPECIFICITY: 5 = many lines use this pet's own decoded genes and bible; 1 = nothing would change with other genes.
+
+Score unhinged and makes-sense independently: a line can be both wild and perfectly clear. Be strict: 5 is rare.`;
+
+export async function judgeUnhinged(ai, judgeModel, pet, pack) {
+  const messages = [
+    { role: "system", content: "You are a strict, fair judge of comic writing for a virtual-pet game. Reply with JSON only." },
+    { role: "user", content: `${RUBRIC_UNHINGED}\n\n${packText(pet, pack)}\n\nAlso pick the 3 lines that are the most unhinged while still making complete sense, copied exactly.\n\nReply as JSON: {"unhinged": n, "makes_sense": n, "voice": n, "specificity": n, "wildest_coherent": ["...", "...", "..."], "notes": "one or two sentences"}` },
+  ];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const j = parseJsonReply(await call(ai, judgeModel, messages, { maxTokens: 4000, temperature: 0.2 }));
+    if (j && ["unhinged", "makes_sense", "voice", "specificity"].every((k) => Number.isFinite(Number(j[k])))) {
+      return { unhinged: Number(j.unhinged), sense: Number(j.makes_sense), voice: Number(j.voice), specificity: Number(j.specificity),
+               wildest: Array.isArray(j.wildest_coherent) ? j.wildest_coherent.map(String).slice(0, 3) : [], notes: j.notes ?? "" };
+    }
+  }
+  return null;
+}
