@@ -21,6 +21,7 @@
 #include "blorb/idle.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
+#include "blorb/traits.h"
 
 namespace blorb {
 
@@ -57,6 +58,7 @@ struct Phenotype {
   Size size{};
   Oracle oracle{};
   SpeciesTraits species{};             // body, power and knack (species.h); grungo until a species gene says otherwise
+  Traits traits{};                     // what the genes make him, against the recipe (traits.h); behaviour reads it
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
