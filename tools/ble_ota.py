@@ -25,14 +25,14 @@ quiet; OTA REBOOT; a reconnect and HELLO; OTA CONFIRM; STATUS until
 `trial=0`, when the new image has kept itself. A dropped connection before
 the restart is resumed: reconnect, the same BEGIN, carry on from `at`.
 
-What it can push. Every image must be signed by the owner's key, which is on
-`soul` and never on this laptop (docs/ota.md "Signing"). The signature is in
+What it can push. Every image must be signed by the owner's key, which only
+tools/ota_release.py reads; this tool never signs (docs/ota.md "The key"). The signature is in
 the manifest, over `blorbota2 board version flags fmt size sha256`, so an
 image is pushable only with the manifest tools/ota_release.py wrote for it:
 the site's release (the default), or a release copied here (--manifest, or
 --image with its manifest.json beside it). It cannot push a firmware.bin
 built here, change a release's version or flags, re-push the version a badge
-already runs, or downgrade, unless soul signed that image with
+already runs, or downgrade, unless that image was signed with
 --allow-older. It checks the signature against src/hw/ota_pubkey.h first;
 the badge checks it again and refuses anything else (BAD_SIGNATURE).
 
@@ -423,8 +423,8 @@ def load_release(manifest_src=None, image_path=None, fetch=fetch, pubkey_h=PUBKE
             if not found:
                 raise ValueError(
                     "%s has no manifest beside it naming it, so it carries no signature. A badge takes only an "
-                    "image the owner's key signed, and the key is on soul, not here: release it there with "
-                    "tools/ota_release.py and copy the manifest.json beside the image (or pass --manifest)."
+                    "image the owner's key signed: release it with tools/ota_release.py, which writes the "
+                    "manifest.json beside the image (or pass --manifest)."
                     % image_path)
             manifest_src = str(found)
     manifest_src = manifest_src or SITE

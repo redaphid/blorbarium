@@ -237,7 +237,7 @@ Every line starts `[wifi] `; every window, phase and Check-hold change is one li
 ## Hardware test plan
 
 A 1.28 on the cable, a 2.4 GHz network, the Android phone, and for steps 5-7
-a test release signed on `soul`. Flash this branch (`./flash.sh`, or
+a test release signed with the owner's key (docs/ota.md "The key"). Flash this branch (`./flash.sh`, or
 `./flash.sh --flip` for a flipped badge). Log with `tools/serial_log.py`.
 
 1. **Boot, flip.** On a flipped badge flashed with `--flip`: `[hw] home rot=0
@@ -276,11 +276,13 @@ a test release signed on `soul`. Flash this branch (`./flash.sh`, or
    minutes later `window check opens` ... `up_to_date` ... `closed after N
    ms`, and `next_check_in` about 6 h.
 6. **Remote-update rehearsal.** On a throwaway branch from this one, bump
-   `kFirmwareVersion` (e.g. 0.7.90), commit, build `badge128_pm`, sign on
-   `soul` (the owner does this; `tools/ota_release.py release --no-build`
-   with the key there). Serve that manifest and image from the laptop
-   (`python3 -m http.server 8000` in a folder holding both). On the badge:
-   `DEBUG ota check http://<laptop-ip>:8000/manifest.json`: `install`,
+   `kFirmwareVersion` past what the badge runs (e.g. 0.7.14), commit, build
+   `badge128_pm` through the wrapper, and sign it on this laptop
+   (`tools/ota_release.py release --no-build --env badge128_pm`). Serve that
+   manifest and image from the laptop (`python3 -m http.server 8000` in a
+   folder holding both), or publish it to R2 (`tools/ota_release.py publish`).
+   On the badge: `DEBUG ota check http://<laptop-ip>:8000/manifest.json` (or
+   plain `DEBUG ota check` for the published one): `install`,
    `downloading ... (signature ok, pet saved, slot open)`, `image at ...`,
    `downloaded and verified`, then, dark and alone, the restart; `on trial
    after an update over Wi-Fi: confirming over Wi-Fi, screen dark`, `trial
@@ -304,9 +306,12 @@ an image without it would leave the badges unable to update over Wi-Fi again
 (and the flipped badges keep their NVS home only while the code reads it).
 
 1. Bump `kFirmwareVersion` past what the badges run, commit, release as
-   `docs/ota.md` "Releasing" says (build `badge128_pm`; sign on `soul`), and
-   commit the manifest.
-2. Deploy the site (`cd web && npx -y wrangler@4.149.0 deploy`).
+   `docs/ota.md` "Releasing" says (build `badge128_pm`, sign with
+   `tools/ota_release.py release` on the owner's laptop, which holds the key),
+   and commit the manifest.
+2. Publish it to R2: `tools/ota_release.py publish
+   web/public/fw/lcd128/manifest.json`. No site deploy is needed: the site
+   serves /fw/ from the bucket at the same manifest URL the badges read.
 3. Each badge picks it up at its next Check: within about 6 h of being left
    alone at home, sooner after a trip. Nobody does anything.
 4. To stop every badge's unattended installs at once, set `"auto": false` in

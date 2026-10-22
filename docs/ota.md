@@ -319,12 +319,12 @@ tool itself died still owns its update. A session this laptop did not begin
 (a phone's, or a Wi-Fi install on firmware that has one) is reported and
 never aborted.
 
-It pushes only signed releases: the site's manifest by default, or one
-copied from soul (`--manifest`, or `--image` with its manifest beside it).
-The signing key stays on soul, so from the laptop there is no new build, no
-re-signed version or flags, no re-push of the version a badge already runs,
-and no downgrade unless soul signed it with `--allow-older`. It checks the
-signature against `src/hw/ota_pubkey.h` before it connects.
+It pushes only signed releases: the site's manifest by default, or a local
+one (`--manifest`, or `--image` with its manifest beside it). It never signs
+anything itself, so it makes no new build, re-signs no version or flags,
+re-pushes no version a badge already runs, and downgrades nothing that was
+not signed with `--allow-older` (see "The key"). It checks the signature
+against `src/hw/ota_pubkey.h` before it connects.
 
 ## Release layout
 
@@ -521,7 +521,10 @@ so a cable flash always takes priority over an update.
    ```
 
    The tool refuses a tree with uncommitted changes, so the image is a
-   commit's. It builds `badge128` and checks the following:
+   commit's. It builds `badge128` (pass `--env badge128_pm` for the light-sleep
+   build the releases use; on this laptop build first through the one-at-a-time
+   wrapper, `~/Worktrees/blorbarium/pio run -e badge128_pm`, then release with
+   `--no-build --env badge128_pm`) and checks the following:
    - `src/hw/ota_pubkey.h` holds this key's public half.
    - The image's own stamp (`kReleaseStamp` in `src/main.cpp`: version,
      board, save format and commit) agrees with `protocol.h`, the board and
@@ -572,12 +575,24 @@ inside the repo. It writes the public half to `src/hw/ota_pubkey.h`.
 `.gitignore` also refuses `*signing-key*`. If the key already exists,
 `keygen` keeps it and rewrites only the header.
 
-The key in `src/hw/ota_pubkey.h` was made on 2026-10-13 on the desk machine,
-by the session that built this feature. **Back it up somewhere safe.** Every
-dish built from this tree trusts only that key. If the key is lost, the next
-update to every dish goes over a cable, with firmware built against a new key.
-If the key leaks, its holder can make images that the dishes accept, although
-each install still needs a hand on the button.
+The key in `src/hw/ota_pubkey.h` was made on 2026-10-22 on the owner's Linux
+laptop (`keygen`, mode 600 at `~/.config/blorbarium/ota-signing-key.pem`), and
+releases are signed and published (`release`, then `publish` to R2) from that
+laptop. The SHA-256 of its 65-byte public point is
+`73d466ffb9a30f435fe53fabda50c2e374b86fdb2a06da2907dab78eb479f7aa`.
+It replaced the 2026-10-13 key, which stayed on the desk machine `soul` and is
+out of reach (owner, 2026-10-22: "I have no access to soul. We can reflash the
+badges again for OTA if we need a new key"). So a badge running 0.7.12 or
+older trusts only the old key and refuses every release signed with this one
+(`BAD_SIGNATURE`): each needs one cable flash of firmware built from this
+tree (0.7.13 or later), and after that it updates over the air again.
+
+**Back the key up somewhere safe.** Every dish built from this tree trusts
+only it. If it is lost, the next update to every dish goes over a cable, with
+firmware built against a new key. If it leaks, its holder can make images the
+dishes accept: over Bluetooth each install still needs a hand on the button,
+but over Wi-Fi (docs/wifi-ota.md) a dish installs a signed newer image by
+itself, from the site's manifest only (pinned TLS roots).
 
 On Windows the file's 0600 mode is not enforced, so the key is only as private
 as the user's home directory.
