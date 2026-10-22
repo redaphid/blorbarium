@@ -15,6 +15,7 @@
 #include <variant>
 #include <vector>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "../../src/debug_verbs.h"   // here, so the dependency finder links lib/debugble
 #include "feeding_badge.h"
 #include "links.h"
 #include "mem_storage.h"
