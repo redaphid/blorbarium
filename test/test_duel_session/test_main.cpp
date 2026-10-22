@@ -809,6 +809,31 @@ TEST(DuelSession, ALostConfirmDoesNotStrandStaking) {
   EXPECT_EQ(b.s.view(2000).agreed, Stakes::Scrap);
 }
 
+// Both kids ask for a rematch on a lossy air (#54): one hears the other's ask
+// first and goes back to the lobby pinned to him while he still waits on the
+// friends screen, beaconing nothing. Its claim, beaconed at once, tells him it
+// asked; before, a lost State left him to wait out the friends screen alone.
+TEST(DuelSession, BothAskedRematchesOnEveryAir) {
+  const Weather airs[] = {Weather{}, kStorm, Weather{500, 0, 0, 0}, Weather{200, 200, 400, 12}};
+  int runs = 0, both = 0;
+  for (const Weather& w : airs)
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+      Ether ether(seed * 13 + 7, w);
+      Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+      a.policy.rematch = b.policy.rematch = true;
+      a.maxBouts = b.maxBouts = 2;
+      ASSERT_TRUE(a.open(0) && b.open(0));
+      run(ether, {&a, &b}, 1, 60000, [&](uint32_t) { return a.bouts == 2 && b.bouts == 2 && a.meetings.size() >= 2 && b.meetings.size() >= 2; });
+      if (a.meetings.empty() || b.meetings.empty()) continue;   // the first bout never ended here: nothing to rematch
+      ++runs;
+      const bool ok = a.bouts == 2 && b.bouts == 2;
+      both += ok;
+      EXPECT_TRUE(ok) << "air drop=" << w.drop << " seed " << seed << ": bouts " << int(a.bouts) << "/" << int(b.bouts);
+    }
+  std::printf("[ rematch ] both rematched in %d of %d runs\n", both, runs);
+  EXPECT_GE(runs, 40);
+}
+
 // Both kids ask for a rematch: the session closes, reopens pinned to the same
 // friend, and runs Staking again in full, under a new battle id.
 TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {

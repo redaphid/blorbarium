@@ -178,8 +178,12 @@ std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
     return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
            (s.beacon.wants.none() || s.beacon.wants == self_ || pending(s)) && (!setup_.pin || s.addr == setup_.pin->peer);
   };
+  // A rematch's pinned lobby claims its friend even before it hears him: he
+  // may still be on the friends screen, where he beacons nothing, and my
+  // claim in a beacon is how he learns I asked if my State saying so was lost
+  // (#54: under loss he waited out his friends screen alone).
   const auto want = [&](std::optional<uint8_t> i) {
-    const PeerAddr to = i ? l.seen[*i].addr : PeerAddr{};
+    const PeerAddr to = i ? l.seen[*i].addr : setup_.pin && setup_.decline == Decline::None ? setup_.pin->peer : PeerAddr{};
     if (to != l.wants) l.wantsSince = tick;
     l.wants = to;
   };
