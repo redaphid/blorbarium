@@ -67,6 +67,9 @@ class AimArming {
     movedMs_ = ms;
   }
   bool armed(uint32_t ms) const { return seen_ && ms - movedMs_ < kArmedMs; }
+  // A hand moved it at `ms` or since (a duel's timeout locks only an aim
+  // moved to in its own turn, #24).
+  bool movedSince(uint32_t ms) const { return seen_ && int32_t(movedMs_ - ms) >= 0; }
 
  private:
   int32_t rx_ = 0, ry_ = 0, rz_ = 0;

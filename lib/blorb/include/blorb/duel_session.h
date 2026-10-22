@@ -53,6 +53,10 @@ struct DuelInput {
   bool hang = false;   // held upside down 1 s: in the lobby it leaves, on the friends screen it searches again (the double press, without a button)
   bool lid = false, dropped = false;
   bool bootDown = false;   // the button's level: the Mortal confirm, the Finish and the hug are 3 s holds
+  // A hand moved the badge in this turn (tilt_aim.h AimArming): only then does
+  // the time running out lock the aim; a badge lying tilted since before the
+  // turn chooses nothing, and the pet picks (#24).
+  bool aimMoved = true;
   // `remote` is the stimuli a phone fired this tick (SenseOut::remote, unit D9):
   // none of them is a gesture here, so no verb or twist can lock a move.
   static DuelInput from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx tiltY, bool bootDown);

@@ -1046,7 +1046,8 @@ TEST(Timeout, TiltedWhenTheTimeRunsOutLocksTheAimedStanceOnBothBadges) {
   const int8_t want = int8_t(bout.a.dish->duelView().lean.stance == Stance::Guard ? 0 : 1);   // not the pet's own pick
   Frame tilt, aim, knock;
   tilt.aim = want, aim.aim = 2, knock.aim = 2, knock.tap = true;
-  bout.a.plan.assign(400, tilt);
+  bout.a.plan.assign(3, Frame{});           // level a moment, then the hand tilts: a move, in this turn
+  for (int i = 0; i < 400; ++i) bout.a.plan.push_back(tilt);
   bout.b.plan.assign(5, aim);
   bout.b.plan.push_back(knock);
   for (int i = 0; i < 200; ++i) bout.b.plan.push_back(aim);
@@ -1071,6 +1072,40 @@ TEST(Timeout, TiltedWhenTheTimeRunsOutLocksTheAimedStanceOnBothBadges) {
   EXPECT_FALSE(vb.last.move[1].byPet);
   EXPECT_EQ(va.last.move[1].stance, Stance(2)) << "B's knocked stance";
   EXPECT_EQ(vb.last.move[0].stance, Stance(2));
+}
+
+// A badge left lying tilted since before the turn chooses nothing when the
+// time runs out (#24, AimArming): the pet picks, as for a level badge. The
+// same tilt the turn before, moved into, locked.
+TEST(Timeout, ABadgeLyingTiltedSinceBeforeTheTurnChoosesNothing) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  auto phase = [&] { return bout.a.dish->duelView().phase; };
+  int t = 0;
+  while (t++ < 3000 && !(phase() == DuelPhase::Choosing && !bout.a.dish->duelView().locked)) bout.step();
+  ASSERT_EQ(phase(), DuelPhase::Choosing);
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  // A's hand, alone: level a moment, then tilted to 1 and left lying so; B plays.
+  Device& a = bout.a;
+  int frames = 0;
+  auto stepA = [&] {
+    BodySample s;
+    s.az = 1000;
+    if (frames++ >= 3) s.ax = kAimTilt[1].ax, s.ay = kAimTilt[1].ay, s.az = kAimTilt[1].az;
+    bout.ether.advance(++bout.tick);
+    for (uint8_t i = 0; i < 5; ++i) a.dish->sample(s, a.ms + 20 * i);
+    a.ms += 100;
+    a.dish->tick(a.ms, a.link);
+    bout.b.step(), bout.twin.step();
+  };
+  auto shown = [&](uint8_t n) { const DuelView v = a.dish->duelView(); return v.hasLast && v.lastTurn >= n; };
+  for (int i = 0; i < 600 && !shown(turn); ++i) stepA();
+  ASSERT_TRUE(shown(turn));
+  EXPECT_EQ(a.dish->duelView().last.move[0].stance, Stance(1));
+  EXPECT_FALSE(a.dish->duelView().last.move[0].byPet) << "moved into in its turn: locked at the timeout";
+  for (int i = 0; i < 600 && !shown(uint8_t(turn + 1)) && a.dish->duelActive(); ++i) stepA();
+  if (!shown(uint8_t(turn + 1))) GTEST_SKIP() << "the duel ended before a next turn";
+  EXPECT_TRUE(a.dish->duelView().last.move[0].byPet) << "lying tilted since before the turn: the pet's pick";
 }
 
 // Level when the time runs out: the pet picks, as it always has.

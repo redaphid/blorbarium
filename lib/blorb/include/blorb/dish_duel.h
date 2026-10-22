@@ -73,7 +73,7 @@ class DishDuel {
   //  5 fight mode between fights: the pet's card refreshed, his readiness
   //    rechecked every tick; a pet who is no creature any more leaves it
   DuelStepped step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
-                   uint64_t lineageId, uint16_t petDay, uint32_t tick);
+                   uint64_t lineageId, uint16_t petDay, uint32_t tick, bool aimMoved = true);
 
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }

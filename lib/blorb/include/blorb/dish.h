@@ -260,6 +260,8 @@ class Dish {
   // screen (tilt_aim.h AimArming): unarmed, every reader sees level.
   AimArming arming_;
   bool choosing_ = false, armed_ = false;
+  int16_t turnSeen_ = -1;      // the duel turn being chosen (-1 none), and when it began: a move since arms its timeout (#24)
+  uint32_t turnFromMs_ = 0;
   int8_t armedAim() const { return armed_ ? detectors_.aim.aim() : int8_t(-1); }
   void watchChoice(uint32_t ms);
   DiagLines diag_;

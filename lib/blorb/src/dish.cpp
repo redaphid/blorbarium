@@ -224,7 +224,17 @@ void Dish::runOneTick(Link& link) {
   sideWas_ = side;
   tiltHist_[tick_ % kAimHistory][0] = tiltX, tiltHist_[tick_ % kAimHistory][1] = tiltY;
   const Fx aimX = side ? sideTilt_[0] : tiltX, aimY = side ? sideTilt_[1] : tiltY;
-  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
+  // The time running out locks the aim only when a hand moved the badge in
+  // this turn (#24): one left lying tilted since before it chooses nothing.
+  bool aimMoved = true;
+  if (duel_.active()) {
+    const DuelView v = duel_.view(tick_);
+    const int16_t turn = v.phase == DuelPhase::Choosing ? int16_t(v.hasLast ? v.lastTurn + 1 : 0) : int16_t(-1);
+    if (turn != turnSeen_) turnSeen_ = turn, turnFromMs_ = lastTickMs_;
+    aimMoved = arming_.movedSince(turnFromMs_);
+  }
+  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_,
+                 aimMoved)
           .save)
     save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {

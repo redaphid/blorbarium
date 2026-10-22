@@ -548,7 +548,8 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       // Time is up. Tilted, the aimed stance locks, as a knock would lock it
       // (the owner: "just tilting it and waiting until the time runs out
       // should select the action"); level, the pet picks, as it always has.
-      if (!locked && aim >= 0 && tick - b.chooseTick >= T::chooseTicks(o.resolved)) locked = b.mine.append(Move{Stance(aim)});
+      if (!locked && aim >= 0 && in.aimMoved && tick - b.chooseTick >= T::chooseTicks(o.resolved))
+        locked = b.mine.append(Move{Stance(aim)});
       if (!locked && tick - b.chooseTick >= T::chooseTicks(o.resolved)) {
         const Lean l = petChoice(b.skill, o, b.me, setup_.card, b.theirs, assistFor(b, me), b.battle.seed);
         locked = l.special != Windup::None && specialFits(b, l.special) && b.mine.appendSpecial(l.special, l.stance, true);

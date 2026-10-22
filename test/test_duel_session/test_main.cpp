@@ -512,7 +512,11 @@ void crowd(uint8_t n, uint32_t seeds) {
       std::vector<uint8_t> claimedBy(n, 0);
       for (uint8_t i = 0; i < n; ++i) {
         const DuelView v = all[i]->s.view(t);
-        const bool shows = uint8_t(v.phase) >= uint8_t(DuelPhase::Staking);
+        // In a fight: the stakes to the fall. The friends screen after it is a
+        // farewell each badge leaves on its own clock, so a friend may still
+        // show it a moment after the other has paired again (seen once the
+        // choose timer shrank each turn, #24).
+        const bool shows = uint8_t(v.phase) >= uint8_t(DuelPhase::Staking) && v.phase != DuelPhase::Friends;
         if (shows) {
           const int f = indexOf(v.them.lineageId);
           EXPECT_GE(f, 0);
