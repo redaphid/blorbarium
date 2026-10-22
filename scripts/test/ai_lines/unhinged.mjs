@@ -104,7 +104,14 @@ writeFileSync(join(dir, `unhinged_${prompt}.json`), JSON.stringify({ run, prompt
 
 // ---- the sheet: the leaders' wildest coherent lines ----
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const leaders = rows.filter(eligible).slice(0, top);
+// --leaders a,b,c: the decision's order (after the forced-ranking tie-break, unhinged_rank.mjs).
+const leaders = args.leaders
+  ? String(args.leaders).split(",").map((m) => rows.find((r) => r.model === m)).filter(Boolean)
+  : rows.filter(eligible).slice(0, top);
+const ranked = readJson(join(dir, `rank_${prompt}.json`));
+const rankTable = ranked ? `<div class="scroll"><table><thead><tr><th>model</th><th>Borda points</th><th>per ranking (max ${ranked.table.length - 1})</th><th>ranked first</th></tr></thead><tbody>${
+  ranked.table.map((r) => `<tr class="${leaders[0]?.model === r.model ? "lead" : ""}"><td>${esc(r.model)}</td><td>${r.points}</td><td>${r.perRanking.toFixed(2)}</td><td>${r.firsts} of ${ranked.rankings}</td></tr>`).join("")
+}</tbody></table></div><p><small>${ranked.rankings} rankings: ${ranked.pets.length} pets, judges ${ranked.judges.map((j) => esc(slug(j))).join(", ")} (none of them ranked), two shuffles each. Each judge saw the six leaders' lines for one pet side by side, anonymised, and ranked them by most unhinged while still making sense.</small></p>` : "";
 const sheetPets = String(args.pets || "grungo-b,gilly-b,mudge-b,octopus-b,hushwing-b").split(",");
 const SIT = Object.fromEntries(catalog.situations.map((s) => [s.name, s]));
 const picks = (model, id) => {
@@ -167,7 +174,8 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   ${leaders[0] ? `<p>Winner: <b>${esc(leaders[0].model)}</b>, unhinged ${f2(leaders[0].unhinged)}, makes sense ${f2(leaders[0].sense)}, $${leaders[0].usd.toFixed(3)} and ${f2(leaders[0].seconds, 0)} s per pet.</p>` : ""}
   ${args.note ? `<p>${esc(args.note)}</p>` : ""}
 </header>
-<section style="display:grid;gap:10px"><h2>Ranking</h2>${table}</section>
+<section style="display:grid;gap:10px"><h2>Scores</h2><p><small>Each judge scored each pack 1 to 5. Ranked by unhinged among models with makes-sense of at least ${floor} and full coverage; the greyed rows missed one of those (most often coverage: the always-thinking models' calls ran past five minutes and failed).</small></p>${table}</section>
+${rankTable ? `<section style="display:grid;gap:10px"><h2>Tie-break: the leaders ranked head to head</h2>${rankTable}</section>` : ""}
 <section style="display:grid;gap:14px"><h2>Wildest lines that still make sense</h2><p><small>The judges' picks from each leading model's pack, with the situation the line is said in (hover for when).</small></p>${cards}</section>
 </main>`;
 const out = join(ROOT, args.out || "docs/ai-lines/unhinged.html");

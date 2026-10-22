@@ -1,4 +1,85 @@
-# AI lines eval (run r1, 2026-10-21/22)
+# AI lines eval
+
+## Run r2 (2026-10-22): the most unhinged lines that still make sense
+
+The owner's goal for the model was: "the LLM that will produce the most 'unhinged' lines on Cloudflare AI that still make sense." The answer is **`@cf/moonshotai/kimi-k2.7-code` with prompt v4**. It is now the default (`web/wrangler.jsonc`, `web/src/pipeline.js`), at about $0.05 and about 70 s per pet. The sheet is `docs/ai-lines/unhinged.html`. It has the scores, the head-to-head ranking, and the three leaders' wildest coherent lines for five pets.
+
+### What was run
+
+- **Models.** Every chat model in the Workers AI catalog on 2026-10-22, 20 of them. The catalog's `clef` and `clairic` take structured input rather than chat, so they were left out.
+- **Pets.** The ten drifted fixture pets, one per species.
+- **Prompt.** v4 asks for lines that are unhinged but coherent, with no tone limits. Sampling is wilder: temperature 1.15, top_p 0.95.
+- **Checks.** The same mechanical checks and retries as r1.
+- **Absolute scores.** Two judges scored every pack 1 to 5 on UNHINGED (wild, absurd, chaotic, surprising) and MAKES SENSE (the reader gets it, it fits the situation). They also scored voice and genes, and picked each pack's wildest coherent lines. The judges were qwen3.8-27b (thinking off) and gpt-oss-120b. No judge scored its own model.
+- **Ranking rule.** Unhinged, among models with makes-sense ≥ 3.5 and full coverage.
+- **Tie-break.** The absolute scores bunched the six leaders within 0.25 and gave voice a 5 almost everywhere. So three judges that are not among the six ranked the six leaders head to head (gpt-oss-120b, llama-4-scout and glm-4.7-flash). For each pet, a judge saw all six writers' lines side by side, anonymised and shuffled, and ordered them by "most unhinged while still making sense". That is two shuffles per pet and judge, scored with Borda points.
+
+### Scores (makes-sense ≥ 3.5 and full coverage)
+
+| rank | model | unhinged | makes sense | coverage | first-pass valid | chars/line | $/pet | s/pet |
+|---|---|---|---|---|---|---|---|---|
+| 1 | **kimi-k2.7-code** | **4.05** | 4.60 | 100% | 82% | 25.8 | 0.049 | 68 |
+| 2 | deepseek-v4.1-flash | 3.95 | 4.70 | 100% | 59% | 27.1 | 0.024 | 52 |
+| 3 | gemma-4-26b | 3.95 | 4.65 | 100% | 97% | 22.0 | 0.003 | 38 |
+| 4 | gemma-sea-lion-v4-27b | 3.95 | 4.50 | 100% | 85% | 25.0 | 0.012 | 50 |
+| 5 | kimi-k2.6 | 3.95 | 4.40 | 100% | 59% | 26.9 | 0.070 | 124 |
+| 6 | qwen3.8-27b | 3.80 | 4.20 | 100% | 92% | 21.4 | 0.028 | 78 |
+| 7 | llama-4-scout | 3.00 | 4.10 | 100% | 97% | 18.6 | 0.007 | 33 |
+| 8 | qwen3-30b-a3b | 2.70 | 3.65 | 100% | 90% | 19.2 | 0.007 | 63 |
+| 9 | llama-3.3-70b | 2.45 | 3.90 | 100% | 97% | 10.4 | 0.013 | 47 |
+
+These models were out of the ranking:
+
+| model | unhinged / makes sense | coverage | why it is out |
+|---|---|---|---|
+| qwq-32b | 4.05 / 3.40 | 90% | below the floor; 423 s per pet |
+| glm-5.2 | 4.00 / 4.60 | 83% | $0.35 per pet; 213 s per pet |
+| deepseek-v4-flash-0731 | 3.85 / 4.40 | 59% | coverage |
+| nemotron-3-120b | 3.55 / 4.60 | 59% | coverage |
+| gpt-oss-120b | 3.40 / 3.80 | 86% | coverage |
+| mistral-small-3.1 | 3.70 / 1.60 | 68% | makes no sense |
+| gpt-oss-20b | 3.30 / 2.55 | 98% | makes no sense |
+| glm-4.7-flash | 2.90 / 4.35 | 80% | coverage, and tame |
+| glm-5.3-flash | – | 14% | coverage |
+| deepseek-v4-pro | – | 17% | coverage |
+| glm-5.3 | – | 3% | coverage |
+
+The always-thinking GLM-5.x and DeepSeek V4 Pro models think for minutes per call. Their calls ran past the five-minute response limit and failed, so most of their situations fell back to the built-in lines. They are too slow for this job whatever the score.
+
+### Head to head (60 rankings; Borda points out of 300)
+
+| model | points | ranked first |
+|---|---|---|
+| kimi-k2.6 | 197 | 14 |
+| **kimi-k2.7-code** | 196 | 8 |
+| deepseek-v4.1-flash | 186 | 17 |
+| gemma-sea-lion-v4-27b | 140 | 10 |
+| gemma-4-26b | 113 | 5 |
+| qwen3.8-27b | 68 | 6 |
+
+The judges split. llama-4-scout put k2.7-code first, gpt-oss-120b put deepseek-v4.1-flash first, and glm-4.7-flash put sea-lion and k2.6 first.
+
+### Why kimi-k2.7-code
+
+- **It wins on the owner's measure.** It has the highest absolute unhinged score with makes-sense comfortably above the floor (4.05 and 4.60).
+- **It ties the head-to-head.** The ranking puts it level with Kimi K2.6 (196 to 197), ahead of DeepSeek V4.1 Flash and well clear of the rest.
+- **It wins the tie on what the badge and the bill feel:**
+  - 82% of its lines fit the screen first time, against 59% for K2.6;
+  - a pack takes 68 s, against 124 s;
+  - it costs $0.049 per pet, against $0.070.
+
+Despite the "code" name it writes in voice, for example the octopus: "KNOCK KNOCK. IT IS DOOM.", "MOON IS A BIG FORGOTTEN PEA.", "NO. EVEN MY PEA AGREED."
+
+**The thrifty alternative is `deepseek-v4.1-flash`**, at $0.024 and 52 s per pet. Judges ranked it first most often (17 of 60), but they split on it, and only 59% of its lines fit first time. **The budget pick is still `gemma-4-26b`**, at $0.003 per pet with 97% first-pass validity, about half a point lower head to head.
+
+### Caveats
+
+- These are 10 pets, and the leaders are within judge noise of each other. The forced ranking is the fairer comparison, and it is a near tie at the top.
+- No Claude judge was used, because there is no Anthropic key.
+- A network outage during the run broke some packs. Those were regenerated; only packs that a model's own timeouts broke were kept as failures.
+- Re-run with `bash scripts/test/ai_lines/run_unhinged.sh`, then `node scripts/test/ai_lines/unhinged_rank.mjs --run r2 --models <the leaders>`.
+
+# Run r1 (2026-10-21/22)
 
 The question for #37 was which Workers AI model and prompt should write each pet's character and lines. The answer is **`@cf/moonshotai/kimi-k2.6` with prompt v3**, at about $0.06 and 1.5 to 2 minutes per pet. Prompt v3 has the owner's brief: no tone limits, and dark, sad, cheeky and weird are welcome. If cost matters more than voice, the fallback is `@cf/google/gemma-4-26b-a4b-it` at $0.003 per pet, 20 times cheaper and scored about one point lower on voice and humour.
 
