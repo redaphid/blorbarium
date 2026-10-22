@@ -41,6 +41,11 @@ export function fakeAI({ mischief = false, failWith = null } = {}) {
       calls.push({ model, input });
       if (failWith) throw new Error(failWith);
       const last = input.messages[input.messages.length - 1].content;
+      if (/today's diary entry/.test(last)) {
+        const fed = /- (\S*feeds?\S*): (\d+)/.exec(last);
+        return { choices: [{ message: { content: JSON.stringify({
+          entry: `Dear diary. ${fed ? `I was fed ${fed[2]} times. Delicious.` : "A quiet day."} I counted the dish twice.` }) } }] };
+      }
       if (/character bible/.test(last) && !/lines for each situation/.test(last)) {
         return { choices: [{ message: { content: JSON.stringify({
           bible: "A small grumpy test pet who counts everything twice and hates puddles. ".repeat(4),

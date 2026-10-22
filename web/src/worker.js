@@ -6,16 +6,21 @@
 //                              -> 200 {bible, lines, version, text, sig, ...} | 202 {status: "queued"}
 //   GET  /api/pet-lines?mac=&genome_hash=   the newest pack, or 202 while it is being written
 //   POST /api/pet-lines/ack    {mac, genome_hash, version}: the badge stored it
+//   POST /api/stats            {mac, genome | genome_hash, stats_version?, stats?, parents?, analytics?, fw?}  (#38, #50)
+//   GET  /api/diary?mac=&genome_hash=   the pet's diary, newest first (#39, for the phone #42)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
-// The cron (wrangler.jsonc triggers) writes the packs a POST queued instead of waiting for.
+// Crons (wrangler.jsonc triggers): every 10 minutes, the packs a POST queued
+// instead of waiting for; once a day (DIARY_CRON), each pet's diary entry.
 import { hexToBytes, rawSheet, genomeHash } from "./genome.js";
 import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
+import { storeUpload, runDiaries, diaryFor } from "./diary.js";
 
 const MAX_BODY = 64 * 1024;
+export const DIARY_CRON = "0 4 * * *";   // daily, 04:00 UTC: after a night's stats, before the family's morning
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const json = (body, status = 200, headers = {}) =>
@@ -174,6 +179,40 @@ async function isAdmin(request, env) {
   return d === 0;
 }
 
+// The creature an upload or a read names: by genome hash, or by the genome itself.
+async function creatureOf(env, mac, body) {
+  let hash = String(body.genome_hash ?? "").toLowerCase();
+  if (!hash && body.genome) {
+    try { hash = await genomeHash(hexToBytes(body.genome)); } catch { return null; }
+  }
+  return /^[0-9a-f]{64}$/.test(hash) ? store.findCreature(env.DB, mac, hash) : null;
+}
+
+async function postStats(request, env) {
+  let body;
+  try { body = await readBody(request); } catch (e) { return fail(400, `bad request: ${e.message}`); }
+  const mac = normaliseMac(body.mac);
+  if (!mac) return fail(400, "mac: 12 hex digits");
+  if (env.PET_LINES_LIMITER) {
+    const { success } = await env.PET_LINES_LIMITER.limit({ key: `stats:${mac}` });
+    if (!success) return fail(429, "slow down");
+  }
+  await store.touchBadge(env.DB, mac, body.fw ?? null);
+  const creature = await creatureOf(env, mac, body);
+  if (body.stats && !creature) return fail(404, "unknown creature: POST /api/pet-lines first");
+  const r = await storeUpload(env.DB, { mac, creatureId: creature?.id ?? null, statsVersion: Number(body.stats_version) || 1,
+    stats: body.stats, parents: body.parents, analytics: body.analytics, fw: body.fw,
+    periodStart: body.period_start, periodEnd: body.period_end });
+  return json({ ok: true, stats_id: r.statsId, analytics_id: r.uploadId });
+}
+
+async function getDiary(url, env) {
+  const mac = normaliseMac(url.searchParams.get("mac"));
+  const creature = mac && (await creatureOf(env, mac, { genome_hash: url.searchParams.get("genome_hash") }));
+  if (!creature) return fail(404, "unknown creature");
+  return json({ creature_id: creature.id, entries: await diaryFor(env.DB, creature.id) });
+}
+
 export async function runQueuedJobs(env, limit = 3) {
   const jobs = await store.queuedJobs(env.DB, limit);
   for (const j of jobs) {
@@ -196,6 +235,8 @@ export default {
       if (url.pathname === "/api/pet-lines" && request.method === "POST") return await postPetLines(request, env, ctx);
       if (url.pathname === "/api/pet-lines" && request.method === "GET") return await getPetLines(url, env);
       if (url.pathname === "/api/pet-lines/ack" && request.method === "POST") return await ackPetLines(request, env);
+      if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
+      if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);
       if (url.pathname === "/api/creatures" && request.method === "GET") {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");
         return json(await store.exportAll(env.DB, { mac: normaliseMac(url.searchParams.get("mac")) }));
@@ -209,6 +250,7 @@ export default {
   },
   // A cron run awaits its work (it has minutes, not the request's waitUntil budget).
   async scheduled(controller, env) {
-    await runQueuedJobs(env);
+    if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) await runDiaries(env);
+    else await runQueuedJobs(env);
   },
 };
