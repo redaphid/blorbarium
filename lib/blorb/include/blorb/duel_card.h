@@ -83,7 +83,7 @@ Decline readiness(const Occupant&, uint8_t lossesInARow, uint32_t ticksSinceLast
 // is, so `top` is where the first refusal stops him. The pet's own limits are
 // here: his stage against StakesRule::youngestStage, a Spar while he is
 // Wounded, a tier whose forecast() skull is full, and the device's ceiling.
-// The fairness rules (maxAssistHearts, minManualTurns, the head-to-head floor)
+// The fairness rules (maxAssistSteps, minManualTurns, the head-to-head floor)
 // need both cards and are the session's.
 struct Ceiling {
   Stakes top = Stakes::Spar;

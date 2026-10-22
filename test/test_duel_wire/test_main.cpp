@@ -27,7 +27,7 @@ BattleCard card(uint8_t salt) {
 
 StatePacket state() {
   StatePacket p;
-  p.roster = rosterHash();
+  p.roster = duelRulesHash();
   p.battle = BattleId{duelSeed(11, 22, 1, Stakes::Mortal), 1, Stakes::Mortal};
   p.nonce = 11;
   p.chosen = Stakes::Mortal;
@@ -103,7 +103,7 @@ TEST(DuelWire, StateRoundTripsWithAVerdictAfterATurn15Downing) {
 
 TEST(DuelWire, ABeaconNeverBroadcastsTheLineage) {
   BeaconPacket p;
-  p.roster = rosterHash();
+  p.roster = duelRulesHash();
   p.nonce = 77;
   p.wants = PeerAddr{{2, 0, 0, 0, 0, 9}};
   p.seq = 0xBEEF;

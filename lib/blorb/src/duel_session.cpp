@@ -76,12 +76,12 @@ DuelInput DuelInput::from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx til
 Ceiling pairCeiling(const Ceiling& pet, const BattleCard& mine, const BattleCard& theirs, uint32_t myManualTurns,
                     DuelBook::HeadToHead h2h, uint8_t forKeepsToday) {
   Ceiling c = pet;
-  const uint8_t assist = std::max(Assist::hearts(mine.prowess, theirs.prowess), Assist::hearts(theirs.prowess, mine.prowess));
+  const uint8_t assist = std::max(Assist::steps(mine.prowess, theirs.prowess), Assist::steps(theirs.prowess, mine.prowess));
   const uint16_t lower = std::min(h2h.myWins, h2h.theirWins);
   const bool lopsided = h2h.duels >= kHeadToHeadMin && uint32_t(lower) * 1000 < uint32_t(kHeadToHeadFloor) * h2h.duels;
   for (uint8_t tier = u8(Stakes::Scrap); tier <= u8(Stakes::Mortal) && tier <= u8(c.top); ++tier) {
     const StakesRule& r = rule(Stakes(tier));
-    if (assist > r.maxAssistHearts || myManualTurns < r.minManualTurns || (r.headToHead && lopsided) ||
+    if (assist > r.maxAssistSteps || myManualTurns < r.minManualTurns || (r.headToHead && lopsided) ||
         forKeepsToday >= kForKeepsPerPairPerDay) {
       c.top = Stakes(tier - 1);
       break;
@@ -181,7 +181,7 @@ std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
     return false;   // whom he claims is out of my hearing: take him at his word
   };
   const auto open = [&](const Lobby::Seen& s) {
-    return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
+    return s.beacon.roster == duelRulesHash() && s.beacon.decline == Decline::None &&
            (s.beacon.wants.none() || s.beacon.wants == self_ || pending(s)) && (!setup_.pin || s.addr == setup_.pin->peer);
   };
   const auto want = [&](std::optional<uint8_t> i) {
@@ -283,7 +283,7 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
 
 void DuelSession::beacon(Air& air, PeerAddr wants) {
   BeaconPacket p;
-  p.roster = rosterHash();
+  p.roster = duelRulesHash();
   p.nonce = setup_.nonce;
   p.wants = wants;
   p.seq = ++beaconSeq_;
@@ -368,7 +368,7 @@ void DuelSession::onState(Battle& b, const StatePacket& st, uint32_t tick) {
 
 void DuelSession::sendState(Battle& b, Air& air, uint32_t tick, const Farewell* f, bool leaving) {
   StatePacket st;
-  st.roster = rosterHash();
+  st.roster = duelRulesHash();
   st.battle = b.battle;
   st.nonce = setup_.nonce;
   st.chosen = b.chosen;
@@ -404,7 +404,7 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
     const std::optional<Packet> p = decode(d->bytes, d->len);
     if (!p) continue;
     if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
-      if (st->roster == rosterHash() && sameBout(b, st->battle)) onState(b, *st, tick);
+      if (st->roster == duelRulesHash() && sameBout(b, st->battle)) onState(b, *st, tick);
     } else if (const BeaconPacket* bp = std::get_if<BeaconPacket>(&*p)) {
       // A beacon newer than the one that locked us: still claiming me in this
       // pairing, or searching again (they gave up on it), which ends it here too.
@@ -726,7 +726,7 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
     const std::optional<Packet> p = decode(d->bytes, d->len);
     if (!p) continue;
     if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
-      if (st->roster != rosterHash() || st->battle != b.battle) continue;
+      if (st->roster != duelRulesHash() || st->battle != b.battle) continue;
       b.lastHeard = tick;
       f.theyAsked = f.theyAsked || st->rematch;
       theyLeft = theyLeft || st->leaving;
@@ -853,7 +853,7 @@ DuelView DuelSession::view(uint32_t tick) const {
     for (uint8_t i = 0; i < v.peerCount; ++i) {
       const Lobby::Seen& s = l->seen[i];
       v.peers[i] = DuelView::Peer{s.beacon.card.species, s.beacon.card.look, s.beacon.decline, s.beacon.wants == self_,
-                                  l->wants == s.addr, s.beacon.roster == rosterHash()};
+                                  l->wants == s.addr, s.beacon.roster == duelRulesHash()};
     }
     return v;
   }
@@ -906,7 +906,8 @@ DuelView DuelSession::view(uint32_t tick) const {
       v.phaseTicks = uint16_t(tick - b.chooseTick);
       const uint32_t spent = tick - b.chooseTick;
       v.chooseTicksLeft = uint16_t(spent >= T::kChooseTicks ? 0 : T::kChooseTicks - spent);
-      v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, v.assistHearts[0], b.battle.seed);
+      v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, Assist::steps(setup_.card.prowess, b.theirs.prowess),
+                         b.battle.seed);
     }
   }
   v.aim = aim_;

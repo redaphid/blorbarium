@@ -31,7 +31,7 @@ inline constexpr uint8_t kWireMagic0 = 'b', kWireMagic1 = 'D', kWireVersion = 2;
 enum class Emote : uint8_t { None, Heart, Star, Laugh, Wave, Plead };
 
 struct BeaconPacket {
-  uint16_t roster = 0;           // rosterHash(): a mismatch greys the friend out
+  uint16_t roster = 0;           // duelRulesHash() (duel.h): the roster and the rules; a mismatch greys the friend out
   uint32_t nonce = 0;            // fresh per open(); half the battle seed
   PeerAddr wants{};              // whom I claim (none: nobody); a claim on someone else says "already paired"
   uint16_t seq = 0;              // bumps per beacon from this session, so a late one never overrides a newer

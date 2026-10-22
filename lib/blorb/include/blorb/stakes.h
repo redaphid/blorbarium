@@ -39,7 +39,7 @@ struct StakesRule {
   Fx injuryCapPerDuel;      // the most one duel can add (before the woundRoom clamp)
   bool scars, traits, downs;
   Stage youngestStage;      // both pets must be at least this old
-  uint8_t maxAssistHearts;  // the fight must be this fair (Assist::hearts) or the tier is refused
+  uint8_t maxAssistSteps;   // the fight must be this fair (Assist::steps) or the tier is refused
   uint16_t minManualTurns;  // both kids must have picked this many turns themselves
   bool headToHead;          // the two lines' record must not be lopsided (kHeadToHeadFloor)
   enum class Confirm : uint8_t { Knock, Press, Hold3s } confirm;

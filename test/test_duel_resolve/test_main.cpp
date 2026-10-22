@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstring>
 #include <set>
 #include "blorb/duel.h"
@@ -115,7 +116,7 @@ TEST(Hearts, StayWithinZeroAndMaxEveryTurn) {
       const Outcome o = resolve(a, b, seed, Stakes::Spar, pa, pb);
       for (const SideState& s : o.side) {
         ASSERT_LE(s.hearts, s.maxHearts);
-        ASSERT_LE(s.maxHearts, DuelRules::kHearts + DuelRules::kMaxAssistHearts);
+        ASSERT_LE(s.maxHearts, DuelRules::kHearts + DuelRules::kMaxAssistSteps * DuelRules::kAssistStepHearts);
         ASSERT_LE(s.spark, kMeterMax);
       }
     }
@@ -196,7 +197,7 @@ TEST(Special, AQuickBracesOneTurnThenLandsForTwo) {
   EXPECT_EQ(o.turns[3].clash, Clash::Bonk) << "a guard does nothing to a bracer";
   EXPECT_EQ(o.turns[3].hit[0] + o.turns[3].hit[1], 0);
   EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[4].hit[1], 1 + SpecialRules::kQuickExtra);
+  EXPECT_EQ(o.turns[4].hit[1], SpecialRules::hearts(Windup::Quick));
   EXPECT_TRUE(o.turns[4].powered[0]);
   EXPECT_EQ(o.side[0].queued, Windup::None);
 }
@@ -207,19 +208,19 @@ TEST(Special, AHeavyBracesTwoTurnsThenLandsForThree) {
   EXPECT_TRUE(o.turns[4].bracing[0]);
   EXPECT_EQ(o.turns[3].clash, Clash::Bonk) << "a pounce bonks off a bracer";
   EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[5].hit[1], 1 + SpecialRules::kHeavyExtra);
+  EXPECT_EQ(o.turns[5].hit[1], SpecialRules::hearts(Windup::Heavy));
 }
 
 TEST(Special, ATieGoesToTheSpecial) {
   const Outcome o = play(kMudge, gillyCard, "PPPqg", "PPPPG");
   EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[4].hit[1], 2);
+  EXPECT_EQ(o.turns[4].hit[1], SpecialRules::hearts(Windup::Quick));
 }
 
 TEST(Special, ACounteredLandingIsRipostedAndThePowerDoesNotFire) {
   const Outcome o = play(kMudge, gillyCard, "PPPh_p", "PPPPPG");
   EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Riposted);
-  EXPECT_EQ(o.turns[5].hit[0], 1 + SpecialRules::kHeavyExtra);
+  EXPECT_EQ(o.turns[5].hit[0], SpecialRules::hearts(Windup::Heavy));
   EXPECT_EQ(o.turns[5].hit[1], 0);
   EXPECT_FALSE(o.turns[5].powered[0]);
   EXPECT_EQ(o.side[0].bonkTurns, 0);
@@ -229,11 +230,11 @@ TEST(Special, ATrickStaggersABracerAndAStaggeredQuickLandsPlain) {
   const Outcome o = play(kMudge, gillyCard, "PPPqp", "PPPTT");
   EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Staggered);
   EXPECT_EQ(o.turns[3].clash, Clash::BWins);
-  EXPECT_EQ(o.turns[3].hit[0], 1);
+  EXPECT_EQ(o.turns[3].hit[0], DuelRules::kClashHearts);
   EXPECT_FALSE(o.turns[4].bracing[0]);
   EXPECT_EQ(o.turns[4].special[0], TurnReport::Special::None);
   EXPECT_EQ(o.turns[4].clash, Clash::AWins) << "the landing entry's pounce, played plain";
-  EXPECT_EQ(o.turns[4].hit[1], 1) << "one heart, not the special's two";
+  EXPECT_EQ(o.turns[4].hit[1], DuelRules::kClashHearts) << "a clash's hearts, not the special's";
   EXPECT_FALSE(o.turns[4].powered[0]);
 }
 
@@ -242,7 +243,7 @@ TEST(Special, AStaggeredHeavyDropsToQuickStrength) {
   EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Staggered);
   EXPECT_TRUE(o.turns[4].bracing[0]) << "still winding up";
   EXPECT_EQ(o.turns[5].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[5].hit[1], 1 + SpecialRules::kQuickExtra);
+  EXPECT_EQ(o.turns[5].hit[1], SpecialRules::hearts(Windup::Quick));
 }
 
 TEST(Special, AsleepOnItsLandingTurnTheSpecialIsLost) {
@@ -255,7 +256,7 @@ TEST(Special, AsleepOnItsLandingTurnTheSpecialIsLost) {
   EXPECT_TRUE(o.turns[8].dozed[1]);
   EXPECT_FALSE(o.turns[8].powered[1]);
   EXPECT_EQ(o.side[1].queued, Windup::None);
-  EXPECT_EQ(o.turns[8].hit[1], 1) << "a trick beats a sleeper";
+  EXPECT_EQ(o.turns[8].hit[1], DuelRules::kClashHearts) << "a trick beats a sleeper";
 }
 
 // ---- one case per power -------------------------------------------------------------
@@ -266,7 +267,7 @@ TEST(Powers, ForeseeWhiffsWhereOthersAreRiposted) {
   EXPECT_EQ(foresee.turns[6].hit[0] + foresee.turns[6].hit[1], 0);
   const Outcome mend = play(gillyCard, grungoCard, "PPPPPPqp", "PPPPPPGG");
   EXPECT_EQ(mend.turns[7].special[0], TurnReport::Special::Riposted);
-  EXPECT_EQ(mend.turns[7].hit[0], 2);
+  EXPECT_EQ(mend.turns[7].hit[0], SpecialRules::hearts(Windup::Quick));
 }
 
 TEST(Powers, ShellStaysUpUntilAHitUsesIt) {
@@ -275,16 +276,16 @@ TEST(Powers, ShellStaysUpUntilAHitUsesIt) {
   ASSERT_EQ(o.turns[6].special[0], TurnReport::Special::Landed);
   EXPECT_TRUE(o.side[0].shell == false) << "used on turn 7";
   EXPECT_EQ(o.turns[7].clash, Clash::BWins);
-  EXPECT_EQ(o.turns[7].hit[0], 0);
+  EXPECT_EQ(o.turns[7].hit[0], std::max(0, DuelRules::kClashHearts - PowerRules::kShellHearts));
   EXPECT_TRUE(o.turns[7].blocked[0]);
-  EXPECT_EQ(o.turns[8].hit[0], 1);
+  EXPECT_EQ(o.turns[8].hit[0], DuelRules::kClashHearts);
 }
 
 TEST(Powers, ZapAddsAHeartToTheLanding) {
   const BattleCard fizz = cardOf(sp::fizz, 1), mothwick = cardOf(sp::mothwick, 2);
   const Outcome o = play(fizz, mothwick, "PPPPPPqp", "PPPPPPPT");
   ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[7].hit[1], 2 + 1);
+  EXPECT_EQ(o.turns[7].hit[1], SpecialRules::hearts(Windup::Quick) + PowerRules::kZapHearts);
 }
 
 TEST(Powers, ZapAgainstShellLosesOneHeartToIt) {
@@ -293,7 +294,7 @@ TEST(Powers, ZapAgainstShellLosesOneHeartToIt) {
   const Outcome o = play(fizz, mossby, "PPPPPPqp", "PPPPPqgP");
   ASSERT_EQ(o.turns[6].special[1], TurnReport::Special::Landed);
   ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(o.turns[7].hit[1], 2);
+  EXPECT_EQ(o.turns[7].hit[1], SpecialRules::hearts(Windup::Quick) + PowerRules::kZapHearts - PowerRules::kShellHearts);
   EXPECT_TRUE(o.turns[7].blocked[1]);
   EXPECT_FALSE(o.side[1].shell);
 }
@@ -304,13 +305,13 @@ TEST(Powers, SporesPutTheFriendToSleepNextTurn) {
   ASSERT_EQ(o.turns[7].special[0], TurnReport::Special::Landed);
   EXPECT_TRUE(o.turns[8].dozed[1]);
   EXPECT_EQ(o.turns[8].clash, Clash::AWins) << "even trick beats a sleeper";
-  EXPECT_EQ(o.turns[8].hit[1], 1);
+  EXPECT_EQ(o.turns[8].hit[1], DuelRules::kClashHearts);
 }
 
 TEST(Powers, MendGrowsBackAHeartButNeverPastFull) {
   const Outcome hurt = play(gillyCard, grungoCard, "PPPPPqp", "GPPPPPT");
   ASSERT_EQ(hurt.turns[6].special[0], TurnReport::Special::Landed);
-  EXPECT_EQ(hurt.turns[6].healed[0], 1);
+  EXPECT_EQ(hurt.turns[6].healed[0], std::min(PowerRules::kMendHearts, DuelRules::kClashHearts));
   EXPECT_EQ(hurt.side[0].hearts, DuelRules::kHearts);
   const Outcome full = play(gillyCard, grungoCard, "PPPPPPqp", "PPPPPPPT");
   ASSERT_EQ(full.turns[7].special[0], TurnReport::Special::Landed);
@@ -321,7 +322,7 @@ TEST(Powers, DashWinsTheNextHeadBonk) {
   const Outcome o = play(kMudge, gillyCard, "PPPqpPP", "PPPGTPP");
   ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
   EXPECT_EQ(o.turns[5].clash, Clash::AWins);
-  EXPECT_EQ(o.turns[5].hit[1], 1);
+  EXPECT_EQ(o.turns[5].hit[1], DuelRules::kClashHearts);
   EXPECT_EQ(o.turns[6].clash, Clash::Bonk);
 }
 
@@ -335,7 +336,7 @@ TEST(Powers, HushWhiffsTheNextSpecialAndCancelsTheNextLostClash) {
   ASSERT_EQ(clash.turns[6].special[0], TurnReport::Special::Landed);
   EXPECT_EQ(clash.turns[7].hit[0], 0);
   EXPECT_TRUE(clash.turns[7].blocked[0]);
-  EXPECT_EQ(clash.turns[8].hit[0], 1) << "worn off";
+  EXPECT_EQ(clash.turns[8].hit[0], DuelRules::kClashHearts) << "worn off";
 }
 
 TEST(Powers, BlackBellUsesItsTwoTurnHush) {
@@ -348,7 +349,7 @@ TEST(Powers, BlackBellUsesItsTwoTurnHush) {
   ASSERT_EQ(clash.turns[6].special[0], TurnReport::Special::Landed);
   EXPECT_EQ(clash.turns[7].hit[0], 0);
   EXPECT_TRUE(clash.turns[7].blocked[0]);
-  EXPECT_EQ(clash.turns[8].hit[0], 1) << "the Black Bell's hush has worn off";
+  EXPECT_EQ(clash.turns[8].hit[0], DuelRules::kClashHearts) << "the Black Bell's hush has worn off";
 }
 
 TEST(Powers, LanternDazzlesTheFriendNextTurn) {
@@ -358,7 +359,7 @@ TEST(Powers, LanternDazzlesTheFriendNextTurn) {
     const Outcome o = play(mothwick, fizz, "PPPqtTT", "PPPPGPP", Stakes::Spar, seed);
     ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
     landed += o.turns[5].hit[0];
-    ASSERT_EQ(o.turns[6].hit[0], 1) << "worn off";
+    ASSERT_EQ(o.turns[6].hit[0], DuelRules::kClashHearts) << "worn off";
   }
   EXPECT_GT(landed, 400);
   EXPECT_LT(landed, 600);
@@ -437,12 +438,12 @@ TEST(TurnHits, HeartsKindAndLuckPerTurn) {
   const Outcome o = play(fizz, mothwick, "PPPPPPqpT", "TPPPPPPTG");
   TurnHit hits[DuelRules::kMaxTurns]{};
   turnHits(o, Side::B, 1, mothwick, fizz, hits);
-  EXPECT_EQ(hits[0].hearts, 1);
+  EXPECT_EQ(hits[0].hearts, DuelRules::kClashHearts);
   EXPECT_EQ(hits[0].kind, Scar::Kind::Claw) << "a pounce claws";
   EXPECT_EQ(hits[1].hearts, 0);
-  EXPECT_EQ(hits[7].hearts, 3) << "a quick landing and its zap";
+  EXPECT_EQ(hits[7].hearts, SpecialRules::hearts(Windup::Quick) + PowerRules::kZapHearts) << "a quick landing and its zap";
   EXPECT_EQ(hits[7].kind, Scar::Kind::Bite) << "a zap bites";
-  EXPECT_EQ(hits[8].hearts, 1);
+  EXPECT_EQ(hits[8].hearts, DuelRules::kClashHearts);
   EXPECT_EQ(hits[8].kind, Scar::Kind::Scorch) << "a spark pet's trick scorches";
   EXPECT_NE(hits[0].luck, hits[7].luck);
 }
