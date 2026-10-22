@@ -274,6 +274,8 @@ class Thinker {
   // face and glow, and the shake's hop does not show; while he says the
   // phone's line he wears the croak face.
   void show(Appearance&, uint32_t tick) const;
+  // Foretellings told (a shake's trance ended in its answer) since boot: the life stats count them (life_tally.h).
+  uint32_t foretold() const { return foretold_; }
 
   static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one
   static constexpr uint32_t kTranceTicks = 12;                         // a shake's trance: the swirl before the answer lands
@@ -298,6 +300,7 @@ class Thinker {
   uint32_t fortuneDay_ = 0xFFFFFFFFu;                   // the pet day whose first foretelling is still owed
   std::optional<Shown> now_;
   std::optional<Trance> trance_;
+  uint32_t foretold_ = 0;
 };
 
 }  // namespace blorb

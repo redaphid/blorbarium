@@ -1,0 +1,71 @@
+// Life stats (life_tally.h, docs/life-stats.md): what one pet's life did,
+// counted as it happens, for the server's personality and diary (#37-#40).
+// Bookkeeping only: nothing in the engine reads them back.
+//
+// The row's position is its slot in life.stats, so a row is only ever added
+// at the end, never moved, renamed or removed (a retired one keeps its slot
+// and name). A file with fewer slots reads the rest as 0; one with more
+// keeps the extra slots it does not know and writes them back.
+//
+//   Count  a plain count, saturating at 2^32 - 1
+//   Ticks  powered (or caught-up) time in 100 ms ticks, printed in seconds as <name>_s
+//   Code   an enum code (below), 0 when it has not happened
+//
+// BLORB_LIFE_STAT(slot, name, unit)
+// ---- the kid's hands: gestures from the detectors (the phone's never count) ----
+BLORB_LIFE_STAT( 0, presses,        Count)   // the press word: BOOT pressed, or its twin the knock knock
+BLORB_LIFE_STAT( 1, knock_knocks,   Count)   // two knocks on the case
+BLORB_LIFE_STAT( 2, knocks,         Count)   // one knock (a lock-in, a spare, a nudge)
+BLORB_LIFE_STAT( 3, double_presses, Count)   // BOOT pressed twice
+BLORB_LIFE_STAT( 4, holds,          Count)   // the hold word: BOOT held, or turned onto a side and held
+BLORB_LIFE_STAT( 5, side_holds,     Count)   // ...of those, the side hold
+BLORB_LIFE_STAT( 6, hangs,          Count)   // held upside down: the fight ask
+BLORB_LIFE_STAT( 7, shakes,         Count)
+BLORB_LIFE_STAT( 8, tilts,          Count)   // tipped into an aim sector from level
+BLORB_LIFE_STAT( 9, cradles,        Count)   // held still in a hand (a cuddle; every 10 s while it lasts)
+BLORB_LIFE_STAT(10, pickups,        Count)
+BLORB_LIFE_STAT(11, drops,          Count)   // free fall, then a landing
+BLORB_LIFE_STAT(12, face_downs,     Count)   // the lid: face down, bedtime
+BLORB_LIFE_STAT(13, held,           Ticks)   // time in a hand (the held sense) while he lived
+BLORB_LIFE_STAT(14, phone_visits,   Count)   // a phone connected
+// ---- feeding ----
+BLORB_LIFE_STAT(15, pellets,        Count)   // a press reached him and a pellet left the pantry
+BLORB_LIFE_STAT(16, refused_empty,  Count)   // a press found the pantry empty
+BLORB_LIFE_STAT(17, refused_asleep, Count)   // a pellet dropped while he slept
+BLORB_LIFE_STAT(18, refused_full,   Count)   // a pellet dropped while he was full
+BLORB_LIFE_STAT(19, bites,          Count)   // he ate a pellet
+BLORB_LIFE_STAT(20, rotten_bites,   Count)   // ...and it was rotten
+// ---- his body and mind ----
+BLORB_LIFE_STAT(21, prophecies,     Count)   // a shake's foretelling landed (its trance ran to the answer)
+BLORB_LIFE_STAT(22, starving_spells, Count)  // hunger rose past 0.8 (the "starving" line's gate), counted again after it fell under 0.5
+BLORB_LIFE_STAT(23, starving,       Ticks)
+BLORB_LIFE_STAT(24, sick_spells,    Count)   // toxin past 0.3 (rotten food), again after under 0.15
+BLORB_LIFE_STAT(25, sick,           Ticks)
+BLORB_LIFE_STAT(26, hurt_spells,    Count)   // injury past 0.4, again after under 0.2
+BLORB_LIFE_STAT(27, hurt,           Ticks)
+BLORB_LIFE_STAT(28, naps,           Count)   // he fell asleep
+BLORB_LIFE_STAT(29, asleep,         Ticks)
+BLORB_LIFE_STAT(30, away,           Ticks)   // unpowered time lived in a catch-up
+BLORB_LIFE_STAT(31, long_absences,  Count)   // a gap long enough to hurt him (three weeks)
+// ---- duels ----
+BLORB_LIFE_STAT(32, fights_opened,  Count)   // fight mode entered
+BLORB_LIFE_STAT(33, battles,        Count)   // a duel fought to its end (a meeting in the book)
+BLORB_LIFE_STAT(34, won,            Count)
+BLORB_LIFE_STAT(35, lost,           Count)
+BLORB_LIFE_STAT(36, drawn,          Count)   // a draw, or the friend wandered off
+BLORB_LIFE_STAT(37, fizzled,        Count)   // ...of the draws, the friend wandered off or a lid ended it
+BLORB_LIFE_STAT(38, spars,          Count)
+BLORB_LIFE_STAT(39, scraps,         Count)
+BLORB_LIFE_STAT(40, mortals,        Count)
+BLORB_LIFE_STAT(41, spared_one,     Count)   // he downed a friend's pet and spared it
+BLORB_LIFE_STAT(42, was_spared,     Count)   // he was downed and spared
+BLORB_LIFE_STAT(43, slew,           Count)   // he finished a friend's pet
+BLORB_LIFE_STAT(44, fell,           Count)   // he was finished in a Mortal duel (his death's cause reads injured)
+BLORB_LIFE_STAT(45, fainted,        Count)   // he lost every heart (any stakes) and swooned
+BLORB_LIFE_STAT(46, fled,           Count)   // downed, and the cable came out before the verdict
+// ---- his life's milestones (ages in his own life, powered and caught up) ----
+BLORB_LIFE_STAT(47, age,            Ticks)   // his age now, or at his death
+BLORB_LIFE_STAT(48, child_at,       Ticks)   // 0: not reached
+BLORB_LIFE_STAT(49, adult_at,       Ticks)
+BLORB_LIFE_STAT(50, elder_at,       Ticks)
+BLORB_LIFE_STAT(51, death,          Code)    // 0 alive; else 1 + DeathCause: 1 old_age, 2 starved, 3 injured, 4 poisoned, 5 unknown

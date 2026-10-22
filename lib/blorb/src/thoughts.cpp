@@ -405,6 +405,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
     } else {
       const Trance t = *trance_;
       trance_.reset();
+      ++foretold_;   // the answer lands: a prophecy he told
       Rng rng = seededFor(life_, tick, kOracleSalt);
       return start(c, lineage, phone, t.pick, tick, rng, t.verdict);
     }
