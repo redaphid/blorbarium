@@ -21,3 +21,4 @@ BLORB_CMD(TIME,     time,     kMutating)  // TIME <unixSeconds> [tzMinutes]: the
 BLORB_CMD(ADOPT,    adopt,    0)          // ADOPT: the owner takes the egg, so it may hatch; ADOPT status: asks
 BLORB_CMD(SUB,      sub,      0)
 BLORB_CMD(HASH,     hash,     0)
+BLORB_CMD(STATS,    stats,    0)          // STATS: life stats as k=v lines; STATS json: life and analytics, chunked; STATS ack <seq> (docs/life-stats.md)

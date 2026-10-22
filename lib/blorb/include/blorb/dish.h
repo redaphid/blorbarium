@@ -14,6 +14,7 @@
 #include "blorb/gesture_cues.h"
 #include "blorb/habitat.h"
 #include "blorb/keepsake.h"
+#include "blorb/life_tally.h"
 #include "blorb/lineage.h"
 #include "blorb/protocol.h"
 #include "blorb/seams.h"
@@ -127,6 +128,20 @@ class Dish {
   bool teach(std::string_view line);
   bool unteach();                  // TWIST unteach: he forgets every taught line; false as teach
   const Taught& taught() const { return taught_; }
+  // What his life did and how the badge is doing (life_tally.h, analytics.h):
+  // bookkeeping only, never read back by the engine, so no decision, save or
+  // hash moves with it.
+  const LifeTally& tally() const { return stats_.life; }
+  const Stats& stats() const { return stats_; }
+  // The firmware's half of the analytics: one increment or bin at a time.
+  Analytics& analytics() { return stats_.analytics; }
+  // life.stats written now, not waiting for the next keepsake save: the
+  // firmware asks as the badge goes dark, so a crash in low power loses
+  // nothing counted. False when it did not land (a trial, a sealed pet).
+  bool saveStats();
+  // STATS ack <seq>: the server has the closed analytics buckets up to seq.
+  // They go, and the file is written at the next save. False: none to drop.
+  bool ackStats(uint32_t seq);
   // One body byte of the creature's genome, recorded in the lineage. False
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
@@ -214,6 +229,9 @@ class Dish {
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
   bool save();
+  void resumeStats(bool fresh);
+  void saveStatsDue();
+  void countDuel();
 
   Storage& store_;
   Keepsake keep_;
@@ -260,6 +278,12 @@ class Dish {
   std::optional<uint32_t> lastPhoneTick_;
   std::optional<int16_t> zone_;
   Taught taught_;                  // its own file, read once at boot; never saved with him or hashed
+  // life.stats, as taught_: counted here, written with the keepsake at most
+  // every Stats::kSaveEveryTicks, at once after a life event or a flush.
+  Stats stats_;
+  uint32_t statsSavedTick_ = 0, battleStart_ = 0, refusedTick_ = UINT32_MAX;
+  bool statsUrgent_ = false, duelWas_ = false;
+  uint8_t secondTicks_ = 0, seenTurn_ = 0xFF, seenEnd_ = 0;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;

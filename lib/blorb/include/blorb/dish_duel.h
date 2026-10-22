@@ -50,6 +50,7 @@ BootHint bootHint(BootContext, const DuelView*);
 // What one tick of the duel asks of the Dish.
 struct DuelStepped {
   bool save = false;        // a wound, a scar, a downing, a fall, a graft, a meeting: save the keepsake now
+  bool met = false;         // a battle ended and is in the book (DishDuel::lastMeeting)
 };
 
 class DishDuel {

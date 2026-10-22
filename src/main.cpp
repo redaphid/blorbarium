@@ -237,7 +237,10 @@ static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
 static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, px0 = 0, send0 = 0, sames = 0;
-static void same() { ++sames; }
+static void same() {
+  ++sames;
+  dish->analytics().add(blorb::anx::frames_same);
+}
 static uint64_t lookUs = 0, memoUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
 // look: the Dish's Appearance (the engine's), memo: the overlays and whether
@@ -246,6 +249,8 @@ static void note(uint32_t look, uint32_t memo, uint32_t draw, uint32_t push) {
   look += memo;   // draw_ms and worst count both, as before
   ++frames, lookUs += look, memoUs += memo, drawUs += draw, pushUs += push;
   if (look + draw + push > worstUs) worstUs = look + draw + push;
+  dish->analytics().add(blorb::anx::frames);   // #50: an increment and a bin, nothing more
+  dish->analytics().hist(blorb::hist::frame_ms, (look + draw + push) / 1000);
 }
 // "a.b": tenths of a ms from a total of us over n.
 static void ms(char* out, size_t cap, uint64_t us, uint32_t n) {
@@ -1009,6 +1014,10 @@ static void adoptTableSpecies(uint32_t now) {
 }
 #endif
 
+#if !defined(BADGE_BOARD_SIM)
+#include "analytics_fw.h"
+#endif
+
 void setup() {
 #if !defined(BADGE_BOARD_SIM)
   // A line on the cable is queued, not waited out: with only the UART's
@@ -1078,6 +1087,7 @@ void setup() {
   panelUp = false;
 #endif
   const bool resumed = dish->boot() == blorb::Boot::Resumed;
+  anxfw::boot(imuOk, !trialPort.pending() && trialPort.handover().has_value());   // as trial.begin judges a rollback
   trial.begin(trialPort, panelUp, resumed, petMark());
   if (trial.onTrial()) {
     const std::optional<ota::Handover> h = trialPort.handover();
@@ -1774,7 +1784,8 @@ void loop() {
   updater.tick(millis());
   if (updater.rebootDue(millis())) restartIntoUpdate();
   trialWatchdog.beat(millis());
-  if (trial.poll(millis()) != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
+  if (const ota::Trial::Poll polled = trial.poll(millis()); polled != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
+    if (polled == ota::Trial::Poll::Kept) dish->analytics().add(blorb::anx::ota_kept);
     trialWatchdog.stop();
     store.releaseHold();
     dishStore.hold(false);
@@ -1787,6 +1798,7 @@ void loop() {
       Serial.printf("[hw] ble tx chunks=%u retries=%u bytes=%u\n", unsigned(d->chunks), unsigned(d->retries),
                     unsigned(d->bytes));
     }
+  anxfw::loop(now, panelLow, sleptMs());
   // Asleep, the loop rests: the sense task's 50 Hz and the radio's tasks go on.
   if (panelLow) delay(kLowRestMs);
 #endif

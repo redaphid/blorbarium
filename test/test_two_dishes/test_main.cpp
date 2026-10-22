@@ -1521,6 +1521,39 @@ TEST(BootRows, LeavingTheFriendsScreenNeverAsksARematch) {
   EXPECT_EQ(bout.a.dish->duels().state().friends[0].s.met, 1) << "and no second bout began";
 }
 
+// ---- life stats and analytics (#38, #50): a battle as each side counts it ---------------
+
+TEST(LifeStats, ASparIsCountedOnBothSidesAsTheBookRecordsIt) {
+  Bout bout(7, kGrungo, SpeciesId{6});
+  ASSERT_TRUE(bout.runDuel());
+  const LifeCounters& a = bout.a.dish->tally().life;
+  const LifeCounters& b = bout.b.dish->tally().life;
+  EXPECT_EQ(a[stat::won], b[stat::lost]);
+  EXPECT_EQ(a[stat::lost], b[stat::won]);
+  EXPECT_EQ(a[stat::drawn], b[stat::drawn]);
+  for (Device* d : {&bout.a, &bout.b}) {
+    const LifeCounters& c = d->dish->tally().life;
+    EXPECT_EQ(c[stat::battles], 1u);
+    EXPECT_EQ(c[stat::spars], 1u);
+    EXPECT_EQ(c[stat::won] + c[stat::lost] + c[stat::drawn], 1u);
+    EXPECT_EQ(c[stat::fights_opened], 1u);
+    EXPECT_GE(c[stat::double_presses] + c[stat::hangs], 1u) << "the kid asked";
+    ASSERT_TRUE(d->dish->lastMeeting());
+    const AnalyticsBucket& k = d->dish->stats().analytics.open();
+    EXPECT_EQ(k.count[anx::battles], 1u);
+    EXPECT_EQ(k.count[anx::fight_opens], 1u);
+    EXPECT_EQ(k.count[anx::turns], d->dish->lastMeeting()->turns) << "every round, once";
+    EXPECT_LE(k.count[anx::pounces] + k.count[anx::guards] + k.count[anx::tricks], k.count[anx::turns]);
+    EXPECT_GT(k.count[anx::pounces] + k.count[anx::guards] + k.count[anx::tricks], 0u);
+    EXPECT_GT(k.count[anx::dueling], 0u);
+    uint32_t turnsBinned = 0, timed = 0;
+    for (uint32_t v : k.bins[hist::battle_turns]) turnsBinned += v;
+    for (uint32_t v : k.bins[hist::battle_s]) timed += v;
+    EXPECT_EQ(turnsBinned, 1u);
+    EXPECT_EQ(timed, 1u);
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
