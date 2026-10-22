@@ -5,6 +5,7 @@
 #include <cstdint>
 #include "blorb/genes.h"
 #include "blorb/registry.h"
+#include "blorb/traits.h"
 
 namespace blorb {
 namespace {
@@ -116,7 +117,15 @@ struct Author {
 
 constexpr LocusId kNoLocus{kNoCue};
 
+// The bytes traitsOf() measures a pet against: grungo's, as the recipe below writes them.
+constexpr RecipeNorms kNorms{tonicByte(30 * kMinute, 150), tonicByte(90 * kMinute, 580), timeByte(1 * kHour),
+                             tonicByte(1 * kHour, 600),    tonicByte(3 * kHour, 500),    tonicByte(3 * kHour, 500),
+                             tonicByte(2 * kMinute, 50),   boldGain(128),                sgn(300),
+                             170,                          unit(600)};
+
 }  // namespace
+
+const RecipeNorms kRecipeNorms = kNorms;
 
 void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speciesSeed, bool neglectCanKill) {
   Author g{out, Rng::seeded(speciesSeed)};
