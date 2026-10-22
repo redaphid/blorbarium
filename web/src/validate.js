@@ -50,7 +50,7 @@ export function lineProblem(text, situation) {
 // what earlier attempts already accepted (dedupe runs across them). Returns the
 // accepted lines per situation, every rejection with its reason, and which
 // situations still need lines.
-export function checkLines(parsed, asked, { species, kept = {} } = {}) {
+export function checkLines(parsed, asked, { species, kept = {}, avoid = null } = {}) {
   const builtIn = builtInLines(species);
   const seen = new Set(Object.values(kept).flat());
   const accepted = {}, rejected = [], structural = [];
@@ -75,7 +75,8 @@ export function checkLines(parsed, asked, { species, kept = {} } = {}) {
     for (const rawLine of got) {
       const text = normalise(rawLine);
       const why = lineProblem(text, sit) ??
-        (builtIn.has(text) ? "repeats a built-in line" : seen.has(text) ? "repeats another of his lines" : null);
+        (builtIn.has(text) ? "repeats a built-in line" : seen.has(text) ? "repeats another of his lines"
+          : avoid?.has(text) ? "repeats a line from one of his recent packs" : null);
       if (why) { rejected.push({ situation: name, text, why }); continue; }
       if (ok.length >= MAX_LINES) continue;
       seen.add(text);

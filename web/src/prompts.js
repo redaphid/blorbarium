@@ -75,7 +75,10 @@ His catchphrases: ${(input.catchphrases ?? []).join(" / ")}
 
 His genes, decoded:
 ${input.traits.text}
-
+${input.lately ? `
+What has happened to him lately (fresh material: tonight's lines are new ones, never his old ones):
+${input.lately}
+` : ""}
 How his species usually sounds (a taste of the voice; do not reuse these):
 ${styleSamples(input.species).map((l) => `  ${l}`).join("\n")}
 

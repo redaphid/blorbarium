@@ -124,7 +124,7 @@ async function writeBatch(ai, input, batch, { model, prompt, meter, log }) {
       continue;
     }
     const parsed = parseJsonReply(reply);
-    const res = checkLines(parsed, needed, { species: input.species, kept });
+    const res = checkLines(parsed, needed, { species: input.species, kept, avoid: input.avoid });
     const got = Object.values(res.accepted).reduce((a, l) => a + l.length, 0);
     const returned = got + res.rejected.length;
     if (attempt === 0) { stats.returned = returned; stats.firstPassValid = got; }
@@ -147,7 +147,8 @@ export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DE
   const t0 = Date.now();
   const traits = pet.traits ?? traitSheet(pet.raw, { generation: pet.generation, name: pet.name });
   const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "", history: pet.history ?? "",
-                  life: pet.life ?? "", currentBible: pet.currentBible ?? "" };
+                  life: pet.life ?? "", currentBible: pet.currentBible ?? "",
+                  lately: pet.lately ?? "", avoid: pet.avoid ?? null };
   // An edited personality (the phone #43, the dashboard #41) skips call 1: the
   // owner's words are the bible, and his catchphrases are kept if given.
   const { bible, catchphrases, attempts: bibleAttempts } = pet.bible

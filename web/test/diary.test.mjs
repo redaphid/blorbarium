@@ -79,26 +79,49 @@ test("an egg reported before hatching gets its personality from its genes and it
   assert.equal(p.source, "hatch");
 });
 
-test("the nightly revision rewrites a pet whose life moved on, and only him (#47)", async () => {
-  const { runNightlyRevisions } = await import("../src/app.js");
+test("every night, every living pet gets new lines from the same personality; a pet whose life moved on is rewritten (#47)", async () => {
+  const { runNightly, nightStart } = await import("../src/app.js");
   const env = fakeEnv();
   const quiet = await petWithPack(env, fixtures[6]);
   const fighter = await petWithPack(env, fixtures[7]);
   const db = env.DB.raw;
-  // Their personalities were written a minute ago; since then the fighter won two fights.
-  db.prepare("UPDATE personalities SET created_at = created_at - 60000").run();
+  // Their packs and personalities were written two days ago; since then the fighter won two fights.
+  db.prepare("UPDATE packs SET created_at = created_at - 172800000").run();
+  db.prepare("UPDATE personalities SET created_at = created_at - 172800000").run();
   for (const [hash, stats] of [[quiet, { feeds: 3 }], [fighter, { feeds: 3, fights_won: 2 }]]) {
     await req(env, "/api/stats", { mac: MAC, genome_hash: hash, stats });
   }
   const before = env.AI.calls.length;
-  assert.equal(await runNightlyRevisions(env), 1);
-  const revise = env.AI.calls.slice(before).find((c) => /Rewrite his bible/.test(c.input.messages.at(-1).content));
-  assert.match(revise.input.messages.at(-1).content, /fights_won \+2/);
-  const versions = db.prepare(`SELECT c.genome_hash, MAX(q.version) AS v, (SELECT source FROM personalities WHERE creature_id = c.id
-    ORDER BY version DESC LIMIT 1) AS src FROM creatures c JOIN personalities q ON q.creature_id = c.id GROUP BY c.id`).all();
-  assert.deepEqual(versions.map((v) => [v.genome_hash === fighter, v.v, v.src]), [[false, 1, "genes"], [true, 2, "nightly"]]);
-  assert.equal(db.prepare("SELECT kind FROM actions").get().kind, "line_pack");
-  assert.equal(await runNightlyRevisions(env), 0, "nothing new since: no second revision");
+  const done = await runNightly(env);
+  assert.equal(done.length, 2, "both pets, not only the one with a trigger");
+  const calls = env.AI.calls.slice(before).map((c) => c.input.messages.at(-1).content);
+  assert.equal(calls.filter((c) => /Rewrite his bible/.test(c)).length, 1, "only the fighter's bible is rewritten");
+  assert.ok(calls.some((c) => /What has happened to him lately/.test(c) && /feeds/.test(c)), "the quiet pet's stats are fresh material");
+
+  const rows = db.prepare(`SELECT c.genome_hash AS hash, (SELECT COUNT(*) FROM personalities q WHERE q.creature_id = c.id) AS personalities,
+      (SELECT COUNT(*) FROM packs p WHERE p.creature_id = c.id) AS packs,
+      (SELECT q.version FROM packs p JOIN personalities q ON q.id = p.personality_id WHERE p.creature_id = c.id ORDER BY p.version DESC LIMIT 1) AS pv,
+      (SELECT pending_device FROM packs p WHERE p.creature_id = c.id ORDER BY p.version DESC LIMIT 1) AS pending
+    FROM creatures c ORDER BY c.id`).all();
+  const q = rows.find((r) => r.hash === quiet), f = rows.find((r) => r.hash === fighter);
+  assert.deepEqual([q.personalities, q.packs, q.pv, q.pending], [1, 2, 1, 1], "quiet: same personality v1, a new pack v2 waiting for the badge");
+  assert.deepEqual([f.personalities, f.packs, f.pv, f.pending], [2, 2, 2, 1], "fighter: personality v2 and its pack");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM packs WHERE status = 'superseded'").get().n, 2, "old packs kept, superseded");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM actions WHERE kind = 'line_pack'").get().n, 2);
+  const prov = JSON.parse(db.prepare("SELECT provenance_json FROM packs ORDER BY id DESC LIMIT 1").get().provenance_json);
+  assert.ok(prov.nightly || prov.model, "provenance kept");
+
+  assert.equal((await runNightly(env)).length, 0, "done for tonight");
+  const tomorrow = nightStart() + 24 * 3600 * 1000 + 60000;
+  // Tomorrow night: tonight's packs are then from before it.
+  assert.equal((await runNightly(env, { now: tomorrow })).length, 2, "and again the next night");
+});
+
+test("a nightly pack's lines are new: his recent packs' lines are refused like repeats", async () => {
+  const { checkLines } = await import("../src/validate.js");
+  const r = checkLines({ lines: { peckish: ["OLD JOKE", "NEW JOKE"] } }, ["peckish"], { species: "grungo", avoid: new Set(["OLD JOKE"]) });
+  assert.deepEqual(r.accepted.peckish, ["NEW JOKE"]);
+  assert.match(r.rejected[0].why, /recent packs/);
 });
 
 test("flatten and delta", () => {

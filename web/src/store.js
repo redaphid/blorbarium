@@ -64,13 +64,17 @@ const nextVersion = async (db, table, creatureId) =>
 // older ready pack is superseded, and the new one waits for the badge.
 export async function storeGeneration(db, creatureId, g) {
   const t = now();
-  const pv = await nextVersion(db, "personalities", creatureId);
-  const pr = await db.prepare(
-    `INSERT INTO personalities (creature_id, version, source, bible, catchphrases_json, edited_by, inputs_json,
-       modifiers_json, model, prompt_version, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`)
-    .bind(creatureId, pv, g.source, g.bible, J(g.catchphrases ?? []), g.editedBy ?? null, J(g.inputs ?? {}),
-          J(g.modifiers ?? null), g.model, g.prompt, t).run();
-  const personalityId = pr.meta.last_row_id;
+  let personalityId = g.personalityId, pv = g.personalityVersion;
+  // g.personalityId: new lines from a stored personality (the nightly pack), so no new personality version.
+  if (!personalityId) {
+    pv = await nextVersion(db, "personalities", creatureId);
+    const pr = await db.prepare(
+      `INSERT INTO personalities (creature_id, version, source, bible, catchphrases_json, edited_by, inputs_json,
+         modifiers_json, model, prompt_version, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`)
+      .bind(creatureId, pv, g.source, g.bible, J(g.catchphrases ?? []), g.editedBy ?? null, J(g.inputs ?? {}),
+            J(g.modifiers ?? null), g.model, g.prompt, t).run();
+    personalityId = pr.meta.last_row_id;
+  }
   const version = await nextVersion(db, "packs", creatureId);
   await db.prepare("UPDATE packs SET status = 'superseded' WHERE creature_id = ?1 AND status = 'ready'").bind(creatureId).run();
   const r = await db.prepare(
@@ -96,7 +100,8 @@ export async function ackPack(db, creatureId, version) {
 export async function generationsSince(db, mac, since) {
   const r = await db.prepare(
     `SELECT COUNT(*) AS n FROM packs p JOIN creatures c ON c.id = p.creature_id
-     WHERE c.mac = ?1 AND p.created_at >= ?2 AND json_extract(p.provenance_json, '$.copiedFrom') IS NULL`)
+     WHERE c.mac = ?1 AND p.created_at >= ?2 AND json_extract(p.provenance_json, '$.copiedFrom') IS NULL
+       AND json_extract(p.provenance_json, '$.nightly') IS NULL`)
     .bind(mac, since).first();
   return r?.n ?? 0;
 }
@@ -171,4 +176,11 @@ export async function familyHistory(db, creature, carried) {
   }
   if (carried && typeof carried === "object") out.push(`What the egg carries about its parents: ${JSON.stringify(carried).slice(0, 600)}`);
   return out.join("\n");
+}
+
+// The lines of a creature's last few packs, normalised: tonight's must be new.
+export async function recentLines(db, creatureId, packs = 3) {
+  const rows = (await db.prepare("SELECT lines_json FROM packs WHERE creature_id = ?1 ORDER BY version DESC LIMIT ?2")
+    .bind(creatureId, packs).all()).results ?? [];
+  return new Set(rows.flatMap((r) => Object.values(JSON.parse(r.lines_json)).flat()));
 }

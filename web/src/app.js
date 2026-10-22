@@ -68,14 +68,16 @@ function packReply(row, creature, extra = {}) {
 // `bible` given (an edit from the phone or the dashboard): the lines are written
 // from it and call 1 is skipped. Only a genes-only pack is shared by cache key.
 export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy, carried,
-                                                  life, currentBible } = {}) {
+                                                  life, currentBible, personality, lately, avoid } = {}) {
+  // personality ({id, version, bible, catchphrases}): new lines from that stored personality, which is kept as is.
+  if (personality) { bible = personality.bible; catchphrases = personality.catchphrases; }
   const bytes = hexToBytes(creature.genome_hex);
   const raw = rawSheet(bytes, { stage: creature.stage ?? "adult", feats: creature.feats ?? 0 });
   const full = creature.parent_id === undefined
     ? await env.DB.prepare("SELECT parent_id FROM creatures WHERE id = ?1").bind(creature.id).first() : creature;
   const history = await store.familyHistory(env.DB, { parent_id: full?.parent_id ?? null }, carried);
   const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash,
-                bible, catchphrases, history, life, currentBible };
+                bible, catchphrases, history, life, currentBible, lately, avoid };
   pet.traits = traitSheet(raw, { generation: pet.generation, name: pet.name });
   const pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt });
   const { log, ...provenance } = pack.provenance;
@@ -84,7 +86,9 @@ export async function generateFor(env, creature, { source = "genes", s = setting
     inputs: { dice: provenance.dice, traits: pet.traits.text, history: history || undefined, life: life || undefined,
               stage: raw.stage },
     cacheKey: source === "genes" && !history ? cacheKey(creature.genome_hash, s) : `${creature.genome_hash}:${source}:${Date.now()}`,
-    lines: pack.lines, fallback: pack.fallback, provenance: { ...provenance, attempts: log },
+    lines: pack.lines, fallback: pack.fallback,
+    provenance: { ...provenance, attempts: log, ...(personality ? { nightly: true, lately: lately || undefined } : {}) },
+    personalityId: personality?.id, personalityVersion: personality?.version,
   });
   const sig = await signPack(packText({ genomeHash: creature.genome_hash, version: stored.version, lines: pack.lines }),
                              env.PACK_SIGNING_KEY);
@@ -316,30 +320,60 @@ export async function revisionReason(db, c) {
   return entries >= 7 ? `${entries} diary entries since he was last written` : null;
 }
 
-export async function runNightlyRevisions(env, { limit = 10 } = {}) {
+// #47 as the owner put it: "generate new lines, using the same generated
+// personality, every night and push them down." From 04:00 UTC, every living
+// creature with a personality gets a fresh pack written from its STORED bible,
+// with its latest stats and diary as fresh material, and none of the lines of
+// its last three packs. The bible changes only on the life triggers
+// (revisionReason: a new stage, fights or hunger, a week of diary) or an
+// owner's edit (#43). A creature is done for the night once it has a pack
+// newer than tonight's 04:00, so the 10-minute cron finishes whatever one run
+// had no time for.
+export const NIGHT_START_HOUR = 4, NIGHT_END_HOUR = 10;   // UTC
+export function nightStart(t = Date.now()) {
+  const d = new Date(t);
+  const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), NIGHT_START_HOUR);
+  return t >= start ? start : start - 24 * 3600 * 1000;
+}
+
+async function nightlyOne(env, c) {
+  const cur = await env.DB.prepare(
+    "SELECT id, version, bible, catchphrases_json FROM personalities WHERE creature_id = ?1 ORDER BY version DESC LIMIT 1")
+    .bind(c.id).first();
+  if (!cur) return null;
+  const stats = await env.DB.prepare("SELECT stats_json FROM life_stats WHERE creature_id = ?1 ORDER BY id DESC LIMIT 1").bind(c.id).first();
+  const diary = (await diaryFor(env.DB, c.id, 7)).reverse();
+  const recent = [stats ? `His counters: ${stats.stats_json.slice(0, 800)}` : "",
+    ...diary.map((d) => `Diary ${d.day}: ${d.entry}`)].filter(Boolean).join("\n");
+  const avoid = await store.recentLines(env.DB, c.id, 3);
+  const why = await revisionReason(env.DB, c);
+  const row = why
+    // His life moved on: the bible is rewritten too (a new personality version).
+    ? await generateFor(env, c, { source: "nightly", life: [`Why now: ${why}.`, recent].join("\n"), currentBible: cur.bible, avoid })
+    // Every other night: the same personality, new lines.
+    : await generateFor(env, c, { source: "nightly", lately: recent, avoid,
+        personality: { id: cur.id, version: cur.version, bible: cur.bible, catchphrases: JSON.parse(cur.catchphrases_json ?? "[]") } });
+  await enqueue(env.DB, { macs: [c.mac], kind: "line_pack", createdBy: "nightly",
+    payload: { pack_id: row.id, version: row.version, genome_hash: c.genome_hash } });
+  return { creature: c.id, version: row.version, revised: !!why };
+}
+
+export async function runNightly(env, { limit = 12, concurrency = 4, now = Date.now() } = {}) {
+  const since = nightStart(now);
   const due = (await env.DB.prepare(
-    `SELECT c.* FROM creatures c WHERE c.status = 'alive' AND EXISTS (SELECT 1 FROM packs p WHERE p.creature_id = c.id)
-     ORDER BY c.last_seen DESC LIMIT ?1`).bind(limit * 5).all()).results ?? [];
-  let revised = 0;
-  for (const c of due) {
-    if (revised >= limit) break;
-    const why = await revisionReason(env.DB, c);
-    if (!why) continue;
-    const cur = await env.DB.prepare("SELECT bible FROM personalities WHERE creature_id = ?1 ORDER BY version DESC LIMIT 1").bind(c.id).first();
-    const stats = await env.DB.prepare("SELECT stats_json FROM life_stats WHERE creature_id = ?1 ORDER BY id DESC LIMIT 1").bind(c.id).first();
-    const diary = await diaryFor(env.DB, c.id, 7);
-    const life = [`Why now: ${why}.`, stats ? `His counters: ${stats.stats_json.slice(0, 800)}` : "",
-      ...diary.reverse().map((d) => `Diary ${d.day}: ${d.entry}`)].filter(Boolean).join("\n");
-    try {
-      const row = await generateFor(env, c, { source: "nightly", life, currentBible: cur?.bible ?? "" });
-      await enqueue(env.DB, { macs: [c.mac], kind: "line_pack", createdBy: "nightly",
-        payload: { pack_id: row.id, version: row.version, genome_hash: c.genome_hash } });
-      revised++;
-    } catch (e) {
-      console.error(JSON.stringify({ msg: "nightly revision failed", creature: c.id, error: String(e.message ?? e) }));
-    }
+    `SELECT c.* FROM creatures c WHERE c.status = 'alive'
+       AND EXISTS (SELECT 1 FROM personalities q WHERE q.creature_id = c.id)
+       AND NOT EXISTS (SELECT 1 FROM packs p WHERE p.creature_id = c.id AND p.created_at >= ?1)
+     ORDER BY c.last_seen DESC LIMIT ?2`).bind(since, limit).all()).results ?? [];
+  const done = [];
+  for (let i = 0; i < due.length; i += concurrency) {
+    const res = await Promise.allSettled(due.slice(i, i + concurrency).map((c) => nightlyOne(env, c)));
+    res.forEach((r, k) => {
+      if (r.status === "fulfilled" && r.value) done.push(r.value);
+      else if (r.status === "rejected") console.error(JSON.stringify({ msg: "nightly pack failed", creature: due[i + k].id, error: String(r.reason?.message ?? r.reason) }));
+    });
   }
-  return revised;
+  return done;
 }
 
 export async function runQueuedJobs(env, limit = 3) {
@@ -397,8 +431,12 @@ export default {
   async scheduled(controller, env) {
     if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) {
       await runDiaries(env);
-      await runNightlyRevisions(env);
+      await runNightly(env);
+    } else {
+      await runQueuedJobs(env);
+      // The night's packs a 04:00 run had no time for.
+      const hour = new Date(controller.scheduledTime ?? Date.now()).getUTCHours();
+      if (hour >= NIGHT_START_HOUR && hour < NIGHT_END_HOUR) await runNightly(env, { limit: 6 });
     }
-    else await runQueuedJobs(env);
   },
 };
