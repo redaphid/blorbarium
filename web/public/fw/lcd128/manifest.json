@@ -1,10 +1,10 @@
 {
  "board": "lcd128",
- "version": "0.7.12",
+ "version": "0.7.13",
  "flags": 0,
- "size": 2407760,
- "sha256": "glVjE8siM8qtBpgYfZQl7w8Ih5pXiQjnBa88lIVuKJw",
- "sig": "337ogIdyDn51ZliJv9bmAExysj_hArwwuKtIVA1PF4U--Jp9Oe6sAXtt42znW5ZQH8CHoJz9rWJqUXMz6fui4A",
- "image": "blorbarium-lcd128-0.7.12.bin",
+ "size": 2714272,
+ "sha256": "cIRhtZttnlr6lkmHJDaXy_CEkSGsQeEbPLjJgVjePl8",
+ "sig": "TBw8mNZpuAEdaUT1vJRA-6CqwZwRWCLspPinG2qImgne1l234YSmAYr7nfov_ukcEWmsMqCfdw0n_hEgmeqg4Q",
+ "image": "blorbarium-lcd128-0.7.13.bin",
  "fmt": 1
 }
