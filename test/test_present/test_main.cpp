@@ -178,7 +178,7 @@ TEST(Golden, Remains) {
   r.creature().inject(chem::life, Fx::ratio(5, 100));
   r.run(60000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=2 gen=0 stage=1 seed=4f197116 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=0 egg=0 fade=33 eggs=1@0 hint=0/0 0 stim=0+0 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=4 e0,2,5");
+            "kind=2 gen=0 stage=1 seed=4f197116 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=0 egg=0 fade=33 eggs=1@0 hint=0/0 0 stim=0+0 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=4 e0,1,4");
 }
 
 TEST(Golden, Clutch) {
@@ -188,7 +188,7 @@ TEST(Golden, Clutch) {
   r.creature().inject(chem::life, Fx::ratio(5, 100));
   r.run(Clutch::kVigilTicks * kTickMs + 5000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=3 gen=1 stage=0 seed=4f197116 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=3@0 hint=0/0 0 stim=0+0 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 pantry=4 e0,2,5 e0,1,5 e-90,2,5");
+            "kind=3 gen=1 stage=0 seed=4f197116 at=0,0 facing=0 scale=100 pose=0/0 face=0<0 0 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=0 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=3@0 hint=0/0 0 stim=0+0 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 r0,128,128 pantry=4 e0,1,4 e-90,2,5 e0,2,4");
 }
 
 // ---- properties ------------------------------------------------------------------------

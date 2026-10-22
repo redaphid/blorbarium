@@ -15,6 +15,7 @@ namespace {
 // The forced Look change moves a visible byte at least this far (of 255).
 constexpr uint8_t kMinVisibleDelta = 24;
 constexpr uint8_t kNudgeMax = 8;
+constexpr uint8_t kPlumbingWildMax = 24;   // two doublings on the half-life scale
 constexpr uint8_t kFlagBits = 3;          // the widest flags byte a known gene uses
 constexpr uint8_t kDefaultWeight = 64;    // mutWeight at which a gene mutates at the policy's rate
 constexpr int kAttempts = 1 + 8;          // the roll, then 8 retries from the same stream
@@ -151,10 +152,28 @@ uint8_t nudged(uint8_t from, uint8_t lo, uint8_t hi, Rng& rng) {
 }
 
 // One point mutation of a known gene, by its kind's rules. nullopt if every byte is Fixed.
+// The chemistry is his plumbing (GeneClass::Body: chem, reaction, emitter,
+// receptor): its rates, thresholds and gains drift, but which chemical and
+// which locus a gene connects (its Any bytes) never jumps by a point
+// mutation, and none of it is knocked out (randomPass). Measured on 60 lines
+// of 20 generations (gene_variety lineage, #60): with the wiring free, about
+// half the lines by generation 5 had a pet that never slept at night, slept
+// all day or stood frozen in fear, from one rewired or slept chemistry gene
+// (an adrenaline that never decays, a melatonin emitter on the wrong locus).
+// That reads to a kid as a broken pet, not a family trait. Traits still come
+// from the graded drift, duplications (a doubled tonic) and the Mind and Look
+// genes' knock-outs and rewiring (a pet that does not flinch at knocks).
+bool plumbing(const GeneTypeInfo& info) { return info.cls == GeneClass::Body; }
+// A gene that sets a whole block of the phenotype rather than adding to it:
+// losing the temperament left the brain with every rate at zero, a pet who
+// stood still all day (measured as above). It drifts, it is never knocked out.
+bool setting(const GeneTypeInfo& info) { return info.type == GeneKindOf<TemperamentGene>::value; }
+
 std::optional<MutPoint> pointOf(const GeneView& v, const GeneTypeInfo& info, Fx wild, Rng& rng) {
   uint8_t open[255];
   uint8_t n = 0;
-  for (uint8_t i = 0; i < info.bodyLen; ++i) if (info.rules[i] != MutRule::Fixed) open[n++] = i;
+  for (uint8_t i = 0; i < info.bodyLen; ++i)
+    if (info.rules[i] != MutRule::Fixed && !(plumbing(info) && info.rules[i] == MutRule::Any)) open[n++] = i;
   if (n == 0) return std::nullopt;
   uint8_t at = open[rng.below(n)], from = v.body[at];
   MutPoint p{v.header.uid, at, from, from, false};
@@ -163,7 +182,12 @@ std::optional<MutPoint> pointOf(const GeneView& v, const GeneTypeInfo& info, Fx 
     case MutRule::Flag: p.to = uint8_t(from ^ (1u << rng.below(kFlagBits))); break;
     default:
       p.wild = rng.chance(wild);
-      p.to = p.wild ? otherByte(from, rng) : nudged(from, 1, kNudgeMax, rng);
+      // A wild roll is a sport: anywhere in the byte's range, except in the
+      // plumbing, where it is a big step (up to two doublings of a rate), not
+      // a reroll: a sleepiness that halved in seconds left a pet who never slept.
+      p.to = !p.wild             ? nudged(from, 1, kNudgeMax, rng)
+             : plumbing(info)    ? nudged(from, kNudgeMax + 1, kPlumbingWildMax, rng)
+                                 : otherByte(from, rng);
       break;
   }
   return p;
@@ -261,7 +285,9 @@ void forceMind(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& r
 
 // Each parent gene gets at most one of: wake, delete, sleep, point, duplicate.
 // The gene holding the largest uid is never deleted, so the largest uid only
-// rises and nextUid() never hands out a uid an ancestor used. The coat gene
+// rises and nextUid() never hands out a uid an ancestor used. The chemistry
+// and the temperament are never deleted or slept (plumbing and setting,
+// above). The coat gene
 // is never deleted or slept: losing it would fade the child to the art's own
 // colour where the forced change means him to gain one.
 void randomPass(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
@@ -274,7 +300,7 @@ void randomPass(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& 
     const GeneHeader& h = v->header;
     const GeneTypeInfo* info = knownKind(h);
     if ((h.flags & GeneFlags::Dormant) && rng.chance(pol.wakePerDormant)) { d.add(MutWake{h.uid}); return; }
-    if ((h.flags & GeneFlags::Delable) && !kept(h.uid)) {
+    if ((h.flags & GeneFlags::Delable) && !kept(h.uid) && !(info && (plumbing(*info) || setting(*info)))) {
       if (rng.chance(pol.delPerGene) && h.uid != top) { d.add(MutDel{h.uid}); return; }
       if (!(h.flags & GeneFlags::Dormant) && rng.chance(pol.sleepPerGene)) { d.add(MutSleep{h.uid}); return; }
     }
