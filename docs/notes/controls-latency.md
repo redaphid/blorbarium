@@ -376,3 +376,21 @@ The cable's UART had only its 128-byte FIFO: a longer line held the loop
 until it went out at 115200 baud (the 10 s status line ~20 ms, a protocol
 reply more), and a gesture's samples and its frame waited with it (seen p95
 51-53 ms while the probe asked STATE). Serial now queues 2 KB.
+
+### Board: 5cf3409: fight fixed, the rest's tail back
+
+Fight mode: the aim 28/72 ms, panel 121/213. At rest the aim's p95 came
+back, 45/249: the tilt events that trailed were the badge's returns from
+the cable's injected poses (a side hold, the hang, the wake's turn): each is
+a one-sample step, which KnockSense takes for a knock and rings, and the aim
+held through the ring, 200-225 ms (the side and low phases' tilts, all of
+them).
+
+### 11. The aim holds through a ring only while the badge sways (Refs #25)
+
+While a knock rings the aim now holds only on samples that sway (one
+steady sample to the next past kSwayMg, 60 mg in the plane): a knock's
+ringing in a hand sways, a badge set down or turned with a thump settles at
+once and aims where it settled. `Aim.AThumpOntoAnAimIsTheAimAtOnce`: 180 ms
+with the ring hold, 20 ms with this. No first knock on any recording moves
+the aim it locks.

@@ -114,9 +114,10 @@ struct AimDetector : DetectorBase {
   static constexpr int32_t kInMg = 300;
   static constexpr int32_t kOutMg = 200;
   static constexpr int32_t kSwitchMg = 120;
+  static constexpr int32_t kSwayMg = 60;   // in the plane, one steady sample to the next: swaying, while a knock rings
   void sample(const BodySample&, uint32_t ms, SenseOut&);
   int8_t aim() const { return aim_; }
- private: int32_t x_ = 0, y_ = 0, px_ = 0, py_ = 0; bool primed_ = false; int8_t aim_ = -1;
+ private: int32_t x_ = 0, y_ = 0, px_ = 0, py_ = 0, lx_ = 0, ly_ = 0; bool primed_ = false; int8_t aim_ = -1;
 };
 // Gravity as the body feels it at rest: an average of the samples within
 // 0.25 g of 1 g and near the average, so a jolt or a swing never drags it.
