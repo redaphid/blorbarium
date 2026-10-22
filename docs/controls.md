@@ -200,8 +200,23 @@ number is now in `lib/blorb/include/blorb/food.h`:
 
 The viability dry run (`mutate.cpp`) still feeds at the old two-hour pace
 on purpose, so mutations it passed before pass now. Starving is still the
-chemistry's: left untouched he is starving within 1.5 to 2 hours of his
-last ask and dies of it after about 2.4 days.
+chemistry's.
+
+Measured, every species, two seeds, two days (`FOOD_SWEEP=1 FOOD_SEEDS=2
+FOOD_DAYS=2`; the kid is there 12 hours a day and glances every 2 to 6
+minutes):
+
+| | Before | After |
+|---|---|---|
+| Feeds when he asks (attentive or eager) | never dry; starving 15-20 h of 48, overnight | never dry; starving 10-20 h of 48, overnight (the chemistry: a 12 h night unfed) |
+| Also knocks for fun, half his glances | 152-170 of 170-188 presses find it empty; starving 9-10 h | 0 empty presses; starving 3-6 h |
+| Snacks he dug up | none | 0-11 in two days |
+| Neglect: fed 12 h, then nobody | starving 1.4-1.8 h after the last hand, dead at 57 h | starving 1.5-26 h after it, dead at 57-82 h |
+
+Open, for the owner: a pet fed whenever he asks still starves overnight
+(energy halves every 4 hours, so a 12 hour night unfed pins hunger by
+morning and adds injury about 0.2 a night, healed by day). That is the
+starter chemistry, not the pantry; slowing his burn asleep would fix it.
 
 Not changed, for the owner to decide: that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
 starving pet that eats it later is poisoned); where the engine drops it (a
