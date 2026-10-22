@@ -13,7 +13,7 @@
   // to 0.6.x, its species from 0.7.0. Once chosen, the name never matters again:
   // a reconnect, even after an update renames the dish, is to the same device.
   const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker"];
+  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker", "octopus"];
   function chooserFilters(want, wide = false) {
     if (want) return [{ name: want }];
     if (wide) return [{ services: [NUS] }];

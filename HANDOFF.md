@@ -12,6 +12,40 @@ The design is in `docs/design/` (DESIGN.md, DEVIATIONS.md, BATTLES.md,
 SPECIES.md, `sketch/`). The task board is Vikunja project 41 "Blorbarium",
 and a picture of this file is at https://draw.hypnodroid.com/b/blorbarium.
 
+## Where things stand (2026-10-21, late: coordinator session; see issue #32)
+
+Work is tracked as GitHub issues on redaphid/blorbarium; **#32 is the
+sequence and merge order**. The system whiteboard to keep current is
+https://draw.hypnodroid.com/b/blorbarium. Builds go through the
+one-at-a-time lock `~/Worktrees/blorbarium/pio` (never /usr/bin/pio). The
+test badge is the puffkin 5C94094999 (an adult, genome fe88419d, restored from
+`pet_backups/d40592771b44-20261021-162606-*`; back it up before risky runs).
+
+**On main (e3bf472):** perf (19 → ~48 fps; dual core, chunk push, frame memo),
+smooth motion (between-tick tween, 1.2x screen speed, walk drawn ahead), feeding
+(a cookie from the pantry, eaten at the mouth; refusals in words), the radial
+duel HUD, controls latency (aim from gravity, tilt ~70/150 ms p50/p95, a brisk
+tip is no knock), the pet-line fixes, ble_ota.py, the flip env.
+
+**Open branches (unmerged; see each issue):** wifi-ota-2 (#26 heap fixed and
+measured, #27 needs the owner's network and the family's badges; the flip
+moves to NVS), egg-ux (#23: a badge lying tilted picked an egg by itself; the
+movement-armed aim is in progress), controls-timeout (#24, parked on #23),
+sleep-idle (#20/#21: unknown time read as night; refuse rotten food),
+punch-up (#34: voice frames off species lines; RESTORE the octopus's
+funeral and grave lines; lines are never policed for tone), grungo-cleanup (#36:
+no gift device; grungo normal; the octopus the one-off), carry-react (#22),
+feeding-allgone (#18), life-stats (#38/#50), ai-lines (#37 and the server
+chain #39-#43, #47, #49), neighbours (#33, design), lineage-design (#45/#44/#46
+LINEAGE.md; owner answers on #45), cf-ci (#48), and cyber-puck perf-backport
+(claude-notification-screen #52).
+
+**Running when this was written:** a detached flash watcher
+(`~/Worktrees/blorbarium/flash_watch.sh`, pid in `flash_watch.pid`, log
+`flash_watch.log`) flashes main's badge128_flip onto each NEW CH343 badge
+plugged in (badges already attached are left alone). Stop it with
+`kill $(cat ~/Worktrees/blorbarium/flash_watch.pid)`.
+
 ## Where things stand (2026-10-20, night: flip, duel icons, lines, laptop OTA)
 
 A coordinator session: features done by agents in worktrees, merged to `main`
