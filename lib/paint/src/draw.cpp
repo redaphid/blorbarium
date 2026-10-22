@@ -166,6 +166,16 @@ Rgb tinted(Rgb c, Tint t, int satScale) {
   return toRgb(h);
 }
 
+// blend(px, 0, alpha) for alpha >= 0: toward black, (0 - v) * alpha / 256
+// truncates toward zero, so it is v less (v * alpha) >> 8, with no signed
+// division to round. The shadow and the marquee's band.
+inline uint16_t darkened(uint16_t px, int alpha) {
+  int r = (px >> 11) & 31, g = (px >> 5) & 63, b = px & 31;
+  r = (r << 3) | (r >> 2), g = (g << 2) | (g >> 4), b = (b << 3) | (b >> 2);
+  r -= r * alpha >> 8, g -= g * alpha >> 8, b -= b * alpha >> 8;
+  return uint16_t(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}
+
 // Additive light in the panel's own channel depths, so whether a pixel moves
 // depends only on the light, not on the colour under it.
 void addLight(Canvas240& cv, int x, int y, const Rgb& c, int intensity) {
@@ -738,7 +748,7 @@ void shadow(Canvas240& cv, const Place& p, int halfW, int lift, int maxLift) {
       const int64_t dx = x - p.x, dy = y - p.y;
       if (dx * dx * hh * hh + dy * dy * hw * hw > r2) continue;
       uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, 0, alpha);
+      px = darkened(px, alpha);
     }
 }
 
@@ -1289,7 +1299,7 @@ void dimBand(Canvas240& cv, const Marquee& strip) {
     for (int x = kSide / 2 - half; x < kSide / 2 + half; ++x) {
       const int toRim = imin(x - (kSide / 2 - half), kSide / 2 + half - 1 - x);
       uint16_t& px = cv.px[y * kSide + x];
-      px = blend(px, 0, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
+      px = darkened(px, 140 * imin(256, toRim * 256 / kMarqueeFeather) / 256);
     }
   }
 }
