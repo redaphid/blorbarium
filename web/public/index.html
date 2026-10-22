@@ -123,6 +123,10 @@ details summary { cursor: pointer; color: var(--teal); font-weight: 700; }
 .tag.mind { background: var(--teal-soft); }
 
 form { display: flex; gap: 10px; flex-wrap: wrap; }
+#bible { width: 100%; font: 0.98rem/1.45 var(--font-body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; }
+.says { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.says li { font: 0.8rem var(--font-mono); background: var(--fg); color: var(--bg); padding: 3px 10px; border-radius: 999px; }
+.journal { margin: 0; padding-left: 1.2rem; display: grid; gap: 8px; font-size: 0.95rem; }
 input {
   flex: 1 1 10rem; min-width: 0; font: 1rem var(--font-body); padding: 11px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--bg); color: var(--fg);
@@ -286,6 +290,73 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
           await link.send("TWIST unteach");
           tell("ok", "He forgot every line you taught him.");
         } catch (err) { tell("err", refused(err)); }
+      });
+    })();
+    </script>
+  </section>
+
+  <section id="selfBox" hidden>
+    <!-- His personality and journal (#42), and the owner's own words for him
+         (#43). The server knows him by his genome, read from the badge above;
+         Web Bluetooth never shows the badge's address. -->
+    <h2>Who he is</h2>
+    <p class="hint" id="selfHint">Looking him up…</p>
+    <div id="selfBody" hidden>
+      <textarea id="bible" rows="7" aria-label="His personality, in words"></textarea>
+      <p class="hint">This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online.</p>
+      <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
+      <ul class="says" id="says"></ul>
+      <h2>His journal</h2>
+      <ol class="journal" id="journal"></ol>
+      <h2>His family</h2>
+      <p class="hint" id="family"></p>
+    </div>
+    <script>
+    (() => {
+      const el = (id) => document.getElementById(id);
+      let genome = null;
+      const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+      const tell = (tone, text) => { el("selfHint").dataset.tone = tone; el("selfHint").textContent = text; };
+      function render(p) {
+        el("bible").value = p.bible || "";
+        el("says").replaceChildren(...Object.values(p.lines).flat().slice(0, 12).map((l) => {
+          const li = document.createElement("li"); li.textContent = l; return li;
+        }));
+        el("journal").replaceChildren(...(p.diary.length ? p.diary : [{ day: "", entry: "No entries yet. He writes one each night after he has been online." }]).map((d) => {
+          const li = document.createElement("li");
+          const b = document.createElement("b"); b.textContent = d.day ? d.day + " " : "";
+          li.append(b, d.entry); return li;
+        }));
+        const f = p.family, bits = [];
+        if (f.parent) bits.push(`Child of ${f.parent.name || "a"} ${f.parent.species}, generation ${f.parent.generation ?? "?"}${f.parent.status === "dead" ? ", now gone" : ""}.`);
+        if (f.children.length) bits.push(`Parent of ${f.children.map((c) => `${c.name || "a"} ${c.species} (generation ${c.generation ?? "?"})`).join(", ")}.`);
+        el("family").textContent = bits.join(" ") || `Generation ${p.generation ?? "?"}. The first of his line the server has met.`;
+        el("selfBody").hidden = false;
+      }
+      async function look() {
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", genome));
+        const r = await fetch(`/api/pet?genome_hash=${hex(digest)}`).catch(() => null);
+        if (!r) return tell("err", "Offline: his personality shows when the phone is online.");
+        if (r.status === 404) return tell("", "He has not been online yet. The first time he is, the server writes his personality and his own lines.");
+        if (!r.ok) return tell("err", `The server said no (${r.status}).`);
+        const p = await r.json();
+        tell("ok", p.version ? `Personality version ${p.personality_version}, lines version ${p.version}.` : "His lines are being written.");
+        render(p);
+      }
+      addEventListener("blorb:genome", (e) => { genome = e.detail; el("selfBox").hidden = false; look().catch((err) => tell("err", err.message)); });
+      el("saveBible").addEventListener("click", async () => {
+        const bible = el("bible").value.trim();
+        if (!genome || bible.length < 20) return tell("err", "Write at least a sentence about him.");
+        el("saveBible").disabled = true;
+        tell("", "Rewriting his lines from your words… (a minute or two)");
+        try {
+          const r = await fetch("/api/personality", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ genome: hex(genome), bible }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || r.status);
+          tell("ok", `Saved. Lines version ${j.version} is ready; he picks it up the next time he is online.`);
+          await look();
+        } catch (err) { tell("err", `That did not save (${err.message}).`); }
+        el("saveBible").disabled = false;
       });
     })();
     </script>
@@ -767,6 +838,8 @@ async function loadGenome() {
     g = await fetchGenome();
   }
   renderGenome(g.crc, decodeGenes(g.bytes));
+  // The personality box (below) looks him up on the server by this genome.
+  dispatchEvent(new CustomEvent("blorb:genome", { detail: g.bytes }));
 }
 
 function genomeUnavailable(text) {

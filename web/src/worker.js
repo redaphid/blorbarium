@@ -8,6 +8,8 @@
 //   POST /api/pet-lines/ack    {mac, genome_hash, version}: the badge stored it
 //   POST /api/stats            {mac, genome | genome_hash, stats_version?, stats?, parents?, analytics?, fw?}  (#38, #50)
 //   GET  /api/diary?mac=&genome_hash=   the pet's diary, newest first (#39, for the phone #42)
+//   GET  /api/pet?genome_hash=          the phone's view: bible, sample lines, diary, family (#42)
+//   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
 // Crons (wrangler.jsonc triggers): every 10 minutes, the packs a POST queued
@@ -18,7 +20,7 @@ import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor } from "./diary.js";
-import { handleAdmin, handleBadge } from "./admin.js";
+import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
 
 const MAX_BODY = 64 * 1024;
@@ -231,6 +233,60 @@ async function getDiary(url, env) {
   return json({ creature_id: creature.id, entries: await diaryFor(env.DB, creature.id) });
 }
 
+// The phone (#42, #43). Web Bluetooth never shows the badge's MAC, so the phone
+// names the pet by its genome, which it reads from the badge: the hash to look,
+// the whole genome to change anything.
+const SAMPLE = ["peckish", "crunch", "heard_you", "warm_hands", "sky_down", "moon", "p_doom", "p_lucky", "rim_walk",
+  "brave", "dream_feast", "verdict_yes"];
+async function newestByHash(env, hash) {
+  return env.DB.prepare("SELECT * FROM creatures WHERE genome_hash = ?1 ORDER BY last_seen DESC LIMIT 1").bind(hash).first();
+}
+async function getPet(url, env) {
+  const hash = String(url.searchParams.get("genome_hash") ?? "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) return fail(400, "genome_hash: 64 hex digits");
+  const c = await newestByHash(env, hash);
+  if (!c) return fail(404, "this pet has not been online yet");
+  const pack = await store.latestPack(env.DB, c.id);
+  const lines = pack ? JSON.parse(pack.lines_json) : {};
+  const kin = async (sql, v) => (await env.DB.prepare(sql).bind(v).all()).results ?? [];
+  const parent = c.parent_id ? await env.DB.prepare(
+    `SELECT c.id, c.species, c.name, c.generation, c.status, c.genome_hash,
+       (SELECT bible FROM personalities q WHERE q.creature_id = c.id ORDER BY version DESC LIMIT 1) AS bible
+     FROM creatures c WHERE c.id = ?1`).bind(c.parent_id).first() : null;
+  return json({
+    species: c.species, name: c.name, generation: c.generation, stage: c.stage, status: c.status,
+    bible: pack?.bible ?? null, catchphrases: pack ? JSON.parse(pack.catchphrases_json ?? "[]") : [],
+    version: pack?.version ?? null, personality_version: pack?.personality_version ?? null,
+    lines: Object.fromEntries(SAMPLE.filter((k) => lines[k]).map((k) => [k, lines[k]])),
+    diary: await diaryFor(env.DB, c.id, 14),
+    family: {
+      parent, children: await kin("SELECT species, name, generation, status, genome_hash FROM creatures WHERE parent_id = ?1 ORDER BY generation", c.id),
+    },
+  });
+}
+async function postPersonality(request, env) {
+  let body;
+  try { body = await readBody(request); } catch (e) { return fail(400, `bad request: ${e.message}`); }
+  let bytes;
+  try { bytes = hexToBytes(body.genome); } catch (e) { return fail(400, e.message); }
+  const bible = typeof body.bible === "string" ? body.bible.trim() : "";
+  if (bible.length < 20 || bible.length > 4000) return fail(400, "bible: 20 to 4000 characters");
+  const hash = await genomeHash(bytes);
+  const c = await newestByHash(env, hash);
+  if (!c) return fail(404, "this pet has not been online yet");
+  if (env.PET_LINES_LIMITER) {
+    const { success } = await env.PET_LINES_LIMITER.limit({ key: `edit:${c.mac}` });
+    if (!success) return fail(429, "slow down");
+  }
+  const s = settings(env);
+  if (await store.generationsSince(env.DB, c.mac, Date.now() - DAY_MS) >= s.dailyCap) return fail(429, "this badge has had its packs for today");
+  const row = await generateFor(env, c, { s, source: "edit", bible, editedBy: "phone" });
+  // The badge picks it up at its next Wi-Fi window (or the phone pushes it, once the firmware takes packs over BLE).
+  await enqueue(env.DB, { macs: [c.mac], kind: "line_pack", createdBy: "phone",
+    payload: { pack_id: row.id, version: row.version, genome_hash: c.genome_hash } });
+  return json(packReply(row, c, { cached: false }));
+}
+
 export async function runQueuedJobs(env, limit = 3) {
   const jobs = await store.queuedJobs(env.DB, limit);
   for (const j of jobs) {
@@ -256,6 +312,8 @@ export default {
       if (url.pathname === "/api/pet-lines" && request.method === "GET") return await getPetLines(url, env);
       if (url.pathname === "/api/pet-lines/ack" && request.method === "POST") return await ackPetLines(request, env);
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
+      if (url.pathname === "/api/pet" && request.method === "GET") return await getPet(url, env);
+      if (url.pathname === "/api/personality" && request.method === "POST") return await postPersonality(request, env);
       if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);
       if (url.pathname === "/api/creatures" && request.method === "GET") {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");

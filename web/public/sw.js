@@ -128,6 +128,7 @@ self.addEventListener("fetch", (event) => {
   if (/^fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return event.respondWith(font(request));
   if (!request.url.startsWith(scope())) return;
   const path = url.href.slice(scope().length).split(/[?#]/)[0];
+  if (path.startsWith("api/") || path.startsWith("admin")) return;   // the server's own, never the offline shell
   const fw = /^fw\/([^/]+)\/(.+)$/.exec(path);
   if (fw && fw[2] === "manifest.json") return event.respondWith(releaseManifest(request, fw[1]));
   if (fw) return event.respondWith(releaseFile(request, fw[1]));
