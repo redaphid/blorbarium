@@ -182,11 +182,10 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   const char* text = t ? t->text : "";
   uint8_t mine = 0;
   for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
-  if (mine) {
+  if (mine) {   // his own line, in his own voice already: said as written
     uint8_t want = uint8_t(pick % mine);
     for (const SpeciesLine& l : SPECIES_LINES)
       if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
-    pick = uint8_t(pick / mine);   // so the frame is not tied to which line was drawn
   }
   uint8_t own = 0;
   if (!mine)
@@ -197,12 +196,14 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
       if (l.thought == id && l.voice == voice && want-- == 0) { text = l.text; break; }
   }
   const VoiceInfo* v = nullptr;
-  for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
+  if (!mine)
+    for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
+  // A shared line wears a frame now and then, never every time.
   const FrameInfo* f = nullptr;
-  if (v && !own) {
+  if (v && !own && pick % kFrameOneIn == 0) {
     uint8_t frames = 0;
     for (const FrameInfo& row : FRAMES) frames += row.voice == voice;
-    uint8_t want = uint8_t(pick % frames);
+    uint8_t want = uint8_t(pick / kFrameOneIn % frames);
     for (const FrameInfo& row : FRAMES)
       if (row.voice == voice && want-- == 0) { f = &row; break; }
   }
@@ -317,9 +318,16 @@ constexpr BallAnswer kVerdicts[] = {
     {"NO.", 1}, {"NO WAY.", 1}, {"MY ANSWER IS NO.", 1}, {"DO NOT COUNT ON IT.", 1},
     {"MAYBE.", 2}, {"CANNOT SAY YET.", 2}, {"THE MIST IS THICK.", 2}, {"ASK AGAIN LATER.", 2},
 };
-const char* drawVerdict(Rng& rng) {
+const char* drawVerdict(Rng& rng, SpeciesId species) {
   const uint32_t roll = rng.below(100);
   const uint8_t kind = roll < 45 ? 0 : roll < 75 ? 1 : 2;
+  uint8_t mine = 0;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) mine += v.species == species && v.kind == kind;
+  if (mine) {
+    uint32_t want = rng.below(mine);
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+      if (v.species == species && v.kind == kind && want-- == 0) return v.text;
+  }
   const char* pool[4];
   uint8_t n = 0;
   for (const BallAnswer& v : kVerdicts)
@@ -402,7 +410,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
       if (p) {
         if (fortune) fortuneDay_ = day;
         now_.reset();
-        trance_ = Trance{tick + kTranceTicks, *p, verdict ? drawVerdict(rng) : nullptr};
+        trance_ = Trance{tick + kTranceTicks, *p, verdict ? drawVerdict(rng, c.phenotype().species.body) : nullptr};
         return;
       }
     }

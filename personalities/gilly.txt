@@ -1,6 +1,7 @@
 GILLY
 axolotl: never down for long
-Element Splash, style Guard, power mend. Voice: cheerful_doom, which wraps his lines as "GOOD NEWS: LINE", "LINE. HOORAY!", "LINE. HOW FUN!".
+Element Splash, style Guard, power mend. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry
+the voice themselves; the cheerful_doom frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -36,63 +37,115 @@ IT'LL GROW BACK! I'M FINE! HUGS!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
   SNACK? I'D LOVE A SNACK!
+  MY TUMMY SAYS HI! IT'S HUNGRY!
+  A WORM WOULD BE LOVELY! ANY!
+  HUNGRY! FOOD TASTES BEST NOW!
+  LUNCH? I'LL SHARE! SOME OF IT!
 starving
   SO HUNGRY! STILL SMILING!
+  SO HUNGRY MY FRILLS DROOP!
+  EMPTY! I'LL REFILL! WITH FOOD!
 hoarding
   I'LL SHARE THAT ONE. LATER.
+  THAT ONE'S FOR A FRIEND! ME!
+  SAVING IT! FOR A SNACK PARTY!
 crunch
   CHOMP! CHOMP! DELICIOUS!
+  NOM! BEST PELLET OF MY LIFE!
+  CRUNCH! THANK YOU, PELLET!
+  MMM! TASTES LIKE FRIENDSHIP!
 fuzzy_bite
   FUZZY! I'LL BE FINE. PROBABLY!
+  A FUZZY ONE! IT HAD A HAIRCUT!
 smells
   SOMETHING SMELLS! NOT ME!
+  A STINKY CRUMB! I FORGIVE IT!
 green
   I'M GREEN! I WAS PINK! FUN!
+  A TUMMY ACHE! IT'LL MEND!
 ow
   OW! IT'LL GROW BACK!
+  OW! GOOD THING I REGROW!
 heard_you
   HI! YES! I HEARD! HELLO!
   ONE KNOCK! NOW DO TWO!
+  A KNOCK! A VISITOR! YOU!
+  KNOCK ONCE MORE! SNACKS COME!
 ground_lies
   WHEE! SPLOSH! WHEE!
+  A WAVE! I LOVE WAVES!
+  SHAKY! LIKE A FUN BOAT RIDE!
 not_again
   SHAKING AGAIN? I'LL MANAGE!
+  SHAKING? FRILLS, HOLD ON!
+  NOT THE SHAKING! OKAY, FINE!
 hooded
   I'M HIDING. IN MY FRILLS.
+  SCARED? A BIT! HUG FIXES IT!
+  EEP! I'M FINE! I'M FINE!
 ancestor_fear
   GEN # WAS SCARED. THEN FINE!
 inherited
   GEN # SAYS: KEEP SMILING!
 counted
   I COUNTED MY FRILLS. TWELVE!
+  BORED! I'LL FIX THAT! HOW?
+  NOTHING TO MEND! ODD!
 put_me_down
   CARRY ME! OKAY! PUT ME DOWN!
+  UP HIGH! A GIANT HUG!
+  WHEE! A RIDE! WHERE TO?
 warm_hands
   WARM HANDS! A LITTLE TOO WARM!
+  A HUG! I'M MENDED ALREADY!
+  FRIEND! YOU FEEL LIKE A BATH!
+  HOLD STILL! I'M HUGGING BACK!
+  YOU'RE MY FAVOURITE HANDS!
 sky_down
   UPSIDE DOWN! NEW VIEW!
   UPSIDE DOWN! MY FRILLS FLOP!
+  THE FLOOR IS UP! HELLO FLOOR!
 heavy_eyes
   SLEEPY... HAPPY... SLEEPY...
+  NAP TIME! BEST TIME! YAWN!
+  FRILLS DROOPING... NIGHT...
+  I'LL MEND MY EYES... SLEEPING
 dream_pellets
   ZZZ... SWIMMING... ZZZ...
+  ZZZ... WORMS... WITH BOWS...
+  ZZZ... A SNACK FOR A FRIEND...
+  ZZZ... A PICNIC... EVERYONE...
+  ZZZ... JELLY... WOBBLY... YAY
+  ZZZ... SECONDS FOR EVERYONE...
 see_pellet
   I SEE... A PELLET! FOR ME!
+  I SEE... A SNACK! LET'S SHARE!
+  I SEE... LUNCH! HI LUNCH!
 see_phone
   I SEE... A FRIEND'S PHONE!
+  I SEE... A PHONE! IT'S SMILING
+  I SEE... YOU! HOLDING A PHONE!
 see_nothing
   I SEE... AN EMPTY DISH! OH.
+  I SEE... NO FOOD! A NEW START!
+  I SEE... NOTHING! FRESH IDEAS!
 see_damp
   I SEE... A BIG WET HUG!
+  I SEE... A SPLASH! FOR ME!
 knees
   OLD! STILL REGROWING THINGS!
+  OLD FRILLS! STILL FABULOUS!
 moon
   THE MOON SMILES BACK AT ME!
+  HI MOON! YOU'RE GLOWING!
 anyone
   HELLO? HUGS AVAILABLE! FREE!
+  ANY FRIENDS NEARBY? HUGS?
+  LONELY! I'LL WAVE AT GLASS!
 science
   FOOD HELPS! I FIXED HUNGER!
 no_hat
@@ -100,8 +153,10 @@ no_hat
 
 p_snack
   A SNACK! THEN ANOTHER!
+  A SNACK FOR YOU! AND ME!
 p_feast
   A FEAST! FOR EVERYONE!
+  A WORM BUFFET! ALL YOU CAN EAT
 p_pellet_soon
   A PELLET IS SWIMMING TO ME!
 p_feed_me
@@ -112,42 +167,55 @@ p_more_shaking
   MORE SHAKING! I'LL BOUNCE BACK
 p_mud
   MUD! A NICE MUD BATH!
+  MUD ON YOUR SHOES! IT WASHES!
 p_big_hand
   A BIG HAND! TO HIGH FIVE!
+  A HAND COMES! HUG IT BACK!
 p_bedtime
   BEDTIME! THE BEST TIME!
 p_sun
   THE SUN! A LITTLE DRY! FINE!
 p_rain
   RAIN! FREE WATER!
+  RAIN! THE SKY IS HUGGING US!
 p_watched
   SOMEONE IS WATCHING! WAVE!
 p_return
   THEY'LL COME BACK! THEY ALWAYS
 p_tap
   A KNOCK KNOCK! FOR ME! SNACKS!
+  TWO KNOCKS SOON! SNACK TIME!
 p_no
   NO! BUT A HAPPY NO!
+  NO! IT'S FINE! NO IS FINE!
 p_doom
   DOOM! IT GROWS BACK TOO!
+  DOOM! I'LL BRING A PLASTER!
 p_lunch
   MY END IS NEAR! OR A NAP!
 p_outlook
   OUTLOOK: GREAT! IT ALWAYS IS!
+  OUTLOOK: SPLASHY! PERFECT!
 p_decidedly
   YES! I DECIDED IT! YES!
+  YES! I'D HUG THAT ANSWER!
 p_lucky
   LUCK IS A FRIEND YOU MEET!
+  LUCKY YOU! LUCKY ME! LUCKY!
 p_pond_no
   THE POND SAYS NO! IT'S FINE!
+  POND SAYS NO! POND NEEDS A HUG
 p_pond_yes
   THE POND SAYS YES! I KNEW IT!
+  POND SAYS YES! SPLISH SPLOSH!
 p_ripples
   RIPPLES! I LOVE A RIPPLE!
+  TOO WIGGLY! ASK ME AGAIN!
 p_ancestor
   GEN # SAW THIS! AND SMILED!
 miss_phone
   THE PHONE WILL BE BACK! SURE!
+  NO PHONE! MORE HUGS FOR YOU!
 
 oclock
   IT'S # O'CLOCK! A GREAT HOUR!
@@ -191,7 +259,7 @@ dust
 blinked
   I BLINKED! I CAN DO IT AGAIN!
 important
-  I AM VERY HAPPY TODAY!
+  I MENDED A CRACK! TINY HERO!
 secret_mud
   SECRET: I'M NEVER SAD FOR LONG
 nap_plan
@@ -201,7 +269,7 @@ ceiling
 serious_face
   SERIOUS FACE! CAN'T! SMILING!
 no_echo
-  HELLO! NO ECHO! HELLO ANYWAY!
+  HELLO! NO ECHO! HELLO AGAIN!
 king
   BEST FRIEND OF THE DISH!
 smells_me
@@ -289,34 +357,60 @@ only_me
 snore
   ZZZ... BLUB... BLUB... ZZZ
   ZZZ... BLOOP... ZZZ... BLOOP
+  ZZZ... BUBBLE... POP... ZZZ
 mumble
   MMM... FRIEND... HUGS... MM
   MMM... I'M FINE... I'M FINE...
+  MMM... IT'LL GROW BACK... MM
 dream_chase
   ZZZ... TAG! YOU'RE IT, FRIEND
   ZZZ... SWIM FASTER, FRIEND!
+  ZZZ... WAIT FOR ME, DUCKS!
 dream_feast
   ZZZ... WORMS FOR EVERYONE...
   ZZZ... MUD PIE... FOR ALL!
+  ZZZ... A PICNIC... ON A LILY
 dream_flight
   ZZZ... MY FRILLS ARE WINGS...
   ZZZ... SWIMMING IN THE SKY...
+  ZZZ... HUGGING A CLOUD...
 sleep_count
   ONE FRIEND... TWO FRIENDS...
   ONE FRILL... TWO FRILLS...
+  ZZZ... ONE HUG... TWO HUGS...!
 sleep_warm
   MMM... SNUG AS A TADPOLE...
   MMM... WARM MUD BATH... COMFY
+  MMM... COSY POND... STAYING
 dream_rain
   ZZZ... RAIN! MORE SPLASHING...
   ZZZ... PUDDLES FOR FRIENDS!
+  ZZZ... DRIP DROP... SO NICE
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME! SNACK TIME!
+  KNOCK TWICE ON ME! FOOD! YAY!
+  TWO KNOCKS ON ME MEAN LUNCH!
+  HUNGRY! KNOCK KNOCK, FRIEND!
 teach_fight
   FIGHT? HOLD ME UPSIDE DOWN!
 teach_hold
   SLEEPY? HOLD ME SIDEWAYS!
 teach_shake
   SHAKE ME! I SEE GOOD THINGS!
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES! OBVIOUSLY! HUGS!
+  YES! I'M SO PROUD OF YOU!
+  A BIG PINK YES!
+verdict_no
+  NO! BUT I STILL LIKE YOU!
+  NO! IT'LL GROW BACK INTO YES!
+  NOPE! STILL A GREAT QUESTION!
+verdict_later
+  STILL GROWING THAT ANSWER!
+  ASK LATER! IT'S MENDING!
+  WAIT! MY FRILLS ARE THINKING

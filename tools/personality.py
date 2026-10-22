@@ -7,9 +7,10 @@
   python3 tools/personality.py build            check, then write the tables
 
 What it owns: the text column of thoughts.def (from personalities/_shared.txt),
-all of species_lines.def (from personalities/<species>.txt) and the parity
-fixture test/test_thoughts/said_lines.inc. Ids, situations, priorities and
-cooldowns stay hand-written in thoughts.def.
+all of species_lines.def and species_verdicts.def (from
+personalities/<species>.txt) and the parity fixture
+test/test_thoughts/said_lines.inc. Ids, situations, priorities and cooldowns
+stay hand-written in thoughts.def.
 """
 import difflib
 import re
@@ -29,6 +30,11 @@ FONT = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?-':")
 # Typing on a laptop produces these; the screen has a plain twin for each.
 FRIENDLY = {"’": "'", "‘": "'", "…": "...", "–": "-", "—": "-"}
 MARKER = re.compile(r"^\s*=+\s*LINES\s*=+\s*$", re.I)
+# The Magic 8-Ball's half of a shake (thoughts.cpp drawVerdict): a species may
+# give its own yes, no and not-yet in these sections, in place of the ball's
+# plain YES. / NO. / ASK AGAIN LATER. Kinds as BLORB_SPECIES_VERDICT's.
+VERDICTS = {"verdict_yes": 0, "verdict_no": 1, "verdict_later": 2}
+SPECIES_VERDICTS_DEF = DEFS / "species_verdicts.def"
 # One mark per line, each given by some situations only: # a number, @ his
 # name (situations named named...), * a line the owner taught him (taught).
 MARKS = "#@*"
@@ -38,11 +44,17 @@ PARITY_NAME, PARITY_TAUGHT = "MOSS BOY", "I LOVE YOU, LITTLE ONE"
 
 def _limits():
     h = (ROOT / "lib/blorb/include/blorb/thoughts.h").read_text()
-    text, frame = (int(re.search(rf"{k} = (\d+);", h)[1]) for k in ("kMaxThoughtText", "kMaxFrameText"))
-    return text, text + frame + (text - 1) + 1   # kThoughtLineCap: '*' can grow to a taught line (kMaxTaughtText)
+    text, frame, one_in = (int(re.search(rf"{k} = (\d+);", h)[1])
+                           for k in ("kMaxThoughtText", "kMaxFrameText", "kFrameOneIn"))
+    # kThoughtLineCap: '*' can grow to a taught line (kMaxTaughtText)
+    return text, text + frame + (text - 1) + 1, one_in
 
 
-MAX_TEXT, LINE_CAP = _limits()
+MAX_TEXT, LINE_CAP, FRAME_ONE_IN = _limits()
+# Hedges and tags that pad a line instead of finishing it. The owner asked for
+# them gone ("OR SOMETHING" and other boring things): a line ends on its joke.
+FILLER = re.compile(r"(,? OR SOMETHING|,? I GUESS|,? WHATEVER|,? OR WHATEVER|,? KIND OF|,? SORT OF|,? ISH|"
+                    r"\. MAYBE|,? OK\?|,? OKAY\?|\. ANYWAY)[.!?]*$")
 
 
 @dataclass
@@ -141,6 +153,8 @@ def clean_text(raw, path, n, row, engine, problems):
     if len(text) > MAX_TEXT:
         over = len(text) - MAX_TEXT
         problems.add(path, n, f"too long by {over}: {len(text)} characters, the screen holds {MAX_TEXT}. \"{text}\"")
+    if m := FILLER.search(text):
+        problems.add(path, n, f"ends on a filler tag ('{m[0].strip(' ,.')}'): end on the joke instead. \"{text}\"")
     if text.count("#") > 1:
         problems.add(path, n, "only one '#' per line (it is the one number this situation gives)")
     elif sum(text.count(m) for m in MARKS) > 1:
@@ -184,20 +198,26 @@ def parse_source(path, text, engine, problems):
     if start is None:
         problems.add(path, 1, "no '=== LINES ===' line, so nothing here is said. Put it above the first situation")
         return said
-    row, header_ok = None, False
+    row, verdict, header_ok = None, None, False
     for i in range(start, len(lines)):
         n, raw = i + 1, lines[i]
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         if raw[0] not in " \t":
-            row = resolve(raw.split()[0].lower(), engine, path, n, problems)
+            word = raw.split()[0].lower()
+            verdict = word if word in VERDICTS else None
+            row = None if verdict else resolve(word, engine, path, n, problems)
             header_ok = True
             continue
         if not header_ok:
             problems.add(path, n, "a line with no situation above it")
             continue
         text = clean_text(raw, path, n, row, engine, problems)
-        if row:
+        if verdict:
+            if any(m in text for m in MARKS):
+                problems.add(path, n, f"a verdict gives no number, name or taught line: no # @ * in \"{text}\"")
+            said.append(Said(path, n, verdict, text))
+        elif row:
             said.append(Said(path, n, row.name, text))
     return said
 
@@ -215,6 +235,10 @@ def read_book(engine, problems, root=PERSONALITIES):
         said = parse_source(rel, f.read_text(encoding="utf-8"), engine, problems)
         if f.stem == SHARED:
             for s in said:
+                if s.row in VERDICTS:
+                    problems.add(s.path, s.line, f"'{s.row}' belongs in a species' file: the ball's plain verdicts "
+                                                 "every pet shares are kVerdicts in lib/blorb/src/thoughts.cpp")
+                    continue
                 if s.row in shared:
                     problems.add(s.path, s.line, f"'{s.row}' already has its shared line; every pet shares exactly one. "
                                                  "Give a species more in its own file")
@@ -244,14 +268,16 @@ def read_book(engine, problems, root=PERSONALITIES):
 def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, taught=PARITY_TAUGHT):
     text = book.shared.get(row.name, row.text)
     mine = book.own.get(species, {}).get(row.name, [])
-    if mine:
+    if mine:   # his own line is already in his voice: said as written, never framed or cut
         text = mine[pick % len(mine)]
-        pick //= len(mine)
     own = [] if mine else [t for (th, v, t) in engine.voiced if th == row.name and v == voice]
     if own:
         text = own[pick % len(own)]
     v = engine.voices[voice]
-    frame = None if own else v.frames[pick % len(v.frames)]
+    # A shared line takes a frame only one time in FRAME_ONE_IN, so the frame
+    # stays a seasoning rather than a tag on every line.
+    framed = not mine and not own and pick % FRAME_ONE_IN == 0
+    frame = v.frames[pick // FRAME_ONE_IN % len(v.frames)] if framed else None
     out = []
 
     def put(s):
@@ -263,7 +289,7 @@ def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, tau
         put(frame[0])
     body = len(out)
     put(text.replace("#", str(num)).replace("@", name).replace("*", taught))
-    if v.first_only and not own and "*" not in text:
+    if v.first_only and not mine and not own and "*" not in text:
         for i in range(body, len(out) - 1):
             if out[i] in ".!?" and out[i + 1] == " " and (i == body or out[i - 1] != "."):
                 del out[i + 1:]
@@ -302,6 +328,10 @@ def cmd_say(engine, book, who):
                 said = (m.replace("#", "3").replace("@", PARITY_NAME).replace("*", PARITY_TAUGHT) for m in mine)
                 star = "*" if any(m in s for m in said) else " "
                 print(f"  {star} {s}")
+        for verdict in VERDICTS:
+            print(f"{verdict}  [a shake's bare answer, in place of the ball's plain one]")
+            for s in book.own.get(name, {}).get(verdict, []) or ["(the ball's plain answers)"]:
+                print(f"  * {s}")
         print()
 
 
@@ -327,6 +357,20 @@ def render_species_lines(engine, book):
     return "\n".join(out) + "\n"
 
 
+def render_species_verdicts(engine, book):
+    out = ["// Generated by tools/personality.py from the verdict_yes, verdict_no and",
+           "// verdict_later sections of personalities/<species>.txt. Do not edit: edit",
+           "// those files and run `python3 tools/personality.py build`.",
+           "// A species' own answers to a shake stand in for the ball's plain ones",
+           "// (kVerdicts in thoughts.cpp), kind by kind: 0 yes, 1 no, 2 not yet.",
+           "// BLORB_SPECIES_VERDICT(speciesId, species, kind, text)"]
+    for name, sp in engine.species.items():
+        for verdict, kind in VERDICTS.items():
+            for text in book.own.get(name, {}).get(verdict, []):
+                out.append(f'BLORB_SPECIES_VERDICT({sp.id}, {name}, {kind}, "{text}")')
+    return "\n".join(out) + "\n"
+
+
 NO_SPECIES = 0xFE   # kSharedOnly in thoughts.h
 
 
@@ -337,12 +381,14 @@ def render_parity(engine, book):
            "// {species, thought, voice, pick, num, text}"]
     cases = [(NO_SPECIES, None)] + [(engine.species[s].id, s) for s in book.own]
     for sid, sname in cases:
-        for v in engine.voices.values():
+        # A species' own line ignores the voice, so his own voice proves it.
+        voices = [engine.voices[engine.species[sname].voice]] if sname else engine.voices.values()
+        for v in voices:
             for row in engine.rows:
                 if sname and row.name not in book.own[sname]:
                     continue
                 seen = set()
-                for pick in range(6):
+                for pick in range(2 * FRAME_ONE_IN + 1):
                     s = say_line(engine, book, row, 7, v.name, pick, sname)
                     if s not in seen:
                         seen.add(s)
@@ -353,6 +399,7 @@ def render_parity(engine, book):
 def outputs(engine, book):
     return {THOUGHTS_DEF: render_thoughts_def(book),
             SPECIES_LINES_DEF: render_species_lines(engine, book),
+            SPECIES_VERDICTS_DEF: render_species_verdicts(engine, book),
             PARITY_FIXTURE: render_parity(engine, book)}
 
 

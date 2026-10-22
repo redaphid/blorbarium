@@ -1,6 +1,7 @@
 PUFFKIN
 puffball: sneezes sparkles
-Element Sprout, style Pounce, power spores. Voice: cheerful_doom, which wraps his lines as "GOOD NEWS: LINE", "LINE. HOORAY!", "LINE. HOW FUN!".
+Element Sprout, style Pounce, power spores. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry
+the voice themselves; the cheerful_doom frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -35,63 +36,115 @@ ACHOO! BOUNCE! POOF! HUG ME!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
   SNACK TIME! ACHOO! SNACK TIME!
+  MY TUMMY IS DOING A DRUM SOLO!
+  I'M HUNGRY! SO EXCITING!
+  FEED THE FLUFF! FEED IT NOW!
+  EMPTY TUMMY! MORE ROOM! YAY!
 starving
   SO HUNGRY I'M DEFLATING.
+  I'M GOING FLAT! A PANCAKE!
+  SO HUNGRY! I'D EAT A COMB!
 hoarding
   I'LL HIDE THAT ONE IN MY FLUFF
+  INTO THE FLUFF IT GOES! POOF!
+  FOUND IT LATER! IN MY FLUFF!
 crunch
   NOM! NOM! FLUFF IN IT! NOM!
+  CRUNCH! ACHOO! CRUNCH!
+  NOM NOM NOM! BEST BITE EVER!
+  CHOMP! CRUMBS IN MY FLUFF!
 fuzzy_bite
   IT WAS FUZZIER THAN ME!
+  A FUZZY ONE! WE MATCH! BLEH!
 smells
   SOMETHING STINKS. NOT ME. NO.
+  A STINK! HOW EXCITING! ACHOO!
 green
   I FEEL GREEN. AND STILL FLUFFY
+  GREEN PUFF! NEW COLOUR! UGH!
 ow
   OW! MY FLUFF IS FLAT!
+  OW! BUT WHAT A BONK! WOW!
 heard_you
   KNOCK KNOCK! WHO IS IT? YOU!
   ONE KNOCK! TWO! DO TWO! TWO!
+  A KNOCK! HI! HUG? HI!
+  KNOCK AGAIN! I LOVE KNOCKS!
 ground_lies
   WHEE! ACHOO! WHEEEE!
+  BOUNCY CASTLE! WHEEE!
+  EARTHQUAKE! BEST DAY EVER!
 not_again
   NO SHAKING! I'LL GO POOF!
+  SHAKING? MY FLUFF! MY HAIRDO!
+  NO SHAKE! I'M A SNOW GLOBE!
 hooded
   I PUFFED UP. NOW I'M SCARY.
+  POOF! I'M BIGGER! RUN AWAY!
+  SCARED! TINY FROWN! GRR!
 ancestor_fear
   GEN # WENT POOF AT THIS TOO.
 inherited
   GEN # SNEEZES HELLO!
 counted
   I COUNTED MY FLUFF. LOTS.
+  BORED! SO BORED! HOW FUN!
+  NOTHING TO BOUNCE ON! SAD!
 put_me_down
   UP! UP! DOWN! NO, UP!
+  I'M FLYING! WAIT, I'M HELD!
+  DOWN! I NEED TO BOUNCE!
 warm_hands
   WARM HANDS! MY FLUFF APPROVES.
+  A HUG! FINALLY! SQUEEZE!
+  HANDS! MY FAVOURITE CUSHION!
+  CUDDLE! I'M PURRING! I THINK!
+  DON'T LET GO! EVER! OK, LATER!
 sky_down
   UPSIDE DOWN! FLUFF FALLS UP!
   UPSIDE DOWN! WHEE! WHEE!
+  MY FACE IS ON THE BOTTOM! HA!
 heavy_eyes
   SO SLEEPY... SOFT... FLUFF...
+  BOUNCE... BOUNCE... BOU...
+  EYES... GOING... SMOOSHY...
+  SLEEPY! SO EXCITING! YAWN!
 dream_pellets
   ZZZ... ACHOO... ZZZ...
+  ZZZ... SNACKS... ON SNACKS...
+  ZZZ... A BISCUIT HUG...
+  ZZZ... CAKE! CAKE! ACHOO...
+  ZZZ... A PUDDING TRAMPOLINE...
+  ZZZ... SPARKLE SPRINKLES...
 see_pellet
   I SEE... A SNACK! A SNACK!!
+  I SEE... CRUMBS! FOR ME!
+  I SEE... BOUNCING FOOD!
 see_phone
   I SEE... A SHINY RECTANGLE!
+  I SEE... A PHONE! HUG IT!
+  I SEE... A FACE! HI FACE!
 see_nothing
   I SEE... NOTHING TO EAT!
+  I SEE... AN EMPTY DISH! WOW!
+  I SEE... ZERO SNACKS! DRAMA!
 see_damp
   I SEE... A LOVELY DAMP LOG!
+  I SEE... MOSS! SOFT MOSS!
 knees
   OLD AND STILL FLUFFY. HA!
+  OLD! MY FLUFF IS GREY! FANCY!
 moon
   THE MOON IS A BIG PUFFBALL!
+  HI MOON! WANNA BOUNCE?
 anyone
   HELLO? HUG? ANYONE? HUG?
+  HUG SHORTAGE! EMERGENCY!
+  I'M HERE! ROUND AND READY!
 science
   FOOD MAKES ME BIGGER. SCIENCE!
 no_hat
@@ -99,8 +152,10 @@ no_hat
 
 p_snack
   SNACKS SOON! SO MANY!
+  A SNACK! THEN A SNEEZE!
 p_feast
   A FEAST! WE'LL ALL GET ROUND!
+  SO MUCH FOOD! I'LL BE A MOON!
 p_pellet_soon
   A BISCUIT IS BOUNCING OVER!
 p_feed_me
@@ -111,42 +166,55 @@ p_more_shaking
   MORE SHAKING! MORE SNEEZING!
 p_mud
   MUD IS COMING. GOODBYE FLUFF!
+  MUD! I'LL BE A CHOCOLATE PUFF!
 p_big_hand
   A BIG HAND! IT MIGHT SQUISH!
+  A HAND! A HUG? A HUG! YES!
 p_bedtime
   BEDTIME SOON! FLUFFY DREAMS!
 p_sun
   THE SUN WILL DRY MY FLUFF!
 p_rain
   RAIN! I WILL BE A SOGGY PUFF!
+  RAIN! SOGGY! WHAT A DISASTER!
 p_watched
   THE PHONE IS WATCHING! WAVE!
 p_return
   THEY'LL COME BACK! WITH HUGS!
 p_tap
   YOU WILL KNOCK! KNOCK KNOCK!
+  TWO KNOCKS! THEN SNACKS! YAY!
 p_no
   NOPE! NOPE NOPE! ACHOO!
+  NO! BUT A BOUNCY NO!
 p_doom
   DOOM! BUT FLUFFY DOOM!
+  DOOM! I'VE NEVER HAD DOOM!
 p_lunch
   MY END IS NEAR! ONE LAST POOF!
 p_outlook
   OUTLOOK: SPARKLY!
+  OUTLOOK: WINDY! OH NO! WHEE!
 p_decidedly
   YES! YES YES! DEFINITELY!
+  ALL SIGNS SAY BOUNCE! YES!
 p_lucky
   LUCK IS A SNEEZE. BLESS YOU!
+  YOUR LUCKY COLOUR IS FLUFF!
 p_pond_no
   THE POND SAYS NO! SPLASH!
+  THE POND SAYS NO! TOO SOGGY!
 p_pond_yes
   THE POND SAYS YES! BUBBLES!
+  POND SAYS YES! BLOOP BLOOP!
 p_ripples
   RIPPLES! I CAN'T READ THEM!
+  I SNEEZED ON THE FUTURE! ASK!
 p_ancestor
   GEN # SNEEZED THIS UP TOO.
 miss_phone
   WHERE DID THE PHONE GO? SAD!
+  NO PHONE FOR AGES! HUG ME?
 
 oclock
   IT'S # O'CLOCK! BOING!
@@ -210,7 +278,7 @@ todo
 brave
   I'M BRAVE! I'M ALSO SQUISHY!
 big_pond
-  ONE DAY: A BIG FOREST!
+  ONE DAY: A TRAMPOLINE!
 floor
   THE FLOOR IS GREAT FOR BOUNCE!
 snack_snacks
@@ -266,7 +334,7 @@ outside
   IS OUTSIDE FLUFFY TOO?
 
 not_scared
-  IT'S DARK! I'M A BIT SCARED!
+  DARK! I GLOW IN IT! A BIT!
 star_crumbs
   THE STARS ARE SPARKLY SNEEZES!
 rebel
@@ -288,34 +356,60 @@ only_me
 snore
   ZZZ... POOF... ZZZ... POOF...
   ZZZ... SNNRK... ACHOO! ZZZ...
+  ZZZ... PFFF... PFFF... ZZZ
 mumble
   MMM... HUG... HUG ME... MMM
   MMM... SPARKLES... MORE...
+  MMF... NO COMBS... NO COMBS...
 dream_chase
   ZZZ... BOUNCE BOUNCE... GOT IT
   ZZZ... CATCH THE SPARKLE! WHEE
+  ZZZ... A BALLOON! MY COUSIN!
 dream_feast
   ZZZ... A SNACK AS BIG AS ME!
   ZZZ... A DAMP LOG CAKE! YUM!
+  ZZZ... SNACK FOR EVERY HUG...
 dream_flight
   ZZZ... I'M A SPORE... WHEEE...
   ZZZ... BOUNCED TO THE STARS!
+  ZZZ... I'M A CLOUD... FLUFFY
 sleep_count
   ZZZ... ONE HUG... TWO HUGS...
   ZZZ... ONE BOUNCE... TWO...
+  ZZZ... ONE SNEEZE... ACHOO...
 sleep_warm
   MMM... FLUFFY... SO FLUFFY...
   MMM... BIG HUG... WARM HUG...
+  MMM... TOASTY FLUFF... MMM
 dream_rain
   ZZZ... SOGGY... STILL BOUNCY
   ZZZ... PUDDLE... BOUNCE! SPLAT
+  ZZZ... RAINBOW SNEEZE...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME! SNACKS!
+  KNOCK TWICE! FLUFF GETS FOOD!
+  TWO KNOCKS ON ME MEANS SNACKS!
+  KNOCK KNOCK! FEED THE FLUFF!
 teach_fight
   BATTLE? HOLD ME UPSIDE DOWN!
 teach_hold
   NAP? HOLD ME SIDEWAYS! POOF!
 teach_shake
   SHAKE ME! I SEE! ACHOO!
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES! YES YES YES! ACHOO!
+  BIG BOUNCY YES!
+  YES! HUG ME ABOUT IT!
+verdict_no
+  NO! A FLUFFY NO!
+  NOPE! POOF! NOPE!
+  NO! BUT WHAT A QUESTION!
+verdict_later
+  ACHOO! I SNEEZED IT. ASK AGAIN
+  TOO BOUNCY TO SEE! LATER!
+  FLUFF IN MY EYES! ASK LATER!
