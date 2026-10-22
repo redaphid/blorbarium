@@ -18,22 +18,35 @@ Phases (--phase, comma separated; `all` runs them in this order):
              signature refused), then DEBUG ota check <--test-manifest>: download,
              verify, DEBUG power low so the restart happens dark, the new version
              boots on trial, confirms over Wi-Fi, and keeps the same pet (GENOME,
-             gen) and the same home (DEBUG home). Each stage timed.
-  offline    The networks swapped for one that is not in range, a reboot so a
-             check is due, then dark: one short scan per window, the backoff
-             growing (next_check_in, absent_streak), 80 MHz while dark, and
-             DEBUG fps / DEBUG latency awake unchanged against a baseline.
-             The real network is given back from .env at the end.
+             gen) and the same home (DEBUG home). Each stage timed. After the
+             live check's window, DEBUG air open/close: fight mode's radio fits.
+  offline    The networks swapped for one that is not in range, DEBUG wifi due
+             (a reboot on a firmware without it) so a check is due, then dark:
+             one short scan per window, the backoff growing (next_check_in,
+             absent_streak), each later check made due by DEBUG wifi due with
+             the streak kept, 80 MHz while dark, DEBUG air open/close after the
+             windows, and DEBUG fps / DEBUG latency awake unchanged against a
+             baseline. The real network is given back from .env at the end.
   lifecycle  DESTROYS THE PET (the owner allows it). For --generations N:
-             hatch, grow, idle variety, night only with evidence, feeding, rot
-             refused unless starving, sleep and wake, elder, death, vigil,
-             clutch, a badge left lying picks nothing, a lean plus a knock picks
-             the aimed egg, the hatch of the next generation, LINEAGE's new
-             rows, STATS carrying the parent's life, and a reboot that keeps him.
-  server     The current genome POSTed to /api/pet-lines (a pack with every
-             situation covered), then with .env's admin_token the admin API:
-             the creature record for --mac and its stats (uploaded from the
-             badge's STATS json by this script unless --no-upload-stats).
+             hatch, grow, idle variety, night only with evidence, feeding
+             (DEBUG chem hunger), rot refused unless starving (DEBUG chem makes
+             him starving once he has refused it hungry), sleep and wake (a
+             knock; DEBUG pickup with DEBUG trace: picked_up and nothing else),
+             elder, death, vigil, clutch, a badge left lying picks nothing, a
+             lean plus a knock picks the aimed egg, the hatch of the next
+             generation, LINEAGE's new rows, STATS carrying the parent's life,
+             and a reboot that keeps him.
+  server     STATE's mac= and species= (the board's own MAC, --mac only when
+             STATE has none), the current genome POSTed to /api/pet-lines (a
+             pack with every situation covered), then with .env's admin_token
+             the admin API: the creature record for that MAC, matching STATE's
+             species and gen, and its stats (uploaded from the badge's STATS
+             json by this script unless --no-upload-stats).
+
+The verbs come from test-verbs (DEBUG chem, DEBUG pickup, STATE species=/mac=),
+test-verbs-wifi (DEBUG wifi due) and wifi-ota-2 (DEBUG wifi, ota, home, air). A
+firmware without one is named at the end; chem, pickup and wifi due fall back
+to the slower way (warps, DEBUG cradle, a reboot).
 
 The port is opened once and held (DTR and RTS low, so the open itself should
 not reset the board). If the board drops off the bus it is found again by its
@@ -292,6 +305,35 @@ def live_verdict(k, outcome, verdict) -> tuple:
     if k == 2:
         return False, "it took the live image: %s" % outcome
     return False, "the check failed: %s" % outcome
+
+
+MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+
+# What `DEBUG pickup` must never be read as (stimuli.def names, as DEBUG trace prints them).
+NOT_A_PICKUP = ("knock", "double_knock", "shake", "dropped", "flipped", "button", "button_hold", "button_double",
+                "hang", "cradle", "lid_down")
+
+
+def parse_stims(lines) -> list:
+    """DEBUG trace's `[stim] <ms> <name>` lines: the names, in order."""
+    return [m.group(1) for m in (re.search(r"\[stim\] \d+ (\w+)", l) for l in lines) if m]
+
+
+def pickup_verdict(stims) -> tuple:
+    """DEBUG pickup through the real detectors: picked_up fired, and nothing a pick-up is not."""
+    wrong = sorted(set(stims) & set(NOT_A_PICKUP))
+    ok = "picked_up" in stims and not wrong
+    return ok, "stimuli %s%s" % (" ".join(stims) or "none", "; never a pick-up: %s" % wrong if wrong else "")
+
+
+def state_board(st, want_mac) -> tuple:
+    """STATE's species= and mac= (test-verbs): (ok, mac to use, note). The mac is the board's own;
+    --mac is only a fallback for a firmware whose STATE has none."""
+    mac, species = st.get("mac"), st.get("species")
+    if not isinstance(mac, str) or not MAC_RE.match(mac):
+        return False, want_mac, "STATE has no board mac (mac=%s, species=%s): this firmware lacks test-verbs" % (mac, species)
+    ok = mac == want_mac.lower() and isinstance(species, str) and species != "none"
+    return ok, mac, "STATE mac=%s species=%s (--mac %s)" % (mac, species, want_mac)
 
 
 def version_tuple(v):
@@ -724,6 +766,69 @@ class Run:
         lines = [l for l in self.b.since(m) if "[wifi] window=" in l or "[wifi] station=" in l]
         return parse_wifi_status(lines), lines
 
+    def chem_set(self, name, permille):
+        """DEBUG chem <name> <permille> (test-verbs): one chemical or drive, as the debug link's
+        CHEM sets it. The level he holds after; Fail with the board's reason when refused."""
+        r = self.debug("DEBUG chem %s %d" % (name, permille),
+                       r"\[hw\] debug chem (?:(\w+)=(-?\d+)$|\S+ \S*: (.*))")
+        if r.group(3) is not None:
+            raise Fail("DEBUG chem %s %d refused: %s" % (name, permille, r.group(3)))
+        return int(r.group(2))
+
+    def pickup(self, during=None):
+        """DEBUG pickup (test-verbs) with DEBUG trace on: (the stimuli it fired, its line). It
+        runs ~5.5 s (the board says how long); then up to 2.5 s for the put_down of a badge
+        lying on the desk. `during(end)` is called while it runs (a state poll; `end`, on
+        time.monotonic(), is when the pose is over)."""
+        self.debug("DEBUG trace 12", r"\[hw\] debug trace 12")
+        m = self.b.mark()
+        try:
+            r = self.debug("DEBUG pickup", r"\[hw\] debug pickup: .*over in (\d+) ms")
+            end = time.monotonic() + int(r.group(1)) / 1000.0
+            if during:
+                during(end)
+            self.b.wait(r"\[stim\] \d+ put_down", max(0.0, end - time.monotonic()) + 2.5, since=m)
+        finally:
+            self.debug("DEBUG trace 0", r"\[hw\] debug trace 0")
+        return parse_stims(self.b.since(m)), r.group(0)
+
+    def wifi_due(self):
+        """DEBUG wifi due (test-verbs-wifi): the next automatic check due now, on the real clock
+        that DEBUG warp does not move. (status, lines), or None on a firmware without it."""
+        m = self.b.mark()
+        self.b.send("DEBUG wifi due")
+        k, r = self.b.wait([r"\[wifi\] due: .*", r"\[wifi\] want: wifi", UNKNOWN_VERB], 5, since=m)
+        if k in (1, 2):
+            self.missing.add("DEBUG wifi due")
+            return None
+        if r is None:
+            raise Fail("no answer to DEBUG wifi due")
+        self.b.wait(r"\[wifi\] station=", 5, since=m)
+        lines = [l for l in self.b.since(m) if "[wifi] due:" in l or "[wifi] window=" in l or "[wifi] station=" in l]
+        return parse_wifi_status(lines), lines
+
+    def air_fits(self, P, name):
+        """DEBUG air open, then close (wifi-ota-2): the duel's radio opens through RadioGate as
+        fight mode opens it, after a Wi-Fi window. A window still closing says wifi_up for a
+        moment: a few tries, a second apart."""
+        t0 = time.monotonic()
+        ev, why, tries, r = [], None, 0, None
+        try:
+            for tries in range(1, 7):
+                r = self.debug("DEBUG air open", r"\[hw\] debug air open: (\S+) heap=(\d+) minheap=(\d+) big=(\d+)")
+                ev.append(r.group(0))
+                why = r.group(1)
+                if why == "ok" or why not in ("wifi_up", "ota_active"):
+                    break
+                time.sleep(1)
+            c = self.debug("DEBUG air close", r"\[hw\] debug air close: open=(\d) heap=(\d+) minheap=(\d+) big=(\d+)")
+            ev.append(c.group(0))
+        except MissingVerb as e:
+            return self.record(P, name, False, str(e), ev, t0)
+        ok = why == "ok" and c.group(1) == "0"
+        return self.record(P, name, ok, "open: %s after %d tr%s, heap %s big %s; closed: open=%s heap %s" % (
+            why, tries, "y" if tries == 1 else "ies", r.group(2), r.group(4), c.group(1), c.group(2)), ev, t0)
+
     def fps_window(self, seconds=10):
         self.debug("DEBUG fps", r"\[fps\] fps=")   # starts a new window
         time.sleep(seconds)
@@ -791,6 +896,7 @@ class Run:
         if not (saved and listed):
             return
         self._ota_live()
+        self.air_fits(P, "fight radio fits after a window")
         if self.args.test_manifest:
             self._ota_test(self.args.test_manifest)
         else:
@@ -942,14 +1048,21 @@ class Run:
                     lines, t1)
         if not ok:
             return self._restore_network()
-        if st.get("next_check_in", 0) != 0 or st.get("auto") != 1:
-            mr = self.b.mark()
-            self.b.send("DEBUG reboot")
-            self.wait_boot(60, since=mr)
+        if st.get("auto") != 1:
             self.debug("DEBUG wifi on", r"\[wifi\] automatic checks on")
+        if st.get("next_check_in", 0) != 0:
+            # The schedule keeps real time (DEBUG warp does not move it): DEBUG wifi due makes the
+            # next check due now; a firmware without it reboots, which makes one due at boot.
+            if self.wifi_due() is None:
+                mr = self.b.mark()
+                self.b.send("DEBUG reboot")
+                self.wait_boot(60, since=mr)
+                self.debug("DEBUG wifi on", r"\[wifi\] automatic checks on")
         scans0 = self.wifi_status()[0].get("scans", 0)
         windows = []
-        for n in range(max(1, self.args.offline_checks)):
+        nudged = False   # the check about to open was made due by DEBUG wifi due
+        checks = max(1, self.args.offline_checks)
+        for n in range(checks):
             tw = time.monotonic()
             m = self.b.mark()
             if n == 0:
@@ -957,7 +1070,7 @@ class Run:
                 if pw.group(2) != "low":
                     self.record(P, "dark", False, pw.group(0))
                     break
-            due = 150 if n == 0 else 60 + (900 << (n - 1))
+            due = 150 if n == 0 or nudged else 60 + (900 << (n - 1))
             k, opened = self.b.wait(r"\[wifi\] window check opens.*", due, since=m)
             k2, closed = self.b.wait(r"\[wifi\] window check closed after (\d+) ms", 30, since=m)
             wl = [l for l in self.b.since(m) if l.startswith("[wifi]")]
@@ -978,11 +1091,24 @@ class Run:
                         "power=%s cpu=%s sleep=%s" % (power.get("power"), power.get("cpu"), power.get("sleep")), [pline], tw)
             if not opened:
                 break
+            nudged = False
+            if n + 1 < checks and self.args.offline_due:
+                # The backoff is proven; the next check is made due now rather than waited
+                # for (15 min, then 30...). The streak must stand, so the wait after it grows.
+                td = time.monotonic()
+                got = self.wifi_due()
+                if got:
+                    nudged = True
+                    dst, dlines = got
+                    self.record(P, "check %d: DEBUG wifi due" % (n + 2), dst.get("next_check_in") == 0 and
+                                dst.get("absent_streak") == n + 1, "next_check_in=%ss absent_streak=%s (the streak stands)" % (
+                                    dst.get("next_check_in"), dst.get("absent_streak")), dlines, td)
         scans1 = self.wifi_status()[0].get("scans", 0)
         self.record(P, "no other scans", scans1 - scans0 == len(windows), "scans %s -> %s over %d window(s)" % (
             scans0, scans1, len(windows)))
         t2 = time.monotonic()
         self.awake()
+        self.air_fits(P, "fight radio fits after the windows")
         aft_fps, fps2 = self.fps_window(10)
         aft_lat, lat2 = self.latency_probe()
         ok, note = perf_close(base_fps, aft_fps)
@@ -1052,6 +1178,8 @@ class Run:
             info["species"], info["genome_fnv"] = sj.get("species"), sj.get("genome_fnv")
         except Fail:
             pass
+        if st.get("species") not in (None, "none"):
+            info["species"] = st["species"]   # STATE's own (test-verbs)
         info["genome_sha"] = hashlib.sha256(self.genome()).hexdigest()
         self.say("generation %d: gen=%s species=%s genome=%s" % (g + 1, gen, info.get("species"), info["genome_sha"][:12]))
         Pg = "%s g%s" % (P, gen)
@@ -1106,7 +1234,11 @@ class Run:
             died = r.group(2) == "clutch"
             ev = [r.group(0)]
         except MissingVerb:
-            ev, died = ["no DEBUG die (egg-ux adds it): warping until he dies"], False
+            ev, died = ["no DEBUG die (egg-ux adds it): his life to nothing (DEBUG chem), then warping until he dies"], False
+            try:
+                ev.append("DEBUG chem life: %s" % self.chem_set("life", 0))
+            except MissingVerb:
+                pass
             for _ in range(self.args.die_fallback_warps):
                 if self.warp(600, timeout=600) == "clutch":
                     died = True
@@ -1187,12 +1319,15 @@ class Run:
             self.warp(120)
         self.stage_to(st.get("stage", "adult"))
         hunger = 0
-        for _ in range(15):
-            st = self.state()
-            hunger = st["drives"].get("hunger", 0)
-            if hunger >= 450:
-                break
-            self.warp(20)
+        try:
+            hunger = self.chem_set("hunger", 600)   # hungry enough to eat at once (DEBUG chem)
+        except MissingVerb:
+            for _ in range(15):   # a firmware without DEBUG chem: let him grow hungry
+                st = self.state()
+                hunger = st["drives"].get("hunger", 0)
+                if hunger >= 450:
+                    break
+                self.warp(20)
         self.debug("DEBUG sleepiness 0", r"debug sleepiness")
         if self.state().get("asleep") == 1:
             self.debug("DEBUG knock 1", r"debug knock 1")
@@ -1248,6 +1383,7 @@ class Run:
             return self.debug("DEBUG tidy", r"\[hw\] debug tidy")
         t1 = time.monotonic()
         samples, actions, minute = [(0, st["drives"].get("hunger", 0), 1, ch["chem"].get("toxin", 0))], set(), 0
+        jumped = False
         for _ in range(60):
             step = 5 if samples[-1][1] >= 600 else 10
             self.warp(step)
@@ -1261,6 +1397,15 @@ class Run:
             samples.append((minute, st["drives"].get("hunger", 0), st["dish"].get("pellets", 0), ch["chem"].get("toxin", 0)))
             if samples[-1][2] == 0 or samples[-1][1] >= 950:
                 break
+            if not jumped and samples[-1][1] >= 600 and samples[-2][1] >= 600:
+                # Refused twice while hungry: DEBUG chem makes him starving now instead of
+                # warping there 5 min at a time. A sample at the new level marks the jump.
+                jumped = True
+                try:
+                    level = self.chem_set("hunger", STARVING + 50)
+                    samples.append((minute, level, samples[-1][2], samples[-1][3]))
+                except MissingVerb:
+                    pass
         refused, ate, note = rot_verdict(samples)
         table = ["min %s hunger %s pellets %s toxin %s" % s for s in samples]
         self.record(Pg, "rot refused unless starving", refused, note, table[-8:], t1)
@@ -1271,25 +1416,41 @@ class Run:
     def _sleep_wake(self, Pg):
         t0 = time.monotonic()
         self.awake()
-        for how, line, pat in (("a knock", "DEBUG knock 1", r"debug knock 1"),
-                               ("a pick-up (DEBUG cradle)", "DEBUG cradle 6000", r"debug cradle")):
+        for how in ("a knock", "a pick-up"):
             t = time.monotonic()
             self.debug("DEBUG nap", r"\[hw\] debug nap: forced sleep")
             self.debug("DEBUG sleepiness 100", r"debug sleepiness")   # so he does not wake by himself
             time.sleep(3)
             asleep = self.state().get("asleep") == 1   # and still asleep 3 s on: only the hand wakes him
-            self.debug(line, pat)
-            woke, st = False, None
-            for _ in range(12):
-                time.sleep(1)
-                st = self.state()
-                if st.get("asleep") == 0:
-                    woke = True
-                    break
-            self.record(Pg, "%s wakes him" % how, asleep and woke, "asleep after nap=%s, awake after=%s, action=%s" % (
-                asleep, woke, st.get("action") if st else "?"), (st or {}).get("_lines", [])[:1], t)
+            seen = {"woke": False, "st": None}
+
+            def poll(end):
+                while time.monotonic() < end and not seen["woke"]:
+                    time.sleep(1)
+                    seen["st"] = self.state()
+                    seen["woke"] = seen["st"].get("asleep") == 0
+
+            if how == "a knock":
+                self.debug("DEBUG knock 1", r"debug knock 1")
+                poll(time.monotonic() + 12)
+            else:
+                # DEBUG pickup: lying still, lifted, carried, set down, through the raw sample and
+                # the real HeldDetector (~6 s); DEBUG trace shows what it fired.
+                tp = time.monotonic()
+                try:
+                    stims, line = self.pickup(during=poll)
+                    poll(time.monotonic() + 3)
+                    ok, note = pickup_verdict(stims)
+                    self.record(Pg, "DEBUG pickup fires picked_up", ok, note, [line], tp)
+                except MissingVerb:
+                    how = "a pick-up (DEBUG cradle: no DEBUG pickup here)"
+                    self.debug("DEBUG cradle 6000", r"debug cradle")
+                    poll(time.monotonic() + 12)
+            st = seen["st"]
+            self.record(Pg, "%s wakes him" % how, asleep and seen["woke"], "asleep after nap=%s, awake after=%s, action=%s" % (
+                asleep, seen["woke"], st.get("action") if st else "?"), (st or {}).get("_lines", [])[:1], t)
             self.debug("DEBUG sleepiness 0", r"debug sleepiness")
-            time.sleep(4)   # cradle and poses settle
+            time.sleep(4)   # poses settle
 
     def _pick(self, Pg, gen, st):
         """The egg pick (#23): lying, nothing; a lean (a hand's move arms the aim) and a knock, the aimed one."""
@@ -1352,7 +1513,9 @@ class Run:
             doc = self.stats_json()
         except Fail as e:
             self.say("  (STATS json: %s)" % e)
-        body = {"mac": self.args.mac, "genome": genome.hex(), "stage": st.get("stage", "adult"),
+        ok, mac, note = state_board(st, self.args.mac)
+        self.record(P, "STATE names the board", ok, note, st["_lines"][:1], t0)
+        body = {"mac": mac, "genome": genome.hex(), "stage": st.get("stage", "adult"),
                 "generation": st.get("gen"), "name": hello.get("name", ""), "fw": hello.get("fw"), "wait": True}
         status, pack = self.http("POST", SITE + "/api/pet-lines", body, timeout=180)
         polls = 0
@@ -1360,7 +1523,7 @@ class Run:
             time.sleep(15)
             polls += 1
             status, pack = self.http("GET", SITE + "/api/pet-lines?mac=%s&genome_hash=%s" % (
-                urllib.parse.quote(self.args.mac), ghash), timeout=60)
+                urllib.parse.quote(mac), ghash), timeout=60)
         names = situations(self.args.catalog)
         if status != 200 or not isinstance(pack, dict):
             self.record(P, "pet-lines pack", False, "HTTP %s after %d polls: %s" % (status, polls, str(pack)[:200]), t0=t0)
@@ -1375,14 +1538,19 @@ class Run:
         if not token:
             return self.record(P, "admin record", False, "no admin_token in %s" % self.args.env, status="SKIP")
         t1 = time.monotonic()
-        mac = re.sub(r"[^0-9a-f]", "", self.args.mac.lower())
-        status, badge = self.http("GET", SITE + "/api/admin/badges/" + mac, token=token, timeout=30)
+        hexmac = re.sub(r"[^0-9a-f]", "", mac.lower())
+        status, badge = self.http("GET", SITE + "/api/admin/badges/" + hexmac, token=token, timeout=30)
         creature = None
         if status == 200 and isinstance(badge, dict):
             creature = next((c for c in badge.get("creatures", []) if c.get("genome_hash") == ghash), None)
-        self.record(P, "admin: creature record", bool(creature), "HTTP %s; %s" % (status, "creature id=%s species=%s gen=%s stage=%s" % (
-            creature.get("id"), creature.get("species"), creature.get("generation"), creature.get("stage")) if creature
-            else "no creature with genome %s for %s" % (ghash[:12], mac)), t0=t1)
+        # The record is this pet as the badge says he is: STATE's species and gen.
+        species = st.get("species") if st.get("species") not in (None, "none") else None
+        same = bool(creature) and (species is None or creature.get("species") == species) and \
+            creature.get("generation") == st.get("gen")
+        self.record(P, "admin: creature record", same, "HTTP %s; %s" % (status, (
+            "creature id=%s species=%s gen=%s stage=%s; STATE species=%s gen=%s" % (
+                creature.get("id"), creature.get("species"), creature.get("generation"), creature.get("stage"), species,
+                st.get("gen"))) if creature else "no creature with genome %s for %s" % (ghash[:12], hexmac)), t0=t1)
         if not creature:
             return
         t2 = time.monotonic()
@@ -1391,7 +1559,7 @@ class Run:
         uploaded = ""
         if not stats and self.args.upload_stats and doc:
             parents = {k: doc[k] for k in ("parent", "grandparent") if k in doc}
-            s2, r2 = self.http("POST", SITE + "/api/stats", {"mac": self.args.mac, "genome_hash": ghash, "stats_version": doc.get("v", 1),
+            s2, r2 = self.http("POST", SITE + "/api/stats", {"mac": mac, "genome_hash": ghash, "stats_version": doc.get("v", 1),
                                                               "stats": doc.get("life"), "parents": parents or None,
                                                               "analytics": doc.get("analytics"), "fw": doc.get("fw")}, timeout=30)
             uploaded = "; uploaded the badge's STATS json here (HTTP %s %s)" % (s2, str(r2)[:80])
@@ -1446,7 +1614,10 @@ def parse_args(argv=None):
     ap.add_argument("--env", default=str(DEFAULT_ENV), help="ssid=, password=, admin_token= (never printed)")
     ap.add_argument("--test-manifest", help="a manifest URL with a newer signed image (wifi phase)")
     ap.add_argument("--download-timeout", type=int, default=600)
-    ap.add_argument("--offline-checks", type=int, default=2, help="dark checks to watch (the 2nd comes 15 min after the 1st)")
+    ap.add_argument("--offline-checks", type=int, default=2,
+                    help="dark checks to watch (each after the 1st made due by DEBUG wifi due; else 15 min, 30...)")
+    ap.add_argument("--no-offline-due", dest="offline_due", action="store_false",
+                    help="wait out the backoff between dark checks instead of DEBUG wifi due")
     ap.add_argument("--idle-seconds", type=int, default=60)
     ap.add_argument("--lying-seconds", type=int, default=60)
     ap.add_argument("--die-fallback-warps", type=int, default=8)

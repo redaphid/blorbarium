@@ -51,6 +51,11 @@ class FakeBadge:
         self.fw = "0.7.13"
         self.networks = []
         self.sent = []
+        self.has_due, self.next_check, self.absent = True, 900, 1
+        self.air_tries, self.air_open = 0, False
+        self.chems = {}
+        self.extra_stims = []
+        self.state_tail = " species=puffkin mac=%s" % MAC
         self.emit("[hw] blorbarium abc123 fw=%s fmt=1 lcd128" % self.fw,
                   "[hw] boot=Resumed occupant=creature gen=1 genome=deadbeef age=900 species=puffkin")
 
@@ -134,6 +139,42 @@ class FakeBadge:
                       "input=none sleep=off slept_ms=0" % ("low" if low else "full", 80 if low else 240))
         elif d.startswith("home"):
             self.emit("[hw] home rot=2 (USB-C up, nvs; stored up; built up)")
+        elif d == "wifi due":   # test-verbs-wifi; an older firmware answers "want: wifi [...]"
+            if not self.has_due:
+                return self.emit("[wifi] want: wifi [status|set <ssid> [password]|forget [ssid]|on|off]")
+            self.next_check = 0
+            self.emit("[wifi] due: the next automatic check is due now (it opens once dark 60 s and alone)",
+                      "[wifi] window=none phase=off networks=[] auto=1 hold=not_idle next_check_in=0s absent_streak=%d "
+                      "server_streak=0 vbat=4100 mV (pin 1366 mV)" % self.absent,
+                      '[wifi] station=off improv=1/0 consent=none trial=0 confirm_pending=0 ota=idle owner=none windows=0 '
+                      'scans=0 last="" heap=90000 minheap=80000')
+        elif d.startswith("air"):   # wifi-ota-2 aa4c8c1
+            what = d[4:] or "status"
+            if what == "open":
+                self.air_tries += 1
+                why = "wifi_up" if self.air_tries == 1 else "ok"   # a window still closing, the first time
+                self.air_open = why == "ok"
+                return self.emit("[hw] debug air open: %s heap=61000 minheap=52000 big=31000" % why)
+            if what == "close":
+                self.air_open = False
+            self.emit("[hw] debug air %s: open=%d heap=98000 minheap=52000 big=45000" % (what, int(self.air_open)))
+        elif d.startswith("chem"):   # test-verbs
+            parts = d.split()
+            name, permille = (parts + ["", ""])[1:3]
+            if name not in ("hunger", "sleepiness", "toxin", "injury", "life"):
+                return self.emit("[hw] debug chem %s %s: not a drive or chemical (hunger, sleepiness, injury, toxin, ...)" % (name, permille))
+            if not permille.isdigit() or int(permille) > 1000:
+                return self.emit("[hw] debug chem %s %s: want <permille 0..1000>" % (name, permille))
+            self.chems[name] = int(permille)
+            self.emit("[hw] debug chem %s=%s" % (name, permille))
+        elif d.startswith("trace"):
+            self.emit("[hw] debug trace %s s" % (d.split() + ["0"])[1])
+        elif d == "pickup":
+            self.emit("[hw] debug pickup: still 2000 ms, then lifted toward home rot=2 and carried, set down, over in 5500 ms",
+                      "[imu] 1000 0 0 1000 0 2 0 0 0 0 pk 0 0 1000 aim -1 busy 0 ring 0",
+                      "[stim] 3100 picked_up", "[stim] %d put_down" % 6900)
+            for s in self.extra_stims:
+                self.emit("[stim] 3200 %s" % s)
         else:
             self.emit("[hw] debug: unknown verb '%s' (try: ...)" % d.split()[0])
 
@@ -143,7 +184,7 @@ class FakeBadge:
         elif verb == "GENOME":
             self.emit(*chunks(rid, GENOME))
         elif verb == "STATE":
-            self.emit("#%s + phase=creature gen=1 stage=adult age=900 action=explore face=happy asleep=0" % rid,
+            self.emit("#%s + phase=creature gen=1 stage=adult age=900 action=explore face=happy asleep=0%s" % (rid, self.state_tail),
                       "#%s + drives hunger=120 sleepiness=40 boredom=0" % rid,
                       "#%s + dish pantry=3 pellets=0 night=0 time=unknown dark=0 still=0" % rid, "#%s OK" % rid)
         elif verb == "STATS" and args == "json":
@@ -188,7 +229,7 @@ class FakeServer:
         return 404, {"error": "no such endpoint"}
 
 
-def run_phases(phases, extra=()):
+def run_phases(phases, extra=(), badge=None):
     tmp = tempfile.TemporaryDirectory()
     env = Path(tmp.name, ".env")
     env.write_text('ssid="%s"\npassword=%s\nadmin_token=%s\n' % (SSID, PASSWORD, TOKEN))
@@ -200,7 +241,7 @@ def run_phases(phases, extra=()):
     secrets = acc.read_env(env)
     stream = io.StringIO()
     out = acc.Out(str(log), acc.Redactor({k: secrets.get(k, "") for k in acc.SECRET_KEYS}), stream=stream)
-    badge = FakeBadge()
+    badge = badge or FakeBadge()
     board = acc.Board(out, "5B91046680", "/dev/fake", opener=lambda dev: badge, finder=lambda s: "/dev/fake")
     server = FakeServer()
     run = acc.Run(board, out, args, secrets, http=server)
@@ -342,7 +383,8 @@ class PretendRuns(unittest.TestCase):
         self.assertTrue(any(SSID in l and PASSWORD in l for l in badge.sent))   # and the badge did get them
         status = {s["name"]: s["status"] for s in run.report.steps}
         for step in ("provision", "live manifest refused", "test manifest offered", "download and verify",
-                     "restart while dark", "new version boots on trial", "trial confirmed", "same pet", "same home"):
+                     "restart while dark", "new version boots on trial", "trial confirmed", "same pet", "same home",
+                     "fight radio fits after a window"):
             self.assertEqual(status.get(step), "PASS", "%s: %s\n%s" % (step, status.get(step), stdout))
         self.assertIn("PASS", stdout)
         tmp.cleanup()
@@ -352,10 +394,25 @@ class PretendRuns(unittest.TestCase):
         self.assertNoSecrets(stdout, log)
         self.assertIn("<admin_token>", stdout)            # the server's echo, masked
         status = {s["name"]: s["status"] for s in run.report.steps}
-        for step in ("pet-lines pack", "admin: creature record", "admin: stats", "admin page"):
+        for step in ("STATE names the board", "pet-lines pack", "admin: creature record", "admin: stats", "admin page"):
             self.assertEqual(status.get(step), "PASS", "%s\n%s" % (step, stdout))
         self.assertEqual(len(server.stats), 1)
+        self.assertEqual(server.stats[0]["mac"], MAC)
         self.assertTrue(all(t in (None, TOKEN) for _, _, t in server.calls))
+        tmp.cleanup()
+
+    def test_the_server_record_must_be_the_pet_state_names(self):
+        badge = FakeBadge()
+        badge.state_tail = " species=gilly mac=%s" % MAC   # the record says puffkin
+        run, stdout, log, badge, server, tmp = run_phases("server", badge=badge)
+        status = {s["name"]: s["status"] for s in run.report.steps}
+        self.assertEqual(status.get("admin: creature record"), "FAIL", stdout)
+        tmp.cleanup()
+        badge = FakeBadge()
+        badge.state_tail = ""   # a firmware before test-verbs: --mac, and the step says why
+        run, stdout, log, badge, server, tmp = run_phases("server", badge=badge)
+        status = {s["name"]: s["status"] for s in run.report.steps}
+        self.assertEqual((status.get("STATE names the board"), status.get("admin: creature record")), ("FAIL", "PASS"))
         tmp.cleanup()
 
     def test_a_missing_verb_is_named(self):
@@ -364,6 +421,72 @@ class PretendRuns(unittest.TestCase):
         self.assertTrue(run.report.failed())
         self.assertNoSecrets(stdout, log)
         tmp.cleanup()
+
+
+class NewVerbs(unittest.TestCase):
+    """The verbs test-verbs, test-verbs-wifi and wifi-ota-2 add, as their replies read."""
+
+    def setUp(self):
+        self.stream = io.StringIO()
+        self.out = acc.Out(None, acc.Redactor({}), stream=self.stream)
+        self.badge = FakeBadge()
+        self.board = acc.Board(self.out, "5B91046680", "/dev/fake", opener=lambda dev: self.badge,
+                               finder=lambda s: "/dev/fake")
+        args = acc.parse_args(["--serial", "5B91046680", "--env", "/nonexistent", "--mac", MAC])
+        self.run = acc.Run(self.board, self.out, args, {}, http=FakeServer())
+
+    def tearDown(self):
+        self.board.close()
+
+    def test_state_names_the_board(self):
+        st = self.run.state()
+        self.assertEqual((st["species"], st["mac"]), ("puffkin", MAC))
+        self.assertEqual(acc.state_board(st, MAC)[:2], (True, MAC))
+        self.assertFalse(acc.state_board(st, "3c:0f:02:00:00:01")[0])   # another board's MAC
+        old = acc.parse_state(["phase=creature gen=1 stage=adult age=9 action=rest face=happy asleep=0"])
+        ok, mac, note = acc.state_board(old, MAC)
+        self.assertEqual((ok, mac), (False, MAC))   # --mac as the fallback
+        self.assertIn("lacks test-verbs", note)
+        self.assertFalse(acc.state_board(acc.parse_state(["phase=egg gen=0 progress=0 species=none mac=none"]), MAC)[0])
+
+    def test_chem_sets_and_says_why_not(self):
+        self.assertEqual(self.run.chem_set("hunger", 600), 600)
+        self.assertEqual(self.badge.chems["hunger"], 600)
+        with self.assertRaises(acc.Fail) as e:
+            self.run.chem_set("nonsense", 5)
+        self.assertIn("not a drive or chemical", str(e.exception))
+        with self.assertRaises(acc.Fail):
+            self.run.chem_set("hunger", 1001)
+
+    def test_pickup_traces_picked_up_and_nothing_else(self):
+        polls = []
+        stims, line = self.run.pickup(during=lambda end: polls.append(end - time.monotonic()))
+        self.assertEqual(stims, ["picked_up", "put_down"])
+        self.assertIn("over in 5500 ms", line)
+        self.assertTrue(polls and 5.0 < polls[0] <= 5.5)   # told when it ends
+        self.assertIn("DEBUG trace 0", self.badge.sent)    # the trace is turned off after
+        self.assertTrue(acc.pickup_verdict(stims)[0])
+        self.badge.extra_stims = ["cradle"]
+        stims, _ = self.run.pickup()
+        ok, note = acc.pickup_verdict(stims)
+        self.assertFalse(ok)
+        self.assertIn("cradle", note)
+        self.assertFalse(acc.pickup_verdict(["put_down"])[0])
+        self.assertEqual(acc.parse_stims(["[stim] 10 knock", "[imu] 1 2 3", "[stim] 20 picked_up"]), ["knock", "picked_up"])
+
+    def test_wifi_due_and_a_firmware_without_it(self):
+        st, lines = self.run.wifi_due()
+        self.assertEqual((st["next_check_in"], st["absent_streak"]), (0, 1))
+        self.assertTrue(any("[wifi] due:" in l for l in lines))
+        self.badge.has_due = False
+        self.assertIsNone(self.run.wifi_due())
+        self.assertIn("DEBUG wifi due", self.run.missing)
+
+    def test_air_fits_after_a_window_still_closing(self):
+        self.assertTrue(self.run.air_fits("wifi", "fight radio fits"))
+        self.assertEqual(self.badge.air_tries, 2)   # wifi_up once, then ok
+        self.assertFalse(self.badge.air_open)       # and closed again
+        self.assertIn("open: ok after 2 tries", self.run.report.steps[-1]["note"])
 
 
 class Identity(unittest.TestCase):
