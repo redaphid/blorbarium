@@ -1,20 +1,44 @@
 # The perf climb: drawing a frame faster, byte for byte
 
-The owner: "go above and beyond to hillclimb perftest". Branch `perf-climb`,
-from `framerate`. Every step draws the same bytes: `REF=main bash
-scripts/test/paint_bench.sh` hashes 4,310 home frames and 54 duel frames
-(2aac61f2caef5ae9), and the S3 build of the bench checks its own frames
-against the host's hash of them.
+The owner: "go above and beyond to hillclimb perftest". Branch `perf-climb`
+(issue #28), from `framerate`. Every step draws the same bytes as main:
+`REF=main bash scripts/test/paint_bench.sh` hashes 15,630 home frames (lived
+pets of every species, grown, and 9,720 heavy ones: scarred, mottled, 55-130%,
+hopping, crossfading), the 54 duel frames and the frames between ticks
+(`smooth=`), and the S3 build of the bench checks its own frames against the
+host's hash of them. `bash scripts/test/perf_gate.sh` is everything a commit
+holds before it merges (that, the native suite, the duel goldens, the three
+badge builds).
+
+## Where it stands
+
+On an adult puffkin (badge128_flip), `DEBUG fps`:
+
+| | before (`framerate`, 0.6.0 ~190 ms) | ed0891a (main) |
+|---|---|---|
+| at rest | 19.0 fps, draw 49.2 ms (bg 13.4, fig 33.5) | 48.1 fps (the 20 ms cap), draw 12.8 |
+| awake, moving | - | 47.3 fps, draw 15.1 |
+| in a hang | 13.7 fps, draw 57.7, push 11.1 | 38.6 fps, draw 17.6, send 11.6 on core 0 |
+| a duel frame (S3) | ~39 ms | ~13.4 ms (with the duel HUD's own work) |
+
+What did it: the renderer's per-pixel work cut on the S3's own count (6.8M
+instructions a home frame to 2.5M); -O2 for lib/paint; the panel sent by a task
+on core 0 from a PSRAM shadow, by windows of changed 30 px chunks; frames whose
+inputs did not change not drawn at all; the background and the big sprites
+drawn on both cores. RAM +~13 KB (the chunk hashes 7.7 KB, tables, the two
+cores' scratch), flash +~45 KB (-O2 and compile-time tables).
 
 ## The sticks
 
+- **S3**, `bash scripts/test/paint_bench_qemu.sh` (`SMOOTH=badge` for the
+  frames as the badge draws them now, four between each two ticks): the
+  board's compiler and flags, runs of 4 frames from every 64 of the bench's
+  (980) and the 54 duel frames, on Espressif's QEMU with `-icount shift=0`:
+  thousands of instructions a frame (kinstr), by phase and by species.
+  Deterministic: a change of one instruction shows. One core only.
 - **Host**, `bash scripts/test/paint_bench_runs.sh 7 3 2`: µs a home frame,
-  drawing only (the hash is no longer timed), the median of 7 runs pinned to
-  one core, each the best of 3. Noise band about ±1 µs.
-- **S3**, `QEMU=... bash scripts/test/paint_bench_qemu.sh`: the board's
-  compiler and flags, every 8th home frame (539) and the 54 duel frames, on
-  Espressif's QEMU with `-icount shift=0`: thousands of instructions a frame
-  (kinstr), by phase. Deterministic: a change of one instruction shows.
+  drawing only, the median of 7 pinned runs. Other agents' builds load this
+  laptop, so from step 6 on it is too noisy to rank a step; it proves bytes.
 - **Board**, `DEBUG fps` and `DEBUG fps bench` through
   `scripts/test/fps_probe.py`: the truth, when a badge is free.
 
@@ -24,7 +48,7 @@ resting frame in 25.9 ms: bg 13.4, fig 11.0, mask 0.9, hint 0.6, look and over
 6.2M cycles for its frame put it near one instruction a cycle: no PSRAM (the
 canvas is internal, a 115 KB memset is 168 µs), no stall to speak of. The
 board is slow because it does the work, so the S3 instruction count is the
-stick, and a frame on the board takes about kinstr / 240 ms.
+stick, and a frame on the board takes about kinstr / 240 ms on one core.
 
 ## The climb
 
