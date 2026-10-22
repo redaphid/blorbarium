@@ -78,10 +78,10 @@ constexpr uint8_t kWhen[][kDayPartCount] = {
     { 5,  8, 10, 10, 12, 12},   // hide
     {10, 10, 10, 10, 10, 10},   // hiccup
     { 2, 10, 15, 11, 10,  6},   // zoomies
-    {25, 25,  6,  8, 15,  8},   // wash: on waking and of a morning, again at evening
-    { 0,  6, 30, 20,  3,  0},   // sunbathe: the middle of the day (never in the dark)
-    { 0,  0,  0,  3, 30, 25},   // fireflies: dusk and the dark
-    { 6, 30, 10,  6,  2,  0},   // exercise: mornings
+    {25, 25,  4,  4, 15,  6},   // wash: on waking and of a morning, again at evening
+    { 0,  0, 30, 20,  0,  0},   // sunbathe: the middle of the day (never in the dark)
+    { 0,  0,  0,  0, 30, 25},   // fireflies: dusk and the dark
+    { 6, 30,  4,  0,  0,  0},   // exercise: mornings
     {35,  8,  4,  8, 25, 15},   // yawn: just up, or winding down
     {10, 10, 10, 10, 10, 10},   // tummy
     {10, 10, 10, 10, 10, 10},   // beg
@@ -120,8 +120,8 @@ int32_t lean(IdleId id, const IdleMood& m) {
   if (row.family <= IdleFamily::Muse) w = w * kAge[stage][uint8_t(row.family)] / 10;
   // His size gene: a big one romps less and muses more, a small one the other way.
   const int32_t bulk = int32_t(m.bulk) - 128;
-  if (row.family == IdleFamily::Romp) w = w * (512 - bulk) / 512;
-  if (row.family == IdleFamily::Muse) w = w * (512 + bulk) / 512;
+  if (row.family == IdleFamily::Romp) w = w * (384 - bulk) / 384;
+  if (row.family == IdleFamily::Muse) w = w * (384 + bulk) / 384;
   // His temperament's dreams: a long dreamer muses more.
   if (row.family == IdleFamily::Muse) w = w * (120 + clampi(m.dreamLenTicks, 0, 240)) / 150;
   if (id == idles::sunbathe && m.dark) return 0;
@@ -212,7 +212,7 @@ uint8_t idlePace(const IdleMood& m) {
   int32_t p = 100;
   static constexpr uint8_t kStagePace[4] = {115, 110, 100, 80};
   p = p * kStagePace[uint8_t(m.stage) & 3] / 100;
-  p = p * (768 - (int32_t(m.bulk) - 128)) / 768;   // a big one slower, a small one quicker
+  p = p * (512 - (int32_t(m.bulk) - 128)) / 512;   // a big one slower, a small one quicker
   p = p * (1000 - 7 * past(m.sleepiness, Fx::ratio(3, 10)) / 10) / 1000;
   p = p * (1000 - 5 * past(fxMax(fxMax(m.pain, m.discomfort), m.injury), Fx::ratio(2, 10)) / 10) / 1000;
   p = p * (1000 - permille(m.toxin) / 2) / 1000;
@@ -229,6 +229,11 @@ IdleId pickIdle(const IdleState& s, const IdleMood& m, Rng& rng) {
   const int32_t hab = permille(m.habituation);
   const uint32_t coolPct = uint32_t(clampi(57 + hab / 10, 40, 160));
   const int32_t samePct = clampi(100 - 115 * hab / 1000, 10, 100);
+  // What he feels most, of the acts that show it: the more he feels it, the
+  // less he plays at anything else.
+  int32_t feelMost = 0;
+  for (size_t i = 0; i < kIdleCount; ++i) feelMost = feels(IDLES[i].id, m) > feelMost ? feels(IDLES[i].id, m) : feelMost;
+  const int32_t damp = 1000 - clampi(feelMost, 0, 800);
   uint32_t weight[kIdleCount]{}, total = 0;
   for (size_t i = 0; i < kIdleCount; ++i) {
     const IdleInfo& row = IDLES[i];
@@ -238,14 +243,27 @@ IdleId pickIdle(const IdleState& s, const IdleMood& m, Rng& rng) {
     const int32_t feel = feels(row.id, m);
     // Pressed, only what shows how he feels; a Feel act only while he feels it.
     if ((m.pressed || row.family == IdleFamily::Feel) && !feel) continue;
-    const uint32_t cooldown = uint32_t(row.cooldownS) * kTicksPerSecond * coolPct / 100;
+    const uint8_t when = kWhen[i][uint8_t(m.part)];
+    if (!when) continue;   // not at this part of his day
+    const int32_t lent = lean(row.id, m);
+    if (!lent) continue;
+    const int32_t pull = m.pressed || row.family == IdleFamily::Feel ? feel : familyPull(row.family, m);
+    // How keen he is on it now, permille: its part of the day, his age and
+    // genes, his drives, how he feels. A keen act comes round again sooner,
+    // so the day, the feeling and the genes show even when he plays all the
+    // time and every act takes its turn.
+    const int32_t keen = row.family == IdleFamily::Feel || feel
+                             ? 1000 + 2 * feel
+                             : int32_t(int64_t(when) * 100 * lent / 1000 * pull / 700);
+    const uint32_t cooldown =
+        uint32_t(uint64_t(row.cooldownS) * kTicksPerSecond * coolPct / 100 * 1000 / uint32_t(clampi(keen, 350, 4000)));
     if (!m.greeting && s.startedAt[i] && m.age + 1 - s.startedAt[i] < cooldown) continue;
     // His own taste: each favourite 0.75x to 1.25x his species', from his genome.
     const uint32_t mine = 75 + mix(m.genomeHash, uint32_t(i)) % 51;
-    const int32_t pull = m.pressed || row.family == IdleFamily::Feel ? feel : familyPull(row.family, m);
     uint32_t w = uint32_t(fav[i]) * mine * uint32_t(pull) / 100;
-    w = uint32_t(uint64_t(w) * kWhen[i][uint8_t(m.part)] / 10);
-    w = uint32_t(uint64_t(w) * uint32_t(lean(row.id, m)) / 1000);
+    w = uint32_t(uint64_t(w) * when / 10);
+    w = uint32_t(uint64_t(w) * uint32_t(lent) / 1000);
+    if (row.family != IdleFamily::Feel && !feel) w = uint32_t(uint64_t(w) * uint32_t(damp) / 1000);
     if (row.family == lastFamily) w = w * uint32_t(samePct) / 100;   // a romp, then something else
     weight[i] = w;
     total += w;
