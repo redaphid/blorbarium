@@ -1550,7 +1550,7 @@ static void runDebug(const char* line) {
   }
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
-                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, pickup, chem <name> <permille>, nap, net, duel, latency [last|clear], warp <min>, tidy, "
+                  "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
                   "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
     return;
   }
