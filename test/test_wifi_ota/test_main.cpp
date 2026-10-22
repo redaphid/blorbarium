@@ -697,6 +697,25 @@ TEST(Schedule, ARestartInsideAWindowWaitsTheLongest) {
   EXPECT_EQ(s.checkHold(kDarkAndAlone, 100 + Schedule::kAbsentMaxMs - 1), Hold::NotDue);
 }
 
+// `DEBUG wifi due` (#55): a test run's warp moves the pet's clock, not the
+// schedule's, so the cable makes the next check due now. It still waits to be
+// dark and alone, and a check that fails again backs off as far as it would have.
+TEST(Schedule, DueNowOpensTheNextCheckButKeepsTheBackoff) {
+  Schedule s;
+  s.failed(Failure::Absent, 0);
+  s.failed(Failure::Absent, 0);
+  ASSERT_EQ(s.checkHold(kDarkAndAlone, 1000), Hold::NotDue);
+  s.dueNow();
+  EXPECT_EQ(s.dueIn(1000), 0u);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 1000), Hold::Open);
+  Facts awake = kDarkAndAlone;
+  awake.darkMs = 0;
+  EXPECT_EQ(s.checkHold(awake, 1000), Hold::NotIdle) << "due, but never while someone could be using it";
+  EXPECT_EQ(s.absentStreak(), 2u);
+  s.failed(Failure::Absent, 1000);
+  EXPECT_EQ(s.dueIn(1000), 4 * Schedule::kAbsentFirstMs) << "the third absence in a row, as without the nudge";
+}
+
 TEST(Schedule, TheClockWrappingDoesNotStopChecks) {
   Schedule s;
   const uint32_t nearWrap = 0xffffffffu - 1000;

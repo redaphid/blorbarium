@@ -111,6 +111,11 @@ class Schedule {
   // The last boot ended inside a window (a crash, a watchdog): the longest wait,
   // so a fault in Wi-Fi can never become a loop of restarts.
   void crashed(uint32_t now) { next_ = now + kAbsentMaxMs; }
+  // `DEBUG wifi due`: the next check is due now (the schedule runs on the real
+  // clock, which DEBUG warp does not move). It still waits to be dark and
+  // alone, and the streaks stand: a check that fails again backs off as far
+  // as it would have.
+  void dueNow() { next_.reset(); }
 
   uint8_t absentStreak() const { return absent_; }
   uint8_t serverStreak() const { return server_; }
