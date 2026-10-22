@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker from "../src/worker.js";
+import worker from "../src/app.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/genomes.json", import.meta.url)));
@@ -88,6 +88,13 @@ test("an OTA rollout pauses (held) and kills (cancelled)", async () => {
   assert.equal((await call(env, `/api/badge/actions?mac=${A}`, { admin: false })).body.actions.length, 0, "killed: cancelled");
   const acts = (await call(env, `/api/admin/actions?mac=${A}`)).body.actions;
   assert.equal(acts[0].status, "cancelled");
+});
+
+test("the Worker's entry module exports only its handler (workerd takes named exports for entrypoints)", async () => {
+  const entry = await import("../src/worker.js");
+  assert.deepEqual(Object.keys(entry), ["default"]);
+  assert.equal(typeof entry.default.fetch, "function");
+  assert.equal(typeof entry.default.scheduled, "function");
 });
 
 test("the dashboard page is served, holds no data, and its script parses", async () => {

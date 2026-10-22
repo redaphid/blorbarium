@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker, { DIARY_CRON } from "../src/worker.js";
+import worker, { DIARY_CRON } from "../src/app.js";
 import { flatten, statsDelta, runDiaries } from "../src/diary.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 
@@ -80,7 +80,7 @@ test("an egg reported before hatching gets its personality from its genes and it
 });
 
 test("the nightly revision rewrites a pet whose life moved on, and only him (#47)", async () => {
-  const { runNightlyRevisions } = await import("../src/worker.js");
+  const { runNightlyRevisions } = await import("../src/app.js");
   const env = fakeEnv();
   const quiet = await petWithPack(env, fixtures[6]);
   const fighter = await petWithPack(env, fixtures[7]);

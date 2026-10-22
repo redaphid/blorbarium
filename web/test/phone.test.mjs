@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker from "../src/worker.js";
+import worker from "../src/app.js";
 import { runDiaries } from "../src/diary.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 

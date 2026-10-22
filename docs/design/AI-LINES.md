@@ -35,7 +35,7 @@ A batch whose lines fail is asked again in the same conversation, with each fail
 
 ### The endpoint
 
-`web/src/worker.js` on the same Worker as the site. Only `/api/*` reaches the code (`run_worker_first`), so the static site is served as before.
+`web/src/app.js` (entry `worker.js`) on the same Worker as the site. Only `/api/*` reaches the code (`run_worker_first`), so the static site is served as before.
 
 | Route | What it does |
 |---|---|

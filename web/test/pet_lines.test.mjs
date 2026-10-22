@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker, { runQueuedJobs, normaliseMac } from "../src/worker.js";
+import worker, { runQueuedJobs, normaliseMac } from "../src/app.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 import { checkLines, lineProblem, normalise, MAX_TEXT, SITUATIONS } from "../src/validate.js";
 import { packText, signPack, verifyPack } from "../src/pack.js";
