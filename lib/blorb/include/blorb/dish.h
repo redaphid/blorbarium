@@ -21,6 +21,7 @@
 #include "blorb/senses.h"
 #include "blorb/taught.h"
 #include "blorb/thoughts.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 
@@ -255,6 +256,12 @@ class Dish {
   int8_t knockAim_ = -1;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
+  // The aim counts only once a hand has moved the badge on this choice
+  // screen (tilt_aim.h AimArming): unarmed, every reader sees level.
+  AimArming arming_;
+  bool choosing_ = false, armed_ = false;
+  int8_t armedAim() const { return armed_ ? detectors_.aim.aim() : int8_t(-1); }
+  void watchChoice(uint32_t ms);
   DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;

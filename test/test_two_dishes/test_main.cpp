@@ -1347,6 +1347,7 @@ TEST(BootRows, NoButtonASideHoldKeepsTheEggAimedBeforeTheTurn) {
   a.d.creature().fall();
   a.tick(), a.tick();
   std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+  a.tick();   // the eggs come out with him level; then a hand tilts him
   for (int t = 0; t < 20; ++t) a.tick(right);
   for (int t = 0; t < 22; ++t) a.tick(side);
   a.tick();
@@ -1356,6 +1357,27 @@ TEST(BootRows, NoButtonASideHoldKeepsTheEggAimedBeforeTheTurn) {
     if (const auto* b = std::get_if<Birth>(&e)) chosen = b->chosen;
   });
   EXPECT_EQ(chosen, 1) << "the egg tilted toward before the turn";
+}
+
+// A badge already lying on its side, or tilted, when the eggs come out
+// chooses nothing however long it lies there, nor with a knock on it: no
+// hand moved it (tilt_aim.h AimArming; found on a board, 2026-10-21).
+TEST(BootRows, NoButtonABadgeAlreadyLyingWhenTheEggsComeOutKeepsNothing) {
+  for (bool onSide : {true, false}) {
+    Alone a;
+    Frame lying, knocked;
+    if (onSide) lying.side = true;
+    else lying.aim = 1;
+    knocked = lying;
+    knocked.tap = true;
+    a.d.creature().fall();
+    a.tick(), a.tick();
+    for (int t = 0; t < 40; ++t) a.tick(lying);   // laid down so during the vigil
+    std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+    for (int t = 0; t < 300; ++t) a.tick(t % 50 == 25 ? knocked : lying);
+    ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << (onSide ? "on its side" : "tilted");
+    EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 0) << "nothing was aimed at";
+  }
 }
 
 // Asleep, a double press asks for a fight (he is woken for it); too sleepy,

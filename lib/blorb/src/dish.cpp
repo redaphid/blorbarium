@@ -125,7 +125,9 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   // ends was measured from BOOT's raw level by the samples before this one.
   lastFired_ = 0;
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
-  if (s.knockWaiting && !knockWaitWas_) knockAim_ = detectors_.aim.aim();   // the first knock: what it aims at
+  arming_.sample(s.ax, s.ay, s.az, nowMs);
+  watchChoice(nowMs);
+  if (s.knockWaiting && !knockWaitWas_) knockAim_ = armedAim();   // the first knock: what it aims at
   knockWaitWas_ = s.knockWaiting;
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
@@ -148,11 +150,23 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   const bool picking = k && k->sinceDeath >= Clutch::kVigilTicks && k->count > 1;
   int8_t egg = -1;
   if (picking) {
-    int8_t aim = knockWaitWas_ && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+    int8_t aim = knockWaitWas_ && knockAim_ >= 0 ? knockAim_ : armedAim();
     if (kSideHoldHolds && detectors_.side.holding() && sideWas_) aim = tiltAim(sideTilt_[0], sideTilt_[1]);
     egg = eggAt(aim, k->count);
   }
   clutchShow_.sample(s, egg, picking, nowMs);
+}
+
+// A choice screen (the eggs, a duel) opens unarmed: a hand's move arms the
+// aim (tilt_aim.h AimArming), so a badge left lying never chooses. Called on
+// every sample and before every tick reads the aim, so a screen that opens on
+// a tick (the vigil's end, a duel) is unarmed from that tick on.
+void Dish::watchChoice(uint32_t ms) {
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool choosing = (k && k->sinceDeath + 1 >= Clutch::kVigilTicks && k->count > 1) || duel_.active();
+  if (choosing && !choosing_) arming_.open();
+  choosing_ = choosing;
+  armed_ = choosing && arming_.armed(ms);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -194,7 +208,8 @@ void Dish::runOneTick(Link& link) {
   // so DuelInput::from finds the same sector; a knock locks the aim it was
   // made at, not where the hand drifted while it was decided.
   const bool knocked = fired(out, stim::knock) || fired(out, stim::double_knock);
-  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+  watchChoice(lastTickMs_);
+  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : armedAim();
   constexpr Fx kMid = Fx::ratio(1, 2), kLean = Fx::ratio(1, 4);
   const Fx tiltX = aim == 0 ? kMid + kLean : aim == 1 ? kMid - kLean : kMid;
   const Fx tiltY = aim == 2 ? kMid - kLean : aim == 3 ? kMid + kLean : kMid;
@@ -502,7 +517,7 @@ Appearance Dish::appearance() const {
 int8_t Dish::liveAim() const {
   if (kSideHoldHolds && detectors_.side.holding()) return duel_.view(tick_).aim;
   if (knockWaitWas_ && knockAim_ >= 0) return knockAim_;
-  return detectors_.aim.aim();
+  return armedAim();
 }
 
 DuelView Dish::duelView() const {

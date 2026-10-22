@@ -103,6 +103,7 @@ struct Count {
   int pellets = 0;            // pellets that left the pantry
   int pelletsInTheDark = 0;   // ...while the panel was dark
   int presses = 0;            // stim::button the Dish took (a knock knock, as a press)
+  int knocks = 0;             // stim::knock the Dish took (one knock)
   bool oneMore = false;       // the rim's "one more" lit
 };
 
@@ -165,6 +166,7 @@ struct Badge {
       dish->sample(f.screen, ring.front().second);
       count.oneMore = count.oneMore || f.screen.knockWaiting;
       if (dish->firedLastSample() >> stim::button.v & 1) ++count.presses;
+      if (dish->firedLastSample() >> stim::knock.v & 1) ++count.knocks;
     }
     const uint8_t before = dish->habitat().pantry;
     dish->tick(ms, link);

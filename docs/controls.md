@@ -228,6 +228,19 @@ away, nothing is kept: a knock knock out of habit feeds no egg into a choice.
 The timeout still keeps the cursor after 30 minutes, never a friend egg. The
 clutch's seeds, the eggs they hatch and the friend egg's rules are untouched.
 
+**A badge left lying chooses nothing** (`tilt_aim.h` `AimArming`, shared by
+the eggs and the duel). On a board (2026-10-21) a puffkin left lying tilted on
+a desk with its eggs out kept one within 20 minutes, nobody near it: a stray
+jolt read as the knock on an aim no hand had made. Now a choice screen (the
+eggs, fight mode and the duel) opens unarmed, so a pose the badge already lay
+in points at nothing. A hand arms it by moving the badge: gravity 250 mg away
+from where it rested, on two steady samples running (a jolt is not steady), which
+any tilt into a lean or turn onto a side is. It stays armed 20 s after the
+last move. Unarmed, every reader of the aim sees level: the screen points at
+nothing, no knock, knock knock, press or hold selects, a side hold of a badge
+already on its side keeps nothing, and the timeouts keep only what an armed
+aim chose (the clutch: the cursor egg after 30 minutes, as before).
+
 Caveat for a try with a kid: as in a duel, a badge **held upright** in a hand
 is tilted toward the kid (the near egg, a duel's Trick) as far as it can be,
 so with three eggs the near one is aimed until the badge is laid back like a

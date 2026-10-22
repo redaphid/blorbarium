@@ -126,6 +126,63 @@ TEST(Picker, ABriskTipPointsButKeepsNothing) {
   }
 }
 
+// Board, 2026-10-21: a puffkin left lying tilted on a desk with its eggs out
+// kept one within 20 minutes, nobody near it. A badge left lying in any pose
+// chooses nothing, stray jolts and all, until the timeout keeps the cursor
+// egg half an hour on (tilt_aim.h AimArming).
+TEST(Picker, ABadgeLeftLyingKeepsNothingButTheTimeouts) {
+  for (Pose lying : {Pose::TiltRight, Pose::TiltLeft, Pose::TiltNear, Pose::SideLeft}) {
+    Badge b(kHomeDown, std::nullopt, "elder");
+    b.frameMs = 20;
+    b.hand.turnMs = 250;
+    b.hand.pose = lying;   // laid down so before he died, and left there
+    b.run(3000);
+    b.creature().fall();
+    b.run(300);
+    ASSERT_NE(clutch(b), nullptr);
+    for (uint32_t t = 0; t < Clutch::kVigilTicks; ++t) b.dish->tick(b.ms += 100, b.link);
+    b.nextFrame = b.ms;
+    const uint32_t out = b.ms;
+    uint32_t keptAt = 0;
+    b.count = {};
+    // A jolt now and then (a desk knocked, a door shut), in a knock's own shape.
+    for (uint32_t ms = 0; ms < 31 * 60000u && !keptAt; ms += 1000) {
+      if (ms % 41000 == 7000) b.hand.knocks = {b.ms + 50};
+      b.run(1000);
+      if (!clutch(b)) keptAt = b.ms;
+      else if (b.dish->appearance().clutch.aim >= 0) ADD_FAILURE() << "lying still, the screen points at an egg";
+    }
+    ASSERT_NE(keptAt, 0u) << "the timeout keeps one";
+    EXPECT_GE(b.count.knocks, 3) << "the jolts were felt as knocks, lying " << int(lying);
+    EXPECT_GE(keptAt - out, Clutch::kPickTimeoutTicks * kTickMs - 1000) << "kept before the timeout, lying " << int(lying);
+    EXPECT_EQ(bornOf(b), 0) << "the cursor egg: nothing was ever aimed at";
+  }
+}
+
+// An aim a hand made counts for a while after the hand stops; a badge then
+// left lying is unarmed again, and a jolt keeps nothing until it moves.
+TEST(Picker, AnAimLeftLyingGoesOutAndAMoveBringsItBack) {
+  Badge b(kHomeDown, std::nullopt, "elder");
+  toTheEggs(b);
+  b.hand.pose = Pose::TiltRight;
+  b.run(1000);
+  ASSERT_EQ(b.dish->appearance().clutch.aim, 1) << "a hand's tilt aims at once";
+  b.run(AimArming::kArmedMs + 1000);
+  EXPECT_EQ(b.dish->appearance().clutch.aim, -1) << "left lying, it points at nothing";
+  b.hand.knocks = {b.ms + 50};
+  b.run(2000);
+  ASSERT_NE(clutch(b), nullptr) << "a jolt keeps nothing";
+  b.hand.pose = Pose::Flat;
+  b.run(800);
+  b.hand.pose = Pose::TiltRight;
+  b.run(800);
+  EXPECT_EQ(b.dish->appearance().clutch.aim, 1) << "picked up and tilted again";
+  b.hand.knocks = {b.ms + 50};
+  b.run(2000);
+  ASSERT_EQ(clutch(b), nullptr) << "and a knock keeps it";
+  EXPECT_EQ(bornOf(b), 1);
+}
+
 // Level, a knock knock (a kid feeding him, as he did yesterday) keeps nothing.
 TEST(Picker, LevelAKnockKnockKeepsNothing) {
   Badge b(kHomeDown, std::nullopt, "elder");
