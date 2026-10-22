@@ -617,7 +617,10 @@ static void wifiVerb(const char* line) {
   }
   if (!std::strcmp(what, "set")) {
     const std::optional<improv::Credentials> c = parseSet(std::strstr(line, "set") + 3);
-    if (!c) return say("want: wifi set <ssid|\"ssid with spaces\"> [password]");
+    if (!c)   // lengths only: the line itself may hold the password
+      return say("want: wifi set <ssid|\"ssid with spaces\"> [password] (an SSID of 1-32 bytes, a password of up "
+                 "to 64; got %u bytes after \"set\")",
+                 unsigned(std::strlen(std::strstr(line, "set") + 3)));
     mem().networks.remember(*c);
     say("network \"%s\" (%s password, %s; %u remembered, newest first); DEBUG ota check tries it now", c->ssid,
         c->password[0] ? "with a" : "no", hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
@@ -639,10 +642,16 @@ static void otaVerb(const char* line) {
   if (std::strcmp(what, "check") != 0) return say("want: ota check [manifest url]");
   if (*url && std::strncmp(url, "https://", 8) != 0 && std::strncmp(url, "http://", 7) != 0)
     return say("ota check: the url must start http:// or https://");
+  // A cable's check: now, dark or not, alone or not. Only a duel's radio, an
+  // open window, or no network at all hold it, and each says so.
+  if (mem().networks.empty()) return say("ota check: refused, no network remembered (DEBUG wifi set first)");
   std::snprintf(mem().forcedUrl, sizeof mem().forcedUrl, "%s", url);
   forced = true;
-  say("ota check asked (%s)%s", *url ? url : wifiota::kManifestUrl,
-      window != Window::None ? ": after the open window closes" : "");
+  const wifiota::Facts f = facts(millis());
+  say("ota check asked (%s), whatever the power and whoever is there%s", *url ? url : wifiota::kManifestUrl,
+      window != Window::None ? ": waits for the open window to close"
+      : f.radioBusy          ? ": waits for the duel or fight mode to give the radio back"
+                             : ": opening now");
 }
 
 }  // namespace wififw

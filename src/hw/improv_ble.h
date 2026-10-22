@@ -89,7 +89,15 @@ class ImprovBle : public wifiota::improv::Port {
     caps->setValue(&can, 1);
     const uint8_t data[6] = {state, can, 0, 0, 0, 0};
     const bool inAdv = adv->setServiceData(NimBLEUUID(im::kServiceDataUuid), data, sizeof data);
-    const bool inScan = adv->addServiceUUID(im::kService);
+    // Straight into the scan response, and only if it fits beside the name
+    // (NimBLE's addServiceUUID tries the full advertisement first and logs
+    // "Cannot add UUID, data length exceeded!" before it falls back).
+    NimBLEAdvertisementData scan = adv->getScanData();   // the name, set before this
+    bool inScan = false;
+    if (scan.getPayload().size() + 2 + 16 <= 31) {
+      scan.addServiceUUID(NimBLEUUID(im::kService));
+      inScan = adv->setScanResponseData(scan);
+    }
     Serial.printf("[wifi] improv service up: service data %s, uuid in scan response %s, heap %u -> %u (before the server starts)\n",
                   inAdv ? "advertised" : "NO ROOM", inScan ? "yes" : "no room", unsigned(heap0), unsigned(ESP.getFreeHeap()));
   }
