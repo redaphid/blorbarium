@@ -8,7 +8,7 @@ import { SITUATIONS, checkLines, parseJsonReply, normalise, MAX_TEXT, lineProble
 import { traitSheet, flavourDice } from "./traits.js";
 
 export const DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6";
-export const DEFAULT_PROMPT = "v2";
+export const DEFAULT_PROMPT = "v3";   // docs/ai-lines/EVAL.md
 export const MAX_RETRIES = 2; // re-asks per batch after the first attempt
 const BATCHES = 4;
 

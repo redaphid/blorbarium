@@ -138,6 +138,7 @@ const body = `<title>Pet Lines Eval</title>
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111714; --panel: #18201c; --fg: #e3ebe6; --muted: #9aa8a0; --rule: #2b3631; --accent: #4fd1bf; --screen: #050a08; --glow: #7ef2de; --pick: #173029; color-scheme: dark; } }
 :root[data-theme="dark"] { --bg: #111714; --panel: #18201c; --fg: #e3ebe6; --muted: #9aa8a0; --rule: #2b3631; --accent: #4fd1bf; --screen: #050a08; --glow: #7ef2de; --pick: #173029; color-scheme: dark; }
 body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+main > * { min-width: 0; }
 main { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; display: grid; gap: 28px; }
 h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
 h1 { font-size: 2.1rem; } h2 { font-size: 1.45rem; } h3 { font-size: 1.2rem; }
@@ -145,7 +146,7 @@ h4 { margin: 0 0 6px; font-size: .78rem; letter-spacing: .08em; text-transform: 
 h5 { margin: 14px 0 4px; font-size: .85rem; color: var(--accent); }
 p { margin: 0; max-width: 72ch; } small { color: var(--muted); }
 .lede { display: grid; gap: 10px; }
-.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
+.scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
 table.results { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .86rem; }
 .results th, .results td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; vertical-align: top; }
 .results th { font-weight: 700; color: var(--muted); font-size: .76rem; }
@@ -155,6 +156,8 @@ dl.lines { margin: 0; display: grid; gap: 4px; }
 dl.lines > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px; align-items: baseline; }
 dl.lines dt { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 dl.lines dd { margin: 0; min-width: 0; }
+.say { max-width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 520px) { dl.lines > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 .pair, .pet { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
 .col { display: grid; gap: 10px; align-content: start; min-width: 0; }
@@ -178,7 +181,8 @@ nav.jump { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .85rem; }
 <header class="lede">
   <h1>Pet lines: model and prompt eval</h1>
   <p>Each blorbarium pet's genes go to Workers AI twice: once to write a short character bible, once to write two to four lines for each of the ${catalog.situations.length} situations a pet speaks in. Every line is checked mechanically (at most ${catalog.maxText} characters, only the badge font's characters, no repeats, every situation covered); failures are asked for again, twice at most, and anything still failing falls back to the built-in lines.</p>
-  <p>Run <b>${esc(run)}</b>: ${summary.models.length} models × ${summary.prompts.length} prompt versions × ${summary.pets.length} pets (two per species). Judges: ${judges.map(esc).join(" and ")}, scoring 1 to 5. Recommended: <b>${esc(pickModel)}</b> with prompt <b>${esc(pickPrompt)}</b>${pick ? ` (${pct(pick.coverage)} coverage, $${f2(pick.usdPerPet, 3)} and ${f2(pick.seconds, 0)} s per pet)` : ""}.</p>
+  <p>Run <b>${esc(run)}</b>: ${summary.models.length} models × ${summary.prompts.length} prompt versions × ${summary.pets.length} pets (two per species). Judges: ${judges.map(esc).join(" and ")}, scoring 1 to 5. Recommended: <b>${esc(pickModel)}</b> with prompt <b>${esc(pickPrompt)}</b>${pick ? ` (${pct(pick.coverage)} coverage, $${f2(pick.usdPerPet, 3)} per pet)` : ""}.</p>
+  ${args.note ? `<p>${esc(args.note)}</p>` : ""}
 </header>
 <section><h2>Results</h2><p><small>Coverage: situations with at least one usable line. First-pass valid: lines that passed the checks without a retry. Distinct-2: unique word pairs over all word pairs in one pet's lines (higher is less repetitive). Same-species overlap: shared word pairs between the two pets of one species (lower is more distinct); similarity is the embedding cosine (bge-m3) of their lines. Hover a judge score for the judge's note.</small></p>${table}</section>
 <section><h2>Side by side</h2><p><small>${esc(pickModel)} ${esc(pickPrompt)} against ${esc(vsModel)} ${esc(vsPrompt)}, on the same three pets and the same situations.</small></p><div style="display:grid;gap:18px">${side}</div></section>

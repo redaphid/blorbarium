@@ -20,7 +20,7 @@
   "triggers": { "crons": ["*/10 * * * *", "0 4 * * *"] },
   "vars": {
     "LINES_MODEL": "@cf/moonshotai/kimi-k2.6",
-    "LINES_PROMPT": "v2",
+    "LINES_PROMPT": "v3",
     "MAX_GENERATIONS_PER_DAY": "6"
   }
   // Secrets (npx wrangler secret put ...): ADMIN_TOKEN (GET /api/creatures),
