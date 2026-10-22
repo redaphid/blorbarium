@@ -14,7 +14,8 @@ work="$HOME/.cache/blorb-guards/$(printf '%s' "$src" | md5sum | cut -c1-12)"
 mkdir -p "$work"
 rsync -a --delete --exclude .pio --exclude .git --exclude outputs "$src/" "$work/"
 cd "$work"
-pio=~/.platformio/penv/bin/pio
+# One build at a time: the flock wrapper when this machine has it, else the penv pio.
+pio=${BLORB_PIO:-$HOME/Worktrees/blorbarium/pio}; [ -x "$pio" ] || pio=~/.platformio/penv/bin/pio
 pending=""
 restore() { if [ -n "$pending" ]; then mv "$pending.orig" "$pending"; pending=""; fi; }
 trap restore EXIT
