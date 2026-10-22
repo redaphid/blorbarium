@@ -9,6 +9,7 @@
 #include <cstdint>
 #include "blorb/boot.h"
 #include "blorb/carry_show.h"
+#include "blorb/clutch_show.h"
 #include "blorb/creature.h"
 #include "blorb/duel_card.h"
 #include "blorb/feed_show.h"
@@ -115,6 +116,10 @@ struct Appearance {
   Fx remainsFade{};                 // 0..1 through the vigil
   EggPreview eggs[kMaxClutch]{};
   uint8_t eggCount = 0, cursor = 0;
+  // Choosing an egg as the eyes see it (clutch_show.h): the egg the tilt
+  // points at and the slide to it, a knock landing on it, the hints' clock,
+  // and the chosen moment (drawn over the egg screen, from `eggs`). Ages in ms.
+  ClutchView clutch{};
 
   // Care hint: the gesture that relieves the most pressing unmet drive (care.def).
   bool hasHint = false;

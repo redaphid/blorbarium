@@ -12,7 +12,8 @@
 // stimuli it fires, or the duel input it becomes) and Appearance carries the
 // hint from it, so the glyph cannot drift from the behaviour. Where a row's
 // double press is Nothing, the second press of a pair counts as a press
-// again (Dish::routeBoot), so a kid tapping through the clutch is not slowed.
+// again (Dish::routeBoot). In the clutch a press keeps the egg the tilt
+// points at (pickEgg), as a knock locks a duel's aimed stance.
 //
 // A case that covers BOOT says the same three words with the body
 // (controls.h, docs/controls.md): a knock knock is a press, a turn onto a side
@@ -50,8 +51,8 @@ enum class BootAct : uint8_t {
   DropPellet,        // stim::button -> Habitat::dropPellet (today's behaviour)
   TuckIn,            // stim::button_hold -> the tuck-in stimulus gene (today's behaviour)
   OpenDuel,          // button_double (ButtonDetector) -> DishDuel opens with a LocalConsent
-  NextEgg,           // stim::button in a Clutch or the nest (today's behaviour)
-  KeepEgg,           // stim::button_hold in a Clutch or the nest (today's behaviour)
+  NextEgg,           // unused since the tilt picks the egg (2026-10-21); kept so the acts keep their numbers
+  KeepEgg,           // a Clutch or the nest: keep the egg the tilt points at (pickEgg; a knock too, as in a duel)
   PeekEgg,           // presentation only: who is inside, for 3 s
   LayFlower,         // presentation only: a flower on the remains
   OtaYes,            // ota::Session::press (after kMinAskMs): yes, update
@@ -93,8 +94,8 @@ inline constexpr BootMeaning kBoot[] = {
     {BootContext::Fallen, BootAct::Nothing, BootAct::Nothing, BootAct::Nothing, BootGlyph::Candle, 0},
     {BootContext::DuelOutcome, BootAct::AskRematch, BootAct::Hug, BootAct::CloseDuel, BootGlyph::Rematch, 3000},
     {BootContext::Lobby, BootAct::DropPellet, BootAct::Nothing, BootAct::CloseDuel, BootGlyph::Pellet, 0},
-    {BootContext::FoundingNest, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
-    {BootContext::ClutchPick, BootAct::NextEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Arrow, 1200},
+    {BootContext::FoundingNest, BootAct::KeepEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Check, 1200},
+    {BootContext::ClutchPick, BootAct::KeepEgg, BootAct::KeepEgg, BootAct::Nothing, BootGlyph::Check, 1200},
     {BootContext::Vigil, BootAct::LayFlower, BootAct::Nothing, BootAct::Nothing, BootGlyph::Flower, 0},
     {BootContext::Egg, BootAct::PeekEgg, BootAct::Nothing, BootAct::Nothing, BootGlyph::Peek, 0},
     {BootContext::Asleep, BootAct::DropPellet, BootAct::TuckIn, BootAct::OpenDuel, BootGlyph::Pellet, 1200},

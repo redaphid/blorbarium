@@ -252,9 +252,11 @@ struct Clutch {
   uint32_t friendSeed = 0;
 
   Offspring child(uint8_t i) const;    // pure; runs mutate() with its viability retries
-  // Body choice: Button or Knock moves the cursor, ButtonHold or DoubleKnock
-  // picks; the timeout picks the cursor. Returns the chosen index once.
-  std::optional<uint8_t> tick(const SenseOut&);
+  // Body choice (pickEgg): `aim` is the tilt picker's sector this tick
+  // (tilt_aim.h, -1 level); the egg it points at becomes the cursor, and a
+  // knock, a knock knock or a hold keeps it. The timeout picks the cursor.
+  // Returns the chosen index once.
+  std::optional<uint8_t> tick(const SenseOut&, int8_t aim = -1);
   // One egg per call (one mutate and dry run, about 30 ms estimated), called
   // once per tick during the vigil, so death never stalls a frame. Idempotent.
   // The friend slot previews the cross only when given its friend egg;
@@ -262,10 +264,19 @@ struct Clutch {
   void derivePreviewStep(const FriendEgg* = nullptr);
 };
 
-// The egg gestures, one rule for a clutch and the founding nest (founding.h):
-// Button or Knock moves the cursor, ButtonHold or DoubleKnock keeps the egg
-// under it. One egg needs no choice. The kept index, or nullopt.
-std::optional<uint8_t> pickEgg(const SenseOut&, uint8_t& cursor, uint8_t count);
+// Where the eggs lie, as the tilt picker's sectors (tilt_aim.h): egg 0 to
+// the left, egg 1 to the right, egg 2 toward the kid (a duel's Pounce, Guard
+// and Trick). The egg a tilt points at, or -1 (level, away, or no egg there).
+inline int8_t eggAt(int8_t aim, uint8_t count) { return aim >= 0 && aim < count && aim < 3 ? aim : -1; }
+
+// The egg gestures, one rule for a clutch and the founding nest (founding.h),
+// the duel's way of picking (owner, 2026-10-21: "Use the same mechanism as we
+// do in fights: tilt the badge"): tilt toward an egg and it is the cursor;
+// while it is tilted toward, a knock keeps it, as a knock locks a stance, and
+// so do a knock knock or BOOT (a press) and a hold, as they lock a special.
+// Level, nothing is kept: the cursor is the last egg tilted toward (the
+// timeout's). One egg needs no choice. The kept index, or nullopt.
+std::optional<uint8_t> pickEgg(const SenseOut&, int8_t aim, uint8_t& cursor, uint8_t count);
 
 using Occupant = std::variant<Egg, Creature, Clutch>;
 

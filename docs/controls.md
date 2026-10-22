@@ -41,13 +41,14 @@ spares, a shake tells the future, a cuddle hugs, a turn answers an update.
 | Mercy, winner | spare | 3 s: Finish | |
 | Mercy, downed | plead | | |
 | Friends | ask for a rematch | 3 s: hug (a friend egg) | back to searching |
-| Clutch | the next egg | 1.2 s: keep this egg | |
+| Clutch (tilt toward an egg) | keep the egg tilted toward | 1.2 s: keep it | |
 | Egg / remains | peek / a flower | | |
 
 Two changes of meaning came with it: a knock knock in a clutch used to keep
-the egg and now moves on (keeping is for good, so it is a hold), and in a
+the egg and moved on instead (keeping is for good, so it was a hold), and in a
 turn a knock knock throws a quick special when one fits (it still cheers
-when one does not).
+when one does not). Since 2026-10-21 the clutch is picked as a duel aims
+(below, "Choosing an egg"): tilt toward an egg, then knock.
 
 ## Why these three
 
@@ -225,12 +226,88 @@ Open, for the owner: a pet fed whenever he asks still starves overnight
 (energy halves every 4 hours, so a 12 hour night unfed pins hunger by
 morning and adds injury about 0.2 a night, healed by day). That is the
 starter chemistry, not the pantry; slowing his burn asleep would fix it.
+Nothing about hunger wakes him either (sleep-idle: left in the dim he
+sleeps on with hunger at 1.0, #61), but waking him would not feed him with
+nobody there; it would only let him eat a pellet left in the dish.
 
 Not changed, for the owner to decide: that a pellet drops for a full or sleeping pet (it rots in 90 min, and a
 starving pet that eats it later is poisoned); where the engine drops it (a
 random spot within 0.6 of the middle, then it rolls downhill, to the bottom
 rim when the badge is held upright); and his mouth opening toward it (pose
 art).
+
+## Choosing an egg, as the kid sees it
+
+Owner, 2026-10-21: "It also was difficult for me to understand how to pick an
+egg." Then: "Use the same mechanism as we do in fights: tilt the badge. Make
+the egg choices next to the selection egg ... reacting more quickly, with
+more frames, making the delay between user gesture and action as low as
+possible."
+
+What it was (`bash scripts/test/clutch_film.sh`, `outputs/egg-ux/strip_*_before.png`):
+
+- **The vigil** is 30 minutes of his remains fading to nothing, with a
+  flower glyph at 1 o'clock (a knock knock lays a flower). Nothing says eggs
+  are coming, or when; for the last minutes the dish is empty.
+- **The eggs** then lie in a row, all one size. The one "selected" is marked
+  by a 6 px cream caret under it, and nothing else (it did not even rock: the
+  clutch's Appearance had no pose clock).
+- **Next egg** was a knock knock, which nothing on screen said: the rim's
+  glyph at 1 o'clock was an arrow, and its "one more" glow lit there, far
+  from the eggs. The caret moved about 0.6 s after the second knock.
+- **Keep** was a turn onto a side held 1.2 s (about 2.5 s with the turn's
+  settle), and its ring filled round that same "next" arrow.
+- **Kept**, the eggs vanished and one big egg was there: no moment, no
+  sign which one it was.
+- **How many** showed (all were drawn); **what differs** was only colour;
+  **nothing done**: 30 minutes after the vigil the egg under the caret (the
+  first, unless moved) is kept, silently, and a clutch of one is laid as the
+  vigil ends.
+
+What it is now (`blorb/clutch_show.h`, `lib/paint/src/clutch.cpp`; the engine
+rule is `pickEgg` in `creature.h`, the shared aim is `blorb/tilt_aim.h`):
+
+| When | What shows |
+|---|---|
+| The vigil | the eggs on their way, small under the remains, clearer as it ends |
+| The eggs come out | they lie where a duel's stances do: left, right and (a third) toward the kid. Level, a little badge in the middle leans toward each egg in turn, its chevron to that egg lit, and TILT TO PICK; the last egg tilted toward (the one the timeout keeps) glows as the duel's lean does |
+| A tilt reaches an egg | that sample (`AimDetector`, two samples into a lean), not the next tick: the egg grows toward the middle (an eased 140 ms slide, every frame drawn), rocks, the duel's reticle rings it, the others dim, the duel's knock taps beside it and the words say KNOCK TO KEEP. Until he has tilted from one egg to another the words take turns with TILT TO PICK, since a badge held upright already leans toward the near egg |
+| The knuckle lands | as it lands (`BodySample::knockWaiting`, ~0.6 s before a lone knock is decided) the ring starts filling, orange, as the duel's hold ring does |
+| The egg is kept | the ring closes lime (a locked stance's), sparks fly, the others fade and drop away, and the egg glides to the middle and becomes the egg screen's egg (2.4 s in all, `ClutchShow::kChosenMs`) |
+
+The rules (`pickEgg`): the aim (`AimDetector`, the duel's) at each tick
+makes the egg there the cursor; while tilted toward an egg, a knock keeps it
+(the egg it was made at, as a knock locks a duel's stance), and so do a
+knock knock, a BOOT press or a hold (a side hold keeps the egg tilted toward
+before the turn, as a heavy special lands where the kid aimed). Level or tilted
+away, nothing is kept: a knock knock out of habit feeds no egg into a choice.
+The timeout still keeps the cursor after 30 minutes, never a friend egg. The
+clutch's seeds, the eggs they hatch and the friend egg's rules are untouched.
+
+**A badge left lying chooses nothing** (`tilt_aim.h` `AimArming`, shared by
+the eggs and the duel). On a board (2026-10-21) a puffkin left lying tilted on
+a desk with its eggs out kept one within 20 minutes, nobody near it: a stray
+jolt read as the knock on an aim no hand had made. Now a choice screen (the
+eggs, fight mode and the duel) opens unarmed, so a pose the badge already lay
+in points at nothing. A hand arms it by moving the badge: gravity 250 mg away
+from where it rested, on two steady samples running (a jolt is not steady), which
+any tilt into a lean or turn onto a side is. It stays armed 20 s after the
+last move. Unarmed, every reader of the aim sees level: the screen points at
+nothing, no knock, knock knock, press or hold selects, a side hold of a badge
+already on its side keeps nothing, and the timeouts keep only what an armed
+aim chose (the clutch: the cursor egg after 30 minutes, as before).
+
+Caveat for a try with a kid: as in a duel, a badge **held upright** in a hand
+is tilted toward the kid (the near egg, a duel's Trick) as far as it can be,
+so with three eggs the near one is aimed until the badge is laid back like a
+tray. The words take turns until he has tilted between eggs, so the tilt is
+taught before the knock.
+
+The rim's hint for the clutch is now the check (a press keeps), with no hold
+ring (the hold also keeps). Previews: `bash scripts/test/clutch_film.sh`
+films a death to the next hatch, on this checkout and on the commit before
+the picker driven the old way, into `outputs/egg-ux/`
+(`strip_<pet>_before.png`, `strip_<pet>_after.png`).
 
 ## He teaches them
 

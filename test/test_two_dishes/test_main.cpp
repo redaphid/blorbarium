@@ -1115,6 +1115,125 @@ TEST(Shake, NeverOnceTheDuelHasStarted) {
   EXPECT_GE(bout.a.dish->appearance().dismissedMs, 1000) << "nothing dismissed";
 }
 
+// The owner: "just tilting it and waiting until the time runs out should
+// select the action." A tilts and waits; B aims and knocks. When A's time runs
+// out the stance A aims at locks, exactly as a knock locks it (not the pet's
+// pick), and both badges see the same moves.
+TEST(Timeout, TiltedWhenTheTimeRunsOutLocksTheAimedStanceOnBothBadges) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked &&
+                         bout.b.dish->duelView().phase == DuelPhase::Choosing && !bout.b.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  bout.step();   // each kid sees the new screen: the plans below replace theirs
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  const int8_t want = int8_t(bout.a.dish->duelView().lean.stance == Stance::Guard ? 0 : 1);   // not the pet's own pick
+  Frame tilt, aim, knock;
+  tilt.aim = want, aim.aim = 2, knock.aim = 2, knock.tap = true;
+  bout.a.plan.assign(3, Frame{});           // level a moment, then the hand tilts: a move, in this turn
+  for (int i = 0; i < 400; ++i) bout.a.plan.push_back(tilt);
+  bout.b.plan.assign(5, aim);
+  bout.b.plan.push_back(knock);
+  for (int i = 0; i < 200; ++i) bout.b.plan.push_back(aim);
+  const uint16_t total = bout.a.dish->duelView().chooseTicks;
+  EXPECT_EQ(total, DuelTimings::chooseTicks(turn));
+  int lockedAfter = -1;
+  for (int i = 0; i < 300 && lockedAfter < 0; ++i) {
+    bout.step();
+    if (bout.a.dish->duelView().locked || bout.a.dish->duelView().phase != DuelPhase::Choosing) lockedAfter = i + 1;
+  }
+  ASSERT_GE(lockedAfter, 0) << "A's time ran out";
+  EXPECT_GE(lockedAfter, total - 2) << "not before the time ran out";
+  EXPECT_LE(lockedAfter, total + 2);
+  auto shows = [&](const Device& d) { const DuelView v = d.dish->duelView(); return v.hasLast && v.lastTurn >= turn; };
+  for (int i = 0; i < 200 && !(shows(bout.a) && shows(bout.b)); ++i) bout.step();
+  const DuelView va = bout.a.dish->duelView(), vb = bout.b.dish->duelView();
+  ASSERT_TRUE(va.hasLast && va.lastTurn == turn) << int(va.lastTurn);
+  ASSERT_TRUE(vb.hasLast && vb.lastTurn == turn) << int(vb.hasLast) << " " << int(vb.lastTurn);
+  EXPECT_EQ(va.last.move[0].stance, Stance(want)) << "the aimed stance, locked";
+  EXPECT_FALSE(va.last.move[0].byPet) << "locked as a knock locks it, not the pet's pick";
+  EXPECT_EQ(vb.last.move[1].stance, Stance(want)) << "and the other badge saw the same move";
+  EXPECT_FALSE(vb.last.move[1].byPet);
+  EXPECT_EQ(va.last.move[1].stance, Stance(2)) << "B's knocked stance";
+  EXPECT_EQ(vb.last.move[0].stance, Stance(2));
+}
+
+// A badge left lying tilted since before the turn chooses nothing when the
+// time runs out (#24, AimArming): the pet picks, as for a level badge. The
+// same tilt the turn before, moved into, locked.
+TEST(Timeout, ABadgeLyingTiltedSinceBeforeTheTurnChoosesNothing) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  auto phase = [&] { return bout.a.dish->duelView().phase; };
+  int t = 0;
+  while (t++ < 3000 && !(phase() == DuelPhase::Choosing && !bout.a.dish->duelView().locked)) bout.step();
+  ASSERT_EQ(phase(), DuelPhase::Choosing);
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  // A's hand, alone: level a moment, then tilted to 1 and left lying so; B plays.
+  Device& a = bout.a;
+  int frames = 0;
+  auto stepA = [&] {
+    BodySample s;
+    s.az = 1000;
+    if (frames++ >= 3) s.ax = kAimTilt[1].ax, s.ay = kAimTilt[1].ay, s.az = kAimTilt[1].az;
+    bout.ether.advance(++bout.tick);
+    for (uint8_t i = 0; i < 5; ++i) a.dish->sample(s, a.ms + 20 * i);
+    a.ms += 100;
+    a.dish->tick(a.ms, a.link);
+    bout.b.step(), bout.twin.step();
+  };
+  auto shown = [&](uint8_t n) { const DuelView v = a.dish->duelView(); return v.hasLast && v.lastTurn >= n; };
+  for (int i = 0; i < 600 && !shown(turn); ++i) stepA();
+  ASSERT_TRUE(shown(turn));
+  EXPECT_EQ(a.dish->duelView().last.move[0].stance, Stance(1));
+  EXPECT_FALSE(a.dish->duelView().last.move[0].byPet) << "moved into in its turn: locked at the timeout";
+  for (int i = 0; i < 600 && !shown(uint8_t(turn + 1)) && a.dish->duelActive(); ++i) stepA();
+  if (!shown(uint8_t(turn + 1))) GTEST_SKIP() << "the duel ended before a next turn";
+  EXPECT_TRUE(a.dish->duelView().last.move[0].byPet) << "lying tilted since before the turn: the pet's pick";
+}
+
+// Level when the time runs out: the pet picks, as it always has.
+TEST(Timeout, LevelWhenTheTimeRunsOutThePetPicks) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  bout.step();
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  bout.a.plan.assign(400, Frame{});
+  for (int i = 0; i < 400 && !(bout.a.dish->duelView().hasLast && bout.a.dish->duelView().lastTurn == turn); ++i) bout.step();
+  const DuelView va = bout.a.dish->duelView();
+  ASSERT_TRUE(va.hasLast && va.lastTurn == turn);
+  EXPECT_TRUE(va.last.move[0].byPet) << "nobody aimed: the pet's pick";
+}
+
+// The time to choose shortens each turn, the same on both badges, to a floor.
+TEST(Timeout, TheTimeToChooseShortensEachTurnToAFloor) {
+  const uint16_t want[] = {100, 88, 77, 67, 60, 60, 60, 60};
+  for (uint32_t turn = 0; turn < 8; ++turn) EXPECT_EQ(DuelTimings::chooseTicks(turn), want[turn]) << "turn " << turn;
+  EXPECT_EQ(DuelTimings::chooseTicks(100), DuelTimings::kChooseFloorTicks);
+  for (uint32_t turn = 1; turn < 20; ++turn) EXPECT_LE(DuelTimings::chooseTicks(turn), DuelTimings::chooseTicks(turn - 1));
+  // On both badges, turn after turn, a whole duel.
+  Bout bout(4, kGrungo, SpeciesId{6});
+  int seen = 0;
+  for (int i = 0; i < 6000 && seen < 3; ++i) {
+    bout.step();
+    const DuelView va = bout.a.dish->duelView(), vb = bout.b.dish->duelView();
+    if (va.phase == DuelPhase::Choosing && vb.phase == DuelPhase::Choosing && !va.locked && !vb.locked) {
+      const uint8_t ta = va.hasLast ? uint8_t(va.lastTurn + 1) : 0, tb = vb.hasLast ? uint8_t(vb.lastTurn + 1) : 0;
+      if (ta != tb) continue;
+      EXPECT_EQ(va.chooseTicks, DuelTimings::chooseTicks(ta));
+      EXPECT_EQ(vb.chooseTicks, va.chooseTicks) << "the same on both badges";
+      seen += ta > 0;
+    }
+  }
+  EXPECT_GE(seen, 1) << "a later turn was seen on both";
+}
+
 // Spared, with no button: a knock spares as it always did, and nobody dies.
 TEST(NoButton, AMortalDuelSparedByAKnock) {
   for (uint64_t seed = 1; seed < 30; ++seed) {
@@ -1518,11 +1637,15 @@ TEST(BootRows, FaceDownAlwaysPutsHimToSleep) {
   EXPECT_TRUE(slept) << "33 s face down";
 }
 
-// The clutch with no button: knock knocks step through the eggs, a side hold keeps one.
-TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
+// The clutch with no button, picked as a duel aims (owner, 2026-10-21):
+// level, a knock knock keeps nothing; tilted toward an egg it is the one, and
+// a knock keeps it.
+TEST(BootRows, NoButtonTheClutchIsTiltedThroughAndAKnockKeeps) {
   Alone a;
-  Frame kk, side;
-  kk.knock2 = true, side.side = true;
+  Frame kk, right, rightKnock;
+  kk.knock2 = true;
+  right.aim = 1;
+  rightKnock.aim = 1, rightKnock.tap = true;
   a.d.creature().fall();
   a.tick(), a.tick();
   Clutch& k = std::get<Clutch>(a.d.dish->occupant());
@@ -1530,11 +1653,63 @@ TEST(BootRows, NoButtonTheClutchIsKnockedThroughAndASideHoldKeeps) {
   k.sinceDeath = Clutch::kVigilTicks;
   a.tick();
   a.tick(kk), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a knock knock: the next egg";
-  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "and it keeps nothing";
+  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "level, a knock knock keeps nothing";
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 0);
+  for (int t = 0; t < 10; ++t) a.tick(right);
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "tilted right: the right egg";
+  EXPECT_EQ(a.d.dish->appearance().clutch.aim, 1) << "and the screen points at it";
+  a.tick(rightKnock);
+  for (int t = 0; t < 10 && std::holds_alternative<Clutch>(a.d.dish->occupant()); ++t) a.tick(right);
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a knock keeps the egg tilted toward";
+  EXPECT_EQ(a.d.dish->appearance().clutch.chosen, 1) << "its chosen moment shows";
+  int chosen = -1;
+  a.d.dish->lineage().forEach([&](const LineageEntry& e) {
+    if (const auto* b = std::get_if<Birth>(&e)) chosen = b->chosen;
+  });
+  EXPECT_EQ(chosen, 1);
+}
+
+// A side hold keeps the egg tilted toward before the turn, as a heavy special
+// lands where the kid aimed before he turned the badge.
+TEST(BootRows, NoButtonASideHoldKeepsTheEggAimedBeforeTheTurn) {
+  Alone a;
+  Frame right, side;
+  right.aim = 1;
+  side.side = true;
+  a.d.creature().fall();
+  a.tick(), a.tick();
+  std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+  a.tick();   // the eggs come out with him level; then a hand tilts him
+  for (int t = 0; t < 20; ++t) a.tick(right);
   for (int t = 0; t < 22; ++t) a.tick(side);
   a.tick();
-  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps the egg";
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a side hold keeps an egg";
+  int chosen = -1;
+  a.d.dish->lineage().forEach([&](const LineageEntry& e) {
+    if (const auto* b = std::get_if<Birth>(&e)) chosen = b->chosen;
+  });
+  EXPECT_EQ(chosen, 1) << "the egg tilted toward before the turn";
+}
+
+// A badge already lying on its side, or tilted, when the eggs come out
+// chooses nothing however long it lies there, nor with a knock on it: no
+// hand moved it (tilt_aim.h AimArming; found on a board, 2026-10-21).
+TEST(BootRows, NoButtonABadgeAlreadyLyingWhenTheEggsComeOutKeepsNothing) {
+  for (bool onSide : {true, false}) {
+    Alone a;
+    Frame lying, knocked;
+    if (onSide) lying.side = true;
+    else lying.aim = 1;
+    knocked = lying;
+    knocked.tap = true;
+    a.d.creature().fall();
+    a.tick(), a.tick();
+    for (int t = 0; t < 40; ++t) a.tick(lying);   // laid down so during the vigil
+    std::get<Clutch>(a.d.dish->occupant()).sinceDeath = Clutch::kVigilTicks;
+    for (int t = 0; t < 300; ++t) a.tick(t % 50 == 25 ? knocked : lying);
+    ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << (onSide ? "on its side" : "tilted");
+    EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 0) << "nothing was aimed at";
+  }
 }
 
 // Asleep, a double press asks for a fight (he is woken for it); too sleepy,
@@ -1554,7 +1729,7 @@ TEST(BootRows, AsleepAndTooSleepyADoublePressIsAPelletAndAReason) {
   EXPECT_EQ(a.d.dish->appearance().noFight, NoFight::TooSleepy);
 }
 
-TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
+TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTiltedThrough) {
   Alone a;
   a.d.creature().fall();
   a.tick(), a.tick();
@@ -1567,12 +1742,13 @@ TEST(BootRows, AnEggIsPeekedAndRemainsGetAFlowerAndTheClutchIsTappedThrough) {
   a.tick();
   expectRow(*a.d.dish, BootContext::ClutchPick, "clutch");
   a.tick({-1, true}), a.tick(), a.tick(), a.tick(), a.tick(), a.tick();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a press: the next egg";
   a.doublePress();
-  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "a quick double is two taps, round a clutch of two";
-  for (int t = 0; t < 14; ++t) a.tick({-1, true});
-  a.tick();
-  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a hold keeps the egg";
+  ASSERT_TRUE(std::holds_alternative<Clutch>(a.d.dish->occupant())) << "level, BOOT keeps nothing";
+  for (int t = 0; t < 20; ++t) a.tick({1});
+  EXPECT_EQ(std::get<Clutch>(a.d.dish->occupant()).cursor, 1) << "tilted right: the right egg";
+  for (int t = 0; t < 14; ++t) a.tick({1, true});
+  a.tick({1});
+  ASSERT_TRUE(std::holds_alternative<Egg>(a.d.dish->occupant())) << "a hold keeps the egg tilted toward";
   expectRow(*a.d.dish, BootContext::Egg, "egg");
   a.tick({-1, true}), a.tick();
   EXPECT_EQ(a.d.dish->appearance().echo, BootAct::PeekEgg);

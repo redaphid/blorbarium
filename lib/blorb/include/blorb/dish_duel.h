@@ -74,7 +74,7 @@ class DishDuel {
   //  5 fight mode between fights: the pet's card refreshed, his readiness
   //    rechecked every tick; a pet who is no creature any more leaves it
   DuelStepped step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
-                   uint64_t lineageId, uint16_t petDay, uint32_t tick);
+                   uint64_t lineageId, uint16_t petDay, uint32_t tick, bool aimMoved = true);
 
   // His pantry now and its room, for the card a friend reads (the spoils,
   // #57). The Dish sets it each tick before step().
@@ -82,6 +82,7 @@ class DishDuel {
 
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }
+  int16_t choosingTurn() const { return session_.choosingTurn(); }
   const DuelBook& book() const { return book_; }
   // The newest battle this boot recorded, for a log line that two boards'
   // logs can be compared by (its outcomeHash).

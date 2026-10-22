@@ -177,7 +177,7 @@ bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId,
 }
 
 DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
-                           uint64_t lineageId, uint16_t petDay, uint32_t tick) {
+                           uint64_t lineageId, uint16_t petDay, uint32_t tick, bool aimMoved) {
   DuelStepped out;
   Creature* c = std::get_if<Creature>(&o);
   // He dozed off in the lobby: fight mode is an awake pet's state, so it
@@ -264,7 +264,8 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       heldPress_.reset();
     }
   }
-  const DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
+  DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
+  in.aimMoved = aimMoved;
   DuelEffects fx = session_.tick(*air, in, tick);
   drop(raw, fx.captured);
   for (uint8_t i = 0; i < fx.stimCount; ++i) raw.fire(fx.stimuli[i]);
