@@ -175,6 +175,16 @@ void Dish::runOneTick(Link& link) {
     if (out.loci[i].locus == locus::tilt_y) tiltY_ = out.loci[i].value;
   }
   routeBoot(bootContext(), out);
+  // A hard shake dismisses anything modal before the tick runs (#35): fight
+  // mode before a duel has started, an ask waiting on an update, why no
+  // fight, a refusal's words. Never a duel. It still reaches him.
+  if (fired(out, stim::shake) && !(out.remote & duelStimBit(stim::shake)) && detectors_.motion.vigorous()) {
+    const DishDuel::Refusal& r = duel_.refusal();
+    const bool refusalShown = r.any && (tick_ - r.tick < kEchoTicks || (r.kind != NoFight::None && tick_ - r.tick < kNoFightTicks));
+    bool any = duel_.dismiss(air_, tick_, refusalShown);
+    any = feed_.dismiss(lastTickMs_) || any;
+    if (any) dismissedAtMs_ = lastTickMs_, dismissed_ = true;
+  }
   const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
   const bool side = kSideHoldHolds && detectors_.side.holding();
   // The duel reads the aim (AimDetector) as the tilt at its sector's middle,
@@ -460,6 +470,7 @@ Appearance Dish::appearance() const {
     a.lobbyDecline = v.myDecline;
   }
   feedView(a);
+  if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);

@@ -394,3 +394,50 @@ ringing in a hand sways, a badge set down or turned with a thump settles at
 once and aims where it settled. `Aim.AThumpOntoAnAimIsTheAimAtOnce`: 180 ms
 with the ring hold, 20 ms with this. No first knock on any recording moves
 the aim it locks.
+
+### 12. A hard shake dismisses what is modal, never a duel (Refs #35)
+
+The owner: "shaking should dismiss any 'modal' stuff (but not back out of a
+fight), including 'fight mode'." 0.7.11's "a shake leaves fight mode"
+(41a4e10) was only ever on a cloud branch (origin/ccr-82507c31-iksr3h) and
+never reached main: nothing regressed, it was never there.
+
+Only a hard shake dismisses: `MotionDetector::vigorous()`, 15 of the last 50
+samples 0.8 g or more off gravity. Of the recordings' three Shakes, the
+pick-up from face down in L2 has 9 such samples and dismisses nothing; the
+shake (9) has 28 and the vigorous carrying in 8 has 31 (that one would: it
+is shake-strength). A Shake still tells the future as before.
+
+What it dismisses:
+- fight mode before a duel has started: the lobby, a pair greeting, the
+  stakes picker (the friend hears it as leaving and goes back to searching);
+- an ask for fight mode waiting on an update, and why no fight;
+- a refusal's words when feeding (ALL GONE!, ZZZ..., I'M FULL!);
+- the update's "Turn me around!" (a no: it lapses as unanswered, the page
+  sees `last=no_confirm`) and the debug link's unlock question.
+Never: once the stakes are agreed (choosing, acting, mercy) a shake is the
+prophecy and is no stance. A thought bubble is already replaced by the
+shake's trance. Improv's "Join Wi-Fi?" is on wifi-ota-2: not done here.
+
+Acknowledgement: a white ring sweeps from the middle to the rim and fades
+in 300 ms (`paint::drawDismissed`, `Appearance::dismissedMs`), on the first
+frame after the tick that dismissed it (the shell's questions: the first
+frame after the sample).
+
+Tests: `Shake.*` in test_two_dishes (the lobby, a soft shake leaves nothing,
+the stakes with the friend hearing it, never once the duel has started),
+`OtaSession.ADeclineEndsTheQuestionAsUnanswered`, and test_controls counts
+the dismissals on every recording (0 outside 8 and 9). The probe's fight
+phase now ends with a hard shake and fails if fight mode stays open.
+
+### Fight mode "gate=wifi result=waiting" on the board (e3bf472)
+
+Not NVS: the ESP-NOW air could not open. Opening it takes ~38 KB of internal
+heap (46 KB -> 8.5 KB free); after two opens and closes the Wi-Fi driver's
+deinit timed out ("wifi:timeout when WiFi un-init", "Failed to deinit Wi-Fi
+driver"), and the next `esp_wifi_init` failed (257, no memory): `air open
+FAILED at wifi`, so fight mode waited, retrying each second, and held the
+badge awake ("low: refused (held awake)"). Free internal heap at boot was
+57.7 KB on e3bf472 where it was 75.4 KB on 78f704f. That is #26's (the
+internal heap with the air open); this branch's part is the cable's 2 KB
+transmit queue (10).

@@ -97,6 +97,7 @@ class Session {
   // One data write: a 4-byte little-endian offset, then image bytes.
   void data(const uint8_t* packet, size_t len, uint32_t now, Peer peer);
   void press(uint32_t now);                 // the dish's button
+  void decline(uint32_t now);               // a no (a hard shake, #35): the question lapses at once, as unanswered
   void tick(uint32_t now);                  // lapses: the question, a silent page
   bool asking() const { return std::holds_alternative<Asking>(state_); }
   bool active() const { return !std::holds_alternative<Idle>(state_); }   // anything else that wants the radio waits

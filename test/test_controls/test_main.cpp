@@ -114,7 +114,7 @@ struct Lat {
 };
 
 struct Result {
-  int kk = 0, singles = 0, holds = 0, hangs = 0, shakes = 0;
+  int kk = 0, singles = 0, holds = 0, hangs = 0, shakes = 0, dismissals = 0;
   std::string poses;   // each pose the shell held, and for how long: S1.42 a side 1.42 s, H.. upside down
   int heard = 0, oneMore = 0, rings = 0, charges = 0;
   Lat kkAck, kkWord, sideAck, sideWord, hangAck, hangWord;
@@ -178,7 +178,7 @@ Result play(const Segment& seg) {
       const StimId s = out.stimuli[i];
       if (s == stim::double_knock) ++r.kk;
       if (s == stim::knock) ++r.singles;
-      if (s == stim::shake) ++r.shakes;
+      if (s == stim::shake) ++r.shakes, r.dismissals += d.motion.vigorous();
       if (s == stim::button_hold) {
         ++r.holds;
         if (run.since(1, t)) r.sideWord.add(ms - t);
@@ -236,6 +236,11 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
     ASSERT_NE(w, nullptr) << s.label;
     if (w->holds >= 0) EXPECT_EQ(r.holds, w->holds) << s.label;
     if (w->hangs >= 0) EXPECT_EQ(r.hangs, w->hangs) << s.label;
+    // A shake that would dismiss what is on the screen (#35): only a hard
+    // one. Of the recordings' three Shakes, the pick-up from face down (L2)
+    // is not one; the shake (9) and the vigorous carrying (8) are.
+    const bool shaken = s.label.rfind("8_", 0) == 0 || s.label.rfind("9_", 0) == 0;
+    if (!shaken) EXPECT_EQ(r.dismissals, 0) << s.label << ": a dismissal nobody meant";
   }
   // Sample time, ms, p50/p95/max: from the decisive moment to what the next
   // frame can show (ack), and to the word the engine gets (word).

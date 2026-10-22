@@ -343,8 +343,16 @@ def main():
                     time.sleep(1.8)
                 b.ask("DEBUG tidy", r"\[hw\] debug tidy")
                 ok = table("fight", b.latency(), only) and ok
-                b.ask("DEBUG hang 2000", r"\[hw\] debug hang")
-                time.sleep(5.5)
+                # A hard shake leaves fight mode before a duel has started (#35).
+                b.ask("DEBUG shake", r"\[hw\] debug shake")
+                time.sleep(2.5)
+                if b.ask("DEBUG duel", r"\[duel\] now active=(\d)")[1] != "0":
+                    print("FAIL fight: a hard shake did not leave fight mode (#35)")
+                    ok = False
+                    b.ask("DEBUG hang 2000", r"\[hw\] debug hang")
+                    time.sleep(5.5)
+                else:
+                    print("fight: a hard shake left fight mode (#35)")
 
         # ---- side holds: last, as each tucks him in (asleep, he would doze out of a fight)
         if want("side"):

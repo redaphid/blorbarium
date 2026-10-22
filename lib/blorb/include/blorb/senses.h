@@ -136,7 +136,14 @@ struct Gravity {
 
 struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 5 jolts >= 0.8 g off gravity, each the other way, in 1 s; free fall 200 ms then impact -> Dropped
   void sample(const BodySample&, uint32_t ms, SenseOut&);
+  // The last second has been a hard shake, not a jolt or two: kVigorSamples
+  // of its 50 samples 0.8 g or more off gravity. A shake dismisses what is on
+  // the screen (#35) only when it is this; the recordings' pick-up from face
+  // down that fires a Shake has 9, a shake in a hand 28-31.
+  static constexpr uint8_t kVigorSamples = 15;
+  bool vigorous() const { return __builtin_popcountll(hard_) >= kVigorSamples; }
  private:
+  uint64_t hard_ = 0;   // the last 50 samples, one bit each: this far off gravity
   enum class Fall : uint8_t { None, Falling, Free, Landing };
   Gravity grav_;
   uint32_t jolts_[5]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
