@@ -95,7 +95,7 @@ class Framing(unittest.TestCase):
         line = "#ffffff " + bo.begin_line(COMMITTED, "A" * 22)
         self.assertLess(len(line), 200)
         self.assertEqual(bo.begin_line(COMMITTED, "T" * 22).split()[:6],
-                         ["OTA", "BEGIN", "lcd128", "0.7.12", "0", "1"])
+                         ["OTA", "BEGIN", "lcd128", COMMITTED["version"], "0", "1"])
         self.assertTrue(bo.begin_line(COMMITTED, "T" * 22).endswith(" " + COMMITTED["sig"] + " " + "T" * 22))
 
 
