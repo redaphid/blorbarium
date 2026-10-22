@@ -339,7 +339,13 @@ web/public/fw/<board>/blorbarium-<board>-<version>.bin
  "image":"blorbarium-lcd128-0.4.0.bin","fmt":1}
 ```
 
-The manifest is published with the site. The image is the app image
+The site serves `/fw/` from the R2 bucket `blorbarium-fw` (bound as `FW` in
+`wrangler.jsonc`, served by `web/src/worker.js`), at the keys
+`<board>/manifest.json` and `<board>/blorbarium-<board>-<version>.bin`. The
+files above are where `release` writes them; `publish` copies them into the
+bucket. A deploy of the site never carries a release: `web/public/.assetsignore`
+leaves `fw/` out of the assets, so a deploy from git, which has no image, cannot
+publish a manifest without its image. The image is the app image
 (`firmware.bin`), not the merged `.hex`, because it goes into an app slot.
 The page fetches `image` relative to the manifest. `fmt` is the save format
 the image writes. It is signed (it is part of the `blorbota2` text) and carried
@@ -348,8 +354,11 @@ release tool also reads it to catch a format change.
 
 The manifest is committed, as the record of the last release. The image is
 not committed (`.gitignore` refuses `web/public/fw/**/*.bin`).
-`tools/ota_release.py release` writes it, so a deploy follows a release from
-the same tree.
+`tools/ota_release.py release` writes it, and `publish` puts the image in the
+bucket before the manifest, so the manifest there never names an image that is
+not. A release goes live when it is published, with no deploy. Older images
+stay in the bucket, so a page holding an older manifest can still fetch its
+image.
 
 ## Offline
 
@@ -528,8 +537,19 @@ so a cable flash always takes priority over an update.
    `--allow-older` signs flag 1, for a deliberate downgrade.
    Run it again before committing and it puts its own last manifest back
    first. Any other uncommitted change is still refused.
-3. Commit the manifest, and deploy the site from the same tree. Deploys are
-   the owner's call. The image is not committed.
+3. Commit the manifest. The image is not committed.
+4. Publish it, which is the owner's call: the moment it lands, every page
+   offers it.
+
+   ```
+   uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json
+   ```
+
+   It checks the release again, then uploads the image and then the manifest
+   to the `blorbarium-fw` bucket with wrangler (logged in, or
+   `CLOUDFLARE_API_TOKEN` with R2 edit). No site deploy is needed, and a site
+   deploy never changes it. `curl -s https://blorb.hypnodroid.com/fw/lcd128/manifest.json`
+   shows the new version.
 
 The build maps the build machine's paths out of the image
 (`tools/strip_paths.py`, `-ffile-prefix-map`), so a public image names no
@@ -580,6 +600,7 @@ as the user's home directory.
 | Signing and releasing | `tools/ota_release.py` |
 | Build paths kept out of the image | `tools/strip_paths.py` |
 | The page's sender | `web/public/ota.js` |
+| `/fw/` from the R2 bucket, and publishing into it | `web/src/worker.js`, `wrangler.jsonc`, `tools/ota_release.py publish` |
 | The laptop's sender (BlueZ) | `tools/ble_ota.py`, tests in `tests/test_ble_ota.py` |
 | The mock dish for `?mock=1` | `web/public/ota-mock.js` |
 | Native tests | `test/test_ota` |
@@ -686,7 +707,8 @@ owner's Android phone. The desk PC has no Bluetooth adapter. The page is
 served from this PC with `wrangler dev`, and the phone reaches it over USB
 through `adb reverse`. Chrome treats `http://localhost` as a secure context,
 so Web Bluetooth works there. The production site is https://blorb.hypnodroid.com
-(`cd web && npx -y wrangler@4.149.0 deploy`), first deployed 2026-10-14 with 0.5.0.
+(`npx wrangler deploy` from the repo root after `npm ci`, see `web/README.md`), first deployed
+2026-10-14 with 0.5.0. Its releases come from the R2 bucket, not the deploy.
 
 Only one program can hold COM11 at a time. Run `serial_log.py` and `shot.py`
 one after the other, never together.
@@ -738,11 +760,13 @@ merged into) on this PC. `E` and the daemon hold come from
 
 4. **Serve the page and bridge it to the phone.**
 
-       (cd web && npx -y wrangler@4.149.0 dev --port 8787 --ip 127.0.0.1) &
+       uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json --local
+       npm ci && (npx wrangler dev --port 8787 --ip 127.0.0.1) &
        adb reverse tcp:8787 tcp:8787
        curl -s http://127.0.0.1:8787/fw/lcd128/manifest.json
 
-   The manifest must say `0.4.1`.
+   The manifest must say `0.4.1`. `--local` puts the release in the bucket
+   `wrangler dev` serves (`.wrangler/state`), never the site's.
 
 5. **Update to 0.4.1.** Ask the owner for owner step 2. When the phone says
    "Press the button on the dish to say yes", take a picture of the question,
@@ -822,6 +846,7 @@ merged into) on this PC. `E` and the daemon hold come from
        adb reverse --remove tcp:8787
        rm -f web/public/fw/lcd128/*.bin
        git checkout -- web/public/fw
+       rm -rf .wrangler/state
        git switch -
 
    Stop `wrangler dev`. It leaves a `workerd.exe` behind, so stop the node

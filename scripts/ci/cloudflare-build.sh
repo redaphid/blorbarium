@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# The build command for Workers Builds (Cloudflare's CI for the blorbarium
-# Worker, which serves web/ as blorb.hypnodroid.com). Every push and pull
-# request runs it before the deploy or preview command; a failure here stops
-# the upload. The Worker's build settings (Settings > Build):
-#   root directory:  web
-#   build command:   bash ../scripts/ci/cloudflare-build.sh
-#   main:            npx -y wrangler@4.149.0 versions upload   (a version, no traffic: the live
-#                    site's fw/*.bin is not in git, so a deploy from git would drop it)
-#   other branches:  npx -y wrangler@4.149.0 versions upload   (a version with a preview URL)
+# The checks Workers Builds (Cloudflare's CI for the blorbarium Worker) runs on
+# every push, as the custom build in the root wrangler.jsonc: `npx wrangler deploy`
+# (main) and `npx wrangler preview` (other branches) run it before they upload,
+# and a failure here stops the upload. There it is called with --workers-ci-only,
+# which returns at once anywhere WORKERS_CI is not set (wrangler dev, a deploy by hand).
 # Locally, from any directory, with the desk's one-at-a-time PlatformIO:
 #   PIO=/home/redaphid/Worktrees/blorbarium/pio bash scripts/ci/cloudflare-build.sh
 #
@@ -21,6 +17,10 @@
 # ESP32 toolchain and framework are downloaded on every build (Workers Builds
 # caches npm/yarn/pnpm/bun, not ~/.platformio).
 set -uo pipefail
+if [ "${1:-}" = --workers-ci-only ] && [ -z "${WORKERS_CI:-}" ]; then
+  echo "cloudflare-build.sh: not in Workers Builds, no checks (run it without --workers-ci-only to check)"
+  exit 0
+fi
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 ci="${CI_CACHE:-$HOME/.cache/blorb-ci}"
@@ -38,9 +38,9 @@ step() {   # step <name> <command...>
   echo "=== $name: $result in $((SECONDS - start)) s"
 }
 
-tools() {   # Pillow for the Python tests, and PlatformIO unless $PIO names one
+tools() {   # Pillow and cryptography for the Python tests, and PlatformIO unless $PIO names one
   python3 -m venv "$ci/venv" || return 1
-  local want=(pillow==12.2.0)
+  local want=(pillow==12.2.0 cryptography==50.0.2)   # cryptography: the ble_ota signing tests
   [ -n "${PIO:-}" ] || want+=(platformio==6.2.0)
   "$ci/venv/bin/pip" install --quiet --disable-pip-version-check "${want[@]}"
 }
