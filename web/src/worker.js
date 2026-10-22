@@ -18,6 +18,7 @@ import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor } from "./diary.js";
+import { handleAdmin, handleBadge } from "./admin.js";
 
 const MAX_BODY = 64 * 1024;
 export const DIARY_CRON = "0 4 * * *";   // daily, 04:00 UTC: after a night's stats, before the family's morning
@@ -60,16 +61,20 @@ function packReply(row, creature, extra = {}) {
 }
 
 // Writes and stores one generation for a creature; returns the stored pack row.
-export async function generateFor(env, creature, { source = "genes", s = settings(env) } = {}) {
+// `bible` given (an edit from the phone or the dashboard): the lines are written
+// from it and call 1 is skipped. Only a genes-only pack is shared by cache key.
+export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy } = {}) {
   const bytes = hexToBytes(creature.genome_hex);
   const raw = rawSheet(bytes, { stage: creature.stage ?? "adult", feats: creature.feats ?? 0 });
-  const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash };
+  const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash,
+                bible, catchphrases };
   pet.traits = traitSheet(raw, { generation: pet.generation, name: pet.name });
   const pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt });
   const { log, ...provenance } = pack.provenance;
   const stored = await store.storeGeneration(env.DB, creature.id, {
-    source, bible: pack.bible, catchphrases: pack.catchphrases, model: s.model, prompt: s.prompt,
-    inputs: { dice: provenance.dice, traits: pet.traits.text }, cacheKey: cacheKey(creature.genome_hash, s),
+    source, bible: pack.bible, catchphrases: pack.catchphrases, model: s.model, prompt: s.prompt, editedBy,
+    inputs: { dice: provenance.dice, traits: pet.traits.text },
+    cacheKey: source === "genes" ? cacheKey(creature.genome_hash, s) : `${creature.genome_hash}:${source}:${Date.now()}`,
     lines: pack.lines, fallback: pack.fallback, provenance: { ...provenance, attempts: log },
   });
   const sig = await signPack(packText({ genomeHash: creature.genome_hash, version: stored.version, lines: pack.lines }),
@@ -241,6 +246,12 @@ export default {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");
         return json(await store.exportAll(env.DB, { mac: normaliseMac(url.searchParams.get("mac")) }));
       }
+      const helpers = { json, fail, readBody, generateFor, normaliseMac };
+      if (url.pathname.startsWith("/api/admin/")) {
+        if (!(await isAdmin(request, env))) return fail(401, "admin token");
+        return await handleAdmin(request, url, env, helpers);
+      }
+      if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
       return env.ASSETS.fetch(request);
     } catch (e) {

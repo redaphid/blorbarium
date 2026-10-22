@@ -50,7 +50,7 @@ export function mechanics(pack, situationCount) {
     passFirst: p.firstPass.returned ? p.firstPass.valid / p.firstPass.returned : 0,
     coverage: 1 - pack.fallback.length / situationCount,
     fallback: pack.fallback.length,
-    retries: p.retries + (p.bibleAttempts - 1),
+    retries: p.retries + Math.max(0, p.bibleAttempts - 1),
     lines: lines.length,
     perSituation: lines.length / Math.max(1, situationCount - pack.fallback.length),
     meanLen: lines.length ? lines.reduce((a, l) => a + l.length, 0) / lines.length : 0,

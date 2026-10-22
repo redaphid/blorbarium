@@ -134,7 +134,11 @@ export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DE
   const t0 = Date.now();
   const traits = pet.traits ?? traitSheet(pet.raw, { generation: pet.generation, name: pet.name });
   const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "" };
-  const { bible, catchphrases, attempts: bibleAttempts } = await writeBible(ai, input, { model, prompt, meter, log });
+  // An edited personality (the phone #43, the dashboard #41) skips call 1: the
+  // owner's words are the bible, and his catchphrases are kept if given.
+  const { bible, catchphrases, attempts: bibleAttempts } = pet.bible
+    ? { bible: String(pet.bible).trim(), catchphrases: pet.catchphrases ?? [], attempts: 0 }
+    : await writeBible(ai, input, { model, prompt, meter, log });
   input.bible = bible;
   input.catchphrases = catchphrases;
   const size = Math.ceil(situations.length / BATCHES);
