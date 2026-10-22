@@ -131,6 +131,9 @@ class Creature {
   bool playing() const { return !actionDone_ && idle_.active(); }
   // What STATE says he is doing: the idle he plays, else the action's name.
   const char* doing() const;
+  // The part of his day (#61, idle.h DayPart): the wall's hour when a phone set
+  // it, else how long since he woke; the dark is his night.
+  DayPart dayPart() const;
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
   void inject(ChemId, Fx);             // sim scripts, tests and the prophecy_treat twist; clamps to 0..1

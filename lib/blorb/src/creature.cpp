@@ -186,8 +186,37 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     m.explore = pheno_.temperament.explore;
     m.dark = !fires(chem_.locus[locus::light.v]);
     m.age = stats_.ageTicks;
+    // #61: his day, how he is, his age and his genes.
+    m.part = dayPart();
+    m.hunger = chem_.drive(drive::hunger);
+    m.pain = chem_.drive(drive::pain);
+    m.discomfort = chem_.drive(drive::discomfort);
+    m.injury = chem_.chem[chem::injury.v];
+    m.toxin = chem_.chem[chem::toxin.v];
+    Fx most{};
+    for (const DriveInfo& row : DRIVES) most = fxMax(most, chem_.drive(row.id));
+    // As Appearance::moods' content: 1 with no drive past 0.15, down to 0 as the most pressing nears 1.
+    const Fx mark = Fx::ratio(15, 100);
+    m.content = most <= mark ? Fx::one()
+                             : clamp01(Fx::one() - Fx{int32_t(int64_t(most.raw - mark.raw) * Fx::kOne / (Fx::kOne - mark.raw))});
+    m.stage = stage_;
+    m.habituation = pheno_.temperament.habituation;
+    m.dreamLenTicks = pheno_.temperament.dreamLenTicks;
+    m.bulk = pheno_.size.base ? pheno_.size.base : 128;
+    m.pressed = !calm();
     return m;
   };
+  // Pressed (not calm), he may still show how he feels: awake, not afraid.
+  auto mayFeel = [&] { return !body_.asleep && chem_.drive(drive::fear) < kPlayFear; };
+  // A play goes on while he is calm; one that shows a feeling, while he still feels it.
+  auto playOn = [&] {
+    if (calm()) return true;
+    if (!mayFeel()) return false;
+    return feels(idle_.now, mood()) > 0;
+  };
+  // He slept long enough to have woken (#61): his day starts again.
+  const bool sleptLong = body_.asleep && action_ == action::sleep && stats_.ageTicks - actionStart_ >= kNapTicks;
+  const bool sleptNight = sleptLong && stats_.ageTicks - actionStart_ >= kNightSleepTicks;
   auto finish = [&] {
     behaviours.stop(action_, body_, ctx);
     actionDone_ = true;
@@ -264,7 +293,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     } else if (asleepFor % every >= t.dreamLenTicks) {
       body_.dreaming = false;
     }
-  } else if (tick % kBrainEvery == 0 && playing() && calm()) {
+  } else if (tick % kBrainEvery == 0 && playing() && playOn()) {
     // An idle runs to its end (idles.def lengths) unless something presses;
     // the brain learns what it did once it is over.
   } else if (tick % kBrainEvery == 0) {
@@ -309,13 +338,15 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
         if (pick != idles::none) idle_.greetedAt = stats_.ageTicks + 1;
       } else if (idleish && calm() && rng_.chance(idleLiveliness(mood()))) {
         pick = pickIdle(idle_, mood(), rng_);   // none when every one is cooling down: he rests
+      } else if (idleish && !calm() && mayFeel() && rng_.chance(idleLiveliness(mood()))) {
+        pick = pickIdle(idle_, mood(), rng_);   // something presses: he shows it (a Feel act), or rests
       }
       if (pick != idles::none && next != action::rest) {
         next = action::rest;   // he plays over a rest
         brain_.relabel(next);
       }
       if (next != action_ || actionDone_) switchTo(next);
-      if (pick != idles::none) beginIdle(idle_, pick, body_.at, stats_.ageTicks, rng_);
+      if (pick != idles::none) beginIdle(idle_, pick, body_.at, stats_.ageTicks, rng_, idlePace(mood()));
       choseSleep = next == action::sleep;
     }
   }
@@ -326,7 +357,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     ActiveReflex& r = *body_.reflex;
     if (const ReflexInfo* row = rowOf(REFLEXES, r.kind)) body_.pose = row->pose;
     if (++r.tick >= r.ticks) body_.reflex.reset();
-  } else if (playing() && !calm()) {
+  } else if (playing() && !playOn()) {
     finish();   // something presses: the brain picks again at its next think
   } else if (playing()) {
     // His idle in place of the rest's step, to its end; then the brain picks again.
@@ -366,6 +397,8 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   }
   for (size_t a = 0; a < kActionCount; ++a)
     if (ACTIONS[a].id == action_) stats_.actionTicks[a] = bump(stats_.actionTicks[a]);
+  if (sleptLong && !body_.asleep) idle_.wokeAt = stats_.ageTicks + 1;   // up: groggy a while (DayPart::Waking)
+  if (sleptNight && !body_.asleep) idle_.dayAt = stats_.ageTicks + 1;   // up from a night's sleep: his morning
   ++stats_.ageTicks;
   for (uint8_t l = kRecentBase; l < kRecentEnd; ++l) chem_.locus[l] = Fx{chem_.locus[l].raw >> 1};
 }
@@ -490,7 +523,20 @@ uint32_t Creature::hash() const {
   for (uint32_t at : idle_.startedAt) mix(at);
   mix(uint32_t(idle_.greet)), mix(idle_.greetedAt);
   mix(picky_.refusedAt), mix(picky_.sniff);
+  // Only once set (#61), so every hash from before his day stands.
+  if (idle_.wokeAt || idle_.dayAt || idle_.pace != 100) mix(idle_.wokeAt), mix(idle_.dayAt), mix(idle_.pace);
   return h;
+}
+
+DayPart Creature::dayPart() const {
+  DayCues c;
+  c.hour = hourOfDayLoci(chem_.locus[locus::day_sin.v], chem_.locus[locus::day_cos.v]);
+  c.dark = !fires(chem_.locus[locus::light.v]);
+  const uint32_t age = stats_.ageTicks;
+  c.upTicks = idle_.wokeAt && idle_.wokeAt <= age + 1 ? age + 1 - idle_.wokeAt : age;
+  c.dayTicks = idle_.dayAt && idle_.dayAt <= age + 1 ? age + 1 - idle_.dayAt : age;
+  c.sleepiness = chem_.drive(drive::sleepiness);
+  return dayPartOf(c);
 }
 
 const char* Creature::doing() const {
