@@ -321,3 +321,58 @@ if not already open, and why not when it cannot be.
   times itself by. Not done.
 - **Low power's wake**: 77/82 ms from the waking read to the light, the
   first frame at ~50 ms. Already within its target.
+
+### Board: 1ef6f1a on the puffkin, `--reps 6`
+
+No harm: injury 0, life 620 before and after, tidied. p50/p95 ms:
+knock knock ack_panel 102/111; hang ack_panel 79/90; side ack_panel 94/104;
+knock 86/119; double, shake (panel 105/161), wake pass. Tilt: the aim read
+100/207 at rest (from 161), 46/247 in fight mode, its panel 171/270 (from
+409/554). Press ack_panel 196/228: a 120 ms BOOT tap where a hold does
+nothing shows no ring (a tap is no hold), so its acknowledgement is the
+flash on its release, which the harness timed from the press.
+
+### 8. The aim's tail: two samples' mean, held through a knock
+
+The aim's p95 came from where the badge started: lying on the desk it leans
+~340 mg one way, just past the dead zone, and a smoothing that halves the
+distance each sample crawls the last of the way to a threshold (4-5
+samples to cross 300 mg toward 340). The aim now reads the mean of the last
+two steady samples, so a lean is all there on its second sample. That lets a
+knock's ringing in the hand through at half weight (4 re-aims in L4), so the
+aim holds while a knock burst is under way (`BodySample::knocking`): a knock
+is what locks the aim, and it never moves it. Recordings: 0 re-aims while
+knocked; 171 aim changes in all (148 with the halving, 109 the old tilt),
+all in handling, where the badge really turns.
+
+The harness now times a BOOT tap that showed nothing while down from its
+release (`Recorder::rebase`).
+
+### Board: 8029a0d, `--reps 6`: the aim held 3.5 s in fight mode
+
+At rest the aim was read 36/68 ms after the lean (from 100/207). In fight
+mode, 3501/3648: the aim held until the next knock knock's burst ended.
+Holding the aim for a knock burst's whole window (`KnockSense::busy`, up to
+0.6 s after its last knock, and on the board longer: the burst's table side
+can stay busy) froze the aim long past the knock.
+
+### 9. The aim holds only while a knock rings
+
+`KnockSense::ringing()`: a burst in a hand, within kMergeMs (170 ms) of its
+last spike or bounce. The aim holds only then (`BodySample::knockRinging`).
+What a knock locks is the aim on its first sample (the Dish's knockAim), and
+the screen shows that aim until the burst is decided, so the hand's sway
+between the knocks moves neither. Recordings: no first knock moved the aim
+it locks (`Aim.OnTheRecordingsAKnockLocksTheAimTheHandHeld`, every first
+knock on every recording); a lean right after a single knock or a knock knock
+is the aim within 60 ms (`Aim.ATiltRightAfterAKnockIsTheAimAtOnce`; with the
+burst's window it was 390 and 230 ms). `DEBUG trace` lines now end with the
+aim, busy and ring; `latency_probe.py --trace-fight` traces the first fight
+rep, should busy stick again.
+
+### 10. The cable never stalls the loop
+
+The cable's UART had only its 128-byte FIFO: a longer line held the loop
+until it went out at 115200 baud (the 10 s status line ~20 ms, a protocol
+reply more), and a gesture's samples and its frame waited with it (seen p95
+51-53 ms while the probe asked STATE). Serial now queues 2 KB.

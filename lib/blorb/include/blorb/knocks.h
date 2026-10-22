@@ -62,6 +62,10 @@ class KnockSense {
   uint8_t sample(const BodySample& s, uint32_t ms);
   // A burst from a steady badge is under way: its bounce is no shake.
   bool busy() const { return (inBurst_ && steady_) || restN_ > 0; }
+  // A knock in a hand is ringing: within kMergeMs of its last spike or
+  // bounce. The badge jolts and sways in the hand, and the aim (AimDetector)
+  // holds through it: a knock locks the aim and never moves it.
+  bool ringing() const { return inBurst_ && steady_ && now_ - last_ <= kMergeMs; }
 
   // One knock is in and a second could still make it a knock knock: a burst
   // of one that will count (steady before it, in a hand), or one blip on a
@@ -122,7 +126,7 @@ class KnockSense {
   // The burst under way.
   bool inBurst_ = false, steady_ = false, heard_ = false;
   uint8_t knocks_ = 0;
-  uint32_t last_ = 0, onset_ = 0, gap_ = 0;   // gap_: from the first knock's onset to the second's
+  uint32_t last_ = 0, onset_ = 0, gap_ = 0, now_ = 0;   // gap_: from the first knock's onset to the second's
   int32_t dev1_ = 0, dev2_ = 0;                  // the last two samples' distance from gravity
   int32_t g0x_ = 0, g0y_ = 0, g0z_ = 0;          // gravity before it
   int32_t sumX_ = 0, sumY_ = 0, sumZ_ = 0, sumN_ = 0;   // after it settled
