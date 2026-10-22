@@ -110,7 +110,8 @@ def load_engine():
             voices[m[1]].frames.append(tuple(_strings(line)))
     species = {}
     for line in (DEFS / "species.def").read_text().splitlines():
-        if m := re.match(r"BLORB_SPECIES\((\d+),\s*(\w+),(?:[^,]*,){6}\s*(\w+)\)\s*(?://\s*(.*))?", line):
+        # The voice is the ninth column; the coat columns after it are the looks' (gene-variety).
+        if m := re.match(r"BLORB_SPECIES\((\d+),\s*(\w+),(?:[^,]*,){6}\s*(\w+)\s*(?:,[^)]*)?\)\s*(?://\s*(.*))?", line):
             species[m[2]] = Species(int(m[1]), m[2], m[3], m[4] or "")
     voiced = []
     for line in (DEFS / "thought_lines.def").read_text().splitlines():

@@ -33,7 +33,7 @@ using LineageEntry = std::variant<Founding, Birth, Checkpoint, Death, Rename>;
 constexpr uint16_t kCheckpointEvery = 8;
 constexpr uint16_t kKeepDetailGenerations = 32;
 constexpr uint32_t kLineageByteCap = 192 * 1024;
-constexpr uint8_t kMutateVersion = 1;   // bump when mutate()'s seed-to-child mapping changes
+constexpr uint8_t kMutateVersion = 2;   // bump when mutate()'s seed-to-child mapping changes (2: the forced Look change steps the species' coat, #60)
 
 class Storage;     // seams.h
 struct Describe;   // protocol.h

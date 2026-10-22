@@ -3,7 +3,11 @@
 #include <string>
 #include <gtest/gtest.h>
 #include <set>
+#include <algorithm>
+#include <cstdlib>
+#include "blorb/appearance.h"
 #include "blorb/fixed.h"
+#include "blorb/mutate.h"
 #include "blorb/founding.h"
 #include "blorb/genes.h"
 #include "blorb/genome.h"
@@ -104,6 +108,48 @@ TEST(FoundingLook, EveryExpressedColourIsInsideItsSpeciesBandsAndReachesAcrossTh
       EXPECT_EQ(*hues[r.v].rbegin(), band.hueMax) << row.name << " region " << int(r.v);
     }
     EXPECT_EQ(mottling, (std::set<int>{2, 3, 4})) << row.name;
+  }
+}
+
+// gene-variety (#60): every egg's guaranteed Look change shows on the glass,
+// for every species. It steps the species' coat (species.def), so the white
+// owl's eggs differ by their belly, not by a skin tint white cannot show.
+// Drawn as the badge draws him, grown up, with one life seed so only genes
+// differ; a pixel counts when a channel moves 3/31 or more (about 10%).
+namespace {
+int changedPixels(const Genome& a, const Genome& b) {
+  static paint::Canvas240 ca, cb;
+  for (auto [g, cv] : {std::pair<const Genome*, paint::Canvas240*>{&a, &ca}, {&b, &cb}}) {
+    Appearance look = portrait(*g, Stage::Adult, 1, 0);
+    look.lifeSeed = 0x5EED;
+    paint::draw(look, paint::packFor(look.species), *cv, 0);
+  }
+  int n = 0;
+  for (int i = 0; i < 240 * 240; ++i) {
+    const uint16_t p = ca.px[i], q = cb.px[i];
+    const int dr = std::abs(int(p >> 11) - int(q >> 11)), dg = std::abs(int((p >> 5) & 63) - int((q >> 5) & 63)) / 2,
+              db = std::abs(int(p & 31) - int(q & 31));
+    n += std::max({dr, dg, db}) >= 3;
+  }
+  return n;
+}
+}  // namespace
+
+TEST(FoundingLook, EveryEggsForcedChangeShowsOnEverySpecies) {
+  for (const SpeciesInfo& row : SPECIES) {
+    for (uint32_t board = 0; board < 4; ++board) {
+      const Genome parent = founder(row.id, seedOf(0x771d00 + board));
+      for (uint8_t slot = 0; slot < kMaxClutch; ++slot) {
+        MutationPolicy pol = policyOf(parent, Fx::zero());
+        pol.pointPerGene = pol.dupPerGene = pol.delPerGene = pol.wakePerDormant = pol.sleepPerGene = Fx::zero();
+        pol.heirloomMax = 0;
+        pol.lookSlot = slot;
+        Rng rng = Rng::seeded(board * 7u + slot);
+        const Offspring child = mutate(parent, pol, {}, rng);
+        // Only the forced Look and Mind changes: the Look one alone must show.
+        EXPECT_GE(changedPixels(parent, child.genome), 400) << row.name << " board " << board << " egg " << int(slot);
+      }
+    }
   }
 }
 

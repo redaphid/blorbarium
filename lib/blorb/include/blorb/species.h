@@ -78,16 +78,18 @@ struct SpeciesInfo {
   Stance style;           // the stance it loves: its lean, and its "in the zone" sparkle
   PowerId power;          // the power a pure-bred pet of this species carries
   SpeciesStarter starter;
+  RegionId coat;          // where a kid sees his colour most: mutate()'s forced Look change steps it
+  bool coatHue;           // a hue step reads there; else the step is the value only
 };
 
 inline constexpr SpeciesInfo SPECIES[] = {
-#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc) \
-  {SpeciesId{id}, #name, Element::el, Stance::st, power::pw, {bold, noct != 0, app, voice::vc}},
+#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc, coat, coatHue) \
+  {SpeciesId{id}, #name, Element::el, Stance::st, power::pw, {bold, noct != 0, app, voice::vc}, region::coat, coatHue != 0},
 #include "blorb/defs/species.def"
 #undef BLORB_SPECIES
 };
 namespace species {
-#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc) inline constexpr SpeciesId name{id};
+#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc, coat, coatHue) inline constexpr SpeciesId name{id};
 #include "blorb/defs/species.def"
 #undef BLORB_SPECIES
 }  // namespace species

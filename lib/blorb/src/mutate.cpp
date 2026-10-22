@@ -6,6 +6,7 @@
 #include <memory>
 #include <type_traits>
 #include "blorb/creature.h"
+#include "blorb/founding.h"
 #include "blorb/genes.h"
 
 namespace blorb {
@@ -26,17 +27,32 @@ constexpr uint32_t kDawnHour = 7, kDuskHour = 21;   // the pet clock's day
 constexpr Fx kHalf = Fx::ratio(1, 2);
 constexpr Fx kPinned = Fx::ratio(99, 100);
 
-// The forced Look change steps the skin's hue or value: the skin covers the
-// hatchling, and with no shell gene the clutch egg's jelly takes its tint. A
-// step lands inside the reach every pack's skin band gives (byte - 128, as
-// Tint reads it), so a band cannot swallow it. Each egg of a clutch takes its
-// own slot, and no two slots look alike, so siblings differ from each other.
+// The forced Look change steps the hue or value of the species' coat
+// (species.def): the region a kid sees most of him in, the skin for most, the
+// belly of the white owl, the wings of the moth. Where a hue step does not
+// read (white, grey), it steps the value only. With no shell gene the clutch
+// egg's jelly takes the coat's tint. A step lands inside the reach the coat's
+// band gives (byte - 128, as Tint reads it), so a band cannot swallow it.
+// Each egg of a clutch takes its own slot, and neighbouring slots differ, so
+// siblings differ from each other.
 constexpr int kForcedStep = 24, kForcedSpread = 16;   // hue: 34 to 56 degrees; value: x0.19 to x0.25
-struct LookSlot { uint8_t offset; int dir, low, high; };
+struct LookSlot { uint8_t offset; int dir; };
 constexpr uint8_t kHueByte = 1, kValByte = 3;         // PaletteGene body offsets
-constexpr LookSlot kLookSlots[] = {
-    {kHueByte, 1, -24, 40}, {kValByte, -1, -32, 32}, {kHueByte, -1, -24, 40}, {kValByte, 1, -32, 32}};
-constexpr uint32_t kLookSlotCount = sizeof(kLookSlots) / sizeof(kLookSlots[0]);
+constexpr LookSlot kLookSlots[] = {{kHueByte, 1}, {kValByte, -1}, {kHueByte, -1}, {kValByte, 1}};
+constexpr LookSlot kValueSlots[] = {{kValByte, -1}, {kValByte, 1}};
+// Each region's band as byte - 128: the bands tools/sprite_pack.py writes into
+// every pack (test_founding_look holds these equal to paint::bandsFor).
+struct Reach { int hueLow, hueHigh, valLow, valHigh; };
+constexpr Reach kReach[] = {
+    {-24, 40, -32, 32},   // skin
+    {-8, 8, -16, 16},     // belly
+    {-16, 36, -48, 48},   // cloak
+    {-8, 30, -32, 64},    // eye
+    {-6, 6, -16, 16},     // mouth
+    {-20, 20, -16, 32},   // glow
+    {-24, 40, -32, 32},   // shell
+};
+static_assert(sizeof(kReach) / sizeof(kReach[0]) == kRegionCount, "a reach per regions.def row");
 
 // Bytes whose change shows on the creature, per Look kind: tint hue, sat and
 // val; mark density and tint; body size.
@@ -184,36 +200,45 @@ std::vector<GeneView> candidates(const Genome& g, Pred pred) {
   return out;
 }
 
-// The skin palette gene the forced change steps: the later one for a region is the one shown.
-std::optional<GeneView> skinGene(const Genome& g) {
-  auto genes = candidates(g, [](const GeneView& v, const GeneTypeInfo&) {
-    return v.header.type == GeneKindOf<PaletteGene>::value && v.body[0] % kRegionCount == region::skin.v;
+// The coat's palette gene the forced change steps (species.def's coat, for
+// the species the genome expresses): the later one for a region is the one shown.
+std::optional<GeneView> coatGene(const Genome& g) {
+  const RegionId coat = speciesInfo(speciesOf(g)).coat;
+  auto genes = candidates(g, [coat](const GeneView& v, const GeneTypeInfo&) {
+    return v.header.type == GeneKindOf<PaletteGene>::value && v.body[0] % kRegionCount == coat.v;
   });
   if (genes.empty()) return std::nullopt;
   return genes.back();
 }
 
-// False when the genome has no free skin palette gene.
-bool forceSkin(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
-  const LookSlot& slot = kLookSlots[(parent.hash() + pol.lookSlot) % kLookSlotCount];
-  std::optional<GeneView> skin = skinGene(d.cur);
-  if (!skin) return false;
-  const GeneView& v = *skin;
+// False when the genome has no free coat palette gene.
+bool forceCoat(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
+  const SpeciesInfo& species = speciesInfo(speciesOf(parent));
+  const uint32_t pick = parent.hash() + pol.lookSlot;
+  const LookSlot& slot = species.coatHue ? kLookSlots[pick % std::size(kLookSlots)] : kValueSlots[pick % std::size(kValueSlots)];
+  const Reach& reach = kReach[species.coat.v % kRegionCount];
+  const int low = slot.offset == kHueByte ? reach.hueLow : reach.valLow;
+  const int high = slot.offset == kHueByte ? reach.hueHigh : reach.valHigh;
+  // A full step, or edge to edge where the band is narrower than two (the owl's belly).
+  const int least = std::min(kForcedStep, (high - low) / 2);
+  std::optional<GeneView> coat = coatGene(d.cur);
+  if (!coat) return false;
+  const GeneView& v = *coat;
   // The step is from the parent's byte, which the random pass may already
   // have moved; the op itself must also move the byte it finds a full step.
   const int was = int(v.body[slot.offset]) - 128;
   std::optional<GeneView> pv = parent.find(v.header.uid);
   const int from = pv && pv->header.type == v.header.type ? int(pv->body[slot.offset]) - 128 : was;
   const int step = kForcedStep + int(rng.below(kForcedSpread + 1));
-  auto land = [&](int dir) { return std::clamp(from + dir * step, slot.low, slot.high); };
-  auto full = [&](int to) { return std::abs(to - from) >= kForcedStep && std::abs(to - was) >= kForcedStep; };
+  auto land = [&](int dir) { return std::clamp(from + dir * step, low, high); };
+  auto full = [&](int to) { return std::abs(to - from) >= least && std::abs(to - was) >= least; };
   int to = land(slot.dir);
   if (!full(to) && full(land(-slot.dir))) to = land(-slot.dir);
   return d.add(MutPoint{v.header.uid, slot.offset, uint8_t(was + 128), uint8_t(to + 128), false});
 }
 
 void forceLook(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
-  if (forceSkin(d, parent, pol, rng)) return;
+  if (forceCoat(d, parent, pol, rng)) return;
   for (const MutationOp& op : d.diff.ops) if (visibleChange(op, parent, d.cur, pol.minVisibleDelta)) return;
   auto looks = candidates(d.cur, [](const GeneView& v, const GeneTypeInfo& i) {
     return i.cls == GeneClass::Look && visibleOf(v.header.type);
@@ -236,13 +261,13 @@ void forceMind(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& r
 
 // Each parent gene gets at most one of: wake, delete, sleep, point, duplicate.
 // The gene holding the largest uid is never deleted, so the largest uid only
-// rises and nextUid() never hands out a uid an ancestor used. The skin gene
+// rises and nextUid() never hands out a uid an ancestor used. The coat gene
 // is never deleted or slept: losing it would fade the child to the art's own
 // colour where the forced change means him to gain one.
 void randomPass(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
   const GeneUid top{uint16_t(parent.nextUid().v - 1)};
-  const std::optional<GeneView> skin = skinGene(parent);
-  auto kept = [&](GeneUid u) { return skin && u == skin->header.uid; };
+  const std::optional<GeneView> coat = coatGene(parent);
+  auto kept = [&](GeneUid u) { return coat && u == coat->header.uid; };
   parent.forEach([&](const GeneView& pv) {
     std::optional<GeneView> v = d.cur.find(pv.header.uid);
     if (!v) return;
