@@ -263,27 +263,34 @@ struct Pen {
 };
 }  // namespace
 
-// The end of a dig now and then turns up a snack, of anything else never; it
-// lands just ahead of him, fresh, in bite range, and the pantry gives nothing for it.
-TEST(Foraging, ADigSometimesTurnsUpASnackAtHisFeet) {
-  int digs = 0, sniffs = 0, others = 0;
-  for (uint64_t seed = 1; seed <= 2000; ++seed) {
-    Pen dig(seed), sniff(seed), toy(seed);
-    dig.play(idles::dig, 1000);
-    sniff.play(idles::sniff, 1000);
-    toy.play(idles::dance, 1000);
-    digs += dig.pellets(), sniffs += sniff.pellets(), others += toy.pellets() + toy.h.pantry - 3;
-    EXPECT_EQ(dig.h.pantry, 3) << "a snack he found is not the pantry's";
-    for (const Pellet& p : dig.h.pellets) {
-      if (!p.present) continue;
-      EXPECT_EQ(p.droppedTick, 1000u + 59u) << "fresh: it landed as the dig ended";
-      const Fx dx = p.at.x - dig.body.at.x, dy = p.at.y - dig.body.at.y;
-      EXPECT_LE(dx * dx + dy * dy, Fx::ratio(12, 100) * Fx::ratio(12, 100)) << "in bite range";
+// A dig that ends inside its forage window's slot turns up a snack, one that
+// ends outside it nothing, and a sniff or a dance never; the snack lands just
+// ahead of him, fresh, in bite range, and the pantry gives nothing for it.
+TEST(Foraging, ADigInItsWindowsSlotTurnsUpASnackAtHisFeet) {
+  for (uint32_t w = 0; w < 50; ++w) {
+    const uint32_t slot = w * food::kForageWindowTicks + food::forageSlotOf(w);
+    struct Case { uint32_t endsAt; bool finds; };
+    const Case cases[] = {{slot + 10, true}, {slot + food::kForageSlotTicks - 1, true},
+                          {slot - 1, false}, {slot + food::kForageSlotTicks, false}};
+    for (const Case& k : cases) {
+      if (k.endsAt < 59) continue;
+      Pen dig(w + 1), sniff(w + 1), toy(w + 1);
+      dig.play(idles::dig, k.endsAt - 59);
+      sniff.play(idles::sniff, k.endsAt - 59);
+      toy.play(idles::dance, k.endsAt - 59);
+      EXPECT_EQ(dig.pellets(), k.finds ? 1 : 0) << "window " << w << " ends at " << k.endsAt;
+      EXPECT_EQ(sniff.pellets() + toy.pellets(), 0) << "only a dig";
+      EXPECT_EQ(dig.h.pantry, 3) << "a snack he found is not the pantry's";
+      for (const Pellet& p : dig.h.pellets) {
+        if (!p.present) continue;
+        EXPECT_EQ(p.droppedTick, k.endsAt) << "fresh: it landed as the dig ended";
+        const Fx dx = p.at.x - dig.body.at.x, dy = p.at.y - dig.body.at.y;
+        EXPECT_LE(dx * dx + dy * dy, Fx::ratio(12, 100) * Fx::ratio(12, 100)) << "in bite range";
+      }
     }
   }
-  EXPECT_NEAR(digs, 2000 / food::kDigFindsOneIn, 25) << "about one dig in " << int(food::kDigFindsOneIn);
-  EXPECT_EQ(sniffs, 0) << "a sniff finds nothing";
-  EXPECT_EQ(others, 0) << "nor a dance";
+  // A slot is shorter than a dig's cooldown, so a window gives at most one.
+  EXPECT_LT(food::kForageSlotTicks, uint32_t(IDLES[idles::dig.v].cooldownS) * 1000 / kTickMs);
 }
 
 // Over days of ordinary play he forages a few snacks of his own: a treat,
@@ -291,7 +298,7 @@ TEST(Foraging, ADigSometimesTurnsUpASnackAtHisFeet) {
 TEST(Foraging, InOrdinaryPlayHeFindsAFewSnacks) {
   const Life r = live(SpeciesId{1}, 0x5EED0000u, Kid::Attentive, 2);
   EXPECT_GE(r.found, 1u) << row(r);
-  EXPECT_LE(r.found, 12u) << row(r);
+  EXPECT_LE(r.found, 2u * 24 / 3) << "one a forage window at most: " << row(r);
   EXPECT_GE(r.asks, 2u) << row(r);
 }
 

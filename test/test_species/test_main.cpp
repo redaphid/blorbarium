@@ -23,9 +23,11 @@ constexpr uint32_t kGiftSeed = 15048;
 constexpr uint32_t kGiftHash = 0x3df10dafu;   // re-pinned 2026-10-17: the starter retired the marble genes (uids 63, 77)
 // Moved by the sleep cut (2026-10-19, genes.cpp: the awake tonic's emitters at
 // 2/5) and by melatonin's reaction running at its genes' rate again
-// (2026-10-21, sleep-idle.md): was 0xc6f5005b / 0x69356d6e. The genome's own
-// bytes and hash are unchanged.
-constexpr uint32_t kGiftLifePrint = 0x3c6de705u, kGiftLifePrintAllFeats = 0x76ee538cu;
+// (2026-10-21, sleep-idle.md): was 0xc6f5005b / 0x69356d6e. Moved again by
+// #57 (food.h): the same metabolism bytes now read as 8 pantry slots and a
+// 5 min 20 s refill, and the print holds the habitat rules (was 0x3c6de705 /
+// 0x76ee538c). The genome's own bytes and hash are unchanged.
+constexpr uint32_t kGiftLifePrint = 0x484c34ffu, kGiftLifePrintAllFeats = 0x547b8d3au;
 
 Phenotype lifeOf(const Genome& g, uint32_t feats = 0) {
   Phenotype p{};

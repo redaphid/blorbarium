@@ -1028,6 +1028,38 @@ TEST(Previews, DumpWhenAsked) {
   remains.remainsFade = fx(0.25);
   shots.push_back({"remains", remains});
 
+  // The pantry (#57): its slots, the next filling, waiting on an empty one,
+  // an empty press, a snack he found, a fight's spoils in and out.
+  Appearance pantry = idle;
+  pantry.feed.pantryMax = 8;
+  pantry.pantry = 5;
+  pantry.feed.refill = fx(0.35);
+  pantry.feed.refillSecs = 208;
+  shots.push_back({"pantry_refilling", pantry});
+  Appearance waiting = pantry;
+  waiting.pantry = 0;
+  waiting.feed.waiting = true;
+  waiting.expression = waiting.previous = blorb::expr::blep;
+  shots.push_back({"pantry_waiting", waiting});
+  Appearance empty = waiting;
+  empty.feed.refused = blorb::FeedRefusal::Empty;
+  empty.feed.refusedMs = 600;
+  shots.push_back({"pantry_empty_press", empty});
+  Appearance found = pantry;
+  found.itemCount = 1;
+  found.items[0] = {Appearance::Item::What::Pellet, {fx(0.3), fx(0.0)}};
+  found.feed.found = 0;
+  found.feed.foundMs = 400;
+  shots.push_back({"pantry_found_snack", found});
+  Appearance won = pantry, lost = pantry;
+  won.feed.spoils = 1, won.feed.spoilsMs = 500;
+  lost.feed.spoils = -1, lost.feed.spoilsMs = 250;
+  shots.push_back({"pantry_spoils_won", won});
+  shots.push_back({"pantry_spoils_lost", lost});
+  Appearance home = pantry;
+  home.feed.topped = 2, home.feed.toppedMs = 250;
+  shots.push_back({"pantry_homecoming", home});
+
   for (const auto& [name, a] : shots) writePpm(std::string(dir) + "/" + name + ".ppm", *render(a, pack));
 
   // The rim's BOOT hint as the firmware draws it over the dish (main.cpp

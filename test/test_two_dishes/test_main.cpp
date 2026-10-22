@@ -1209,15 +1209,18 @@ std::optional<bool> aWon(Bout& bout) {
 // many bouts were decided; checks the food on both badges.
 int spoilsBout(uint64_t seed, Weather w, uint8_t pa, uint8_t pb) {
   Bout bout(seed, kGrungo, SpeciesId{6}, false, w);
+  // Kids whose case covers BOOT: a hang opens and leaves fight mode, so no
+  // press feeds him on the way (the first press of a double does, at once).
+  bout.a.kid.noButton = bout.b.kid.noButton = true;
   setPantries(bout, pa, pb);
   if (::testing::Test::HasFatalFailure()) return 0;
   EXPECT_TRUE(bout.runDuel(9000)) << "seed " << seed;
   const std::optional<bool> won = aWon(bout);
-  bool shownA = false, shownB = false;
+  int shownA = 0, shownB = 0;
   for (int t = 0; t < 600; ++t) {   // a minute after: shown once the dish is back, and never again
     bout.step();
-    shownA = shownA || bout.a.dish->appearance().feed.spoils != 0;
-    shownB = shownB || bout.b.dish->appearance().feed.spoils != 0;
+    if (const int8_t s = bout.a.dish->appearance().feed.spoils) shownA = s;
+    if (const int8_t s = bout.b.dish->appearance().feed.spoils) shownB = s;
   }
   const int na = bout.a.dish->habitat().pantry, nb = bout.b.dish->habitat().pantry;
   const std::string at = "seed " + std::to_string(seed) + " a=" + std::to_string(na) + " b=" + std::to_string(nb);
@@ -1231,7 +1234,8 @@ int spoilsBout(uint64_t seed, Weather w, uint8_t pa, uint8_t pb) {
   EXPECT_EQ(*won ? na : nb, winnerHad + moved) << "the winner gains: " << at;
   EXPECT_EQ(*won ? nb : na, loserHad - moved) << "the loser loses the same: " << at;
   if (moved) {
-    EXPECT_TRUE(shownA && shownB) << "both screens show the pellet go: " << at;
+    EXPECT_EQ(shownA, *won ? moved : -moved) << "both screens show the pellet go: " << at;
+    EXPECT_EQ(shownB, -shownA) << at;
   }
   return 1;
 }

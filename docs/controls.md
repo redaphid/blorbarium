@@ -185,7 +185,7 @@ number is now in `lib/blorb/include/blorb/food.h`:
 |---|---|---|
 | Pantry | 4 | 8 (the metabolism gene's byte x2, at most 12) |
 | Refill | one every 2 h | one every 5 min 20 s (the byte x 40 s): empty to full in 43 min |
-| Foraging | none | the end of a dig turns up a snack 1 time in 40 (2 or 3 a day), at his feet, sparkling |
+| Foraging | none | a dig that ends in its 3-hour window's 150 s slot turns up a snack at his feet, sparkling: one a window at most |
 | Coming home | none | the first hand after 2 h untouched, or after the board was off, tops the pantry up by 2 |
 | A fight won | nothing | a pellet from the loser's pantry to the winner's (both badges agree) |
 

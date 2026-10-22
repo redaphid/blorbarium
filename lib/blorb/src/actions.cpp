@@ -299,11 +299,10 @@ Status Play::step(Body& b, ActionCtx& c) {
       b.pose = pose::walk;
       break;
   }
-  // Foraging (food.h): the end of a dig now and then turns up a snack just
-  // ahead of him. An act cut short finds nothing.
-  if (t + 1u == s->length && s->now == idles::dig) {
-    if (c.rng.below(food::kDigFindsOneIn) == 0)
-      c.habitat.placeFound(DishPos{b.at.x + cosTurn(b.facing) * kFindReach, b.at.y + sinTurn(b.facing) * kFindReach}, c.tick);
+  // Foraging (food.h): a dig that ends in its window's slot turns up a snack
+  // just ahead of him. An act cut short finds nothing.
+  if (t + 1u == s->length && s->now == idles::dig && food::snackDue(c.tick)) {
+    c.habitat.placeFound(DishPos{b.at.x + cosTurn(b.facing) * kFindReach, b.at.y + sinTurn(b.facing) * kFindReach}, c.tick);
   }
   return Status::Running;
 }

@@ -240,7 +240,7 @@ void Dish::runOneTick(Link& link) {
   if (stepped.save) save();
   // Shown once the dish is on the screen again (fight mode's lobby or none):
   // a cookie flies out of the loser's pantry, into the winner's.
-  if (spoilsShown_ && (!duel_.active() || duel_.view(tick_).phase == DuelPhase::Lobby)) {
+  if (spoilsShown_ && (!duel_.active() || duel_.searching())) {
     feed_.spoils(lastTickMs_, spoilsShown_);
     spoilsShown_ = 0;
   }

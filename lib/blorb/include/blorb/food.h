@@ -10,7 +10,7 @@
 // Where food comes from:
 //   the pantry   refills on the pet clock, one pellet every few minutes; a
 //                knock knock (or BOOT) drops one into the dish (habitat.h)
-//   foraging     at the end of a dig (and now and then a sniff) he may turn
+//   foraging     at the end of a dig, now and then (a window's slot), he turns
 //                up a snack of his own, which lands at his feet (actions.cpp)
 //   coming home  the first hand on the badge after a long time untouched, or
 //                after it was off, tops the pantry up (dish.cpp)
@@ -45,13 +45,27 @@ inline constexpr uint32_t kRefillTicksPerByte = 40 * 1000 / kTickMs;   // 40 s
 inline constexpr uint32_t kDryRunRefillTicksPerByte = kTicksPerHour / 4;
 
 // ---- foraging ---------------------------------------------------------------
-// The end of a dig turns up a snack one time in this many: a pellet at his
-// feet, fresh, that he eats when he wants it. A pet left to play digs about a
-// hundred times a day (cooldown 3 min), so this is two or three snacks a day:
-// a treat, never his keep (at 1 in 2 he fed himself and never asked). He only
-// plays an idle when nothing presses (creature.cpp kPlayHunger), so a
-// starving, neglected pet never forages his way out of it.
-inline constexpr uint8_t kDigFindsOneIn = 40;
+// A dig that ends inside its forage window's lucky slot turns up a snack: a
+// pellet at his feet, fresh, that he eats when he wants it. One window every
+// three hours, its slot shorter than a dig's cooldown (idles.def: 180 s), so
+// at most one snack a window and none at all if he never digs then: a treat
+// now and then, never his keep. (A chance per dig made it his keep: a pet left
+// to play digs every few minutes, and at 1 in 2 he fed himself and never
+// asked.) Where the slot falls is the same on every board, from the window's
+// number. He only plays an idle when nothing presses (creature.cpp
+// kPlayHunger), so a starving, neglected pet never forages his way out of it.
+inline constexpr uint32_t kForageWindowTicks = 3 * kTicksPerHour;
+inline constexpr uint32_t kForageSlotTicks = 150 * 1000 / kTickMs;
+static_assert(kForageSlotTicks < 180 * 1000 / kTickMs, "one dig at most ends in a slot");
+// Where window w's slot starts, ticks into it.
+constexpr uint32_t forageSlotOf(uint32_t window) {
+  return uint32_t(uint64_t(window + 1) * 2654435761u >> 13) % (kForageWindowTicks - kForageSlotTicks);
+}
+// A dig ending on `tick` finds a snack.
+constexpr bool snackDue(uint32_t tick) {
+  const uint32_t into = tick % kForageWindowTicks, slot = forageSlotOf(tick / kForageWindowTicks);
+  return into >= slot && into < slot + kForageSlotTicks;
+}
 
 // ---- coming home -----------------------------------------------------------
 // Untouched this long (powered, or the board off), the first hand on the badge
