@@ -2,8 +2,11 @@
 #include <cstdlib>
 #include <type_traits>
 #include <vector>
+#include <memory>
+#include "blorb/creature.h"
 #include "blorb/genes.h"
 #include "blorb/mutate.h"
+#include "blorb/species.h"
 
 using namespace blorb;
 
@@ -94,8 +97,10 @@ TEST(Heredity, TenThousandSeedsReplayRepeatDifferAndLive) {
   }
 }
 
-// Every byte rerolled on every gene: most rolls are lethal, so mutate() has
-// to retry, and some seeds reach the point-only fallback. All stay viable.
+// A point mutation on every gene, every one wild: all stay viable. Since the
+// chemistry's wiring is kept and its sports are bounded (gene-variety, #60),
+// such a roll is seldom lethal, so the point-only fallback is rare; the next
+// test reaches it on purpose.
 TEST(Heredity, RetriesStillReturnAViableChild) {
   MutationPolicy wild = policyOf(parent(), Fx::one());
   wild.pointPerGene = Fx::one();
@@ -109,7 +114,7 @@ TEST(Heredity, RetriesStillReturnAViableChild) {
     ASSERT_GE(mindChanges(parent(), o), 1);
     fallbacks += o.diff.ops.size() == 2;
   }
-  EXPECT_GT(fallbacks, 0) << "the wild policy never exhausted its retries";
+  EXPECT_LT(fallbacks, 20) << "a wild roll of every gene should seldom need the fallback";
 }
 
 // A phone EDIT can leave a living parent that fails viability(). Every random
@@ -207,6 +212,44 @@ TEST(Heredity, ANewGeneNeverReusesAnAncestorsUid) {
     }
   }
   EXPECT_GT(fresh, 500) << "the test must see many new genes";
+}
+
+// gene-variety (#60): lines of every species through the real egg path (the
+// parent hatched, its clutch laid, Clutch::child) keep his plumbing. Nothing
+// deletes or sleeps a chemistry gene or the temperament, no point mutation
+// rewires which chemical or locus a chemistry gene joins, and a sport moves a
+// chemistry rate at most two doublings. Before, by generation 5 about half the
+// lines had a pet that never slept at night, slept all day or stood still.
+TEST(Heredity, LinesKeepTheChemistryAndTheTemperament) {
+  int ops = 0, kept = 0;
+  for (const SpeciesInfo& row : SPECIES) {
+    Genome g = starterGenomeOf(row.id, 7);
+    for (uint16_t gen = 0; gen < 20; ++gen) {
+      const Egg egg(Offspring{g, {}}, gen, 0);
+      auto c = std::make_unique<Creature>(egg, 0, 0);
+      const Clutch k = c->layClutch(kMaxClutch, Fx::zero(), 0);
+      for (uint8_t i = 0; i < k.count; ++i) {
+        for (const MutationOp& op : k.child(i).diff.ops) {
+          ++ops;
+          const std::optional<GeneView> v = g.find(uidOf(op));
+          const GeneTypeInfo* info = v ? geneType(v->header.type) : nullptr;
+          if (!info) continue;   // an heirloom lands after a gene, not on one
+          const bool chemistry = info->cls == GeneClass::Body;
+          if (!chemistry && v->header.type != GeneKindOf<TemperamentGene>::value) continue;
+          ++kept;
+          EXPECT_FALSE(std::holds_alternative<MutDel>(op) || std::holds_alternative<MutSleep>(op))
+              << row.name << " gen " << gen << " lost a " << info->name;
+          const MutPoint* p = std::get_if<MutPoint>(&op);
+          if (!p || !chemistry) continue;
+          EXPECT_NE(info->rules[p->offset], MutRule::Any) << row.name << " gen " << gen << " rewired a " << info->name;
+          EXPECT_LE(std::abs(int(p->to) - int(p->from)), 24) << row.name << " gen " << gen << " " << info->name;
+        }
+      }
+      g = k.child(uint8_t(gen % k.count)).genome;
+    }
+  }
+  EXPECT_GT(ops, 2000) << "the test must see many mutations";
+  EXPECT_GT(kept, 500) << "and many of them on the chemistry and the temperament";
 }
 
 TEST(Policy, ReadsTheGenomeAndTheFeatBonus) {
