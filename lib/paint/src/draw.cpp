@@ -44,8 +44,6 @@ constexpr int kHatchlingWide = kOne * 116 / 100, kHatchlingTall = kOne * 90 / 10
 constexpr int kElderSat = 96;                    // x/128
 constexpr int kMinScale = kOne / 16;
 constexpr int kEggLean = kOne * 16 / 100;        // shear at full wobble
-constexpr int kClutchGapPx = 66;
-constexpr int kClutchEggPx = 72;                 // three eggs side by side, each this tall
 constexpr int kAwayPct = 82;                     // his size at the rim, of his size at home
 constexpr int kCarrySpillQ4 = 4 * 16;            // a carried lean may take him this far past his travel circle
 constexpr uint8_t kHaloTeal[3] = {64, 236, 214};
@@ -1079,32 +1077,6 @@ void fill(Canvas240& cv, int x0, int y0, int x1, int y1, const Rgb& c, int alpha
     }
 }
 
-// Each egg in its own species' art: a friend egg can be another species' than
-// the parent whose clutch it joins.
-void drawClutch(const Appearance& a, Canvas240& cv) {
-  const int n = imin(a.eggCount, blorb::kMaxClutch);
-  const Rgb cream{kHintColour[0], kHintColour[1], kHintColour[2]};
-  for (int i = 0; i < n; ++i) {
-    const SpritePack& pack = packFor(a.eggs[i].species);
-    const FrameRef f = pack.egg(Fx::zero());
-    Tint tints[blorb::kRegionCount]{};
-    tints[blorb::region::skin.v] = a.eggs[i].skin;
-    tints[blorb::region::cloak.v] = a.eggs[i].cloak;
-    tints[blorb::region::shell.v] = a.eggs[i].shell;
-    Colours& col = scratchColours();
-    buildColours(pack, tints, false, 0, col);
-    Place p;
-    p.xf.kx = p.xf.ky = imin(kOne, kOne * kClutchEggPx / imax(1, f.h));
-    p.x = kSide / 2 + (2 * i - (n - 1)) * kClutchGapPx / 2;
-    p.y = kSide / 2 + (f.originY - f.h / 2) * p.xf.ky / kOne;
-    bool chosen = i == a.cursor;
-    if (chosen) p.xf.shear = eggShear(a, Fx::ratio(1, 3), kEggLean);
-    blit(cv, f, p, col, 256, nullptr);
-    if (chosen)
-      for (int row = 0; row < 6; ++row) fill(cv, p.x - row, p.y + 5 + row, p.x + row + 1, p.y + 6 + row, cream, 256);
-  }
-}
-
 bool inDish(int x, int y) {
   int dx = 2 * x + 1 - kSide, dy = 2 * y + 1 - kSide;
   return dx * dx + dy * dy <= kSide * kSide;
@@ -1585,6 +1557,29 @@ void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int a
   blit(cv, g, p, artColours(), alpha, nullptr);
 }
 
+// One egg of a clutch in its own species' art and colours (a friend egg can
+// be another species' than the parent whose clutch it joins), its middle at
+// (cx, cy), heightPx tall, rocked by `shear` (Q12) about its foot.
+void drawEggPreview(Canvas240& cv, const blorb::EggPreview& e, int cx, int cy, int heightPx, int shear, int alpha) {
+  const SpritePack& pack = packFor(e.species);
+  const FrameRef f = pack.egg(Fx::zero());
+  if (!f.h || heightPx <= 0) return;
+  Tint tints[blorb::kRegionCount]{};
+  tints[blorb::region::skin.v] = e.skin;
+  tints[blorb::region::cloak.v] = e.cloak;
+  tints[blorb::region::shell.v] = e.shell;
+  Colours& col = scratchColours();
+  buildColours(pack, tints, false, 0, col);
+  Place p;
+  p.xf.kx = p.xf.ky = imax(kMinScale, kOne * heightPx / f.h);
+  p.xf.shear = shear;
+  p.x = cx;
+  p.y = cy + (f.originY - f.h / 2) * p.xf.ky / kOne;
+  blit(cv, f, p, col, alpha, nullptr);
+}
+
+int eggArtHeight(blorb::SpeciesId species) { return packFor(species).egg(Fx::zero()).h; }
+
 void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Figure& fig) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
@@ -1652,9 +1647,15 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
       drawCreature(a, pack, cv);
       drawIdleProps(cv, a, spots_);   // idle_props.cpp: what he plays with
       break;
-    case Kind::Egg: drawEgg(a, pack, cv); break;
-    case Kind::Remains: drawRemains(a, pack, cv); break;
-    case Kind::Clutch: drawClutch(a, cv); break;
+    case Kind::Egg:
+      // Just kept from a clutch: the chosen moment first (clutch.cpp), then the egg.
+      if (!drawChosen(a, cv)) drawEgg(a, pack, cv);
+      break;
+    case Kind::Remains:
+      drawRemains(a, pack, cv);
+      drawVigilEggs(a, cv);   // the eggs on their way
+      break;
+    case Kind::Clutch: drawClutchPicker(a, cv); break;
   }
   phaseEnd(Phase::Figure);
   pantryBar(cv, a);   // feeding.cpp: the pantry, a bar on the rim (it was pips)

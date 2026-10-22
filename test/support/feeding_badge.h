@@ -33,7 +33,10 @@ constexpr int kR0 = 1;             // ORIENT_R0 on the 1.28
 // How the badge lies or is held, in the IMU's raw frame (milli-g; gravity
 // reads +1 g along whichever way is up). Held: on edge, upright at its home,
 // tipped back a little, with a hand's tremor. Upside down: the hang.
-enum class Pose : uint8_t { Held, Table, UpsideDown };
+// Tilted: held in a hand like a tray, face up, leaning one way as a kid aims
+// in a duel (dish_duel.h kAimTilt: left, right, toward him, away). Side:
+// turned onto a side and held there (the hold's twin), either side.
+enum class Pose : uint8_t { Held, Table, UpsideDown, TiltLeft, TiltRight, TiltNear, TiltAway, Flat, SideLeft, SideRight };
 
 struct Read { int16_t ax, ay, az; };
 
@@ -45,12 +48,38 @@ struct Hand {
   Pose pose = Pose::Held;
   std::vector<uint32_t> knocks;
   Rng rng = Rng::seeded(7);
-  Read at(uint32_t ms) {
+  // turnMs > 0: a change of pose takes that long, the way a hand turns it,
+  // gravity swinging round at 1 g (0: at once, as the feeding tests have it).
+  uint32_t turnMs = 0;
+  Read target(Pose p) const {
     const int16_t up = home == 2 ? 1000 : -1000;   // raw +y is up at home 2 (orient.h)
-    Read r{0, 0, 0};
-    if (pose == Pose::Table) r = {0, 0, 1000};
-    else if (pose == Pose::UpsideDown) r = {0, int16_t(-up), 0};
-    else r = {0, int16_t(up * 97 / 100), -150};
+    // The tilts in the screen's frame at home, turned back into the IMU's
+    // (orient.h toFrame with ORIENT_R0 1: home 2 is a half turn, home 0 none).
+    const int16_t s = home == 2 ? -1 : 1;
+    if (p == Pose::Table) return {0, 0, 1000};
+    if (p == Pose::UpsideDown) return {0, int16_t(-up), 0};
+    if (p == Pose::TiltLeft) return {int16_t(s * 500), 0, 866};
+    if (p == Pose::TiltRight) return {int16_t(s * -500), 0, 866};
+    if (p == Pose::TiltNear) return {0, int16_t(s * -500), 866};
+    if (p == Pose::TiltAway) return {0, int16_t(s * 500), 866};
+    if (p == Pose::Flat) return {0, 0, 1000};
+    if (p == Pose::SideLeft) return {int16_t(up), 0, -60};
+    if (p == Pose::SideRight) return {int16_t(-up), 0, -60};
+    return {0, int16_t(up * 97 / 100), -150};
+  }
+  Pose was_ = Pose::Held, from_ = Pose::Held;
+  uint32_t turnedAt_ = 0;
+  Read at(uint32_t ms) {
+    if (pose != was_) from_ = was_, was_ = pose, turnedAt_ = ms;
+    Read r = target(pose);
+    if (turnMs && ms - turnedAt_ < turnMs) {
+      const Read a = target(from_);
+      const int64_t t = int64_t(ms - turnedAt_) * 1024 / turnMs;
+      const int64_t x = a.ax + (r.ax - a.ax) * t / 1024, y = a.ay + (r.ay - a.ay) * t / 1024, z = a.az + (r.az - a.az) * t / 1024;
+      int64_t m = 1;
+      while ((m + 1) * (m + 1) <= x * x + y * y + z * z) ++m;
+      r = {int16_t(x * 1000 / m), int16_t(y * 1000 / m), int16_t(z * 1000 / m)};
+    }
     const int tremor = pose == Pose::Table ? 2 : 12;
     r.ax = int16_t(r.ax + int(rng.below(2 * tremor + 1)) - tremor);
     r.ay = int16_t(r.ay + int(rng.below(2 * tremor + 1)) - tremor);
@@ -74,6 +103,7 @@ struct Count {
   int pellets = 0;            // pellets that left the pantry
   int pelletsInTheDark = 0;   // ...while the panel was dark
   int presses = 0;            // stim::button the Dish took (a knock knock, as a press)
+  int knocks = 0;             // stim::knock the Dish took (one knock)
   bool oneMore = false;       // the rim's "one more" lit
 };
 
@@ -136,6 +166,7 @@ struct Badge {
       dish->sample(f.screen, ring.front().second);
       count.oneMore = count.oneMore || f.screen.knockWaiting;
       if (dish->firedLastSample() >> stim::button.v & 1) ++count.presses;
+      if (dish->firedLastSample() >> stim::knock.v & 1) ++count.knocks;
     }
     const uint8_t before = dish->habitat().pantry;
     dish->tick(ms, link);

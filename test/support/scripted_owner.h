@@ -3,8 +3,9 @@
 // makes. It looks at him (his drives stand in for his face and the care
 // hint) and, one gesture at a time: presses BOOT for a pellet when he is
 // hungry and the dish is empty, cradles him when he wants touch, lays him
-// face down at dusk, warms the egg in a hand, and at the clutch moves the
-// cursor once and holds BOOT to pick.
+// face down at dusk, warms the egg in a hand, and at the clutch tilts toward
+// the right egg once (the cursor moves), then tilts there again and holds
+// BOOT to keep it, as a duel's special locks the aimed stance.
 #include <cstdint>
 #include <variant>
 #include "blorb/dish.h"
@@ -21,6 +22,8 @@ class ScriptedOwner {
     switch (gesture_) {
       case Gesture::Press:
       case Gesture::Hold: return pressed();
+      case Gesture::Tilt: return tilted(false);
+      case Gesture::TiltHold: return tilted(true);
       case Gesture::Cradle: return cradled();
       case Gesture::Lid: return faceDown();
       default: return still();
@@ -29,7 +32,14 @@ class ScriptedOwner {
   const Counts& counts() const { return counts_; }
 
  private:
-  enum class Gesture : uint8_t { Rest, Press, Hold, Cradle, Lid };
+  enum class Gesture : uint8_t { Rest, Press, Hold, Cradle, Lid, Tilt, TiltHold };
+  // Tilted right, as a duel aims Guard (dish_duel.h kAimTilt): the right egg.
+  static blorb::BodySample tilted(bool down) {
+    blorb::BodySample s;
+    s.ax = blorb::kAimTilt[1].ax, s.ay = blorb::kAimTilt[1].ay, s.az = blorb::kAimTilt[1].az;
+    s.buttonDown = down;
+    return s;
+  }
   static constexpr uint32_t kLookEveryMs = 30000;
   static constexpr uint32_t kPressMs = 200, kHoldMs = 1500, kCradleMs = 4000, kTuckMs = 10 * 60000;
 
@@ -68,10 +78,10 @@ class ScriptedOwner {
       if (k.sinceDeath >= Clutch::kVigilTicks) {
         if (k.count > 1 && k.cursor == 0) {
           ++counts_.cursorMoves;
-          return act(Gesture::Press, ms, kPressMs);
+          return act(Gesture::Tilt, ms, kHoldMs);
         }
         ++counts_.picks;
-        return act(Gesture::Hold, ms, kHoldMs);
+        return act(Gesture::TiltHold, ms, kHoldMs);
       }
     }
     act(Gesture::Rest, ms, kLookEveryMs);

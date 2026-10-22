@@ -268,41 +268,67 @@ TEST(Clutch, TheTimeoutPicksTheCursorEgg) {
   EXPECT_GE(k.previews[0].mindChanges, 1);
 }
 
-// The timeout picks the cursor egg too, so only the moment of the pick shows
-// that the gesture made it: the owner steers to the last egg and picks it the
-// tick his hand lands, half an hour before the timeout could.
-// A hold picks, whoever holds (BOOT, or turned onto a side: both fire ButtonHold).
-TEST(Clutch, AHoldPicksTheCursorEggThatTick) {
-  for (StimId gesture : {stim::button_hold}) {
+// The duel's way of picking (owner, 2026-10-21): a tilt toward an egg makes
+// it the cursor, and while it is tilted toward, a knock keeps it, the tick
+// the knock lands; so do a knock knock (a Button) and a hold. The timeout
+// picks the cursor egg too, so only the moment of the pick shows that the
+// gesture made it: half an hour before the timeout could.
+TEST(Clutch, ATiltPointsAndAKnockKeepsThatEggThatTick) {
+  for (StimId gesture : {stim::knock, stim::button, stim::button_hold}) {
     Clutch k = clutchOf(starterGenome(7), 1, 5);
     k.count = 3;
-    SenseOut press, pick;
-    press.fire(stim::button);
-    pick.fire(gesture);
-    for (uint32_t t = 1; t < Clutch::kVigilTicks; ++t) ASSERT_FALSE(k.tick(pick).has_value()) << "vigil tick " << t;
-    EXPECT_FALSE(k.tick(press).has_value());
-    EXPECT_FALSE(k.tick(press).has_value());
-    EXPECT_EQ(k.cursor, 2);
-    std::optional<uint8_t> chosen = k.tick(pick);
-    ASSERT_TRUE(chosen.has_value()) << "stim " << int(gesture.v) << " picked nothing";
+    SenseOut quiet, keep;
+    keep.fire(gesture);
+    for (uint32_t t = 1; t < Clutch::kVigilTicks; ++t) ASSERT_FALSE(k.tick(keep, 2).has_value()) << "vigil tick " << t;
+    EXPECT_FALSE(k.tick(quiet, 1).has_value());
+    EXPECT_EQ(k.cursor, 1) << "tilted right: the right egg";
+    EXPECT_FALSE(k.tick(quiet, 2).has_value());
+    EXPECT_EQ(k.cursor, 2) << "tilted toward him: the near egg";
+    std::optional<uint8_t> chosen = k.tick(keep, 2);
+    ASSERT_TRUE(chosen.has_value()) << "stim " << int(gesture.v) << " kept nothing";
     EXPECT_EQ(*chosen, 2) << "stim " << int(gesture.v);
     EXPECT_EQ(k.sinceDeath, Clutch::kVigilTicks + 2);
   }
 }
 
-// A knock knock is a press now (controls.h): it arrives with its twin, a
-// Button, and moves the cursor on. It never keeps an egg, which is for good.
-TEST(Clutch, AKnockKnockMovesOnAndNeverKeeps) {
+// Level, or tilted away (no egg there), nothing is kept and the cursor stays
+// on the last egg tilted toward, which is the one the timeout keeps.
+TEST(Clutch, LevelOrAwayKeepsNothing) {
   Clutch k = clutchOf(starterGenome(7), 1, 5);
   k.count = 3;
-  SenseOut quiet, knockKnock;
-  knockKnock.fire(stim::double_knock);
-  knockKnock.fire(stim::button);
+  SenseOut quiet, all;
+  all.fire(stim::knock);
+  all.fire(stim::double_knock);
+  all.fire(stim::button);
+  all.fire(stim::button_hold);
   for (uint32_t t = 1; t < Clutch::kVigilTicks; ++t) ASSERT_FALSE(k.tick(quiet).has_value());
-  EXPECT_FALSE(k.tick(knockKnock).has_value());
-  EXPECT_EQ(k.cursor, 1);
-  EXPECT_FALSE(k.tick(knockKnock).has_value());
-  EXPECT_EQ(k.cursor, 2);
+  EXPECT_FALSE(k.tick(quiet, 1).has_value());
+  for (int8_t aim : {-1, 3}) {
+    EXPECT_FALSE(k.tick(all, aim).has_value()) << "aim " << int(aim);
+    EXPECT_EQ(k.cursor, 1) << "aim " << int(aim);
+  }
+  std::optional<uint8_t> timedOut;
+  for (uint32_t t = 0; t <= Clutch::kPickTimeoutTicks && !timedOut; ++t) timedOut = k.tick(quiet);
+  ASSERT_TRUE(timedOut.has_value());
+  EXPECT_EQ(*timedOut, 1) << "the timeout keeps the last egg tilted toward";
+}
+
+// Two eggs lie left and right: toward him there is none.
+TEST(Clutch, EggsLieAsTheDuelsStances) {
+  EXPECT_EQ(eggAt(0, 3), 0);
+  EXPECT_EQ(eggAt(1, 3), 1);
+  EXPECT_EQ(eggAt(2, 3), 2);
+  EXPECT_EQ(eggAt(3, 3), -1);
+  EXPECT_EQ(eggAt(-1, 3), -1);
+  EXPECT_EQ(eggAt(2, 2), -1);
+  EXPECT_EQ(eggAt(1, 2), 1);
+  Clutch k = clutchOf(starterGenome(7), 1, 5);
+  k.count = 2;
+  SenseOut knock;
+  knock.fire(stim::knock);
+  k.sinceDeath = Clutch::kVigilTicks;
+  EXPECT_FALSE(k.tick(knock, 2).has_value()) << "no egg toward him in a clutch of two";
+  EXPECT_EQ(k.tick(knock, 0), std::optional<uint8_t>(0));
 }
 
 int main(int argc, char** argv) {

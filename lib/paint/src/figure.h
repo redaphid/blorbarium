@@ -96,6 +96,31 @@ void drawFigure(const blorb::Appearance&, const SpritePack&, Canvas240&, const F
 // `fillRows` < 255 draws only that share of its rows, from the bottom up: the skull filling.
 void drawArt(Canvas240&, const FrameRef&, int x, int y, int scalePct, int alpha, int fillRows = 255);
 
+// One egg of a clutch (blorb::EggPreview) in its species' art and colours,
+// its middle at (cx, cy), heightPx tall, rocked by `shear` (Q12).
+void drawEggPreview(Canvas240&, const blorb::EggPreview&, int cx, int cy, int heightPx, int shear, int alpha = 256);
+// The height of a species' whole egg frame, px: the egg screen draws it 1:1.
+int eggArtHeight(blorb::SpeciesId);
+
+// ---- duel_scene.cpp -----------------------------------------------------------------
+
+// One of the duel's props alone, as the duel draws it: the tilt picker's
+// reticle and lean glow, and the knock a kid's knuckle gives, for the clutch.
+void drawPickerProp(Canvas240&, const Prop&);
+
+// ---- clutch.cpp ---------------------------------------------------------------------
+
+// The picker's words: TILT TO PICK, KNOCK TO KEEP (test_paint checks them
+// against the font).
+extern const char* const kClutchWords[2];
+// The eggs to choose from, laid out as the duel's tilt picker (blorb/clutch_show.h).
+void drawClutchPicker(const blorb::Appearance&, Canvas240&);
+// The moment after an egg is kept, over the egg screen: false once it has
+// handed over to the plain egg (the caller draws that).
+bool drawChosen(const blorb::Appearance&, Canvas240&);
+// The vigil: the eggs on their way, coming clearer as it ends.
+void drawVigilEggs(const blorb::Appearance&, Canvas240&);
+
 // ---- feeding.cpp --------------------------------------------------------------------
 
 // Where draw.cpp put him and the newest pellet this frame, for what

@@ -318,7 +318,7 @@ TEST(Lifecycle, body_only_full_life) {
       diedAt = d->at;
     } else if (auto* b = std::get_if<Birth>(&e)) {
       ++births;
-      EXPECT_EQ(b->chosen, 1) << "the owner moved the cursor once, then held";
+      EXPECT_EQ(b->chosen, 1) << "the owner tilted toward the right egg, then held BOOT tilted there";
       EXPECT_EQ(b->clutchSize, 3);
       bornAt = b->at;
     }

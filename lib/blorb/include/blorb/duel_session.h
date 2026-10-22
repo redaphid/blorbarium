@@ -53,6 +53,10 @@ struct DuelInput {
   bool hang = false;   // held upside down 1 s: in the lobby it leaves, on the friends screen it searches again (the double press, without a button)
   bool lid = false, dropped = false;
   bool bootDown = false;   // the button's level: the Mortal confirm, the Finish and the hug are 3 s holds
+  // A hand moved the badge in this turn (tilt_aim.h AimArming): only then does
+  // the time running out lock the aim; a badge lying tilted since before the
+  // turn chooses nothing, and the pet picks (#24).
+  bool aimMoved = true;
   // `remote` is the stimuli a phone fired this tick (SenseOut::remote, unit D9):
   // none of them is a gesture here, so no verb or twist can lock a move.
   static DuelInput from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx tiltY, bool bootDown);
@@ -88,7 +92,22 @@ inline constexpr uint8_t kMaxLobbyHeard = 8;   // remembered in fight mode: nine
 struct DuelTimings {
   static constexpr uint16_t kFightModeTicks = 3000; // 5 min in fight mode with no fight: radio off
   static constexpr uint16_t kGreetTicks = 50;       // a locked pair that never hears the friend's State: back to searching
-  static constexpr uint16_t kChooseTicks = 100;     // 10 s, then the pet picks
+  // A turn's time to choose: kChooseTicks the first turn, kChooseShrinkPct
+  // shorter each turn after, never under kChooseFloorTicks (the owner,
+  // 2026-10-21: shorter as the rounds go on, "but not so dramatically it's
+  // unusable"). By turn: 10.0, 8.8, 7.7, 6.7, then 6.0 s. Six seconds still
+  // gives a six-year-old time to read the turn, tilt (~0.5-1 s) and see the
+  // aim light up before it locks. From the turn both badges share, so they
+  // agree with no clock between them. When it runs out the aimed stance
+  // locks as a knock would lock it (tilt and wait); level, the pet picks.
+  static constexpr uint16_t kChooseTicks = 100;
+  static constexpr uint8_t kChooseShrinkPct = 12;
+  static constexpr uint16_t kChooseFloorTicks = 60;
+  static constexpr uint16_t chooseTicks(uint32_t turn) {
+    uint32_t t = kChooseTicks;
+    for (uint32_t i = 0; i < turn && t > kChooseFloorTicks; ++i) t = t * (100 - kChooseShrinkPct) / 100;
+    return uint16_t(t < kChooseFloorTicks ? kChooseFloorTicks : t);
+  }
   static constexpr uint16_t kRevealTicks = 30;
   static constexpr uint16_t kFaintTicks = 40;
   static constexpr uint16_t kFallenTicks = 50;      // the fallen side keeps sending, so the victor hears the ack
@@ -171,6 +190,7 @@ struct DuelView {
   bool specialReady = false;            // the meter holds the power's cost and a special still fits
   uint8_t pipsShort = 0;                // greyed hint: how many pips short
   uint16_t chooseTicksLeft = 0;
+  uint16_t chooseTicks = DuelTimings::kChooseTicks;   // this turn's whole time to choose (DuelTimings::chooseTicks)
   bool hasLast = false;
   TurnReport last{};                    // mirrored so index 0 is always me
   uint8_t lastTurn = 0;
@@ -231,6 +251,9 @@ class DuelSession {
   // mode, beaconing his picture, and is claimed again once he is ready.
   void setDecline(Decline);
   DuelView view(uint32_t tick) const;
+  // The turn being chosen now (0, 1, ...), or -1: none (a light view, for
+  // the Dish's tick, where a whole DuelView is too big for the stack).
+  int16_t choosingTurn() const;
 
  private:
   friend struct DuelTestAccess;

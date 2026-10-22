@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include "blorb/species.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 namespace {
@@ -13,7 +14,6 @@ using Special = TurnReport::Special;
 // woundFor's own clamp is turned off here: the Dish's Creature::wound clamps
 // to woundRoom, which only the Dish can read.
 constexpr Fx kNoClamp = Fx::one();
-constexpr Fx kAimDeadZone = Fx::ratio(15, 100);
 
 constexpr uint8_t u8(Stakes s) { return uint8_t(s); }
 uint8_t fill(uint16_t ticks, uint16_t of) { return uint8_t(std::min<uint32_t>(255, uint32_t(ticks) * 255 / of)); }
@@ -63,13 +63,7 @@ DuelInput DuelInput::from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx til
     else if (s.v == stim::lid_down.v) in.lid = true;
     else if (s.v == stim::dropped.v) in.dropped = true;
   }
-  // The loci read 0.5 level. tilt_x above it raises the +x edge, so things
-  // roll left: that is "tilt left". tilt_y below it rolls them toward the
-  // kid's edge: "toward you". D12 confirms both on the board.
-  const Fx dx = tiltX - Fx::ratio(1, 2), dy = tiltY - Fx::ratio(1, 2);
-  const Fx ax = dx < Fx::zero() ? -dx : dx, ay = dy < Fx::zero() ? -dy : dy;
-  if (ax >= kAimDeadZone || ay >= kAimDeadZone)
-    in.aim = ax >= ay ? (dx > Fx::zero() ? 0 : 1) : (dy < Fx::zero() ? 2 : 3);
+  in.aim = tiltAim(tiltX, tiltY);   // the tilt picker (tilt_aim.h), which the clutch shares
   return in;
 }
 
@@ -184,8 +178,12 @@ std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
     return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
            (s.beacon.wants.none() || s.beacon.wants == self_ || pending(s)) && (!setup_.pin || s.addr == setup_.pin->peer);
   };
+  // A rematch's pinned lobby claims its friend even before it hears him: he
+  // may still be on the friends screen, where he beacons nothing, and my
+  // claim in a beacon is how he learns I asked if my State saying so was lost
+  // (#54: under loss he waited out his friends screen alone).
   const auto want = [&](std::optional<uint8_t> i) {
-    const PeerAddr to = i ? l.seen[*i].addr : PeerAddr{};
+    const PeerAddr to = i ? l.seen[*i].addr : setup_.pin && setup_.decline == Decline::None ? setup_.pin->peer : PeerAddr{};
     if (to != l.wants) l.wantsSince = tick;
     l.wants = to;
   };
@@ -551,7 +549,12 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       if (aim >= 0 && in.hold && specialFits(b, Windup::Heavy)) locked = b.mine.appendSpecial(Windup::Heavy, Stance(aim));
       else if (aim >= 0 && in.press && specialFits(b, Windup::Quick)) locked = b.mine.appendSpecial(Windup::Quick, Stance(aim));
       else if (aim >= 0 && in.knock) locked = b.mine.append(Move{Stance(aim)});
-      if (!locked && tick - b.chooseTick >= T::kChooseTicks) {
+      // Time is up. Tilted, the aimed stance locks, as a knock would lock it
+      // (the owner: "just tilting it and waiting until the time runs out
+      // should select the action"); level, the pet picks, as it always has.
+      if (!locked && aim >= 0 && in.aimMoved && tick - b.chooseTick >= T::chooseTicks(o.resolved))
+        locked = b.mine.append(Move{Stance(aim)});
+      if (!locked && tick - b.chooseTick >= T::chooseTicks(o.resolved)) {
         const Lean l = petChoice(b.skill, o, b.me, setup_.card, b.theirs, assistFor(b, me), b.battle.seed);
         locked = l.special != Windup::None && specialFits(b, l.special) && b.mine.appendSpecial(l.special, l.stance, true);
         if (!locked) locked = b.mine.append(Move{l.stance, false, true});
@@ -834,6 +837,12 @@ void DuelSession::closeWith(Air& air, EndReason why, bool goodbye) {
 
 // ---- the view -----------------------------------------------------------------------
 
+int16_t DuelSession::choosingTurn() const {
+  const Battle* b = std::get_if<Battle>(&state_);
+  if (!b || b->phase != DuelPhase::Choosing || b->revealing || b->outcome.over()) return -1;
+  return b->mine.count() == b->outcome.resolved ? int16_t(b->outcome.resolved) : int16_t(-1);
+}
+
 DuelView DuelSession::view(uint32_t tick) const {
   DuelView v;
   if (const Closed* c = std::get_if<Closed>(&state_)) {
@@ -905,7 +914,8 @@ DuelView DuelSession::view(uint32_t tick) const {
     } else if (!o.over()) {
       v.phaseTicks = uint16_t(tick - b.chooseTick);
       const uint32_t spent = tick - b.chooseTick;
-      v.chooseTicksLeft = uint16_t(spent >= T::kChooseTicks ? 0 : T::kChooseTicks - spent);
+      v.chooseTicks = T::chooseTicks(o.resolved);
+      v.chooseTicksLeft = uint16_t(spent >= v.chooseTicks ? 0 : v.chooseTicks - spent);
       v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, v.assistHearts[0], b.battle.seed);
     }
   }

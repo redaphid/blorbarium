@@ -512,7 +512,11 @@ void crowd(uint8_t n, uint32_t seeds) {
       std::vector<uint8_t> claimedBy(n, 0);
       for (uint8_t i = 0; i < n; ++i) {
         const DuelView v = all[i]->s.view(t);
-        const bool shows = uint8_t(v.phase) >= uint8_t(DuelPhase::Staking);
+        // In a fight: the stakes to the fall. The friends screen after it is a
+        // farewell each badge leaves on its own clock, so a friend may still
+        // show it a moment after the other has paired again (seen once the
+        // choose timer shrank each turn, #24).
+        const bool shows = uint8_t(v.phase) >= uint8_t(DuelPhase::Staking) && v.phase != DuelPhase::Friends;
         if (shows) {
           const int f = indexOf(v.them.lineageId);
           EXPECT_GE(f, 0);
@@ -803,6 +807,31 @@ TEST(DuelSession, ALostConfirmDoesNotStrandStaking) {
   EXPECT_TRUE(muted);
   EXPECT_EQ(a.s.view(2000).agreed, Stakes::Scrap);
   EXPECT_EQ(b.s.view(2000).agreed, Stakes::Scrap);
+}
+
+// Both kids ask for a rematch on a lossy air (#54): one hears the other's ask
+// first and goes back to the lobby pinned to him while he still waits on the
+// friends screen, beaconing nothing. Its claim, beaconed at once, tells him it
+// asked; before, a lost State left him to wait out the friends screen alone.
+TEST(DuelSession, BothAskedRematchesOnEveryAir) {
+  const Weather airs[] = {Weather{}, kStorm, Weather{500, 0, 0, 0}, Weather{200, 200, 400, 12}};
+  int runs = 0, both = 0;
+  for (const Weather& w : airs)
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+      Ether ether(seed * 13 + 7, w);
+      Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+      a.policy.rematch = b.policy.rematch = true;
+      a.maxBouts = b.maxBouts = 2;
+      ASSERT_TRUE(a.open(0) && b.open(0));
+      run(ether, {&a, &b}, 1, 60000, [&](uint32_t) { return a.bouts == 2 && b.bouts == 2 && a.meetings.size() >= 2 && b.meetings.size() >= 2; });
+      if (a.meetings.empty() || b.meetings.empty()) continue;   // the first bout never ended here: nothing to rematch
+      ++runs;
+      const bool ok = a.bouts == 2 && b.bouts == 2;
+      both += ok;
+      EXPECT_TRUE(ok) << "air drop=" << w.drop << " seed " << seed << ": bouts " << int(a.bouts) << "/" << int(b.bouts);
+    }
+  std::printf("[ rematch ] both rematched in %d of %d runs\n", both, runs);
+  EXPECT_GE(runs, 40);
 }
 
 // Both kids ask for a rematch: the session closes, reopens pinned to the same

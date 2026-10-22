@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
+#include "blorb/tilt_aim.h"
 #include <cstring>
 #include <utility>
 
@@ -141,7 +142,9 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   // ends was measured from BOOT's raw level by the samples before this one.
   lastFired_ = 0;
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
-  if (s.knockWaiting && !knockWaitWas_) knockAim_ = detectors_.aim.aim();   // the first knock: what it aims at
+  arming_.sample(s.ax, s.ay, s.az, nowMs);
+  watchChoice(nowMs);
+  if (s.knockWaiting && !knockWaitWas_) knockAim_ = armedAim();   // the first knock: what it aims at
   knockWaitWas_ = s.knockWaiting;
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
@@ -158,6 +161,18 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   cues_.sample(s, detectors_.side.holding(), nowMs);
   feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
   carry_.sample(s, nowMs, carryContext(s));
+  // The picker's aim as of this sample (AimDetector), by the rule the next
+  // tick keeps by (pickEgg): while a knock waits, the aim it was made at;
+  // turned onto a side, the aim from before the turn, as a heavy special's.
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool picking = k && k->sinceDeath >= Clutch::kVigilTicks && k->count > 1;
+  int8_t egg = -1;
+  if (picking) {
+    int8_t aim = knockWaitWas_ && knockAim_ >= 0 ? knockAim_ : armedAim();
+    if (kSideHoldHolds && detectors_.side.holding() && sideWas_) aim = tiltAim(sideTilt_[0], sideTilt_[1]);
+    egg = eggAt(aim, k->count);
+  }
+  clutchShow_.sample(s, egg, picking, nowMs);
 }
 
 // What the carry show (carry_show.h) needs to know beyond the sample: whether
@@ -183,6 +198,18 @@ CarryContext Dish::carryContext(const BodySample& s) const {
 void Dish::forceCarry(Carry k) {
   const Creature* cr = std::get_if<Creature>(&live_.occupant);
   carry_.force(k, nowMs_, cr ? cr->genome().hash() : 0);
+}
+
+// A choice screen (the eggs, a duel) opens unarmed: a hand's move arms the
+// aim (tilt_aim.h AimArming), so a badge left lying never chooses. Called on
+// every sample and before every tick reads the aim, so a screen that opens on
+// a tick (the vigil's end, a duel) is unarmed from that tick on.
+void Dish::watchChoice(uint32_t ms) {
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool choosing = (k && k->sinceDeath + 1 >= Clutch::kVigilTicks && k->count > 1) || duel_.active();
+  if (choosing && !choosing_) arming_.open();
+  choosing_ = choosing;
+  armed_ = choosing && arming_.armed(ms);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -237,7 +264,8 @@ void Dish::runOneTick(Link& link) {
   // so DuelInput::from finds the same sector; a knock locks the aim it was
   // made at, not where the hand drifted while it was decided.
   const bool knocked = fired(out, stim::knock) || fired(out, stim::double_knock);
-  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+  watchChoice(lastTickMs_);
+  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : armedAim();
   constexpr Fx kMid = Fx::ratio(1, 2), kLean = Fx::ratio(1, 4);
   const Fx tiltX = aim == 0 ? kMid + kLean : aim == 1 ? kMid - kLean : kMid;
   const Fx tiltY = aim == 2 ? kMid - kLean : aim == 3 ? kMid + kLean : kMid;
@@ -252,7 +280,16 @@ void Dish::runOneTick(Link& link) {
   sideWas_ = side;
   tiltHist_[tick_ % kAimHistory][0] = tiltX, tiltHist_[tick_ % kAimHistory][1] = tiltY;
   const Fx aimX = side ? sideTilt_[0] : tiltX, aimY = side ? sideTilt_[1] : tiltY;
-  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
+  // The time running out locks the aim only when a hand moved the badge in
+  // this turn (#24): one left lying tilted since before it chooses nothing.
+  bool aimMoved = true;
+  if (duel_.active()) {
+    const int16_t turn = duel_.choosingTurn();
+    if (turn != turnSeen_) turnSeen_ = turn, turnFromMs_ = lastTickMs_;
+    aimMoved = arming_.movedSince(turnFromMs_);
+  }
+  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_,
+                 aimMoved)
           .save)
     save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
@@ -289,7 +326,8 @@ void Dish::runOneTick(Link& link) {
       const std::optional<FriendEgg> egg = k.friendSlot ? FriendEggStore::load(store_) : std::nullopt;
       k.derivePreviewStep(egg ? &*egg : nullptr);
     }
-    if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
+    // The tilt picker's aim, as the duel's: a knock's own, or from before a turn onto a side.
+    if (std::optional<uint8_t> i = k.tick(out, tiltAim(aimX, aimY))) onPicked(k, *i);
   }
   ++tick_;
 }
@@ -373,6 +411,7 @@ bool Dish::onPicked(Clutch& k, uint8_t i) {
   Egg egg(childOf(k, i, friendEgg ? &*friendEgg : nullptr), k.generation, tick_);
   if (friendEgg && !FriendEggStore::consume(store_)) return false;
   lineage_.recordBirth(egg, k, i, tick_);
+  clutchShow_.kept(k, i, nowMs_);   // before the egg replaces it: its eggs, for the chosen moment
   live_.occupant = std::move(egg);
   eventDirty_ = true;
   return true;
@@ -510,6 +549,7 @@ Appearance Dish::appearance() const {
   feedView(a);
   if (std::holds_alternative<Creature>(live_.occupant)) a.carry = carry_.view(nowMs_);
   if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
+  a.clutch = clutchShow_.view(nowMs_, a.eggs, a.eggCount);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
@@ -536,7 +576,7 @@ Appearance Dish::appearance() const {
 int8_t Dish::liveAim() const {
   if (kSideHoldHolds && detectors_.side.holding()) return duel_.view(tick_).aim;
   if (knockWaitWas_ && knockAim_ >= 0) return knockAim_;
-  return detectors_.aim.aim();
+  return armedAim();
 }
 
 DuelView Dish::duelView() const {

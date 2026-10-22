@@ -118,6 +118,13 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
   a.feed.chompMs = fast(now.feed.chompMs);
   a.feed.meterMs = fast(now.feed.meterMs);
   a.carry.ageMs = fast(now.carry.ageMs);   // carried about (carried.cpp): its reaction too
+  // The egg picker's show (clutch.cpp) is on ages in wall ms as well: its
+  // slide, the aimed egg's rock, the hints and the chosen moment at the
+  // screen's speed. A knock's ring is a hold filling, which a kid reads
+  // against his own knock: it keeps the wall's pace.
+  a.clutch.aimMs = fast(now.clutch.aimMs);
+  a.clutch.chosenMs = fast(now.clutch.chosenMs);
+  a.clutch.shownMs = uint16_t(uint32_t(now.clutch.shownMs) * kScreenSpeedQ8 / 256 % 60000);
   // The same line a tick on: it crawls at the step it took last tick (a reading pace, not sped up).
   if (now.thinking && was.thinking && was.thought == now.thought && now.thoughtPhase > was.thoughtPhase &&
       std::memcmp(was.line, now.line, sizeof now.line) == 0) {

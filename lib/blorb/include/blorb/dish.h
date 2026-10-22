@@ -9,6 +9,7 @@
 #include "blorb/air.h"
 #include "blorb/carry_show.h"
 #include "blorb/appearance.h"
+#include "blorb/clutch_show.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
 #include "blorb/feed_show.h"
@@ -21,6 +22,7 @@
 #include "blorb/senses.h"
 #include "blorb/taught.h"
 #include "blorb/thoughts.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 
@@ -245,6 +247,10 @@ class Dish {
   // Carried about (carry_show.h): presentation only, never saved or hashed.
   CarryShow carry_;
   CarryContext carryContext(const BodySample&) const;
+  // Choosing an egg as the eyes see it (clutch_show.h): presentation only,
+  // never saved or hashed. The tilt at each sample, not each tick, so the
+  // picker follows the hand with nothing added to the tilt's own smoothing.
+  ClutchShow clutchShow_;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn
@@ -262,6 +268,14 @@ class Dish {
   bool dismissed_ = false;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
+  // The aim counts only once a hand has moved the badge on this choice
+  // screen (tilt_aim.h AimArming): unarmed, every reader sees level.
+  AimArming arming_;
+  bool choosing_ = false, armed_ = false;
+  int16_t turnSeen_ = -1;      // the duel turn being chosen (-1 none), and when it began: a move since arms its timeout (#24)
+  uint32_t turnFromMs_ = 0;
+  int8_t armedAim() const { return armed_ ? detectors_.aim.aim() : int8_t(-1); }
+  void watchChoice(uint32_t ms);
   DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;
