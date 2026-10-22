@@ -545,7 +545,11 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       if (aim >= 0 && in.hold && specialFits(b, Windup::Heavy)) locked = b.mine.appendSpecial(Windup::Heavy, Stance(aim));
       else if (aim >= 0 && in.press && specialFits(b, Windup::Quick)) locked = b.mine.appendSpecial(Windup::Quick, Stance(aim));
       else if (aim >= 0 && in.knock) locked = b.mine.append(Move{Stance(aim)});
-      if (!locked && tick - b.chooseTick >= T::kChooseTicks) {
+      // Time is up. Tilted, the aimed stance locks, as a knock would lock it
+      // (the owner: "just tilting it and waiting until the time runs out
+      // should select the action"); level, the pet picks, as it always has.
+      if (!locked && aim >= 0 && tick - b.chooseTick >= T::chooseTicks(o.resolved)) locked = b.mine.append(Move{Stance(aim)});
+      if (!locked && tick - b.chooseTick >= T::chooseTicks(o.resolved)) {
         const Lean l = petChoice(b.skill, o, b.me, setup_.card, b.theirs, assistFor(b, me), b.battle.seed);
         locked = l.special != Windup::None && specialFits(b, l.special) && b.mine.appendSpecial(l.special, l.stance, true);
         if (!locked) locked = b.mine.append(Move{l.stance, false, true});
@@ -899,7 +903,8 @@ DuelView DuelSession::view(uint32_t tick) const {
     } else if (!o.over()) {
       v.phaseTicks = uint16_t(tick - b.chooseTick);
       const uint32_t spent = tick - b.chooseTick;
-      v.chooseTicksLeft = uint16_t(spent >= T::kChooseTicks ? 0 : T::kChooseTicks - spent);
+      v.chooseTicks = T::chooseTicks(o.resolved);
+      v.chooseTicksLeft = uint16_t(spent >= v.chooseTicks ? 0 : v.chooseTicks - spent);
       v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, v.assistHearts[0], b.battle.seed);
     }
   }

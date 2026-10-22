@@ -648,7 +648,7 @@ DuelScene sceneOf(const blorb::DuelView& v, const blorb::Appearance& mine) {
   sc.me.locked = v.locked;
   sc.them.locked = v.theyLocked;
   sc.ticksLeft = v.chooseTicksLeft;
-  sc.turnTicks = blorb::DuelTimings::kChooseTicks;
+  sc.turnTicks = v.chooseTicks;   // shorter each turn (DuelTimings::chooseTicks)
   if (v.hasLast && sc.act == DuelAct::Clash) turnOnto(sc, v.last, 0);   // the view mirrors it: index 0 is me
   // Mercy and the end: the downed side lost; in Mercy the hold is the winner's Finish.
   if (sc.act != DuelAct::Clash) sc.won = v.draw ? Side::Neither : (v.iWon ? Side::Me : Side::Them);

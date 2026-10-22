@@ -1029,6 +1029,90 @@ TEST(NoButton, ASideHoldKeepsTheAimFromBeforeTheTurn) {
   EXPECT_GE(checked, 6) << "the aim was looked at on his side";
 }
 
+// The owner: "just tilting it and waiting until the time runs out should
+// select the action." A tilts and waits; B aims and knocks. When A's time runs
+// out the stance A aims at locks, exactly as a knock locks it (not the pet's
+// pick), and both badges see the same moves.
+TEST(Timeout, TiltedWhenTheTimeRunsOutLocksTheAimedStanceOnBothBadges) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked &&
+                         bout.b.dish->duelView().phase == DuelPhase::Choosing && !bout.b.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  bout.step();   // each kid sees the new screen: the plans below replace theirs
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  const int8_t want = int8_t(bout.a.dish->duelView().lean.stance == Stance::Guard ? 0 : 1);   // not the pet's own pick
+  Frame tilt, aim, knock;
+  tilt.aim = want, aim.aim = 2, knock.aim = 2, knock.tap = true;
+  bout.a.plan.assign(400, tilt);
+  bout.b.plan.assign(5, aim);
+  bout.b.plan.push_back(knock);
+  for (int i = 0; i < 200; ++i) bout.b.plan.push_back(aim);
+  const uint16_t total = bout.a.dish->duelView().chooseTicks;
+  EXPECT_EQ(total, DuelTimings::chooseTicks(turn));
+  int lockedAfter = -1;
+  for (int i = 0; i < 300 && lockedAfter < 0; ++i) {
+    bout.step();
+    if (bout.a.dish->duelView().locked || bout.a.dish->duelView().phase != DuelPhase::Choosing) lockedAfter = i + 1;
+  }
+  ASSERT_GE(lockedAfter, 0) << "A's time ran out";
+  EXPECT_GE(lockedAfter, total - 2) << "not before the time ran out";
+  EXPECT_LE(lockedAfter, total + 2);
+  auto shows = [&](const Device& d) { const DuelView v = d.dish->duelView(); return v.hasLast && v.lastTurn >= turn; };
+  for (int i = 0; i < 200 && !(shows(bout.a) && shows(bout.b)); ++i) bout.step();
+  const DuelView va = bout.a.dish->duelView(), vb = bout.b.dish->duelView();
+  ASSERT_TRUE(va.hasLast && va.lastTurn == turn) << int(va.lastTurn);
+  ASSERT_TRUE(vb.hasLast && vb.lastTurn == turn) << int(vb.hasLast) << " " << int(vb.lastTurn);
+  EXPECT_EQ(va.last.move[0].stance, Stance(want)) << "the aimed stance, locked";
+  EXPECT_FALSE(va.last.move[0].byPet) << "locked as a knock locks it, not the pet's pick";
+  EXPECT_EQ(vb.last.move[1].stance, Stance(want)) << "and the other badge saw the same move";
+  EXPECT_FALSE(vb.last.move[1].byPet);
+  EXPECT_EQ(va.last.move[1].stance, Stance(2)) << "B's knocked stance";
+  EXPECT_EQ(vb.last.move[0].stance, Stance(2));
+}
+
+// Level when the time runs out: the pet picks, as it always has.
+TEST(Timeout, LevelWhenTheTimeRunsOutThePetPicks) {
+  Bout bout(3, kGrungo, SpeciesId{6});
+  for (Device* d : {&bout.a, &bout.b}) d->kid.noButton = true;
+  int t = 0;
+  while (t++ < 3000 && !(bout.a.dish->duelView().phase == DuelPhase::Choosing && !bout.a.dish->duelView().locked))
+    bout.step();
+  ASSERT_EQ(bout.a.dish->duelView().phase, DuelPhase::Choosing);
+  bout.step();
+  const uint8_t turn = bout.a.dish->duelView().hasLast ? uint8_t(bout.a.dish->duelView().lastTurn + 1) : 0;
+  bout.a.plan.assign(400, Frame{});
+  for (int i = 0; i < 400 && !(bout.a.dish->duelView().hasLast && bout.a.dish->duelView().lastTurn == turn); ++i) bout.step();
+  const DuelView va = bout.a.dish->duelView();
+  ASSERT_TRUE(va.hasLast && va.lastTurn == turn);
+  EXPECT_TRUE(va.last.move[0].byPet) << "nobody aimed: the pet's pick";
+}
+
+// The time to choose shortens each turn, the same on both badges, to a floor.
+TEST(Timeout, TheTimeToChooseShortensEachTurnToAFloor) {
+  const uint16_t want[] = {100, 88, 77, 67, 60, 60, 60, 60};
+  for (uint32_t turn = 0; turn < 8; ++turn) EXPECT_EQ(DuelTimings::chooseTicks(turn), want[turn]) << "turn " << turn;
+  EXPECT_EQ(DuelTimings::chooseTicks(100), DuelTimings::kChooseFloorTicks);
+  for (uint32_t turn = 1; turn < 20; ++turn) EXPECT_LE(DuelTimings::chooseTicks(turn), DuelTimings::chooseTicks(turn - 1));
+  // On both badges, turn after turn, a whole duel.
+  Bout bout(4, kGrungo, SpeciesId{6});
+  int seen = 0;
+  for (int i = 0; i < 6000 && seen < 3; ++i) {
+    bout.step();
+    const DuelView va = bout.a.dish->duelView(), vb = bout.b.dish->duelView();
+    if (va.phase == DuelPhase::Choosing && vb.phase == DuelPhase::Choosing && !va.locked && !vb.locked) {
+      const uint8_t ta = va.hasLast ? uint8_t(va.lastTurn + 1) : 0, tb = vb.hasLast ? uint8_t(vb.lastTurn + 1) : 0;
+      if (ta != tb) continue;
+      EXPECT_EQ(va.chooseTicks, DuelTimings::chooseTicks(ta));
+      EXPECT_EQ(vb.chooseTicks, va.chooseTicks) << "the same on both badges";
+      seen += ta > 0;
+    }
+  }
+  EXPECT_GE(seen, 1) << "a later turn was seen on both";
+}
+
 // Spared, with no button: a knock spares as it always did, and nobody dies.
 TEST(NoButton, AMortalDuelSparedByAKnock) {
   for (uint64_t seed = 1; seed < 30; ++seed) {
