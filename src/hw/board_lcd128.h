@@ -136,10 +136,12 @@ constexpr uint16_t kFullEvery = 64;
 // A row is known by eight hashes, one a 30 px chunk, so a frame sends not the
 // whole of a changed row but the chunks from its first changed to its last:
 // with his motion between ticks a hundred-odd rows change a frame, and he is
-// in the middle of them. 7.5 KB, for about half the bus.
+// in the middle of them. 7.5 KB, for about half the bus: in PSRAM
+// (boardPresentBegin), since internal RAM is what the duel's radio needs
+// free (#53); read and written once a frame in order, the cache keeps up.
 constexpr int kChunks = 8, kChunkW = CANVAS_W / kChunks;
 static_assert(CANVAS_W % kChunks == 0 && kChunkW % 2 == 0, "whole chunks of whole words");
-static uint32_t hash[CANVAS_H][kChunks];
+static uint32_t (*hash)[kChunks] = nullptr;   // [CANVAS_H][kChunks]; null until boardPresentBegin: every row is sent
 static uint16_t sinceFull = 0;
 static bool stale = true;     // the next frame sends every row
 static uint32_t sent = 0;     // rows sent since boot, for DEBUG fps
@@ -160,6 +162,7 @@ inline uint32_t of(const uint16_t* p) {
 }  // namespace panelrows
 
 static void boardRepaintAll() { panelrows::stale = true; }
+static const void* boardRowHashes() { return panelrows::hash; }
 static bool boardStale() { return panelrows::stale; }   // the next frame must send every row
 static uint32_t boardRowsSent() { return panelrows::sent; }
 static uint32_t boardPixelsSent() { return panelrows::sentPx; }
@@ -231,12 +234,19 @@ static void boardPanelIdle() {
 static void boardPresentBegin(BoardDisplay& display) {
   using namespace panelsend;
   to = &display;
+  using panelrows::hash;
+  using panelrows::kChunks;
+  void* h = heap_caps_malloc(sizeof(uint32_t) * CANVAS_H * kChunks, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!h) h = malloc(sizeof(uint32_t) * CANVAS_H * kChunks);
+  hash = static_cast<uint32_t(*)[kChunks]>(h);
+  panelrows::stale = true;
   shadow = static_cast<uint16_t*>(heap_caps_malloc(sizeof(uint16_t) * CANVAS_W * CANVAS_H, MALLOC_CAP_SPIRAM));
   idle = xSemaphoreCreateBinary();
   if (!shadow || !idle) return void(async = false);
   xSemaphoreGive(idle);
   // Core 0, beside the radio's tasks (which outrank it); the loop and its drawing are core 1's.
-  if (xTaskCreatePinnedToCore(loop, "lcdsend", 3072, nullptr, 1, &task, 0) != pdPASS) async = false;
+  // 2.5 KB: DEBUG fps prints what it never used (stack lcdsend=).
+  if (xTaskCreatePinnedToCore(loop, "lcdsend", 2560, nullptr, 1, &task, 0) != pdPASS) async = false;
 }
 static bool boardSendAsync() { return panelsend::async && panelsend::task; }
 static void boardSetSendAsync(bool on) {
@@ -244,6 +254,9 @@ static void boardSetSendAsync(bool on) {
   panelsend::async = on;
 }
 static uint32_t boardSendUs() { return panelsend::sendUs; }
+static const void* boardShadow() { return panelsend::shadow; }
+// The send task's stack never used yet (bytes), for DEBUG fps: its size is that plus a margin.
+static uint32_t boardSendStackFree() { return panelsend::task ? uxTaskGetStackHighWaterMark(panelsend::task) : 0; }
 // The newest frame that sent the panel rows (0: none yet), the newest whose
 // rows are out, and when each of the last eight went out (micros).
 static uint32_t boardFrameSeq() { return panelsend::queuedSeq; }
@@ -256,7 +269,7 @@ static uint32_t boardPanelDoneAt(uint32_t seq) { return panelsend::doneAt[seq % 
 static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) {
   using namespace panelrows;
   using namespace panelsend;
-  const bool all = stale || ++sinceFull >= kFullEvery;
+  const bool all = stale || ++sinceFull >= kFullEvery || !hash;
   if (all) stale = false, sinceFull = 0;
   const bool background = boardSendAsync();
   if (background) xSemaphoreTake(idle, portMAX_DELAY);   // the last frame's pixels are out; the shadow is free
@@ -270,7 +283,7 @@ static void boardPresent(BoardDisplay& display, const paint::Canvas240& canvas) 
     for (int c = 0; c < kChunks; ++c) {
       const uint32_t h = of(&canvas.px[y * CANVAS_W + c * kChunkW]);
       if (all || h != hash[y][c]) c0 = c0 < c ? c0 : c, c1 = c;
-      hash[y][c] = h;
+      if (hash) hash[y][c] = h;
     }
     if (c1 < 0) { open = false; continue; }
     if (open) {

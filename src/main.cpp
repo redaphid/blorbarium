@@ -170,23 +170,45 @@ static hw::TwoLinks links(phone, otaLink);   // DEBUG lines stay on the cable: o
 // The radio's opens and refusals, for the debug link (drained with the Dish's lines).
 static blorb::DiagLines radioDiag;
 struct RadioGate : blorb::Air {
-  blorb::Air& inner;
+  blorb::Air* inner = nullptr;   // FaultAir, set by setup() once it is made
   const char* why = nullptr;     // the last open()'s refusal
   const char* logged = "";       // the last one logged, so a waiting retry each second logs once
-  explicit RadioGate(blorb::Air& a) : inner(a) {}
   bool open() override;
   const char* refusal() const override { return why ? why : "radio_closed"; }
-  void close() override { inner.close(); }
-  bool isOpen() const override { return inner.isOpen(); }
-  blorb::PeerAddr self() const override { return inner.self(); }
-  void broadcast(const uint8_t* p, size_t n) override { inner.broadcast(p, n); }
-  void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner.send(to, p, n); }
-  std::optional<blorb::Datagram> receive() override { return inner.receive(); }
+  void close() override { inner->close(); }
+  bool isOpen() const override { return inner->isOpen(); }
+  blorb::PeerAddr self() const override { return inner->self(); }
+  void broadcast(const uint8_t* p, size_t n) override { inner->broadcast(p, n); }
+  void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override { inner->send(to, p, n); }
+  std::optional<blorb::Datagram> receive() override { return inner->receive(); }
+};
+// Internal RAM is the scarce kind: a duel's radio takes about 37 KB of it and
+// must find it free each time fight mode opens (#53). Objects only tasks touch
+// (never an interrupt, and nothing in them is a lock or an atomic) can live in
+// PSRAM. PSRAM joins the heap in initArduino(), after the static constructors
+// have run, so such an object is made by setup()'s first lines (make()), not
+// as a static: internal only if PSRAM is not there (`[hw] psram: ...` at boot
+// says where each landed). After wifi-ota-2's a602752.
+template <class T>
+class InPsram {
+ public:
+  template <class... A>
+  void make(A&&... a) {
+    if (p_) return;
+    void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    p_ = m ? new (m) T(std::forward<A>(a)...) : new T(std::forward<A>(a)...);
+  }
+  T& operator*() const { return *p_; }
+  T* operator->() const { return p_; }
+  T* get() const { return p_; }
+
+ private:
+  T* p_ = nullptr;
 };
 static hw::EspNowAir espNow;
 // `DEBUG net ...` makes the room worse between the gate and the radio (hw/net_faults.h).
-static hw::FaultAir faultAir(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
-static RadioGate radioGate(faultAir);
+static InPsram<hw::FaultAir> faultAir;   // made by setup()
+static RadioGate radioGate;
 // Survives ESP.restart() (not a power cut): `DEBUG reboot quiet` boots with the radio blacked out
 // from the first tick, so a soak sets its room before two badges can pair.
 static constexpr uint32_t kQuietMagic = 0x51E7B007u;
@@ -282,6 +304,10 @@ static void report() {
                 "send=%s (%s)\n",
                 f[0], f[12], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11],
                 boardSendAsync() ? "async" : "sync");
+  // What each task's stack never used yet, bytes (sized from these, #53).
+  Serial.printf("[fps] stack paint0=%u lcdsend=%u heap=%u big=%u\n", unsigned(paintcore0::stackFree()),
+                unsigned(boardSendStackFree()), unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   since = t, frames = 0, sames = 0, worstUs = 0, rows0 = boardRowsSent(), px0 = boardPixelsSent(), lookUs = memoUs = drawUs = pushUs = 0, send0 = boardSendUs();
   for (uint32_t& p : paint::phaseClock.spent) p = 0;
 }
@@ -658,7 +684,7 @@ static hw::Feel shell{ORIENT_R0, ORIENT_HOME, powerPolicy};
 //   DEBUG latency clear   starts over
 // A few KB and a few us a sample, so it is always on.
 namespace lat {
-static latency::Recorder rec;
+static InPsram<latency::Recorder> rec;   // made by setup()
 static latency::Watch watch;
 static uint32_t readUs = 0, peakUs = 0;   // the sample feel() is on: its read, and its peak's
 static void felt(const hw::Felt& f, bool button, bool woke) {
@@ -675,7 +701,7 @@ static void felt(const hw::Felt& f, bool button, bool woke) {
   s.press = has(blorb::stim::button), s.dbl = has(blorb::stim::button_double), s.hold = has(blorb::stim::button_hold);
   s.hang = has(blorb::stim::hang), s.shake = has(blorb::stim::shake), s.knock = has(blorb::stim::knock);
   s.knockKnockWord = has(blorb::stim::double_knock);
-  watch.sample(s, rec);
+  watch.sample(s, *rec);
 }
 // What a frame acknowledges before the engine has: a bit per control.
 static uint32_t acks(const blorb::Appearance& a) {
@@ -686,33 +712,33 @@ static uint32_t acks(const blorb::Appearance& a) {
   if (a.boot.knockWait) m |= flag(Ctl::Knock);                                                 // "one more"
   if (a.boot.holdFill || a.boot.holdVoid) m |= flag(Ctl::Side) | flag(Ctl::Hold) | flag(Ctl::Press);   // the hold ring
   if (a.hangCharge > blorb::Fx::zero() || a.boot.doubleFill) m |= flag(Ctl::Hang) | flag(Ctl::Double);   // the charge, the bars
-  if (rec.isOpen(Ctl::Tilt) && a.dueling && watch.tiltTarget() >= 0 && dish->duelView().aim == watch.tiltTarget())
+  if (rec->isOpen(Ctl::Tilt) && a.dueling && watch.tiltTarget() >= 0 && dish->duelView().aim == watch.tiltTarget())
     m |= flag(Ctl::Tilt);   // the duel's aimed action
   return m;
 }
 // After every frame handed to the panel: seqBefore is boardFrameSeq() before it.
 static void framed(const blorb::Appearance& a, uint32_t seqBefore) {
   const uint32_t seq = boardFrameSeq();
-  rec.framed(micros(), seq != seqBefore ? seq : 0, acks(a));
+  rec->framed(micros(), seq != seqBefore ? seq : 0, acks(a));
 }
 // Every loop: the rows the send task has put on the panel, and events open too long.
 static void poll() {
   static uint32_t polled = 0;   // each frame's own time, though the loop looks only once a pass
   const uint32_t seq = boardPanelDoneSeq();
-  for (uint32_t k = seq - polled > 8 ? seq - 7 : polled + 1; int32_t(seq - k) >= 0; ++k) rec.panelDone(k, boardPanelDoneAt(k));
+  for (uint32_t k = seq - polled > 8 ? seq - 7 : polled + 1; int32_t(seq - k) >= 0; ++k) rec->panelDone(k, boardPanelDoneAt(k));
   polled = seq;
-  rec.expire(micros());
+  rec->expire(micros());
 }
 static void verb(const char* a) {
   if (!std::strcmp(a, "clear")) {
-    rec.clear();
+    rec->clear();
     Serial.printf("[lat] cleared\n");
     return;
   }
   const bool last = !std::strcmp(a, "last");
   char line[400];
   for (uint8_t i = 0; i < latency::kCtls; ++i)
-    if (last ? rec.last(i, line, sizeof line) : (rec.count(latency::Ctl(i)) && rec.line(i, line, sizeof line)))
+    if (last ? rec->last(i, line, sizeof line) : (rec->count(latency::Ctl(i)) && rec->line(i, line, sizeof line)))
       Serial.printf("[lat] %s\n", line);
   Serial.printf("[lat] done\n");
 }
@@ -776,7 +802,7 @@ static void step(uint32_t now) {
   [[maybe_unused]] const uint32_t ticks = dish->tickCount();
   dish->tick(now, host);
 #if !defined(BADGE_BOARD_SIM)
-  if (dish->tickCount() != ticks) lat::rec.ticked(micros());   // what spoke is taken
+  if (dish->tickCount() != ticks) lat::rec->ticked(micros());   // what spoke is taken
 #endif
 }
 
@@ -838,8 +864,8 @@ bool DishOtaHost::busy() {
 bool DishOtaHost::save() { return dish->flush(); }
 bool RadioGate::open() {
   why = updater.active() ? "ota_active" : trial.onTrial() ? "trial" : nullptr;
-  const bool ok = !why && inner.open();
-  if (!why && !ok) why = inner.refusal();
+  const bool ok = !why && inner->open();
+  if (!why && !ok) why = inner->refusal();
   if (ok) radioDiag.say("radio open=1"), logged = "";
   else if (std::strcmp(logged, why) != 0) radioDiag.say("radio open=0 err=%s", why), logged = why;
   return ok;
@@ -892,6 +918,9 @@ static void reportBoot() {
                 kReleaseStamp.board.data());
   Serial.printf("[hw] home rot=%u (USB-C %s)\n", unsigned(ORIENT_HOME), ORIENT_HOME == 2 ? "up" : "down");
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
+  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(faultAir.get())),
+                int(esp_ptr_external_ram(lat::rec.get())), int(esp_ptr_external_ram(boardRowHashes())),
+                int(esp_ptr_external_ram(boardShadow())));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
@@ -1016,9 +1045,16 @@ void setup() {
   // 115200 baud (the 10 s status line, ~330 bytes: ~20 ms; a reply to the
   // protocol: more), and a gesture's samples and frame waited with it
   // (DEBUG latency: seen p95 51 ms while a probe asked STATE).
-  Serial.setTxBufferSize(2048);
+  // 512 B: a status line's worth; every byte of it is internal RAM (#53).
+  Serial.setTxBufferSize(512);
 #endif
   Serial.begin(115200);
+#if !defined(BADGE_BOARD_SIM)
+  // In PSRAM (InPsram above), before anything uses them.
+  faultAir.make(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
+  radioGate.inner = faultAir.get();
+  lat::rec.make();
+#endif
   boardButtonBegin();
 #if !defined(BADGE_BOARD_SIM)
 #endif
@@ -1060,7 +1096,7 @@ void setup() {
 #if !defined(BADGE_BOARD_SIM)
   duelAir = &radioGate;
   if (quietBoot == kQuietMagic) {   // `DEBUG reboot quiet`: deaf and mute until `DEBUG net blackout 0`
-    faultAir.cfg.deaf = true;
+    faultAir->cfg.deaf = true;
     Serial.printf("[net] quiet boot: radio blacked out until DEBUG net blackout 0\n");
   }
   quietBoot = 0;
@@ -1352,16 +1388,16 @@ static void setSleepiness(const char* a) {
 }
 
 static void netReport() {
-  const hw::FaultAir::Config& c = faultAir.cfg;
-  const hw::FaultAir::Counts& n = faultAir.n;
+  const hw::FaultAir::Config& c = faultAir->cfg;
+  const hw::FaultAir::Counts& n = faultAir->n;
   Serial.printf("[net] cfg rx_drop=%u tx_drop=%u dup=%u delay=%u jitter=%u ghosts=%u/%u%s blackout_left=%ld | rx=%u "
                 "rx_dropped=%u tx=%u tx_dropped=%u duped=%u delayed=%u blacked=%u overflow=%u ghost_beacons=%u open=%d\n",
                 c.rxDrop, c.txDrop, c.dup, c.delayMs, c.jitterMs, c.ghosts, c.ghostMode, c.ghostsLow ? "low" : "high",
-                c.deaf ? -1L : faultAir.blackedOut() ? long(c.blackoutUntil - millis()) : 0L, unsigned(n.rx), unsigned(n.rxDropped),
+                c.deaf ? -1L : faultAir->blackedOut() ? long(c.blackoutUntil - millis()) : 0L, unsigned(n.rx), unsigned(n.rxDropped),
                 unsigned(n.tx), unsigned(n.txDropped), unsigned(n.duped), unsigned(n.delayed), unsigned(n.blackedOut),
-                unsigned(n.overflow), unsigned(n.ghostBeacons), int(faultAir.isOpen()));
-  for (uint8_t i = 0; i < faultAir.heardCount; ++i) {
-    const auto& h = faultAir.heard[i];
+                unsigned(n.overflow), unsigned(n.ghostBeacons), int(faultAir->isOpen()));
+  for (uint8_t i = 0; i < faultAir->heardCount; ++i) {
+    const auto& h = faultAir->heard[i];
     Serial.printf("[net] heard %02x:%02x:%02x:%02x:%02x:%02x frames=%u rssi=%d\n", h.from.mac[0], h.from.mac[1],
                   h.from.mac[2], h.from.mac[3], h.from.mac[4], h.from.mac[5], unsigned(h.frames), int(h.rssi));
   }
@@ -1373,10 +1409,10 @@ static bool net(const char* line) {
   char what[16] = "";
   long x = 0, y = 0;
   const int got = std::sscanf(line, "%*s %15s %ld %ld", what, &x, &y);
-  hw::FaultAir::Config& c = faultAir.cfg;
+  hw::FaultAir::Config& c = faultAir->cfg;
   const auto pct = [](long v) { return uint8_t(v < 0 ? 0 : v > 100 ? 100 : v); };
   if (got <= 0) {
-  } else if (!std::strcmp(what, "clear")) faultAir.clear();
+  } else if (!std::strcmp(what, "clear")) faultAir->clear();
   else if (!std::strcmp(what, "rx")) c.rxDrop = pct(x);
   else if (!std::strcmp(what, "tx")) c.txDrop = pct(x);
   else if (!std::strcmp(what, "dup")) c.dup = pct(x);
@@ -1750,8 +1786,8 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
     if (lightAfterFrame) {   // the first frame since the wake is on the glass: now the light
       lightAfterFrame = false, boardPanelIdle(), display.setBrightness(dish->settings().brightness);
-      lat::rec.mark(latency::Ctl::Wake, latency::St::Ack, micros());
-      lat::rec.mark(latency::Ctl::Wake, latency::St::AckPanel, micros());
+      lat::rec->mark(latency::Ctl::Wake, latency::St::Ack, micros());
+      lat::rec->mark(latency::Ctl::Wake, latency::St::AckPanel, micros());
     }
 #endif
   }
