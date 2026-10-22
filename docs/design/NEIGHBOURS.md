@@ -573,8 +573,8 @@ turned on.
 6. **Should gifts need a gesture?** A minute side by side is automatic. A
    clink (knock the two badges together) would make it deliberate, and also
    works if RSSI proves too noisy.
-7. **Is the gift badge (grungo) a neighbour like the rest?** It is on a
-   friend's desk, far from the kids, but if it visits, it would join in.
+7. *(Withdrawn: it rested on a "gift device" that doesn't exist (#36). Every
+   board, grungo and 237c included, is a neighbour like the rest.)*
 8. **Should comments ever be unkind?** The drafts tease (fizz hoards, mudge
    brags, hushwing shushes) but are never mean. Is that the right line for
    ages 6-13?
