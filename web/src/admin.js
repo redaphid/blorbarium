@@ -17,6 +17,8 @@
 //
 //   GET  /api/badge/actions?mac=&via=wifi|phone  pending actions for this badge, marked delivered
 //   POST /api/badge/actions/:id                  {mac, ok, result}: what applying it did
+import { readBody as readDebugBody } from "./debug.js";
+
 const KINDS = new Set(["line_pack", "ota", "settings", "command"]);
 const now = () => Date.now();
 const J = (v) => JSON.stringify(v ?? null);
@@ -78,7 +80,12 @@ async function badgeDetail(db, mac) {
   const uploads = (await db.prepare(
     "SELECT id, fw, period_start, period_end, uploaded_at FROM analytics_uploads WHERE mac = ?1 ORDER BY id DESC LIMIT 20")
     .bind(mac).all()).results;
-  return { badge, creatures, actions, uploads };
+  const installs = (await db.prepare(
+    `SELECT i.*, c.species, c.name FROM installs i JOIN creatures c ON c.id = i.creature_id WHERE i.mac = ?1
+     ORDER BY i.installed_at DESC LIMIT 100`).bind(mac).all()).results;
+  const kinds = (await db.prepare("SELECT kind, COUNT(*) AS n FROM device_debug WHERE mac = ?1 GROUP BY kind ORDER BY kind")
+    .bind(mac).all()).results;
+  return { badge, creatures, actions, uploads, installs, debugKinds: kinds };
 }
 
 async function creatureDetail(db, id) {
@@ -93,6 +100,9 @@ async function creatureDetail(db, id) {
     diary: await all("SELECT day, entry, model, created_at FROM diary_entries WHERE creature_id = ?1 ORDER BY day DESC LIMIT 60"),
     children: await all("SELECT id, species, generation, mac FROM creatures WHERE parent_id = ?1"),
     jobs: await all("SELECT * FROM jobs WHERE creature_id = ?1 ORDER BY id DESC LIMIT 20"),
+    installs: await all("SELECT * FROM installs WHERE creature_id = ?1 ORDER BY installed_at DESC"),
+    genDebug: await all(`SELECT id, pack_id, source, ok, error, model, prompt, calls, ms, usd, size, r2_key IS NOT NULL AS in_r2, created_at
+      FROM gen_debug WHERE creature_id = ?1 ORDER BY id DESC LIMIT 200`),
   };
 }
 
@@ -210,6 +220,22 @@ export async function handleAdmin(request, url, env, { json, fail, readBody, gen
     return json({ ok: true });
   }
   if (request.method === "GET" && path === "/analytics") return json(await analytics(db, url));
+  // Device debug uploads, filterable: ?mac= &kind= &creature= &since= &until= (unix ms) &limit=
+  if (request.method === "GET" && path === "/debug") {
+    const q = url.searchParams;
+    const rows = (await db.prepare(
+      `SELECT id, mac, creature_id, kind, fw, via, summary, size, r2_key IS NOT NULL AS in_r2, received_at FROM device_debug
+       WHERE (?1 IS NULL OR mac = ?1) AND (?2 IS NULL OR kind = ?2) AND (?3 IS NULL OR creature_id = ?3)
+         AND received_at >= ?4 AND received_at <= ?5 ORDER BY received_at DESC LIMIT ?6`)
+      .bind(normaliseMac(q.get("mac")), q.get("kind") || null, q.get("creature") ? Number(q.get("creature")) : null,
+            Number(q.get("since")) || 0, Number(q.get("until")) || 8.64e15, Math.min(1000, Number(q.get("limit")) || 200)).all()).results;
+    return json({ items: rows });
+  }
+  // One stored body (gen or device), from D1 or R2.
+  if (request.method === "GET" && (r = m(/^\/blob\/(gen|device)\/(\d+)$/))) {
+    const b = await readDebugBody(env, r[1], Number(r[2]));
+    return b === null ? fail(404, "no such body") : json(b);
+  }
   return fail(404, "no such admin endpoint");
 }
 
@@ -245,6 +271,13 @@ export async function handleBadge(request, url, env, { json, fail, readBody, nor
       `UPDATE actions SET status = ?3, completed_at = ?4, result_json = ?5 WHERE id = ?1 AND mac = ?2 AND status IN ('pending','delivered')`)
       .bind(Number(r[1]), mac, b.ok ? "done" : "failed", t, J(b.result ?? null)).run();
     if (!res.meta.changes) return fail(404, "no open action with that id for this badge");
+    const a = await db.prepare("SELECT kind, payload_json FROM actions WHERE id = ?1").bind(Number(r[1])).first();
+    if (b.ok && a?.kind === "line_pack") {
+      const p = JSON.parse(a.payload_json);
+      const c = await db.prepare("SELECT creature_id FROM packs WHERE id = ?1").bind(p.pack_id).first();
+      if (c) await db.prepare("INSERT INTO installs (mac, creature_id, pack_id, version, via, installed_at) VALUES (?1, ?2, ?3, ?4, 'action', ?5)")
+        .bind(mac, c.creature_id, p.pack_id, p.version, t).run();
+    }
     return json({ ok: true });
   }
   return fail(404, "no such badge endpoint");

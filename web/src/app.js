@@ -23,6 +23,8 @@ import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
+import { storeGenDebug, storeDeviceDebug, recordInstall, purgeOld } from "./debug.js";
+import { newMeter } from "./pipeline.js";
 
 const MAX_BODY = 64 * 1024;
 export const DIARY_CRON = "0 4 * * *";   // daily, 04:00 UTC: after a night's stats, before the family's morning
@@ -79,7 +81,16 @@ export async function generateFor(env, creature, { source = "genes", s = setting
   const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash,
                 bible, catchphrases, history, life, currentBible, lately, avoid };
   pet.traits = traitSheet(raw, { generation: pet.generation, name: pet.name });
-  const pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt });
+  // Every raw reply is kept for the debug store, whether the generation works or not.
+  const meter = newMeter({ trace: true });
+  let pack;
+  try {
+    pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt, meter });
+  } catch (e) {
+    await storeGenDebug(env, { creatureId: creature.id, source, ok: false, error: String(e?.message ?? e), model: s.model,
+      prompt: s.prompt, meter: { ...meter, trace: undefined }, trace: meter.trace }).catch(() => {});
+    throw e;
+  }
   const { log, ...provenance } = pack.provenance;
   const stored = await store.storeGeneration(env.DB, creature.id, {
     source, bible: pack.bible, catchphrases: pack.catchphrases, model: s.model, prompt: s.prompt, editedBy,
@@ -93,6 +104,9 @@ export async function generateFor(env, creature, { source = "genes", s = setting
   const sig = await signPack(packText({ genomeHash: creature.genome_hash, version: stored.version, lines: pack.lines }),
                              env.PACK_SIGNING_KEY);
   if (sig) await store.setPackSig(env.DB, stored.packId, sig);
+  await storeGenDebug(env, { creatureId: creature.id, packId: stored.packId, source, ok: true, model: s.model, prompt: s.prompt,
+    meter: provenance.meter, trace: { replies: meter.trace, checks: log, rejected: provenance.rejected, fallback: pack.fallback } })
+    .catch((e) => console.error(JSON.stringify({ msg: "debug store failed", error: String(e?.message ?? e) })));
   return store.latestPack(env.DB, creature.id);
 }
 
@@ -191,6 +205,8 @@ async function ackPetLines(request, env) {
   const creature = mac && (await store.findCreature(env.DB, mac, String(body.genome_hash ?? "").toLowerCase()));
   if (!creature) return fail(404, "unknown creature");
   const n = await store.ackPack(env.DB, creature.id, Number(body.version));
+  const pack = await env.DB.prepare("SELECT id FROM packs WHERE creature_id = ?1 AND version = ?2").bind(creature.id, Number(body.version)).first();
+  if (pack) await recordInstall(env.DB, { mac, creatureId: creature.id, packId: pack.id, version: Number(body.version), via: body.via ?? "wifi" });
   return json({ ok: true, acknowledged: n });
 }
 
@@ -231,6 +247,33 @@ async function postStats(request, env) {
     stats: body.stats, parents: body.parents, analytics: body.analytics, fw: body.fw,
     periodStart: body.period_start, periodEnd: body.period_end });
   return json({ ok: true, stats_id: r.statsId, analytics_id: r.uploadId });
+}
+
+// Device debug (the owner: "store ... debug information in Cloudflare"): boot
+// lines, reset and crash reasons, OTA results, remote debug command results
+// (#56), logs. Small bodies inline in D1, large ones in R2.
+const DEBUG_KINDS = /^[a-z][a-z0-9_]{0,31}$/;
+async function postDebug(request, env) {
+  let body;
+  try { body = await readBody(request); } catch (e) { return fail(400, `bad request: ${e.message}`); }
+  const mac = normaliseMac(body.mac);
+  if (!mac) return fail(400, "mac: 12 hex digits");
+  const items = Array.isArray(body.items) ? body.items : [{ kind: body.kind, summary: body.summary, data: body.data }];
+  if (!items.length || items.length > 50 || !items.every((i) => DEBUG_KINDS.test(String(i?.kind ?? "")))) {
+    return fail(400, "kind: a short lower-case word (boot, reset, crash, ota, command, log); at most 50 items");
+  }
+  if (env.PET_LINES_LIMITER) {
+    const { success } = await env.PET_LINES_LIMITER.limit({ key: `debug:${mac}` });
+    if (!success) return fail(429, "slow down");
+  }
+  await store.touchBadge(env.DB, mac, body.fw ?? null);
+  const creature = await creatureOf(env, mac, body);
+  const ids = [];
+  for (const i of items) {
+    ids.push(await storeDeviceDebug(env, { mac, creatureId: creature?.id ?? null, kind: i.kind, fw: body.fw ?? null,
+      via: body.via === "phone" ? "phone" : "wifi", summary: i.summary ?? null, body: i.data ?? null }));
+  }
+  return json({ ok: true, ids });
 }
 
 async function getDiary(url, env) {
@@ -401,6 +444,7 @@ export default {
       if (url.pathname === "/api/pet-lines" && request.method === "GET") return await getPetLines(url, env);
       if (url.pathname === "/api/pet-lines/ack" && request.method === "POST") return await ackPetLines(request, env);
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
+      if (url.pathname === "/api/debug" && request.method === "POST") return await postDebug(request, env);
       if (url.pathname === "/api/pet" && request.method === "GET") return await getPet(url, env);
       if (url.pathname === "/api/personality" && request.method === "POST") return await postPersonality(request, env);
       if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);
@@ -432,6 +476,7 @@ export default {
     if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) {
       await runDiaries(env);
       await runNightly(env);
+      await purgeOld(env);   // keeps everything unless RETENTION_DAYS is set
     } else {
       await runQueuedJobs(env);
       // The night's packs a 04:00 run had no time for.

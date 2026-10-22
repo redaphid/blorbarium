@@ -68,7 +68,10 @@ export async function call(ai, model, messages, { maxTokens = 2500, temperature 
       break;
     } catch (e) {
       const msg = String(e?.message ?? e);
-      if (attempt >= TRANSIENT_TRIES - 1 || !/429|capacity|overloaded|HTTP 5\d\d|timed? ?out|abort|3040|internal|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|network/i.test(msg)) throw e;
+      if (attempt >= TRANSIENT_TRIES - 1 || !/429|capacity|overloaded|HTTP 5\d\d|timed? ?out|abort|3040|internal|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|network/i.test(msg)) {
+        meter?.trace?.push({ model, at: t0, ms: Date.now() - t0, error: msg });
+        throw e;
+      }
       if (meter) meter.transient = (meter.transient ?? 0) + 1;
       await new Promise((r) => setTimeout(r, Math.min(60000, backoffMs * 2 ** attempt) * (0.5 + Math.random())));
     }
@@ -82,10 +85,15 @@ export async function call(ai, model, messages, { maxTokens = 2500, temperature 
     meter.outTok += outTok;
     meter.usd += (inTok * spec.price[0] + outTok * spec.price[1]) / 1e6;
   }
-  return replyText(result);
+  const text = replyText(result);
+  // The raw reply, before any check: the generation's debug trail (debug.js).
+  meter?.trace?.push({ model, at: t0, ms: Date.now() - t0, inTok, outTok,
+                       sampling: { temperature, top_p: topP ?? null, ...spec.opts }, reply: String(text).slice(0, 20000) });
+  return text;
 }
 
-export const newMeter = () => ({ calls: 0, ms: 0, inTok: 0, outTok: 0, usd: 0 });
+// trace: true keeps every raw reply (for the debug store); it never goes in the pack's provenance.
+export const newMeter = ({ trace = false } = {}) => ({ calls: 0, ms: 0, inTok: 0, outTok: 0, usd: 0, ...(trace ? { trace: [] } : {}) });
 
 // Call 1. A bible that is not JSON with a non-trivial "bible" string is re-asked.
 export async function writeBible(ai, input, { model, prompt, meter, log }) {
@@ -141,8 +149,8 @@ async function writeBatch(ai, input, batch, { model, prompt, meter, log }) {
 // The whole pack for one pet. Never throws for a line problem: a situation
 // with no usable line after the retries is left out (the badge falls back to
 // its built-in lines there) and listed in `fallback`.
-export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DEFAULT_PROMPT, situations = SITUATIONS } = {}) {
-  const meter = newMeter();
+export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DEFAULT_PROMPT, situations = SITUATIONS,
+                                              meter = newMeter() } = {}) {
   const log = [];
   const t0 = Date.now();
   const traits = pet.traits ?? traitSheet(pet.raw, { generation: pet.generation, name: pet.name });
@@ -170,7 +178,10 @@ export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DE
     provenance: {
       model, prompt, maxText: MAX_TEXT, bibleAttempts, retries: sum("retries"),
       firstPass: { returned: sum("returned"), valid: sum("firstPassValid") },
-      rejected: results.flatMap((r) => r.stats.rejected), short, ms: Date.now() - t0, meter, log,
+      rejected: results.flatMap((r) => r.stats.rejected), short, ms: Date.now() - t0,
+      meter: Object.fromEntries(Object.entries(meter).filter(([k]) => k !== "trace")), log,
+      sampling: { temperature: PROMPTS[prompt].sampling?.temperature ?? 0.9, top_p: PROMPTS[prompt].sampling?.topP ?? null,
+                  ...(MODELS[model]?.opts ?? {}) },
       dice: input.dice,
     },
     traits,

@@ -11,7 +11,11 @@
   // The pets' API and the owner's dashboard run the Worker first.
   "assets": { "directory": "./web/public", "binding": "ASSETS", "run_worker_first": ["/api/*", "/admin", "/admin/*"] },
   // The firmware releases: /fw/<board>/manifest.json and its image (tools/ota_release.py publish).
-  "r2_buckets": [{ "binding": "FW", "bucket_name": "blorbarium-fw" }],
+  "r2_buckets": [
+    { "binding": "FW", "bucket_name": "blorbarium-fw" },
+    // Debug bodies too large for D1 rows: generation trails, crash dumps, logs (web/src/debug.js).
+    { "binding": "DEBUG", "bucket_name": "blorbarium-debug" }
+  ],
   "routes": [{ "pattern": "blorb.hypnodroid.com", "custom_domain": true }],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
 
@@ -23,13 +27,16 @@
   // Per badge (keyed by MAC): a few requests a minute.
   "ratelimits": [{ "name": "PET_LINES_LIMITER", "namespace_id": "3701", "simple": { "limit": 6, "period": 60 } }],
   // Every 10 minutes: the packs a badge asked for without waiting (and eggs, #40).
-  // Daily at 04:00 UTC: each pet's diary (#39), then the nightly line revision (#47).
+  // Daily at 04:00 UTC: each pet's diary (#39), then every living pet's new nightly pack (#47);
+  // the 10-minute cron finishes the night's packs until 10:00 UTC.
   "triggers": { "crons": ["*/10 * * * *", "0 4 * * *"] },
   "vars": {
     // docs/ai-lines/EVAL.md: the owner's pick from run r2, with prompt v4 (unhinged but coherent).
     "LINES_MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "LINES_PROMPT": "v4",
     "MAX_GENERATIONS_PER_DAY": "6"
+    // RETENTION_DAYS: unset, so every debug row and body is kept. Set it to purge
+    // debug data older than that many days (packs and installs are never purged).
   },
   // Secrets (npx wrangler secret put ...): ADMIN_TOKEN (/admin and /api/admin/*),
   // PACK_SIGNING_KEY (optional; P-256 PKCS#8, base64; packs go unsigned without it).
