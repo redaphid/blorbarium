@@ -55,7 +55,7 @@ export async function call(ai, model, messages, { maxTokens = 2500, temperature 
       break;
     } catch (e) {
       const msg = String(e?.message ?? e);
-      if (attempt >= TRANSIENT_TRIES - 1 || !/429|capacity|overloaded|HTTP 5\d\d|timed? ?out|abort|3040|internal/i.test(msg)) throw e;
+      if (attempt >= TRANSIENT_TRIES - 1 || !/429|capacity|overloaded|HTTP 5\d\d|timed? ?out|abort|3040|internal|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|network/i.test(msg)) throw e;
       if (meter) meter.transient = (meter.transient ?? 0) + 1;
       await new Promise((r) => setTimeout(r, backoffMs * 2 ** attempt * (0.5 + Math.random())));
     }

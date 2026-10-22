@@ -2,6 +2,7 @@
 // AI binding (web/src/worker.js). The token is CLOUDFLARE_API_TOKEN, or else
 // the OAuth token `wrangler login` saved; it is never printed.
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -15,11 +16,32 @@ function token() {
   return m[1];
 }
 
+// The wrangler OAuth token lives about an hour; `wrangler whoami` refreshes it
+// on disk. A long eval outlives it, so a 401 refreshes once and tries again.
+function refreshToken() {
+  if (process.env.CLOUDFLARE_API_TOKEN) return token();
+  execFileSync("npx", ["wrangler", "whoami"], { stdio: "ignore", timeout: 120000 });
+  return token();
+}
+
 // The same shape as env.AI.run(model, input): resolves to the model's result.
 export function restAI({ timeoutMs = 300000 } = {}) {
-  const tok = token();
-  return {
-    async run(model, input) {
+  let tok = token();
+  let refreshing = null;
+  const api = {
+    async run(model, input, retried = false) {
+      try {
+        return await once(model, input);
+      } catch (e) {
+        if (retried || !/HTTP 401/.test(e.message)) throw e;
+        refreshing ??= Promise.resolve().then(() => { tok = refreshToken(); }).finally(() => { refreshing = null; });
+        await refreshing;
+        return api.run(model, input, true);
+      }
+    },
+  };
+  async function once(model, input) {
+    {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), timeoutMs);
       try {
@@ -38,6 +60,7 @@ export function restAI({ timeoutMs = 300000 } = {}) {
       } finally {
         clearTimeout(timer);
       }
-    },
-  };
+    }
+  }
+  return api;
 }

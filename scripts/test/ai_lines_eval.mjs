@@ -69,7 +69,8 @@ const jobs = [];
 for (const f of pets) for (const prompt of prompts) for (const model of models) jobs.push({ model, prompt, f });
 console.log(`run ${run}: ${jobs.length} packs (${models.length} models x ${prompts.length} prompts x ${pets.length} pets)`);
 let done = 0;
-await pool(jobs, concurrency, async ({ model, prompt, f }) => {
+// --no-generate: judge and summarise only what is on disk (a combination with no packs is left out).
+await pool(args["no-generate"] ? [] : jobs, concurrency, async ({ model, prompt, f }) => {
   const path = join(dir, "packs", `${slug(model)}__${prompt}__${f.id}.json`);
   if (existsSync(path)) { done++; return; }
   const pet = await petOf(f);
@@ -135,6 +136,7 @@ const mean = (xs) => { const v = xs.filter((x) => Number.isFinite(x)); return v.
 const summary = [];
 for (const model of models) for (const prompt of prompts) {
   const packs = pets.map((f) => [f, packOf(model, prompt, f.id)]).filter(([, p]) => p);
+  if (!packs.length) continue;
   const failed = pets.length - packs.length;
   const mech = packs.map(([, p]) => mechanics(p, SITUATIONS.length));
   const reasons = {};

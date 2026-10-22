@@ -19,6 +19,7 @@ import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor } from "./diary.js";
 import { handleAdmin, handleBadge } from "./admin.js";
+import { ADMIN_HTML } from "./admin_page.js";
 
 const MAX_BODY = 64 * 1024;
 export const DIARY_CRON = "0 4 * * *";   // daily, 04:00 UTC: after a night's stats, before the family's morning
@@ -156,6 +157,14 @@ async function getPetLines(url, env) {
   if (!mac || !/^[0-9a-f]{64}$/.test(hash)) return fail(400, "mac and genome_hash");
   const creature = await store.findCreature(env.DB, mac, hash);
   if (!creature) return fail(404, "unknown creature");
+  // &version=: one exact version (a line_pack action from the dashboard may name an older one).
+  const version = Number(url.searchParams.get("version"));
+  if (version) {
+    const exact = await env.DB.prepare(
+      `SELECT p.*, q.bible, q.catchphrases_json FROM packs p JOIN personalities q ON q.id = p.personality_id
+       WHERE p.creature_id = ?1 AND p.version = ?2`).bind(creature.id, version).first();
+    return exact ? json(packReply(exact, creature, { cached: true })) : fail(404, "no such version");
+  }
   const row = await store.latestPack(env.DB, creature.id);
   if (row) return json(packReply(row, creature, { cached: true }));
   const busy = await store.activeJob(env.DB, creature.id);
@@ -245,6 +254,11 @@ export default {
       if (url.pathname === "/api/creatures" && request.method === "GET") {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");
         return json(await store.exportAll(env.DB, { mac: normaliseMac(url.searchParams.get("mac")) }));
+      }
+      // The dashboard page carries no data; everything it shows comes from /api/admin/* with the token.
+      if (url.pathname === "/admin" || url.pathname === "/admin/") {
+        return new Response(ADMIN_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+          "x-robots-tag": "noindex", "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'" } });
       }
       const helpers = { json, fail, readBody, generateFor, normaliseMac };
       if (url.pathname.startsWith("/api/admin/")) {

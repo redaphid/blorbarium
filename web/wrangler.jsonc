@@ -2,10 +2,10 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "blorbarium",
   "compatibility_date": "2026-10-01",
-  // The site is static (public/); the Worker answers only /api/* (#37's pet lines).
+  // The site is static (public/); the Worker answers /api/* and the owner's dashboard at /admin.
   "main": "src/worker.js",
   "workers_dev": true,
-  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*", "/admin", "/admin/*"] },
   "routes": [{ "pattern": "blorb.hypnodroid.com", "custom_domain": true }],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
 
