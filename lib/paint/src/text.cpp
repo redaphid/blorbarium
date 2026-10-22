@@ -53,13 +53,18 @@ void drawString(Canvas240& cv, const Font& f, const char* s, int x, int y, uint1
   const int baseline = y - (m.height >> 1) + m.ascent;
   const Glyph& first = glyphFor(f, *s);
   int pen = x + (first.xOffset < 0 ? -first.xOffset : 0);
+  // What plot() would keep: inside the clip and the canvas. A marquee's line
+  // runs far past its strip, so each glyph is walked only where it can land.
+  const int cx0 = imax(clip.x, 0), cx1 = imin(clip.x + clip.w, kSide), cy0 = imax(clip.y, 0), cy1 = imin(clip.y + clip.h, kSide);
   for (; *s; ++s) {
     const Glyph& g = glyphFor(f, *s);
     const uint8_t* bits = f.bitmap + g.bitmapOffset;
     const int x0 = pen + g.xOffset, y0 = baseline + g.yOffset;
-    for (int i = 0; i < g.width * g.height; ++i)
-      if (bits[i >> 3] & (0x80 >> (i & 7))) plot(cv, x0 + i % g.width, y0 + i / g.width, colour, clip);
     pen += g.xAdvance;
+    const int c0 = imax(0, cx0 - x0), c1 = imin(int(g.width), cx1 - x0), r0 = imax(0, cy0 - y0), r1 = imin(int(g.height), cy1 - y0);
+    for (int r = r0; r < r1; ++r)
+      for (int c = c0, i = r * g.width + c0; c < c1; ++c, ++i)
+        if (bits[i >> 3] & (0x80 >> (i & 7))) plot(cv, x0 + c, y0 + r, colour, clip);
   }
 }
 
