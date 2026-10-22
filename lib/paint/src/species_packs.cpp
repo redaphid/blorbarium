@@ -19,7 +19,7 @@ namespace {
 // with no `<slug>Pack()` (tools/sprite_pack.py --pet <slug>) does not compile.
 using PackFn = const SpritePack& (*)();
 constexpr PackFn kPacks[] = {
-#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc) &name##Pack,
+#define BLORB_SPECIES(id, name, el, st, pw, bold, noct, app, vc, coat, coatHue) &name##Pack,
 #include "blorb/defs/species.def"
 #undef BLORB_SPECIES
 };

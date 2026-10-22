@@ -16,19 +16,23 @@
 //   nocturnal  1: sleeps by day (grungo), 0: by night
 //   appetite   hunger tonic, permille of grungo's
 //   voice      voices.def row the oracle speaks in
+//   coat       the palette region a kid sees most of him in (gene-variety, #60):
+//              every egg's guaranteed visible change steps this region's tint
+//   coatHue    1: a hue step reads on that region; 0: it does not (a white owl,
+//              a grey raccoon), so the step is its value only
 //
 // Stable ids: never renumber, never reuse (the roster says the battle code
 // may key on them). Slot 0 is grungo, and also what a genome with no
 // SpeciesGene expresses, so every save from before species reads as grungo.
 //
-// BLORB_SPECIES(id, name, Element, Style, power, bold, nocturnal, appetite, voice)
-BLORB_SPECIES(0, grungo,   Splash, Trick,  foresee, 128, 1, 1000, mystic)         // frog: a skittish oracle
-BLORB_SPECIES(1, mossby,   Sprout, Guard,  shell,    70, 0,  800, rambling)       // snail: no rush, ever
-BLORB_SPECIES(2, puffkin,  Sprout, Pounce, spores,  190, 0, 1100, cheerful_doom)  // puffball: sneezes sparkles
-BLORB_SPECIES(3, gilly,    Splash, Guard,  mend,    100, 0, 1000, cheerful_doom)  // axolotl: never down for long
-BLORB_SPECIES(4, mothwick, Spark,  Trick,  lantern, 110, 1,  900, rambling)       // glow-moth: hums to himself
-BLORB_SPECIES(5, mudge,    Splash, Pounce, dash,    230, 0, 1300, terse)          // mudskipper: races everything
-BLORB_SPECIES(6, fizz,     Spark,  Pounce, zap,     200, 0, 1200, hoarder)        // firefly beetle: crackles
-BLORB_SPECIES(7, hushwing, Sprout, Trick,  hush,     60, 1,  900, ominous)        // marsh owl: silent wings
-BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget,  150, 1, 1000, hoarder)        // raccoon: a scrap-pile gadget
-BLORB_SPECIES(9, octopus, Splash, Trick,  blackbell, 210, 1, 1050, ominous)     // octopus: the abyss rings back
+// BLORB_SPECIES(id, name, Element, Style, power, bold, nocturnal, appetite, voice, coat, coatHue)
+BLORB_SPECIES(0, grungo,   Splash, Trick,  foresee, 128, 1, 1000, mystic, skin, 1)          // frog: a skittish oracle
+BLORB_SPECIES(1, mossby,   Sprout, Guard,  shell,    70, 0,  800, rambling, skin, 1)        // snail: no rush, ever
+BLORB_SPECIES(2, puffkin,  Sprout, Pounce, spores,  190, 0, 1100, cheerful_doom, skin, 1)   // puffball: sneezes sparkles
+BLORB_SPECIES(3, gilly,    Splash, Guard,  mend,    100, 0, 1000, cheerful_doom, skin, 1)   // axolotl: never down for long
+BLORB_SPECIES(4, mothwick, Spark,  Trick,  lantern, 110, 1,  900, rambling, cloak, 1)       // glow-moth: hums to himself
+BLORB_SPECIES(5, mudge,    Splash, Pounce, dash,    230, 0, 1300, terse, skin, 1)           // mudskipper: races everything
+BLORB_SPECIES(6, fizz,     Spark,  Pounce, zap,     200, 0, 1200, hoarder, skin, 1)         // firefly beetle: crackles
+BLORB_SPECIES(7, hushwing, Sprout, Trick,  hush,     60, 1,  900, ominous, belly, 0)        // marsh owl: silent wings
+BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget,  150, 1, 1000, hoarder, skin, 0)         // raccoon: a scrap-pile gadget
+BLORB_SPECIES(9, octopus, Splash, Trick,  blackbell, 210, 1, 1050, ominous, skin, 0)        // octopus: the abyss rings back

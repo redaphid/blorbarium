@@ -44,7 +44,7 @@ CardLook lookOf(const Creature& c) {
     l.regions[paint.region.v % kRegionCount] = t;
     shellGene = shellGene || paint.region.v % kRegionCount == region::shell.v;
   }
-  if (!shellGene) l.regions[region::shell.v] = l.regions[region::skin.v];
+  if (!shellGene) l.regions[region::shell.v] = l.regions[speciesInfo(p.species.body).coat.v % kRegionCount];
   const int shift = scaled(chem.locus[locus::hue_shift.v], kHueShiftSteps);
   for (Tint& t : l.regions) t.hue = int8_t(((int(t.hue) + shift + 128) & 255) - 128);
   for (const Phenotype::Mark& m : p.marks) {
