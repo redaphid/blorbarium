@@ -1,17 +1,22 @@
 // The Wi-Fi station (docs/wifi-ota.md). Off unless a window is open
 // (wifiota/schedule.h): up() brings the radio up in station mode, joined to
 // nothing, with the credentials kept in RAM only (WiFi.persistent(false): the
-// core would otherwise copy them into the driver's own NVS namespace); down()
-// gives the heap back. ESP-NOW's duel radio (src/hw/air_espnow.h) runs the
-// same radio and never at the same time: src/wifi_ota.h keeps the two apart.
+// core would otherwise copy them into the driver's own NVS namespace). Going
+// down is two steps, stop() then, once the driver is quiet, off(): the
+// driver must not be torn down mid-scan or mid-connect ("wifi:timeout when
+// WiFi un-init"). ESP-NOW's duel radio (src/hw/air_espnow.h) runs the same
+// radio and never at the same time: src/wifi_ota.h keeps the two apart.
 //
 // Nothing here waits: the scan runs on the driver's task and is polled, the
-// join is polled, and the HTTPS GET runs on its own task (net_job.h).
+// join is polled, and the HTTPS GET runs on its own task (net_job.h). The
+// driver's events (scan done, disconnected and why, got an IP) are counted
+// by a handler on the core's event task, for the loop to read.
 #pragma once
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+#include <esp_wifi.h>
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <esp_pm.h>
@@ -27,18 +32,28 @@ namespace hw {
 
 class WifiStation {
  public:
-  // Active: about 2 s for the 13 channels. The core calls a scan failed after
-  // 20 times this (3 s), so it must leave room for Bluetooth's share of the radio.
-  static constexpr uint32_t kScanMsPerChannel = 150;
-  static constexpr uint8_t kSeenMax = 24;              // the strongest this many a scan finds are looked at
+  // Active, at most this long on each channel. The scan's end is the driver's
+  // SCAN_DONE event, not the core's scanComplete(), which calls a scan failed
+  // after 20 times this whatever the driver is doing: with Bluetooth sharing
+  // the radio a scan takes longer than that, and the "failed" scan then went
+  // on under the join and refused it.
+  static constexpr uint32_t kScanMsPerChannel = 120;
+  static constexpr uint8_t kSeenMax = 24;   // the strongest this many a scan finds are looked at
+  static constexpr uint32_t kQuietMinMs = 200, kQuietMaxMs = 2500;   // stop() to off()
 
   bool up() {
     if (up_) return true;
+    if (!handler_) {
+      WiFi.onEvent(&WifiStation::onEvent);
+      handler_ = true;
+    }
     const uint32_t before = ESP.getFreeHeap();
     WiFi.persistent(false);
     if (!WiFi.mode(WIFI_STA)) return false;
     WiFi.setAutoReconnect(false);   // the window decides when to try again
     up_ = true;
+    stopping_ = false;
+    attempted_ = false;
 #if defined(CONFIG_PM_ENABLE)
     // Light sleep between packets would hold a download to the AP's beacons.
     if (!lock_) esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "wifi", &lock_);
@@ -49,17 +64,38 @@ class WifiStation {
     return true;
   }
 
-  void down() {
+  // Step one of going down: the scan stopped, the connection left. off() once quiet().
+  void stop() {
+    if (!up_ || stopping_) return;
+    stopping_ = true;
+    stopAt_ = millis();
+    disconnectsAtStop_ = disconnects_;
+    if (WiFi.getStatusBits() & WIFI_SCANNING_BIT) esp_wifi_scan_stop();
+    if (attempted_) esp_wifi_disconnect();
+  }
+  // The driver has finished what it was doing: a connection attempt answered
+  // with its disconnect, or long enough has passed.
+  bool quiet() const {
+    if (!up_) return true;
+    const uint32_t since = millis() - stopAt_;
+    if (since < kQuietMinMs) return false;
+    if (since >= kQuietMaxMs) return true;
+    const bool scanning = WiFi.getStatusBits() & WIFI_SCANNING_BIT;
+    return !scanning && (!attempted_ || disconnects_ != disconnectsAtStop_);
+  }
+  void off() {
     if (!up_) return;
+    if (!stopping_) stop();
+    const uint32_t waited = millis() - stopAt_;
     WiFi.scanDelete();
-    WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     up_ = false;
+    stopping_ = false;
     seen_ = 0;
 #if defined(CONFIG_PM_ENABLE)
     if (lock_) esp_pm_lock_release(lock_);
 #endif
-    Serial.printf("[wifi] radio down heap=%u\n", unsigned(ESP.getFreeHeap()));
+    Serial.printf("[wifi] radio down after %u ms quiet heap=%u\n", unsigned(waited), unsigned(ESP.getFreeHeap()));
   }
 
   bool isUp() const { return up_; }
@@ -72,19 +108,25 @@ class WifiStation {
       views_ = static_cast<wifiota::Seen*>(heap_caps_calloc(kSeenMax, sizeof(wifiota::Seen), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
       if (!aps_ || !views_) return false;
     }
-    return WiFi.scanNetworks(true, false, false, kScanMsPerChannel) == WIFI_SCAN_RUNNING;
+    scansAtStart_ = scansDone_;
+    const int16_t r = WiFi.scanNetworks(true, false, false, kScanMsPerChannel);
+    if (r != WIFI_SCAN_RUNNING) Serial.printf("[wifi] the scan would not start (%d)\n", int(r));
+    return r == WIFI_SCAN_RUNNING;
   }
-  // -1 still scanning, -2 failed, else how many networks it found (the
-  // strongest kSeenMax of them copied for seen()).
+  // -1 still scanning, -2 the driver said it failed, else how many networks
+  // it found (the strongest kSeenMax of them copied for seen()).
   int scanned() {
-    const int16_t n = WiFi.scanComplete();
-    if (n < 0 || !aps_) return n;
+    if (scansDone_ == scansAtStart_ || !aps_) return WIFI_SCAN_RUNNING;
+    if (scanStatus_ != 0) return WIFI_SCAN_FAILED;
+    const int16_t n = WiFi.scanComplete();   // the driver's count: the core reset its own clock at SCAN_DONE
+    if (n < 0) return n;
     seen_ = 0;
     for (int16_t i = 0; i < n; ++i) {
       Ap a;
       std::snprintf(a.ssid, sizeof a.ssid, "%s", WiFi.SSID(i).c_str());
       a.rssi = int(WiFi.RSSI(i));
       a.channel = uint8_t(WiFi.channel(i));
+      a.auth = uint8_t(WiFi.encryptionType(i));
       if (const uint8_t* b = WiFi.BSSID(i)) std::memcpy(a.bssid, b, 6);
       if (seen_ < kSeenMax) aps_[seen_++] = a;
       else {   // keep the strongest
@@ -96,40 +138,102 @@ class WifiStation {
     for (uint8_t i = 0; i < seen_; ++i) views_[i] = wifiota::Seen{aps_[i].ssid, aps_[i].rssi};
     return n;
   }
+  uint32_t scanStatus() const { return scanStatus_; }
   const wifiota::Seen* seen() const { return views_; }
   uint8_t seenCount() const { return seen_; }
+  // A scan that has run too long: stopped, so nothing is left running under the join.
+  void abandonScan() {
+    if (WiFi.getStatusBits() & WIFI_SCANNING_BIT) esp_wifi_scan_stop();
+  }
 
   // ---- the join ----
   enum class Join : uint8_t { Trying, Joined, Failed };
   // The network's strongest access point from the last scan, straight to its
-  // channel and BSSID, so no second scan is needed.
+  // channel and BSSID, so no second scan is needed. Logs what it chose, with
+  // the SSID's and password's lengths only.
   void join(const wifiota::improv::Credentials& c) {
+    abandonScan();
     const Ap* best = nullptr;
     for (uint8_t i = 0; i < seen_; ++i)
       if (!std::strcmp(aps_[i].ssid, c.ssid) && (!best || aps_[i].rssi > best->rssi)) best = &aps_[i];
     const char* pass = c.password[0] ? c.password : nullptr;
-    if (best) WiFi.begin(c.ssid, pass, best->channel, best->bssid);
-    else WiFi.begin(c.ssid, pass);
+    attempted_ = true;
+    reason_ = 0;
+    disconnectsAtJoin_ = disconnects_;
+    const wl_status_t r = best ? WiFi.begin(c.ssid, pass, best->channel, best->bssid) : WiFi.begin(c.ssid, pass);
+    if (best)
+      Serial.printf("[wifi] join: ssid %u B, password %u B, its strongest AP ch=%u rssi=%d auth=%s; begin=%d\n",
+                    unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), unsigned(best->channel),
+                    best->rssi, authName(best->auth), int(r));
+    else
+      Serial.printf("[wifi] join: ssid %u B, password %u B, not in the scan: the driver scans for it; begin=%d\n",
+                    unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), int(r));
+    beginStatus_ = r;
   }
   Join joining() const {
     if (!up_) return Join::Failed;
-    switch (WiFi.status()) {
-      case WL_CONNECTED: return Join::Joined;
-      case WL_NO_SSID_AVAIL:
-      case WL_CONNECT_FAILED: return Join::Failed;
-      default: return Join::Trying;
+    if (beginStatus_ == WL_CONNECT_FAILED) return Join::Failed;   // esp_wifi_connect refused at once
+    if (WiFi.status() == WL_CONNECTED) return Join::Joined;
+    // A disconnect since the join, other than the core's own one retry's: the reason says why.
+    if (disconnects_ != disconnectsAtJoin_ && (reason_ == WIFI_REASON_AUTH_FAIL || reason_ == WIFI_REASON_NO_AP_FOUND ||
+                                               reason_ == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
+                                               reason_ == WIFI_REASON_HANDSHAKE_TIMEOUT ||
+                                               reason_ == WIFI_REASON_ASSOC_FAIL || reason_ == WIFI_REASON_CONNECTION_FAIL)) {
+      // The core retries once after the first failure: give the retry its chance.
+      return disconnects_ - disconnectsAtJoin_ >= 2 ? Join::Failed : Join::Trying;
     }
+    return Join::Trying;
   }
   bool joined() const { return up_ && WiFi.status() == WL_CONNECTED; }
+  // The last disconnect's reason (the driver's wifi_err_reason_t), 0 for none, and how many since the join.
+  uint8_t reason() const { return reason_; }
+  const char* reasonName() const { return reason_ ? WiFi.disconnectReasonName(wifi_err_reason_t(reason_)) : "none"; }
+  uint32_t disconnectsSinceJoin() const { return disconnects_ - disconnectsAtJoin_; }
+  int beginStatus() const { return beginStatus_; }
 
  private:
   struct Ap {
     char ssid[33] = "";
     int rssi = -127;
     uint8_t channel = 0;
+    uint8_t auth = 0;
     uint8_t bssid[6] = {};
   };
-  bool up_ = false;
+
+  static const char* authName(uint8_t a) {
+    switch (wifi_auth_mode_t(a)) {
+      case WIFI_AUTH_OPEN: return "open";
+      case WIFI_AUTH_WEP: return "wep";
+      case WIFI_AUTH_WPA_PSK: return "wpa";
+      case WIFI_AUTH_WPA2_PSK: return "wpa2";
+      case WIFI_AUTH_WPA_WPA2_PSK: return "wpa/wpa2";
+      case WIFI_AUTH_WPA2_ENTERPRISE: return "wpa2-enterprise";
+      case WIFI_AUTH_WPA3_PSK: return "wpa3";
+      case WIFI_AUTH_WPA2_WPA3_PSK: return "wpa2/wpa3";
+      default: return "other";
+    }
+  }
+
+  // On the core's event task: counts and the last reason, read by the loop.
+  static void onEvent(arduino_event_id_t e, arduino_event_info_t info) {
+    switch (e) {
+      case ARDUINO_EVENT_WIFI_SCAN_DONE:
+        scanStatus_ = info.wifi_scan_done.status;
+        ++scansDone_;
+        break;
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+        reason_ = info.wifi_sta_disconnected.reason;
+        ++disconnects_;
+        break;
+      default: break;
+    }
+  }
+  static inline volatile uint32_t scansDone_ = 0, scanStatus_ = 0, disconnects_ = 0;
+  static inline volatile uint8_t reason_ = 0;
+
+  bool up_ = false, handler_ = false, stopping_ = false, attempted_ = false;
+  uint32_t stopAt_ = 0, scansAtStart_ = 0, disconnectsAtStop_ = 0, disconnectsAtJoin_ = 0;
+  int beginStatus_ = 0;
   Ap* aps_ = nullptr;
   wifiota::Seen* views_ = nullptr;
   uint8_t seen_ = 0;

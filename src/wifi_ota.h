@@ -52,8 +52,8 @@ namespace improv = wifiota::improv;
 using wifiota::Failure;
 using wifiota::Window;
 
-constexpr uint32_t kScanMs = 6000;             // a scan that has not finished by then has failed
-constexpr uint32_t kJoinMs = 12000;            // the join, then the window closes
+constexpr uint32_t kScanMs = 10000;            // a scan the driver has not finished by then is stopped
+constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then the window closes
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
 constexpr uint32_t kStuckMs = 60000;           // a GET that will not end after a cancel: its sockets are cut
 constexpr size_t kTakePerPassBytes = 8192;     // image bytes a loop pass writes: about two flash sectors
@@ -160,9 +160,10 @@ static void setPhase(Phase p) {
   phaseAt = millis();
 }
 
-// The radio goes once the GET's task has ended (hw/net_job.h).
+// The radio goes once the GET's task has ended (hw/net_job.h) and the
+// driver has finished its scan or connection attempt (WifiStation::quiet).
 static void radioDown() {
-  station.down();
+  station.off();
   job.reset();
   inWindow = 0;
   crashesInARow = 0;
@@ -178,9 +179,10 @@ static void radioDown() {
 static void closeWindow() {
   if (phase == Phase::Closing || window == Window::None) return;
   job.cancel();
+  station.stop();   // the scan stopped, the connection left: off() once the driver is quiet
   if (updater.ownedBy(kWifiPeer) && !updater.ready()) updater.abort();
   mem().provisioning.reset();
-  if (!job.busy()) return radioDown();
+  if (!job.busy() && !station.isUp()) return radioDown();
   closingSince = millis();
   cutSockets = false;
   setPhase(Phase::Closing);
@@ -208,6 +210,7 @@ static void openWindow(Window w) {
       unsigned(mem().networks.size()), unsigned(ESP.getFreeHeap()));
   if (!station.up()) return failWindow(Failure::Absent, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
+    say("provision: joining the phone's network without a scan");
     station.join(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
@@ -216,22 +219,25 @@ static void openWindow(Window w) {
   setPhase(Phase::Scanning);
 }
 
+// Networks are named in logs by their place in the list (#1 the newest),
+// never by SSID: only `DEBUG wifi` and the cable's set and forget name them.
 static void scanned() {
-  const int n = station.scanned();
-  if (n == WIFI_SCAN_RUNNING) {
-    if (millis() - phaseAt > kScanMs) failWindow(Failure::Absent, "the scan took over %u s", unsigned(kScanMs / 1000));
-    return;
-  }
+  int n = station.scanned();
+  const bool late = n == WIFI_SCAN_RUNNING && millis() - phaseAt > kScanMs;
+  if (n == WIFI_SCAN_RUNNING && !late) return;
+  if (late) station.abandonScan();
   if (n < 0) {   // a scan that failed is no proof of absence: try the newest network the driver's own way
-    say("the scan failed: joining \"%s\" without it", mem().networks[0].ssid);
+    say("the scan %s after %u ms (driver status %u): joining network #1 without it", late ? "did not finish" : "FAILED",
+        unsigned(millis() - phaseAt), unsigned(station.scanStatus()));
     station.join(mem().networks[0]);
     return setPhase(Phase::Joining);
   }
   const std::optional<size_t> pick = mem().networks.pick(station.seen(), station.seenCount());
+  say("scan done in %u ms: %d networks seen, %s", unsigned(millis() - phaseAt), n,
+      pick ? "a remembered one among them" : "none of ours");
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(mem().networks.size()), n);
-  const improv::Credentials& c = mem().networks[*pick];
-  say("joining \"%s\" (%d networks seen)", c.ssid, n);
-  station.join(c);
+  say("joining network #%u of %u", unsigned(*pick + 1), unsigned(mem().networks.size()));
+  station.join(mem().networks[*pick]);
   setPhase(Phase::Joining);
 }
 
@@ -242,7 +248,7 @@ static bool startGet(const char* url, bool text) {
 }
 
 static void joined() {
-  say("joined \"%s\" rssi=%d ch=%u ip=%s heap=%u", WiFi.SSID().c_str(), int(WiFi.RSSI()), unsigned(WiFi.channel()),
+  say("joined in %u ms rssi=%d ch=%u ip=%s heap=%u", unsigned(millis() - phaseAt), int(WiFi.RSSI()), unsigned(WiFi.channel()),
       WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
   if (window != Window::Provision) {
     if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
@@ -253,7 +259,7 @@ static void joined() {
   char url[64];
   std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
   improvBle.machine().joined(url);
-  outcome("provisioned \"%s\" (%s; %u remembered)", mem().provisioning->ssid, saved ? "saved" : "SAVE FAILED",
+  outcome("provisioned the phone's network as #1 (%s; %u remembered)", saved ? "saved" : "SAVE FAILED",
           unsigned(mem().networks.size()));
   consent.end();   // the next network needs another yes
   closeWindow();
@@ -336,7 +342,7 @@ static void download() {
 
 // The window is closing: the radio goes once the GET's task has ended.
 static void closing() {
-  if (!job.busy()) return radioDown();
+  if (!job.busy() && station.quiet()) return radioDown();
   if (!cutSockets && millis() - closingSince > kStuckMs) {
     cutSockets = true;
     say("the GET has not ended %u s after it was told to: cutting its connection", unsigned(kStuckMs / 1000));
@@ -397,9 +403,14 @@ static void poll(uint32_t now) {
       switch (station.joining()) {
         case hw::WifiStation::Join::Joined: return joined();
         case hw::WifiStation::Join::Failed:
-          return failWindow(Failure::Absent, "could not join \"%s\" (status %d)", WiFi.SSID().c_str(), int(WiFi.status()));
+          return failWindow(Failure::Absent, "could not join in %u ms: %s (reason %u, %u disconnects, begin=%d, status %d)",
+                            unsigned(millis() - phaseAt), station.reasonName(), unsigned(station.reason()),
+                            unsigned(station.disconnectsSinceJoin()), station.beginStatus(), int(WiFi.status()));
         case hw::WifiStation::Join::Trying:
-          if (millis() - phaseAt > kJoinMs) return failWindow(Failure::Absent, "could not join in %u s", unsigned(kJoinMs / 1000));
+          if (millis() - phaseAt > kJoinMs)
+            return failWindow(Failure::Absent, "could not join in %u s: last disconnect %s (reason %u, %u disconnects, status %d)",
+                              unsigned(kJoinMs / 1000), station.reasonName(), unsigned(station.reason()),
+                              unsigned(station.disconnectsSinceJoin()), int(WiFi.status()));
           return;
       }
       return;
@@ -485,7 +496,8 @@ static void begin() {
   if (const std::optional<wifiota::Networks> n = hw::WifiStore::load()) mem().networks = *n;
   autoOn = hw::WifiStore::autoOn();
   improvBle.onJoin = [](const improv::Credentials& c) {
-    say("improv: the phone sent network \"%s\"", c.ssid);
+    say("improv: the phone sent a network (ssid %u B, password %u B)", unsigned(std::strlen(c.ssid)),
+        unsigned(std::strlen(c.password)));
     mem().provisionAsked = c;
   };
   // A crash or a watchdog inside a window: wait the longest before the next, and
@@ -509,10 +521,7 @@ static void begin() {
       powerPolicy.sleepNow();   // restarted at a quiet moment: it stays dark
       say("on trial after an update over Wi-Fi: confirming over Wi-Fi, screen dark");
     }
-  char list[3 * 36] = "";
-  for (size_t i = 0; i < mem().networks.size(); ++i)
-    std::snprintf(list + std::strlen(list), sizeof list - std::strlen(list), "%s\"%s\"", i ? " " : "", mem().networks[i].ssid);
-  say("networks %u [%s], automatic checks %s, heap %u -> %u", unsigned(mem().networks.size()), list,
+  say("networks %u, automatic checks %s, heap %u -> %u", unsigned(mem().networks.size()),
       autoOn ? "on" : "OFF (DEBUG wifi on)", unsigned(heap0), unsigned(ESP.getFreeHeap()));
 }
 
@@ -626,13 +635,27 @@ static void wifiVerb(const char* line) {
         c->password[0] ? "with a" : "no", hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
     return;
   }
+  // `DEBUG wifi verify <ssid> <password>`, as `set` takes them: whether what
+  // is stored is byte for byte what was sent. Says only lengths and yes or no.
+  if (!std::strcmp(what, "verify")) {
+    const std::optional<improv::Credentials> c = parseSet(std::strstr(line, "verify") + 6);
+    if (!c) return say("verify: want verify <ssid|\"ssid with spaces\"> [password]");
+    const std::optional<size_t> at = mem().networks.find(c->ssid);
+    if (!at) return say("verify: no remembered network has that SSID (%u B sent)", unsigned(std::strlen(c->ssid)));
+    const improv::Credentials& n = mem().networks[*at];
+    const bool same = !std::strcmp(n.password, c->password);
+    say("verify: network #%u: ssid matches (%u B); password %s (sent %u B, stored %u B)", unsigned(*at + 1),
+        unsigned(std::strlen(n.ssid)), same ? "MATCHES" : "DIFFERS", unsigned(std::strlen(c->password)),
+        unsigned(std::strlen(n.password)));
+    return;
+  }
   if (!std::strcmp(what, "on") || !std::strcmp(what, "off")) {
     autoOn = !std::strcmp(what, "on");
     if (autoOn) crashesInARow = 0;
     say("automatic checks %s (%s)", autoOn ? "on" : "off", hw::WifiStore::setAuto(autoOn) ? "saved" : "SAVE FAILED");
     return;
   }
-  say("want: wifi [status|set <ssid> [password]|forget [ssid]|on|off]");
+  say("want: wifi [status|set <ssid> [password]|forget [ssid]|verify <ssid> [password]|on|off]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

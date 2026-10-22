@@ -20,6 +20,8 @@ is still booting, drops a line sent too early):
   1. `DEBUG wifi` until the badge answers its status (up to --ready seconds);
   2. `DEBUG wifi set "<ssid>" <password>`, and its reply printed;
   3. `DEBUG wifi` again, and a verdict: is the network in `networks=[...]`?
+     Then `DEBUG wifi verify` the same: does the stored password match .env
+     byte for byte (the badge answers lengths and yes or no only)?
   4. with --check or --check-url, `DEBUG ota check [url]`.
 Then it prints what the badge says for --seconds. Every line is printed, none
 dropped, with the SSID and the password replaced by <ssid> and <password>.
@@ -68,7 +70,7 @@ def read_env(path: Path):
         sys.exit("the SSID must be 1-32 bytes and the password at most 64 (lengths only; not shown)")
     if '"' in ssid or "\n" in ssid or "\n" in password:
         sys.exit("the SSID holds a double quote or a newline, which DEBUG wifi set cannot carry (not shown)")
-    if len(f'wifi set "{ssid}" {password}'.encode()) > 127:
+    if len(f'wifi verify "{ssid}" {password}'.encode()) > 127:
         sys.exit("the line would pass the badge's 128-byte DEBUG line (not shown)")
     return ssid, password
 
@@ -156,6 +158,11 @@ def main():
     status = b.until(5, lambda t: "[wifi] window=" in t)
     saved = bool(status) and f'"{ssid}"' in status.split("networks=[", 1)[-1].split("]", 1)[0]
     b.say(f"=== the network is {'REMEMBERED' if saved else 'NOT remembered'} (networks=[...] in DEBUG wifi)")
+    if saved:   # byte for byte, answered with lengths and yes or no only
+        b.send(f'DEBUG wifi verify "{ssid}" {password}', 'DEBUG wifi verify "<ssid>" <password>')
+        verdict = b.until(5, lambda t: "[wifi] verify:" in t)
+        saved = bool(verdict) and "MATCHES" in verdict
+        b.say(f"=== the stored password {'matches .env' if saved else 'does NOT match .env'}")
 
     # 4. A check now.
     if args.check or args.check_url:
