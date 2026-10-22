@@ -243,7 +243,6 @@ TEST(Boot, ANewerFormatIsSealedAndWritesNothing) {
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
 // The device prints its own from HASH after the same feed (unit 20).
 TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   // 0xdca5e44a until a chosen sleep needed the gate open past kSleepOnset
   // (docs/notes/first-hours.md: 8a7f68fc) and the shake landed on its fifth
   // reversal, a tick later (rel-senses: c848b73d); both together: e8e58739.
@@ -252,8 +251,11 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // the marble cut: no marble rolls in the dish, nothing chases it, and the
   // starter genome is two genes shorter. (An interim reading of 22246b02
   // came from incremental builds on a mirror carrying stale objects;
-  // from-scratch builds agree on c1a2eec8.)
-  constexpr uint32_t kCommitted = 0xc1a2eec8u;
+  // from-scratch builds agree on c1a2eec8.) c74fada3 with sleep-idle
+  // (docs/notes/sleep-idle.md): no night with no clock, the still run and
+  // the pet clock's two new fields in the hash, a hand rousing him, his idles
+  // over a rest (their rng draws, drives, faces) and the 2/5 sleep cut.
+  constexpr uint32_t kCommitted = 0xc74fada3u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -264,7 +266,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=c1a2eec8 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=c74fada3 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

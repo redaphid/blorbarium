@@ -90,6 +90,26 @@ void dishItems(const Habitat& h, const HabitatRules* rules, uint32_t tick, Appea
   a.pantry = h.pantry;
 }
 
+// His moods for his posture (Appearance::Moods): each 0 at its mark and full
+// 0.15 past it; content is all of them well short of 0.3.
+Moods moodsOf(const Chemistry& chem) {
+  auto past = [](Fx level, Fx mark) {
+    const int64_t over = int64_t(level.raw) - mark.raw, span = Fx::ratio(15, 100).raw;
+    return uint8_t(over <= 0 ? 0 : over >= span ? 255 : over * 255 / span);
+  };
+  auto d = [&](DriveId id) { return chem.drive(id); };
+  Moods m;
+  m.hurting = std::max(past(d(drive::pain), Fx::ratio(4, 10)), past(chem.chem[chem::injury.v], Fx::ratio(3, 10)));
+  m.hungry = past(d(drive::hunger), Fx::ratio(6, 10));
+  m.sleepy = past(d(drive::sleepiness), Fx::ratio(4, 10));
+  m.lonely = std::max(past(d(drive::loneliness), Fx::ratio(55, 100)), past(d(drive::need_touch), Fx::ratio(55, 100)));
+  m.bored = past(d(drive::boredom), Fx::ratio(55, 100));
+  Fx most{};
+  for (const DriveInfo& row : DRIVES) most = fxMax(most, d(row.id));
+  m.content = uint8_t(255 - past(most, Fx::ratio(15, 100)));
+  return m;
+}
+
 void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   const Chemistry& chem = c.chemistry();
   const Body& body = c.body();
@@ -120,6 +140,12 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.asleep = body.asleep;
   a.dreaming = body.dreaming;
   a.calling = c.action() == action::call;
+  a.moods = moodsOf(chem);
+  if (c.playing()) {
+    a.idle = c.idle().now;
+    a.idleTicks = c.idle().ticks;
+    a.idleLength = c.idle().length;
+  }
   a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
@@ -167,8 +193,10 @@ void presentClutch(const Clutch& k, Appearance& a) {
 
 Appearance present(const Occupant& occ, const Habitat& habitat, const PetClock& clock, uint32_t tick) {
   Appearance a;
+  // The sky follows the pet hours only while they are the wall's (PetClock):
+  // a board with no clock shows his day.
   Fx fromNoon = clock.dayFraction() + clock.dayFraction() - Fx::one();   // -1 at midnight, 0 at noon, 1 at midnight
-  a.night = fromNoon >= Fx::zero() ? fromNoon : -fromNoon;
+  a.night = !clock.trusted ? Fx::zero() : fromNoon >= Fx::zero() ? fromNoon : -fromNoon;
   const HabitatRules* rules = nullptr;
   if (const Creature* c = std::get_if<Creature>(&occ)) {
     presentCreature(*c, tick, a);

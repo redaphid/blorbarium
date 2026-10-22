@@ -8,6 +8,7 @@
 #include <optional>
 #include "blorb/fixed.h"
 #include "blorb/habitat.h"
+#include "blorb/idle.h"
 #include "blorb/registry.h"
 
 namespace blorb {
@@ -43,6 +44,7 @@ struct ActionCtx {
   Rng& rng;
   SenseOut& out;          // self-stimuli and loci (asleep, eating, foreseeing), applied by the creature next tick
   Fx foodEaten{};
+  IdleState* idle = nullptr;   // the creature's: which idle Play runs, and how far in
 };
 
 enum class Status : uint8_t { Running, Done };
@@ -68,6 +70,9 @@ struct Curl : Base { Status step(Body&, ActionCtx&); };                 // hood 
 struct FollowTilt : Base { Status step(Body&, ActionCtx&); };           // downhill
 struct FleeTilt : Base { Status step(Body&, ActionCtx&); };             // uphill
 struct HopCircles : Base { Status step(Body&, ActionCtx&); };           // happy hops
+// The idle the creature chose (idle.h), played to its end over a rest. Not an
+// actions.def row: the creature runs it in place of the rest's step.
+struct Play : Base { Status step(Body&, ActionCtx&); };
 }  // namespace behave
 
 // Every behaviour, generated from defs/actions.def and dispatched by stable

@@ -21,7 +21,11 @@ namespace {
 // before species genes existed (battles-d2 0a64811).
 constexpr uint32_t kGiftSeed = 15048;
 constexpr uint32_t kGiftHash = 0x3df10dafu;   // re-pinned 2026-10-17: the starter retired the marble genes (uids 63, 77)
-constexpr uint32_t kGiftLifePrint = 0xc6f5005bu, kGiftLifePrintAllFeats = 0x69356d6eu;
+// Moved by the sleep cut (2026-10-19, genes.cpp: the awake tonic's emitters at
+// 2/5) and by melatonin's reaction running at its genes' rate again
+// (2026-10-21, sleep-idle.md): was 0xc6f5005b / 0x69356d6e. The genome's own
+// bytes and hash are unchanged.
+constexpr uint32_t kGiftLifePrint = 0x3c6de705u, kGiftLifePrintAllFeats = 0x76ee538cu;
 
 Phenotype lifeOf(const Genome& g, uint32_t feats = 0) {
   Phenotype p{};
@@ -60,7 +64,6 @@ constexpr uint8_t kSpecies = GeneKindOf<SpeciesGene>::value, kPower = GeneKindOf
 // ---- grungo, and every pet alive today ------------------------------------------------
 
 TEST(Gift, TheGiftGenomeHashesAndExpressesExactlyAsBefore) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   Genome gift = starterGenome(kGiftSeed);
   ASSERT_EQ(gift.hash(), kGiftHash);
   EXPECT_EQ(lifePrint(gift, 0), kGiftLifePrint);
@@ -374,7 +377,6 @@ TEST(NoImmortals, ALifeThatNeverDecaysIsNotViable) {
 }
 
 TEST(NoImmortals, TheGiftAndEveryStarterStayViable) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   EXPECT_TRUE(viability(starterGenome(kGiftSeed)).ok);
   EXPECT_EQ(lifePrint(starterGenome(kGiftSeed), 0), kGiftLifePrint);
   for (const SpeciesInfo& row : SPECIES) EXPECT_TRUE(viability(starterGenomeOf(row.id, kGiftSeed)).ok) << row.name;

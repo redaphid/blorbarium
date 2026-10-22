@@ -99,6 +99,7 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
   // The clocks, run on past the tick now.
   tween::clock(now.poseTick, share, a.poseTick, a.poseSub);
   tween::clock(now.exprTicks, share, a.exprTicks, a.exprSub, true);   // saturates: a wrap would crossfade again
+  if (now.idle != blorb::idles::none) tween::clock(now.idleTicks, share, a.idleTicks, a.idleSub, true);
   if (now.reflexActive) {
     int64_t step = 0;
     for (const blorb::ReflexInfo& r : blorb::REFLEXES)
@@ -150,6 +151,11 @@ inline blorb::Appearance between(const blorb::Appearance& was, const blorb::Appe
   a.eggProgress = tween::back(now.eggProgress, was.eggProgress, behind);
   a.remainsFade = tween::back(now.remainsFade, was.remainsFade, behind);
   a.hintUrgency = tween::back(now.hintUrgency, was.hintUrgency, behind);
+  // His moods, as his posture shows them (lively.cpp): a drive moves them a little each tick.
+  auto mood = [behind](uint8_t to, uint8_t from) { return uint8_t(int(to) + (int(from) - int(to)) * behind / 256); };
+  a.moods.content = mood(now.moods.content, was.moods.content), a.moods.bored = mood(now.moods.bored, was.moods.bored);
+  a.moods.lonely = mood(now.moods.lonely, was.moods.lonely), a.moods.sleepy = mood(now.moods.sleepy, was.moods.sleepy);
+  a.moods.hungry = mood(now.moods.hungry, was.moods.hungry), a.moods.hurting = mood(now.moods.hurting, was.moods.hurting);
   // A pellet sliding on a tilt: the same pellets in the same order, each eased.
   bool samePellets = was.itemCount == now.itemCount;
   for (uint8_t i = 0; samePellets && i < now.itemCount && i < 8; ++i) samePellets = was.items[i].what == now.items[i].what;

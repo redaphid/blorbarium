@@ -98,6 +98,25 @@ bool ancestor_fear(const Observed& o, uint16_t& num) { return level(o, drive::fe
 bool heirloom(const Observed& o, uint16_t& num) { return awake(o) && doing(o, action::rest) && datedHeirloom(o, false, num); }
 bool foreseen(const Observed& o, uint16_t& num) { return datedHeirloom(o, false, num); }
 bool bored(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::boredom) >= kHigh; }
+// Playing on his own (idle.h), this idle now.
+bool playingIdle(const Observed& o, IdleId which) { return awake(o) && o.c.playing() && o.c.idle().now == which; }
+bool singing(const Observed& o, uint16_t&) { return playingIdle(o, idles::sing); }
+bool dancing(const Observed& o, uint16_t&) { return playingIdle(o, idles::dance); }
+bool chasing_tail(const Observed& o, uint16_t&) { return playingIdle(o, idles::chase_tail); }
+bool digging(const Observed& o, uint16_t&) { return playingIdle(o, idles::dig); }
+bool peeking(const Observed& o, uint16_t&) { return playingIdle(o, idles::peek); }
+bool shadow_boxing(const Observed& o, uint16_t&) { return playingIdle(o, idles::shadow_box); }
+bool juggling(const Observed& o, uint16_t&) { return playingIdle(o, idles::juggle); }
+bool daydreaming(const Observed& o, uint16_t&) { return playingIdle(o, idles::daydream); }
+bool stargazing(const Observed& o, uint16_t&) { return playingIdle(o, idles::stargaze); }
+bool sneezing(const Observed& o, uint16_t&) { return playingIdle(o, idles::sneeze); }
+bool booing(const Observed& o, uint16_t&) {
+  return playingIdle(o, idles::boo) && o.c.idle().ticks * 100u >= o.c.idle().length * 55u;   // as he pops up
+}
+bool hiccuping(const Observed& o, uint16_t&) { return playingIdle(o, idles::hiccup); }
+bool zooming(const Observed& o, uint16_t&) { return playingIdle(o, idles::zoomies); }
+bool discovering(const Observed& o, uint16_t&) { return playingIdle(o, idles::discover); }
+bool hiding(const Observed& o, uint16_t&) { return playingIdle(o, idles::hide); }
 bool held(const Observed& o, uint16_t&) { return sense(o, locus::held) >= kHalf && sense(o, locus::cradled) < kHalf; }
 bool cradled(const Observed& o, uint16_t&) { return sense(o, locus::cradled) >= kHalf; }
 // Upside down is the hang's pose: the badge turned half round from home

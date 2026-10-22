@@ -103,9 +103,11 @@ struct Heard {
   double at(LocusId id) const { return double(locus[id.v].raw) / Fx::kOne; }
 };
 
+// A clock a phone set, with wall time known this boot: its night is believed (PetClock).
 PetClock clockAt(uint32_t hour, uint32_t minute = 0) {
   PetClock c;
   c.alignToWall(hour * 3600 + minute * 60, 0);
+  c.trusted = true;
   return c;
 }
 
@@ -664,6 +666,33 @@ TEST(PetClock, NightIsNinePmToSevenAm) {
   EXPECT_TRUE(clockAt(6, 59).night());
   EXPECT_FALSE(clockAt(7, 0).night());
   EXPECT_EQ(clockAt(12).dayFraction(), Fx::ratio(1, 2));
+}
+
+// The field bug (2026-10-21): with no phone the pet hours are his own, not
+// the wall's, and night was believed anyway, all ten hours of every pet night.
+TEST(PetClock, UnknownTimeIsNeverNight) {
+  PetClock c;
+  for (uint32_t t = 0; t < PetClock::kDayTicks; ++t) {
+    c.advance(false);
+    ASSERT_FALSE(c.night()) << t;
+    ASSERT_FALSE(c.dark()) << t;
+  }
+  c.alignToWall(23 * 3600, 0);
+  EXPECT_TRUE(c.aligned);
+  EXPECT_FALSE(c.night()) << "set, but not yet trusted this boot";
+  c.trusted = true;
+  EXPECT_TRUE(c.night());
+}
+
+TEST(PetClock, UntouchedLongEnoughIsDim) {
+  PetClock c;
+  for (uint32_t t = 0; t + 1 < PetClock::kDimAfterTicks; ++t) c.advance(false, false);
+  EXPECT_FALSE(c.dim());
+  c.advance(false, false);
+  EXPECT_TRUE(c.dim());
+  EXPECT_TRUE(c.dark());
+  c.advance(false, true);
+  EXPECT_FALSE(c.dark());
 }
 
 TEST(PetClock, AlignToWallUsesTheTimeZoneAndKeepsTicking) {

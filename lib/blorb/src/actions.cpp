@@ -11,6 +11,8 @@ constexpr Fx kRoam = Fx::ratio(85, 100);      // he stays this far in, short of 
 constexpr Fx kNearRim = Fx::ratio(78, 100);   // Curl stops here
 constexpr Fx kWanderTurn = Fx::ratio(1, 10);  // most a wander heading changes per tick, in half turns
 constexpr Fx kHopTurn = Fx::ratio(1, 16);
+constexpr Fx kSpinTurn = Fx::ratio(1, 6);      // chasing his tail: round in about 1.2 s
+constexpr uint16_t kRoamBeat = 24;              // sniffing about: 1.2 s of steps, 1.2 s of nose
 constexpr uint16_t kChewTicks = 15;            // he holds the bite this long, so eating can be seen
 constexpr Fx kNoseSpeed = Fx::ratio(9, 100);   // ... so it rolls about half the dish against the habitat's rolling friction
 constexpr Fx kTiltDeadZone = Fx::ratio(3, 100);   // the habitat's: a dish on a desk is level
@@ -202,6 +204,79 @@ Status HopCircles::step(Body& b, ActionCtx&) {
   b.pose = pose::bounce;
   b.facing = wrapTurn(b.facing + kHopTurn);
   walkOn(b, kAmble);
+  return Status::Running;
+}
+
+// An idle (idles.def) to its end. Where it takes him is the engine's (a lap
+// of the rim, a spin, up to the glass, a few steps and a sniff); how it looks
+// is paint's, from the idle and how far in. The creature picked it and keeps
+// its state; this moves him through it.
+Status Play::step(Body& b, ActionCtx& c) {
+  IdleState* s = c.idle;
+  const IdleInfo* row = s ? idleInfo(s->now) : nullptr;
+  if (!row || s->ticks >= s->length) return Status::Done;
+  const uint16_t t = s->ticks++;
+  b.pose = pose::idle;
+  switch (row->move) {
+    case IdleMove::Stay:
+      // Hiding is his hood up (the curl's pose) until he pops out.
+      if (s->now == idles::hide && uint32_t(t) * 10 < uint32_t(s->length) * 7) b.pose = pose::curl;
+      break;
+    case IdleMove::Rim: {
+      // Out to the edge, then round it, looking out.
+      const Fx r = fxSqrt(b.at.x * b.at.x + b.at.y * b.at.y);
+      if (r < kNearRim - kWalk) {
+        if (r == Fx::zero()) b.facing = wrapTurn(b.facing + kHalf);
+        walkTo(b, r == Fx::zero() ? DishPos{cosTurn(b.facing) * kNearRim, sinTurn(b.facing) * kNearRim}
+                                  : DishPos{fxDiv(b.at.x, r) * kNearRim, fxDiv(b.at.y, r) * kNearRim},
+               kWalk);
+      } else {
+        const Fx round = heading(b.at.x, b.at.y) + kHalf;   // a quarter turn on from facing out
+        b.facing = wrapTurn(round);
+        walkOn(b, kAmble + kAmble);
+        const Fx r2 = fxSqrt(b.at.x * b.at.x + b.at.y * b.at.y);
+        if (r2 != Fx::zero()) b.at = DishPos{fxDiv(b.at.x, r2) * kNearRim, fxDiv(b.at.y, r2) * kNearRim};
+      }
+      b.pose = pose::walk;
+      break;
+    }
+    case IdleMove::Spin:
+      b.facing = wrapTurn(b.facing + kSpinTurn);
+      walkOn(b, kAmble + kAmble);
+      b.pose = pose::bounce;
+      break;
+    case IdleMove::Home:
+      if (!walkHome(b)) b.pose = pose::walk;
+      break;
+    case IdleMove::Roam:
+      // A few steps, then a pause with his nose down, then a new way.
+      if (t % kRoamBeat == 0) b.facing = wrapTurn(b.facing + (c.rng.unit() - kHalf));
+      if (t % kRoamBeat < kRoamBeat / 2) {
+        walkOn(b, kAmble);
+        b.pose = pose::walk;
+      }
+      break;
+    case IdleMove::Zoom: {
+      // Flat out round the rim: out to it, then laps at a run.
+      const Fx r = fxSqrt(b.at.x * b.at.x + b.at.y * b.at.y);
+      if (r < kNearRim - kWalk - kWalk) {
+        walkTo(b, r == Fx::zero() ? DishPos{kNearRim, Fx::zero()} : DishPos{fxDiv(b.at.x, r) * kNearRim, fxDiv(b.at.y, r) * kNearRim},
+               kWalk + kWalk);
+      } else {
+        b.facing = wrapTurn(heading(b.at.x, b.at.y) + kHalf);
+        walkOn(b, kWalk + kWalk);
+        const Fx r2 = fxSqrt(b.at.x * b.at.x + b.at.y * b.at.y);
+        if (r2 != Fx::zero()) b.at = DishPos{fxDiv(b.at.x, r2) * kNearRim, fxDiv(b.at.y, r2) * kNearRim};
+      }
+      b.pose = pose::walk;
+      break;
+    }
+    case IdleMove::Push:
+      b.facing = wrapTurn(b.facing + (c.rng.unit() - kHalf) * kWanderTurn);
+      walkOn(b, kWalk);
+      b.pose = pose::walk;
+      break;
+  }
   return Status::Running;
 }
 

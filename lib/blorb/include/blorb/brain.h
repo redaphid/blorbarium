@@ -43,6 +43,10 @@ class Brain {
   // The caller paces dreams (dreamEveryTicks) and shows them (dreamLenTicks).
   bool dream(const Temperament&, Rng&);
   void queueInstinct(const Instinct&);
+  // The creature did another action than the one think() picked (a wander or
+  // a curl his liveliness turned into play over a rest): what he learns next
+  // is that action's.
+  void relabel(ActionId a) { current_ = a; }
 
   std::vector<Belief> strongestBeliefs(uint8_t n) const;   // sorted by |effect| * confidence
   Fx predict(LocusId feature, ActionId, DriveId) const;

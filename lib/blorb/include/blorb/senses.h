@@ -55,21 +55,36 @@ struct BodySample {
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered
-// ticks and its day is (petTicks + phaseOffset) mod 24 pet-hours. Night always
-// exists, phone or not. Two things move the phase: the phone's TIME snaps it
-// to the real day, and with no phone the owner entrains it (a long dark
-// stretch, lidded face down during pet day, pulls the phase toward night by at
-// most an hour a day, like daylight setting a body clock). Unpowered time is
-// stasis: the pet sleeps in its box.
+// ticks and its day is (petTicks + phaseOffset) mod 24 pet-hours. Two things
+// move the phase: the phone's TIME snaps it to the real day, and with no phone
+// the owner entrains it (a long dark stretch, lidded face down during pet day,
+// pulls the phase toward night by at most an hour a day, like daylight
+// setting a body clock). Unpowered time is stasis: the pet sleeps in its box.
+//
+// Night is believed only on evidence (owner, 2026-10-21: "They all also sleep
+// constantly!"). The pet hours say night only while they are the wall's: a
+// phone's TIME set them (`aligned`) and wall time is known this boot, so no
+// unpowered gap since has gone unlived (`trusted`, the Dish's, each tick). A
+// board that never met a phone has no night of its own any more; it gets dark
+// for him when he is lidded (face down and still) or left untouched for a
+// long stretch (`stillRunTicks`; the panel went dark long before).
 struct PetClock {
   static constexpr uint32_t kDayTicks = 24 * kTicksPerHour;
+  // Untouched this long, it is dim for him: nobody is there, and most likely it is night.
+  static constexpr uint32_t kDimAfterTicks = 45 * kTicksPerMinute;
   uint32_t petTicks = 0;
   int32_t phaseOffsetTicks = 0;
   uint32_t darkRunTicks = 0;                               // consecutive lidded ticks; > 0 means lidded now
   uint32_t entrainedTicks = 0;                             // phase moved by entrainment since pet midnight
+  uint32_t stillRunTicks = 0;                              // consecutive ticks nobody moved or touched the badge
+  bool aligned = false;                                    // a wall clock set the phase (TIME); saved
+  bool trusted = false;                                    // aligned, and wall time known this boot; not saved
   Fx dayFraction() const;                                  // 0 = pet midnight, 0.5 = pet noon
-  bool night() const;
-  void advance(bool lidded);                               // +1 tick and entrainment
+  bool nightHours() const;                                 // 21:00 to 07:00 of pet time, believed or not
+  bool night() const { return trusted && nightHours(); }   // the wall's night
+  bool dim() const { return stillRunTicks >= kDimAfterTicks; }
+  bool dark() const { return night() || darkRunTicks > 0 || dim(); }   // the light locus is 0
+  void advance(bool lidded, bool handled = true);          // +1 tick, entrainment and the still run
   void alignToWall(uint32_t unixSeconds, int16_t tzMinutes);
 };
 

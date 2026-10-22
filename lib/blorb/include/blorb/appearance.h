@@ -12,6 +12,7 @@
 #include "blorb/duel_card.h"
 #include "blorb/feed_show.h"
 #include "blorb/habitat.h"
+#include "blorb/idle.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
 #include "blorb/species.h"
@@ -23,6 +24,13 @@ namespace blorb {
 // Foresee action runs, glow is at least this, whatever the genes say. Genes
 // make it brighter and tint it; they cannot make it invisible.
 constexpr Fx kForeseeGlowFloor = Fx::ratio(6, 10);
+
+// How he feels, as his posture shows it (paint/lively.cpp): perky when
+// content, slumped when bored, drooping and watching the glass when lonely,
+// heavy when sleepy, fidgety when hungry, hunched when hurting. Each 0..255,
+// rising from nothing as its drive passes its mark, so his posture moves as
+// smoothly as his drives do, never a jump at a tick.
+struct Moods { uint8_t content = 0, bored = 0, lonely = 0, sleepy = 0, hungry = 0, hurting = 0; };
 
 struct Appearance {
   // Kind selects the stage art: Egg, Creature (with `stage`: Baby/Child =
@@ -68,6 +76,11 @@ struct Appearance {
   uint8_t markCount = 0;
 
   bool asleep = false, dreaming = false, calling = false;
+  // Playing on his own (idle.h): which idle, how far in and how long it runs.
+  // paint/lively.cpp moves him through it, paint's idle props draw its prop.
+  IdleId idle = idles::none;
+  uint16_t idleTicks = 0, idleLength = 0;
+  Moods moods{};
   Mouthful mouth = Mouthful::Nothing;   // drawn at his mouth, as the dish item it was
   Fx injury{}, wobble{};
   Fx night{};                       // 0..1 background tint from the pet clock
@@ -153,6 +166,7 @@ struct Appearance {
   DishPos from{};                   // where he stood a tick ago ...
   uint16_t behind = 0;              // ... and how far he is drawn still on the way from it to `at`, 0..256
   uint16_t poseSub = 0, exprSub = 0;   // 1/256 ticks past poseTick and exprTicks, 0..255
+  uint16_t idleSub = 0;             // 1/256 ticks past idleTicks
   bool lively = false;              // breath and the idle layer drawn on liveMs (paint/tween.h)
   uint32_t liveMs = 0;              // the screen's clock: wall ms run at the screen's speed
   uint16_t ahead = 0;               // walking: drawn this far (0..256 of a step) on past `at`, at the step from `from`

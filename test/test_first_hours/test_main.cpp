@@ -38,8 +38,9 @@ namespace {
 constexpr uint32_t kMinuteMs = 60000;
 constexpr uint32_t kTicksPerSec = 1000 / kTickMs;
 
-enum class Owner : uint8_t { Nobody, Seated };
-const char* ownerName(Owner o) { return o == Owner::Nobody ? "nobody" : "seated"; }
+// Tucked: face down on the tray table the whole time (lidded: bedtime).
+enum class Owner : uint8_t { Nobody, Seated, Tucked };
+const char* ownerName(Owner o) { return o == Owner::Nobody ? "nobody" : o == Owner::Seated ? "seated" : "tucked"; }
 
 // A seated passenger: glances every 3 to 10 minutes and does one gentle thing.
 // Never a shake, a drop or a face-down tuck.
@@ -224,7 +225,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
 
   const uint32_t endMs = uint32_t(hours * 60 * kMinuteMs);
   for (; ms < endMs; ms += kSampleMs) {
-    const BodySample s = owner == Owner::Seated ? who.next(ms, dish, a) : still();
+    const BodySample s = owner == Owner::Seated ? who.next(ms, dish, a) : owner == Owner::Tucked ? faceDown() : still();
     dish.sample(s, ms);
     dish.tick(ms, link);
     if (!adopted && ms >= uint32_t(field->adoptAfterH * 60 * kMinuteMs) &&
@@ -447,7 +448,6 @@ TEST(FirstHours, ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt) {
 // night-sleeper of each voice length, alone and with a seated owner. Each run
 // is six pet hours from a fresh founding with no phone and no wall time.
 TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   for (SpeciesId sp : {SpeciesId{0}, SpeciesId{1}, SpeciesId{5}, SpeciesId{7}})
     for (Owner o : {Owner::Nobody, Owner::Seated}) {
       const Report r = live(sp, 0x5EED0000u, o, 6.0);
@@ -459,15 +459,21 @@ TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
       EXPECT_LE(r.longestThoughtGapMin, 6) << at;
       EXPECT_GE(r.distinctLines, 40u) << at;
       EXPECT_LE(r.topLineCount * 8, r.thoughts) << "no line is an eighth of what he says: " << at;
-      EXPECT_GE(r.naps, 1u) << at;
-      EXPECT_LE(r.asleepH, 2.5) << "naps, not the whole flight: " << at;
-      EXPECT_LE(r.longestSleepMin, 60) << at;
       EXPECT_GE(r.faceChanges, 3u) << at;
       EXPECT_LT(r.injuryMax, 0.1) << at;
+      // With no clock he has no night of his own (2026-10-21, sleep-idle.md):
+      // looked at every few minutes he is awake all through it, and left
+      // alone on the tray table it goes dim for him after 45 minutes and he
+      // goes to bed. (The floors were naps >= 1, asleep <= 2.5 h and no sleep
+      // over 60 minutes for both, from the pet night his clock used to keep.)
       if (o == Owner::Seated) {
+        EXPECT_LE(r.asleepH, 0.5) << "awake while he is being looked at: " << at;
+        EXPECT_LE(r.longestSleepMin, 30) << at;
         EXPECT_GE(r.bites, 2u) << at;
         EXPECT_EQ(r.starvingMin, 0) << at;
       } else {
+        EXPECT_GE(r.naps, 1u) << "left alone, he goes to bed: " << at;
+        EXPECT_GE(r.firstSleepMin, 45) << "not before it is dim: " << at;
         EXPECT_GE(r.hungerMax, 0.5) << "hungry by the time anyone looks again: " << at;
       }
     }
@@ -506,15 +512,16 @@ TEST(Sweep, FieldPetsHourByHour) {
       }
 }
 
-// The badges 0.4.0 founded sleep through most of their first night (pet
+// The badges 0.4.0 founded slept through most of their first night (pet
 // 00:00 at founding, no phone to say otherwise), and the owner saw no text
-// until a phone woke him. Asleep, he murmurs: every few minutes, in his voice.
+// until a phone woke him. With no clock there is no such night any more
+// (sleep-idle.md); a pet tucked in face down sleeps instead. Asleep, he
+// murmurs: every few minutes, in his voice.
 TEST(FieldPets, ASleepingPetStillTalks) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   FieldPet f;
   f.giftSleep = true;   // adopted on 0.7.0, the longest sleeper
   for (SpeciesId sp : {SpeciesId{1}, SpeciesId{5}, SpeciesId{7}}) {
-    const Report r = live(sp, 0x5EED0000u, Owner::Nobody, 8.0, &f);
+    const Report r = live(sp, 0x5EED0000u, Owner::Tucked, 8.0, &f);
     const std::string at = row(r);
     ASSERT_GE(r.asleepH, 4.0) << "the night this guards: " << at;
     double asleepLines = 0;

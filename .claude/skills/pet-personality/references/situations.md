@@ -47,6 +47,21 @@ pet that never meets a phone never says them; he still says everything else.
 | dreaming | He is asleep and dreaming. |
 | dozing | He is asleep, dreaming or not: a murmur in his sleep. |
 | young | He is in his first day of life: the teaching lines run (hold me upside down to fight; hold me sideways for bed; shake me and I see things), then never again. A teaching line is advice, said the right way up: it says what to do ("TO FIGHT, HOLD ME UPSIDE DOWN"), never that he is upside down now. |
+| singing | He is singing to himself (the sing idle): notes rise round him. |
+| dancing | He is dancing on his own (the dance idle): a wiggle, notes about him. |
+| chasing_tail | He is spinning round after his own tail (the chase_tail idle). |
+| digging | He is digging at the dish floor, dirt flying (the dig idle). |
+| peeking | He has come up to the glass to peek at the kid (the peek idle). |
+| shadow_boxing | He is practising his duel stance, jabbing at the air (the shadow_box idle). |
+| juggling | He is juggling a pebble over his head (the juggle idle). |
+| daydreaming | He is awake and daydreaming, a thought bubble over him (the daydream idle). |
+| stargazing | He is gazing up at the stars in the dark (the stargaze idle). |
+| sneezing | He is sneezing (the sneeze idle): a puffball sneezes sparkles. |
+| booing | He has sneaked up to the glass and popped up at the kid (the boo idle). |
+| hiccuping | He has the hiccups (the hiccup idle): a hop with each one. |
+| zooming | He is tearing round the rim at a run (the zoomies idle). |
+| discovering | He has found something small at his feet: a flower or a beetle (the discover idle). |
+| hiding | He is hiding in his hood, shell or wings (the hide idle). |
 | foreseeing | He is in his oracle trance. |
 | sees_pellet | He is in the trance and there is a pellet in the dish. |
 | sees_phone | He is in the trance and a phone is near. |
