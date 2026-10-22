@@ -189,13 +189,30 @@ struct RadioGate : blorb::Air {
 // have run, so such an object is made by setup()'s first lines (make()), not
 // as a static: internal only if PSRAM is not there (`[hw] psram: ...` at boot
 // says where each landed). After wifi-ota-2's a602752.
+//
+// #53's A/B builds, one variable each (all default to this commit's choice):
+//   -DBLORB_PSRAM_OBJECTS=0   FaultAir and the latency recorder in internal RAM
+//   -DBLORB_SERIAL_TX=2048    the cable's TX queue
+//   -DBLORB_HEAP_BALLAST=N    N bytes of internal heap held from boot (to stand
+//                             where main's heap stood without moving anything back)
+//   -DBLORB_ROWHASH_PSRAM=0   the panel's chunk hashes in internal RAM (board_lcd128.h)
+//   -DBLORB_AIR_TX_QDBM=52    the air's TX power, quarter dBm (air_espnow.h)
+#ifndef BLORB_PSRAM_OBJECTS
+#define BLORB_PSRAM_OBJECTS 1
+#endif
+#ifndef BLORB_SERIAL_TX
+#define BLORB_SERIAL_TX 512
+#endif
+#ifndef BLORB_HEAP_BALLAST
+#define BLORB_HEAP_BALLAST 0
+#endif
 template <class T>
 class InPsram {
  public:
   template <class... A>
   void make(A&&... a) {
     if (p_) return;
-    void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    void* m = BLORB_PSRAM_OBJECTS ? heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
     p_ = m ? new (m) T(std::forward<A>(a)...) : new T(std::forward<A>(a)...);
   }
   T& operator*() const { return *p_; }
@@ -1046,11 +1063,15 @@ void setup() {
   // protocol: more), and a gesture's samples and frame waited with it
   // (DEBUG latency: seen p95 51 ms while a probe asked STATE).
   // 512 B: a status line's worth; every byte of it is internal RAM (#53).
-  Serial.setTxBufferSize(512);
+  Serial.setTxBufferSize(BLORB_SERIAL_TX);
 #endif
   Serial.begin(115200);
 #if !defined(BADGE_BOARD_SIM)
   // In PSRAM (InPsram above), before anything uses them.
+  if (BLORB_HEAP_BALLAST) {   // #53's A/B: never freed, never touched
+    static void* ballast = heap_caps_malloc(BLORB_HEAP_BALLAST, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    Serial.printf("[hw] heap ballast %u bytes %s\n", unsigned(BLORB_HEAP_BALLAST), ballast ? "held" : "FAILED");
+  }
   faultAir.make(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
   radioGate.inner = faultAir.get();
   lat::rec.make();

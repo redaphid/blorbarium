@@ -236,7 +236,11 @@ static void boardPresentBegin(BoardDisplay& display) {
   to = &display;
   using panelrows::hash;
   using panelrows::kChunks;
-  void* h = heap_caps_malloc(sizeof(uint32_t) * CANVAS_H * kChunks, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#ifndef BLORB_ROWHASH_PSRAM   // #53's A/B: -DBLORB_ROWHASH_PSRAM=0 keeps them internal
+#define BLORB_ROWHASH_PSRAM 1
+#endif
+  void* h = BLORB_ROWHASH_PSRAM ? heap_caps_malloc(sizeof(uint32_t) * CANVAS_H * kChunks, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+                                : nullptr;
   if (!h) h = malloc(sizeof(uint32_t) * CANVAS_H * kChunks);
   hash = static_cast<uint32_t(*)[kChunks]>(h);
   panelrows::stale = true;
