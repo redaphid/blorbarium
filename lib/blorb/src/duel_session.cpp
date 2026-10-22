@@ -833,6 +833,12 @@ void DuelSession::closeWith(Air& air, EndReason why, bool goodbye) {
 
 // ---- the view -----------------------------------------------------------------------
 
+int16_t DuelSession::choosingTurn() const {
+  const Battle* b = std::get_if<Battle>(&state_);
+  if (!b || b->phase != DuelPhase::Choosing || b->revealing || b->outcome.over()) return -1;
+  return b->mine.count() == b->outcome.resolved ? int16_t(b->outcome.resolved) : int16_t(-1);
+}
+
 DuelView DuelSession::view(uint32_t tick) const {
   DuelView v;
   if (const Closed* c = std::get_if<Closed>(&state_)) {

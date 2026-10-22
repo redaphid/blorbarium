@@ -228,8 +228,7 @@ void Dish::runOneTick(Link& link) {
   // this turn (#24): one left lying tilted since before it chooses nothing.
   bool aimMoved = true;
   if (duel_.active()) {
-    const DuelView v = duel_.view(tick_);
-    const int16_t turn = v.phase == DuelPhase::Choosing ? int16_t(v.hasLast ? v.lastTurn + 1 : 0) : int16_t(-1);
+    const int16_t turn = duel_.choosingTurn();
     if (turn != turnSeen_) turnSeen_ = turn, turnFromMs_ = lastTickMs_;
     aimMoved = arming_.movedSince(turnFromMs_);
   }

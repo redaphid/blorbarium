@@ -77,6 +77,7 @@ class DishDuel {
 
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }
+  int16_t choosingTurn() const { return session_.choosingTurn(); }
   const DuelBook& book() const { return book_; }
   // The newest battle this boot recorded, for a log line that two boards'
   // logs can be compared by (its outcomeHash).

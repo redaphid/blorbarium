@@ -251,6 +251,9 @@ class DuelSession {
   // mode, beaconing his picture, and is claimed again once he is ready.
   void setDecline(Decline);
   DuelView view(uint32_t tick) const;
+  // The turn being chosen now (0, 1, ...), or -1: none (a light view, for
+  // the Dish's tick, where a whole DuelView is too big for the stack).
+  int16_t choosingTurn() const;
 
  private:
   friend struct DuelTestAccess;
