@@ -60,6 +60,29 @@ class WifiStore {
     return !off;
   }
 
+  // The manifest URL an update over Wi-Fi came from, when it was not the
+  // site's (a cable's `DEBUG ota check <url>`, a test release): its trial
+  // confirms against the same place. Written before the restart, read on the
+  // trial's boot, erased once it has confirmed. Empty: the site's.
+  static bool setSource(const char* url) {
+    nvs_handle_t n;
+    if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
+    const esp_err_t e = *url ? nvs_set_str(n, "src", url) : nvs_erase_key(n, "src");
+    const bool ok = (e == ESP_OK || (!*url && e == ESP_ERR_NVS_NOT_FOUND)) && nvs_commit(n) == ESP_OK;
+    nvs_close(n);
+    return ok;
+  }
+  static bool source(char* out, size_t cap) {
+    out[0] = 0;
+    nvs_handle_t n;
+    if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return false;
+    size_t len = cap;
+    const bool ok = nvs_get_str(n, "src", out, &len) == ESP_OK;
+    nvs_close(n);
+    if (!ok) out[0] = 0;
+    return ok;
+  }
+
   static bool setAuto(bool on) {
     if (on == autoOn()) return true;   // and a badge never given a network gets no namespace for it
     nvs_handle_t n;

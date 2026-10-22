@@ -153,7 +153,12 @@ static wifiota::Facts facts(uint32_t now) {
   };
 }
 
-static const char* manifestUrl() { return window == Window::Forced && mem().forcedUrl[0] ? mem().forcedUrl : wifiota::kManifestUrl; }
+// A cable's URL for a forced check; on trial, the URL the update came from
+// (WifiStore::source, in forcedUrl since boot); else the site's.
+static const char* manifestUrl() {
+  return (window == Window::Forced || window == Window::Confirm) && mem().forcedUrl[0] ? mem().forcedUrl
+                                                                                       : wifiota::kManifestUrl;
+}
 
 static void setPhase(Phase p) {
   say("%s: %s -> %s (%u ms)", wifiota::windowName(window), phaseName(phase), phaseName(p), unsigned(millis() - phaseAt));
@@ -277,6 +282,9 @@ static void startImage(const wifiota::Manifest& m) {
   char url[200];
   if (!wifiota::imageUrl(manifestUrl(), m.file, url, sizeof url)) return failWindow(Failure::Server, "image url too long");
   job.reset();
+  // Where its trial will confirm: this manifest's URL when it is not the site's.
+  const char* src = std::strcmp(manifestUrl(), wifiota::kManifestUrl) ? manifestUrl() : "";
+  if (!hw::WifiStore::setSource(src)) say("!!! could not store the confirm URL: the trial will ask the site");
   if (!startGet(url, false)) return;
   say("downloading %u bytes (signature ok, pet saved, slot open)", unsigned(m.image.size));
   imageAt = 0;
@@ -302,6 +310,7 @@ static void readManifest() {
       return failWindow(Failure::Server, "confirm: the manifest that came back is not signed by the owner's key");
     const ota::Confirm c = trial.confirm(*confirmToken);
     confirmToken.reset();
+    if (mem().forcedUrl[0]) hw::WifiStore::setSource(""), mem().forcedUrl[0] = 0;
     outcome("trial confirmed over Wi-Fi (%s; the site has %u.%u.%u)", c == ota::Confirm::Confirmed ? "ok" : "not on trial",
             unsigned(v.major), unsigned(v.minor), unsigned(v.patch));
     schedule.checked(millis());
@@ -533,7 +542,9 @@ static void begin() {
     if (const std::optional<ota::Handover> h = trialPort.handover(); h && wifiota::isWifiToken(h->token)) {
       confirmToken = h->token;
       powerPolicy.sleepNow();   // restarted at a quiet moment: it stays dark
-      say("on trial after an update over Wi-Fi: confirming over Wi-Fi, screen dark");
+      hw::WifiStore::source(mem().forcedUrl, sizeof mem().forcedUrl);
+      say("on trial after an update over Wi-Fi: confirming over Wi-Fi at %s, screen dark",
+          mem().forcedUrl[0] ? mem().forcedUrl : "the site");
     }
   say("networks %u, automatic checks %s, heap %u -> %u", unsigned(mem().networks.size()),
       autoOn ? "on" : "OFF (DEBUG wifi on)", unsigned(heap0), unsigned(ESP.getFreeHeap()));
