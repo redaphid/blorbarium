@@ -40,9 +40,13 @@ static void use(bool two) {
   paint::parallel.run = on ? run : nullptr;
 }
 
+static uint32_t stackFree() { return task ? uxTaskGetStackHighWaterMark(task) : 0; }
+
 static void begin() {
   done = xSemaphoreCreateBinary();
-  if (done && xTaskCreatePinnedToCore(loop, "paint0", 4096, nullptr, 1, &task, 0) != pdPASS) task = nullptr;
+  // 2.5 KB: a half's locals are a row reader and a few ints (#53: internal
+  // RAM is the radio's). DEBUG fps prints what it never used (stack paint0=).
+  if (done && xTaskCreatePinnedToCore(loop, "paint0", 2560, nullptr, 1, &task, 0) != pdPASS) task = nullptr;
   use(true);
 }
 }  // namespace paintcore0
