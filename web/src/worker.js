@@ -19,7 +19,7 @@ import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
-import { storeUpload, runDiaries, diaryFor } from "./diary.js";
+import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
 
@@ -66,20 +66,22 @@ function packReply(row, creature, extra = {}) {
 // Writes and stores one generation for a creature; returns the stored pack row.
 // `bible` given (an edit from the phone or the dashboard): the lines are written
 // from it and call 1 is skipped. Only a genes-only pack is shared by cache key.
-export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy, carried } = {}) {
+export async function generateFor(env, creature, { source = "genes", s = settings(env), bible, catchphrases, editedBy, carried,
+                                                  life, currentBible } = {}) {
   const bytes = hexToBytes(creature.genome_hex);
   const raw = rawSheet(bytes, { stage: creature.stage ?? "adult", feats: creature.feats ?? 0 });
   const full = creature.parent_id === undefined
     ? await env.DB.prepare("SELECT parent_id FROM creatures WHERE id = ?1").bind(creature.id).first() : creature;
   const history = await store.familyHistory(env.DB, { parent_id: full?.parent_id ?? null }, carried);
   const pet = { raw, generation: creature.generation ?? 1, name: creature.name ?? "", hash: creature.genome_hash,
-                bible, catchphrases, history };
+                bible, catchphrases, history, life, currentBible };
   pet.traits = traitSheet(raw, { generation: pet.generation, name: pet.name });
   const pack = await generatePack(env.AI, pet, { model: s.model, prompt: s.prompt });
   const { log, ...provenance } = pack.provenance;
   const stored = await store.storeGeneration(env.DB, creature.id, {
     source, bible: pack.bible, catchphrases: pack.catchphrases, model: s.model, prompt: s.prompt, editedBy,
-    inputs: { dice: provenance.dice, traits: pet.traits.text, history: history || undefined },
+    inputs: { dice: provenance.dice, traits: pet.traits.text, history: history || undefined, life: life || undefined,
+              stage: raw.stage },
     cacheKey: source === "genes" && !history ? cacheKey(creature.genome_hash, s) : `${creature.genome_hash}:${source}:${Date.now()}`,
     lines: pack.lines, fallback: pack.fallback, provenance: { ...provenance, attempts: log },
   });
@@ -287,6 +289,58 @@ async function postPersonality(request, env) {
   return json(packReply(row, c, { cached: false }));
 }
 
+// #47: after the diaries, decide per pet whether his life has moved on enough
+// to rewrite him. Yes when he has grown into a new stage since his personality
+// was written, when he has won or lost fights or gone hungry since, or when a
+// week of new diary has piled up. A revision is a new personality and pack
+// version (history kept) waiting for the badge's next nightly window.
+const FIGHTS = /fight|duel|won|lost|win|loss|starv|sick|hurt|died|death/i;
+export async function revisionReason(db, c) {
+  const p = await db.prepare(
+    "SELECT created_at, inputs_json FROM personalities WHERE creature_id = ?1 ORDER BY version DESC LIMIT 1").bind(c.id).first();
+  if (!p) return null;
+  const inputs = JSON.parse(p.inputs_json || "{}");
+  if (c.stage && inputs.stage && c.stage !== inputs.stage) return `grew from ${inputs.stage} to ${c.stage}`;
+  const since = (await db.prepare(
+    "SELECT stats_json FROM life_stats WHERE creature_id = ?1 AND uploaded_at > ?2 ORDER BY id").bind(c.id, p.created_at).all()).results ?? [];
+  const before = await db.prepare(
+    "SELECT stats_json FROM life_stats WHERE creature_id = ?1 AND uploaded_at <= ?2 ORDER BY id DESC LIMIT 1").bind(c.id, p.created_at).first();
+  if (since.length) {
+    const d = statsDelta(JSON.parse(since.at(-1).stats_json), before ? JSON.parse(before.stats_json) : null);
+    const big = Object.entries(d).filter(([k, v]) => FIGHTS.test(k) && v > 0);
+    if (big.length) return big.map(([k, v]) => `${k} +${v}`).join(", ");
+  }
+  const entries = (await db.prepare("SELECT COUNT(*) AS n FROM diary_entries WHERE creature_id = ?1 AND created_at > ?2")
+    .bind(c.id, p.created_at).first())?.n ?? 0;
+  return entries >= 7 ? `${entries} diary entries since he was last written` : null;
+}
+
+export async function runNightlyRevisions(env, { limit = 10 } = {}) {
+  const due = (await env.DB.prepare(
+    `SELECT c.* FROM creatures c WHERE c.status = 'alive' AND EXISTS (SELECT 1 FROM packs p WHERE p.creature_id = c.id)
+     ORDER BY c.last_seen DESC LIMIT ?1`).bind(limit * 5).all()).results ?? [];
+  let revised = 0;
+  for (const c of due) {
+    if (revised >= limit) break;
+    const why = await revisionReason(env.DB, c);
+    if (!why) continue;
+    const cur = await env.DB.prepare("SELECT bible FROM personalities WHERE creature_id = ?1 ORDER BY version DESC LIMIT 1").bind(c.id).first();
+    const stats = await env.DB.prepare("SELECT stats_json FROM life_stats WHERE creature_id = ?1 ORDER BY id DESC LIMIT 1").bind(c.id).first();
+    const diary = await diaryFor(env.DB, c.id, 7);
+    const life = [`Why now: ${why}.`, stats ? `His counters: ${stats.stats_json.slice(0, 800)}` : "",
+      ...diary.reverse().map((d) => `Diary ${d.day}: ${d.entry}`)].filter(Boolean).join("\n");
+    try {
+      const row = await generateFor(env, c, { source: "nightly", life, currentBible: cur?.bible ?? "" });
+      await enqueue(env.DB, { macs: [c.mac], kind: "line_pack", createdBy: "nightly",
+        payload: { pack_id: row.id, version: row.version, genome_hash: c.genome_hash } });
+      revised++;
+    } catch (e) {
+      console.error(JSON.stringify({ msg: "nightly revision failed", creature: c.id, error: String(e.message ?? e) }));
+    }
+  }
+  return revised;
+}
+
 export async function runQueuedJobs(env, limit = 3) {
   const jobs = await store.queuedJobs(env.DB, limit);
   for (const j of jobs) {
@@ -339,7 +393,10 @@ export default {
   },
   // A cron run awaits its work (it has minutes, not the request's waitUntil budget).
   async scheduled(controller, env) {
-    if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) await runDiaries(env);
+    if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) {
+      await runDiaries(env);
+      await runNightlyRevisions(env);
+    }
     else await runQueuedJobs(env);
   },
 };

@@ -79,6 +79,28 @@ test("an egg reported before hatching gets its personality from its genes and it
   assert.equal(p.source, "hatch");
 });
 
+test("the nightly revision rewrites a pet whose life moved on, and only him (#47)", async () => {
+  const { runNightlyRevisions } = await import("../src/worker.js");
+  const env = fakeEnv();
+  const quiet = await petWithPack(env, fixtures[6]);
+  const fighter = await petWithPack(env, fixtures[7]);
+  const db = env.DB.raw;
+  // Their personalities were written a minute ago; since then the fighter won two fights.
+  db.prepare("UPDATE personalities SET created_at = created_at - 60000").run();
+  for (const [hash, stats] of [[quiet, { feeds: 3 }], [fighter, { feeds: 3, fights_won: 2 }]]) {
+    await req(env, "/api/stats", { mac: MAC, genome_hash: hash, stats });
+  }
+  const before = env.AI.calls.length;
+  assert.equal(await runNightlyRevisions(env), 1);
+  const revise = env.AI.calls.slice(before).find((c) => /Rewrite his bible/.test(c.input.messages.at(-1).content));
+  assert.match(revise.input.messages.at(-1).content, /fights_won \+2/);
+  const versions = db.prepare(`SELECT c.genome_hash, MAX(q.version) AS v, (SELECT source FROM personalities WHERE creature_id = c.id
+    ORDER BY version DESC LIMIT 1) AS src FROM creatures c JOIN personalities q ON q.creature_id = c.id GROUP BY c.id`).all();
+  assert.deepEqual(versions.map((v) => [v.genome_hash === fighter, v.v, v.src]), [[false, 1, "genes"], [true, 2, "nightly"]]);
+  assert.equal(db.prepare("SELECT kind FROM actions").get().kind, "line_pack");
+  assert.equal(await runNightlyRevisions(env), 0, "nothing new since: no second revision");
+});
+
 test("flatten and delta", () => {
   assert.deepEqual(flatten({ a: 1, b: { c: 2, d: [5, 6] }, e: "x" }).map((m) => m.metric), ["a", "b.c", "b.d", "b.d"]);
   assert.deepEqual(statsDelta({ feeds: 9, knocks: 2 }, { feeds: 4, knocks: 2 }), { feeds: 5 });

@@ -3,7 +3,7 @@
 // run(model, input) shaped like the Workers AI binding: env.AI in the Worker,
 // the REST runner in the eval. Pure apart from that, so a test drives it with
 // a fake.
-import { PROMPTS, retryMessages } from "./prompts.js";
+import { PROMPTS, retryMessages, reviseMessages } from "./prompts.js";
 import { SITUATIONS, checkLines, parseJsonReply, normalise, MAX_TEXT, lineProblem } from "./validate.js";
 import { traitSheet, flavourDice } from "./traits.js";
 
@@ -76,7 +76,7 @@ export const newMeter = () => ({ calls: 0, ms: 0, inTok: 0, outTok: 0, usd: 0 })
 
 // Call 1. A bible that is not JSON with a non-trivial "bible" string is re-asked.
 export async function writeBible(ai, input, { model, prompt, meter, log }) {
-  let messages = PROMPTS[prompt].bible(input);
+  let messages = input.life ? reviseMessages(input) : PROMPTS[prompt].bible(input);
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const reply = await call(ai, model, messages, { maxTokens: 900, meter });
     const parsed = parseJsonReply(reply);
@@ -133,7 +133,8 @@ export async function generatePack(ai, pet, { model = DEFAULT_MODEL, prompt = DE
   const log = [];
   const t0 = Date.now();
   const traits = pet.traits ?? traitSheet(pet.raw, { generation: pet.generation, name: pet.name });
-  const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "", history: pet.history ?? "" };
+  const input = { species: pet.raw.species, traits, dice: flavourDice(pet.hash), name: pet.name ?? "", history: pet.history ?? "",
+                  life: pet.life ?? "", currentBible: pet.currentBible ?? "" };
   // An edited personality (the phone #43, the dashboard #41) skips call 1: the
   // owner's words are the bible, and his catchphrases are kept if given.
   const { bible, catchphrases, attempts: bibleAttempts } = pet.bible

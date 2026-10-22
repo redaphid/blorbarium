@@ -141,6 +141,33 @@ Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every s
 };
 
 // A retry: the same conversation, plus what was wrong, for the situations still short.
+// The nightly revision (#47): his bible as it stands, and what his life has been
+// lately, in; the bible he has grown into, out. The lines are then written from it
+// with the version's usual lines prompt.
+export function reviseMessages(input) {
+  return [
+    { role: "system", content: `You are the character writer for blorbarium, tiny pets that live on a round badge screen. ${AUDIENCE_V3} Reply with JSON only.` },
+    { role: "user", content:
+`His character bible until now:
+${input.currentBible}
+
+His species, in the game writer's words:
+<<<
+${speciesNotes(input.species)}
+>>>
+
+His genes, decoded:
+${input.traits.text}
+
+What his life has been lately (his badge's counters and his own diary):
+${input.life}
+
+Rewrite his bible, about 120 words, as the pet he has become: the same creature, changed by what happened (wins and losses, hunger, being held or ignored, growing older). Also give 3 catchphrases of at most 30 characters.
+
+Reply as JSON: {"bible": "...", "catchphrases": ["...", "...", "..."]}` },
+  ];
+}
+
 export function retryMessages(messages, reply, failures, stillNeeded, structural = []) {
   return [
     ...messages,
