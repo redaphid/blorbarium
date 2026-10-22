@@ -93,8 +93,33 @@ class Say(unittest.TestCase):
         row = ENGINE.row("peckish")
         grungo = P.variants(ENGINE, book, row, "mystic", "grungo")
         mossby = P.variants(ENGINE, book, row, "mystic", "mossby")
-        self.assertTrue(any("I FORESEE FLIES" in s for s in grungo))
-        self.assertFalse(any("I FORESEE FLIES" in s for s in mossby))
+        frog = book.own["grungo"]["peckish"][0]
+        self.assertIn(frog, grungo)
+        self.assertNotIn(frog, mossby)
+
+    def test_his_own_lines_are_said_as_written_and_a_shared_line_is_framed_now_and_then(self):
+        _, book, _ = P.checked()
+        row = ENGINE.row("peckish")
+        for voice in ENGINE.voices:
+            self.assertEqual(sorted(P.variants(ENGINE, book, row, voice, "grungo")),
+                             sorted(book.own["grungo"]["peckish"]), f"{voice} frames or cuts his own line")
+        shared = [P.say_line(ENGINE, book, row, 3, "mystic", pick, None) for pick in range(256)]
+        self.assertEqual(sum(s != book.shared["peckish"] for s in shared), 256 // P.FRAME_ONE_IN)
+
+
+class Verdicts(unittest.TestCase):
+    def test_a_species_gives_his_own_answers_to_a_shake(self):
+        problems, book = problems_for("=== LINES ===\nverdict_yes\n  THE REEDS NOD\nverdict_later\n  ASK THE MOON\n")
+        self.assertEqual(problems, [])
+        self.assertEqual(book.own["grungo"]["verdict_yes"], ["THE REEDS NOD"])
+        engine = ENGINE
+        out = P.render_species_verdicts(engine, book)
+        self.assertIn('BLORB_SPECIES_VERDICT(0, grungo, 0, "THE REEDS NOD")', out)
+        self.assertIn('BLORB_SPECIES_VERDICT(0, grungo, 2, "ASK THE MOON")', out)
+
+    def test_a_verdict_takes_no_mark(self):
+        problems, _ = problems_for("=== LINES ===\nverdict_no\n  NO, GEN #\n")
+        self.assertTrue(any("no # @ *" in p for p in problems), problems)
 
 
 if __name__ == "__main__":

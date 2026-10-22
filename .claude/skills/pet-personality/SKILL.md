@@ -24,14 +24,28 @@ The pets go to children aged 6 to 13. Every line must suit them.
   or under a situation that only one line uses.
 - A species' lines for a line name replace the shared line for that species.
   Several lines under one name: he draws one each time.
-- His voice wraps every line (the sheet's first lines show how). A `terse`
-  voice (mudge) keeps only the first sentence, so lead with the punch.
+- His own lines are said exactly as written: no voice frame pads them and the
+  `terse` cut does not shorten them, so the line itself carries his voice. Only
+  a shared line (the fallback) passes through the voice, and wears one of its
+  frames (voices.def) just one time in `kFrameOneIn`.
+- No filler. A line ends on its joke, not on a hedge or tag ("OR SOMETHING",
+  "I GUESS", "MAYBE", "ISH", "KIND OF", "OK?"). That is judgement, not a check.
+- Concrete beats generic: a callback to his quirks (the hood, the shell, the
+  stash, the race) over an adjective. A joke a 6-year-old gets, a layer for
+  the parent, nothing mean, nothing scary.
+- Variety where it repeats: situations that come round often (peckish,
+  teach_feed, crunch, heard_you, warm_hands, heavy_eyes, the sleep murmurs,
+  the anytime prophecies) want three to five lines each, so a kid does not see
+  the same one twice in a few minutes.
+- A shake's bare answer (the Magic 8-Ball half) can be his too: sections
+  `verdict_yes`, `verdict_no`, `verdict_later` in his file (no `#`, `@`, `*`)
+  stand in for the ball's plain YES. / NO. / ASK AGAIN LATER.
 
 ## What you never change
 
 The `id`, `when`, `priority` and `cooldownS` columns of
 `lib/blorb/include/blorb/defs/thoughts.def`, and the generated files
-(`species_lines.def`, `test/test_thoughts/said_lines.inc`, and the text column
+(`species_lines.def`, `species_verdicts.def`, `test/test_thoughts/said_lines.inc`, and the text column
 of `thoughts.def`, which `build` writes from `_shared.txt`). A new situation or
 a new line name is a code change: ask the owner before adding a row, and
 never renumber or reuse an id.
@@ -56,6 +70,13 @@ never renumber or reuse an id.
    - the goldens: `MSYS_NO_PATHCONV=1 wsl -d survivor --exec bash /mnt/d/Projects/<checkout>/tools/sim_film.sh`.
      A changed shared line can change a golden. Look at the changed PNG and say
      why it changed before re-blessing it.
+   On Linux, through the one-at-a-time lock:
+   `/home/redaphid/Worktrees/blorbarium/pio test -e native -f test_thoughts`.
+   To see how the lines land over a real stretch of life, the on-demand
+   simulation lives each species some hours with a caretaker who feeds,
+   cradles, shakes and knocks, and prints what crossed the screen, most
+   frequent first: `BLORB_LINE_SIM=8 BLORB_LINE_SIM_TOP=20` in the environment
+   of that same command (grep the output for `[linesim]`).
 8. Show the owner a before and after table per species: line name, the line
    before, the line after, as `say` prints them. Ask before committing.
 9. Commit `personalities/` with the generated files, then `git push -u origin HEAD`.

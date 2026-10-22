@@ -1,6 +1,7 @@
 HUSHWING
 marsh owl: silent wings
-Element Sprout, style Trick, power hush. Voice: ominous, which wraps his lines as "LINE... SOON.", "HEED: LINE", "LINE. IT IS WRITTEN.".
+Element Sprout, style Trick, power hush. Voice: ominous. His own lines below are said exactly as written, so they carry
+the voice themselves; the ominous frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -38,63 +39,115 @@ SHH. NOTED. I SAW. HOO.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
   HUNGER STIRS. QUIETLY.
+  MY TUMMY RUMBLED. SHH, TUMMY.
+  A SNACK, PLEASE. A SOFT ONE.
+  HUNGRY. I SHALL NOT HOOT.
+  FOOD IS OVERDUE. NOTED.
 starving
   THE HUNGER IS VERY LOUD NOW.
+  MY TUMMY IS SHOUTING. SHH!
+  SO HUNGRY. I MAY HOOT. TWICE.
 hoarding
   THAT PELLET WAITS. AS DO I.
+  THAT ONE IS FOR DUSK. NOTED.
+  I SHELVED IT. UNDER 'LATER'.
 crunch
   CRUNCH. SORRY. TOO LOUD.
+  CRUNCH. SHH. CRUNCH. SHH.
+  I CHEW IN A WHISPER.
+  CRUNCH. PLEASE IGNORE THAT.
 fuzzy_bite
   IT WAS FUZZY. I SAID NOTHING.
+  FUZZY. THIS IS ON YOUR RECORD.
 smells
   A SMELL. IT HAS BEEN NOTED.
+  A PONG. FILED UNDER 'NO'.
 green
   I AM GREEN. I WILL NOT HOOT.
+  GREEN. IT CLASHES. NOTED.
 ow
   OW. QUIETLY. OW.
+  OW. A FEATHER IS UPSET.
 heard_you
   SHH. YES. I HEARD. SHH.
   ONE KNOCK. TWO MEANS SNACKS.
+  A KNOCK. KNOCK ONCE MORE. SOFT
+  WHO KNOCKS? QUIETLY, PLEASE.
 ground_lies
   THE WORLD SHAKES. I DO NOT.
+  TOO LOUD! MY FEATHERS! HOO!
+  THE SHELVES! THE BOOKS! SHH!
 not_again
   NOT THE SHAKING. I FORBID IT.
+  NO SHAKING IN THE LIBRARY.
+  PLEASE. MY TUFTS JUST SETTLED.
 hooded
   I AM A WHITE LUMP. UNSEEN.
+  I AM A SNOWBALL. MOVE ALONG.
+  WINGS UP. EYES SHUT. HIDDEN.
 ancestor_fear
   GEN # FEARED THIS. IN SILENCE.
 inherited
   GEN # WATCHES THROUGH ME.
 counted
   I COUNTED THE QUIET. ALL OF IT
+  A STARING CONTEST. WALL WON.
+  I HAVE READ THE DISH. TWICE.
 put_me_down
   PUT ME DOWN. GENTLY. SILENTLY.
+  I PREFER A BRANCH. A STILL ONE
+  DOWN, PLEASE. MY DIGNITY.
 warm_hands
   WARM HANDS. I WILL ALLOW IT.
+  WARM. I AM NOT BLUSHING. SHH.
+  YOU MAY CONTINUE. QUIETLY.
+  WARM HANDS. THE TUFTS RELAX.
 sky_down
   THE SKY IS BELOW. CURIOUS.
   I HANG LIKE A BAT. NOTED.
+  UPSIDE DOWN. MY TUFTS DANGLE.
 heavy_eyes
   MY EYES CLOSE. SLOWLY. HOO.
+  ONE EYE SHUT. THEN THE OTHER.
+  SLEEPY. THE LIBRARY IS CLOSED.
+  YAWN. THAT WAS TOO LOUD. SORRY
 dream_pellets
   ZZZ... SILENT FIELDS... ZZZ
+  ZZZ... A MOUSE... MADE OF CAKE
+  ZZZ... A QUIET BUFFET...
+  ZZZ... SOUP... NO SLURPING...
+  ZZZ... A SILENT SANDWICH...
+  ZZZ... CRUMBS. IN THE STACKS
 see_pellet
   I SEE... A PELLET. IT SEES ME.
+  I SEE... A CRUMB. BE STILL.
+  I SEE... LUNCH. IN THE CORNER.
 see_phone
   I SEE... A LOUD LIGHT.
+  I SEE... A GLOWING SLAB. SHH.
+  I SEE... A FACE. TOO CLOSE.
 see_nothing
   I SEE... AN EMPTY DISH. GRAVE.
+  I SEE... NOTHING. NOT A CRUMB.
+  I SEE... A VERY QUIET TUMMY.
 see_damp
   I SEE... MIST ON THE MARSH.
+  I SEE... FOG. LOVELY FOG.
+  I SEE... DEW ON A BRANCH.
 knees
   OLD. I HAVE SEEN MANY NIGHTS.
+  OLD OWL. EVEN QUIETER NOW.
 moon
   THE MOON AND I DO NOT BLINK.
+  THE MOON. A QUIET COLLEAGUE.
 anyone
   HOO? HOO IS THERE? NO ONE.
+  HELLO? I WILL NOT SHOUT IT.
+  ALONE. I ALLOW A SMALL HOOT.
 science
   FOOD ENDS HUNGER. I OBSERVED.
 no_hat
@@ -102,8 +155,10 @@ no_hat
 
 p_snack
   A SNACK WILL COME. QUIETLY.
+  A SOFT SNACK. NO CRUNCH. YES.
 p_feast
   A FEAST, IN THE DEEP NIGHT.
+  I SEE A FEAST. EATEN SILENTLY.
 p_pellet_soon
   A PELLET DESCENDS. HUSH.
 p_feed_me
@@ -114,42 +169,55 @@ p_more_shaking
   THE SHAKING WILL RETURN.
 p_mud
   THE MARSH RISES. MUD FOLLOWS.
+  MUD ON YOUR SHOES. I SAW IT.
 p_big_hand
   A HAND FROM ABOVE. BE STILL.
+  A HAND COMES. LOOK DIGNIFIED.
 p_bedtime
   THE DARK HAS COME. I WAKE.
 p_sun
   THE SUN WILL RISE. I WILL HIDE
 p_rain
   RAIN WILL FALL. SOFTLY.
+  RAIN. ITS PATTER IS ALLOWED.
 p_watched
   THE GLOWING ONE OBSERVES US.
 p_return
   THEY WILL RETURN. AT DUSK.
 p_tap
   A KNOCK WILL BREAK THE SILENCE
+  TWO KNOCKS COME. THEN SUPPER.
 p_no
   NO. SAY NOTHING MORE.
+  NO. THE MIST HAS SPOKEN.
 p_doom
   DOOM. QUIET DOOM. THE BEST.
+  DOOM COMES. IT WIPED ITS FEET.
 p_lunch
   MY NIGHTS ARE FEW. LUNCH, TOO.
 p_outlook
   OUTLOOK: MISTY.
+  OUTLOOK: HUSHED. VERY GOOD.
 p_decidedly
   IT IS SO. I SAW IT AT NIGHT.
+  YES. IT IS WRITTEN. IN PENCIL.
 p_lucky
   LUCK FLIES SILENT. LIKE ME.
+  YOUR LUCK IS A SOFT FEATHER.
 p_pond_no
   THE MARSH SAYS NO. HUSH.
+  THE MARSH SHOOK ITS REEDS. NO.
 p_pond_yes
   THE MARSH SAYS YES. SOFTLY.
+  THE MIST PARTED. YES.
 p_ripples
   THE MARSH IS RESTLESS. LATER.
+  TOO MUCH FOG. ASK AT DUSK.
 p_ancestor
   GEN # SAW THIS. FROM A BRANCH.
 miss_phone
   THE GLOWING ONE IS LONG GONE.
+  NO SLAB FOR A WHILE. NOTED.
 
 oclock
   I HEARD # O'CLOCK PASS BY.
@@ -291,34 +359,109 @@ only_me
 snore
   ZZZ... HOOO... ZZZ...
   ZZZ... FLUFF... ZZZ... HOO
+  ZZZ... SHH... ZZZ... SHH...
 mumble
   MMM... SHH... SHHH... SHH...
   MMM... TOO LOUD... NOTED...
+  MMM... NO TALKING... MM...
 dream_chase
   ZZZ... SWOOP... NOT A SOUND...
   ZZZ... A MOTH... I SAW IT...
+  ZZZ... A LEAF... GOT IT...
 dream_feast
   ZZZ... SOFT FOOD... NO CRUNCH
   ZZZ... QUIET SOUP... HOO...
+  ZZZ... A WHISPERING PUDDING
 dream_flight
   ZZZ... OVER THE MIST... HUSH
   ZZZ... SILENT WINGS... GLIDE
+  ZZZ... PAST THE MOON... SHH
 sleep_count
   ONE REED... TWO REEDS... NOTED
   ONE STAR... TWO STARS... SHH
+  ONE BOOK... TWO BOOKS... ZZZ
 sleep_warm
   MM. WARM HANDS. I ALLOW IT.
   MM... SNUG ON MY PERCH...
+  MM... FEATHERS FLUFFED... MM
 dream_rain
   ZZZ... SOFT RAIN. NO THUNDER
   ZZZ... QUIET RAIN... GOOD...
+  ZZZ... PITTER... PATTER...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME. FOOD. SHH.
+  KNOCK TWICE. SOFTLY. SUPPER.
+  TWO GENTLE KNOCKS. THEN FOOD.
+  HUNGRY. KNOCK KNOCK, PLEASE.
 teach_fight
   HOLD ME UPSIDE DOWN TO DUEL.
 teach_hold
   TO SLEEP, HOLD ME SIDEWAYS.
 teach_shake
   SHAKE ME. I WILL SEE THINGS.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. QUIETLY, YES.
+  HOO. THAT MEANS YES.
+  YES. NOTED. FILED.
+verdict_no
+  NO. SHH. NO.
+  NO. DO NOT ASK SO LOUDLY.
+  NO. THE TUFTS HAVE SPOKEN.
+verdict_later
+  ASK AT DUSK.
+  SHH. ASK AGAIN. SOFTER.
+  THE MIST IS THICK. WAIT.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  HOO. HOO. QUIETLY. HOO.
+  A SONG. VERY SOFT. SHH.
+dance_break
+  A SILENT DANCE. NOTED.
+  NOBODY SAW THAT. GOOD.
+tail_get
+  TAIL FEATHERS. HALT.
+  I WILL CATCH YOU. SILENTLY.
+treasure
+  A SECRET. BURIED. SHH.
+  THE MARSH HIDES THINGS.
+peekaboo
+  I SAW YOU. I ALWAYS SEE.
+  I AM WATCHING. NOTED.
+hyah
+  HOO! TALONS. READY.
+  SILENT STRIKE. NOTED.
+pebble
+  ONE PEBBLE. NO NOISE.
+  DO NOT DROP IT. TOO LOUD.
+dream_big
+  A LIBRARY. NOBODY TALKS.
+  WHAT IF IT WAS ALWAYS NIGHT?
+wish_star
+  THE STARS. QUIET ONES.
+  THE NIGHT IS MINE. SHH.
+achoo
+  ACHOO. PARDON. SHH.
+  THAT SNEEZE WAS TOO LOUD.
+boo_hee
+  HOO. DID I STARTLE YOU?
+  BOO. VERY QUIETLY.
+hic
+  HIC. UNDIGNIFIED. HIC.
+  HIC. NOBODY HEARD. HIC.
+zoom
+  SILENT WINGS. FAST FEET.
+  NO NOISE. ALL SPEED.
+ooh_what
+  A BEETLE. NOTED.
+  A FLOWER. IT IS QUIET.
+cant_see
+  IN MY WINGS. SHH.
+  I AM NOT HERE. HOO.
+yuck
+  ROTTEN. NOTED. NO.
+  THAT ONE. I WILL NOT.

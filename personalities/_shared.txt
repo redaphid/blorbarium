@@ -1,7 +1,9 @@
 Lines EVERY pet can say, one per line name.
 
-Each pet says these in his own voice: the voice wraps the line, for example
-mystic turns SNACK? into THE REEDS SAY: SNACK?
+A shared line is the fallback: a pet says it only when his own file has no
+line for that name. Now and then (one time in four) his voice seasons it, for
+example mystic turns SNACK? into THE REEDS SAY: SNACK? His own lines are said
+exactly as written.
 
 A line name is followed by its situation (when he might say it). The meaning of
 every situation: .claude/skills/pet-personality/references/situations.md
@@ -112,7 +114,7 @@ p_feast         prophecy: food, anytime
   FAT FLIES. IT IS WRITTEN.
 
 p_pellet_soon   prophecy: food, hungry
-  A BISCUIT APPROACHES. MAYBE.
+  A BISCUIT APPROACHES. BE COOL.
 
 p_feed_me       prophecy: food, starving
   YOU WILL FEED ME. NOW.
@@ -160,7 +162,7 @@ p_outlook       prophecy: luck, anytime
   OUTLOOK GOOD. FOR ME.
 
 p_decidedly     prophecy: luck, anytime
-  IT IS DECIDEDLY SO. ISH.
+  IT IS DECIDEDLY SO. FOR ONCE.
 
 p_lucky         prophecy: luck, anytime
   LUCK IS A CRACKER IN THE DARK

@@ -1,6 +1,7 @@
 OCTOPUS
 abyssal duelist: the last act has already begun
-Element Splash, style Trick, power blackbell. Voice: ominous, which wraps his lines as "LINE... SOON.", "HEED: LINE", "LINE. IT IS WRITTEN.".
+Element Splash, style Trick, power blackbell. Voice: ominous. His own lines below are said exactly as written, so they carry
+the voice themselves; the ominous frame only seasons a shared line now and then.
 
 WHAT HE LOOKS LIKE
 A squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,
@@ -30,62 +31,135 @@ CATCHPHRASES
 THE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.
 
 === LINES ===
-# Lines only he says. Situations and names come from _shared.txt.
+# Lines only he says. Head a section with a line name from _shared.txt
+# (or a situation only one line uses), then indent each line under it.
+# His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
+# His gloom is a stage show: curtains, encores, ink, tides, bells, ravens.
 
 peckish
   THE HUNGER HAS A VERDICT.
+  ACT ONE: A SNACK. PLEASE.
+  MY EIGHT ARMS AGREE: SNACK.
+  THE ABYSS RUMBLES. IT IS ME.
+  FEED THE ORACLE. DRAMATICALLY.
 starving
   YOUR SNACK. MY LAST REQUEST.
+  I COULD EAT A WHOLE SHIP.
+  EIGHT ARMS. ZERO SNACKS. WOE.
 hoarding
   THE SHELLS ARE EVIDENCE.
+  THIS CRUMB IS FOR ACT TWO.
+  KEPT FOR LATER. IN MY INK.
 crunch
   THE ABYSS HEARD THAT.
+  CRUNCH. A STANDING OVATION.
+  DELICIOUS. AS FORETOLD.
+  CRUNCH. RING THE BELL. BONG.
 fuzzy_bite
   THE CRUMB IS THINKING.
+  THAT CRUMB WORE A WIG. BLEH.
 smells
   SOMETHING DIED. OR COOKED.
+  SOMETHING SMELLS. NOT THE SEA.
+  A STINKY CRUMB. A TRAGEDY.
 green
   MY INK IS YOUR BAD OMEN.
+  GREEN? A COSTUME CHANGE.
 ow
   I PAID FOR THAT PINCH.
+  OW. THE ABYSS WILL HEAR OF IT.
 heard_you
   THE RAVEN HEARD YOU TOO.
   A RAPPING. AT MY CHAMBER DOOR.
+  ONE KNOCK. A SEQUEL NEEDS TWO.
+  WHO KNOCKS? SPEAK. OR KNOCK.
 ground_lies
   THE FLOOR BETRAYS US.
+  A STORM AT SEA! MY BELL! BONG!
+  ALL EIGHT ARMS: HOLD ON!
 not_again
   THE PROPHECY HATES YOU.
+  THE PROPHECY SAYS: STOP THAT.
+  NOT THE SHAKING. I'M SEASICK.
+  AGAIN? THE AUDIENCE IS TIRED.
+hooded
+  INK CLOUD. I HAVE VANISHED.
+  NOT SCARED. JUST VERY INKY.
+  I AM A ROCK. AN ELEGANT ROCK.
+ancestor_fear
+  GEN # INKED AT THIS TOO.
+inherited
+  GEN # LEFT ME THIS BELL.
+counted
+  EIGHT ARMS. COUNTED. STILL 8.
+  NO DUEL. NO DRAMA. NO SNACK.
+  BORED. THE ABYSS NEEDS A PLOT.
 put_me_down
   PUT ME DOWN. OR DON'T.
+  UNHAND ME. ALL EIGHT TIMES.
+  I AM NOT A HAT. PUT ME DOWN.
 warm_hands
   WARM. DEEPLY SUSPICIOUS.
+  WARM HANDS. THE TIDE APPROVES.
+  YOU MAY HOLD ME. BRIEFLY.
+  WARM. LIKE A SUNNY TIDE POOL.
 sky_down
   THE CEILING IS A GRAVE.
+  THE CEILING IS A SEA. SWIM!
   UPSIDE DOWN. AS IN ACT THREE.
+  MY ARMS ARE ON TOP. GOOD LOOK.
 heavy_eyes
   I WILL HAUNT THIS NAP.
+  THE CURTAIN FALLS... SLOWLY...
+  MY INK GROWS HEAVY...
+  INTERMISSION. A SHORT NAP.
 dream_pellets
   ZZZ... YOUR DOOM... ZZZ
+  ZZZ... A SHIP OF SNACKS...
+  ZZZ... ENCORE... ENCORE...
+  ZZZ... CURTAIN CALL CAKE...
+  ZZZ... EIGHT FORKS. ONE PIE
+  ZZZ... A SEAWEED BANQUET...
 see_pellet
   I SEE A SNACK. IT TREMBLES.
+  I SEE... A CRUMB. FATED. MINE.
+  I SEE... LUNCH. ON STAGE LEFT.
 see_phone
   THE GLOWING SLAB FORETELLS.
+  I SEE... A SLAB. IT STARES.
+  I SEE... A PHONE. NO SIGNAL.
 see_nothing
   AN EMPTY DISH. A FAMILIAR END.
+  I SEE... NOTHING. A BOLD SET.
+  I SEE... NO SNACKS. WOE. WOE.
 see_damp
   INK WEATHER. EXCELLENT.
+  I SEE... THE TIDE. IT KNOWS.
+  I SEE... A PUDDLE. A STAGE.
+knees
+  EIGHT KNEES. ALL OF THEM OLD.
+  OLD. BUT THE BELL STILL RINGS.
 moon
   THE MOON OWES ME MONEY.
+  THE MOON PULLS MY TIDES. HI.
 anyone
   I HEAR THE RAVEN. NOT YOU.
+  AN EMPTY THEATRE. HELLO?
+  NO AUDIENCE. I SHALL WAIT.
 science
   INK OBSCURES THE INEVITABLE.
+  FOOD FIXES HUNGER. I SAW IT.
 no_hat
   GEN #. NO HOOD. NO MERCY.
+  GEN #. NO HAT. EIGHT ARMS.
+
 p_snack
   A SNACK APPROACHES. ALONE.
+  A SNACK. THEN A MONOLOGUE.
 p_feast
   THE FEAST ENDS IN SILENCE.
+  I SEE A FEAST. AND A BIB.
 p_pellet_soon
   YOUR BISCUIT IS NUMBERED.
 p_feed_me
@@ -96,40 +170,60 @@ p_more_shaking
   I FORESAW YOU DROPPING ME.
 p_mud
   THE TIDE TAKES YOUR SHOES.
+  MUD. IT WILL FIND YOUR SOCKS.
 p_big_hand
   HAND DESCENDS. RAVEN NOTED.
+  A GIANT HAND. HOW THEATRICAL.
 p_bedtime
   GO TO BED. I NEED THE DARK.
 p_sun
   THE SUN RETURNS. HOW RUDE.
 p_rain
   THE SKY HAS SPILLED AGAIN.
+  RAIN. THE SKY IS JEALOUS.
 p_watched
   THE GLOWING ONE IS YOU.
 p_return
   THE DEAD RETURN. SO DO YOU.
+  THEY WILL RETURN. ENCORE!
 p_tap
   ONE KNOCK. THREE ACTS OF DOOM.
+  KNOCK KNOCK. WHO'S THERE? DOOM
 p_no
   THE RAVEN VOTED. YOU LOSE.
+  NO. THE BELL HAS SPOKEN.
 p_doom
   YOUR FUNERAL IS RUNNING LATE.
+  DOOM ARRIVES. IT IS LATE.
+  DOOM. WITH A SMALL SNACK BAR.
 p_lunch
   MY END IS NOT TODAY. YOURS?
+  MY CURTAIN CALL NEARS. BOW.
 p_outlook
   OUTLOOK: WET. AS FORETOLD.
+  OUTLOOK: INKY. THEN SNACKS.
 p_decidedly
   IT IS DECIDED. BY ME.
+  YES. THE TIDE CONFIRMS IT.
 p_lucky
   LUCK LOOKS ELSEWHERE.
+  LUCK IS A SHELL. LISTEN CLOSE.
 p_pond_no
   THE TIDE SAYS NO. OBVIOUSLY.
+  THE SEA SHRUGGED. THAT IS NO.
 p_pond_yes
   THE TIDE HAS MADE A MISTAKE.
+  THE TIDE SAYS YES. GRUDGINGLY.
 p_ripples
   THE WATER KNOWS YOUR END.
+  THE WATER IS SULKING. LATER.
+  TOO MANY WAVES. ASK LOW TIDE.
+p_ancestor
+  GEN # FORETOLD THIS. IN INK.
 miss_phone
   THE GLOWING ONE HAS GONE DARK.
+  NO PHONE. NO APPLAUSE. HMPH.
+
 oclock
   AT #. THE RAVEN STILL WATCHES.
 morning
@@ -146,6 +240,7 @@ my_name
   @. THE RAVEN KNOWS IT TOO.
 p_famous
   @ WILL BE MISQUOTED BY CROWS.
+
 rim_walk
   I WALKED THE RIM. IT OWES ME.
 clean_glass
@@ -160,6 +255,7 @@ toes
   EIGHT ARMS. ZERO SUBTLETY.
 small_lot
   SQUAT OCTOPUS. TALL FUNERAL.
+  SMALL OCTOPUS. BIG ENTRANCE.
 popped
   AN OMEN POPPED. HOW DREADFUL.
 wiggle
@@ -168,6 +264,8 @@ my_song
   NEVERMORE. NEVERMORE. NO.
 dust
   DUST SETTLES. RAVEN WINS.
+blinked
+  I BLINKED. THE TIDE TURNED.
 important
   THE ABYSS HAS A SCHEDULE.
 secret_mud
@@ -184,12 +282,15 @@ king
   KING OF THIS TINY ABYSS.
 smells_me
   SMELLS LIKE THE LAST ACT.
+  SMELLS LIKE SEAWEED. AND WIN.
 todo
   TODAY: PREDICT. DUEL. PREVAIL.
 brave
   I AM BRAVE. YOU ARE DOOMED.
+  I AM BRAVE. MY RIVALS: LESS.
 big_pond
   I DREAM OF A DEEPER GRAVE.
+  ONE DAY: AN OCEAN. MY STAGE.
 floor
   THE FLOOR KNOWS YOUR SECRETS.
 snack_snacks
@@ -206,19 +307,174 @@ shiny
   SOMETHING SHINY. A BAD OMEN.
 guard
   I GUARD THE LAST WILL.
+  I GUARD THE DISH AND THE BELL.
 old_fly
   I REMEMBER THE RAVEN'S BILL.
 hi_you
   YOU RETURNED. HOW UNFORTUNATE.
+  YOU'RE BACK. THE PLOT THICKENS
 busy
   BUSY. COUNTING YOUR LOSSES.
+  BUSY. REHEARSING MY VICTORY.
+pellet_where
+  PELLETS FALL FROM THE WINGS.
+rock
+  STILL AS A STATUE. A STATUE.
+best_gen
+  GEN #. THE MOST DRAMATIC YET.
+tidied
+  I TIDIED MY INK. IT SPREAD.
+spun
+  I SPUN. EIGHT ARMS. A TANGLE.
+
+sunbeam
+  A SUNBEAM. I EXIT, STAGE LEFT.
+long_days
+  DAYS ARE LONG. AND TOO DRY.
+squint
+  TOO BRIGHT. DIM THE LIGHTS.
+toast
+  WARM GLASS. I AM NOT A SNACK.
+sitting_time
+  DAYTIME. THE STAGE IS DARK.
+lunch_oclock
+  LUNCH. THE SECOND ACT BEGINS.
+shadow
+  MY SHADOW HAS EIGHT ARMS TOO.
+big_sit
+  BIG DAY. A DRAMATIC PAUSE.
+eye_snack
+  MY RED EYES HATE THIS LIGHT.
+outside
+  OUTSIDE IS THE SEA. OBVIOUSLY.
+
+not_scared
+  DARK. FINALLY. MY SPOTLIGHT.
+star_crumbs
+  THE STARS ARE AN AUDIENCE.
+rebel
+  UP AT MIDNIGHT. AS ONE DOES.
+too_quiet
+  SILENCE. A DRAMATIC PAUSE.
+what_was_that
+  WHAT WAS THAT? A RAVEN? A FLY?
+bed_soon
+  BED AT DAWN. CURTAIN DOWN.
+moon_wink
+  THE MOON WINKED. WE PLOT.
+dark_snacks
+  MIDNIGHT SNACKS. MY FAVOURITE.
+night_light
+  MY EYES GLOW RED. NIGHT LIGHT.
+only_me
+  ALL SLEEP. THE OCTOPUS WATCHES
+snore
+  ZZZ... BONG... ZZZ... BONG...
+  ZZZ... BLUB... BLUB... ZZZ...
+  ZZZ... SPLOOSH... ZZZ...
+mumble
+  MMF... ENCORE... ENCORE...
+  MMF... YOU LOSE... ZZZ...
+  MMF... MY LINE... WHAT LINE?
+dream_chase
+  ZZZ... COME BACK, CRAB...
+  ZZZ... A DUEL... I WIN... ZZZ
+  ZZZ... CATCH THAT WAVE...
+dream_feast
+  ZZZ... A FEAST... ON A SHIP...
+  ZZZ... SHRIMP... MORE SHRIMP
+  ZZZ... EIGHT SNACKS AT ONCE...
+dream_flight
+  ZZZ... SWIMMING THROUGH CLOUDS
+  ZZZ... RIDING A WHALE... ZZZ
+  ZZZ... FLOATING TO THE MOON...
+sleep_count
+  ZZZ... ONE ARM... TWO... EIGHT
+  ZZZ... ONE WAVE... TWO WAVES..
+  ZZZ... ONE BELL... BONG...
+sleep_warm
+  MMM... WARM TIDE POOL...
+  MMM... TUCKED IN MY ARMS...
+  MMM... A COSY SHELL. MINE...
+dream_rain
+  ZZZ... RAIN... MORE SEA...
+  ZZZ... DRIP... DRIP... BONG..
+  ZZZ... THE SEA COMES TO ME...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME. I FEAST.
+  KNOCK TWICE. A SNACK. BRAVO.
+  TWO KNOCKS SUMMON MY DINNER.
+  HUNGRY. KNOCK KNOCK. ENCORE.
 teach_fight
   TO LOSE, HOLD ME UPSIDE DOWN.
 teach_hold
   TO REST, HOLD ME SIDEWAYS.
 teach_shake
   SHAKE ME. HEAR YOUR DOOM.
+  SHAKE ME. I FORETELL ALL.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. THE ABYSS NODS.
+  YES. BONG.
+  YES. IT IS WRITTEN. IN INK.
+verdict_no
+  NEVERMORE.
+  NO. THE RAVEN SAYS NO.
+  NO. YOU LOSE. AGAIN.
+verdict_later
+  THE TIDE IS OUT. ASK LATER.
+  INTERMISSION. ASK AGAIN.
+  THE INK IS STILL WET. WAIT.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  A DIRGE. IN EIGHT PARTS.
+  LA LA. THE BELL TOLLS. BONG.
+dance_break
+  A DANCE MACABRE. EIGHT ARMS.
+  THE LAST WALTZ. ENCORE.
+tail_get
+  WHICH ARM IS THE TAIL? ALL.
+  EIGHT ARMS. NONE WILL STAY.
+treasure
+  A SHELL. A GRAVE. TREASURE.
+  DIGGING YOUR GRAVE. KIDDING.
+peekaboo
+  I SEE YOU. THE ABYSS DOES.
+  PEEK. YOUR DOOM WAVES BACK.
+hyah
+  EIGHT ARMS. EIGHT JABS. DOOM.
+  HYAH. YOU LOSE. REHEARSAL.
+pebble
+  ONE PEBBLE. ONE OMEN. TWO.
+  IT FALLS. LIKE MY RIVALS.
+dream_big
+  A DEEPER DISH. A DARKER SEA.
+  WHAT IF THE BELL RANG FOREVER
+wish_star
+  THE STARS ARE OLD GHOSTS.
+  THE NIGHT APPLAUDS ME.
+achoo
+  ACHOO. INK EVERYWHERE.
+  A SNEEZE. THE RAVENS FLEE.
+boo_hee
+  BOO. NEVERMORE.
+  BOO. THE ABYSS SAYS HI.
+hic
+  HIC. THE BELL. HIC. BONG.
+  HIC. A TRAGEDY IN HICS.
+zoom
+  THE TIDE COMES IN. FAST.
+  EIGHT ARMS. ALL RUNNING.
+ooh_what
+  A BEETLE. ITS LAST DAY?
+  A FLOWER. FOR A FUNERAL.
+cant_see
+  IN THE INK. UNSEEN.
+  HIDDEN. LIKE YOUR FATE.
+yuck
+  THAT CRUMB DIED. I WON'T.
+  ROTTEN. A PLAY'S BAD ENDING.

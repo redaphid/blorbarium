@@ -104,6 +104,18 @@ inline constexpr SpeciesLine SPECIES_LINES[] = {
   {SpeciesId{0xFF}, ThoughtId{0xFF}, ""},   // keeps the array non-empty when no species has lines
 };
 
+// A species' own answers to a shake (species_verdicts.def, written by
+// tools/personality.py from the verdict_* sections of personalities/<species>.txt):
+// kind 0 yes, 1 no, 2 not yet. They stand in for the ball's plain ones, kind
+// by kind, so a frog's YES is his own and not every pet's.
+struct SpeciesVerdict { SpeciesId species; uint8_t kind; const char* text; };
+inline constexpr SpeciesVerdict SPECIES_VERDICTS[] = {
+#define BLORB_SPECIES_VERDICT(sid, sp, kind, text) {SpeciesId{sid}, kind, text},
+#include "blorb/defs/species_verdicts.def"
+#undef BLORB_SPECIES_VERDICT
+  {SpeciesId{0xFF}, 0xFF, ""},   // keeps the array non-empty when no species has verdicts
+};
+
 // ---- the text ---------------------------------------------------------------------
 constexpr size_t kMaxThoughtText = 30;
 constexpr size_t kMaxFrameText = 22;          // a voice's prefix and suffix together
@@ -157,6 +169,11 @@ constexpr bool thoughtsWritable() {
     if (!writable(l.text, kMaxVoicedText, whenOf(l.thought))) return false;
   for (const SpeciesLine& l : SPECIES_LINES)
     if (l.species.v != 0xFF && !writable(l.text, kMaxThoughtText, whenOf(l.thought))) return false;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) {
+    if (v.species.v == 0xFF) continue;
+    if (v.kind > 2 || !writable(v.text, kMaxThoughtText, "")) return false;
+    for (const char* s = v.text; *s; ++s) if (isMark(*s)) return false;
+  }
   for (const FrameInfo& f : FRAMES) {
     for (const char* s = f.prefix; *s; ++s) if (!inFont(*s)) return false;
     for (const char* s = f.suffix; *s; ++s) if (!inFont(*s)) return false;
@@ -172,6 +189,9 @@ constexpr bool speciesLinesNameTheirSpecies() {
 #define BLORB_SPECIES_LINE(sid, sp, t, text)   if (sid >= kSpeciesCount || !sameName(SPECIES[sid].name, #sp)) return false;
 #include "blorb/defs/species_lines.def"
 #undef BLORB_SPECIES_LINE
+#define BLORB_SPECIES_VERDICT(sid, sp, kind, text)   if (sid >= kSpeciesCount || !sameName(SPECIES[sid].name, #sp)) return false;
+#include "blorb/defs/species_verdicts.def"
+#undef BLORB_SPECIES_VERDICT
   return true;
 }
 constexpr bool everyVoiceFramed() {
@@ -187,18 +207,22 @@ static_assert(kThoughtCount <= 255, "the Thinker indexes rows by a byte");
 static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two marks, a mark its condition does not "
                                   "give, or a character the font lacks");
 static_assert(everyVoiceFramed(), "every voice needs at least one BLORB_FRAME");
-static_assert(speciesLinesNameTheirSpecies(), "species_lines.def: an id and a name disagree with species.def; rerun tools/personality.py build");
+static_assert(speciesLinesNameTheirSpecies(), "species_lines.def or species_verdicts.def: an id and a name disagree "
+                                              "with species.def; rerun tools/personality.py build");
 
 // What a line's '@' and '*' stand for: his name and one taught line, in the font.
 struct Words { std::string_view name, taught; };
 
 // The line as said, its mark replaced: '#' by `num`, '@' and '*' by `words`.
 // If his species has its own lines for the row (species_lines.def), one of
-// them stands in for the row's text and the voice's own lines. Otherwise: one
-// of the voice's own lines for the row (thought_lines.def) if it has any, else
-// the row's text. Anything but a voice's own line is cut to the first sentence
-// if the voice is terse, inside one of the voice's frames. `pick` chooses
-// among them, modulo their count. Returns the length.
+// them is said exactly as written: his file is already his voice, so no frame
+// pads it and no terse cut shortens it. Otherwise: one of the voice's own
+// lines for the row (thought_lines.def) if it has any, else the row's shared
+// text, which a terse voice cuts to its first sentence and which wears one of
+// the voice's frames only one time in kFrameOneIn (a frame on every line was
+// the "..., OR SOMETHING" filler). `pick` chooses among them, modulo their
+// count. Returns the length.
+constexpr uint8_t kFrameOneIn = 4;
 // The one mark grows a line most as a taught line ('#' is 5 digits, '@' a name).
 constexpr size_t kThoughtLineCap = kMaxVoicedText + (kMaxTaughtText - 1) + 1;
 static_assert(kMaxTaughtText >= kMaxNameText && kMaxTaughtText >= 5);
@@ -227,6 +251,10 @@ struct ThoughtPick { ThoughtId id; uint16_t num; };
 // The prophecy a shake brings, by the oracle gene's topic weights; rows still
 // cooling down (readyAt, per row, nullable) are skipped. Nullopt if none holds.
 std::optional<ThoughtPick> chooseProphecy(const Observed&, const uint32_t* readyAt, Rng&);
+// The ball's bare answer to a shake: yes, no or not yet (45 / 30 / 25), in
+// the species' own words when his file gives that kind (SPECIES_VERDICTS),
+// else the ball's plain ones.
+const char* drawVerdict(Rng&, SpeciesId);
 
 class Thinker {
  public:

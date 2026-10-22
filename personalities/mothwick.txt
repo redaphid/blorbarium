@@ -1,6 +1,7 @@
 MOTHWICK
 glow-moth: hums to himself
-Element Spark, style Trick, power lantern. Voice: rambling, which wraps his lines as "SO, UM, LINE", "LINE, OR SOMETHING", "LINE. ANYWAY. WHERE WAS I".
+Element Spark, style Trick, power lantern. Voice: rambling. His own lines below are said exactly as written, so they carry
+the voice themselves; the rambling frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -36,63 +37,115 @@ HUMMM. OOH, A LIGHT. I DID NOT EAT THE SOCK.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
   A SNACK. OR A SOCK. EITHER.
+  HUMMM. MY TUMMY IS HUMMING TOO
+  HUNGRY. FOR LAMPS. NO. FOOD.
+  A CRUMB, PLEASE. NOT WOOL. NO.
+  SNACK? OOH, A LIGHT. SNACK?
 starving
   I COULD EAT A WHOLE JUMPER.
+  THAT SOCK LOOKS TASTY. NO!
+  I'D EAT A SCARF. A SMALL ONE.
 hoarding
   I'LL SAVE THAT FOR MOONRISE.
+  THAT CRUMB IS FOR MIDNIGHT.
+  NOT NOW. LATER. BY LAMPLIGHT.
 crunch
   MUNCH. HUMMM. MUNCH.
+  NOM. IT'S NOT A SOCK. GOOD.
+  CRUNCH. HUM. CRUNCH. HUM.
+  MMM. NEARLY AS GOOD AS A LAMP.
 fuzzy_bite
   THAT ONE WAS FUZZY. LIKE ME.
+  FUZZY. LIKE A SOCK. ALLEGEDLY.
 smells
   SOMETHING SMELLS. NOT LAMPLY.
+  A WHIFF. LIKE A WET SOCK. HMM.
 green
   I FEEL GREEN. I WAS PURPLE.
+  MY GLOW HAS GONE A BIT GREEN.
 ow
   OW. MY FLUFF IS RUFFLED.
+  OW. I'VE LOST A BIT OF DUST.
 heard_you
   I HEARD YOU. I WAS HUMMING.
   ONE KNOCK. HUMM. AND THE NEXT?
+  KNOCK AGAIN? I LOST COUNT.
+  WHO'S THERE? IS IT A LAMP?
 ground_lies
   AAH! MY WINGS! MY DIGNITY!
+  WOBBLE! MY DUST! EVERYWHERE!
+  WHOA. THE MOON FELL OVER. OH.
 not_again
   NOT THE SHAKING. MY DUST!
+  NO SHAKING. I JUST GOT FLUFFY.
+  OH NO. MY RUFF WILL GO FLAT.
 hooded
   I AM HIDING IN MY RUFF.
+  I AM NOT HERE. I AM A SCARF.
+  WINGS SHUT. I'M A FLUFFY ROCK.
 ancestor_fear
   GEN # FLEW FROM THIS TOO.
 inherited
   GEN # HUMS IN MY FLUFF.
 counted
   I COUNTED MY SPOTS. SIX. AGAIN
+  BORED. I'D LOVE A LAMP. ANY.
+  NO LAMPS. NO SONGS. NO SOCKS.
 put_me_down
   MIND THE WINGS. MIND THEM.
+  CAREFUL. I'M MOSTLY FLUFF.
+  DOWN, PLEASE. MY DUST IS SHY.
 warm_hands
   WARM HANDS. LIKE A SOFT LAMP.
+  WARM. LIKE A PORCH AT NIGHT.
+  HUMMM. COSY. LIKE A MITTEN.
+  YOUR HANDS GLOW. A BIT. HUMM.
 sky_down
   THE MOON IS DOWN THERE NOW?
   UPSIDE DOWN. MY DUST FALLS UP.
+  WHICH WAY IS THE LAMP? ALL?
 heavy_eyes
   HUMMM... HMM... ZZ...
+  MY GLOW IS GOING DIM...
+  SLEEPY. IS IT DAY? IT IS. ZZ.
+  YAWN. MY ANTENNAE DROOP.
 dream_pellets
   ZZZ... A LAMP... SO BRIGHT...
+  ZZZ... A CAKE MADE OF LIGHT...
+  ZZZ... CANDLES... ALL MINE...
+  ZZZ... A SOCK... I MEAN NO...
+  ZZZ... PORCH LIGHT PIE...
+  ZZZ... MOONBEAM SPAGHETTI...
 see_pellet
   I SEE... A PELLET. IT GLOWS?
+  I SEE... A CRUMB. NOT A SOCK.
+  I SEE... A SNACK. AND A LAMP?
 see_phone
   I SEE... A LOVELY BRIGHT LIGHT
+  I SEE... A GLOWING SLAB. OOH.
+  I SEE... A SCREEN. I MUST GO.
 see_nothing
   I SEE... NO CRUMBS. NO LAMPS.
+  I SEE... AN EMPTY DISH. DIM.
+  I SEE... NOTHING. NOT A SOCK.
 see_damp
   I SEE... A LIGHT IN THE FOG.
+  I SEE... DRIZZLE. MY WINGS. NO
+  I SEE... A LAMP IN THE MIST.
 knees
   MY WINGS CREAK. HUMMM.
+  OLD MOTH. SAME LOVE OF LAMPS.
 moon
   THE MOON. THE BIGGEST LAMP.
+  THE MOON. ONE DAY, I'LL GET IT
 anyone
   HELLO? A LAMP? A FRIEND?
+  ANYONE? I'LL LEAVE A LIGHT ON.
+  HUMMM. HUMMING FOR TWO NOW.
 science
   FOOD FIXES HUNGER. HUMM. TRUE.
 no_hat
@@ -100,8 +153,10 @@ no_hat
 
 p_snack
   SNACKS BY LAMPLIGHT. SOON.
+  A SNACK COMES. NOT A SOCK.
 p_feast
   A FEAST OF WOOLLY SOCKS.
+  I SEE A BANQUET. WITH CANDLES.
 p_pellet_soon
   A PELLET WILL DRIFT DOWN.
 p_feed_me
@@ -112,42 +167,55 @@ p_more_shaking
   MORE SHAKING. MORE DUST. SIGH.
 p_mud
   MUD. ON MY WINGS. NO.
+  I SEE MUD. AND ME, FLYING OFF.
 p_big_hand
   A BIG HAND. HIDE THE GLOW.
+  A HAND COMES. IT HAS A TORCH?
 p_bedtime
   DARK COMES. MY BEDTIME? NO.
 p_sun
   THE SUN RETURNS. TOO BRIGHT.
 p_rain
   RAIN. MY WINGS WILL DROOP.
+  RAIN COMES. I'LL BE INDOORS.
 p_watched
   THE BRIGHT ONE IS WATCHING.
 p_return
   THE GLOW WILL RETURN. HUMMM.
 p_tap
   A KNOCK KNOCK. SOON. HUMMM.
+  TWO KNOCKS COME. THEN CRUMBS.
 p_no
   NO. HUMMM. STILL NO.
+  NO. THE LAMP FLICKERED. NO.
 p_doom
   DOOM. BUT CANDLELIT.
+  DOOM COMES. IT FORGOT A LAMP.
 p_lunch
   MY GLOW FADES. LUNCH, THOUGH.
 p_outlook
   OUTLOOK BRIGHT. TOO BRIGHT.
+  OUTLOOK: MOONLIT. WONDERFUL.
 p_decidedly
   IT IS SO. I HUMMED ON IT.
+  YES. THE PORCH LIGHT SAYS SO.
 p_lucky
   LUCK IS A PORCH LIGHT.
+  YOUR LUCK GLOWS. LIKE ME.
 p_pond_no
   THE POND IS DARK. IT SAYS NO.
+  THE POND BLEW OUT ITS CANDLE.
 p_pond_yes
   THE POND GLIMMERS. YES.
+  THE POND LIT UP. THAT'S YES.
 p_ripples
   RIPPLES. LIKE LAMP FLICKER.
+  RIPPLES. I LOST THE QUESTION.
 p_ancestor
   GEN # SAW THIS BY MOONLIGHT.
 miss_phone
   I MISS THE BRIGHT RECTANGLE.
+  NO GLOWING SLAB. JUST THE MOON
 
 oclock
   HUMMM. # O'CLOCK. GOOD HOUR.
@@ -182,6 +250,7 @@ small_lot
   SMALL MOTH. BIG FLUFF.
 popped
   A THOUGHT. IT FLEW OFF.
+  A THOUGHT. OOH, A LIGHT. GONE.
 wiggle
   WING WIGGLE. DUST EVERYWHERE.
 my_song
@@ -194,6 +263,7 @@ important
   I AM A LANTERN. IMPORTANT.
 secret_mud
   SECRET: I ATE A SOCK ONCE.
+  I DID NOT EAT THE SOCK. SHH.
 nap_plan
   DAY NAP. A LONG ONE. HUMM.
 ceiling
@@ -224,6 +294,7 @@ ask_me
   ASK ME ABOUT LAMPS. ANY LAMP.
 legs
   SIX LEGS. FOUR TOO MANY? NO.
+  SIX LEGS. NONE OF THEM SOCKS.
 shiny
   SOMETHING SHINY. I MUST GO.
 guard
@@ -263,6 +334,7 @@ big_sit
   BIG DAY. BIG YAWN.
 eye_snack
   LIGHT. MY FAVOURITE SNACK.
+  THE SUN: A LAMP I CAN'T REACH.
 outside
   IS THERE A PORCH OUTSIDE?
 
@@ -289,34 +361,109 @@ only_me
 snore
   HUMMM... ZZZ... HUMMMM...
   ZZZ... HMMM... ZZZ... HMM...
+  ZZZ... HUMM... FLUTTER... ZZZ
 mumble
   MMF... NOT THE SOCK... MMF...
   MMM... FIVE MORE MOONS...
+  MMF... LEAVE THE LIGHT ON...
 dream_chase
   ZZZ... THE LIGHT... WAIT UP...
   ZZZ... PORCH LIGHT... ALMOST
+  ZZZ... A FIREFLY... SO FAST...
 dream_feast
   ZZZ... A WHOLE WOOLLY JUMPER
   ZZZ... A SOCK... I DIDN'T...
+  ZZZ... MITTENS... WITH JAM...
 dream_flight
   ZZZ... UP TO THE MOON... HUMM
   ZZZ... I GLOW... I FLUTTER...
+  ZZZ... A SKY OF LANTERNS...
 sleep_count
   ONE LAMP... TWO... OOH, LIGHT
   ONE MOON... TWO MOONS? HUMM
+  ONE SOCK... TWO... NOT ME...
 sleep_warm
   MMM... WOOLLY... COSY RUFF...
   MMM... A WOOL SCARF... SNUG...
+  MMM... TUCKED IN MY WINGS...
 dream_rain
   ZZZ... NOT RAIN... MY WINGS...
   ZZZ... DRIP... GO AWAY RAIN...
+  ZZZ... AN UMBRELLA... A LAMP.
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK FOR SNACKS. HUMMM.
+  KNOCK TWICE ON ME. FOOD COMES.
+  TWO KNOCKS. A CRUMB. NO SOCKS.
+  HUNGRY. KNOCK KNOCK ON ME?
 teach_fight
   A DUEL? HOLD ME UPSIDE DOWN.
 teach_hold
   A NAP? HOLD ME SIDEWAYS. HUMM.
 teach_shake
   SHAKE ME. I SEE LAMPS. AND YOU
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. AS BRIGHT AS A LAMP.
+  HUMMM. YES. A GLOWING YES.
+  YES. OOH, AND A LIGHT. YES.
+verdict_no
+  NO. AND I DID NOT EAT IT.
+  NO. THE LAMP SAYS NO.
+  HUMMM... NO. SORRY. NO.
+verdict_later
+  ASK AGAIN. I SAW A LIGHT.
+  WAIT. WHAT WAS THE QUESTION?
+  ASK AT MOONRISE.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  HUMMM. HUMMM. HUM?
+  A SONG ABOUT LAMPS. HUMMM.
+dance_break
+  A MOTH DANCE. FOR THE MOON.
+  FLUTTER. FLUTTER. HUMMM.
+tail_get
+  MY FLUFF. COME BACK, FLUFF.
+  ROUND I GO. WHERE WAS I?
+treasure
+  A SOCK? NOT MINE. NO.
+  DIGGING FOR... HUMMM. WHAT?
+peekaboo
+  YOU GLOW. OR IS THAT A LAMP?
+  OOH. A FACE. IS IT A LIGHT?
+hyah
+  HYAH! I MEAN... HUMMM.
+  FLUFF FISTS! FLUFF FISTS!
+pebble
+  A PEBBLE. NOT A SOCK. HUMMM.
+  UP. DOWN. OOH, IT SHINES.
+dream_big
+  A PORCH LIGHT ALL MY OWN.
+  WHAT IF THE MOON WAS WOOL?
+wish_star
+  SO MANY LITTLE LAMPS.
+  THE MOON. I MUST NOT. I MUST.
+achoo
+  ACHOO! THERE GOES MY DUST.
+  AH... CHOO. MY RUFF!
+boo_hee
+  BOO. I AM VERY FLUFFY.
+  BOO! HUMMM. DID IT WORK?
+hic
+  HIC. HUMMM. HIC.
+  HIC. I DID NOT EAT A SOCK.
+zoom
+  THE LIGHT! WHERE? THERE!
+  ROUND THE LAMP! ROUND AGAIN!
+ooh_what
+  OOH. A LIGHT? NO. A BEETLE.
+  A FLOWER. IT SMELLS OF MOON.
+cant_see
+  WINGS UP. NOBODY HOME.
+  UNDER MY WINGS. HUMMM.
+yuck
+  THAT ONE IS FUZZIER THAN ME.
+  NO. IT SMELLS LIKE A SOCK.

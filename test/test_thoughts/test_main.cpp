@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <variant>
@@ -13,6 +14,7 @@
 #include "../../src/hw/orient.h"
 #include "links.h"
 #include "mem_storage.h"
+#include "scripted_owner.h"
 #include "traces.h"
 
 using namespace blorb;
@@ -367,6 +369,8 @@ TEST(Prophecy, TheDaysFirstForetellingIsAFortuneAndLaterOnesMayBeVerdicts) {
   auto isVerdict = [](const std::string& text) {
     for (const char* v : kVerdictTexts)
       if (text == v) return true;
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)   // the frog's own answers stand in for the ball's
+      if (v.species == kGrungo && text == v.text) return true;
     return false;
   };
   Rig r;
@@ -485,12 +489,73 @@ TEST(Personality, ASpeciesLineIsHisAlone) {
   auto says = [](const std::vector<std::string>& lines, const char* what) {
     return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.find(what) != std::string::npos; });
   };
-  EXPECT_TRUE(says(heard(kGrungo), "I FORESEE FLIES. IN MY MOUTH."));
+  auto firstOwn = [](SpeciesId s) {
+    for (const SpeciesLine& l : SPECIES_LINES)
+      if (l.species == s && l.thought == thought::peckish) return std::string(l.text);
+    return std::string("(none)");
+  };
+  const std::string frog = firstOwn(kGrungo), snail = firstOwn(mossby);
+  EXPECT_TRUE(says(heard(kGrungo), frog.c_str()));
   EXPECT_FALSE(says(heard(kGrungo), "THE GOOD BITS")) << "his own line replaces the shared one";
-  EXPECT_FALSE(says(heard(mossby), "FORESEE FLIES"));
-  EXPECT_TRUE(says(heard(mossby), "A SNACK WOULD BE NICE. LATER."));
+  EXPECT_FALSE(says(heard(mossby), frog.c_str()));
+  EXPECT_TRUE(says(heard(mossby), snail.c_str()));
   EXPECT_FALSE(says(heard(mossby), "THE GOOD BITS"));
   EXPECT_TRUE(says(heard(kSharedOnly), "SNACK? SNACK. THE GOOD BITS!")) << "no species: the shared line";
+}
+
+// The owner's complaint (#34): every line came wrapped in a voice frame, so
+// half the dish said "..., OR SOMETHING" and "SO, UM, ...". A species' own line
+// is his voice already: said exactly as written, whatever the voice or draw.
+TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
+  char out[kThoughtLineCap];
+  for (const SpeciesLine& l : SPECIES_LINES) {
+    if (l.species.v == 0xFF || std::strpbrk(l.text, "#@*")) continue;
+    uint8_t lines = 0;
+    for (const SpeciesLine& m : SPECIES_LINES) lines += m.species == l.species && m.thought == l.thought;
+    for (const VoiceInfo& v : VOICES)
+      for (uint32_t pick = 0; pick < 2u * kFrameOneIn * lines; ++pick) {
+        thoughtLine(l.thought, 0, v.id, uint8_t(pick), out, l.species);
+        bool known = false;
+        for (const SpeciesLine& m : SPECIES_LINES)
+          known = known || (m.species == l.species && m.thought == l.thought && std::strcmp(out, m.text) == 0);
+        ASSERT_TRUE(known) << v.name << " said \"" << out << "\", not one of his own lines as written";
+      }
+  }
+}
+
+// A shared line (the fallback, when his file has none for the row) wears a
+// frame only one draw in kFrameOneIn.
+TEST(Voice, ASharedLineIsFramedOnlyNowAndThen) {
+  char out[kThoughtLineCap];
+  const std::string bare = thoughtInfo(thought::p_mud)->text;
+  for (const VoiceInfo& v : VOICES) {
+    int framed = 0;
+    for (uint32_t pick = 0; pick < 256; ++pick) {
+      thoughtLine(thought::p_mud, 0, v.id, uint8_t(pick), out);
+      framed += out != bare;
+    }
+    if (std::string(v.name) == "terse") EXPECT_EQ(framed, 0);
+    else EXPECT_EQ(framed, 256 / kFrameOneIn) << v.name;
+  }
+}
+
+// Half of later shakes are the ball's bare answer: in the species' own words
+// when his file gives them, the ball's plain ones otherwise.
+TEST(Prophecy, AVerdictIsInHisOwnWordsWhenHeHasThem) {
+  for (const SpeciesInfo& sp : SPECIES) {
+    uint8_t kinds = 0;   // a bit per kind he has his own words for
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+      if (v.species == sp.id) kinds |= uint8_t(1u << v.kind);
+    Rng rng = Rng::seeded(sp.id.v + 1);
+    for (int i = 0; i < 200; ++i) {
+      const char* said = drawVerdict(rng, sp.id);
+      ASSERT_NE(said, nullptr);
+      bool his = false;
+      for (const SpeciesVerdict& v : SPECIES_VERDICTS) his = his || (v.species == sp.id && v.text == said);
+      if (kinds == 0b111) ASSERT_TRUE(his) << sp.name << " said the ball's plain " << said;
+      if (kinds == 0) ASSERT_FALSE(his);
+    }
+  }
 }
 
 // ---- what a phone adds -------------------------------------------------------------
@@ -802,8 +867,61 @@ TEST(Thoughts, TheSkyIsDownOnlyWhenHeIsUpsideDownFromHome) {
     EXPECT_EQ(countOf(r.said, thought::sky_down), 0) << "the right way up, or face down, he is not upside down";
     EXPECT_FALSE(r.said.empty()) << "he talked meanwhile";
 
-    holdPose(r, sh, edgeUp(home + 2), 10 * kSecond);   // the hang: half round from home
+    // The hang: half round from home. Held long enough for a line he had just
+    // started as he was picked up (PUT ME DOWN, up to 30 characters: 19 s) to
+    // run out first; a line in progress is never cut.
+    holdPose(r, sh, edgeUp(home + 2), 25 * kSecond);
     EXPECT_EQ(countOf(r.said, thought::sky_down), 1) << "upside down from home, he notices";
+  }
+}
+
+// ---- what a kid actually sees: hours of each species -------------------------------
+//
+// Not a check but a measurement, run on demand: BLORB_LINE_SIM=<hours> lives
+// each species that long with a body-only caretaker (ScriptedOwner: feeds,
+// cradles, tucks him in at dusk) who also shakes him every 17 minutes and
+// knocks every 23, and prints the lines that crossed the screen, most
+// frequent first (BLORB_LINE_SIM_TOP of them, default 15).
+//   BLORB_LINE_SIM=6 pio test -e native -f test_thoughts
+TEST(LineSim, WhatEachSpeciesSaysOverHours) {
+  const char* env = std::getenv("BLORB_LINE_SIM");
+  if (!env) GTEST_SKIP() << "set BLORB_LINE_SIM=<hours> to run";
+  const uint32_t hours = uint32_t(std::max(1, std::atoi(env)));
+  const char* topEnv = std::getenv("BLORB_LINE_SIM_TOP");
+  const int top = topEnv ? std::atoi(topEnv) : 15;
+  for (const SpeciesInfo& sp : SPECIES) {
+    MemStorage store;
+    NullLink link;
+    ScriptedOwner owner;
+    const Genome founder = edited(starterGenomeOf(sp.id, 7), GeneKindOf<EggGene>::value, 255, 0, 1);
+    Dish dish(store, 7, 1, DishOptions{nullptr, &founder});
+    std::map<std::string, int> times;
+    int total = 0, prophecies = 0;
+    bool wasThinking = false;
+    Fx lastPhase{};
+    for (uint32_t ms = 0; ms < hours * 3600 * kSecond; ms += kSampleMs) {
+      dish.sample(owner.next(ms, dish), ms);
+      dish.tick(ms, link);
+      if (ms && ms % (17 * kMinute) == 0) dish.fire(stim::shake);
+      if (ms && ms % (23 * kMinute) == 0) dish.fire(stim::knock);
+      if (ms % kTickMs) continue;
+      const Appearance a = dish.appearance();
+      if (a.thinking && (!wasThinking || a.thoughtPhase < lastPhase)) {
+        ++times[a.line];
+        ++total;
+        prophecies += a.prophecy;
+      }
+      wasThinking = a.thinking;
+      lastPhase = a.thoughtPhase;
+    }
+    std::vector<std::pair<int, std::string>> ranked;
+    for (const auto& [line, n] : times) ranked.emplace_back(n, line);
+    std::sort(ranked.begin(), ranked.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first || (a.first == b.first && a.second < b.second); });
+    std::cout << "[linesim] " << sp.name << ": " << total << " lines (" << prophecies << " foretold), " << times.size()
+              << " distinct in " << hours << " h\n";
+    for (int i = 0; i < int(ranked.size()) && i < top; ++i)
+      std::cout << "[linesim]   " << ranked[i].first << "x  " << ranked[i].second << "\n";
   }
 }
 

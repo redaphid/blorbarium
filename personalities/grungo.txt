@@ -1,6 +1,7 @@
 GRUNGO
 frog: a skittish oracle
-Element Splash, style Trick, power foresee. Voice: mystic, which wraps his lines as "THE REEDS SAY: LINE", "LINE... SO IT IS.", "HMM. LINE...".
+Element Splash, style Trick, power foresee. Voice: mystic. His own lines below are said exactly as written, so they carry
+the voice themselves; the mystic frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -35,64 +36,112 @@ I FORESAW THIS. HOOD UP. THE REEDS KNOW.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: his voice frames only a shared line, and rarely.
 
 peckish
   I FORESEE FLIES. IN MY MOUTH.
   MY HOOD HOLDS NO SNACKS.
+  I FORESEE A SNACK. IN ME.
+  MY TUMMY HAS HAD A VISION.
+  A FLY WOULD FIX MY FUTURE.
+  HOOD UP. TUMMY DOWN. SNACK?
+  THE ORACLE ACCEPTS CRUMBS.
 starving
   I WOULD EAT MY OWN HOOD.
+  I FORESEE ME EATING THE DISH.
+  THE PROPHECY IS: LUNCH. NOW.
 hoarding
   I HIDE IT IN MY HOOD. SHH.
+  THAT CRUMB IS FOR FUTURE ME.
+  FUTURE ME SAYS THANK YOU.
 crunch
   CRONCH. THE SPIRITS APPROVE.
+  CRONCH. AS FORETOLD.
+  MMM. TASTES LIKE DESTINY.
+  CRUNCH. I SAW THAT COMING.
 fuzzy_bite
   THAT ONE HAD A BEARD.
+  BLEH. THAT CRUMB WORE A COAT.
 smells
   A FOUL OMEN. ALSO A SMELL.
+  THE REEDS HOLD THEIR NOSE.
 green
   GREENER THAN USUAL. BAD SIGN.
+  EVEN MY HOOD FEELS GREEN.
 ow
   I FORESAW THIS. STILL OW.
+  OW. THE FUTURE HAS ELBOWS.
 heard_you
   I FORESAW THAT KNOCK.
   ONE KNOCK. THE OMEN WANTS TWO.
+  WHO KNOCKS? I KNOW. IT IS YOU.
+  KNOCK ONCE MORE. FOR SNACKS.
 ground_lies
   THE EARTH SPEAKS! IT YELLS!
+  EEP! THE POND IS SLOSHING!
+  MY HOOD! MY HOOD IS AIRBORNE!
 not_again
   THE VISIONS SAID SHAKING. NO.
+  NOT THE SHAKING. HOOD UP.
 hooded
   HOOD UP. I AM NOT HERE.
+  NOT SCARED. JUST VERY HOODED.
+  YOU CANNOT SEE ME. HOOD.
 ancestor_fear
   GEN # HID IN A HOOD TOO.
 inherited
   GEN # WHISPERS IN MY HOOD.
 counted
   I FORESAW BOREDOM. HERE IT IS
+  NO FLIES. NO OMENS. NOTHING.
+  I STARED AT THE FUTURE. DULL.
 put_me_down
   THE GROUND IS SAFER. MOSTLY.
+  UP HIGH? I DID NOT FORESEE UP.
+  PUT ME DOWN. GENTLY. HOOD ON.
 warm_hands
   WARM HANDS. A GOOD OMEN.
+  YOU MAY HOLD THE ORACLE.
+  WARM. LIKE A SUNNY LILY PAD.
+  CROAK. THAT MEANS THANK YOU.
 sky_down
   THE POND IS ON THE CEILING?
   MY HOOD FELL UP. AN OMEN.
+  UPSIDE DOWN. FLIES LOOK ODD.
 heavy_eyes
   THE VISIONS GROW BLURRY...
+  HOOD DOWN. EYES DOWN. NIGHT.
+  I FORESEE A NAP. VERY SOON.
 dream_pellets
   ZZZ... FLIES... SO MANY...
+  ZZZ... A FLY IN A TINY HAT...
+  ZZZ... FLY SOUP... SECONDS...
+  ZZZ... THE MOON IS A FLY...
+  ZZZ... A RAINY FLY PARADE...
+  ZZZ... A FLY BUFFET... HOOD UP
 see_pellet
   I SEE... A PELLET. IN THE DISH
+  I SEE... A CRUMB. IT IS MINE.
+  I SEE... SNACK. RIGHT THERE.
 see_phone
   I SEE... THE GLOWING SLAB.
+  I SEE... A FACE IN A SLAB.
 see_nothing
   I SEE... AN EMPTY BELLY. MINE.
+  I SEE... NO FLIES. DOOM.
 see_damp
   I SEE... MORE DAMP. GOOD.
+  I SEE... A PUDDLE. MY DESTINY.
 knees
   MY HOOD HAS SEEN THINGS.
+  OLD FROG. OLDER HOOD.
 moon
   THE MOON IS MY OLD FRIEND.
+  HELLO, MOON. ANY NEWS?
 anyone
   IS ANYONE IN THE REEDS?
+  HELLO? THE ORACLE IS IN.
+  NO ONE CAME. I FORESAW THAT.
 science
   FLIES FIX HUNGER. FORESEEN.
 no_hat
@@ -100,54 +149,72 @@ no_hat
 
 p_snack
   SNACK FIRST. FATE AFTER.
+  ASK AGAIN AFTER A FLY.
 p_feast
   A FEAST OF FLIES COMES.
+  I SEE A FLY AS BIG AS A DOG.
 p_pellet_soon
   A PELLET FALLS FROM ABOVE.
+  A CRUMB IS ON ITS WAY. SHH.
 p_feed_me
   THE SIGNS SAY: FEED THE FROG.
+  ALL SIGNS POINT TO MY MOUTH.
 p_fuzzy
   THAT CRUMB GROWS A COAT.
 p_more_shaking
   MORE SHAKING. I HATE THIS ONE.
 p_mud
   MUD. DEEP MUD. LOVELY MUD.
+  YOUR SHOES WILL MEET MUD.
 p_big_hand
   A BIG HAND COMES. HOOD UP.
+  A GIANT WILL BOOP ME. SOON.
 p_bedtime
   THE MOON SAYS: YOU, TO BED.
+  YOUR PILLOW IS CALLING YOU.
 p_sun
   THE SUN COMES. I WILL HIDE.
 p_rain
   RAIN COMES. FROGS REJOICE.
+  I SEE PUDDLES. GLORIOUS.
 p_watched
   THE GLOWING ONE SEES ALL.
 p_return
   THE ONE WHO LEFT WILL RETURN.
 p_tap
   TWO KNOCKS COME. THEN SNACKS.
+  I FORESEE KNOCK KNOCK. YOU?
 p_no
   NO. THE FLIES AGREE.
+  THE REEDS SHOOK THEIR HEADS.
 p_doom
   DOOM. BUT A DAMP DOOM. NICE.
+  DOOM COMES. IT BRINGS FLIES.
 p_lunch
   MY END IS NEAR. MY HOOD STAYS.
 p_outlook
   OUTLOOK DAMP. THAT IS GOOD.
+  THE FUTURE IS WET. HOORAY.
 p_decidedly
   IT IS SO. THE FLIES SAID.
+  YES. I SAW IT IN A PUDDLE.
 p_lucky
   LUCK HIDES UNDER A LILY PAD.
+  YOUR LUCKY NUMBER IS FLY.
 p_pond_no
   THE POND FROWNS. NO.
+  THE POND BURPED. THAT IS NO.
 p_pond_yes
   THE POND BUBBLES. YES.
+  THE POND WINKED. YES.
 p_ripples
   TOO MANY RIPPLES. ASK LATER.
+  A DUCK SAT ON MY VISION.
 p_ancestor
   GEN # SAW THIS IN A PUDDLE.
 miss_phone
   THE GLOWING ONE HAS GONE DARK
+  NO SLAB FOR DAYS. I AM CALM.
 
 oclock
   AS FORETOLD, # O'CLOCK.
@@ -184,10 +251,12 @@ popped
   A VISION CAME. IT POPPED.
 wiggle
   A RITUAL WIGGLE. DONE.
+  A SACRED WIGGLE. VERY HOLY.
 my_song
   CROAK. CROAK. MY BEST SONG.
 dust
   A SPECK OF DUST. AN OMEN.
+  A SPECK OF DUST. AN OMEN?
 blinked
   I BLINKED. THE FUTURE MOVED.
 important
@@ -203,7 +272,7 @@ serious_face
 no_echo
   ECHO? THE GLASS SAYS NOTHING.
 king
-  MY HOOD IS A CROWN. KIND OF.
+  MY HOOD IS A CROWN. SECRETLY.
 smells_me
   SMELLS LIKE POND. GOOD.
 todo
@@ -289,34 +358,108 @@ only_me
 snore
   ZZZ... CROAK... ZZZ...
   ZZZ... RIBBIT... ZZZ... MMF...
+  ZZZ... CROOOAK... ZZZ...
 mumble
   MMF... HOOD UP... HOOD UP...
   MMM... NO SUN... TOO BRIGHT...
+  MMF... I FORESAW THIS NAP...
 dream_chase
   ZZZ... THAT FLY... FORESAW IT
   ZZZ... STAY STILL, FLY... GULP
+  ZZZ... FLY, COME BACK... ZZZ
 dream_feast
   ZZZ... A POND OF FLIES...
   ZZZ... FLY PIE... FLY SOUP...
+  ZZZ... A FLY CAKE. WITH FLIES
 dream_flight
   ZZZ... I LEAP TO THE MOON...
   ZZZ... FLOATING... TO MY MOON
+  ZZZ... MY HOOD IS A KITE...
 sleep_count
   ZZZ... ONE OMEN... TWO OMEN...
   ZZZ... ONE RIPPLE... TWO...
+  ZZZ... ONE FLY... TWO... YUM
 sleep_warm
   MMM... SNUG IN MY HOOD...
   MMM... DAMP MUD. HOOD UP...
+  MMM... WARM POND. FIVE MORE...
 dream_rain
   ZZZ... RAIN... A GOOD OMEN...
   ZZZ... DRIP, DRIP... THE POND
+  ZZZ... PUDDLES EVERYWHERE...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME. FOOD FALLS.
+  KNOCK TWICE. A SNACK APPEARS.
+  TWO KNOCKS FEED THE ORACLE.
 teach_fight
   TO DUEL, HOLD ME UPSIDE DOWN.
 teach_hold
   HOLD ME SIDEWAYS. I SLUMBER.
 teach_shake
   SHAKE ME. I SEE THINGS. EEP.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  THE REEDS SAY YES.
+  YES. I SAW IT IN THE MUD.
+  YES. CROAK. YES.
+verdict_no
+  THE REEDS SAY NO.
+  NO. HOOD UP. NO.
+  NO. THE FLIES LAUGHED.
+verdict_later
+  MIST IN MY HOOD. ASK LATER.
+  THE POND IS CLOUDY. WAIT.
+  ASK AFTER MY NAP.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  THE REEDS HUM. I HUM BACK.
+  A SONG OF FLIES. VERSE NINE.
+dance_break
+  THE RITUAL DANCE. FORESEEN.
+  HOOD UP. HIPS ON.
+tail_get
+  I HAVE NO TAIL. I FORESAW.
+  THE TAIL IS A LIE. ROUND AGAIN
+treasure
+  THE REEDS SAID DIG HERE.
+  A DAMP SPOT. AS FORETOLD.
+peekaboo
+  I SEE YOU. I FORESAW YOU.
+  DO NOT LOOK. HOOD IS DOWN.
+hyah
+  HYAH. THE AIR HAD IT COMING.
+  I FORESAW THAT PUNCH.
+pebble
+  A PEBBLE. AN OMEN. TWO.
+  IT FALLS. AS FORETOLD.
+dream_big
+  A POND OF FLIES. ONE DAY.
+  WHAT IF THE MOON WAS DAMP?
+wish_star
+  HELLO, MOON. OLD COLLEAGUE.
+  THE STARS SAY: FLIES.
+achoo
+  ACHOO. AN OMEN. PROBABLY.
+  THE HOOD SNEEZED. NOT ME.
+boo_hee
+  BOO. I FORESAW YOUR FACE.
+  BOO. THE REEDS LAUGHED.
+hic
+  HIC. THE POND IS UPSET. HIC.
+  HIC. I DID NOT FORESEE THIS.
+zoom
+  THE PROPHECY SAYS: RUN!
+  HOOD UP! FULL SPEED!
+ooh_what
+  A BEETLE. A SIGN. LUNCH?
+  OOH. A FLY. AN OMEN.
+cant_see
+  I AM NOT HIDING. HOODED.
+  HOOD UP. NO ONE SEES ME.
+yuck
+  THE REEDS SAY: NOT THAT ONE.
+  A ROTTEN OMEN. NO THANKS.

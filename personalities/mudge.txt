@@ -1,6 +1,7 @@
 MUDGE
 mudskipper: races everything
-Element Splash, style Pounce, power dash. Voice: terse, which wraps his lines as "LINE".
+Element Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry
+the voice themselves; the terse frame only seasons a shared line now and then.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -20,8 +21,8 @@ always on his last lap, always winning (by his count). Big appetite, big
 energy, no patience. Mud is the best track there is.
 
 HOW HE TALKS
-Terse voice keeps only his first sentence, so every line is one sentence, the
-punch first, joined by commas. Short words. Coach energy.
+One breath per line: the punch first, joined by commas. Short words. Coach
+energy. (His own lines are said whole; the terse cut is only for shared lines.)
 
 LOVES
 Racing, winning, mud, laps, snacks as fuel, a slippy track.
@@ -36,64 +37,116 @@ RACE YOU! LAST LAP! GO GO GO!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# His terse voice keeps only the first sentence: one sentence per line.
+# They are said as written: his voice frames only a shared line, and rarely.
+# His style: one breath, punch first, commas not full stops. Coach energy.
 
 peckish
   RACE YOU TO THE SNACK!
+  TANK'S LOW, NEED FUEL, STAT!
+  PIT STOP, SNACKS PLEASE!
+  HUNGRY, LOSING SPEED, HELP!
+  CARBS, COACH, I NEED CARBS!
 starving
   I'D EAT THE FINISH LINE!
+  RUNNING ON EMPTY, LITERALLY!
+  SO HUNGRY I'D EAT A MEDAL!
 hoarding
   SAVING IT FOR AFTER THE RACE.
+  THAT ONE'S MY VICTORY SNACK!
+  BENCHED THAT PELLET, FOR NOW!
 crunch
   FASTEST CHEWER ALIVE!
+  CRUNCH, NEW CHEWING RECORD!
+  FUEL IN, SPEED UP, NOM!
+  CHOMP, 2 SECONDS FLAT!
 fuzzy_bite
   BLEH, THAT ONE WAS FUZZY!
+  FUZZY PELLET, FOUL, REF!
 smells
   STINKY CORNER, SKIP IT!
+  WHAT STINKS, NOT MY SOCKS!
 green
   FEEL GREEN, STILL RACING!
+  TUMMY ACHE, ON THE BENCH!
 ow
   OW, BUT I'M STILL FASTER!
+  OW, WALK IT OFF, WALK IT OFF!
 heard_you
   YEAH, YEAH, I HEARD!
   ONE KNOCK, NOW TWO, FASTER!
+  KNOCK AGAIN, DOUBLE TIME!
+  A KNOCK, STARTING PISTOL, GO!
 ground_lies
   WHOA, EARTHQUAKE LAP!
+  BUMPY TRACK, KEEP GOING!
+  WHOA, WHO MOVED THE TRACK?!
 not_again
   NO SHAKING, I'M TRAINING!
+  NO SHAKING, I JUST STRETCHED!
+  TIME OUT, NO SHAKING, REF!
 hooded
   NOT SCARED, JUST WARMING UP!
+  SCARED? NO, CATCHING MY BREATH
+  STRATEGIC HIDE, VERY SPORTY!
 ancestor_fear
   GEN # RAN FROM THIS TOO!
 inherited
   GEN # SAYS GO FASTER!
 counted
   BORED, SOMEBODY RACE ME!
+  NO RACES TODAY? UNACCEPTABLE!
+  I RACED MYSELF, I WON, AGAIN!
 put_me_down
   PUT ME DOWN, I WANNA RUN!
+  LEGS DANGLING, WASTED SPEED!
+  PICKED FIRST FOR THE TEAM!
 warm_hands
   WARM HANDS, GOOD HALFTIME!
+  HALFTIME HUG, ACCEPTED!
+  WARM HANDS, LIKE A HOT LAP!
+  NICE GRIP, YOU'D MAKE A COACH!
+  RECOVERY TIME, NOT A CUDDLE!
 sky_down
   UPSIDE DOWN, STILL WINNING!
   UPSIDE DOWN, NEW TRACK, GO!
+  FLIP TURN, LIKE A PRO!
 heavy_eyes
   SO TIRED... ONE MORE LAP...
+  COOLING DOWN... DOWN... ZZ...
+  RESTING MY EYES, NOT QUITTING!
+  BENCHED BY MY OWN EYELIDS!
 dream_pellets
   ZZZ... WINNING... ZZZ...
+  ZZZ... GOLD MEDAL PELLETS...
+  ZZZ... PODIUM SNACKS... MMM
+  ZZZ... SNACKS AT THE FINISH...
+  ZZZ... A SPORTS DRINK POND...
+  ZZZ... FIRST IN THE LUNCH LINE
 see_pellet
   I SEE A PELLET, RACE YOU!
+  I SEE FUEL, GO GO GO!
+  I SEE A SNACK, FIRST PLACE!
 see_phone
   I SEE A PHONE, IT'S SLOW!
+  I SEE A PHONE, FILM MY RUN!
+  I SEE A STOPWATCH, TIME ME!
 see_nothing
   I SEE AN EMPTY DISH, NOT FAIR!
+  I SEE NO SNACKS, BAD TACTICS!
+  I SEE ZERO FUEL, DISASTER!
 see_damp
   I SEE MUD, FAST MUD!
+  I SEE A PUDDLE, SPLASH LAP!
 knees
   OLD, BUT STILL QUICK!
+  VETERAN RUNNER, STILL GOT IT!
 moon
   THE MOON IS A FINISH LINE!
+  THE MOON'S LAPPING US, NO WAY!
 anyone
   ANYONE WANNA RACE?
+  NO OPPONENTS, I WIN BY DEFAULT
+  HELLO, TEAM? ANY TEAM?
 science
   FOOD MEANS FAST, FACT!
 no_hat
@@ -101,8 +154,10 @@ no_hat
 
 p_snack
   SNACK FIRST, THEN SPRINT!
+  SNACK INCOMING, OPEN WIDE!
 p_feast
   BIG FEAST, EAT IT FAST!
+  A FEAST, EATING CHAMPIONSHIP!
 p_pellet_soon
   PELLET INCOMING, GET READY!
 p_feed_me
@@ -113,42 +168,55 @@ p_more_shaking
   MORE SHAKING COMING, BRACE!
 p_mud
   MUD AHEAD, FULL SPEED!
+  MUDDY TRACK, MY LUCKY DAY!
 p_big_hand
   BIG HAND COMING, DODGE IT!
+  A HAND, HIGH FIVE, NICE!
 p_bedtime
   BEDTIME SOON, SPRINT TO BED!
 p_sun
   SUN'S UP SOON, WARM UP!
 p_rain
   RAIN COMING, SLIPPY TRACK!
+  RAIN AHEAD, MUD SEASON, YES!
 p_watched
   PHONE'S WATCHING, SHOW OFF!
 p_return
   THEY'RE COMING BACK, FAST!
 p_tap
   KNOCK KNOCK, SNACKS, GO GO GO!
+  TWO KNOCKS INCOMING, BE READY!
 p_no
   NOPE, NOT A CHANCE!
+  NO, REF SAYS NO!
 p_doom
   DOOM, BUT I'LL OUTRUN IT!
+  DOOM AHEAD, TAKE THE SHORTCUT!
 p_lunch
   LAST LAP COMING, THEN LUNCH!
 p_outlook
   OUTLOOK: FIRST PLACE!
+  OUTLOOK: PERSONAL BEST!
 p_decidedly
   YES, DEFINITELY, GO!
+  YES, THAT'S A GOLD MEDAL YES!
 p_lucky
   LUCK IS FOR SLOW ONES!
+  LUCKY? NO, I TRAINED FOR THIS!
 p_pond_no
   POND SAYS NO, POND IS SLOW!
+  POND SAYS NO, DISQUALIFIED!
 p_pond_yes
   POND SAYS YES, LET'S GO!
+  POND SAYS YES, ON YOUR MARKS!
 p_ripples
   TOO MANY RIPPLES, ASK LATER!
+  FALSE START, ASK AGAIN!
 p_ancestor
   GEN # SAW THIS COMING TOO!
 miss_phone
   WHERE'S THE PHONE, IT'S LATE!
+  PHONE MISSED PRACTICE, AGAIN!
 
 oclock
   IT'S # O'CLOCK, TIME TO RUN!
@@ -227,6 +295,7 @@ legs
   FINS ARE BETTER THAN LEGS!
 shiny
   SOMETHING SHINY, RACE YOU!
+  SOMETHING SHINY, A TROPHY?!
 guard
   DISH GUARD, ON DUTY!
 old_fly
@@ -260,6 +329,7 @@ lunch_oclock
   LUNCH, THEN SPRINTS!
 shadow
   MY SHADOW IS ALMOST AS FAST!
+  MY SHADOW CHEATS, IT STARTS ME
 big_sit
   BIG DAY, BIG RACE!
 eye_snack
@@ -290,34 +360,109 @@ only_me
 snore
   ZZZ... HUP, HUP, HUP...
   ZZZ... VROOM, VROOM, ZZZ...
+  ZZZ... PHWEET... WHISTLE...
 mumble
   MMF... I WON, I TOTALLY WON...
   MMF... NOT TIRED, JUST RESTING
+  MMF... FIVE MORE LAPS, COACH
 dream_chase
   ZZZ... FASTER, FASTER, FASTER
   ZZZ... CATCHING THE MOON...
+  ZZZ... LAPPED MY SHADOW...
 dream_feast
   ZZZ... FUEL, MORE FUEL, NOM...
   ZZZ... SNACK STOP, REFUEL...
+  ZZZ... A TROPHY MADE OF CAKE
 dream_flight
   ZZZ... FLYING, NEW RECORD...
   ZZZ... JUMPED THE WHOLE POND!
+  ZZZ... HIGH JUMP... TO SPACE
 sleep_count
   ZZZ... LAP 99, LAP 100...
   ZZZ... 3, 2, 1, GO...
+  ZZZ... GOLD, GOLD, GOLD...
 sleep_warm
   MM... WARM MUD, PIT STOP...
   MM... COSY, STILL WINNING...
+  MM... HOT TUB... RECOVERY...
 dream_rain
   ZZZ... RAIN, SLIPPY TRACK, YES
   ZZZ... MUD TRACK, ZOOM...
+  ZZZ... PUDDLE JUMP, PERFECT 10
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME, FUEL UP!
+  KNOCK TWICE ON ME, SNACK TIME!
+  TWO KNOCKS ON ME, PIT STOP!
+  HUNGRY, KNOCK KNOCK, QUICK!
 teach_fight
   DUEL ME, HOLD ME UPSIDE DOWN!
 teach_hold
   NAP TIME, HOLD ME SIDEWAYS!
 teach_shake
   SHAKE ME, I SEE THE FINISH!
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES, GO GO GO!
+  YES, BY A MILE!
+  YES, FIRST PLACE, YES!
+verdict_no
+  NO, FOUL, RED CARD!
+  NOPE, BACK TO THE START!
+  NO, NOT EVEN CLOSE!
+verdict_later
+  HALFTIME, ASK AFTER!
+  STILL RUNNING, ASK LATER!
+  PHOTO FINISH, WAIT FOR IT!
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  LA LA, WARM-UP SONG, GO!
+  A VICTORY SONG, MINE!
+dance_break
+  VICTORY DANCE, I WON!
+  DANCE OFF, I WIN, DONE!
+tail_get
+  RACE YOU, TAIL, GO!
+  TAIL'S AHEAD, NOT FOR LONG!
+treasure
+  DIGGING A TRACK, MUD, YES!
+  FASTEST HOLE EVER!
+peekaboo
+  HI, RACE YOU, GO!
+  PEEK, YOU'RE SLOW, I WIN!
+hyah
+  JAB, JAB, LAST ROUND!
+  HYAH, NEW RECORD!
+pebble
+  PEBBLE, UP, DOWN, RECORD!
+  TEN IN A ROW, FASTEST!
+dream_big
+  A TRACK ROUND THE MOON!
+  WHAT IF I WON EVERYTHING?
+wish_star
+  RACE YOU, STARS, GO!
+  THAT STAR'S FAST, I'M FASTER!
+achoo
+  ACHOO, STILL WINNING!
+  SNEEZE, FASTEST SNEEZE!
+boo_hee
+  BOO, GOT YOU FIRST!
+  BOO, I WIN, AGAIN!
+hic
+  HIC, HIC, HIC, A HIC RACE!
+  HIC, A HOP, A WIN!
+zoom
+  LAST LAP, GO GO GO!
+  ZOOM, NEW RECORD!
+ooh_what
+  A BEETLE, RACE YOU!
+  WHAT'S THIS, A FAST BEETLE?
+cant_see
+  HIDING, FASTEST HIDER!
+  HIDE, SEEK, I WIN!
+yuck
+  NOT THAT, BAD FUEL!
+  ROTTEN, SKIP IT, GO!
