@@ -276,7 +276,11 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
     return;
   }
   if (tick - l.lastBeacon >= T::kBeaconEvery) {
-    beacon(air, l.wants);
+    // Back from a rematch both asked for, I name the friend at once, before I
+    // hear him: he may still be on the friends screen, and if the last State
+    // that carried my ask was lost, my beacon claiming him is his yes (#58: a
+    // storm left one side waiting out the friends screen alone).
+    beacon(air, l.wants.none() && setup_.pin ? setup_.pin->peer : l.wants);
     l.lastBeacon = tick;
   }
 }

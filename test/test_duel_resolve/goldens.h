@@ -54,18 +54,18 @@ struct Golden {
 };
 
 inline constexpr Golden kGoldens[] = {
-    {"a spar, grungo v fizz", cardOf(sp::grungo, 0x1D0001), cardOf(sp::fizz, 0x2D0002), 0xD4D40001u, Stakes::Spar,
-     "TPGqtPGh_pTGP", "PGTPqgTTGPh_t", 0xc371ec08u},
+    {"a spar, grungo's quick lands, assisted fizz's heavy is riposted", cardOf(sp::grungo, 0x1D0001),
+     cardOf(sp::fizz, 0x2D0002, 60), 0xD4D40001u, Stakes::Spar, "PGqtPG", "PPPh_p", 0x31f5ed64u},
     {"a scrap with assist, tinker v gilly", cardOf(sp::tinker, 0xA, 200), cardOf(sp::gilly, 0xB, 100), 0xD4D40002u,
-    Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0xe19fb352u},
+     Stakes::Scrap, "PTGPTqpGTh_gPT", "GTPqgPTGPTPGT", 0x7fe8f00bu},
     {"specials on both sides, puffkin v mothwick", cardOf(sp::puffkin, 0x5EED), cardOf(sp::mothwick, 0x0DD),
-     0xD4D40003u, Stakes::Spar, "PPPPPqpTGh_tPG", "PPPqtGPh_gTqpP", 0x1ab43fc2u},
+     0xD4D40003u, Stakes::Spar, "PPPPPqpTGh_tPG", "PPPqtGPh_gTqpP", 0x1036a3e0u},
     {"a mortal downing and a finish, mudge v hushwing", cardOf(sp::mudge, 0x3), cardOf(sp::hushwing, 0x4),
-     0xD4D40004u, Stakes::Mortal, "PPPPPF", "TTTTT", 0x4bcd6224u},
+     0xD4D40004u, Stakes::Mortal, "PPPF", "TTT", 0xd979781du},
     {"downed on the last turn, spared in slot 16, gilly v grungo", cardOf(sp::gilly, 0x7), cardOf(sp::grungo, 0x8),
-     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPTTTTTF", 0xa1f5b1c7u},
-    {"a riposte and a stagger, mudge v gilly", cardOf(sp::mudge, 0x9), cardOf(sp::gilly, 0xA), 0xD4D40006u,
-     Stakes::Scrap, "PPPqpPPh_pTqg", "PPPGGPTPGPPTG", 0x88df67a4u},
+     0xD4D40005u, Stakes::Mortal, "PPPPPPPPPPPPPPPS", "PPPPPPPPPPPPTTTF", 0x2728c4bfu},
+    {"a riposte, a stagger and a landing, assisted mudge v gilly", cardOf(sp::mudge, 0x9, 60), cardOf(sp::gilly, 0xA),
+     0xD4D40006u, Stakes::Scrap, "PPPqpPPh_pTqg", "PPPGGPTTGPPTG", 0x44161043u},
 };
 
 // The first golden whose hash differs, or -1. Its own function so the S3

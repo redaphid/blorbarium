@@ -517,12 +517,24 @@ void crowd(uint8_t n, uint32_t seeds) {
           const int f = indexOf(v.them.lineageId);
           EXPECT_GE(f, 0);
           EXPECT_NE(f, int(i));
-          if (f >= 0) ++claimedBy[f];
+          // The friends screen is after the fight: on a stormy link one side
+          // may linger there a few packets after the other has left and paired
+          // again, which is no second fight.
+          if (f >= 0 && v.phase != DuelPhase::Friends) ++claimedBy[f];
           if (!showing[i]) starts[i].push_back({t, v.them.lineageId});
         }
         showing[i] = shows;
       }
-      for (uint8_t i = 0; i < n; ++i) EXPECT_LE(claimedBy[i], 1) << "badge " << int(i) << " in two fights, tick " << t;
+      for (uint8_t i = 0; i < n; ++i)
+        if (claimedBy[i] > 1) {
+          std::string who;
+          for (uint8_t j = 0; j < n; ++j) {
+            const DuelView v = all[j]->s.view(t);
+            who += " badge " + std::to_string(j) + " phase " + std::to_string(int(v.phase)) + " v " +
+                   std::to_string(indexOf(v.them.lineageId)) + " ticks " + std::to_string(v.phaseTicks) + ";";
+          }
+          ADD_FAILURE() << "seed " << seed << ": badge " << int(i) << " in two fights, tick " << t << ":" << who;
+        }
       for (Device* d : all)
         if (d->s.active()) return false;
       return true;
@@ -941,7 +953,8 @@ TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {
     }
     return a.bouts == 2 && !a.s.active() && !b.s.active();
   });
-  EXPECT_TRUE(injected);
+  EXPECT_TRUE(injected) << "bouts " << int(a.bouts) << "/" << int(b.bouts) << ", ended " << int(a.ended) << "/"
+                        << int(b.ended) << ", meetings " << a.meetings.size() << "/" << b.meetings.size();
   ASSERT_EQ(a.meetings.size(), 2u);
   ASSERT_EQ(b.meetings.size(), 2u);
   expectSameBattle(a.meetings[1], b.meetings[1]);

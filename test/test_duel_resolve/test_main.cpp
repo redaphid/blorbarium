@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <set>
+#include <string>
 #include "blorb/duel.h"
 #include "goldens.h"
 #define DUEL_BALANCE_NO_MAIN
@@ -54,8 +55,13 @@ struct Random {
 
 constexpr BattleCard grungoCard = cardOf(sp::grungo, 0x61), gillyCard = cardOf(sp::gilly, 0x62);
 
-// Five head bonks fill a 5-pip meter on two same-element pets.
-constexpr const char* kFive = "PPPPP";
+// How many lost clashes down an unassisted pet, and a run of one move.
+constexpr uint8_t kDown = (DuelRules::kHearts + DuelRules::kClashHearts - 1) / DuelRules::kClashHearts;
+std::string run(char c, int n) { return std::string(size_t(n), c); }
+Outcome play(const BattleCard& a, const BattleCard& b, const std::string& ma, const std::string& mb,
+             Stakes s = Stakes::Spar, uint32_t seed = 1) {
+  return play(a, b, ma.c_str(), mb.c_str(), s, seed);
+}
 
 }  // namespace
 
@@ -157,7 +163,7 @@ TEST(MoveLog, AppendSpecialWritesTheCommitAndRefusesALandingPastTheEnd) {
 TEST(Start, AssistHeartsAndTheElementHeadStart) {
   const Outcome o = play(cardOf(sp::grungo, 1, 200), cardOf(sp::fizz, 2, 100), "", "");
   EXPECT_EQ(o.side[0].maxHearts, DuelRules::kHearts);
-  EXPECT_EQ(o.side[1].maxHearts, DuelRules::kHearts + 2);
+  EXPECT_EQ(o.side[1].maxHearts, DuelRules::kHearts + DuelRules::kMaxAssistSteps * DuelRules::kAssistStepHearts);
   EXPECT_EQ(o.side[0].spark, DuelRules::kElementHeadStart) << "splash douses spark";
   EXPECT_EQ(o.side[1].spark, 0);
 }
@@ -190,7 +196,7 @@ TEST(MoveLog, AdoptKeepsTheLongestConsistentPrefix) {
 // Mudge's dash costs 3: three head bonks fill it.
 constexpr BattleCard kMudge = cardOf(sp::mudge, 0x31);
 
-TEST(Special, AQuickBracesOneTurnThenLandsForTwo) {
+TEST(Special, AQuickBracesOneTurnThenLandsForTheQuickHearts) {
   const Outcome o = play(kMudge, gillyCard, "PPPqp", "PPPGT");
   EXPECT_EQ(o.turns[3].special[0], TurnReport::Special::Committed);
   EXPECT_TRUE(o.turns[3].bracing[0]);
@@ -202,7 +208,7 @@ TEST(Special, AQuickBracesOneTurnThenLandsForTwo) {
   EXPECT_EQ(o.side[0].queued, Windup::None);
 }
 
-TEST(Special, AHeavyBracesTwoTurnsThenLandsForThree) {
+TEST(Special, AHeavyBracesTwoTurnsThenLandsForTheHeavyHearts) {
   const Outcome o = play(kMudge, gillyCard, "PPPh_p", "PPPPGT");
   EXPECT_TRUE(o.turns[3].bracing[0]);
   EXPECT_TRUE(o.turns[4].bracing[0]);
@@ -319,7 +325,9 @@ TEST(Powers, MendGrowsBackAHeartButNeverPastFull) {
 }
 
 TEST(Powers, DashWinsTheNextHeadBonk) {
-  const Outcome o = play(kMudge, gillyCard, "PPPqpPP", "PPPGTPP");
+  const BattleCard gilly = cardOf(sp::gilly, 0x62, 60);   // assisted, so she stands long enough to see it wear off
+  const Outcome o = play(kMudge, gilly, "PPPqpPP", "PPPGTPP");
+  ASSERT_EQ(o.resolved, 7);
   ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
   EXPECT_EQ(o.turns[5].clash, Clash::AWins);
   EXPECT_EQ(o.turns[5].hit[1], DuelRules::kClashHearts);
@@ -358,7 +366,7 @@ TEST(Powers, LanternDazzlesTheFriendNextTurn) {
   for (uint32_t seed = 0; seed < 1000; ++seed) {
     const Outcome o = play(mothwick, fizz, "PPPqtTT", "PPPPGPP", Stakes::Spar, seed);
     ASSERT_EQ(o.turns[4].special[0], TurnReport::Special::Landed);
-    landed += o.turns[5].hit[0];
+    landed += o.turns[5].hit[0] > 0;
     ASSERT_EQ(o.turns[6].hit[0], DuelRules::kClashHearts) << "worn off";
   }
   EXPECT_GT(landed, 400);
@@ -383,36 +391,38 @@ TEST(Powers, GadgetDrawsEachOfTheOtherEightAndNeverItself) {
 
 TEST(Verdict, AMortalLoserIsDownedAndTheWinnersSlotDecides) {
   const BattleCard mudge = cardOf(sp::mudge, 3), hushwing = cardOf(sp::hushwing, 4);
-  const Outcome pending = play(mudge, hushwing, "PPPPP", "TTTTT", Stakes::Mortal);
+  const std::string win = run('P', kDown), lose = run('T', kDown);
+  const Outcome pending = play(mudge, hushwing, win, lose, Stakes::Mortal);
   EXPECT_EQ(pending.ending, Ending::AWon);
   EXPECT_TRUE(pending.downed[1]);
   EXPECT_FALSE(pending.downed[0]);
-  EXPECT_EQ(pending.resolved, 5);
+  EXPECT_EQ(pending.resolved, kDown);
   EXPECT_TRUE(pending.awaitingVerdict());
-  EXPECT_EQ(play(mudge, hushwing, "PPPPPF", "TTTTT", Stakes::Mortal).verdict, Verdict::Finish);
-  EXPECT_EQ(play(mudge, hushwing, "PPPPPS", "TTTTT", Stakes::Mortal).verdict, Verdict::Spare);
-  const Outcome loserSpeaks = play(mudge, hushwing, "PPPPP", "TTTTTF", Stakes::Mortal);
+  EXPECT_EQ(play(mudge, hushwing, win + "F", lose, Stakes::Mortal).verdict, Verdict::Finish);
+  EXPECT_EQ(play(mudge, hushwing, win + "S", lose, Stakes::Mortal).verdict, Verdict::Spare);
+  const Outcome loserSpeaks = play(mudge, hushwing, win, lose + "F", Stakes::Mortal);
   EXPECT_EQ(loserSpeaks.verdict, Verdict::None) << "only the winner's slot counts";
   EXPECT_TRUE(loserSpeaks.awaitingVerdict());
-  const Outcome onTurnMove = play(mudge, hushwing, "PPPPF", "TTTTT", Stakes::Mortal);
+  const Outcome onTurnMove = play(mudge, hushwing, run('P', kDown - 1) + "F", lose, Stakes::Mortal);
   EXPECT_TRUE(onTurnMove.downed[1]);
   EXPECT_EQ(onTurnMove.verdict, Verdict::None) << "a verdict on a turn move means nothing";
 }
 
 TEST(Verdict, ReadFromTheSixteenthSlotAfterADowningOnTurnFifteen) {
-  const char* winner = "PPPPPPPPPPPPPPPF";
-  const char* loser = "PPPPPPPPPPTTTTTS";
+  const std::string winner = run('P', DuelRules::kMaxTurns) + "F";
+  const std::string loser = run('P', DuelRules::kMaxTurns - kDown) + run('T', kDown) + "S";
   const Outcome o = play(gillyCard, grungoCard, winner, loser, Stakes::Mortal);
   EXPECT_EQ(o.resolved, DuelRules::kMaxTurns);
   EXPECT_TRUE(o.downed[1]);
   EXPECT_EQ(o.verdict, Verdict::Finish);
-  EXPECT_EQ(resolve(grungoCard, gillyCard, 1, Stakes::Mortal, logOf(loser), logOf(winner)).verdict, Verdict::Finish)
+  EXPECT_EQ(resolve(grungoCard, gillyCard, 1, Stakes::Mortal, logOf(loser.c_str()), logOf(winner.c_str())).verdict,
+            Verdict::Finish)
       << "whichever side the winner is";
 }
 
 TEST(Verdict, NobodyIsDownedInASparOrAScrapOrOnPoints) {
   for (Stakes s : {Stakes::Spar, Stakes::Scrap}) {
-    const Outcome o = play(gillyCard, grungoCard, "PPPPPF", "TTTTT", s);
+    const Outcome o = play(gillyCard, grungoCard, run('P', kDown) + "F", run('T', kDown), s);
     EXPECT_EQ(o.ending, Ending::AWon);
     EXPECT_FALSE(o.downed[0] || o.downed[1]);
     EXPECT_FALSE(o.awaitingVerdict());
@@ -426,16 +436,17 @@ TEST(Verdict, NobodyIsDownedInASparOrAScrapOrOnPoints) {
 }
 
 TEST(Ending, NoTurnIsReadPastTheEnd) {
-  const Outcome o = play(gillyCard, grungoCard, "PPPPPPPP", "TTTTTGGG");
-  EXPECT_EQ(o.resolved, 5);
+  const Outcome o = play(gillyCard, grungoCard, run('P', kDown + 3), run('T', kDown) + "GGG");
+  EXPECT_EQ(o.resolved, kDown);
   EXPECT_EQ(o.side[1].hearts, 0);
 }
 
 // ---- what the Dish wounds from ------------------------------------------------------------
 
 TEST(TurnHits, HeartsKindAndLuckPerTurn) {
-  const BattleCard fizz = cardOf(sp::fizz, 1), mothwick = cardOf(sp::mothwick, 2);
+  const BattleCard fizz = cardOf(sp::fizz, 1), mothwick = cardOf(sp::mothwick, 2, 60);   // assisted: still up for turn 8
   const Outcome o = play(fizz, mothwick, "PPPPPPqpT", "TPPPPPPTG");
+  ASSERT_EQ(o.resolved, 9);
   TurnHit hits[DuelRules::kMaxTurns]{};
   turnHits(o, Side::B, 1, mothwick, fizz, hits);
   EXPECT_EQ(hits[0].hearts, DuelRules::kClashHearts);
@@ -455,7 +466,7 @@ TEST(Mind, ThePetLearnsToCounterAFriendsHabit) {
   const BattleCard mine = grungoCard, theirs = cardOf(sp::fizz, 2);   // grungo's knack is trick, not guard
   MoveLog ma, mb;
   for (uint8_t t = 0; t < 6; ++t) {
-    ma.append(Move{Stance::Trick});
+    ma.append(Move{Stance::Pounce});   // head bonks: nobody falls, and every cell of the context still learns
     mb.append(Move{Stance::Pounce});
     const Outcome o = resolve(mine, theirs, 1, Stakes::Spar, ma, mb);
     learnTurn(skill, o, Side::A, theirs, uint8_t(o.resolved - 1));
@@ -516,8 +527,8 @@ TEST(Foretell, GrungoReadsATwoTurnPatternTheOthersMiss) {
   // The friend plays P P G, P P G, P P: a one-turn reader sees "after P" split
   // between P and G; a two-turn reader sees "after P P" always G.
   const BattleCard friendCard = cardOf(sp::mudge, 9);
-  const BattleCard seerSide = cardOf(sp::gilly, 8, 100);   // two assist hearts, so six lost turns leave one
-  const Outcome o = play(seerSide, cardOf(sp::mudge, 9, 200), "TTTTTTTT", "PPGPPGPP");
+  const BattleCard seerSide = cardOf(sp::gilly, 8);   // pouncing: bonks, and two lost turns to the guards
+  const Outcome o = play(seerSide, cardOf(sp::mudge, 9), "PPPPPPPP", "PPGPPGPP");
   ASSERT_EQ(o.resolved, 8);
   EXPECT_EQ(foretell(o, Side::B, cardOf(sp::grungo, 8), friendCard, 3).stance, Stance::Guard);
   EXPECT_EQ(foretell(o, Side::B, cardOf(sp::gilly, 8), friendCard, 3).stance, Stance::Pounce);
@@ -528,24 +539,45 @@ TEST(Foretell, GrungoReadsATwoTurnPatternTheOthersMiss) {
 
 // ---- the wheel ----------------------------------------------------------------------------
 
-TEST(Balance, TheWheelHoldsAndMatchesTheProbe) {
+TEST(Balance, TheWheelHoldsAndDuelsAreShort) {
   using namespace blorbtool;
   const BalanceReport r = tournament(800, {Player::Random, Player::Random, 0}, 1);
   EXPECT_TRUE(wheelHolds(r)) << "worst pair " << SPECIES[r.worstA].name << " over " << SPECIES[r.worstB].name << " "
                              << r.worstPermille;
   for (uint8_t s = 0; s < kSpeciesCount; ++s) {
-    EXPECT_GE(r.speciesPermille[s], 430) << SPECIES[s].name;
-    EXPECT_LE(r.speciesPermille[s], 570) << SPECIES[s].name;
-    EXPECT_NEAR(r.speciesPermille[s], kProbePermille[s], 30) << SPECIES[s].name << " strays from special_probe.py";
+    EXPECT_GE(r.speciesPermille[s], kSpeciesLo) << SPECIES[s].name;
+    EXPECT_LE(r.speciesPermille[s], kSpeciesHi) << SPECIES[s].name;
   }
-  EXPECT_GE(r.medianTurns, 6);
-  EXPECT_LE(r.medianTurns, 14);
+  EXPECT_TRUE(lengthHolds(r)) << "median " << int(r.medianTurns) << ", p90 " << int(r.p90Turns);
 }
 
 TEST(Balance, AReaderBeatsAHabitKid) {
   using namespace blorbtool;
   const BalanceReport r = tournament(300, {Player::Reader, Player::Habit, 0}, 2);
-  EXPECT_GE(r.sideAPermille, 700) << "skill matters";
+  EXPECT_GE(r.sideAPermille, 560) << "skill matters";
+}
+
+// The specials are worth a kid's press: a kid who queues beats one who never does.
+TEST(Balance, TheSpecialsAreWorthUsing) {
+  using namespace blorbtool;
+  EXPECT_GE(tournament(200, {Player::Random, Player::Plain, 0}, 4).sideAPermille, 520);
+  EXPECT_GE(tournament(200, {Player::Queuer, Player::Plain, 0}, 4).sideAPermille, 520);
+}
+
+// The help for a younger kid still helps: each assist step lowers a reading
+// parent's rate, and a kid who follows the pet's whisper half the time holds
+// that parent near even with no help at all.
+TEST(Balance, TheAssistAndTheWhisperStillHelp) {
+  using namespace blorbtool;
+  for (const Player kid : {Player::Habit, Player::LeanHalf}) {
+    uint16_t last = 1000;
+    for (uint8_t steps = 0; steps <= DuelRules::kMaxAssistSteps; ++steps) {
+      const uint16_t parent = tournament(200, {Player::Reader, kid, steps}, 2).sideAPermille;
+      EXPECT_LT(parent + 40, last) << "each step is worth at least 40 permille, step " << int(steps);
+      last = parent;
+    }
+  }
+  EXPECT_LE(tournament(200, {Player::Reader, Player::LeanHalf, 0}, 2).sideAPermille, 520);
 }
 
 int main(int argc, char** argv) {

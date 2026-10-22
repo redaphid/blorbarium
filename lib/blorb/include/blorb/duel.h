@@ -41,13 +41,18 @@ namespace blorb {
 // (duel_session.cpp). Bump kRulesVersion whenever resolve() itself changes
 // how a turn plays without a number here moving.
 struct DuelRules {
-  static constexpr uint8_t kRulesVersion = 1;       // 1: the 0.7 rules, five hearts and one heart a lost clash
-  static constexpr uint8_t kHearts = 5;             // everyone starts here, plus any assist hearts
-  static constexpr uint8_t kClashHearts = 1;        // what a lost clash costs (a stagger included)
+  // 2 (#58): shorter duels that hurt more. Three lost clashes down a pet
+  // (was five), every hit costs two hearts, and the meter fills twice as fast
+  // so the specials still come round. 1 was the 0.7 rules: five hearts, one a
+  // lost clash, one pip a turn, assist one heart a step, the extras 1 and 2,
+  // and every power one heart.
+  static constexpr uint8_t kRulesVersion = 2;
+  static constexpr uint8_t kHearts = 6;             // everyone starts here, plus any assist hearts
+  static constexpr uint8_t kClashHearts = 2;        // what a lost clash costs (a stagger included)
   static constexpr uint8_t kMaxAssistSteps = 2;     // the weaker kid's help comes in at most this many steps (Assist)
-  static constexpr uint8_t kAssistStepHearts = 1;   // extra hearts per step
+  static constexpr uint8_t kAssistStepHearts = 2;   // extra hearts per step: a lost clash's worth
   static constexpr uint8_t kElementHeadStart = 1;   // the side whose element wins starts with a pip lit
-  static constexpr uint8_t kSparkPerTurn = 1;       // pips each side not dozing gains every turn
+  static constexpr uint8_t kSparkPerTurn = 2;       // pips each side not dozing gains every turn
   static constexpr uint8_t kRallySpark = 1;         // and one more for a side hurt while the other was not
   static constexpr uint8_t kMaxTurns = 15;          // then whoever has more hearts wins; equal is a draw
   static constexpr uint8_t kLogSlots = kMaxTurns + 1;   // one more for the winner's verdict on a downed pet
@@ -72,17 +77,17 @@ enum class Windup : uint8_t { None = 0, Quick = 1, Heavy = 2 };
 // 2026-10-13) and retuned by tools/duel_balance.cpp (#58). A landing (or a
 // riposte) costs a lost clash's hearts plus the extra.
 struct SpecialRules {
-  static constexpr uint8_t kQuickExtra = 1;   // hearts on top of a clash's when a quick special lands
-  static constexpr uint8_t kHeavyExtra = 2;   // ... when a heavy one lands
+  static constexpr uint8_t kQuickExtra = 2;   // hearts on top of a clash's when a quick special lands: 4, two clashes' worth
+  static constexpr uint8_t kHeavyExtra = 4;   // ... a heavy one: 6, a whole unassisted pet
   static constexpr uint8_t extra(Windup w) { return w == Windup::Heavy ? kHeavyExtra : kQuickExtra; }
   static constexpr uint8_t hearts(Windup w) { return uint8_t(DuelRules::kClashHearts + extra(w)); }
 };
 
 // What the powers do, in hearts (duel_powers.cpp; the costs are powers.def's).
 struct PowerRules {
-  static constexpr uint8_t kZapHearts = 1;     // zap: on top of the landing
-  static constexpr uint8_t kMendHearts = 1;    // mend: grown back after the landing, never past full
-  static constexpr uint8_t kShellHearts = 1;   // shell: taken off the next hit that lands
+  static constexpr uint8_t kZapHearts = 2;     // zap: on top of the landing
+  static constexpr uint8_t kMendHearts = 2;    // mend: grown back after the landing, never past full
+  static constexpr uint8_t kShellHearts = 2;   // shell: taken off the next hit that lands
 };
 
 // One locked choice. `byPet` marks a turn the kid let run out, or a turn the

@@ -841,9 +841,10 @@ TEST(TwoDishes, AScrapWoundsByExactlyTheHeartsHeLostAndNothingElse) {
   const Creature& twin = bout.twin.creature();
   // woundFor's amounts land whole; from then on injury is his own chemistry,
   // healing a little and drawing a little life, as any injury does.
-  const Fx woundFor = rule(Stakes::Scrap).injuryPerHeart * Fx::ratio(lost, 1);
+  // Every heart lost, up to the tier's cap for one duel (a whole lost Scrap reaches it).
+  const Fx woundFor = fxMin(rule(Stakes::Scrap).injuryPerHeart * Fx::ratio(lost, 1), rule(Stakes::Scrap).injuryCapPerDuel);
   const Fx added = level(me, chem::injury) - level(twin, chem::injury);
-  EXPECT_LE(added, woundFor) << "never more than the tier's wound per heart lost";
+  EXPECT_LE(added, woundFor) << "never more than the tier's wound per heart lost, nor its cap";
   EXPECT_GE(added, woundFor * Fx::ratio(98, 100)) << "healing over the duel takes under 2 percent back";
   EXPECT_EQ(level(me, chem::toxin), level(twin, chem::toxin));
   EXPECT_LE(level(me, chem::life), level(twin, chem::life));

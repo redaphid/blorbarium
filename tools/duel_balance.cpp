@@ -255,24 +255,28 @@ BalanceReport tournament(uint32_t perPair, const Matchup& m, uint32_t seed) {
   return r;
 }
 
-// The gate BATTLES.md sets: every species within 430..570 permille and every
-// pair within 300..700, Random against Random.
+// The gate BATTLES.md sets ("Shorter duels", #58), Random against Random:
+// every species within kSpeciesBand of even and every pair within kPairBand.
+// At 800 a pair one standard error is about 18 permille, so the pair band
+// is the 0.40..0.60 the rules were tuned to, plus a standard error of room.
+inline constexpr uint16_t kSpeciesLo = 450, kSpeciesHi = 550, kPairLo = 380, kPairHi = 620;
 bool wheelHolds(const BalanceReport& r) {
   for (uint16_t pm : r.speciesPermille)
-    if (pm < 430 || pm > 570) return false;
+    if (pm < kSpeciesLo || pm > kSpeciesHi) return false;
   for (uint8_t a = 0; a < kSpeciesCount; ++a)
     for (uint8_t b = 0; b < kSpeciesCount; ++b) {
       const uint16_t pm = pairPermille(r.pairs[a][b], r.perPair);
-      if (pm < 300 || pm > 700) return false;
+      if (pm < kPairLo || pm > kPairHi) return false;
     }
   return true;
 }
 
-// special_probe.py's species rates, Random v Random at 800 a pair, with its
-// heavy special winding up two turns as the design says (the committed probe
-// lands a heavy after one; BATTLES.md, "Measured through resolve()"). The
-// tournament must land within 30 permille of each.
-inline constexpr uint16_t kProbePermille[kSpeciesCount] = {465, 501, 557, 492, 460, 483, 532, 509, 502, 506};
+// The owner's ask (#58): duels about half as long as the 0.7 rules' median of
+// 8 turns and p90 of 11, but never so short a special has no room to land.
+inline constexpr uint8_t kMedianTurnsLo = 4, kMedianTurnsHi = 5, kP90TurnsHi = 7;
+bool lengthHolds(const BalanceReport& r) {
+  return r.medianTurns >= kMedianTurnsLo && r.medianTurns <= kMedianTurnsHi && r.p90Turns <= kP90TurnsHi;
+}
 
 void printWheel(const char* label, const BalanceReport& r) {
   std::printf("%s, %u a pair: median %u turns, p90 %u, knockouts %u permille, worst pair %s over %s %u\n  ", label,
@@ -327,11 +331,8 @@ int main(int argc, char** argv) {
     std::printf("tier %s, random v random, %u a pair: median %u turns, p90 %u, knockouts %u permille\n", kTier[t],
                 s.perPair, s.medianTurns, s.p90Turns, s.knockoutPermille);
   }
-  int furthest = 0;
-  for (uint8_t s = 0; s < kSpeciesCount; ++s)
-    furthest = std::max(furthest, std::abs(int(random.speciesPermille[s]) - int(kProbePermille[s])));
-  std::printf("  furthest species from special_probe.py: %d permille; gate %s\n", furthest,
-              wheelHolds(random) ? "holds" : "FAILS");
+  std::printf("  wheel gate %s, length gate %s\n", wheelHolds(random) ? "holds" : "FAILS",
+              lengthHolds(random) ? "holds" : "FAILS");
   const BalanceReport queuer = tournament(n, {Player::Queuer, Player::Queuer, 0}, 1);
   printWheel("queuer v queuer", queuer);
   if (pairs) printPairs(queuer);
@@ -354,6 +355,6 @@ int main(int argc, char** argv) {
         std::printf("parent (reader) v %s, assist %u: parent %u, median %u turns, p90 %u\n", names[k], assist,
                     f.sideAPermille, f.medianTurns, f.p90Turns);
       }
-  return wheelHolds(random) ? 0 : 1;
+  return wheelHolds(random) && lengthHolds(random) ? 0 : 1;
 }
 #endif
