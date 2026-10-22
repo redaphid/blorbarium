@@ -83,9 +83,21 @@ Owner: "the behavior should represent it's genetics". What his genes do to it
   and less of the family he just played (the starter's 0.43 keeps sleep-idle's
   halving).
 - **temperament dreamLen**: a long dreamer muses more.
-- And as before, his genome hash moves each favourite 0.75x to 1.25x, his
-  species sets the favourites (`kAffinity`), and his chemistry genes set how
-  his drives run, which now shows in the Feel acts.
+- **Traits** (`Phenotype::traits`, traits.h, from gene-variety #60: 0 is the
+  recipe, +100 one doubling of a gene's rate): playfulness, more romps, more
+  play at all and a brisker pace; affection, more showing off for the kid and
+  begging; sleepiness, more musing and a slower pace; nightOwl, more of the
+  evening's and the dark's acts (fireflies, the stars, a lullaby); cheer, more
+  beaming; nerves, more hiding and looking about; boldness, more boos, boxing
+  and zoomies. Curiosity is explore's, already in the Nose pull. (Under a kid's
+  normal care boredom and loneliness sit near 0 all day, #60 measured, so
+  those genes show here through the traits, not the drives.)
+- **His own taste** (`IdleMood::taste`): each favourite 0.75x to 1.25x his
+  species', seeded from his belly, eye and glow colours and his knack, which a
+  child nearly always shares with his parent. It was the genome hash, which
+  every egg changes, so no family shared its habits; two founders still differ.
+- His species sets the favourites (`kAffinity`), and his chemistry genes set
+  how his drives run, which now shows in the Feel acts.
 
 ## How he plays it: the pace
 
@@ -95,6 +107,17 @@ quicker; sleepy, hurt, poisoned or hungry slower; content a little brisker. A
 slow act runs the longer (its length / pace), and paint runs its motion and
 props on a clock at that pace, its sway and bounce bigger when brisk. Fixed
 for the act, so no motion jumps mid-act (tween identity holds).
+
+## Under the cooldowns: keen acts come round sooner
+
+A pet awake and calm plays most of the time, and every act has a cooldown, so
+weights alone wash out: whatever is off cooldown gets played. Each act's
+cooldown is divided by how keen he is on it now (`keen`, 0.35x to 4x: its part
+of the day, his age, genes and traits, his drives, and for the Feel acts how
+strongly he feels it), and whatever he feels most damps the rest of his play
+(down to 0.2x), so the day, a feeling and the genes show in what a kid sees.
+A `kWhen` of 0 is a hard no: no sun in the morning or evening, no fireflies
+before the evening, no exercises after midday.
 
 ## Verified
 
@@ -118,3 +141,27 @@ for the act, so no motion jumps mid-act (tween identity holds).
   the size gene in his breaths a minute.
 - `Film.TheDaysActs` (`DAY_ACTS_OUT=<dir>`; `scripts/test/idle_strips.py`):
   each new act at six points, on a puffkin and a grungo.
+
+A day's mix, `DAY_MIX=1` (four species, a phone's clock, 07:00 to 22:00):
+
+    waking    yawn 16%  look_around 11%  stretch 9%  wash 8%  ...
+    morning   look_around 8%  sing 6%  explore 6%  beam 6%  sniff 6%  wash 6%  discover 5%  exercise 5%
+    midday    explore 9%  look_around 8%  sunbathe 7%  sniff 7%  discover 6%  dig 6%  beam 5%
+    afternoon look_around 9%  discover 9%  explore 8%  sniff 7%  daydream 5%  sunbathe 4%  dig 4%
+    evening   look_around 10%  yawn 10%  fireflies 6%  sniff 6%  explore 6%  discover 5%  sing 5%
+    night     look_around 14%  stargaze 13%  yawn 6%  sniff 6%  fireflies 6%  explore 5%
+
+## Goldens and tests that moved
+
+- `Replay.TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash` (and the
+  device's `HASH` reply): 6fce18b3 -> d349a3b4.
+- `test_protocol` Golden.State (`day=waking`, what the hatchling does), Chem
+  (sleepiness, boredom, a `recent_woke`), Clutch (the eggs follow the life
+  before).
+- `test_present` Golden.Hatchling: 30 s after hatching he is waking, and yawns.
+- `Thoughts.HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim`: a knock every
+  20 minutes beside the button. Untouched, the pet goes to bed in the dim
+  (sleep-idle) and sleeps it out; whether he ever woke inside those 17 hours
+  hung on the exact path of his day (the same scenario passed or failed as
+  single factors of this change were switched off), and a sleeper misses
+  nothing. The line itself is unchanged.
