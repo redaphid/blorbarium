@@ -11,7 +11,9 @@ dst="$HOME/.cache/blorbarium-build/$(printf '%s' "$src" | md5sum | cut -c1-12)"
 mkdir -p "$dst"
 rsync -a --delete --exclude .pio --exclude .git --exclude outputs "$src/" "$dst/"
 cd "$dst"
-~/.platformio/penv/bin/pio run -e sim -s
+# One build at a time: the flock wrapper when this machine has it, else the penv pio.
+pio=${BLORB_PIO:-$HOME/Worktrees/blorbarium/pio}; [ -x "$pio" ] || pio=~/.platformio/penv/bin/pio
+"$pio" run -e sim -s
 status=0
 python3 tests/film.py "$@" || status=$?
 mkdir -p "$src/outputs"

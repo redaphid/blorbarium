@@ -137,14 +137,6 @@ void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 // waits on an empty pantry, when the next pellet comes. Before the round mask.
 void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&, uint32_t nowMs = 0);
 
-// The pantry along the rim, up and left of the pellet glyph (#57): a cookie
-// in each full slot, the next one filling like a clock as it comes back, the
-// rest hollow. In the rim phase, where the old pips were.
-void drawPantry(Canvas240&, const blorb::Appearance&, uint32_t nowMs);
-// Where pantry slot k sits (0 nearest the glyph), canvas pixels.
-void pantrySlot(int k, int& x, int& y);
-constexpr int kPantrySlots = 12;
-
 // ---- idle_props.cpp -----------------------------------------------------------------
 
 // What he plays with while he plays an idle (blorb/idle.h): the notes of a
@@ -152,5 +144,14 @@ constexpr int kPantrySlots = 12;
 // pushes, a daydream's bubble, the stars he gazes at. Drawn in code, over him,
 // on the idle's clock (Appearance::idleTicks), so it moves between ticks.
 void drawIdleProps(Canvas240&, const blorb::Appearance&, const DishSpots&);
+
+// The pantry: a bar on the rim from about ten to twelve o'clock, its fill the
+// pellets left, green full to red empty (pantryColour, `full` 0..256), a feed
+// draining it a step, an empty try shaking it red. Over the dish, before the
+// round mask; it took the place of the pantry's pips. While he waits on it
+// (#57) a warm line breathes round it on `nowMs`; coming home, the part it
+// filled glows.
+void pantryBar(Canvas240&, const blorb::Appearance&, uint32_t nowMs = 0);
+uint16_t pantryColour(int full);
 
 }  // namespace paint

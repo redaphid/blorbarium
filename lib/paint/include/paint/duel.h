@@ -91,6 +91,12 @@ void drawBootHint(Canvas240&, const RimHint&);
 // everything else: main.cpp draws it last.
 void drawIdleBar(Canvas240&, uint16_t permille);
 
+// A hard shake dismissed something (#35): a white ring sweeps out from the
+// middle and fades, kDismissedMs long, `ageMs` into it. UINT16_MAX or past
+// it: nothing.
+constexpr uint16_t kDismissedMs = 300;
+void drawDismissed(Canvas240&, uint16_t ageMs);
+
 struct DuelScene {
   DuelAct act = DuelAct::Meeting;
   uint16_t ticks = 0;               // 10 a second since the act began; every motion is a function of it

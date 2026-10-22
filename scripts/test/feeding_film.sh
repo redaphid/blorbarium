@@ -14,8 +14,11 @@ out="$here/outputs/feeding"
 work="$here/.pio/feeding-before"
 mkdir -p "$out/ppm_before" "$out/ppm_after" "$work"
 export PLATFORMIO_RUN_JOBS=3
+# Through the laptop's build lock when it has one (one compile at a time).
+pio="${PIO:-$HOME/Worktrees/blorbarium/pio}"
+[ -x "$pio" ] || pio=~/.platformio/penv/bin/pio
 
-~/.platformio/penv/bin/pio test -e native -f test_feeding_film --without-testing > /dev/null
+"$pio" test -e native -f test_feeding_film --without-testing > /dev/null
 FEEDING_DUMP="$out/ppm_after" .pio/build/native/program --gtest_filter='Film.*' > /dev/null
 
 rm -rf "$work/src" "$work/lib" "$work/test" "$work/pets"
@@ -25,7 +28,7 @@ for f in test/support/feeding_badge.h test/test_feeding_film/test_main.cpp src/h
   mkdir -p "$work/$(dirname "$f")"
   cp "$f" "$work/$f"
 done
-(cd "$work" && ~/.platformio/penv/bin/pio test -e native -f test_feeding_film --without-testing > /dev/null)
+(cd "$work" && "$pio" test -e native -f test_feeding_film --without-testing > /dev/null)
 FEEDING_DUMP="$out/ppm_before" "$work/.pio/build/native/program" --gtest_filter='Film.*' > /dev/null
 
 python3 scripts/test/feeding_sheet.py "$out"

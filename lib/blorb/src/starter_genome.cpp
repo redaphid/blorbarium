@@ -118,10 +118,8 @@ constexpr LocusId kNoLocus{kNoCue};
 
 }  // namespace
 
-void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speciesSeed, bool neglectCanKill,
-                   Recipe recipe) {
+void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speciesSeed, bool neglectCanKill) {
   Author g{out, Rng::seeded(speciesSeed)};
-  const bool gift = recipe == Recipe::Gift;
   const uint8_t hunger = d(drive::hunger), sleepiness = d(drive::sleepiness), boredom = d(drive::boredom),
                 loneliness = d(drive::loneliness), fear = d(drive::fear), pain = d(drive::pain),
                 discomfort = d(drive::discomfort), needTouch = d(drive::need_touch);
@@ -138,14 +136,13 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.receive(life, locus::cause.v, 26, kCauseOldAge, 128, kDigital | kInvert, kVital);
 
   // ---- drives: each has a half-life and tonic production on `always` ----------
-  // FirstHours makes sleepiness pressure instead: made only while he is awake
-  // and drained while he sleeps, so a pet day has naps in it as well as a
-  // night. A species that sleeps by day builds it faster.
+  // Sleepiness is pressure instead: made only while he is awake and drained
+  // while he sleeps, so a pet day has naps in it as well as a night. A
+  // species that sleeps by day builds it faster.
   struct Tonic { uint8_t chem; uint32_t halfLife; uint32_t permille; uint8_t initial; };
   const Tonic tonics[] = {
       {hunger, 30 * kMinute, 150u * row.appetite / 1000, unit(300)},
-      gift ? Tonic{sleepiness, 2 * kHour, 100, 0}
-           : Tonic{sleepiness, 90 * kMinute, row.nocturnal ? 580u : 520u, unit(250)},
+      {sleepiness, 90 * kMinute, row.nocturnal ? 580u : 520u, unit(250)},
       {boredom, 1 * kHour, 600, 0},
       {loneliness, 3 * kHour, 500, 0},        {fear, 2 * kMinute, 50, 0},       {pain, 10 * kMinute, 20, 0},
       {discomfort, 5 * kMinute, 50, 0},       {needTouch, 3 * kHour, 500, 0},
@@ -153,13 +150,13 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   for (const Tonic& t : tonics) {
     g.chem(t.chem, t.halfLife, t.initial);
     const uint8_t fill = tonicByte(t.halfLife, t.permille);
-    if (t.chem == sleepiness && !gift) g.emit(locus::asleep.v, t.chem, unit(500), fill, kDigital | kInvert);
+    if (t.chem == sleepiness) g.emit(locus::asleep.v, t.chem, unit(500), fill, kDigital | kInvert);
     else g.emit(locus::always.v, t.chem, 0, fill, kDigital);
   }
 
   // ---- food -> energy; low energy calls up hunger ------------------------------
   g.chem(food, 0);
-  g.chem(energy, 4 * kHour, unit(gift ? 800 : 450));   // FirstHours: peckish within his first hours
+  g.chem(energy, 4 * kHour, unit(450));   // peckish within his first hours
   g.react(food, 1, kNone, 0, energy, 1, 2 * kMinute, kVital);
   g.receive(energy, kHungerCall, unit(350), 128, 128 + 48, kInvert);   // 3 x the shortfall below 0.35
   g.emit(kHungerCall, hunger, 0, timeByte(20 * kMinute), 0);
@@ -240,7 +237,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
 
   // ---- faces over the drive mix: weight is a base, amounts per drive ----------
   g.face(expr::neutral, 350);
-  g.face(expr::happy, gift ? 550 : 600, drive::hunger, -500, drive::boredom, -500, drive::fear, -600);
+  g.face(expr::happy, 600, drive::hunger, -500, drive::boredom, -500, drive::fear, -600);
   g.face(expr::alarmed, 0, drive::fear, 900, drive::discomfort, 500);
   g.face(expr::annoyed, 0, drive::discomfort, 700, drive::pain, 600);
   g.face(expr::croak, 250, drive::need_touch, -600, drive::loneliness, -400);
@@ -268,7 +265,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.put(TemperamentGene{140, 16, 170, 110, 8, 3, 20}, kGene);   // calm learner, curious
   g.put(TemperamentGene{90, 24, 110, 140, 6, 4, 24}, kGene, Stage::Elder);
   g.put(MutationPolicyGene{40, 6, 4, 20, 6, 10, 3, 140}, kVital);
-  g.put(EggGene{uint8_t(gift ? 30 : 15), 128, 12}, kVital);         // a 30- or 15-minute egg
+  g.put(EggGene{15, 128, 12}, kVital);                              // a 15-minute egg
   g.put(MetabolismGene{4, 8, 90, unit(300)}, kVital);                // 8 pellets, one back every 5 min 20 s (food.h)
   NoteGene note{};
   const char motto[] = "it is WRITTEN";
@@ -278,7 +275,7 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
 
 Genome starterGenome(uint32_t speciesSeed) {
   GenomeBuilder b;
-  authorStarter(b, speciesInfo(kGrungo).starter, speciesSeed, kNeglectCanKill, Recipe::Gift);
+  authorStarter(b, speciesInfo(kGrungo).starter, speciesSeed);
   return *b.build();
 }
 

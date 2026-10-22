@@ -256,12 +256,14 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // the pet clock's two new fields in the hash, a hand rousing him, his idles
   // over a rest (their rng draws, drives, faces) and the 2/5 sleep cut.
   // ea029709 once rot is refused unless he is starving (#21): food_near counts
-  // only what he would eat, and he sniffs rot and turns away. ad5cdd1f with
-  // the food balance (#57, food.h): the pantry holds 8 and refills every
-  // 5 min 20 s (the routine's presses no longer find it empty), a dig that
-  // ends in its forage window's slot turns up a snack, and the first hand
-  // after two hours untouched tops the pantry up.
-  constexpr uint32_t kCommitted = 0xad5cdd1fu;
+  // only what he would eat, and he sniffs rot and turns away. 6fce18b3 with
+  // the one starter recipe (#36): Dish(.., 7) founds starterGenome(7), now the
+  // recipe every board founds from (sleep as pressure, a 15-minute egg).
+  // 8bf77fa0 with the food balance (#57, food.h): the pantry holds 8 and
+  // refills every 5 min 20 s (the routine's presses no longer find it
+  // empty), a dig that ends in its forage window's slot turns up a snack, and
+  // the first hand after two hours untouched tops the pantry up.
+  constexpr uint32_t kCommitted = 0x8bf77fa0u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -272,7 +274,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=ad5cdd1f tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=8bf77fa0 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

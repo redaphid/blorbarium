@@ -13,3 +13,5 @@ pet_backups/
 .soak/*.log
 .soak/
 .jobs/
+.env
+.claude/worktrees/

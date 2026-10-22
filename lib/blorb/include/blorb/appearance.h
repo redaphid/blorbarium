@@ -8,6 +8,7 @@
 // renders it byte-identically run after run.
 #include <cstdint>
 #include "blorb/boot.h"
+#include "blorb/carry_show.h"
 #include "blorb/creature.h"
 #include "blorb/duel_card.h"
 #include "blorb/feed_show.h"
@@ -102,6 +103,12 @@ struct Appearance {
   // Feeding as the eyes see it (feed_show.h): the knock knock heard, the
   // pellet's flight, a refusal and why, the chomp, and his belly. Ages in ms.
   FeedView feed{};
+  // Carried about (carry_show.h): his lean against the badge's acceleration,
+  // and now and then a reaction to the ride (paint's carried.cpp). Ages in ms.
+  CarryView carry{};
+  // A hard shake dismissed something (#35) this long ago, ms: the screen's
+  // whoosh (paint::drawDismissed). UINT16_MAX: none to show.
+  uint16_t dismissedMs = UINT16_MAX;
 
   // Egg, remains and clutch
   Fx eggProgress{};                 // whole -> cracking -> hatching

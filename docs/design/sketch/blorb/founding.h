@@ -18,7 +18,7 @@
 // egg (friend_egg.h).
 //
 // Existing pets are untouched: a keepsake or a lineage means no chooser, and
-// grungo d30f00d1 has no SpeciesGene, so he reads as slot 0 forever.
+// a pet from before species has no SpeciesGene, so he reads as slot 0.
 #include <cstdint>
 #include <optional>
 #include "blorb/seams.h"

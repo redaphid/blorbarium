@@ -159,6 +159,32 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   }
   cues_.sample(s, detectors_.side.holding(), nowMs);
   feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
+  carry_.sample(s, nowMs, carryContext(s));
+}
+
+// What the carry show (carry_show.h) needs to know beyond the sample: whether
+// he can react at all (awake at home, not fighting or eating), whether a
+// gesture is under way or just spoke, and who he is.
+CarryContext Dish::carryContext(const BodySample& s) const {
+  CarryContext c;
+  const auto fired = [&](StimId id) { return id.v < 64 && ((lastFired_ >> id.v) & 1); };
+  c.posing = s.sideDown || s.invertedDown || detectors_.side.holding() || detectors_.hang.charge() > Fx::zero();
+  c.shook = fired(stim::shake);
+  c.gestured = fired(stim::button) || fired(stim::button_hold) || fired(stim::button_double) || fired(stim::hang) ||
+               fired(stim::knock) || fired(stim::double_knock);
+  c.poseWord = fired(stim::button_hold) || fired(stim::hang);
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  if (!cr) return c;
+  c.canReact = !sealed() && !duel_.active() && !cr->body().asleep && cr->body().mouth == Mouthful::Nothing &&
+               !detectors_.lid.lidded();
+  c.species = cr->phenotype().species.body.v;
+  c.seed = cr->genome().hash();
+  return c;
+}
+
+void Dish::forceCarry(Carry k) {
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  carry_.force(k, nowMs_, cr ? cr->genome().hash() : 0);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
@@ -197,6 +223,16 @@ void Dish::runOneTick(Link& link) {
     if (out.loci[i].locus == locus::tilt_y) tiltY_ = out.loci[i].value;
   }
   routeBoot(bootContext(), out);
+  // A hard shake dismisses anything modal before the tick runs (#35): fight
+  // mode before a duel has started, an ask waiting on an update, why no
+  // fight, a refusal's words. Never a duel. It still reaches him.
+  if (fired(out, stim::shake) && !(out.remote & duelStimBit(stim::shake)) && detectors_.motion.vigorous()) {
+    const DishDuel::Refusal& r = duel_.refusal();
+    const bool refusalShown = r.any && (tick_ - r.tick < kEchoTicks || (r.kind != NoFight::None && tick_ - r.tick < kNoFightTicks));
+    bool any = duel_.dismiss(air_, tick_, refusalShown);
+    any = feed_.dismiss(lastTickMs_) || any;
+    if (any) dismissedAtMs_ = lastTickMs_, dismissed_ = true;
+  }
   const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
   const bool side = kSideHoldHolds && detectors_.side.holding();
   // The duel reads the aim (AimDetector) as the tilt at its sector's middle,
@@ -455,21 +491,9 @@ Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
   char was[16], now[16];
   speciesLineName(kGrungo, was);
   speciesLineName(species, now);
-  if (std::strcmp(lineage_.currentName(), was) == 0) rename(now);
+  if (std::strcmp(was, now) != 0 && std::strcmp(lineage_.currentName(), was) == 0) rename(now);
   // A rerun after a power cut may find the Rename on the log and the old name in the save.
   copyName(live_.settings.name, lineage_.currentName());
-  eventDirty_ = true;
-  save();
-  return Adoption::Adopted;
-}
-
-Dish::Adoption Dish::retuneFirstHours(SpeciesId species) {
-  if (readOnly_) return Adoption::NotNeeded;
-  Creature* c = std::get_if<Creature>(&live_.occupant);
-  if (!c) return Adoption::NotYet;
-  if (!store_.writable() || duel_.active()) return Adoption::NotYet;
-  if (!blorb::retuneFirstHours(*c, species, live_.settings.speciesSeed)) return Adoption::NotNeeded;
-  lineage_.recordEdit(c->generation(), c->genome());
   eventDirty_ = true;
   save();
   return Adoption::Adopted;
@@ -517,6 +541,8 @@ Appearance Dish::appearance() const {
     a.lobbyDecline = v.myDecline;
   }
   feedView(a);
+  if (std::holds_alternative<Creature>(live_.occupant)) a.carry = carry_.view(nowMs_);
+  if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);

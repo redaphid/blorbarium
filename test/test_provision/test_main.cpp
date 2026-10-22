@@ -252,7 +252,7 @@ TEST(Mixed, JunkPetfsBesideAnUnreadablePetIsLeftAlone) {
 
 // ---- a keepsake: recognised by bytes every save already has ----
 
-// The gift device's save, in the format it is in today: NVS entries written by
+// A board's save, in the format it is in today: NVS entries written by
 // ESP-IDF's own generator around keepsake_v1.bin, and mklittlefs's superblock.
 TEST(Keepsake, TheCurrentFormatIsRecognisedWithNoNewMarker) {
   MemVolume pet(fixture("nvs_pet_v1.bin", kPetSize), true);

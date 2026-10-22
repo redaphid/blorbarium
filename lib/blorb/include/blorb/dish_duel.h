@@ -98,6 +98,12 @@ class DishDuel {
   // routing says so, and the screen shows why.
   void refuse(NoFight, uint32_t tick, const char* gate = nullptr, bool hang = false);
   bool searching() const { return session_.searching(); }
+  // A hard shake dismisses what fight mode puts on the screen before a duel
+  // has started (#35): the lobby, a pair greeting, the stakes picker (the
+  // friend hears it as leaving), an ask waiting on an update, and why no fight
+  // (refusalShown: the Dish is showing it). Never a duel: once the stakes are
+  // agreed a shake is the prophecy. True when it dismissed anything.
+  bool dismiss(Air*, uint32_t tick, bool refusalShown);
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out); }
   const char* lastGate() const { return lastGate_; }
   // Fight mode asked for while an update held the radio: it opens by itself

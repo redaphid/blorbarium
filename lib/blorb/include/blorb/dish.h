@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 #include "blorb/air.h"
+#include "blorb/carry_show.h"
 #include "blorb/appearance.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
@@ -136,15 +137,11 @@ class Dish {
   // for grungo takes the species' name, and an owner's name stays. NotYet
   // while nothing could be written (an OTA trial's held storage), a duel is
   // open, or the pet is an egg or a clutch, so the caller asks again.
-  // NotNeeded once he has a species, when `species` is grungo (he already is
-  // one), and on a sealed board. Running it again after a power cut finds
-  // the saved pet adopted, or adopts the unsaved one the same way.
+  // NotNeeded once he has a species, and on a sealed board. Grungo is adopted
+  // like any species. Running it again after a power cut finds the saved pet
+  // adopted, or adopts the unsaved one the same way.
   enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
   Adoption adoptSpecies(SpeciesId, const LookBands&);
-  // The one-time step after adoption (founding.h retuneFirstHours), recorded
-  // and saved the same way. NotYet as adoptSpecies; NotNeeded once he sleeps
-  // by FirstHours or when he is not the Gift recipe's `species`.
-  Adoption retuneFirstHours(SpeciesId);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
 
   // Duels (dish_duel.h). The view is plain data for the duel scene and the
@@ -158,7 +155,16 @@ class Dish {
   // above 0, and the aim the tilt reads as of the last sample, not the last
   // tick (-1 level). Reads only.
   bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
+  // The last sample fired a shake hard enough to dismiss what is on the
+  // screen (#35): the shell's questions (the update's, the debug unlock's)
+  // take it for a no. The Dish's own (fight mode before a duel, a refusal's
+  // words) it dismisses at the next tick.
+  bool shakeDismisses() const { return (lastFired_ >> stim::shake.v & 1) && detectors_.motion.vigorous(); }
   int8_t aimNow() const { return detectors_.aim.aim(); }
+  // Carried about, as the eyes see it (carry_show.h): presentation only. The
+  // cable's `DEBUG carry <kind>` plays one now; tests count what started.
+  const CarryShow& carry() const { return carry_; }
+  void forceCarry(Carry k);
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
@@ -237,6 +243,9 @@ class Dish {
   // or hashed. nowMs_ is the newest time the shell has handed in, a sample's
   // or a tick call's: the frame drawn next is about then.
   FeedShow feed_;
+  // Carried about (carry_show.h): presentation only, never saved or hashed.
+  CarryShow carry_;
+  CarryContext carryContext(const BodySample&) const;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // Ticks since a hand was last on the badge (food.h, coming home). Not
@@ -253,6 +262,9 @@ class Dish {
   // The aim a knock is made at: the aim on the first knock's sample, which
   // the lock takes when the knock is decided ~0.6 s later (a hand drifts).
   int8_t knockAim_ = -1;
+  // When a hard shake last dismissed something (#35), for the whoosh.
+  uint32_t dismissedAtMs_ = 0;
+  bool dismissed_ = false;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
   DiagLines diag_;

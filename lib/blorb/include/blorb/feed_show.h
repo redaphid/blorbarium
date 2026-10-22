@@ -12,18 +12,19 @@
 //   dropped  a pellet left the pantry: that cookie is tossed down to where
 //            it lands in the dish, and the pantry's empty slot shows where it
 //            came from;
-//   refused  the press fed nobody now, and he says why in a bubble: ALL
-//            GONE! (the pantry's empty slots shake, the next one filling),
-//            ZZZ... (the pellet waits for him), or I'M FULL!;
+//   refused  the press fed nobody now, and why: the pantry is empty (a
+//            cookie jar knocked over and empty, and the pantry's empty slots
+//            shaking, the next one filling), or he says ZZZ... (the pellet
+//            waits for him) or I'M FULL! in a bubble;
 //   chomp    he bit a pellet: crumbs and hearts (a rotten one: yuck), and his
 //            belly meter rises.
 //
 // And where food comes from (#57, food.h), so a kid knows how to get more:
-//   pantry   its slots along the rim, full ones filled; the next one fills
-//            like a clock as it comes back, and while he is hungry with none
-//            left the time it will take is written beside it (waiting);
+//   pantry   the bar on the rim (#18), its next pellet's sliver; while he is
+//            hungry with none left it breathes warm and the time until the
+//            next one is written under it, m:ss (waiting);
 //   found    a snack he dug up sparkles where it lands;
-//   topped   coming home after a long time away: the slots it filled pop in;
+//   topped   coming home after a long time away: the part it filled glows;
 //   spoils   a battle won: a cookie flies in over the rim to the pantry; lost:
 //            one flies out of it and away (the friend's screen shows it land).
 //
@@ -62,6 +63,7 @@ struct FeedView {
   uint8_t topped = 0;               // ...by this many: the newest slots
   uint16_t spoilsMs = kNever;       // since a battle's spoils were shown...
   int8_t spoils = 0;                // ...won (> 0: into the pantry from the rim) or lost (< 0: out of it)
+  uint8_t emptyTries = 0;           // knock knocks that found the pantry empty, this boot: the sad thought's variant
 };
 
 class FeedShow {
@@ -79,6 +81,12 @@ class FeedShow {
   // On the tick a press reached a pet: whether a pellet dropped (the tick it
   // did is `tick`), and how he was when it did.
   void pressed(uint32_t ms, bool dropped, uint32_t tick, bool asleep, Fx hunger);
+  // A hard shake dismisses a refusal's words (#35). True when one was shown.
+  bool dismiss(uint32_t nowMs) {
+    if (age(refused_, nowMs) == FeedView::kNever) return false;
+    refused_.seen = false;
+    return true;
+  }
   // On the tick he bit a pellet. `hunger`: before the bite.
   void ate(uint32_t ms, bool rotten, Fx hunger);
   // On the tick a snack he dug up landed (its pellet's droppedTick is `tick`).
@@ -102,6 +110,7 @@ class FeedShow {
   Event heard_, dropped_, refused_, chomp_, found_, topped_, spoils_;
   FeedRefusal why_ = FeedRefusal::None;
   bool rotten_ = false, knockKnockWas_ = false;
+  uint8_t emptyTries_ = 0;
   uint32_t dropTick_ = 0, foundTick_ = 0;
   uint8_t toppedN_ = 0;
   int8_t spoilsN_ = 0;

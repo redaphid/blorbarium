@@ -28,13 +28,14 @@ and the evidence.
 ## D3. One badge per species, from a fixed MAC table
 
 - **Decision:** the 8 badges in `flash_log.csv` take the 8 species that are
-  not grungo, one each, in badge order. The original gift device
-  (`blorb-237c`, an adult grungo the owner's friend chose, on flash3 with no
-  updater) stays the one grungo. A MAC not in the table falls back to a hash
-  over the nine species.
+  not grungo, one each, in badge order. Board 237c (`blorb-237c`, the
+  owner's) is grungo. A MAC not in the table falls back to a hash over the
+  regular cast (every species but the octopus, a one-off variant; updated
+  2026-10-21, issue #36).
 
   | Badge | MAC | Old BLE name | Species (new BLE name) |
   |---|---|---|---|
+  | 0 | d4:05:92:77:23:7c | blorb-237c | grungo |
   | 1 | d4:05:92:77:1b:3c | blorb-1b3c | mossby |
   | 2 | d4:05:92:77:1b:44 | blorb-1b44 | puffkin |
   | 3 | d4:05:92:77:1b:34 | blorb-1b34 | gilly |
@@ -43,19 +44,19 @@ and the evidence.
   | 6 | d4:05:92:77:1b:40 | blorb-1b40 | fizz |
   | 7 | d4:05:92:77:22:58 | blorb-2258 | hushwing |
   | 8 | d4:05:92:77:22:40 | blorb-2240 | tinker |
-  | gift | (ends 23:7c) | blorb-237c | grungo (unchanged, needs a cable for any update) |
 
 - **Why:** the owner: "There will only be one of each." A hash cannot promise
   that for 8 MACs, so a table does. Nine creatures for nine devices.
-- **Evidence:** `flash_log.csv`, `flash_log.old.csv` (badge 1 only),
-  `docs/hardware-testing.md` (the gift device).
+- **Evidence:** `flash_log.csv`, `flash_log.old.csv` (badge 1 only).
 
-The final table is `lib/blorb/include/blorb/defs/badges.def`. The gift row
-`d4:05:92:77:23:7c` is **assumed** from the BLE name `blorb-237c` and the
-batch prefix: its full MAC is recorded nowhere. Any MAC not in the table
-founds grungo, the one species the table leaves for the gift, so the nine
-known devices hold nine different species. A `static_assert` in
-`founding.cpp` checks nine rows, each species once and no MAC twice.
+The final table is `lib/blorb/include/blorb/defs/badges.def`. Row 0,
+`d4:05:92:77:23:7c`, is read from the BLE name `blorb-237c` and the batch
+prefix: its full MAC is recorded nowhere. It is an ordinary row: board 237c
+founds and adopts grungo exactly as any badge founds and adopts its species.
+Any MAC not in the table takes a species of the regular cast from
+`fnv1a(MAC)` (`founding.h` `castSpecies`), so grungo is not a catch-all. A
+`static_assert` in `founding.cpp` checks the rows, each species once and no
+MAC twice.
 
 ## D4. Adopt the 0.4.0 pets; do not re-found them
 
@@ -71,12 +72,13 @@ known devices hold nine different species. A `static_assert` in
   by the duel-gene graft).
 - **The trap it avoids:** an OTA image keeps itself only if the resumed pet
   matches the handover record (generation and genome hash). So adoption
-  waits until the trial has kept the image (`adoptTableSpecies` in
+  waits until the trial has kept the image (`adoptBoardSpecies` in
   `src/main.cpp`), and it is idempotent across power cuts.
-- **Never adopts toward grungo**, so the gift grungo's genome stays byte for
-  byte (`TheGiftDevicesGrungoStaysByteForByteAndAdvertisesGrungo`).
-- **Evidence:** `test/test_adopt_species` (16 cases),
-  `tools/guards/adopt_species.sh` (13 mutants caught).
+- **Grungo is adopted like any species** (updated 2026-10-21, issue #36):
+  a pet from before species on board 237c gains grungo's species genes and
+  rolled look (`Board237csPetAdoptsGrungoLikeAnyBadgeAdoptsItsSpecies`). A
+  board off the table adopts the species its MAC gives.
+- **Evidence:** `test/test_adopt_species`, `tools/guards/adopt_species.sh`.
 
 ## D5. The BLE name is the species slug
 

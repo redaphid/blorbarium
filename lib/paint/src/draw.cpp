@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
+#include "carried.h"
 #include "duel/duel_art.h"
 #include "figure.h"
 #include "lively.h"
@@ -46,6 +47,7 @@ constexpr int kEggLean = kOne * 16 / 100;        // shear at full wobble
 constexpr int kClutchGapPx = 66;
 constexpr int kClutchEggPx = 72;                 // three eggs side by side, each this tall
 constexpr int kAwayPct = 82;                     // his size at the rim, of his size at home
+constexpr int kCarrySpillQ4 = 4 * 16;            // a carried lean may take him this far past his travel circle
 constexpr uint8_t kHaloTeal[3] = {64, 236, 214};
 constexpr uint8_t kSparkWhite[3] = {200, 255, 248};
 constexpr uint16_t kPulseTicks = 8;              // 1.25 Hz at 10 ticks a second
@@ -56,7 +58,7 @@ constexpr Fx kSparkGlow = Fx::ratio(6, 10);
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-// The empty band above his head, under the pantry's slots: the sibling's label
+// The empty band above his head, under the pantry bar: the sibling's label
 // strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
 // over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
@@ -975,14 +977,29 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 
   Motion m = motionOf(a, maxLift);
   const Lively live = livelyOf(a, maxLift - m.lift);
-  shadow(cv, p, foot, m.lift + live.lift, maxLift);
-  p.xf = {imax(1, base.kx * m.wide / kOne * (1024 + live.wide) / 1024),
-          imax(1, base.ky * m.tall / kOne * (1024 + live.tall) / 1024), m.lift + live.lift, 0};   // an idle's squash (lively.h)
+  // Carried about (carried.cpp): a slide and lean against the badge's
+  // acceleration, and now and then a reaction to the ride, on top of the idle layer.
+  const Carried carry = carriedOf(a);
+  const int carryLift = imin(carry.lift, imax(0, maxLift - m.lift - live.lift));
+  if (carry.dxQ4 || carry.dyQ4) {
+    // Held to the travel circle his envelope fits in, give or take a few
+    // pixels (a lean is a moment), so a slide never puts him off the glass.
+    int64_t qx = int64_t(p.x) * 16 + carry.dxQ4, qy = int64_t(p.y) * 16 + carry.dyQ4;
+    const int64_t cx = qx + d.x - kSide * 8, cy = qy + d.y - kSide * 8;
+    const int64_t travel = imax(0, kSide * 8 - d.r) + kCarrySpillQ4, r = isqrt(uint64_t(cx * cx + cy * cy));
+    if (r > travel) qx = kSide * 8 + cx * travel / r - d.x, qy = kSide * 8 + cy * travel / r - d.y;
+    p.x = floorDiv(qx + 8, 16), p.y = floorDiv(qy + 8, 16);
+  }
+  shadow(cv, p, foot, m.lift + live.lift + carryLift, maxLift);
+  // An idle's squash (lively.h) and the ride's (carried.h), both on his motion's.
+  p.xf = {imax(1, base.kx * m.wide / kOne * (1024 + live.wide) / 1024 * carry.wide / kOne),
+          imax(1, base.ky * m.tall / kOne * (1024 + live.tall) / 1024 * carry.tall / kOne),
+          m.lift + live.lift + carryLift, 0};
   if (body.h && a.lively) {
     // His breath and sway, from his feet: the height and lean are a share of the frame as drawn.
     const int tallPx = imax(1, body.h * p.xf.ky / kOne);
     p.xf.ky += live.breathQ4 * kOne / (16 * body.h);
-    p.xf.shear = live.swayQ4 * kOne / (16 * tallPx);
+    p.xf.shear = (live.swayQ4 + carry.shearQ4) * kOne / (16 * tallPx);
   } else if (body.h) {
     p.xf.ky += breathPx(a) * kOne / body.h;
   }
@@ -994,15 +1011,30 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 
   // His face, a pixel to the side when his eyes wander (the idle layer).
   Place look = p;
-  look.x += live.gazeX;
+  look.x += live.gazeX + carry.gaze;
   look.y += live.gazeY;
   FaceShown face = faceFor(a);
+  if (carry.face && !eyesGlow(a)) face = {carry.expr, carry.expr, 256};
   FrameRef now = pack.face(face.now, a.stage);
   if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), look, col, 256, spots, &scars);
   blit(cv, now, look, col, face.mix, spots, &scars);
   halo(cv, a, pack, now.eyeCount ? now : body, look);
   pelletInMouth(cv, pack, a, now, now.eyeCount ? now : body, look);
   drawItems(a, cv, d, p, foot, true);
+  if (carry.active) {
+    CarrySpots at;
+    at.x = p.x, at.y = p.y - p.xf.lift, at.top = p.y - p.xf.lift - body.originY * p.xf.ky / kOne;
+    at.halfW = body.w * p.xf.kx / kOne / 2;
+    const FrameRef& eyes = now.eyeCount ? now : body;
+    at.eyes = uint8_t(imin(eyes.eyeCount, 2));
+    for (int e = 0; e < at.eyes; ++e) {
+      const Pt c = project(look.xf, eyes, eyes.eyes[e].x * 16 + 8, eyes.eyes[e].y * 16 + 8);
+      at.ex[e] = look.x + floorDiv(c.x + 8, 16), at.ey[e] = look.y + floorDiv(c.y + 8, 16);
+      at.er[e] = eyes.eyes[e].r * look.xf.kx / kOne;
+    }
+    at.glowing = eyesGlow(a);
+    drawCarried(cv, a, at);
+  }
 }
 
 // The egg's rock: 8/64 of a turn a tick on poseTick (which an egg never moves,
@@ -1626,7 +1658,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutch(a, cv); break;
   }
   phaseEnd(Phase::Figure);
-  drawPantry(cv, a, nowMs);   // feeding.cpp: the pantry's slots and the next one coming
+  pantryBar(cv, a, nowMs);   // feeding.cpp: the pantry, a bar on the rim (it was pips)
   rimTokens(cv, a);
   hint(cv, a);
   phaseEnd(Phase::Rim);

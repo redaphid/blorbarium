@@ -50,6 +50,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 using PetStorage = hw::NvsFsStorage;
 #endif
 
+#include "hw/carry_ride.h"
 #include "hw/feel.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
@@ -234,6 +235,7 @@ RTC_NOINIT_ATTR static uint32_t quietBoot;
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
 static bool debugAsks();
+static void debugSaysNo();   // a hard shake answers the debug link's unlock question no (#35)
 static bool debugPress(uint32_t ms);
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
@@ -409,8 +411,16 @@ static void lcdVerb(const char* a) {
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
 
+#if !defined(BADGE_BOARD_SIM)
+static uint32_t shellDismissedAt = 0;   // a hard shake answered the shell's question no (#35): the whoosh
+#endif
+
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
+#if !defined(BADGE_BOARD_SIM)
+  if (shellDismissedAt && millis() - shellDismissedAt < 1000)
+    a.dismissedMs = uint16_t(std::min<uint32_t>(a.dismissedMs, millis() - shellDismissedAt));
+#endif
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
@@ -520,7 +530,17 @@ static volatile uint8_t knockCode = 0;
 static volatile uint32_t shakeAt = 0;
 static volatile bool shaking = false;
 static volatile uint32_t knockAt = 0;
+// `DEBUG ride <kind> [ms]`: a motion from hw/carry_ride.h in place of the
+// IMU's reading, through the real sense path (the carried reactions'
+// detectors, the knocks, the poses), from rideAt for rideMs.
+static volatile uint32_t rideAt = 0, rideMs = 0;
+static volatile uint8_t rideKind = 0;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
+  if (rideMs && int32_t(ms - rideAt) >= 0 && ms - rideAt < rideMs) {
+    const blorb::BodySample r = hw::ride::toRaw(hw::ride::at(hw::ride::Kind(rideKind), ms - rideAt), ORIENT_HOME, ORIENT_R0);
+    s.ax = r.ax, s.ay = r.ay, s.az = r.az;
+    return true;
+  }
   if (knockCode && int32_t(ms - knockAt) >= 0) {
     const uint32_t since = ms - knockAt;
     for (uint8_t i = 0; i < knockCode; ++i) {
@@ -794,6 +814,13 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   f.screen.buttonDown = petFeels(f.screen.buttonDown, remote);
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
+  // A hard shake is a no to the shell's questions (#35): the update's "Turn
+  // me around!" lapses (not now), the debug link's unlock question goes.
+  if (dish->shakeDismisses() && (updater.asking() || debugAsks())) {
+    if (updater.asking()) updater.decline(millis()), Serial.printf("[ota] shaken: not now\n");
+    if (debugAsks()) debugSaysNo();
+    shellDismissedAt = millis() | 1;
+  }
   traceSample(f.body, f.screen, f.rot, ms);
   lat::felt(f, sensed.buttonDown, wasLow && !powerPolicy.low());
 #else
@@ -987,7 +1014,7 @@ static void reportStatus(uint32_t now) {
 
 // A device that has never had a pet waits a moment on its first boot for
 // `DEBUG found <species>`: tools/flash_fleet.sh --species sends it, so each
-// gift hatches the creature chosen for its kid. The pin must land before the
+// badge hatches the creature chosen for its kid. The pin must land before the
 // founding below, and storage is blank until this boot formats it, so there
 // is no earlier moment to write it. A device with a pet never waits.
 [[maybe_unused]] static void awaitFoundPin() {
@@ -1003,8 +1030,8 @@ static void reportStatus(uint32_t now) {
 }
 
 #if !defined(BADGE_BOARD_SIM)
-// The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
-// badge table will adopt him as (founding.h advertisedSpecies), whatever the
+// The Bluetooth name is the species (docs/ble.md): the pet's, or the one his
+// board will adopt him as (founding.h advertisedSpecies), whatever the
 // owner named him. An image on trial keeps the old image's blorb-xxxx, so a
 // trial looks to the page exactly as the board it updated: the page served
 // before rel-site keys its OTA token by device name, and a reloaded one must
@@ -1019,39 +1046,28 @@ static const char* bleName(const uint8_t mac[6]) {
   return name;
 }
 
-// A pet 0.4.0 founded becomes his badge's species (founding.h), once the
-// flash can be written: on an OTA trial, only after the trial keeps the
-// image, so the trial's pet check and a rollback both meet the pet the old
-// image saved. Then, under the same rule, a pet 0.7.0 adopted with the Gift
-// recipe's sleep takes FirstHours' (founding.h retuneFirstHours). Asked once
-// a second until the Dish says each is done. A board not in the table, and
-// the gift grungo (row 0), are neither adopted nor retuned.
-static void adoptTableSpecies(uint32_t now) {
-  static bool adopted = false, retuned = false;
+// A pet from before species (0.4.0 founded them) becomes his board's species
+// (founding.h badgeSpecies: the table's, else one of the regular cast from
+// the MAC), once the flash can be written: on an OTA trial, only after the
+// trial keeps the image, so the trial's pet check and a rollback both meet
+// the pet the old image saved. Asked once a second until the Dish says it is
+// done. Every board is treated alike, grungo's included.
+static void adoptBoardSpecies(uint32_t now) {
+  static bool adopted = false;
   static uint32_t askedAt = 0;
-  if ((adopted && retuned) || trial.onTrial() || now - askedAt < 1000) return;
+  if (adopted || trial.onTrial() || now - askedAt < 1000) return;
   askedAt = now;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
-  if (!adopted) {
-    const blorb::Dish::Adoption a =
-        species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
-    if (a == blorb::Dish::Adoption::NotYet) return;
-    adopted = true;
-    if (a == blorb::Dish::Adoption::Adopted) {
-      const OccupantSummary o = summarize(dish->occupant());
-      Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
-                    blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
-    }
+  const blorb::SpeciesId species = blorb::badgeSpecies(mac);
+  const blorb::Dish::Adoption a = dish->adoptSpecies(species, paint::bandsFor(species));
+  if (a == blorb::Dish::Adoption::NotYet) return;
+  adopted = true;
+  if (a == blorb::Dish::Adoption::Adopted) {
+    const OccupantSummary o = summarize(dish->occupant());
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+                  blorb::speciesInfo(species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
   }
-  const uint32_t was = summarize(dish->occupant()).genome;
-  const blorb::Dish::Adoption r = species ? dish->retuneFirstHours(*species) : blorb::Dish::Adoption::NotNeeded;
-  if (r == blorb::Dish::Adoption::NotYet) return;
-  retuned = true;
-  if (r == blorb::Dish::Adoption::Adopted)
-    Serial.printf("[hw] retuned first-hours sleep species=%s genome=%08x->%08x\n", blorb::speciesInfo(*species).name,
-                  unsigned(was), unsigned(summarize(dish->occupant()).genome));
 }
 #endif
 
@@ -1102,8 +1118,8 @@ void setup() {
   options.sealed = simSealed;
 #endif
   // A fresh board founds its own species: found.pin's, else the badge
-  // table's, else grungo (founding.h). The sim founds the starter, as
-  // it always has, so its goldens hold.
+  // table's, else one of the regular cast from its MAC (founding.h). The
+  // sim founds the starter, as it always has.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
   std::optional<blorb::Genome> founder;
 #if !defined(BADGE_BOARD_SIM)
@@ -1378,6 +1394,44 @@ static void cradle(const char* a) {
   cradleFor(uint32_t(ms));
 }
 
+// `DEBUG ride <bumpy|turn|spin|swing|walk|jolt|shake|settle|still> [ms]`:
+// that motion (hw/carry_ride.h) through the real IMU path for its own
+// length, or ms; `DEBUG ride` alone lists them. The carried reactions
+// (blorb/carry_show.h) are chances, not certainties: see `DEBUG carry`.
+static void rideVerb(const char* line) {
+  char kind[16] = "";
+  long ms = 0;
+  std::sscanf(line, "%*s %15s %ld", kind, &ms);
+  const hw::ride::Info* r = *kind ? hw::ride::find(kind) : nullptr;
+  if (!r || ms < 0 || ms > 60000) {
+    for (const hw::ride::Info& k : hw::ride::kRides) Serial.printf("[hw] ride %s (%u ms): %s\n", k.name, unsigned(k.ms), k.what);
+    return (void)Serial.printf("[hw] debug ride: want <kind> [ms 1..60000]\n");
+  }
+  bodyq::rideMs = 0;
+  bodyq::rideKind = uint8_t(r->kind);
+  bodyq::rideAt = millis() + 40;   // on a read to come
+  bodyq::rideMs = ms ? uint32_t(ms) : r->ms;
+  Serial.printf("[hw] debug ride %s %u ms\n", r->name, unsigned(bodyq::rideMs));
+}
+
+// `DEBUG carry [kind|none]`: that carried reaction now (cling, dizzy, jelly,
+// whee, glance, settle), whatever the motion: a preview of how it looks. With
+// none named, what the carry show measures and how many of each have played.
+static void carryVerb(const char* a) {
+  blorb::Carry k = blorb::Carry::None;
+  if (*a && (std::strcmp(a, "none") == 0 || blorb::carryFromName(a, k))) {
+    dish->forceCarry(k);
+    return (void)Serial.printf("[hw] debug carry %s\n", blorb::carryName(k));
+  }
+  const blorb::CarryShow& c = dish->carry();
+  const blorb::CarryShow::Signals& g = c.signals();
+  Serial.printf("[hw] carry playing=%s jerk=%d pull=%d off=%d push=%d ride_ms=%u still_ms=%u steps=%u swings=%u spin=%d",
+                blorb::carryName(c.playing(millis())), g.jerk, g.pull, g.off, g.push, unsigned(g.rideMs), unsigned(g.stillMs),
+                unsigned(g.steps), unsigned(g.swings), g.spinDeg);
+  for (uint8_t i = 1; i < blorb::kCarryKinds; ++i) Serial.printf(" %s=%u", blorb::carryName(blorb::Carry(i)), unsigned(c.started(blorb::Carry(i))));
+  Serial.printf("\n");
+}
+
 // `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
 static void nap() {
   blorb::Creature* c = std::get_if<blorb::Creature>(&dish->occupant());
@@ -1487,6 +1541,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "shake") == 0) return shake();
+  if (std::strcmp(verb, "ride") == 0) return rideVerb(line);
+  if (std::strcmp(verb, "carry") == 0) return carryVerb(a);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
@@ -1543,6 +1599,8 @@ static void runDebug(const char* line) {
 }
 
 #include "debug_ble.h"
+
+static void debugSaysNo() { dbgfw::console.unlock().cancelQuestion(); }
 
 // ---- Low power (src/hw/power.h, docs/power.md) ---------------------------------------
 // Asleep: the backlight is off and the panel in SLPIN, no frame is drawn, the
@@ -1789,6 +1847,7 @@ void loop() {
       const uint32_t drawAt = micros();
 #endif
       drawFrame(look, now);
+      paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
       else dbgfw::draw(canvas);
@@ -1837,7 +1896,7 @@ void loop() {
     dishStore.hold(false);
     dish->flush();
   }
-  adoptTableSpecies(millis());
+  adoptBoardSpecies(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;
