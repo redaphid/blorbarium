@@ -136,7 +136,7 @@ class Stats {
   // A press reached a living pet: whether a pellet dropped, and how he was
   // (FeedShow's refusals, feed_show.h).
   void fed(bool dropped, bool asleep, Fx hunger);
-  void bit(bool rotten);
+  void bitten(bool rotten);   // not bit(): Arduino.h defines it as a macro
   // He lived `ticks` more (1 a tick, or a catch-up's stride): time held,
   // asleep, starving, sick, hurt, his age and the stages he has reached.
   // `present`: false for a catch-up, which nobody held and he did not nap through.

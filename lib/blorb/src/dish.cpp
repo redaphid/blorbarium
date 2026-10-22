@@ -233,7 +233,7 @@ void Dish::runOneTick(Link& link) {
     c->tick(out, live_.habitat, behaviours_, tick_);
     if (mouth == Mouthful::Nothing && c->body().mouth != Mouthful::Nothing) {   // a bite, for the eyes
       feed_.ate(lastTickMs_, c->body().mouth == Mouthful::RottenPellet, hunger);
-      stats_.bit(c->body().mouth == Mouthful::RottenPellet);
+      stats_.bitten(c->body().mouth == Mouthful::RottenPellet);
     }
     stats_.lived(*c, 1);
     if (c->stage() != before) eventDirty_ = statsUrgent_ = true;

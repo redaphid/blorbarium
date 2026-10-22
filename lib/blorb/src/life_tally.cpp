@@ -304,7 +304,7 @@ void Stats::fed(bool dropped, bool asleep, Fx hunger) {
   if (refused != kNone) add(refused), analytics.add(anx::feed_refused);
 }
 
-void Stats::bit(bool rotten) {
+void Stats::bitten(bool rotten) {
   add(stat::bites);
   if (rotten) add(stat::rotten_bites);
 }
