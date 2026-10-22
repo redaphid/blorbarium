@@ -143,20 +143,28 @@ feet or behind him, and it goes into his mouth:
 | When | What shows |
 |---|---|
 | The second knock lands | as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided: a small ring round the rim's pellet glyph, and a cookie springs out of it and waits there (none if the pantry is empty) |
-| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry's pip goes |
+| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry bar drains a step, a chunk flying off |
 | It lies in the dish | as a cookie; one that would lie on, under or behind him, or by his feet, is set down beside him, clear of his body |
 | He bites it | it is at his mouth (held up by his eyes when a species' mouth is tagged low, as the octopus's), a bite out of it each third of the chew; a burst and crumbs, YUM! and three hearts (rotten: grey-green, YUCK) |
 | Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
 | He is full (hunger under 0.15) | he says I'M FULL! in a bubble. The cookie still lies there |
 | He is asleep | ZZZ... in a bubble. The cookie waits for him |
-| The pantry is empty | ALL GONE! in a bubble; the pantry's empty slots shake at the top, the next one filling like a clock |
+| The pantry is empty | no words: a thought bubble beside his head plays emoji drawn in code: the food he wants pops in, a red NO slams over it, then a sad face (four variants in turn: a drumstick; the food then an empty plate; an empty jar; another food, with a tear); the pantry bar shakes hard and flashes red |
+| Always | the pantry: a bar on the rim from ten to twelve o'clock, a cookie at its start, filled to the pellets left, green full through yellow and amber to red, the next pellet's return a lighter sliver past the fill |
 
 The first version (2026-10-21, 94e22a3) flashed a gold ring round the whole
 rim on the second knock ("a little much, and didn't help me understand I was
 feeding it") and said a refusal in pictures: the owner, knocking until the
 pantry was empty, read its grey cookie and hourglass as "two emojis, the
 globe and something else". Both are gone: the knock brings a cookie, and a
-refusal is words (checked against the font, `test_paint` `Font.*`).
+refusal is words (checked against the font, `test_paint` `Font.*`). Then
+the owner: "For that 'all gone', it needs to be an obvious icon and not
+text. For the 6 year old." A jar drawn for it read as a blue box or a
+battery, so (owner: "a mini animation with a couple obvious emojis in a
+thought bubble") it is the emoji thought, and the pantry's pips became a
+bar "that goes down upon feeding, and changes color green->red". The
+emoji and the bubble are `paint/emoji.h` (`drawEmoji`, `drawThought`,
+`drawThoughtFrames`), for the pet's inner state too (#19).
 
 **The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
 declared in `lib/paint/src/figure.h`): every cookie on screen goes through

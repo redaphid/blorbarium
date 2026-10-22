@@ -12,9 +12,10 @@
 //   dropped  a pellet left the pantry: that cookie is tossed down to where
 //            it lands in the dish, and the pantry's empty slot shows where it
 //            came from;
-//   refused  the press fed nobody now, and he says why in a bubble: ALL
-//            GONE! (the pantry's empty slots shake, the next one filling),
-//            ZZZ... (the pellet waits for him), or I'M FULL!;
+//   refused  the press fed nobody now, and why: the pantry is empty (a
+//            cookie jar knocked over and empty, and the pantry's empty slots
+//            shaking, the next one filling), or he says ZZZ... (the pellet
+//            waits for him) or I'M FULL! in a bubble;
 //   chomp    he bit a pellet: crumbs and hearts (a rotten one: yuck), and his
 //            belly meter rises.
 //
@@ -45,6 +46,7 @@ struct FeedView {
   Fx fullnessFrom{};                // and just before the bite, for the meter to rise from
   uint8_t pantryMax = 0;            // the pantry's slots (the metabolism gene)
   Fx refill{};                      // how far the next pellet is to coming back, 0..1
+  uint8_t emptyTries = 0;           // knock knocks that found the pantry empty, this boot: the sad thought's variant
 };
 
 class FeedShow {
@@ -77,6 +79,7 @@ class FeedShow {
   Event heard_, dropped_, refused_, chomp_;
   FeedRefusal why_ = FeedRefusal::None;
   bool rotten_ = false, knockKnockWas_ = false;
+  uint8_t emptyTries_ = 0;
   uint32_t dropTick_ = 0;
   Fx fullnessFrom_{};
 };

@@ -9,9 +9,11 @@
 //   heard     the rim's pellet glyph pops and a cookie springs out of it;
 //   flight    the cookie, big, arcs from the rim's pellet glyph down to its
 //             spot beside him, its shadow waiting, and lands in a puff;
-//   refused   a bubble beside his head says why, in words: I'M FULL!,
-//             ZZZ..., or ALL GONE! (the pantry's slots shaking at the top,
-//             the next one filling);
+//   refused   beside his head, why: I'M FULL! or ZZZ... in a bubble, or, with
+//             the pantry empty, a thought bubble of emoji (the food, NO, a
+//             sad face), and the pantry bar shaking red;
+//   pantry    a bar at the top of the rim, green full to red empty, draining
+//             a step at each feed, the next pellet's return a lighter sliver;
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
 //             rotten one: green crumbs and YUCK);
 //   belly     a meter up the left rim, its level his fullness (1 - hunger),
@@ -20,6 +22,8 @@
 
 #include "duel/duel_art.h"
 #include "figure.h"
+#include "hud.h"
+#include "paint/emoji.h"
 #include "blorb/thoughts.h"
 #include "paint/text.h"
 
@@ -54,7 +58,6 @@ constexpr int kGlyphX = 146, kGlyphY = 18;    // the rim's pellet glyph (duel_sc
 constexpr int kFromX = 142, kFromY = 68;      // just under it, where the cookie waits and is tossed from (its stand point)
 constexpr int kArcPx = 34;                    // how high the toss rises over the straight line
 constexpr int kMeterTop = 62, kMeterBottom = 150, kMeterIn = 100, kMeterOut = 114;   // up the left rim
-constexpr int kPantryR = 108;                 // the pantry's row (draw.cpp pips)
 constexpr int kFoodR = kFoodFloorR;          // a cookie on the floor: 19 px across (the pack's pellet was 15 x 13)
 
 struct Rgb { int r, g, b; };
@@ -251,52 +254,113 @@ void puff(Canvas240& cv, const DishSpots& s, int t) {
   }
 }
 
-// ---- refused ------------------------------------------------------------------
-// The pantry's slots at the top of the rim, hollow and shaking: none left.
-// The first fills like a clock as the next pellet comes back.
-void emptyPantry(Canvas240& cv, const FeedView& f, int t) {
-  const int n = imin(f.pantryMax, 12);
-  const int alpha = fadeOut(t, kRefusedMs) * 230 / 256;
-  const int shake = t < 900 ? wave(t, 140, 3) : 0;
-  for (int k = 0; k < n; ++k) {
-    const int dx = (2 * k - (n - 1)) * 9 / 2;
-    const int x = kSide / 2 + dx + shake, y = kSide / 2 - isqrt(kPantryR * kPantryR - dx * dx);
-    ring(cv, x, y, 3, 5, kNo, alpha);
-    if (k != 0) continue;
-    // The next one coming back: a pie, clockwise from the top.
-    const int filled = unit256(f.refill);
-    for (int py = -3; py <= 3; ++py)
-      for (int px = -3; px <= 3; ++px) {
-        if (px * px + py * py > 9) continue;
-        // How far round from 12 o'clock, clockwise, 0..256: a quarter per quadrant, linear within it.
-        const int ax = px < 0 ? -px : px, ay = py < 0 ? -py : py, sum = imax(1, ax + ay);
-        const int turn = px >= 0 && py < 0 ? 64 * ax / sum
-                         : px > 0 && py >= 0 ? 64 + 64 * ay / sum
-                         : px <= 0 && py > 0 ? 128 + 64 * ax / sum
-                                             : 192 + 64 * ay / sum;
-        if (turn <= filled) put(cv, x + px, y + py, kPelletOrange, alpha);
-      }
-  }
+// ---- refused: the pantry empty, a thought ---------------------------------------
+// The owner, of a jar drawn here before (it read as a blue box, or a battery):
+// "a mini animation with a couple obvious emojis in a thought bubble. Like
+// ':no: :turkey_leg: :sad:'". So a thought bubble beside his head plays three
+// big emoji-style pictures, drawn in code: the food he wants pops in, a red
+// NO slams over it (or it goes, leaving an empty plate), then a sad face, a
+// tear running down. Four variants, one per try, so it is not the same
+// every time. Bold dark outlines and emoji colours, 30-40 px each, so they
+// read at arm's length. No words, no small grey circles.
+constexpr Rgb kNoRed{232, 36, 36};
+constexpr int kThinkMs = 2800;       // the thought, start to gone
+
+// The pantry empty: the thought, start to end. Four variants, one per try:
+// the food he wants, NO slams over it, a sad face; the food, then an empty
+// plate, a crying face; an empty jar, NO, crying; another food, NO, crying.
+void sadThought(Canvas240& cv, const FeedView& f, const blorb::Appearance& app, const DishSpots& s) {
+  const int t = f.refusedMs;
+  if (t >= kThinkMs) return;
+  const int hx = s.him ? s.x : kSide / 2, top = s.him ? s.top : 60;
+  // To his right (the pantry bar and the belly meter are on the left), unless he stands far right.
+  const int side = hx <= 140 ? 1 : -1;
+  const int cx = clampi(hx + side * 68, 62, 184), cy = clampi(top + 32, 66, kSide - 70);
+  constexpr Emoji kFoods[4] = {Emoji::Drumstick, Emoji::Cookie, Emoji::Apple, Emoji::Fish};
+  const int variant = (f.emptyTries + 3) % 4;   // the first try (emptyTries 1) plays the first
+  const Emoji want = variant == 0 ? Emoji::Drumstick : kFoods[((app.lifeSeed >> 3) + f.emptyTries) % 4];
+  ThoughtBeat beats[3] = {{want, 120}, {Emoji::No, 700, true, true}, {Emoji::Crying, 1450}};
+  if (variant == 0) beats[2].emoji = Emoji::Sad;
+  if (variant == 1) beats[1] = {Emoji::EmptyPlate, 750};
+  if (variant == 2) beats[0].emoji = Emoji::EmptyJar;
+  drawThoughtFrames(cv, cx, cy, hx + side * 20, top + 22, beats, 3, t, kThinkMs);
 }
 
-// What each refusal says, in words: the owner read the first pictures (a grey
-// cookie and an hourglass) as "two emojis, a globe and something else".
-// Short, so a six-year-old reads them, and in the font (thoughts.h inFont).
+// ---- the pantry: a bar at the top of the rim ------------------------------------
+// The owner: "a bar representing the amount of food, that goes down upon
+// feeding, and changes color green->red based on amount of food left, and
+// shakes when a user tries to feed the pet and it's empty". An arc on the rim
+// from about ten to twelve o'clock (the belly meter is on the left rim below
+// it, the BOOT hint at one o'clock), a cookie at its start: its fill is the
+// pellets left of the pantry's, green full through yellow and amber to red,
+// and a lighter sliver past it, the next pellet coming back. A feed drains it
+// a step, eased, a chunk flying off; a knock knock on an empty pantry shakes
+// it hard and flashes it red. Drawn with lib/paint's HUD arcs (hud.cpp: row
+// spans from compile-time tables, no trig per pixel).
+constexpr int kBarA0 = 668, kBarA1 = 762;     // 1/1024 turn clockwise from three o'clock: 235 to 268 degrees
+constexpr int kBarIn = 103, kBarOut = 113;    // its band, px from the middle
+constexpr int kDrainMs = 450, kShakeMs = 550;
+
+}  // namespace
+
+uint16_t pantryColour(int full) {
+  // Green when full, through yellow and amber, to red with one left or none.
+  constexpr Rgb kStops[4] = {{232, 44, 40}, {255, 148, 24}, {240, 218, 40}, {84, 214, 64}};
+  const int f = clampi(full, 0, 256);
+  if (f <= 64) return to565(kStops[0]);
+  const int seg = imin(2, (f - 64) * 3 / 192), u = (f - 64) * 3 - seg * 192;   // 0..191 within the segment
+  const Rgb a = kStops[seg], b = kStops[seg + 1];
+  return to565({a.r + (b.r - a.r) * u / 192, a.g + (b.g - a.g) * u / 192, a.b + (b.b - a.b) * u / 192});
+}
+
+void pantryBar(Canvas240& cv, const blorb::Appearance& app) {
+  const FeedView& f = app.feed;
+  if (app.kind != blorb::Appearance::Kind::Creature || app.sealed || f.pantryMax == 0) return;
+  const int max = f.pantryMax;
+  // Its level, Q8 of the bar: a feed slides it down from where it was.
+  int level = 256 * imin(app.pantry, max) / max;
+  if (f.droppedMs < kDrainMs) {
+    const int was = 256 * imin(app.pantry + 1, max) / max;
+    level = was + (level - was) * easeOut(f.droppedMs, kDrainMs) / 256;
+  }
+  const int refill = app.pantry < max ? unit256(f.refill) / max : 0;
+  // An empty try: it shakes hard, flashing red.
+  const bool shaking = f.refused == FeedRefusal::Empty && f.refusedMs < kShakeMs;
+  const int jolt = shaking ? wave(f.refusedMs, 90, hud::span(5, 108)) : 0;
+  const bool flash = shaking && (f.refusedMs / 90) % 2 == 0;
+  const int a0 = kBarA0 + jolt, a1 = kBarA1 + jolt, len = a1 - a0;
+  const int filled = a0 + len * level / 256;
+  hud::arc(cv, 240, 240, kBarIn - 2, kBarOut + 2, a0 - 4, a1 + 4, hud::rgb(10, 14, 20), 230);   // its dark well
+  hud::arc(cv, 240, 240, kBarIn, kBarOut, a0, a1, flash ? to565(kNoRed) : hud::rgb(36, 44, 50), 256);   // the empty track
+  if (level > 0) hud::arc(cv, 240, 240, kBarIn, kBarOut, a0, filled, pantryColour(level), 256);
+  if (refill > 0) hud::arc(cv, 240, 240, kBarIn + 2, kBarOut - 2, filled, filled + len * refill / 256, hud::rgb(150, 160, 150), 200);
+  // A chunk flies off the end as a feed drains it, toward the cookie it became.
+  if (f.droppedMs < kDrainMs) {
+    const int u = f.droppedMs, ax = 120 + 108 * hud::cos1024(filled) / 16384, ay = 120 + 108 * hud::sin1024(filled) / 16384;
+    const int x = ax + (kFromX - ax) * u / kDrainMs, y = ay + (kFromY - 20 - ay) * u / kDrainMs;
+    disc(cv, x, y, 3, {255, 236, 170}, 256 - 256 * u / kDrainMs);
+  }
+  // A cookie at its start: this bar is food (the belly meter has its own at its foot).
+  const int ca = a0 - hud::span(12, 108);
+  drawFood(cv, 120 + 108 * hud::cos1024(ca) / 16384, 120 + 108 * hud::sin1024(ca) / 16384, 6, Food{});
+}
+
+namespace {
+
+// What the other refusals say, in words, short, and in the font (thoughts.h inFont).
 constexpr const char* kSaysFull = "I'M FULL!";
 constexpr const char* kSaysAsleep = "ZZZ...";
-constexpr const char* kSaysEmpty = "ALL GONE!";
 static_assert(blorb::writable(kSaysFull, blorb::kMaxThoughtText, "") && blorb::writable(kSaysAsleep, blorb::kMaxThoughtText, "") &&
-                  blorb::writable(kSaysEmpty, blorb::kMaxThoughtText, "") && blorb::writable("YUM!", blorb::kMaxThoughtText, "") &&
-                  blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
+                  blorb::writable("YUM!", blorb::kMaxThoughtText, "") && blorb::writable("YUCK", blorb::kMaxThoughtText, ""),
               "what he says when fed is in the font");
 
-void refused(Canvas240& cv, const FeedView& f, const DishSpots& s) {
+void refused(Canvas240& cv, const FeedView& f, const blorb::Appearance& app, const DishSpots& s) {
+  if (f.refused == FeedRefusal::Empty) return sadThought(cv, f, app, s);
   if (f.refused == FeedRefusal::None || f.refusedMs >= kRefusedMs) return;
   const int t = f.refusedMs;
-  if (f.refused == FeedRefusal::Empty) emptyPantry(cv, f, t);
-  const char* says = f.refused == FeedRefusal::Full ? kSaysFull : f.refused == FeedRefusal::Asleep ? kSaysAsleep : kSaysEmpty;
   int x = 0, y = 0, tx = 0, ty = 0;
   beside(s, x, y, tx, ty);
+  const char* says = f.refused == FeedRefusal::Full ? kSaysFull : kSaysAsleep;
   y += wave(t, 1200, 2);
   const int pop = t < 160 ? 150 + 106 * t / 160 : 256;   // it pops in
   const int alpha = fadeOut(t, kRefusedMs) * 235 / 256;
@@ -429,7 +493,7 @@ void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) 
   }
   belly(cv, f);
   if (f.droppedMs != kNever) puff(cv, s, f.droppedMs);
-  refused(cv, f, s);
+  refused(cv, f, a, s);
   chomp(cv, f, s);
   glyphPop(cv, f.heardMs);
   cookieOut(cv, f, a.pantry);
