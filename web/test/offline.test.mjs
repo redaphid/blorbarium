@@ -14,8 +14,8 @@ function files(dir = PUBLIC, prefix = "") {
     e.isDirectory() ? files(new URL(`${e.name}/`, dir), `${prefix}${e.name}/`) : [`${prefix}${e.name}`]);
 }
 
-test("sw.js lists every file in web/public but itself and fw/", () => {
-  const want = files().filter((f) => f !== "sw.js" && !f.startsWith("fw/")).sort();
+test("sw.js lists every file in web/public but itself, .assetsignore and fw/", () => {
+  const want = files().filter((f) => f !== "sw.js" && f !== ".assetsignore" && !f.startsWith("fw/")).sort();
   const listed = SHELL.filter((f) => f !== "./").sort();
   assert.deepEqual(listed, want, "add the new file to SHELL in web/public/sw.js");
 });

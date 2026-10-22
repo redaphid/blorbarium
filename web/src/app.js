@@ -22,6 +22,7 @@ import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
+import { firmware } from "./firmware.js";
 
 const MAX_BODY = 64 * 1024;
 export const DIARY_CRON = "0 4 * * *";   // daily, 04:00 UTC: after a night's stats, before the family's morning
@@ -385,6 +386,7 @@ export default {
       }
       if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
+      if (url.pathname.startsWith("/fw/")) return await firmware(request, env, decodeURIComponent(url.pathname.slice(4)));
       return env.ASSETS.fetch(request);
     } catch (e) {
       console.error(JSON.stringify({ msg: "unhandled", path: url.pathname, error: String(e?.stack ?? e) }));

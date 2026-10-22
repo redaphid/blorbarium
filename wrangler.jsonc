@@ -1,0 +1,39 @@
+// blorb.hypnodroid.com: one Worker, deployed from the repo root by Workers Builds
+// (`npx wrangler deploy` on main, `npx wrangler preview` on other branches) or by hand
+// with the same command. See web/README.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "blorbarium",
+  "main": "web/src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  // The site. Matched before the Worker runs; fw/ is left out (web/public/.assetsignore).
+  // The pets' API and the owner's dashboard run the Worker first.
+  "assets": { "directory": "./web/public", "binding": "ASSETS", "run_worker_first": ["/api/*", "/admin", "/admin/*"] },
+  // The firmware releases: /fw/<board>/manifest.json and its image (tools/ota_release.py publish).
+  "r2_buckets": [{ "binding": "FW", "bucket_name": "blorbarium-fw" }],
+  "routes": [{ "pattern": "blorb.hypnodroid.com", "custom_domain": true }],
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  // Workers AI: the calls that write a pet's character, lines and diary (#37, #39).
+  "ai": { "binding": "AI" },
+  // Every badge, creature, personality, pack, stat, diary entry and queued action (web/migrations).
+  "d1_databases": [{ "binding": "DB", "database_name": "blorbarium", "migrations_dir": "web/migrations" }],
+  // Per badge (keyed by MAC): a few requests a minute.
+  "ratelimits": [{ "name": "PET_LINES_LIMITER", "namespace_id": "3701", "simple": { "limit": 6, "period": 60 } }],
+  // Every 10 minutes: the packs a badge asked for without waiting (and eggs, #40).
+  // Daily at 04:00 UTC: each pet's diary (#39), then the nightly line revision (#47).
+  "triggers": { "crons": ["*/10 * * * *", "0 4 * * *"] },
+  "vars": {
+    // docs/ai-lines/EVAL.md: the owner's pick from run r2, with prompt v4 (unhinged but coherent).
+    "LINES_MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    "LINES_PROMPT": "v4",
+    "MAX_GENERATIONS_PER_DAY": "6"
+  },
+  // Secrets (npx wrangler secret put ...): ADMIN_TOKEN (/admin and /api/admin/*),
+  // PACK_SIGNING_KEY (optional; P-256 PKCS#8, base64; packs go unsigned without it).
+
+  // In Workers Builds (WORKERS_CI=1) every check runs before the upload, and a
+  // failure stops it. Anywhere else (wrangler dev, a deploy by hand) this returns at once.
+  "build": { "command": "bash scripts/ci/cloudflare-build.sh --workers-ci-only" }
+}

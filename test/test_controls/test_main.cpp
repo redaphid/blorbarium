@@ -475,6 +475,33 @@ TEST(Aim, ATiltRightAfterAKnockIsTheAimAtOnce) {
   }
 }
 
+// A badge set down or turned onto an aim in one step (a thump, or the cable's
+// injected poses) rings like a knock (#25: on the board the aim then waited
+// the ring out, 200-250 ms). It holds the aim only while the badge sways:
+// where it settles, it aims at once.
+TEST(Aim, AThumpOntoAnAimIsTheAimAtOnce) {
+  ::power::Policy policy;
+  hw::Feel shell(kR0, kHome, policy);
+  AimDetector aim;
+  int8_t target = -1;
+  uint32_t aimedAt = 0, ringing = 0;
+  for (uint32_t ms = 0; ms < 3000; ms += 20) {
+    BodySample s;
+    if (ms < 1500) s.ax = int16_t(ms / 20 % 3 * 6 - 6), s.ay = 0, s.az = 1000;   // lying flat on a table
+    else s.ax = 860, s.ay = 0, s.az = 510;                                        // tipped in one step (a knock-sized jolt) and left there
+    s.hasPeak = ms > 0, s.peakAx = s.ax, s.peakAy = s.ay, s.peakAz = s.az;
+    const hw::Felt f = shell.sample(s, ms, false);
+    ringing += f.screen.knockRinging;
+    if (ms == 1500) target = latency::rawAim(f.screen.ax, f.screen.ay, f.screen.az);
+    if (ms >= 1500 && !aimedAt && aimOf(aim, f.screen) == target) aimedAt = ms;
+    else if (ms < 1500 || aimedAt) aimOf(aim, f.screen);
+  }
+  ASSERT_GE(target, 0);
+  EXPECT_GT(ringing, 0u) << "the step rang like a knock";
+  ASSERT_GT(aimedAt, 0u);
+  EXPECT_LE(aimedAt - 1500, 40u) << "the aim " << aimedAt - 1500 << " ms after the step (" << ringing << " ringing samples)";
+}
+
 TEST(Latency, ARawAimIsTheDuelsSectors) {
   using latency::rawAim;
   for (const AimTilt& t : kAimTilt) EXPECT_EQ(rawAim(t.ax, t.ay, t.az), t.aim);

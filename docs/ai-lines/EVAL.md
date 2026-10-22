@@ -2,7 +2,15 @@
 
 ## Run r2 (2026-10-22): the most unhinged lines that still make sense
 
-The owner's goal for the model was: "the LLM that will produce the most 'unhinged' lines on Cloudflare AI that still make sense." The answer is **`@cf/moonshotai/kimi-k2.7-code` with prompt v4**. It is now the default (`web/wrangler.jsonc`, `web/src/pipeline.js`), at about $0.05 and about 70 s per pet. The sheet is `docs/ai-lines/unhinged.html`. It has the scores, the head-to-head ranking, and the three leaders' wildest coherent lines for five pets.
+The owner's goal for the model was: "the LLM that will produce the most 'unhinged' lines on Cloudflare AI that still make sense."
+
+**The owner chose `@cf/deepseek-ai/deepseek-v4.1-flash-1017` with prompt v4** and v4's sampling (temperature 1.15, top_p 0.95). It is the default in the root `wrangler.jsonc` (`LINES_MODEL`, `LINES_PROMPT`) and `web/src/pipeline.js`.
+
+- It sits in the three-way tie at the top: unhinged 3.95 and makes sense 4.70, the highest makes-sense score of the leaders. Head to head it scored 186 points, and it was ranked first most often (17 of 60).
+- It costs $0.024 per pet and takes about 52 s, half the cost of kimi-k2.7-code.
+- My own recommendation below was kimi-k2.7-code, on its first-pass validity and its top unhinged score. It and kimi-k2.6 stay one `LINES_MODEL` change away.
+
+The sheet is `docs/ai-lines/unhinged.html`. It has the scores, the head-to-head ranking, and the three leaders' wildest coherent lines for five pets.
 
 ### What was run
 
@@ -59,7 +67,7 @@ The always-thinking GLM-5.x and DeepSeek V4 Pro models think for minutes per cal
 
 The judges split. llama-4-scout put k2.7-code first, gpt-oss-120b put deepseek-v4.1-flash first, and glm-4.7-flash put sea-lion and k2.6 first.
 
-### Why kimi-k2.7-code
+### The case for kimi-k2.7-code (my recommendation before the owner chose DeepSeek)
 
 - **It wins on the owner's measure.** It has the highest absolute unhinged score with makes-sense comfortably above the floor (4.05 and 4.60).
 - **It ties the head-to-head.** The ranking puts it level with Kimi K2.6 (196 to 197), ahead of DeepSeek V4.1 Flash and well clear of the rest.

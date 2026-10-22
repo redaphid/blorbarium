@@ -3,13 +3,18 @@
     uv run --with cryptography python tools/ota_release.py keygen
     uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build] [--env badge128_pm]
     uv run --with cryptography python tools/ota_release.py check web/public/fw/lcd128/manifest.json
+    uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json [--local]
     uv run --with cryptography python tools/ota_release.py fixture
 
 keygen makes the signing key, outside the repo, and writes its public half
 into the firmware (src/hw/ota_pubkey.h). release builds the 1.28's firmware
 from a clean tree, signs it, and places the manifest and image under
-web/public/fw/ for the site to publish. The image is not committed; the
-manifest is, as the record of the last release. Every dish built with that public key accepts only what this key
+web/public/fw/. publish checks a release and puts it in the R2 bucket the site
+serves /fw/ from (wrangler.jsonc), the image first and the manifest last, so
+the manifest there never names an image that is not; --local puts it in the
+bucket `wrangler dev` serves instead. A deploy of the site never carries a
+release. The image is not committed; the manifest is, as the record of the
+last release. Every dish built with that public key accepts only what this key
 signs, so losing the key means the next update goes over a cable.
 """
 import argparse
@@ -18,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +38,7 @@ PUBKEY_H = ROOT / "src" / "hw" / "ota_pubkey.h"
 VERSION_H = ROOT / "lib" / "blorb" / "include" / "blorb" / "protocol.h"
 FIXTURE_H = ROOT / "test" / "support" / "ota_fixture.h"
 BOARDS = {"lcd128": "badge128"}   # board name in images -> PlatformIO env
+FW_BUCKET = "blorbarium-fw"       # wrangler.jsonc's FW bucket: the site serves /fw/<key> from it
 
 
 def b64url(b: bytes) -> str:
@@ -195,6 +202,20 @@ def cmd_check(args):
     check(Path(args.manifest))
 
 
+def cmd_publish(args):
+    """The checked release into the bucket at <board>/<name>: the image, then the manifest."""
+    manifest_path = Path(args.manifest).resolve()   # wrangler runs at the root, for its config and local state
+    check(manifest_path)
+    m = json.loads(manifest_path.read_text())
+    npx = shutil.which("npx") or shutil.which("npx.cmd") or sys.exit("publish needs npx (Node.js) for wrangler")
+    where = "--local" if args.local else "--remote"
+    for name, kind in ((m["image"], "application/octet-stream"), ("manifest.json", "application/json")):
+        subprocess.run([npx, "wrangler", "r2", "object", "put", f"{FW_BUCKET}/{m['board']}/{name}",
+                        "--file", str(manifest_path.parent / name), "--content-type", kind, where],
+                       cwd=ROOT, check=True)
+    print(f"published {m['board']} {m['version']} to {FW_BUCKET} ({where[2:]})")
+
+
 def cmd_fixture(args):
     """A signed release from a throwaway key, so the C++ verifier is held to this tool's output."""
     key = ec.generate_private_key(ec.SECP256R1())
@@ -231,9 +252,13 @@ def main():
     r.add_argument("--format-change", action="store_true", help="release an image whose save format differs from the last")
     c = sub.add_parser("check")
     c.add_argument("manifest")
+    u = sub.add_parser("publish")
+    u.add_argument("manifest")
+    u.add_argument("--local", action="store_true", help="the bucket `wrangler dev` serves, not the site's")
     sub.add_parser("fixture")
     args = p.parse_args()
-    {"keygen": cmd_keygen, "release": cmd_release, "check": cmd_check, "fixture": cmd_fixture}[args.cmd](args)
+    {"keygen": cmd_keygen, "release": cmd_release, "check": cmd_check, "publish": cmd_publish,
+     "fixture": cmd_fixture}[args.cmd](args)
 
 
 if __name__ == "__main__":

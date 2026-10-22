@@ -75,7 +75,7 @@ After a change to `thoughts.def`, `personalities/` or the genes, regenerate the 
 
 ### Deploying (the owner's go-ahead first; none of this has been done)
 
-1. `cd web && npx wrangler d1 create blorbarium`, then put the printed `database_id` into `wrangler.jsonc`. Recent Wrangler can instead provision the database on deploy.
+1. From the repo root (the Worker config is `wrangler.jsonc` there): `npx wrangler d1 create blorbarium`, then put the printed `database_id` into it.
 2. `npx wrangler d1 migrations apply blorbarium --remote`.
 3. `npx wrangler secret put ADMIN_TOKEN`. Optionally `npx wrangler secret put PACK_SIGNING_KEY`, a P-256 PKCS#8 key in base64 that never goes in the repo. The badge can only check signatures once its firmware holds the public key.
 4. `npx wrangler deploy`. This also deploys the site, now through a Worker with `main`; static paths behave as before. The account is already on Workers Paid, which Kimi K2.6 requires.

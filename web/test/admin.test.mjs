@@ -97,6 +97,22 @@ test("the Worker's entry module exports only its handler (workerd takes named ex
   assert.equal(typeof entry.default.scheduled, "function");
 });
 
+test("/fw/ still serves the firmware releases from R2 (main's route, kept through the merge)", async () => {
+  const objects = { "lcd128/manifest.json": '{"v":1}' };
+  const fw = {
+    async get(key) { return objects[key] === undefined ? null : { body: objects[key], httpEtag: '"e1"', writeHttpMetadata() {} }; },
+    async head(key) { return objects[key] === undefined ? null : { size: objects[key].length, httpEtag: '"e1"', writeHttpMetadata() {} }; },
+  };
+  const env = { ...fakeEnv(), FW: fw };
+  const r = await worker.fetch(new Request("https://blorb.test/fw/lcd128/manifest.json"), env, { waitUntil() {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "application/json");
+  assert.equal(await r.text(), '{"v":1}');
+  assert.equal((await worker.fetch(new Request("https://blorb.test/fw/lcd128/../x"), env, {})).status, 404);
+  assert.equal((await worker.fetch(new Request("https://blorb.test/fw/nope.bin"), env, {})).status, 404);
+  assert.equal((await worker.fetch(new Request("https://blorb.test/fw/a.bin", { method: "POST" }), env, {})).status, 405);
+});
+
 test("the dashboard page is served, holds no data, and its script parses", async () => {
   const env = fakeEnv();
   const r = await worker.fetch(new Request("https://blorb.test/admin"), env, { waitUntil() {} });

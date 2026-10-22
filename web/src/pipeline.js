@@ -7,7 +7,7 @@ import { PROMPTS, retryMessages, reviseMessages } from "./prompts.js";
 import { SITUATIONS, checkLines, parseJsonReply, normalise, MAX_TEXT, lineProblem } from "./validate.js";
 import { traitSheet, flavourDice } from "./traits.js";
 
-export const DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.7-code";   // run r2: docs/ai-lines/EVAL.md
+export const DEFAULT_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";   // the owner's pick from run r2: docs/ai-lines/EVAL.md
 export const DEFAULT_PROMPT = "v4";   // unhinged but coherent (r2)
 export const MAX_RETRIES = 2; // re-asks per batch after the first attempt
 const BATCHES = 4;
