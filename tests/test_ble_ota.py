@@ -95,7 +95,7 @@ class Framing(unittest.TestCase):
         line = "#ffffff " + bo.begin_line(COMMITTED, "A" * 22)
         self.assertLess(len(line), 200)
         self.assertEqual(bo.begin_line(COMMITTED, "T" * 22).split()[:6],
-                         ["OTA", "BEGIN", "lcd128", "0.7.12", "0", "1"])
+                         ["OTA", "BEGIN", "lcd128", COMMITTED["version"], "0", "1"])
         self.assertTrue(bo.begin_line(COMMITTED, "T" * 22).endswith(" " + COMMITTED["sig"] + " " + "T" * 22))
 
 
@@ -158,7 +158,7 @@ class Releases(unittest.TestCase):
 
     def test_an_image_without_a_manifest_is_refused_with_why(self):
         (self.dir / "firmware.bin").write_bytes(self.image)
-        with self.assertRaisesRegex(ValueError, "no signature.*soul"):
+        with self.assertRaisesRegex(ValueError, "no signature.*ota_release"):
             bo.load_release(image_path=self.dir / "firmware.bin", pubkey_h=self.pub)
 
     def test_a_manifest_for_another_image_is_refused(self):

@@ -56,6 +56,7 @@ class NusLink : public blorb::Link {
     adv->addServiceUUID(kService);
     adv->enableScanResponse(true);
     adv->setName(name_);
+    if (serve_) serve_(server, adv);   // after the name, so nothing it advertises can push the name out
     adv->setMinInterval(160);
     adv->setMaxInterval(240);
     adv->start();
@@ -63,8 +64,12 @@ class NusLink : public blorb::Link {
   }
 
   bool connected() override { return up_; }
+  const char* name() const { return name_; }   // what begin() advertises
   // Before begin(): one more thing to add to the service, given it as it is built.
   void extend(std::function<void(NimBLEService*)> more) { extend_ = std::move(more); }
+  // Before begin(): another service on this server, and what it adds to the
+  // advertising once the name is in (Improv Wi-Fi, src/hw/improv_ble.h).
+  void serve(std::function<void(NimBLEServer*, NimBLEAdvertising*)> more) { serve_ = std::move(more); }
   // A line another characteristic heard (the debug link): this phone speaks.
   void spoke() { squatters_.spoke(); }
   // While this is true (an update in progress) a quiet connection is never dropped.
@@ -142,7 +147,21 @@ class NusLink : public blorb::Link {
     return done;
   }
 
-  // Advertising restarts if it ever stops, and the interval is asked for once per connection.
+ public:
+  // Wi-Fi's TLS handshake (src/wifi_ota.h) holds advertising off while it
+  // runs, so the radio's time and the controller's buffers are the handshake's:
+  // only ever with no phone connected. Released, it restarts at the next poll.
+  void holdAdvertising(bool hold) {
+    if (hold == advHeld_) return;
+    advHeld_ = hold;
+    if (hold && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
+    lastPoll_ = millis() - 250;   // a release restarts it at once
+  }
+  bool advertisingHeld() const { return advHeld_; }
+
+ private:
+
+  // Advertising restarts if it ever stops (unless Wi-Fi holds it), and the interval is asked for once per connection.
   void poll() {
     const uint32_t now = millis();
     if (now - lastPoll_ < 250) return;
@@ -168,7 +187,7 @@ class NusLink : public blorb::Link {
     const bool live = liveConnections(server) > 0;
     if (!live) {
       up_ = false;
-      if (!NimBLEDevice::getAdvertising()->isAdvertising()) {
+      if (!advHeld_ && !NimBLEDevice::getAdvertising()->isAdvertising()) {
         if (server->getConnectedCount()) Serial.println("[hw] ble: a stale peer, advertising again");
         NimBLEDevice::getAdvertising()->start();
       }
@@ -253,7 +272,9 @@ class NusLink : public blorb::Link {
   blorb::Squatters squatters_;        // the loop's only
   std::function<bool()> keep_;
   std::function<void(NimBLEService*)> extend_;
+  std::function<void(NimBLEServer*, NimBLEAdvertising*)> serve_;
   bool advLogged_ = false;
+  bool advHeld_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;

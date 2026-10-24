@@ -5,6 +5,7 @@
 // every path with a slot in memory.
 //
 //   idle --BEGIN--> asking --button--> receiving --last byte--> ready --REBOOT--> restart
+//   idle --install()---------------> receiving    (Wi-Fi, unattended: docs/wifi-ota.md)
 //
 // A disconnect is not an event here. The session waits, and the page resumes
 // by sending the same BEGIN with the same token, which answers where the
@@ -70,6 +71,12 @@ struct Config {
   const uint8_t* publicKey;   // 65 bytes, uncompressed P-256
 };
 
+// Why install() did not start receiving: BEGIN's refusal text (docs/ota.md),
+// or, past the checks, how the session ended (lastName).
+struct Refusal {
+  const char* why;
+};
+
 // What the screen shows.
 struct View {
   enum class Phase : uint8_t { Asking, Receiving, Ready } phase;
@@ -98,9 +105,19 @@ class Session {
   void data(const uint8_t* packet, size_t len, uint32_t now, Peer peer);
   void press(uint32_t now);                 // the dish's button
   void decline(uint32_t now);               // a no (a hard shake, #35): the question lapses at once, as unanswered
+  // The unattended update (Wi-Fi, docs/wifi-ota.md): BEGIN's checks and the
+  // same signature check, then what a press does (save, open the slot), with
+  // no question. Only a strictly newer image: a downgrade, signed or not, needs
+  // a hand on the badge. Data then comes through data() from `peer`. Nothing
+  // when it is receiving.
+  std::optional<Refusal> install(const Image&, const Token&, uint32_t now, Peer peer);
+  void abort();                             // as OTA ABORT by the owner: the slot is discarded
   void tick(uint32_t now);                  // lapses: the question, a silent page
   bool asking() const { return std::holds_alternative<Asking>(state_); }
   bool active() const { return !std::holds_alternative<Idle>(state_); }   // anything else that wants the radio waits
+  bool ready() const { return std::holds_alternative<Ready>(state_); }
+  bool ownedBy(Peer peer) const;            // an open session whose data comes from `peer`
+  Last last() const;                        // how the last session ended; None while one is open
   std::optional<View> view(uint32_t now) const;
   bool rebootDue(uint32_t now);             // ready, asked or lapsed, and not busy
   // Just before the restart: save (twice if need be) and hand over. False,
@@ -118,6 +135,10 @@ class Session {
   using State = std::variant<Idle, Asking, Receiving, Ready>;
 
   void begin(blorb::Args&, blorb::Reply&, uint32_t now, Peer peer);
+  // BEGIN's checks, cheap first, then the signature: the HTTP-ish code and text of the first that fails.
+  struct Check { int code; const char* text; };
+  std::optional<Check> check(const Image&, uint32_t now, bool allowOlder);
+  void accept(uint32_t now);                // the yes: save, open the slot, receive
   void status(blorb::Reply&);
   void finish(Receiving&, uint32_t now);
   void fail(Last);

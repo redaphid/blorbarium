@@ -293,6 +293,62 @@ TEST(Show, TheBiteIsAChompAndHisBellyRises) {
   EXPECT_LT(f.meterMs, 400);
 }
 
+// ---- home at run time (src/hw/home.h): set from NVS at boot, or by DEBUG home ----------
+
+// A shell built at one home and told the other at boot feels every sample
+// exactly as one built at that home: the screen's frame, the hang, the side
+// hold. So a universal release on a badge whose NVS says "down" is the flip build.
+TEST(Home, AShellToldItsHomeAtRunTimeFeelsAsOneBuiltThere) {
+  for (uint8_t told : {kHomeUp, kHomeDown}) {
+    ::power::Policy pa, pb;
+    hw::Feel built(kR0, told, pa);
+    hw::Feel set(kR0, told == kHomeUp ? kHomeDown : kHomeUp, pb);
+    set.setHome(told);
+    EXPECT_EQ(set.home(), told);
+    int hangs = 0, sides = 0;
+    // Held at either home, upside down, on each side, face up, tipped: 2 s of each.
+    const int16_t poses[][3] = {{0, 1000, 0}, {0, -1000, 0}, {1000, 0, 0}, {-1000, 0, 0}, {0, 0, 1000}, {0, 700, 700}};
+    uint32_t ms = 0;
+    for (const auto& p : poses)
+      for (int i = 0; i < 100; ++i, ms += 20) {
+        BodySample s;
+        s.ax = p[0], s.ay = p[1], s.az = p[2];
+        const hw::Felt a = built.sample(s, ms, false), b = set.sample(s, ms, false);
+        ASSERT_EQ(a.screen.ax, b.screen.ax) << "home " << int(told) << " at " << ms;
+        ASSERT_EQ(a.screen.ay, b.screen.ay);
+        ASSERT_EQ(a.screen.az, b.screen.az);
+        ASSERT_EQ(a.screen.invertedDown, b.screen.invertedDown);
+        ASSERT_EQ(a.screen.sideDown, b.screen.sideDown);
+        ASSERT_EQ(a.rot, b.rot);
+        hangs += a.screen.invertedDown, sides += a.screen.sideDown;
+      }
+    EXPECT_GT(hangs, 0) << "the hang was felt, home " << int(told);
+    EXPECT_GT(sides, 0) << "the side hold was felt, home " << int(told);
+  }
+}
+
+// The hang is upside down from whichever home the badge was told: USB-C up is
+// the hang on a flipped badge, and the right way up on any other.
+TEST(Home, TheHangFollowsTheHomeTold) {
+  for (uint8_t told : {kHomeUp, kHomeDown}) {
+    ::power::Policy p;
+    hw::Feel shell(kR0, kHomeUp, p);
+    shell.setHome(told);
+    // Gravity along +y settles rotation 2 (USB-C up), along -y rotation 0 (orient.h, ORIENT_R0 = 1).
+    bool hungUsbUp = false, hungUsbDown = false;
+    uint32_t ms = 0;
+    for (int16_t y : {int16_t(1000), int16_t(-1000)})
+      for (int i = 0; i < 100; ++i, ms += 20) {
+        BodySample s;
+        s.ay = y;
+        const hw::Felt f = shell.sample(s, ms, false);
+        if (i > 60) (y > 0 ? hungUsbUp : hungUsbDown) |= f.screen.invertedDown;
+      }
+    EXPECT_EQ(hungUsbUp, told == kHomeDown) << "home " << int(told);
+    EXPECT_EQ(hungUsbDown, told == kHomeUp) << "home " << int(told);
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

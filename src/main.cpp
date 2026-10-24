@@ -5,10 +5,13 @@
 #include <esp_mac.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "blorb/dish.h"
 #include "blorb/founding.h"
@@ -37,6 +40,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
+#include "hw/home_store.h"
 #include "ota/held_storage.h"
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
@@ -52,6 +56,7 @@ using PetStorage = hw::NvsFsStorage;
 
 #include "hw/carry_ride.h"
 #include "hw/feel.h"
+#include "hw/home.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
 #include "hw/poses.h"
@@ -72,19 +77,33 @@ class SerialLink : public blorb::Link {
   size_t len_ = 0;
   bool heard_ = false;
   // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
-  // (one slot dropped all but the last). Lines are short: 64 bytes each is ample.
+  // (one slot dropped all but the last). 128 bytes holds the longest, `DEBUG wifi
+  // set "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h). The queue is
+  // made in PSRAM at the first DEBUG line: internal RAM is the scarce kind
+  // (a duel's radio takes about 37 KB of it), and a cable is rare.
   static constexpr uint8_t kDebugQueue = 8;
-  static constexpr size_t kDebugLine = 64;
-  char debug_[kDebugQueue][kDebugLine] = {};
+  static constexpr size_t kDebugLine = 128;
+  struct Queue {
+    char lines[kDebugQueue][kDebugLine];
+    char taken[kDebugLine];
+  };
+  Queue* q_ = nullptr;
   uint8_t debugHead_ = 0, debugTail_ = 0;
-  char taken_[kDebugLine] = "";
+
+  bool queue() {
+#if !defined(BADGE_BOARD_SIM)
+    if (!q_) q_ = static_cast<Queue*>(heap_caps_calloc(1, sizeof(Queue), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+    if (!q_) q_ = static_cast<Queue*>(std::calloc(1, sizeof(Queue)));
+    return q_ != nullptr;
+  }
 
  public:
   bool connected() override { return heard_; }
   const char* takeDebug() {
-    if (debugHead_ == debugTail_) return nullptr;
-    std::memcpy(taken_, debug_[debugTail_++ % kDebugQueue], sizeof(taken_));
-    return taken_;
+    if (debugHead_ == debugTail_ || !q_) return nullptr;
+    std::memcpy(q_->taken, q_->lines[debugTail_++ % kDebugQueue], sizeof(q_->taken));
+    return q_->taken;
   }
   std::optional<std::string_view> readLine() override {
     while (Serial.available() > 0) {
@@ -99,8 +118,9 @@ class SerialLink : public blorb::Link {
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
+        if (!queue()) continue;
         if (uint8_t(debugHead_ - debugTail_) >= kDebugQueue) ++debugTail_;   // full: the oldest goes
-        char* d = debug_[debugHead_++ % kDebugQueue];
+        char* d = q_->lines[debugHead_++ % kDebugQueue];
         const size_t k = std::min(n - 6, kDebugLine - 1);
         std::memcpy(d, line_ + 6, k);
         d[k] = 0;
@@ -158,6 +178,9 @@ static hw::PacketRing otaPackets;
 static hw::OtaData otaData(otaPackets, ble);
 static ota::Session updater(otaSlot, otaHost, ble,
                             ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
+// The unattended update's data comes from here (src/wifi_ota.h): never a
+// Bluetooth connection's number, which counts up from 1.
+static constexpr ota::Peer kWifiPeer = 0xffffffffu;
 static hw::OtaLink otaLink(ble, updater);
 static ota::Trial trial;
 static hw::EspTrialPort trialPort;
@@ -237,6 +260,11 @@ static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 static bool debugAsks();
 static void debugSaysNo();   // a hard shake answers the debug link's unlock question no (#35)
 static bool debugPress(uint32_t ms);
+// Wi-Fi's question, "Join Wi-Fi? Turn me around!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
+static bool wifiAsks();
+static bool wifiPress(uint32_t ms);
+static void wifiSaysNo();   // a hard shake answers Wi-Fi's question no (#35)
+static bool wifiQuietBoot();
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 // The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
@@ -250,6 +278,10 @@ static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
 // Low power after BLORB_IDLE_SECONDS (600) with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
+// Which way up is home on this badge: the build's ORIENT_HOME until setup()
+// reads the badge's own from NVS (src/hw/home.h), and `DEBUG home` sets it.
+static volatile uint8_t homeRot = ORIENT_HOME;
+static const char* homeWhy = "built";
 static uint32_t framesDrawn = 0;
 #if !defined(BADGE_BOARD_SIM)
 static uint32_t cpuMaxMhz = 240;   // what the clock is set to run at (with DFS it dips below)
@@ -429,7 +461,7 @@ static blorb::Appearance shown() {
   if (pinnedSpecies) a.species = *pinnedSpecies;
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
+  if (updater.asking() || debugAsks() || wifiAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
 #endif
   return a;
 }
@@ -564,7 +596,7 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
     const uint32_t r = esp_random();
-    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((ORIENT_HOME == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
+    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((homeRot == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
     return true;
   }
   if (!hangMs && !rightMs) return false;
@@ -573,7 +605,7 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   const bool down = since < hangMs;
   // Gravity along +y in the IMU's frame settles rotation 2, along -y rotation 0
   // (orient.h with ORIENT_R0 = 1): home is USB-C up (ORIENT_HOME), the hang its opposite.
-  const int16_t homeY = ORIENT_HOME == 2 ? 1000 : -1000;
+  const int16_t homeY = homeRot == 2 ? 1000 : -1000;
   s.ax = 0, s.ay = int16_t(down ? -homeY : homeY), s.az = 0;
   if (down && hangSide) s.ax = int16_t(hangSide * 1000), s.ay = 0;
   if (hangWobble) {
@@ -701,12 +733,13 @@ static bool petFeels(bool down, bool remote) {
   if (remote) {
     wasDown = down;
     otaOwns = false;
-    return down && !updater.asking() && !debugAsks();
+    return down && !updater.asking() && !debugAsks() && !wifiAsks();
   }
   const bool edge = down && !wasDown;
   if (updater.asking() && edge) updater.press(millis());
   const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
-  otaOwns = updater.asking() || debugAsks() || debugTook || (otaOwns && down);
+  const bool wifiTook = !updater.asking() && !debugTook && edge && wifiPress(millis());   // Wi-Fi's
+  otaOwns = updater.asking() || debugAsks() || wifiAsks() || debugTook || wifiTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
@@ -717,7 +750,7 @@ static bool petFeels(bool down, bool remote) {
 
 // The knocks, the power policy's input, the poses and the turn into the
 // screen's frame, for every sample (hw/feel.h, pure so test_feeding replays it).
-static hw::Feel shell{ORIENT_R0, ORIENT_HOME, powerPolicy};
+static hw::Feel shell{ORIENT_R0, homeRot, powerPolicy};
 
 #if !defined(BADGE_BOARD_SIM)
 // How long each control takes to show, stage by stage (src/latency.h):
@@ -788,7 +821,7 @@ static void verb(const char* a) {
 #endif
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
 #if !defined(BADGE_BOARD_SIM)
-  const bool asking = updater.asking() || debugAsks();   // a question owns BOOT, and its twin with it
+  const bool asking = updater.asking() || debugAsks() || wifiAsks();   // a question owns BOOT, and its twin with it
 #else
   constexpr bool asking = false;
 #endif
@@ -800,9 +833,9 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // panel stays at home (USB-C up) and the engine feels the badge in that one
   // frame: left is left, always. The settled rotation is still read, for the
   // poses (side hold, hang) and the update's turn.
-  if (display.getRotation() != ORIENT_HOME) {
+  if (display.getRotation() != homeRot) {
     boardPanelIdle();
-    display.setRotation(ORIENT_HOME);
+    display.setRotation(homeRot);
     boardRepaintAll();   // the rows the panel holds were sent the other way round
   }
 #if !defined(BADGE_BOARD_SIM)
@@ -810,9 +843,10 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
-  if (turnYes.sample(updater.asking(), f.rot, millis())) {
-    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(f.rot));
-    updater.press(millis());
+  if (turnYes.sample(updater.asking() || wifiAsks(), f.rot, millis())) {
+    Serial.printf("[%s] turned: yes (rot=%u)\n", updater.asking() ? "ota" : "wifi", unsigned(f.rot));
+    if (updater.asking()) updater.press(millis());
+    else wifiPress(millis());
   }
 #endif
   applyLean(f.screen, ms);
@@ -820,10 +854,12 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
   // A hard shake is a no to the shell's questions (#35): the update's "Turn
-  // me around!" lapses (not now), the debug link's unlock question goes.
-  if (dish->shakeDismisses() && (updater.asking() || debugAsks())) {
+  // me around!" lapses (not now), the debug link's unlock question goes, and
+  // Wi-Fi's "Join Wi-Fi?" goes as if unanswered.
+  if (dish->shakeDismisses() && (updater.asking() || debugAsks() || wifiAsks())) {
     if (updater.asking()) updater.decline(millis()), Serial.printf("[ota] shaken: not now\n");
     if (debugAsks()) debugSaysNo();
+    if (wifiAsks()) wifiSaysNo();
     shellDismissedAt = millis() | 1;
   }
   traceSample(f.body, f.screen, f.rot, ms);
@@ -911,8 +947,14 @@ bool DishOtaHost::busy() {
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
+static bool wifiYieldRadio();       // src/wifi_ota.h
+static bool wifiUpdateHoldsRadio();
+static void wifiBegin();
 bool RadioGate::open() {
-  why = updater.active() ? "ota_active" : trial.onTrial() ? "trial" : nullptr;
+  // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
+  // pins the channel to its access point's, and ESP-NOW needs channel 1.
+  const bool wifiUp = wifiYieldRadio();
+  why = wifiUpdateHoldsRadio() ? "ota_active" : trial.onTrial() ? "trial" : wifiUp ? "wifi_up" : nullptr;
   const bool ok = !why && inner->open();
   if (!why && !ok) why = inner->refusal();
   if (ok) radioDiag.say("radio open=1"), logged = "";
@@ -965,7 +1007,8 @@ extern const ReleaseStamp kReleaseStamp = {stampField<12>("blorbstamp1"), stampF
 static void reportBoot() {
   Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", BLORB_FW, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
                 kReleaseStamp.board.data());
-  Serial.printf("[hw] home rot=%u (USB-C %s)\n", unsigned(ORIENT_HOME), ORIENT_HOME == 2 ? "up" : "down");
+  Serial.printf("[hw] home rot=%u (USB-C %s, %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot), homeWhy,
+                hw::home::name(ORIENT_HOME));
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
   Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d stats=%d (1: in PSRAM)\n",
                 int(esp_ptr_external_ram(faultAir.get())), int(esp_ptr_external_ram(lat::rec.get())),
@@ -1079,6 +1122,12 @@ static void adoptBoardSpecies(uint32_t now) {
 
 #if !defined(BADGE_BOARD_SIM)
 #include "analytics_fw.h"
+// Internal heap at each step of boot (#27: an image built on badge128_pm had
+// about 25 KB less on trial than badge128, too little for Wi-Fi's driver).
+static void heapMark(const char* step) {
+  Serial.printf("[hw] heap %s: free=%u big=%u\n", step, unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
 #endif
 
 void setup() {
@@ -1093,6 +1142,7 @@ void setup() {
 #endif
   Serial.begin(115200);
 #if !defined(BADGE_BOARD_SIM)
+  heapMark("start");
   // In PSRAM (InPsram above), before anything uses them.
   if (BLORB_HEAP_BALLAST) {   // #53's A/B: never freed, never touched
     static void* ballast = heap_caps_malloc(BLORB_HEAP_BALLAST, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -1124,6 +1174,7 @@ void setup() {
   const bool onTrial = trialPort.pending();
   storageState = store.begin(onTrial);
   dishStore.hold(onTrial);
+  heapMark("storage");
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
   // No battery: no wall time is coming, so a fresh pet hatches into his
@@ -1157,10 +1208,27 @@ void setup() {
 #endif
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
+#if !defined(BADGE_BOARD_SIM)
+  heapMark("dish");
+#endif
+#if !defined(BADGE_BOARD_SIM)
+  // This badge's own home, before the first frame or sample (src/hw/home.h).
+  {
+    const hw::home::AtBoot h = hw::home::atBoot(hw::HomeStore::load(), ORIENT_HOME);
+    homeRot = h.rot;
+    homeWhy = h.write ? (hw::HomeStore::save(h.rot) ? "migrated: written" : "migrated: WRITE FAILED") : h.why;
+    shell.setHome(h.rot);
+  }
+#endif
   [[maybe_unused]] bool panelUp = display.init();
   boardPresentBegin(display);   // the panel's send task, on core 0
 #if !defined(BADGE_BOARD_SIM)
-  display.setBrightness(dish->settings().brightness);
+  heapMark("panel");
+#endif
+#if !defined(BADGE_BOARD_SIM)
+  // An update over Wi-Fi restarts into its trial dark, in the night or on a
+  // shelf: the backlight stays off until someone wakes him (src/wifi_ota.h).
+  display.setBrightness(wifiQuietBoot() ? 0 : dish->settings().brightness);
   reportBoot();
 #if defined(BLORB_OTA_FAIL_TRIAL)
   // For the hardware proof only (docs/ota.md): an image that reports its panel
@@ -1177,14 +1245,17 @@ void setup() {
     trialWatchdog.start();
   }
   otaPackets.begin();
+  wifiBegin();
   ble.keepWhile([] { return updater.active(); });
   const char* name = ble.begin(bleName(mac), &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
+  heapMark("sense+pm");
   paint::phaseClock.now = fps::now;   // DEBUG fps's phases
   paintcore0::begin();                // the renderer's second half on core 0
+  heapMark("paint core0");
 #if defined(CONFIG_PM_ENABLE)
   Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
 #else
@@ -1522,6 +1593,23 @@ static bool net(const char* line) {
   return true;
 }
 
+// `DEBUG air [open|close]`: the duel's radio by hand, through RadioGate as
+// fight mode opens it (an open Wi-Fi window gives the radio up first; a trial
+// or an update refuses), to show the air still fits after a Wi-Fi window.
+// EspNowAir logs its own `[hw] air open ch=1 heap A -> B ... big=`.
+static void airVerb(const char* a) {
+  if (!std::strcmp(a, "open")) {
+    const bool ok = radioGate.open();
+    return (void)Serial.printf("[hw] debug air open: %s heap=%u minheap=%u big=%u\n", ok ? "ok" : radioGate.refusal(),
+                               unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                               unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  }
+  if (!std::strcmp(a, "close")) radioGate.close();
+  Serial.printf("[hw] debug air %s: open=%d heap=%u minheap=%u big=%u\n", *a ? a : "status", int(radioGate.isOpen()),
+                unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
+
 // `DEBUG duel`: where the duel stands right now, in one line.
 static void duelNow() {
   constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
@@ -1549,9 +1637,29 @@ static const char* powerLine(char* out, size_t n, uint32_t now);
 static bool powerHeld();
 static bool remotePress(uint32_t ms, bool twice);
 
+static void wifiVerb(const char* line);   // src/wifi_ota.h
+static void otaVerb(const char* line);
+
+// `DEBUG home [up|down]`: which way up is home on this badge, kept in NVS
+// through updates and pet wipes (src/hw/home.h). Bare: what it is now.
+static void homeVerb(const char* a) {
+  if (*a) {
+    const std::optional<uint8_t> h = hw::home::parse(a);
+    if (!h) return (void)Serial.printf("[hw] debug home: want up|down (USB-C up or USB-C down is the right way up)\n");
+    const bool saved = hw::HomeStore::save(*h);
+    homeRot = *h;
+    homeWhy = saved ? "nvs" : "set, SAVE FAILED";
+    shell.setHome(*h);
+  }
+  const std::optional<uint8_t> stored = hw::HomeStore::load();
+  Serial.printf("[hw] home rot=%u (USB-C %s, %s; stored %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot),
+                homeWhy, stored ? hw::home::name(*stored) : "none", hw::home::name(ORIENT_HOME));
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
+  if (std::strcmp(verb, "home") == 0) return homeVerb(a);
   if (std::strcmp(verb, "hang") == 0) return hang(line);
   if (std::strcmp(verb, "side") == 0) return side(line);
   if (std::strcmp(verb, "knock") == 0) return knock(a);
@@ -1584,6 +1692,9 @@ static void runDebug(const char* line) {
     return (void)Serial.printf("[hw] smooth=%s speed=%u/256\n", smoothFrames ? "on" : "off", unsigned(paint::kScreenSpeedQ8));
   }
   if (std::strcmp(verb, "duel") == 0) return duelNow();
+  if (std::strcmp(verb, "air") == 0) return airVerb(a);
+  if (std::strcmp(verb, "wifi") == 0) return wifiVerb(line);
+  if (std::strcmp(verb, "ota") == 0) return otaVerb(line);
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
@@ -1608,7 +1719,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, die [remains], species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1725,8 +1836,8 @@ static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 M
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
 static bool powerHeld() {
-  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || updater.active() || debugAsks() ||
-         bool(shot);
+  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 ||
+         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || wifiAsks() || bool(shot);
 }
 
 static const char* powerLine(char* out, size_t n, uint32_t now) {
@@ -1815,9 +1926,18 @@ static void powerVerb(const char* a, const char* line) {
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
 }
 
+#include "wifi_ota.h"
+static bool wifiYieldRadio() { return wififw::yieldRadio(); }
+static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
+static void wifiBegin() { wififw::begin(); }
+static bool wifiAsks() { return wififw::asks(); }
+static void wifiSaysNo() { wififw::dismiss(); }
+static bool wifiQuietBoot() { return wififw::quietBoot(); }
+static bool wifiPress(uint32_t ms) { return wififw::press(ms); }
+
 // The debug link's PRESS and DOUBLE: never while a question owns the button.
 static bool remotePress(uint32_t ms, bool twice) {
-  if (updater.asking() || debugAsks()) return false;
+  if (updater.asking() || debugAsks() || wifiAsks()) return false;
   const uint32_t t = millis();
   bodyq::remote[0].ms = bodyq::remote[1].ms = 0;
   bodyq::remote[0].at = t;
@@ -1859,7 +1979,7 @@ void loop() {
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
-    const bool overlay = update || dbgfw::drawing();
+    const bool overlay = update || dbgfw::drawing() || wififw::drawing();
     const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
     if (still) fps::same();
 #else
@@ -1873,7 +1993,7 @@ void loop() {
       paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
-      else dbgfw::draw(canvas);
+      else dbgfw::draw(canvas), wififw::draw(canvas);
       paint::drawIdleBar(canvas, idleBar);
       framememo::drew(look, idleBar, overlay);
       const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
@@ -1911,7 +2031,8 @@ void loop() {
   }
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
-  if (updater.rebootDue(millis())) restartIntoUpdate();
+  wififw::poll(millis());
+  if (updater.rebootDue(millis()) && wififw::mayRestart()) restartIntoUpdate();
   trialWatchdog.beat(millis());
   if (const ota::Trial::Poll polled = trial.poll(millis()); polled != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
     if (polled == ota::Trial::Poll::Kept) dish->analytics().add(blorb::anx::ota_kept);

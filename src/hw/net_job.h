@@ -1,0 +1,270 @@
+// One HTTPS GET at a time, on its own task, so the loop never waits for a DNS
+// lookup, a TCP connect, a TLS handshake or a slow server (owner, 2026-10-21:
+// "nothing that blocks the loop"). The loop starts it, polls state(), takes
+// the body as it arrives, and cancels it; the task ends itself, and only once
+// it has (busy() false) may the radio go down (src/wifi_ota.h).
+//
+// The task runs on core 1 at the loop's own priority (1), beside the loop and
+// never above it, so core 0 stays Bluetooth's, Wi-Fi's own driver's, ESP-NOW's
+// and the panel's send task's, and the 250 Hz sense task (priority 2)
+// preempts it wherever it runs. Its stack is internal RAM (TLS needs about
+// 7 KB of it), made for the GET and given back when it ends. The TLS record
+// buffers go to PSRAM (src/wifi_ota.h, tlsCalloc).
+//
+// Internal RAM is the scarce kind (a duel's radio takes about 37 KB of it):
+// everything here but a few flags lives in PSRAM, made at the first GET and
+// kept. The ring is a plain single-writer, single-reader one (not FreeRTOS's
+// stream buffer, whose code sits in IRAM).
+//
+// A text GET (the manifest) reads the whole body, at most kTextMax bytes,
+// into text(). A streamed GET (the image) feeds a ring of kRingBytes that the
+// loop drains with take(): when the loop is slow the task waits for room, so
+// the download goes at the speed the flash takes it.
+#pragma once
+
+#include <Arduino.h>
+#include <HTTPClient.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <new>
+
+#include "hw/tls_roots.h"
+
+namespace hw {
+
+class NetJob {
+ public:
+  enum class State : uint8_t { Idle, Opening, Body, Done, Failed };
+
+  static constexpr size_t kTextMax = 2048;              // a manifest is a few hundred bytes
+  static constexpr size_t kRingBytes = 32 * 1024;
+  // The task's stack, internal RAM while it runs (FreeRTOS on this framework
+  // refuses a PSRAM stack): a TLS handshake through the P-384 chain needs some
+  // KB of it, a plain HTTP GET (a cable's `DEBUG ota check http://...`) less.
+  // The TLS one is `DEBUG wifi stack <KB>` (RAM only) to find the least that
+  // holds: every GET logs the bytes its task never used.
+  // 7 KB: #27's board run used 5,256 B of 10 KB for the manifest's handshake
+  // through the P-384 chain; the image's GET uses less (its reads decrypt, and
+  // the hash and the flash writes are the loop's).
+  static constexpr uint32_t kStackTlsDefault = 7 * 1024;
+  static constexpr uint32_t kStackHttpBytes = 6 * 1024;
+  static inline uint32_t stackTlsBytes = kStackTlsDefault;
+  static constexpr uint16_t kConnectMs = 5000;
+  static constexpr uint32_t kHandshakeS = 8;
+  static constexpr uint16_t kHeadersMs = 6000;
+  static constexpr uint32_t kStallMs = 20000;           // a body that sends nothing this long has failed
+
+  // Start a GET of `url`: https:// with the pinned roots (tls_roots.h), or
+  // http:// (only a cable's `DEBUG ota check http://...` asks for one).
+  // False when one is still running, or PSRAM or the task could not be had.
+  bool start(const char* url, bool text) {
+    if (busy()) return false;
+    if (!m_) {
+      void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!p) return false;
+      m_ = new (p) Mem;
+    }
+    std::snprintf(m_->url, sizeof m_->url, "%s", url);
+    text_ = text;
+    textLen_ = 0;
+    size_ = -1;
+    got_ = 0;
+    m_->error[0] = 0;
+    m_->text[0] = 0;
+    cancel_ = false;
+    openMs_ = 0;
+    stackFree_ = 0;
+    head_ = tail_ = 0;
+    state_ = State::Opening;
+    running_ = true;
+    startedAt_ = millis();
+    stackBytes_ = std::strncmp(url, "https://", 8) == 0 ? stackTlsBytes : kStackHttpBytes;
+    if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", stackBytes_, this, 1, nullptr, 1) != pdPASS) {
+      running_ = false;
+      state_ = fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap()));
+      return false;
+    }
+    return true;
+  }
+
+  State state() const { return state_; }
+  bool busy() const { return running_; }
+  // The task stops at its next chance: a read, a wait for room, or the end of
+  // the blocking call it is in (each bounded by the timeouts above).
+  void cancel() { cancel_ = true; }
+
+  int size() const { return size_; }                    // Content-Length, -1 when none was sent
+  const char* text() const { return m_ ? m_->text : ""; }
+  size_t textLen() const { return textLen_; }
+  size_t received() const { return got_; }
+  const char* error() const { return m_ ? m_->error : "no PSRAM"; }
+  uint32_t openMs() const { return openMs_; }           // DNS, connect, TLS and headers
+  uint32_t stackFree() const { return stackFree_; }     // the task's stack never used, at its end
+  uint32_t stackBytes() const { return stackBytes_; }
+  // Internal heap and its largest block just after the handshake and headers.
+  uint32_t heapAfterOpen() const { return heapAfterOpen_; }
+  uint32_t bigAfterOpen() const { return bigAfterOpen_; }
+
+  // The loop: up to `cap` streamed bytes that have arrived, without waiting.
+  size_t take(uint8_t* out, size_t cap) {
+    const uint32_t head = head_, tail = tail_;
+    size_t n = std::min(cap, size_t(head - tail));
+    std::atomic_thread_fence(std::memory_order_acquire);
+    for (size_t i = 0; i < n; ++i) out[i] = m_->ring[(tail + i) % kRingBytes];
+    std::atomic_thread_fence(std::memory_order_release);
+    tail_ = tail + uint32_t(n);
+    return n;
+  }
+  size_t waiting() const { return size_t(head_ - tail_); }
+  // Once the task has ended: ready for the next GET.
+  void reset() {
+    if (busy()) return;
+    head_ = tail_ = 0;
+    state_ = State::Idle;
+  }
+
+ private:
+  struct Mem {
+    char url[200];
+    char text[kTextMax + 1];
+    char error[96];
+    uint8_t chunk[1024];   // off the task's stack
+    uint8_t ring[kRingBytes];
+  };
+
+  static void run(void* arg) {
+    auto* self = static_cast<NetJob*>(arg);
+    self->get();   // everything it made is gone when this returns
+    self->stackFree_ = uxTaskGetStackHighWaterMark(nullptr);
+    self->running_ = false;
+    vTaskDelete(nullptr);
+  }
+
+  // The task: `n` bytes into the ring, waiting while it is full.
+  void put(const uint8_t* p, size_t n) {
+    while (n && !cancel_) {
+      const uint32_t head = head_, tail = tail_;
+      const size_t room = kRingBytes - size_t(head - tail);
+      if (!room) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+        continue;
+      }
+      const size_t k = std::min(room, n);
+      std::atomic_thread_fence(std::memory_order_acquire);   // the loop is done with that room
+      for (size_t i = 0; i < k; ++i) m_->ring[(head + i) % kRingBytes] = p[i];
+      std::atomic_thread_fence(std::memory_order_release);
+      head_ = head + uint32_t(k);   // published after the bytes
+      p += k, n -= k;
+    }
+  }
+
+  void get() {
+    std::unique_ptr<WiFiClient> client;
+    if (std::strncmp(m_->url, "https://", 8) == 0) {
+      auto* secure = new WiFiClientSecure;
+      secure->setCACert(kTlsRoots);
+      secure->setHandshakeTimeout(kHandshakeS);
+      client.reset(secure);
+    } else {
+      client.reset(new WiFiClient);
+    }
+    HTTPClient http;
+    http.setReuse(false);
+    http.setConnectTimeout(kConnectMs);
+    http.setTimeout(kHeadersMs);
+    http.setUserAgent("blorbarium");
+    const uint32_t t0 = millis();
+    if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
+    const int code = http.GET();
+    openMs_ = millis() - t0;
+    heapAfterOpen_ = ESP.getFreeHeap();
+    bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (cancel_) return finish(fail("cancelled"), http);
+    if (code != HTTP_CODE_OK)
+      return finish(code < 0 ? fail("%s", HTTPClient::errorToString(code).c_str()) : fail("http %d", code), http);
+    size_ = http.getSize();
+    WiFiClient* s = http.getStreamPtr();
+    if (!s) return finish(fail("no stream"), http);
+    if (text_) {
+      if (size_ > int(kTextMax)) return finish(fail("%d bytes is not a manifest", int(size_)), http);
+      state_ = State::Body;
+      const size_t want = size_ >= 0 ? size_t(size_) : kTextMax;
+      uint32_t heard = millis();
+      size_t len = 0;
+      while (len < want && !cancel_) {
+        const int n = s->available() > 0 ? s->read(reinterpret_cast<uint8_t*>(m_->text) + len, want - len) : 0;
+        if (n > 0) len += size_t(n), heard = millis();
+        else if (!s->connected()) break;
+        else if (millis() - heard > kStallMs) return finish(fail("the manifest stalled"), http);
+        else vTaskDelay(pdMS_TO_TICKS(10));
+      }
+      m_->text[len] = 0;
+      textLen_ = len;
+      if (cancel_) return finish(fail("cancelled"), http);
+      if (size_ >= 0 && len != size_t(size_)) return finish(fail("the manifest was cut at %u bytes", unsigned(len)), http);
+      return finish(State::Done, http);
+    }
+    if (size_ <= 0) return finish(fail("no length"), http);
+    state_ = State::Body;
+    uint8_t* buf = m_->chunk;
+    uint32_t heard = millis();
+    while (got_ < size_t(size_) && !cancel_) {
+      const int avail = s->available();
+      if (avail > 0) {
+        const int n = s->read(buf, std::min(sizeof m_->chunk, size_t(avail)));
+        if (n <= 0) continue;
+        put(buf, size_t(n));
+        got_ = got_ + size_t(n);
+        heard = millis();
+      } else if (!s->connected()) {
+        break;
+      } else if (millis() - heard > kStallMs) {
+        return finish(fail("stalled at %u bytes", unsigned(got_)), http);
+      } else {
+        vTaskDelay(pdMS_TO_TICKS(5));
+      }
+    }
+    if (cancel_) return finish(fail("cancelled"), http);
+    if (got_ != size_t(size_)) return finish(fail("the connection closed at %u of %d bytes", unsigned(got_), int(size_)), http);
+    finish(State::Done, http);
+  }
+
+  void finish(State s) { state_ = s; }
+  void finish(State s, HTTPClient& http) {
+    http.end();
+    state_ = s;
+  }
+
+  State fail(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::vsnprintf(m_->error, sizeof m_->error, fmt, ap);
+    va_end(ap);
+    return State::Failed;
+  }
+
+  Mem* m_ = nullptr;
+  bool text_ = true;
+  // Each written by one side and read by the other: plain words, never a
+  // compare-and-swap.
+  volatile bool running_ = false, cancel_ = false;
+  volatile State state_ = State::Idle;
+  volatile uint32_t head_ = 0, tail_ = 0;
+  volatile size_t textLen_ = 0, got_ = 0;
+  volatile int size_ = -1;
+  volatile uint32_t openMs_ = 0, stackFree_ = 0, startedAt_ = 0;
+  uint32_t stackBytes_ = 0;
+  volatile uint32_t heapAfterOpen_ = 0, bigAfterOpen_ = 0;
+};
+
+}  // namespace hw
