@@ -647,6 +647,15 @@ static void wifiVerb(const char* line) {
   char what[12] = "";
   std::sscanf(line, "%*s %11s", what);
   if (!*what || !std::strcmp(what, "status")) return statusLine();
+  // `DEBUG wifi due`: the next automatic check is due now (Schedule::dueNow),
+  // for a test run whose DEBUG warp moves the pet's clock but not the real one
+  // the schedule keeps. It still opens only dark and alone; the status follows.
+  if (!std::strcmp(what, "due")) {
+    schedule.dueNow();
+    say("due: the next automatic check is due now (it opens once dark %u s and alone)",
+        unsigned(wifiota::Schedule::kDarkMs / 1000));
+    return statusLine();
+  }
   if (!std::strcmp(what, "forget")) {
     const char* rest = std::strstr(line, "forget") + 6;
     while (*rest == ' ') ++rest;
