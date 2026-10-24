@@ -66,10 +66,11 @@ constexpr uint32_t kStuckMs = 60000;           // a GET that will not end after 
 constexpr size_t kTakePerPassBytes = 8192;     // image bytes a loop pass writes: about two flash sectors
 constexpr uint32_t kBatteryEveryMs = 10 * 60 * 1000;
 constexpr const char* kSiteUrl = "https://blorb.hypnodroid.com/?d=";
+constexpr const char* kPetLinesUrl = "https://blorb.hypnodroid.com/api/pet-lines";
 
-enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing };
+enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing, Lines };
 const char* phaseName(Phase p) {
-  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing"};
+  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing", "lines"};
   return kNames[uint8_t(p)];
 }
 
@@ -261,11 +262,11 @@ static void scanned() {
   setPhase(Phase::Joining);
 }
 
-static bool startGet(const char* url, bool text) {
+static bool startGet(const char* url, bool text, const char* post = nullptr) {
   say("GET %s: heap=%u big=%u before the task (stack %u B)", std::strncmp(url, "https://", 8) == 0 ? "https" : "http",
       unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(std::strncmp(url, "https://", 8) == 0 ? hw::NetJob::stackTlsBytes : hw::NetJob::kStackHttpBytes));
-  if (job.start(url, text)) return true;
+  if (job.start(url, text, post)) return true;
   failWindow(Failure::Server, "GET %s: %s", url, job.error());
   return false;
 }
@@ -306,6 +307,23 @@ static void startImage(const wifiota::Manifest& m) {
   setPhase(Phase::Image);
 }
 
+// The pet's lines (#59): once a check installs nothing, the site's newest pack
+// for him (POST /api/pet-lines, format "pack"), kept and said from then on.
+// Whatever goes wrong here only closes the window: the lines he has stay.
+static void startLines() {
+  const char* body = petLinesBody();
+  job.reset();
+  if (!body || !startGet(kPetLinesUrl, true, body)) return closeWindow();
+  setPhase(Phase::Lines);
+}
+
+static void readLines() {
+  if (job.busy()) return;
+  if (job.state() == hw::NetJob::State::Done) petLinesArrived(job.text(), job.textLen());
+  else say("lines: none this time (%s); the ones he has stay", job.error());
+  closeWindow();
+}
+
 static void readManifest() {
   if (job.busy()) return;   // the GET's task has ended: what it left is all there is
   if (job.state() != hw::NetJob::State::Done) return failWindow(Failure::Server, "manifest: %s", job.error());
@@ -338,7 +356,7 @@ static void readManifest() {
       wifiota::offerName(offer), blorb::kFirmwareVersion, unsigned(blorb::kFormatVersion));
   if (offer != wifiota::Offer::Install) {
     outcome("%s, nothing to install", wifiota::offerName(offer));
-    return closeWindow();
+    return startLines();
   }
   startImage(*m);
 }
@@ -418,7 +436,7 @@ static void poll(uint32_t now) {
   improvBle.poll();
   // Advertising paused while a GET opens (DNS, connect, TLS handshake,
   // headers), so the radio's time is the handshake's: only with no phone.
-  ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image) && job.busy() &&
+  ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) && job.busy() &&
                       job.state() == hw::NetJob::State::Opening && !ble.connected());
   pollConsent(now);
   const bool dark = powerPolicy.low();
@@ -453,6 +471,7 @@ static void poll(uint32_t now) {
       return;
     case Phase::Manifest: return readManifest();
     case Phase::Image: return download();
+    case Phase::Lines: return readLines();
     case Phase::Closing: return closing();
     case Phase::Off: break;
   }

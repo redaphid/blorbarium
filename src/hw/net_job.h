@@ -46,7 +46,7 @@ class NetJob {
  public:
   enum class State : uint8_t { Idle, Opening, Body, Done, Failed };
 
-  static constexpr size_t kTextMax = 2048;              // a manifest is a few hundred bytes
+  static constexpr size_t kTextMax = 16 * 1024;         // a manifest is a few hundred bytes, a pet's line pack (#59) some KB
   static constexpr size_t kRingBytes = 32 * 1024;
   // The task's stack, internal RAM while it runs (FreeRTOS on this framework
   // refuses a PSRAM stack): a TLS handshake through the P-384 chain needs some
@@ -67,7 +67,8 @@ class NetJob {
   // Start a GET of `url`: https:// with the pinned roots (tls_roots.h), or
   // http:// (only a cable's `DEBUG ota check http://...` asks for one).
   // False when one is still running, or PSRAM or the task could not be had.
-  bool start(const char* url, bool text) {
+  // `post`: a JSON body to POST instead (a text GET's reply, the pet's line pack, #59).
+  bool start(const char* url, bool text, const char* post = nullptr) {
     if (busy()) return false;
     if (!m_) {
       void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -75,6 +76,7 @@ class NetJob {
       m_ = new (p) Mem;
     }
     std::snprintf(m_->url, sizeof m_->url, "%s", url);
+    std::snprintf(m_->post, sizeof m_->post, "%s", post ? post : "");
     text_ = text;
     textLen_ = 0;
     size_ = -1;
@@ -136,6 +138,7 @@ class NetJob {
  private:
   struct Mem {
     char url[200];
+    char post[2 * 8192 + 512];   // a genome (at most 8 KB) as hex, and the rest of the pet-lines body
     char text[kTextMax + 1];
     char error[96];
     uint8_t chunk[1024];   // off the task's stack
@@ -185,7 +188,8 @@ class NetJob {
     http.setUserAgent("blorbarium");
     const uint32_t t0 = millis();
     if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
-    const int code = http.GET();
+    if (m_->post[0]) http.addHeader("content-type", "application/json");
+    const int code = m_->post[0] ? http.POST(reinterpret_cast<uint8_t*>(m_->post), std::strlen(m_->post)) : http.GET();
     openMs_ = millis() - t0;
     heapAfterOpen_ = ESP.getFreeHeap();
     bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -196,7 +200,7 @@ class NetJob {
     WiFiClient* s = http.getStreamPtr();
     if (!s) return finish(fail("no stream"), http);
     if (text_) {
-      if (size_ > int(kTextMax)) return finish(fail("%d bytes is not a manifest", int(size_)), http);
+      if (size_ > int(kTextMax)) return finish(fail("%d bytes is too long", int(size_)), http);
       state_ = State::Body;
       const size_t want = size_ >= 0 ? size_t(size_) : kTextMax;
       uint32_t heard = millis();
@@ -205,13 +209,13 @@ class NetJob {
         const int n = s->available() > 0 ? s->read(reinterpret_cast<uint8_t*>(m_->text) + len, want - len) : 0;
         if (n > 0) len += size_t(n), heard = millis();
         else if (!s->connected()) break;
-        else if (millis() - heard > kStallMs) return finish(fail("the manifest stalled"), http);
+        else if (millis() - heard > kStallMs) return finish(fail("the text stalled"), http);
         else vTaskDelay(pdMS_TO_TICKS(10));
       }
       m_->text[len] = 0;
       textLen_ = len;
       if (cancel_) return finish(fail("cancelled"), http);
-      if (size_ >= 0 && len != size_t(size_)) return finish(fail("the manifest was cut at %u bytes", unsigned(len)), http);
+      if (size_ >= 0 && len != size_t(size_)) return finish(fail("the text was cut at %u bytes", unsigned(len)), http);
       return finish(State::Done, http);
     }
     if (size_ <= 0) return finish(fail("no length"), http);

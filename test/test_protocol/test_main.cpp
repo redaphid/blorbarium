@@ -492,8 +492,8 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=flee_tilt face=neutral asleep=0 species=grungo mac=none",
-      "#2b + drives hunger=301 sleepiness=252 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=wander face=happy asleep=0 day=waking species=grungo mac=none",
+      "#2b + drives hunger=301 sleepiness=232 boredom=1 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
       "#2b + body life=1000 injury=0 glow=0 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=1",
       "#2b OK",
@@ -639,8 +639,8 @@ TEST(Golden, Chem) {
   r.run(30000);
   Lines want = {
       "#62 + chem=1 name=hunger level=301",
-      "#62 + chem=2 name=sleepiness level=252",
-      "#62 + chem=3 name=boredom level=2",
+      "#62 + chem=2 name=sleepiness level=232",
+      "#62 + chem=3 name=boredom level=1",
       "#62 + chem=4 name=loneliness level=1",
       "#62 + chem=5 name=fear level=8",
       "#62 + chem=6 name=pain level=1",
@@ -656,7 +656,8 @@ TEST(Golden, Chem) {
       "#62 + locus=8 name=day_cos level=500",
       "#62 + locus=9 name=owner_near level=1000",
       "#62 + locus=18 name=pantry level=1000",
-      "#62 OK 18",
+      "#62 + locus=98 name=recent_woke level=63",
+      "#62 OK 19",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);
 }
@@ -753,9 +754,9 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=-18,128,128 cloak=0,128,118 shell=-18,128,128 look=2 mind=3",
-      "#6d + egg=1 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=7",
-      "#6d + egg=2 skin=40,128,128 cloak=0,128,118 shell=40,128,128 look=1 mind=4",
+      "#6d + egg=0 skin=-16,128,128 cloak=0,128,118 shell=-16,128,128 look=1 mind=4",
+      "#6d + egg=1 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=4",
+      "#6d + egg=2 skin=40,128,128 cloak=0,128,118 shell=40,128,128 look=3 mind=5",
       "#6d OK eggs=3 cursor=0 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);

@@ -2,8 +2,9 @@
 // AI personality lines API (#37). Only /api/* reaches this code
 // (wrangler.jsonc run_worker_first); everything else is the assets.
 //
-//   POST /api/pet-lines        {mac, genome, stage?, name?, generation?, lineage?, feats?, fw?, wait?}
+//   POST /api/pet-lines        {mac, genome, stage?, name?, generation?, lineage?, feats?, fw?, wait?, format?}
 //                              -> 200 {bible, lines, version, text, sig, ...} | 202 {status: "queued"}
+//                              format "pack": 200 is the pack's text alone (the badge, #59)
 //   GET  /api/pet-lines?mac=&genome_hash=   the newest pack, or 202 while it is being written
 //   POST /api/pet-lines/ack    {mac, genome_hash, version}: the badge stored it
 //   POST /api/stats            {mac, genome | genome_hash, stats_version?, stats?, parents?, analytics?, fw?}  (#38, #50)
@@ -110,6 +111,12 @@ export async function generateFor(env, creature, { source = "genes", s = setting
   return store.latestPack(env.DB, creature.id);
 }
 
+// format "pack" (the badge, #59): the pack's text alone, as the badge keeps it.
+function packOr(body, reply) {
+  if (body.format !== "pack") return json(reply);
+  return new Response(reply.text, { headers: { "content-type": "text/plain; charset=utf-8", "x-pack-version": String(reply.version) } });
+}
+
 async function postPetLines(request, env) {
   let body;
   try { body = await readBody(request); } catch (e) { return fail(400, `bad request: ${e.message}`); }
@@ -141,7 +148,7 @@ async function postPetLines(request, env) {
   const creature = await store.findCreature(env.DB, mac, hash);
 
   const have = await store.latestPack(env.DB, creature.id);
-  if (have) return json(packReply(have, creature, { cached: true }));
+  if (have) return packOr(body, packReply(have, creature, { cached: true }));
 
   // The same genome already written elsewhere (a re-flashed badge, a restored
   // keepsake): its pack becomes this creature's first, and costs nothing.
@@ -156,7 +163,7 @@ async function postPetLines(request, env) {
     const row = await store.latestPack(env.DB, creature.id);
     const sig = await signPack(packText({ genomeHash: hash, version: row.version, lines: JSON.parse(row.lines_json) }), env.PACK_SIGNING_KEY);
     if (sig) { await store.setPackSig(env.DB, row.id, sig); row.sig = sig; }
-    return json(packReply(row, creature, { cached: true }));
+    return packOr(body, packReply(row, creature, { cached: true }));
   }
 
   const busy = await store.activeJob(env.DB, creature.id);
@@ -170,7 +177,7 @@ async function postPetLines(request, env) {
   try {
     const row = await generateFor(env, creature, { s, source: body.egg ? "hatch" : "genes", carried: body.parents });
     await store.setJob(env.DB, job, { status: "done", packId: row.id });
-    return json(packReply(row, creature, { cached: false, created: up.created }));
+    return packOr(body, packReply(row, creature, { cached: false, created: up.created }));
   } catch (e) {
     // Left queued, so the cron tries again; the badge keeps its built-in lines meanwhile.
     await store.setJob(env.DB, job, { status: "queued", error: String(e.message ?? e) });

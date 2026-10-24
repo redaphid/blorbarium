@@ -1,5 +1,7 @@
 #include "blorb/thoughts.h"
 
+#include "blorb/pack_lines.h"
+
 #include <cstring>
 #include <variant>
 #include "blorb/appearance.h"
@@ -200,12 +202,18 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
                    const Words& words) {
   const ThoughtInfo* t = thoughtInfo(id);
   const char* text = t ? t->text : "";
-  uint8_t mine = 0;
-  for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
-  if (mine) {   // his own line, in his own voice already: said as written
-    uint8_t want = uint8_t(pick % mine);
-    for (const SpeciesLine& l : SPECIES_LINES)
-      if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
+  // The site's lines for him (#59), when its pack has some for this thought: only those, as written.
+  const PackLines* pack = packLines();
+  uint8_t mine = pack ? pack->count(id) : 0;
+  if (mine) {
+    text = pack->line(id, uint8_t(pick % mine));
+  } else {
+    for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
+    if (mine) {   // his own line, in his own voice already: said as written
+      uint8_t want = uint8_t(pick % mine);
+      for (const SpeciesLine& l : SPECIES_LINES)
+        if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
+    }
   }
   uint8_t own = 0;
   if (!mine)

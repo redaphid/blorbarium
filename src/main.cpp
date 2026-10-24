@@ -41,6 +41,10 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
 #include "hw/home_store.h"
+#include <mbedtls/sha256.h>
+#include <nvs.h>
+#include "blorb/pack_lines.h"
+#include "hw/net_job.h"
 #include "ota/held_storage.h"
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
@@ -959,6 +963,7 @@ bool DishOtaHost::save() { return dish->flush(); }
 static bool wifiYieldRadio();       // src/wifi_ota.h
 static bool wifiUpdateHoldsRadio();
 static void wifiBegin();
+static void petLinesBoot();
 bool RadioGate::open() {
   // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
   // pins the channel to its access point's, and ESP-NOW needs channel 1.
@@ -1256,6 +1261,7 @@ void setup() {
   }
   otaPackets.begin();
   wifiBegin();
+  petLinesBoot();
   ble.keepWhile([] { return updater.active(); });
   const char* name = ble.begin(bleName(mac), &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
@@ -1959,6 +1965,117 @@ static void powerVerb(const char* a, const char* line) {
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
 }
 
+// ---- the site's lines for this pet (#59) ------------------------------------
+// A Wi-Fi check that installs nothing then POSTs the pet to /api/pet-lines
+// (wifi_ota.h startLines) and gets back his newest pack as text. It is kept in
+// the pet partition (namespace "lines") and said from (blorb::PackLines) while
+// it is his: a pack for another genome (a new generation, an egg) is set aside
+// until a check brings the new pet's own.
+namespace petlines {
+constexpr size_t kEntries = 1024;
+struct Mem {
+  char text[hw::NetJob::kTextMax + 1];
+  char body[2 * blorb::kMaxGenomeBytes + 256];
+  blorb::PackLines::Entry entries[kEntries];
+  blorb::PackLines pack;
+  uint32_t forGenome = 0;   // Genome::hash() of the pet the active pack was checked against
+};
+static Mem* mem = nullptr;   // PSRAM, made at the first use
+static uint32_t checkedAt = 0;
+
+static bool ready() {
+  if (mem) return true;
+  void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (p) mem = new (p) Mem;
+  return mem != nullptr;
+}
+static const blorb::Creature* creature() { return dish ? std::get_if<blorb::Creature>(&dish->occupant()) : nullptr; }
+// The site's genome_hash: SHA-256 over the genome's bytes, as hex.
+static void sha256Hex(const blorb::Genome& g, char* out, size_t digits) {
+  uint8_t d[32];
+  mbedtls_sha256(g.bytes().data(), g.bytes().size(), d, 0);
+  for (size_t i = 0; i * 2 < digits && i < sizeof d; ++i) std::snprintf(out + i * 2, 3, "%02x", d[i]);
+}
+// Says from mem->text (len bytes) when it is a pack for the pet there is now.
+static bool use(size_t len, const char* from) {
+  blorb::setPackLines(nullptr);
+  const blorb::Creature* c = creature();
+  if (!c || !mem->pack.parse(mem->text, len, mem->entries, kEntries)) {
+    Serial.printf("[lines] %s: %s\n", from, c ? "not a pack" : "no pet to say it");
+    return false;
+  }
+  char mine[17] = "";
+  sha256Hex(c->genome(), mine, 16);
+  if (std::strcmp(mine, mem->pack.genome())) {
+    Serial.printf("[lines] %s: pack v%u is for genome %s, he is %s: built-in lines\n", from,
+                  unsigned(mem->pack.version()), mem->pack.genome(), mine);
+    return false;
+  }
+  mem->forGenome = c->genome().hash();
+  blorb::setPackLines(&mem->pack);
+  Serial.printf("[lines] %s: pack v%u, %u lines he can say, said from now on\n", from, unsigned(mem->pack.version()),
+                unsigned(mem->pack.size()));
+  return true;
+}
+static nvs_handle_t open(nvs_open_mode_t mode) {
+  nvs_handle_t h = 0;
+  return nvs_open_from_partition("pet", "lines", mode, &h) == ESP_OK ? h : 0;
+}
+}  // namespace petlines
+
+// wifi_ota.h: the body to POST, or nullptr (no pet, no PSRAM).
+static const char* petLinesBody() {
+  const blorb::Creature* c = petlines::creature();
+  if (!c || !petlines::ready()) return nullptr;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char* b = petlines::mem->body;
+  int n = std::snprintf(b, 64, "{\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"genome\":\"", mac[0], mac[1], mac[2], mac[3], mac[4],
+                        mac[5]);
+  for (uint8_t x : c->genome().bytes()) n += std::snprintf(b + n, 3, "%02x", x);
+  std::snprintf(b + n, sizeof petlines::mem->body - size_t(n),
+                "\",\"stage\":%u,\"generation\":%u,\"fw\":\"%s\",\"wait\":false,\"format\":\"pack\"}",
+                unsigned(c->stage()), unsigned(c->generation()), blorb::kFirmwareVersion);
+  return b;
+}
+
+// wifi_ota.h: what came back; kept when it is a pack for him.
+static void petLinesArrived(const char* text, size_t len) {
+  if (!petlines::ready() || len > hw::NetJob::kTextMax) return;
+  std::memcpy(petlines::mem->text, text, len);
+  petlines::mem->text[len] = 0;
+  if (!petlines::use(len, "from the site")) return;
+  if (nvs_handle_t h = petlines::open(NVS_READWRITE)) {   // `text` is still whole: parse() cut the copy
+    const bool ok = nvs_set_blob(h, "pack", text, len) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    Serial.printf("[lines] %s\n", ok ? "kept in flash" : "!!! could not keep it in flash");
+  }
+}
+
+// Boot: the kept pack, when it is still his.
+static void petLinesBoot() {
+  nvs_handle_t h = petlines::open(NVS_READONLY);
+  if (!h) return;
+  size_t len = 0;
+  if (nvs_get_blob(h, "pack", nullptr, &len) == ESP_OK && len && len <= hw::NetJob::kTextMax && petlines::ready() &&
+      nvs_get_blob(h, "pack", petlines::mem->text, &len) == ESP_OK) {
+    petlines::mem->text[len] = 0;
+    petlines::use(len, "at boot");
+  }
+  nvs_close(h);
+}
+
+// The loop: a pack stops being said the moment the pet is another (a hatch, a new generation).
+static void petLinesTick(uint32_t now) {
+  if (!blorb::packLines() || now - petlines::checkedAt < 5000) return;
+  petlines::checkedAt = now;
+  const blorb::Creature* c = petlines::creature();
+  if (!c || c->genome().hash() != petlines::mem->forGenome) {
+    blorb::setPackLines(nullptr);
+    Serial.printf("[lines] the pet changed: built-in lines until a check brings his own\n");
+  }
+}
+
 #include "wifi_ota.h"
 static bool wifiYieldRadio() { return wififw::yieldRadio(); }
 static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
@@ -2065,6 +2182,7 @@ void loop() {
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
   wififw::poll(millis());
+  petLinesTick(millis());
   if (updater.rebootDue(millis()) && wififw::mayRestart()) restartIntoUpdate();
   trialWatchdog.beat(millis());
   if (const ota::Trial::Poll polled = trial.poll(millis()); polled != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
