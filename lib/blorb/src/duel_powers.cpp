@@ -39,8 +39,10 @@ constexpr void power_spores(PowerPhase ph, PowerCtx& c) {
 constexpr void power_mend(PowerPhase ph, PowerCtx& c) {
   SideState& s = c.side[mine(c)];
   if (ph == PowerPhase::AfterDamage && s.hearts < s.maxHearts) {
-    ++s.hearts;
-    ++c.healed[mine(c)];
+    const uint8_t room = uint8_t(s.maxHearts - s.hearts);
+    const uint8_t grown = room < PowerRules::kMendHearts ? room : PowerRules::kMendHearts;
+    s.hearts = uint8_t(s.hearts + grown);
+    c.healed[mine(c)] = uint8_t(c.healed[mine(c)] + grown);
   }
 }
 
@@ -53,7 +55,7 @@ constexpr void power_dash(PowerPhase ph, PowerCtx& c) {
 }
 
 constexpr void power_zap(PowerPhase ph, PowerCtx& c) {
-  if (ph == PowerPhase::OnDamage) ++c.hit[theirs(c)];
+  if (ph == PowerPhase::OnDamage) c.hit[theirs(c)] = uint8_t(c.hit[theirs(c)] + PowerRules::kZapHearts);
 }
 
 constexpr void power_hush(PowerPhase ph, PowerCtx& c) {

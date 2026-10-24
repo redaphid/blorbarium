@@ -63,7 +63,7 @@ constexpr void land(TurnReport& r, SideState (&s)[2], const BattleCard& card, ui
   const uint8_t o = uint8_t(1 - i);
   const PowerId p = powerInfo(card.power).id;
   const PowerId fires = p == power::gadget ? gadgetPick(luck) : p;
-  const uint8_t hearts = uint8_t(1 + SpecialRules::extra(s[i].queued));
+  const uint8_t hearts = SpecialRules::hearts(s[i].queued);
   const bool countered = !r.dozed[o] && !r.bracing[o] && beats(r.shown[o], r.shown[i]);
   if (countered && seesTheRiposte(fires)) {
     r.special[i] = Special::Whiffed;
@@ -100,7 +100,7 @@ constexpr void clash(TurnReport& r, SideState (&s)[2], const BattleCard* const (
   const uint8_t w = uint8_t(win), l = uint8_t(1 - win);
   const bool dazzleMiss = s[w].dazzledTurns > 0 && (draw(luck[w], Purpose::Dazzle) & 1) != 0;
   if (dazzleMiss || s[l].hushTurns > 0) r.blocked[l] = true;
-  else ++r.hit[l];
+  else r.hit[l] = uint8_t(r.hit[l] + DuelRules::kClashHearts);
   if (r.bracing[l]) {
     s[l].queued = s[l].queued == Windup::Heavy ? Windup::Quick : Windup::None;
     r.special[l] = Special::Staggered;
@@ -144,7 +144,7 @@ constexpr void playTurn(Outcome& o, const BattleCard* const (&card)[2], uint32_t
   phase(PowerPhase::OnDamage);
   for (uint8_t i = 0; i < 2; ++i) {
     if (r.hit[i] > 0 && s[i].shell) {
-      --r.hit[i];
+      r.hit[i] = r.hit[i] > PowerRules::kShellHearts ? uint8_t(r.hit[i] - PowerRules::kShellHearts) : 0;
       s[i].shell = false;
       r.blocked[i] = true;
     }
@@ -155,8 +155,8 @@ constexpr void playTurn(Outcome& o, const BattleCard* const (&card)[2], uint32_t
   // 5 sparks and the counters
   for (uint8_t i = 0; i < 2; ++i) {
     uint8_t spark = s[i].spark;
-    if (!r.dozed[i]) ++spark;
-    if (r.hit[i] > 0 && r.hit[1 - i] == 0) ++spark;
+    if (!r.dozed[i]) spark = uint8_t(spark + DuelRules::kSparkPerTurn);
+    if (r.hit[i] > 0 && r.hit[1 - i] == 0) spark = uint8_t(spark + DuelRules::kRallySpark);
     s[i].spark = spark > kMeterMax ? kMeterMax : spark;
     if (s[i].bonkTurns) --s[i].bonkTurns;
     if (s[i].dazzledTurns) --s[i].dazzledTurns;

@@ -521,12 +521,24 @@ void crowd(uint8_t n, uint32_t seeds) {
           const int f = indexOf(v.them.lineageId);
           EXPECT_GE(f, 0);
           EXPECT_NE(f, int(i));
-          if (f >= 0) ++claimedBy[f];
+          // The friends screen is after the fight: on a stormy link one side
+          // may linger there a few packets after the other has left and paired
+          // again, which is no second fight.
+          if (f >= 0 && v.phase != DuelPhase::Friends) ++claimedBy[f];
           if (!showing[i]) starts[i].push_back({t, v.them.lineageId});
         }
         showing[i] = shows;
       }
-      for (uint8_t i = 0; i < n; ++i) EXPECT_LE(claimedBy[i], 1) << "badge " << int(i) << " in two fights, tick " << t;
+      for (uint8_t i = 0; i < n; ++i)
+        if (claimedBy[i] > 1) {
+          std::string who;
+          for (uint8_t j = 0; j < n; ++j) {
+            const DuelView v = all[j]->s.view(t);
+            who += " badge " + std::to_string(j) + " phase " + std::to_string(int(v.phase)) + " v " +
+                   std::to_string(indexOf(v.them.lineageId)) + " ticks " + std::to_string(v.phaseTicks) + ";";
+          }
+          ADD_FAILURE() << "seed " << seed << ": badge " << int(i) << " in two fights, tick " << t << ":" << who;
+        }
       for (Device* d : all)
         if (d->s.active()) return false;
       return true;
@@ -732,6 +744,116 @@ TEST(DuelSession, ADecliningFriendShowsWhyAndIsNeverMatched) {
   EXPECT_TRUE(a.meetings.empty() && b.meetings.empty());
 }
 
+// ---- mixed firmware: a badge on other duel rules (#58) -----------------------------------
+
+// What every badge before #58 puts in the roster field: plain rosterHash(), as
+// test_species_registry pins it. Those badges resolve() by the old rules.
+constexpr uint16_t kOldRules = 5381;
+
+// Makes `d` a badge on the old rules, at the wire: it sends kOldRules where
+// this firmware sends duelRulesHash(), and hears the two the other way round,
+// so it sees itself exactly as an old badge does (its own kind match, ours
+// do not).
+void speakOldRules(Device& d) {
+  d.air.translate = [](Datagram& f) {
+    std::optional<Packet> p = decode(f.bytes, f.len);
+    if (!p) return;
+    const auto swap = [](uint16_t& h) { h = h == duelRulesHash() ? kOldRules : h == kOldRules ? duelRulesHash() : h; };
+    if (BeaconPacket* b = std::get_if<BeaconPacket>(&*p)) swap(b->roster);
+    else if (StatePacket* s = std::get_if<StatePacket>(&*p)) swap(s->roster);
+    else return;
+    f.len = uint8_t(encode(*p, f.bytes));
+  };
+}
+
+TEST(MixedRules, TheNewRulesSpeakADifferentHashFromTheOld) {
+  EXPECT_NE(duelRulesHash(), kOldRules) << "an old badge would resolve our battles by its own rules";
+}
+
+// The two badges see each other, greyed out ("they speak another frog"), and
+// neither ever claims, greets or fights the other, through the whole of fight
+// mode, until the radio gives up on its own.
+TEST(MixedRules, AnOldBadgeAndANewOneNeverFight) {
+  for (const bool storm : {false, true}) {
+    Ether ether(storm ? 11 : 10, storm ? kStorm : Weather{});
+    Device a(ether, 1, kGrungo, 1), old(ether, 2, SpeciesId{4}, 2);
+    speakOldRules(old);
+    ASSERT_TRUE(a.open(0) && old.open(0));
+    run(ether, {&a, &old}, 1, 100, [](uint32_t) { return false; });
+    for (Device* d : {&a, &old}) {
+      const DuelView v = d->s.view(100);
+      ASSERT_EQ(v.peerCount, 1);
+      EXPECT_FALSE(v.peers[0].compatible) << "greyed out on both rims";
+      EXPECT_FALSE(v.peers[0].chosen) << "never claimed";
+    }
+    const uint32_t end = runOut(ether, a, old, 100, T::kFightModeTicks + 400);
+    EXPECT_LT(end, T::kFightModeTicks + 400u) << "both radios give up by themselves";
+    for (Device* d : {&a, &old}) {
+      EXPECT_EQ(d->phases & ~((1u << uint8_t(DuelPhase::Lobby)) | (1u << uint8_t(DuelPhase::Closed))), 0u)
+          << "never past the lobby";
+      EXPECT_TRUE(d->meetings.empty());
+    }
+  }
+}
+
+// In a room of both, each badge pairs with one on its own rules, never across,
+// and each pair agrees on every byte.
+TEST(MixedRules, ARoomOfOldAndNewBadgesPairsEachWithItsOwnKind) {
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
+    Ether ether(seed * 3 + 1, seed % 2 ? kStorm : Weather{});
+    Device a(ether, 1, kGrungo, seed), x(ether, 2, SpeciesId{2}, seed + 1), b(ether, 3, SpeciesId{4}, seed + 2),
+        y(ether, 4, SpeciesId{6}, seed + 3);
+    speakOldRules(x), speakOldRules(y);
+    ASSERT_TRUE(a.open(0) && x.open(0) && b.open(0) && y.open(0));
+    run(ether, {&a, &x, &b, &y}, 1, 20000, [&](uint32_t) {
+      return !a.meetings.empty() && !b.meetings.empty() && !x.meetings.empty() && !y.meetings.empty();
+    });
+    const std::string what = "seed " + std::to_string(seed);
+    ASSERT_FALSE(a.meetings.empty() || b.meetings.empty() || x.meetings.empty() || y.meetings.empty()) << what;
+    EXPECT_EQ(a.meetings.front().friendCard.lineageId, b.setup.card.lineageId) << what;
+    EXPECT_EQ(x.meetings.front().friendCard.lineageId, y.setup.card.lineageId) << what;
+    expectSameBattle(a.meetings.front(), b.meetings.front());
+    expectSameBattle(x.meetings.front(), y.meetings.front());
+  }
+}
+
+// A State from a badge on the old rules that names a battle in progress (a
+// replayed or crossed frame) is ignored: the pair fights on and agrees.
+TEST(MixedRules, AnOldRulesStateNamingOurBattleIsIgnored) {
+  Ether ether(5, {});
+  Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+  ASSERT_TRUE(a.open(0) && b.open(0));
+  bool injected = false;
+  runOut(ether, a, b);
+  ASSERT_EQ(a.meetings.size(), 1u);
+  const Meeting clean = a.meetings[0];
+  Ether again(5, {});
+  Device a2(again, 1, kGrungo, 1), b2(again, 2, SpeciesId{4}, 2);
+  ASSERT_TRUE(a2.open(0) && b2.open(0));
+  run(again, {&a2, &b2}, 1, 30000, [&](uint32_t t) {
+    const DuelView v = b2.s.view(t);
+    if (!injected && v.phase == DuelPhase::Choosing && v.hasLast) {
+      StatePacket st;
+      st.roster = kOldRules;
+      st.battle = clean.battle;
+      st.card = a2.setup.card;
+      st.moveCount = 3;   // a log that disagrees with what b2 holds: a Conflict, were it heard
+      for (uint8_t i = 0; i < 3; ++i) st.moves[i] = Move{Stance(i % 3), false, false}.pack();
+      Datagram d;
+      d.from = addr(1), d.rssi = -40;
+      d.len = uint8_t(encode(Packet{st}, d.bytes));
+      b2.air.inject(d);
+      injected = true;
+    }
+    return !a2.s.active() && !b2.s.active();
+  });
+  ASSERT_TRUE(injected);
+  ASSERT_EQ(a2.meetings.size(), 1u);
+  ASSERT_EQ(b2.meetings.size(), 1u);
+  expectSameBattle(a2.meetings[0], b2.meetings[0]);
+  EXPECT_EQ(b2.meetings[0].outcomeHash, clean.outcomeHash) << "the old frame changed nothing";
+}
+
 TEST(PairCeiling,MortalNeedsAFairFightPickedTurnsAndAnEvenRecord) {
   Ceiling all;
   all.top = Stakes::Mortal;
@@ -847,7 +969,7 @@ TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {
   run(ether, {&a, &b}, 1, 60000, [&](uint32_t t) {
     if (a.bouts == 2 && b.s.view(t).phase == DuelPhase::Choosing && !injected) {
       // A State from bout 1 that disagrees with everything in bout 2.
-      late.roster = rosterHash();
+      late.roster = duelRulesHash();
       late.battle = a.meetings[0].battle;
       late.card = a.setup.card;
       late.moveCount = 6;
@@ -860,7 +982,8 @@ TEST(DuelSession, ARematchRerunsStakingAndALatePacketFromTheLastBoutIsIgnored) {
     }
     return a.bouts == 2 && !a.s.active() && !b.s.active();
   });
-  EXPECT_TRUE(injected);
+  EXPECT_TRUE(injected) << "bouts " << int(a.bouts) << "/" << int(b.bouts) << ", ended " << int(a.ended) << "/"
+                        << int(b.ended) << ", meetings " << a.meetings.size() << "/" << b.meetings.size();
   ASSERT_EQ(a.meetings.size(), 2u);
   ASSERT_EQ(b.meetings.size(), 2u);
   expectSameBattle(a.meetings[1], b.meetings[1]);
