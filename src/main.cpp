@@ -572,6 +572,11 @@ static volatile uint32_t knockAt = 0;
 // detectors, the knocks, the poses), from rideAt for rideMs.
 static volatile uint32_t rideAt = 0, rideMs = 0;
 static volatile uint8_t rideKind = 0;
+// `DEBUG pickup`: lying still, lifted toward home and carried, set down
+// (debugverbs::pickupPose), so HeldDetector itself fires picked_up.
+static volatile uint32_t pickupAt = 0;
+static volatile uint8_t pickupHome = ORIENT_HOME;   // the shell's home when asked
+static volatile bool pickingUp = false;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
   if (rideMs && int32_t(ms - rideAt) >= 0 && ms - rideAt < rideMs) {
     const blorb::BodySample r = hw::ride::toRaw(hw::ride::at(hw::ride::Kind(rideKind), ms - rideAt), ORIENT_HOME, ORIENT_R0);
@@ -598,6 +603,10 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
     const uint32_t r = esp_random();
     s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((homeRot == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
     return true;
+  }
+  if (pickingUp && int32_t(ms - pickupAt) >= 0) {
+    if (debugverbs::pickupPose(ms - pickupAt, pickupHome, esp_random(), s)) return true;
+    pickingUp = false;
   }
   if (!hangMs && !rightMs) return false;
   const uint32_t since = ms - hangAt;
@@ -1168,6 +1177,7 @@ void setup() {
   uint64_t lineage = 0;
   for (uint8_t b : mac) lineage = lineage << 8 | b;
   blorb::DishOptions options;
+  options.mac = lineage;   // STATE's mac=: the board's own, whatever lineage the keepsake carries
 #if !defined(BADGE_BOARD_SIM)
   // An image on trial opens the pet read-only and formats nothing: until it
   // keeps itself, the flash is the old image's (docs/ota.md "The trial").
@@ -1477,6 +1487,27 @@ static void shake() {
   Serial.printf("[hw] debug shake\n");
 }
 
+// `DEBUG pickup`: he lies still 2 s, is lifted and carried 2.8 s, and is set
+// down: through the raw sample, the shell and the real HeldDetector, at this
+// badge's home, so picked_up fires as for a hand (and put_down after).
+static void pickup() {
+  bodyq::pickupHome = shell.home();
+  bodyq::pickupAt = millis() + 40;   // on a read to come
+  bodyq::pickingUp = true;
+  Serial.printf("[hw] debug pickup: still %u ms, then lifted toward home rot=%u and carried, set down, over in %u ms\n",
+                unsigned(debugverbs::kPickupStillMs), unsigned(bodyq::pickupHome), unsigned(debugverbs::kPickupMs));
+}
+
+// `DEBUG chem <name> <permille>`: as the debug link's CHEM, on the cable.
+static void chemVerb(const char* line) {
+  char name[24] = "", permille[12] = "";
+  std::sscanf(line, "%*s %23s %11s", name, permille);
+  int level = 0;
+  const char* why = debugverbs::chem(*dish, name, permille, level);
+  if (why) return (void)Serial.printf("[hw] debug chem %s %s: %s\n", name, permille, why);
+  Serial.printf("[hw] debug chem %s=%d\n", name, level);
+}
+
 static void cradle(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 5000;
   if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug cradle: want [ms 1..30000]\n");
@@ -1669,6 +1700,8 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "shake") == 0) return shake();
   if (std::strcmp(verb, "ride") == 0) return rideVerb(line);
   if (std::strcmp(verb, "carry") == 0) return carryVerb(a);
+  if (std::strcmp(verb, "pickup") == 0) return pickup();
+  if (std::strcmp(verb, "chem") == 0) return chemVerb(line);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);

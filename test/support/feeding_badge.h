@@ -47,6 +47,7 @@ struct Hand {
   uint8_t home = kHomeUp;
   Pose pose = Pose::Held;
   std::vector<uint32_t> knocks;
+  std::optional<uint32_t> pickupAt;   // `DEBUG pickup` from then: its pose (debugverbs::pickupPose) over this one
   Rng rng = Rng::seeded(7);
   // turnMs > 0: a change of pose takes that long, the way a hand turns it,
   // gravity swinging round at 1 g (0: at once, as the feeding tests have it).
@@ -95,6 +96,9 @@ struct Hand {
         r.az = int16_t(r.az - 1700);
       }
     }
+    BodySample p;   // `DEBUG pickup` over the hand's own reading, as main.cpp's posed() lays it
+    p.ax = r.ax, p.ay = r.ay, p.az = r.az;
+    if (pickupAt && ms >= *pickupAt && debugverbs::pickupPose(ms - *pickupAt, home, rng.next(), p)) r = {p.ax, p.ay, p.az};
     return r;
   }
 };
@@ -105,6 +109,7 @@ struct Count {
   int presses = 0;            // stim::button the Dish took (a knock knock, as a press)
   int knocks = 0;             // stim::knock the Dish took (one knock)
   bool oneMore = false;       // the rim's "one more" lit
+  uint64_t fired = 0;         // every stimulus the Dish took, a bit each (ids < 64)
 };
 
 // One badge: the IMU, the sense task, the shell and the Dish, on one clock.
@@ -167,6 +172,7 @@ struct Badge {
       count.oneMore = count.oneMore || f.screen.knockWaiting;
       if (dish->firedLastSample() >> stim::button.v & 1) ++count.presses;
       if (dish->firedLastSample() >> stim::knock.v & 1) ++count.knocks;
+      count.fired |= dish->firedLastSample();
     }
     const uint8_t before = dish->habitat().pantry;
     dish->tick(ms, link);

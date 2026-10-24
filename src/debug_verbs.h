@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <variant>
 
 #include "blorb/dish.h"
@@ -33,12 +34,75 @@ inline blorb::Fx parseLevel(const char* s) {
   return neg ? -v : v;
 }
 
+// A drive or a chemical by name (or a chemical by number), as the debug link's CHEM reads it.
 inline bool chemByName(const char* name, blorb::ChemId& out) {
-  for (const auto& c : blorb::CHEMICALS)
-    if (!std::strcmp(c.name, name)) { out = c.id; return true; }
-  for (const auto& d : blorb::DRIVES)
-    if (!std::strcmp(d.name, name)) { out = blorb::driveChem(d.id); return true; }
-  return false;
+  const std::optional<blorb::ChemId> c = debugble::chemNamed(name);
+  if (c) out = *c;
+  return bool(c);
+}
+
+// `DEBUG chem <name> <permille>`: one chemical or drive (hunger, sleepiness,
+// injury, toxin...) set as the debug link's CHEM sets it (debugble::setChems),
+// on the cable with no unlock: a cable is a person's hands on the badge.
+// nullptr on success, with `level` what he holds now (permille), else why not.
+inline const char* chem(blorb::Dish& dish, const char* name, const char* permille, int& level) {
+  const std::optional<blorb::ChemId> id = debugble::chemNamed(name);
+  if (!*name || !id) return "not a drive or chemical (hunger, sleepiness, injury, toxin, ...)";
+  long v = 0;
+  const char* p = permille;
+  for (; *p >= '0' && *p <= '9' && v <= 1000; ++p) v = v * 10 + (*p - '0');
+  if (p == permille || *p || v > 1000) return "want <permille 0..1000>";
+  const debugble::ChemSet set{*id, blorb::Fx::ratio(int32_t(v), 1000)};
+  if (debugble::setChems(dish, &set, 1) != debugble::Jump::Done) return "no creature in the dish";
+  const blorb::Fx now = std::get<blorb::Creature>(dish.occupant()).chemistry().chem[id->v];
+  level = int((int64_t(now.raw) * 1000 + (now.raw >= 0 ? blorb::Fx::kOne / 2 : -blorb::Fx::kOne / 2)) / blorb::Fx::kOne);
+  return nullptr;
+}
+
+// `DEBUG pickup`: the raw IMU sample (milli-g, the IMU's frame) of a badge
+// lying still on its back, then lifted and carried, then set down, `since` ms
+// in; false once it is over. `s` comes in as the IMU read it and goes out
+// posed: the first and last kPickupEaseMs blend from and back to the real
+// reading, so neither end is a jolt. The lift tips it toward `home` (2: raw
+// +y up, 0: raw -y up), as a hand lifts a badge to look at it, well past
+// HeldDetector's 0.3 g in the plane for its picked_up, while the face stays
+// up past 0.5 g so no hang or side pose is ever read. The carry sways and
+// bobs gently: moving, so never a cradle, and never a jolt (no knock, no
+// shake). `noise`: any random word, for a table's and a hand's tremor.
+constexpr uint32_t kPickupStillMs = 2000;   // past HeldDetector's 1.5 s let-go: whatever came before, he is put down
+constexpr uint32_t kPickupEaseMs = 300;     // from the real reading at the start, back to it at the end
+constexpr uint32_t kPickupLiftMs = 400, kPickupCarryMs = 2400, kPickupSetMs = 400;
+constexpr uint32_t kPickupMs = kPickupStillMs + kPickupLiftMs + kPickupCarryMs + kPickupSetMs + kPickupEaseMs;
+inline bool pickupPose(uint32_t since, uint8_t home, uint32_t noise, blorb::BodySample& s) {
+  if (since >= kPickupMs) return false;
+  const int32_t up = home == 2 ? 600 : -600;   // raw y toward home's up, at the carry's tilt
+  const auto tri = [](uint32_t t, uint32_t period, int32_t amp) {   // a triangle wave, -amp..amp
+    const int32_t ph = int32_t(t % period) * 4 * amp / int32_t(period);
+    return ph < 2 * amp ? ph - amp : 3 * amp - ph;
+  };
+  const uint32_t carryAt = kPickupStillMs + kPickupLiftMs, setAt = carryAt + kPickupCarryMs;
+  int32_t lift = 0;   // 0 flat .. 1000 lifted
+  if (since >= kPickupStillMs && since < carryAt) lift = int32_t(since - kPickupStillMs) * 1000 / int32_t(kPickupLiftMs);
+  else if (since >= carryAt && since < setAt) lift = 1000;
+  else if (since >= setAt && since < setAt + kPickupSetMs) lift = 1000 - int32_t(since - setAt) * 1000 / int32_t(kPickupSetMs);
+  int32_t ax = 0, ay = up * lift / 1000, az = 1000 - 200 * lift / 1000;
+  // The carry: whole swings and bobs (kPickupCarryMs is 3 and 4 of them) that
+  // start and end level. The bob takes the body past 1 g +- 0.12 every swing,
+  // so HeldDetector never finds him still long enough for a cradle.
+  if (since >= carryAt && since < setAt) ax += tri(since - carryAt + 200, 800, 150), az += tri(since - carryAt + 150, 600, 200);
+  const int32_t tremor = lift ? 8 : 2, span = 2 * tremor + 1;
+  ax += int32_t(noise % span) - tremor;
+  ay += int32_t((noise >> 8) % span) - tremor;
+  az += int32_t((noise >> 16) % span) - tremor;
+  // How much of the real reading is left: all of it at 0, none once eased in, all again at the end.
+  const uint32_t outAt = kPickupMs - kPickupEaseMs;
+  const int32_t real = since < kPickupEaseMs ? 1000 - int32_t(since * 1000 / kPickupEaseMs)
+                       : since >= outAt     ? int32_t((since - outAt) * 1000 / kPickupEaseMs)
+                                            : 0;
+  s.ax = int16_t((s.ax * real + ax * (1000 - real)) / 1000);
+  s.ay = int16_t((s.ay * real + ay * (1000 - real)) / 1000);
+  s.az = int16_t((s.az * real + az * (1000 - real)) / 1000);
+  return true;
 }
 
 // A species by its species.def slug or its number. Any byte is accepted, so
