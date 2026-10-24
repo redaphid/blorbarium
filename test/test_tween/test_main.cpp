@@ -89,7 +89,7 @@ TEST(Tween, TheScreenRunsAFifthFasterThanHisLife) {
 // the clocks run on to where the next tick starts them, and what is eased
 // behind arrives at the tick it was eased toward.
 TEST(Tween, EachTickPicksUpWhereTheFramesBeforeItLeftOff) {
-  const std::vector<Appearance> t = ticksOfHim(40);
+  const std::vector<Appearance> t = ticksOfHim(80);   // 80: a waking hatchling yawns and stretches (#61), whose faces move mid-act, so fewer ticks hold one face
   int compared = 0, turned = 0;
   for (size_t i = 1; i + 1 < t.size(); ++i) {
     if (t[i + 1].pose != t[i].pose || t[i].reflexActive || t[i + 1].reflexActive || t[i].thinking) continue;

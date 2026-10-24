@@ -12,7 +12,9 @@
 //
 //   family   Romp (bouncy play: eases boredom, tires him a little, so a nap
 //            follows play), Nose (curious), Show (for the kid at the glass:
-//            eases loneliness), Muse (calm), Night (only when it is dark)
+//            eases loneliness), Muse (calm), Night (only when it is dark),
+//            Feel (how he feels, shown: hungry, sleepy, hurt, sick; played
+//            only when that presses, idle.cpp feels(), and eases nothing)
 //   seconds  about how long it runs (idle.cpp stretches it 0.8x to 1.3x)
 //   cooldown seconds before the same one may come again
 //   face     the face he wears through it (idle.cpp may move it mid-act)
@@ -52,3 +54,22 @@ BLORB_IDLE(19, boo,         Show,   7, 300, neutral, Home)   // sneaks up to the
 BLORB_IDLE(20, hide,        Show,   8, 300, neutral, Stay)   // hides in his hood, shell or wings, then pops out
 BLORB_IDLE(21, hiccup,      Muse,   5, 400, alarmed, Stay)   // hic! a hop with each one
 BLORB_IDLE(22, zoomies,     Romp,   6, 360, happy,   Zoom)   // a burst of laps round the rim, flat out
+// Day activities (#61; owner, 2026-10-22: "I also want the pets to appear to be
+// doing different things throughout the day. The behavior and animation should
+// vary depending on how it's feeling/its state." and "the behavior should
+// represent it's genetics"). Which part of his day each leans to is idle.cpp's
+// kWhen; who plays the Feel ones is idle.cpp feels().
+BLORB_IDLE(23, wash,        Muse,   6, 240, neutral, Stay)   // washes his face with a paw: mornings, and after a meal
+BLORB_IDLE(24, sunbathe,    Muse,  12, 300, happy,   Stay)   // lies back in the sun: middle of the day, only in the light
+BLORB_IDLE(25, fireflies,   Romp,  10, 300, happy,   Roam)   // chases fireflies: evenings, and awake in the dark
+BLORB_IDLE(26, exercise,    Romp,   8, 300, annoyed, Stay)   // morning exercises: squats, counted
+BLORB_IDLE(27, yawn,        Muse,   4, 120, neutral, Stay)   // a great yawn: just woken, or winding down
+BLORB_IDLE(28, tummy,       Feel,   6,  60, blep,    Stay)   // hungry: rubs his rumbling tummy
+BLORB_IDLE(29, beg,         Feel,   7, 120, neutral, Home)   // hungry: up at the glass with his empty bowl
+BLORB_IDLE(30, nod_off,     Feel,   8,  60, sleepy,  Stay)   // sleepy, awake: his head droops, and he jerks up again
+BLORB_IDLE(31, nurse,       Feel,   8,  90, annoyed, Stay)   // hurt: rubs the sore spot, a plaster on it
+BLORB_IDLE(32, queasy,      Feel,   6,  90, blep,    Stay)   // poisoned: a wobble, a green swirl
+BLORB_IDLE(33, mope,        Muse,   9, 150, sleepy,  Stay)   // lonely or bored a lot: sits and sighs under a raincloud
+BLORB_IDLE(34, beam,        Show,   6, 240, happy,   Stay)   // all's well: hearts float up from him
+BLORB_IDLE(35, tumble,      Romp,   5, 180, happy,   Stay)   // a baby's or a child's: trips on his own feet, rolls, up again
+BLORB_IDLE(36, reminisce,   Muse,  10, 300, happy,   Stay)   // an elder's: a thought bubble of the egg he was

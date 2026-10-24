@@ -11,6 +11,7 @@
 // default 24), and IDLE_DAY_OUT=<dir> writes each run's hours as CSV.
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -29,6 +30,10 @@
 #include "traces.h"
 #include "paint/sprite_pack.h"
 #include "paint/tween.h"
+#include "blorb/genes.h"
+#include "blorb/genome.h"
+#include "blorb/idle.h"
+#include "../../lib/paint/src/lively.h"   // the idle layer (#61: his genes and pace in his motion)
 
 using namespace blorb;
 using namespace blorbtest;
@@ -293,8 +298,9 @@ struct Desk {
   uint32_t ms = 0;
   Genome founder;
   std::optional<Dish> dish;
-  explicit Desk(SpeciesId sp, uint8_t foundingHour = kUnaskedFoundingHour, uint32_t seed = 0x5EED0000u)
-      : founder(starterGenomeOf(sp, seed)) {
+  explicit Desk(SpeciesId sp, uint8_t foundingHour = kUnaskedFoundingHour, uint32_t seed = 0x5EED0000u,
+                const Genome* genome = nullptr)
+      : founder(genome ? *genome : starterGenomeOf(sp, seed)) {
     rtc.poweredMs = &ms;
     DishOptions opt;
     opt.rtc = &rtc;
@@ -633,6 +639,425 @@ TEST(Film, AFewMinutesOnTheDesk) {
       writePpm(name, cv);
     }
   }
+}
+
+// ---- what he does through the day, by how he feels, his age and his genes (#61) ----
+//
+// The owner, 2026-10-22: "I also want the pets to appear to be doing different
+// things throughout the day. The behavior and animation should vary depending
+// on how it's feeling/its state." And: "the behavior should represent it's
+// genetics." docs/notes/day-activities.md.
+
+void setPhoneTime(Dish& dish, uint32_t unix) {   // what cmd_time does
+  dish.phoneTime().set(unix);
+  dish.checkWall();
+  dish.clock().alignToWall(unix, 0);
+  dish.setZone(0);
+}
+
+// Every size and temperament gene of `g` with these bytes (-1 leaves one be).
+Genome withGenes(const Genome& g, int bulk, int squash, int explore, int habituation, int dreamLen) {
+  GenomeBuilder b = GenomeBuilder::from(g);
+  g.forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<SizeGene>::value) {
+      if (bulk >= 0) b.setByte(v.header.uid, 0, uint8_t(bulk));
+      if (squash >= 0) b.setByte(v.header.uid, 2, uint8_t(squash));
+    }
+    if (v.header.type == GeneKindOf<TemperamentGene>::value) {
+      if (explore >= 0) b.setByte(v.header.uid, 2, uint8_t(explore));
+      if (habituation >= 0) b.setByte(v.header.uid, 3, uint8_t(habituation));
+      if (dreamLen >= 0) b.setByte(v.header.uid, 5, uint8_t(dreamLen));
+    }
+  });
+  return *b.build();
+}
+
+const char* familyName(IdleFamily f) {
+  static const char* kNames[] = {"romp", "nose", "show", "muse", "night", "feel"};
+  return kNames[uint8_t(f)];
+}
+
+// What he started playing, by name, by family and by part of his day; and the pace.
+struct Tally {
+  std::map<std::string, uint32_t> idle, family;
+  std::map<std::string, std::map<std::string, uint32_t>> byPart;   // part -> idle -> starts
+  uint32_t starts = 0, paceSum = 0;
+  void add(const Creature& c) {
+    if (!c.playing() || c.idle().ticks != 1) return;
+    const IdleInfo* row = idleInfo(c.idle().now);
+    if (!row) return;
+    ++idle[row->name], ++family[familyName(row->family)], ++byPart[dayPartName(c.dayPart())][row->name];
+    ++starts, paceSum += c.idle().pace;
+  }
+  double share(std::initializer_list<const char*> names) const {
+    uint32_t n = 0;
+    for (const char* k : names) n += idle.count(k) ? idle.at(k) : 0;
+    return starts ? double(n) / starts : 0;
+  }
+  double familyShare(const char* f) const { return starts && family.count(f) ? double(family.at(f)) / starts : 0; }
+  double pace() const { return starts ? double(paceSum) / starts : 0; }
+};
+
+double shareIn(const std::map<std::string, uint32_t>& m, std::initializer_list<const char*> names) {
+  uint32_t n = 0, all = 0;
+  for (const auto& kv : m) all += kv.second;
+  for (const char* k : names) n += m.count(k) ? m.at(k) : 0;
+  return all ? double(n) / all : 0;
+}
+
+std::string mixLine(const std::map<std::string, uint32_t>& m) {
+  std::vector<std::pair<uint32_t, std::string>> v;
+  uint32_t all = 0;
+  for (const auto& kv : m) v.push_back({kv.second, kv.first}), all += kv.second;
+  std::sort(v.rbegin(), v.rend());
+  std::string out;
+  char buf[64];
+  for (size_t i = 0; i < v.size() && i < 8; ++i) {
+    std::snprintf(buf, sizeof buf, "%s %.0f%%  ", v[i].second.c_str(), 100.0 * v[i].first / std::max(1u, all));
+    out += buf;
+  }
+  return out;
+}
+
+// The part of his day by the wall's hour, once a phone set it.
+TEST(Day, PartsByTheWallsHour) {
+  Desk d(SpeciesId{2});
+  d.run(15 * kMinuteMs, cradled());   // up a while: not just woken
+  const std::pair<uint32_t, DayPart> hours[] = {{8, DayPart::Morning},   {12, DayPart::Midday}, {15, DayPart::Afternoon},
+                                                {19, DayPart::Evening},  {7, DayPart::Morning}};
+  for (const auto& [h, part] : hours) {
+    setPhoneTime(*d.dish, kStartUnix - kStartHour * 3600u + h * 3600u);
+    d.run(2000, cradled());
+    EXPECT_EQ(dayPartName(d.c().dayPart()), std::string(dayPartName(part))) << h << ":00";
+  }
+  setPhoneTime(*d.dish, kStartUnix - kStartHour * 3600u + 23 * 3600u);   // the wall's night is dark: his night
+  d.run(2000, cradled());
+  EXPECT_EQ(d.c().dayPart(), DayPart::Night);
+}
+
+// With no clock, his own day: groggy just up, then morning, midday,
+// afternoon; the dark is his night, and a night's sleep starts his day again.
+TEST(Day, NoClockHisOwnDayFromWhenHeWoke) {
+  Desk d(SpeciesId{5});
+  EXPECT_EQ(d.c().dayPart(), DayPart::Waking) << "just hatched";
+  auto handled = [&](uint32_t minutes) {   // a look every ten minutes, so it is never dim
+    for (uint32_t m = 0; m < minutes; m += 10) d.run(10 * kMinuteMs - 2000), d.run(2000, cradled());
+  };
+  handled(20);
+  EXPECT_EQ(d.c().dayPart(), DayPart::Morning);
+  handled(120);
+  EXPECT_EQ(d.c().dayPart(), DayPart::Midday);
+  handled(180);
+  EXPECT_EQ(d.c().dayPart(), DayPart::Afternoon);
+  d.run(4 * 60 * kMinuteMs, faceDown());   // tucked in face down for the night
+  EXPECT_EQ(d.c().dayPart(), DayPart::Night);
+  EXPECT_TRUE(d.c().body().asleep);
+  d.run(3000, cradled());                   // picked up in the morning
+  EXPECT_FALSE(d.c().body().asleep);
+  EXPECT_EQ(d.c().dayPart(), DayPart::Waking);
+  handled(20);
+  EXPECT_EQ(d.c().dayPart(), DayPart::Morning) << "a new day";
+}
+
+// The owner's ask: a day on the desk, with a phone's clock, a kid looking
+// now and then. What he does leans with the part of the day: washing,
+// stretching, exercises and a song in the morning, the sun in the middle of
+// the day, dreams in the afternoon, fireflies and yawns in the evening.
+// DAY_MIX=1 prints each part's mix.
+TEST(Day, WhatHeDoesChangesThroughTheDay) {
+  std::map<std::string, std::map<std::string, uint32_t>> all;
+  for (SpeciesId sp : {SpeciesId{2}, SpeciesId{0}, SpeciesId{5}, SpeciesId{4}}) {
+    MemStorage store;
+    NullLink link;
+    FakeRtc rtc;
+    uint32_t ms = 0;
+    rtc.poweredMs = &ms;
+    const Genome founder = starterGenomeOf(sp, 0x5EED0000u);
+    DishOptions opt;
+    opt.rtc = &rtc;
+    opt.founder = &founder;
+    Dish dish(store, 0x5EED0000u, 0x5EED0000u, opt);
+    setPhoneTime(dish, kStartUnix);
+    Kid kid(0x5EED0000u ^ sp.v, Night::Nightstand);
+    Appearance a = dish.appearance();
+    Tally t;
+    uint32_t last = 0;
+    for (; ms < 15 * kHourMs; ms += kSampleMs) {   // 07:00 to 22:00
+      dish.sample(kid.next(ms, dish, a), ms);
+      dish.tick(ms, link);
+      if (dish.tickCount() == last) continue;
+      last = dish.tickCount();
+      a = dish.appearance();
+      if (const Creature* c = std::get_if<Creature>(&dish.occupant())) t.add(*c);
+    }
+    for (const auto& [part, m] : t.byPart)
+      for (const auto& [name, n] : m) all[part][name] += n;
+  }
+  if (std::getenv("DAY_MIX"))
+    for (const char* part : {"waking", "morning", "midday", "afternoon", "evening", "night"})
+      std::printf("%-9s %s\n", part, mixLine(all[part]).c_str());
+  const auto mornings = {"wash", "stretch", "exercise", "sing", "tidy", "yawn"};
+  EXPECT_GT(shareIn(all["morning"], mornings), 1.8 * shareIn(all["afternoon"], mornings)) << mixLine(all["morning"]);
+  EXPECT_GT(shareIn(all["midday"], {"sunbathe"}), 3 * shareIn(all["evening"], {"sunbathe"})) << mixLine(all["midday"]);
+  EXPECT_GT(shareIn(all["evening"], {"fireflies"}), 0.04) << mixLine(all["evening"]);
+  EXPECT_EQ(shareIn(all["morning"], {"fireflies"}), 0) << mixLine(all["morning"]);
+  EXPECT_GT(shareIn(all["afternoon"], {"daydream"}), shareIn(all["morning"], {"daydream"})) << mixLine(all["afternoon"]);
+  EXPECT_GT(shareIn(all["evening"], {"yawn"}), shareIn(all["midday"], {"yawn"})) << mixLine(all["evening"]);
+  // Still a wide variety in every part he is up for.
+  for (const char* part : {"morning", "midday", "afternoon", "evening"}) EXPECT_GE(all[part].size(), 12u) << part;
+}
+
+// How he feels shows: hungry with nothing to eat he rubs his tummy or begs
+// with his bowl; sleepy and up he nods off and yawns; hurt he nurses the sore
+// spot; poisoned he is queasy. Content, none of them.
+TEST(Feel, HowHeFeelsShows) {
+  struct Case { const char* what; ChemId chem; Fx level; std::initializer_list<const char*> shows; };
+  const Case cases[] = {
+      {"hungry", driveChem(drive::hunger), Fx::ratio(68, 100), {"tummy", "beg"}},
+      {"sleepy", driveChem(drive::sleepiness), Fx::ratio(44, 100), {"nod_off", "yawn"}},
+      {"hurt", driveChem(drive::pain), Fx::ratio(5, 10), {"nurse"}},
+      {"poisoned", chem::toxin, Fx::ratio(3, 10), {"queasy"}},
+  };
+  const auto feelings = {"tummy", "beg", "nod_off", "nurse", "queasy"};
+  for (SpeciesId sp : {SpeciesId{2}, SpeciesId{0}, SpeciesId{7}}) {
+    for (const Case& k : cases) {
+      Desk d(sp);
+      Tally t;
+      for (int i = 0; i < 10 * 60 * 10; ++i) {   // ten minutes, the feeling held
+        if (i % 10 == 0) d.c().inject(k.chem, k.level);
+        if (k.chem == chem::toxin && i % 10 == 0) d.c().inject(chem::injury, Fx::zero());   // queasy, not dying of it
+        d.run(kTickMs, i % 3000 == 0 ? cradled() : still());
+        t.add(d.c());
+      }
+      EXPECT_GT(t.share(k.shows), 0.2) << speciesInfo(sp).name << " " << k.what << ": " << mixLine(t.idle);
+    }
+    Desk d(sp);   // content, handled now and then
+    Tally t;
+    for (int i = 0; i < 20 * 60 * 10; ++i) {
+      if (i % 600 == 0)
+        for (const DriveInfo& row : DRIVES) d.c().inject(driveChem(row.id), Fx::ratio(1, 10));
+      d.run(kTickMs, i % 3000 == 0 ? cradled() : still());
+      t.add(d.c());
+    }
+    EXPECT_GT(t.starts, 10u);
+    EXPECT_EQ(t.share(feelings), 0) << speciesInfo(sp).name << " content: " << mixLine(t.idle);
+    EXPECT_GT(t.share({"beam"}), 0) << speciesInfo(sp).name << " content: " << mixLine(t.idle);
+  }
+}
+
+// The chooser, many times over: a baby romps and tumbles, an elder muses and
+// remembers; a pet's genes move his mix the way their names say.
+std::map<std::string, uint32_t> chooserMix(const IdleMood& m, int n = 4000) {
+  Rng rng = Rng::seeded(0xC0FFEEull);
+  std::map<std::string, uint32_t> out;
+  for (int i = 0; i < n; ++i) {
+    IdleState s;   // nothing cooling down
+    const IdleId id = pickIdle(s, m, rng);
+    if (const IdleInfo* row = idleInfo(id)) ++out[familyName(row->family)], ++out[row->name];
+  }
+  return out;
+}
+IdleMood calmMood(SpeciesId sp) {
+  IdleMood m;
+  m.species = sp, m.taste = 0x1234u, m.age = 100000;
+  m.boredom = m.loneliness = m.needTouch = m.sleepiness = Fx::ratio(2, 10);
+  m.explore = Fx::ratio(66, 100), m.habituation = Fx::ratio(43, 100), m.content = Fx::ratio(7, 10);
+  return m;
+}
+double frac(const std::map<std::string, uint32_t>& m, const char* k, int n = 4000) {
+  return m.count(k) ? double(m.at(k)) / n : 0;
+}
+
+TEST(Age, ABabyRompsAnElderMuses) {
+  for (SpeciesId sp : {SpeciesId{2}, SpeciesId{0}, SpeciesId{5}}) {
+    IdleMood baby = calmMood(sp), elder = calmMood(sp);
+    baby.stage = Stage::Baby, elder.stage = Stage::Elder;
+    const auto b = chooserMix(baby), e = chooserMix(elder);
+    EXPECT_GT(frac(b, "romp"), 1.6 * frac(e, "romp")) << speciesInfo(sp).name;
+    EXPECT_GT(frac(e, "muse"), 1.4 * frac(b, "muse")) << speciesInfo(sp).name;
+    EXPECT_GT(frac(b, "tumble"), 0);
+    EXPECT_EQ(frac(e, "tumble"), 0);
+    EXPECT_GT(frac(e, "reminisce"), 0);
+    EXPECT_EQ(frac(b, "reminisce"), 0);
+  }
+  // And plays it at his age's pace: brisk young, slow old.
+  IdleMood m = calmMood(SpeciesId{2});
+  m.stage = Stage::Baby;
+  const uint8_t baby = idlePace(m);
+  m.stage = Stage::Adult;
+  const uint8_t adult = idlePace(m);
+  m.stage = Stage::Elder;
+  const uint8_t elder = idlePace(m);
+  EXPECT_GT(baby, adult);
+  EXPECT_GT(adult, elder);
+}
+
+// The pace shows how he feels: sleepy, hurt, sick or hungry he plays slower.
+TEST(Feel, HowHeFeelsSetsThePace) {
+  const IdleMood fine = calmMood(SpeciesId{2});
+  const uint8_t pace = idlePace(fine);
+  for (int k = 0; k < 4; ++k) {
+    IdleMood m = fine;
+    if (k == 0) m.sleepiness = Fx::ratio(6, 10);
+    if (k == 1) m.pain = Fx::ratio(6, 10);
+    if (k == 2) m.toxin = Fx::ratio(5, 10);
+    if (k == 3) m.hunger = Fx::ratio(7, 10);
+    EXPECT_LT(idlePace(m), pace) << k;
+  }
+  IdleMood happy = fine;
+  happy.content = Fx::one();
+  EXPECT_GT(idlePace(happy), idlePace(fine));
+}
+
+// The genes, through the chooser: a small one romps more and a big one muses
+// more (size), a curious one noses about more (explore), a dreamer muses more
+// (dreamLen), one quick to tire of a thing changes family more (habituation).
+TEST(Genes, EachMovesTheMixTheWayItsNameSays) {
+  const IdleMood base = calmMood(SpeciesId{3});
+  IdleMood small = base, big = base;
+  small.bulk = 40, big.bulk = 220;
+  EXPECT_GT(frac(chooserMix(small), "romp"), 1.2 * frac(chooserMix(big), "romp"));
+  EXPECT_GT(frac(chooserMix(big), "muse"), 1.2 * frac(chooserMix(small), "muse"));
+  EXPECT_GT(idlePace(small), idlePace(big) + 15);
+  IdleMood curious = base, incurious = base;
+  curious.explore = Fx::ratio(95, 100), incurious.explore = Fx::ratio(5, 100);
+  EXPECT_GT(frac(chooserMix(curious), "nose"), 1.2 * frac(chooserMix(incurious), "nose"));
+  IdleMood dreamer = base, brisk = base;
+  dreamer.dreamLenTicks = 150, brisk.dreamLenTicks = 0;
+  EXPECT_GT(frac(chooserMix(dreamer), "muse"), 1.3 * frac(chooserMix(brisk), "muse"));
+  // Habituation: just played a romp, how much of the next is a romp again.
+  auto again = [&](Fx hab) {
+    IdleMood m = base;
+    m.habituation = hab;
+    Rng rng = Rng::seeded(7);
+    int romps = 0;
+    for (int i = 0; i < 4000; ++i) {
+      IdleState s;
+      s.last = idles::dance;
+      const IdleInfo* row = idleInfo(pickIdle(s, m, rng));
+      romps += row && row->family == IdleFamily::Romp;
+    }
+    return romps;
+  };
+  EXPECT_GT(again(Fx::ratio(5, 100)), 2 * again(Fx::ratio(8, 10)));
+  // What his genes make him (traits.h, #60): one doubling of a gene's rate.
+  IdleMood playful = base, affectionate = base, sleepy = base, owl = base, plain = base;
+  playful.traits.playfulness = 100, affectionate.traits.affection = 100, sleepy.traits.sleepiness = 100;
+  owl.traits.nightOwl = 100;
+  owl.part = plain.part = DayPart::Evening;
+  EXPECT_GT(frac(chooserMix(playful), "romp"), 1.2 * frac(chooserMix(base), "romp"));
+  EXPECT_GT(frac(chooserMix(affectionate), "show"), 1.2 * frac(chooserMix(base), "show"));
+  EXPECT_GT(frac(chooserMix(sleepy), "muse"), 1.2 * frac(chooserMix(base), "muse"));
+  EXPECT_GT(frac(chooserMix(owl), "fireflies"), 1.2 * frac(chooserMix(plain), "fireflies"));
+  EXPECT_GT(idleLiveliness(playful), idleLiveliness(base));
+  EXPECT_GT(idlePace(playful), idlePace(sleepy));
+}
+
+// The owner's ask, whole: two pets of one kind, the same seed, the same desk
+// and kid; only their size and temperament genes differ. What they do and how
+// briskly they do it differ the way the genes say.
+TEST(Genes, TwoPetsOfOneKindDifferByTheirGenes) {
+  const Genome starter = starterGenomeOf(SpeciesId{3}, 0x5EED0000u);
+  const Genome sprite = withGenes(starter, 40, 220, 240, 200, 1);   // small, squashy, curious, restless, short dreams
+  const Genome sage = withGenes(starter, 220, 40, 20, 40, 15);      // big, firm, incurious, settled, long dreams
+  auto live4h = [](const Genome& g) {
+    Desk d(SpeciesId{3}, kUnaskedFoundingHour, 0x5EED0000u, &g);
+    Tally t;
+    for (int i = 0; i < 4 * 3600 * 10; ++i) {
+      d.run(kTickMs, i % (10 * 600) < 30 ? cradled() : still());
+      t.add(d.c());
+    }
+    return t;
+  };
+  const Tally a = live4h(sprite), b = live4h(sage);
+  const double aActive = a.familyShare("romp") + a.familyShare("nose"), bActive = b.familyShare("romp") + b.familyShare("nose");
+  EXPECT_GT(aActive, bActive + 0.1) << "sprite " << mixLine(a.family) << "\nsage " << mixLine(b.family);
+  EXPECT_GT(b.familyShare("muse"), a.familyShare("muse") + 0.1) << "sprite " << mixLine(a.family) << "\nsage " << mixLine(b.family);
+  EXPECT_GT(a.pace(), b.pace() + 20);
+  if (std::getenv("DAY_MIX")) {
+    std::printf("sprite pace %.0f: %s\n  %s\n", a.pace(), mixLine(a.family).c_str(), mixLine(a.idle).c_str());
+    std::printf("sage   pace %.0f: %s\n  %s\n", b.pace(), mixLine(b.family).c_str(), mixLine(b.idle).c_str());
+  }
+}
+
+// And in his motion: a squashy gene squashes him more in an act, a big one
+// breathes slower, a brisk pace bounces more.
+TEST(Genes, HisBodysGenesShowInHisMotion) {
+  Desk d(SpeciesId{2});
+  Appearance a = d.dish->appearance();
+  a.lively = true, a.reflexActive = false, a.asleep = false, a.pose = pose::idle;
+  a.idle = idles::exercise, a.idleLength = 80;
+  auto deepest = [&](uint8_t squash) {
+    Appearance x = a;
+    x.squash = squash;
+    int most = 0;
+    for (uint16_t t = 10; t < 70; ++t) x.idleTicks = t, most = std::max(most, std::abs(paint::livelyOf(x, 20).tall));
+    return most;
+  };
+  EXPECT_GT(deepest(230), deepest(30) * 3 / 2);
+  auto breaths = [&](uint8_t bulk) {   // breaths in a minute
+    Appearance x = a;
+    x.idle = idles::none, x.bulk = bulk;
+    int n = 0, was = 0;
+    for (uint32_t ms = 0; ms < 60000; ms += 20) {
+      x.liveMs = ms;
+      const int b = paint::livelyOf(x, 20).breathQ4;
+      if (b > 20 && was <= 20) ++n;
+      was = b;
+    }
+    return n;
+  };
+  EXPECT_GT(breaths(30), breaths(230) + 3);
+}
+
+// The day's acts filmed (#61): each of them, at a few points through it, on a
+// puffkin and a grungo, as the screen draws them. DAY_ACTS_OUT=<dir>, then
+// python3 scripts/test/idle_strips.py <dir> <out.png> --cols 6.
+TEST(Film, TheDaysActs) {
+  const char* dirEnv = std::getenv("DAY_ACTS_OUT");
+  if (!dirEnv) GTEST_SKIP() << "set DAY_ACTS_OUT to a directory to write the frames";
+  static paint::Canvas240 cv;
+  for (SpeciesId sp : {SpeciesId{2}, SpeciesId{0}}) {
+    Desk d(sp);
+    int n = 0;
+    for (uint8_t id = idles::wash.v; id < kIdleCount; ++id) {
+      for (int k = 0; k < 6; ++k) {
+        Appearance a = d.dish->appearance();
+        a.lively = true, a.reflexActive = false, a.asleep = false, a.pose = pose::idle;
+        a.idle = IdleId{id};
+        a.idleLength = uint16_t(IDLES[id].seconds * 10);
+        a.idleTicks = uint16_t(a.idleLength * (2 * k + 1) / 12);
+        a.liveMs = 10000 + a.idleTicks * kTickMs;
+        a.expression = idleFace(a.idle, a.idleTicks, a.idleLength), a.intensity = Fx::one();
+        paint::draw(a, paint::packFor(a.species), cv, a.liveMs);
+        char name[200];
+        std::snprintf(name, sizeof name, "%s/%s_%03d_%s-%d.ppm", dirEnv, speciesInfo(sp).name, n++, IDLES[id].name, k);
+        writePpm(name, cv);
+      }
+    }
+  }
+}
+
+// What each act costs to draw, on this host, against him standing about and
+// sleep-idle's acts: DAY_ACTS_COST=1. A ratio, not the badge's milliseconds.
+TEST(Film, TheDaysActsCost) {
+  if (!std::getenv("DAY_ACTS_COST")) GTEST_SKIP() << "DAY_ACTS_COST=1 times them";
+  static paint::Canvas240 cv;
+  Desk d(SpeciesId{2});
+  auto cost = [&](IdleId id) {
+    Appearance a = d.dish->appearance();
+    a.lively = true, a.reflexActive = false, a.asleep = false, a.pose = pose::idle, a.idle = id;
+    a.idleLength = id == idles::none ? 0 : uint16_t(IDLES[id.v].seconds * 10);
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int k = 0; k < 300; ++k) {
+      a.idleTicks = uint16_t(a.idleLength ? k % a.idleLength : 0), a.liveMs = 10000 + k * 20;
+      paint::draw(a, paint::packFor(a.species), cv, a.liveMs);
+    }
+    return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / 300;
+  };
+  const double plain = cost(idles::none);
+  std::printf("standing about: %.0f us a frame\n", plain);
+  for (uint8_t id = 0; id < kIdleCount; ++id) std::printf("%-12s %.2fx\n", IDLES[id].name, cost(IdleId{id}) / plain);
 }
 
 int main(int argc, char** argv) {

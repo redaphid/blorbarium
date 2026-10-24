@@ -21,6 +21,7 @@
 #include "blorb/idle.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
+#include "blorb/traits.h"
 
 namespace blorb {
 
@@ -57,6 +58,7 @@ struct Phenotype {
   Size size{};
   Oracle oracle{};
   SpeciesTraits species{};             // body, power and knack (species.h); grungo until a species gene says otherwise
+  Traits traits{};                     // what the genes make him, against the recipe (traits.h); behaviour reads it
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
@@ -131,6 +133,9 @@ class Creature {
   bool playing() const { return !actionDone_ && idle_.active(); }
   // What STATE says he is doing: the idle he plays, else the action's name.
   const char* doing() const;
+  // The part of his day (#61, idle.h DayPart): the wall's hour when a phone set
+  // it, else how long since he woke; the dark is his night.
+  DayPart dayPart() const;
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
   void inject(ChemId, Fx);             // sim scripts, tests and the prophecy_treat twist; clamps to 0..1

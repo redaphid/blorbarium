@@ -120,6 +120,8 @@ void stateLine(Line& l, const Dish& dish) {
     // action= is what he is doing: an idle he plays (idles.def) by its own name.
     l.add(" stage=%s age=%u action=%s face=%s asleep=%d", stageName(c->stage()), unsigned(c->stats().ageTicks),
           c->doing(), nameOf(EXPRESSIONS, c->face().current), int(c->body().asleep));
+    // day= is the part of his day (#61): what he leans to doing now.
+    l.add(" day=%s", dayPartName(c->dayPart()));
   } else if (const Egg* e = std::get_if<Egg>(&o)) {
     l.add(" progress=%d", permille(e->progress()));
   } else {

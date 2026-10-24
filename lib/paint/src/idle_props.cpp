@@ -19,7 +19,10 @@ struct Rgb { int r, g, b; };
 constexpr Rgb kInk{40, 30, 24}, kWhite{255, 255, 255}, kNote{255, 226, 92}, kPebble{170, 166, 160},
     kPebbleLit{226, 222, 214}, kDirt{120, 82, 46}, kDirtDark{84, 56, 30}, kDust{196, 190, 180}, kStar{255, 236, 120},
     kBall{226, 70, 64}, kBroom{150, 104, 54}, kStraw{228, 196, 110}, kHeart{240, 84, 120}, kPow{255, 170, 60},
-    kMoon{250, 236, 170}, kStem{80, 170, 70}, kPetal{250, 150, 200}, kBeetle{70, 120, 220};
+    kMoon{250, 236, 170}, kStem{80, 170, 70}, kPetal{250, 150, 200}, kBeetle{70, 120, 220},
+    // #61
+    kSun{255, 214, 70}, kFirefly{210, 255, 110}, kQueasy{140, 210, 90}, kRain{120, 170, 240}, kCloud{160, 164, 178},
+    kPlaster{236, 204, 168}, kBowl{110, 170, 230}, kSweat{160, 215, 255}, kShell{246, 240, 222};
 constexpr Rgb kSpark[] = {{255, 120, 200}, {120, 220, 255}, {255, 240, 120}, {170, 255, 150}, {220, 160, 255}};
 
 constexpr int imin(int a, int b) { return a < b ? a : b; }
@@ -154,7 +157,15 @@ void dust(Canvas240& cv, const Him& m, const Clock& c, int at) {
   }
 }
 
-void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed) {
+// A little egg: what an old one remembers being.
+void egg(Canvas240& cv, int cx, int cy, int alpha) {
+  for (int y = -7; y <= 7; ++y)
+    for (int x = -6; x <= 6; ++x)
+      if (x * x * 64 / 36 + (y < 0 ? y * y * 64 / 49 : y * y * 64 / 36) <= 64) put(cv, cx + x, cy + y, kShell, alpha);
+  disc(cv, cx - 2, cy - 1, 1, kStem, alpha), disc(cv, cx + 2, cy + 3, 1, kStem, alpha);
+}
+
+void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed, bool memory = false) {
   const int side = m.x < kSide / 2 ? 1 : -1;
   int cx = m.x + side * (m.w + 22), cy = m.top + 4;
   inside(cx, cy, 30);
@@ -169,6 +180,7 @@ void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed) {
   disc(cv, cx - 11, cy + 2, r, kWhite, a), disc(cv, cx + 11, cy + 2, r, kWhite, a), disc(cv, cx, cy - 5, r + 2, kWhite, a),
       disc(cv, cx, cy + 5, r, kWhite, a);
   if (grow < 256) return;
+  if (memory) return egg(cv, cx, cy, c.alpha);   // an elder's: the egg he was
   // What he dreams of, his own: a cookie, a heart, the moon, a star.
   switch (seed % 4) {
     case 0: drawFood(cv, cx, cy, 6, Food{}, c.alpha); break;
@@ -191,10 +203,10 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
   m.side = iabs(a.facing.raw) < blorb::Fx::kOne / 2 ? 1 : -1;
   const int tq = int(a.idleTicks) * 256 + a.idleSub;
   Clock c;
-  c.ms = tq * int(blorb::kTickMs) / 256;
+  c.ms = tq * int(blorb::kTickMs) / 256 * int(a.idlePace ? a.idlePace : 100) / 100;   // at his pace (lively.cpp)
   c.pc = a.idleLength ? imin(1024, tq * 4 / a.idleLength) : 1024;
-  const int lengthMs = int(a.idleLength) * int(blorb::kTickMs);
-  c.alpha = imax(0, imin(256, imin(c.ms * 256 / 200, (lengthMs - c.ms) * 256 / 200)));
+  const int realMs = tq * int(blorb::kTickMs) / 256, lengthMs = int(a.idleLength) * int(blorb::kTickMs);
+  c.alpha = imax(0, imin(256, imin(realMs * 256 / 200, (lengthMs - realMs) * 256 / 200)));
   if (!c.alpha) return;
   const uint32_t seed = a.lifeSeed;
   const bool walking = a.pose == blorb::pose::walk;
@@ -342,7 +354,130 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
         stroke(cv, x0, y, x0 - m.side * len, y, 0, kWhite, c.alpha * 3 / 4);
       }
       break;
-    default: break;   // explore: his walk round the rim is the show
+    // ---- #61: his day, how he feels, his age ----
+    case idles::wash.v: {   // a paw round his face, and a bubble or two
+      const int ph = c.ms * 1024 / 520;
+      blob(cv, m.x + m.side * (m.w / 3) + 5 * cos256(ph) / 256, m.headY + 4 + 4 * sin256(ph) / 256, 5, kWhite, c.alpha);
+      for (int i = 0; i < 3; ++i) {
+        const int life = 1200, t = (c.ms + i * 400) % life;
+        disc(cv, m.x - m.side * (m.w / 2) + i * 5, m.headY - 4 - 22 * t / life, 2 + i % 2, kSweat, c.alpha * (life - t) / life);
+      }
+      break;
+    }
+    case idles::sunbathe.v: {   // the sun over him, its rays turning
+      int sx = m.x + (m.x < kSide / 2 ? 1 : -1) * (m.w + 26), sy = m.top - 14;
+      inside(sx, sy, 26);
+      const int turn = c.ms * 1024 / 6000;
+      for (int k = 0; k < 8; ++k) {
+        const int ph = turn + k * 128;
+        stroke(cv, sx + 13 * cos256(ph) / 256, sy + 13 * sin256(ph) / 256, sx + 18 * cos256(ph) / 256,
+               sy + 18 * sin256(ph) / 256, 1, kSun, c.alpha);
+      }
+      blob(cv, sx, sy, 9, kSun, c.alpha);
+      break;
+    }
+    case idles::fireflies.v:   // a few fireflies about him, blinking on and off
+      for (int i = 0; i < 4; ++i) {
+        const uint32_t h = mix32(seed, uint32_t(i + 40));
+        const int px = 3000 + int(h % 2000), py = 2300 + int((h >> 11) % 1500);
+        int x = m.x + (m.w + 18) * sin256(c.ms * 1024 / px + int(h >> 20)) / 256;
+        int y = m.top - 4 + 18 * sin256(c.ms * 1024 / py + int(h >> 8)) / 256;
+        inside(x, y, 12);
+        const int glow = 96 + iabs(sin256(c.ms * 1024 / (900 + int(h % 500)) + int(h))) * 160 / 256;
+        disc(cv, x, y, 4, kFirefly, c.alpha * glow / 256 / 3);
+        disc(cv, x, y, 2, kFirefly, c.alpha * glow / 256);
+      }
+      break;
+    case idles::exercise.v: {   // each rep counted at the top, a drop of sweat
+      const int rep = c.ms / 900 + 1, within = c.ms % 900;
+      if (within < 260 || within > 700) {
+        char n[3] = {char('0' + (rep > 9 ? 9 : rep)), '!', 0};
+        word(cv, n, m.x + (m.x < kSide / 2 ? 1 : -1) * (m.w + 14), m.headY - 6, kWhite);
+      }
+      if (rep >= 3) disc(cv, m.x - m.side * (m.w / 2 + 2), m.headY - 2 + (within * 10 / 900), 2, kSweat, c.alpha);
+      break;
+    }
+    case idles::tummy.v:   // the rumble, zigzags at his tummy
+      if (c.ms % 1600 < 1100) {
+        const int jig = (c.ms / 90) & 1;
+        for (int side = -1; side <= 1; side += 2) {
+          const int x = m.x + side * (m.w + 3), y = m.y - m.h / 3 + jig;
+          for (int k = 0; k < 3; ++k) {
+            const int x0 = x + side * k * 5, y0 = y + (k & 1 ? 4 : -4), x1 = x + side * (k + 1) * 5, y1 = y + (k & 1 ? -4 : 4);
+            stroke(cv, x0, y0, x1, y1, 1, kInk, c.alpha * 3 / 4);
+            stroke(cv, x0, y0, x1, y1, 0, kWhite, c.alpha);
+          }
+        }
+      }
+      break;
+    case idles::beg.v: {   // his bowl held up, empty
+      if (walking) break;
+      int bx = m.x, by = m.y - m.h / 4 + c.ms / 600 % 2;
+      inside(bx, by, 16);
+      for (int y = 0; y <= 6; ++y)
+        for (int x = -11 + y; x <= 11 - y; ++x) put(cv, bx + x, by + y, kBowl, c.alpha);
+      stroke(cv, bx - 12, by, bx + 12, by, 0, kInk, c.alpha);
+      break;
+    }
+    case idles::nod_off.v: {   // a z as he droops, a ! as he jerks up
+      const int ph = c.pc % 338;
+      if (ph < 268) word(cv, "z", m.x + m.side * (m.w / 2 + 8), m.top - 6 - ph / 30, kWhite);
+      else word(cv, "!", m.x, m.top - 8, kNote);
+      break;
+    }
+    case idles::nurse.v: {   // a plaster on his side, and his paw patting it
+      int px = m.x - m.side * (m.w / 2), py = m.y - m.h / 3;
+      stroke(cv, px - 6, py - 6, px + 6, py + 6, 3, kInk, c.alpha * 3 / 4);
+      stroke(cv, px - 6, py + 6, px + 6, py - 6, 3, kInk, c.alpha * 3 / 4);
+      stroke(cv, px - 6, py - 6, px + 6, py + 6, 2, kPlaster, c.alpha);
+      stroke(cv, px - 6, py + 6, px + 6, py - 6, 2, kPlaster, c.alpha);
+      put(cv, px, py, kDirt, c.alpha);
+      blob(cv, px + m.side * 4, py - 6 + iabs(sin256(c.ms * 1024 / 900)) / 64, 4, kWhite, c.alpha);
+      break;
+    }
+    case idles::queasy.v: {   // a green swirl over his head, bubbles off him
+      const int turn = c.ms * 1024 / 1500;
+      for (int k = 0; k < 12; ++k) {
+        const int ph = turn + k * 96, r = 2 + k * 3 / 2;
+        int x = m.x + r * cos256(ph) / 256, y = m.top - 12 + r * sin256(ph) / 512;
+        disc(cv, x, y, 2, kInk, c.alpha / 2);
+        disc(cv, x, y, 1, kQueasy, c.alpha);
+      }
+      for (int i = 0; i < 2; ++i) {
+        const int life = 1400, t = (c.ms + i * 700) % life;
+        disc(cv, m.x + (i ? 1 : -1) * (m.w / 2 + 4), m.headY - 20 * t / life, 2, kQueasy, c.alpha * (life - t) / life);
+      }
+      break;
+    }
+    case idles::mope.v: {   // a little raincloud over him
+      int cx = m.x, cy = m.top - 16;
+      inside(cx, cy, 18);
+      for (int i = 0; i < 5; ++i) {
+        const int life = 700, t = (c.ms + i * 140) % life;
+        stroke(cv, cx - 10 + i * 5, cy + 7 + 18 * t / life, cx - 11 + i * 5, cy + 10 + 18 * t / life, 0, kRain, c.alpha);
+      }
+      blob(cv, cx - 8, cy + 1, 6, kCloud, c.alpha), blob(cv, cx + 8, cy + 1, 6, kCloud, c.alpha), blob(cv, cx, cy - 3, 8, kCloud, c.alpha);
+      disc(cv, cx - 8, cy + 1, 6, kCloud, c.alpha), disc(cv, cx + 8, cy + 1, 6, kCloud, c.alpha);
+      break;
+    }
+    case idles::beam.v:   // hearts float up from him
+      for (int i = 0; i < 3; ++i) {
+        const int life = 1600, t = (c.ms + i * life / 3) % life;
+        const int side = (i & 1) ? 1 : -1;
+        heart(cv, m.x + side * (m.w / 2 + 6 + 6 * t / life) + 3 * sin256(t * 2) / 256, m.headY - 4 - 30 * t / life,
+              c.alpha * imin(256, (life - t) / 3) / 256);
+      }
+      break;
+    case idles::tumble.v:   // a puff where he fell, stars round his head after
+      if (c.pc >= 380 && c.pc < 600) dust(cv, m, c, m.x + m.w / 2);
+      if (c.pc >= 450 && c.pc < 900)
+        for (int k = 0; k < 3; ++k) {
+          const int ph = c.ms * 1024 / 900 + k * 341;
+          twinkle(cv, m.x + (m.w / 2 + 4) * cos256(ph) / 256, m.top - 2 + 4 * sin256(ph) / 256, 4, kStar, c.alpha);
+        }
+      break;
+    case idles::reminisce.v: bubbleCloud(cv, m, c, seed, /*memory=*/true); break;
+    default: break;   // explore: his walk round the rim is the show; a yawn is all his face
   }
 }
 

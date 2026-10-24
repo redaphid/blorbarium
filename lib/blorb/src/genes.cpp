@@ -422,6 +422,7 @@ void expressStage(const Genome& genome, Stage stage, uint32_t legacyFeats, Pheno
     if (info && v.header.len == info->bodyLen && expressedAt(v.header, stage, legacyFeats)) info->express(v, p);
   });
   p.species = speciesTraitsOf(genome, p.expressedStages, legacyFeats);
+  p.traits = traitsOf(genome, p.expressedStages, legacyFeats);
   p.oracle.voice = speciesInfo(p.species.body).starter.voice;
 }
 

@@ -110,6 +110,12 @@ Moods moodsOf(const Chemistry& chem) {
   return m;
 }
 
+// His size gene as his motion shows it (#61): 0 in a gene means as ever.
+void bodyGenes(const Phenotype& p, Appearance& a) {
+  a.bulk = p.size.base ? p.size.base : 128;
+  a.squash = p.size.squash ? p.size.squash : 128;
+}
+
 void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   const Chemistry& chem = c.chemistry();
   const Body& body = c.body();
@@ -133,6 +139,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
     a.reflexStrength = body.reflex->strength;
   }
   look(c.phenotype(), &chem, a);
+  bodyGenes(c.phenotype(), a);
   a.foreseeing = c.action() == action::foresee;
   a.glow = clamp01(chem.locus[locus::glow.v]);
   a.hangCharge = clamp01(chem.locus[locus::hanging.v]);
@@ -145,6 +152,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
     a.idle = c.idle().now;
     a.idleTicks = c.idle().ticks;
     a.idleLength = c.idle().length;
+    a.idlePace = c.idle().pace;
   }
   a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
@@ -223,6 +231,7 @@ Appearance portrait(const Genome& g, Stage stage, uint16_t generation, uint32_t 
   a.expression = a.previous = expr::neutral;
   a.lastStim = stim::none;
   look(p, nullptr, a);
+  bodyGenes(p, a);
   return a;
 }
 

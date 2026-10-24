@@ -82,6 +82,11 @@ struct Appearance {
   // paint/lively.cpp moves him through it, paint's idle props draw its prop.
   IdleId idle = idles::none;
   uint16_t idleTicks = 0, idleLength = 0;
+  uint8_t idlePace = 100;           // percent: how briskly he plays it (idle.h idlePace), his age, genes and mood
+  // His body's genes as his motion shows them (#61): bulk (size gene base,
+  // 128 = as ever) a bigger one breathes and sways slower; squash (size
+  // gene squash) how far his idles squash and stretch him.
+  uint8_t bulk = 128, squash = 128;
   Moods moods{};
   Mouthful mouth = Mouthful::Nothing;   // drawn at his mouth, as the dish item it was
   Fx injury{}, wobble{};
