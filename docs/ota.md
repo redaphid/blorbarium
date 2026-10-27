@@ -12,28 +12,34 @@ Every badge updates itself over Wi-Fi from the live site, unattended
 that trusts the current signing key and keeps its own home (upright or
 flipped) in NVS, plus a Wi-Fi network it can reach.
 
-1. **Flash over USB** from `main`/`integration` at or after the live release
-   (`./flash.sh` keeps the pet: it writes only the image, never the pet or NVS):
+**The flash station does all of it, a badge a minute:**
 
-   | Badge | Command | Boot log must say |
-   |---|---|---|
-   | Upright (every other 1.28) | `./flash.sh --once` | `home rot=2 (USB-C up, default ...)` |
-   | Flipped: 5C94094497, 5C94094999, 5C94095003 | `./flash.sh --once --flip` | `home rot=0 (USB-C down, migrated: written ...)`, then `nvs` on later boots |
+    uv run scripts/flash_station.py prep     # once: builds badge128 into outputs/station/, says what the site serves
+    uv run scripts/flash_station.py          # plug badges in one at a time; one PASS/FAIL line each
 
-   The flipped badges must run the `--flip` build once (or take
-   `DEBUG home down` over the cable): that writes `home=down` to NVS, and from
-   then on the one universal release keeps them flipped.
-2. **Give it the kids' home Wi-Fi** (2.4 GHz; up to three networks kept). No laptop needed:
-   - **Phone:** on Android Chrome (or desktop Chrome/Edge; not iPhone Safari,
-     which has no Web Bluetooth) open https://blorb.hypnodroid.com, connect the
-     badge, open the **Wi-Fi** card, type the network. The badge asks "Join
-     Wi-Fi? Turn me around!": turn it or press its button. The card says it joined.
-   - **Cable:** `uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --env <file with ssid= and password=>`,
-     or `DEBUG wifi set "Network Name" password` in a serial console.
-3. **Check it** (cable): `DEBUG ota check` answers `up_to_date`, and `DEBUG wifi`
-   says `networks=1`. Then leave it: it checks by itself when it has
-   been dark and alone for a minute, every 6 h, and never in the car (no
-   network: one 2 s scan, backing off to every 8 h).
+For each CH343 badge that appears (the Flipper and anything else are never
+touched) it writes the badge128 image as a normal upload does (the pet and NVS
+stay), checks the boot version, sets the home (`DEBUG home down` on the flipped
+5C94094497, 5C94094999 and 5C94095003, `up` on the rest; the home lives in NVS,
+which releases never touch), gives it the Wi-Fi in `.env` (`ssid=`, `password=`;
+never printed), and runs one OTA check against the live manifest, which must
+say `up_to_date`. So `prep` from the commit that is live: the badges and the
+site then agree, and every later release is an upgrade. `-v` prints each
+badge's console (masked); `--include-present` also does a badge already plugged in.
+
+By hand, the same steps: `./flash.sh --once` (every badge: one image),
+`DEBUG home down` on the flipped three (expect `home rot=0 (USB-C down, nvs ...)`),
+`uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --check`.
+
+**Another network later, no laptop:** on Android Chrome (or desktop
+Chrome/Edge; not iPhone Safari, which has no Web Bluetooth) open
+https://blorb.hypnodroid.com, connect the badge, open the **Wi-Fi** card and
+type the network. The badge asks "Join Wi-Fi? Turn me around!": turn it or
+press its button. Up to three networks are kept, newest first.
+
+After that a badge checks by itself when it has been dark and alone for a
+minute, every 6 h, and costs nothing in the car (no network: one 2 s scan,
+backing off to every 8 h).
 
 ## Away from home: releasing
 
