@@ -54,7 +54,8 @@ using wifiota::Failure;
 using wifiota::Window;
 
 constexpr uint32_t kScanMs = 10000;            // a scan the driver has not finished by then is stopped
-constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then the window closes
+constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then one more, then the window closes
+constexpr uint8_t kTriesAfterRollback = 3;      // a version that rolled back this many times here is not tried again
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
 constexpr uint32_t kConfirmFirstMs = 10000;    // on trial: the first try, once boot's own allocations have settled
 // Internal RAM a window wants free before it starts the Wi-Fi driver: the
@@ -102,6 +103,12 @@ static Window window = Window::None;
 static Phase phase = Phase::Off;
 static wifiota::Hold lastHold = wifiota::Hold::Open;
 static uint32_t phaseAt = 0, windowAt = 0, saidAt = 0, closingSince = 0;
+// The network the window is joining (its place in the list) and whether it
+// had its second try: a weak signal often fails one join (TIMEOUT, AUTH_EXPIRE)
+// and takes the next, and a failed Check waits long (Failure::Absent).
+static std::optional<size_t> joinPick;
+static bool joinRetried = false;
+
 static bool cutSockets = false;
 static uint32_t imageAt = 0;   // bytes handed to the session
 static uint32_t darkSince = 0;
@@ -236,9 +243,11 @@ static void openWindow(Window w) {
   if (!station.up()) return failWindow(Failure::Server, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
     say("provision: joining the phone's network without a scan");
+    joinPick.reset();   // the phone's network is tried once: the page says whether it joined
     station.join(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
+  joinRetried = false;
   ++scans;
   if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
   setPhase(Phase::Scanning);
@@ -254,6 +263,7 @@ static void scanned() {
   if (n < 0) {   // a scan that failed is no proof of absence: try the newest network the driver's own way
     say("the scan %s after %u ms (driver status %u): joining network #1 without it", late ? "did not finish" : "FAILED",
         unsigned(millis() - phaseAt), unsigned(station.scanStatus()));
+    joinPick = 0;
     station.join(mem().networks[0]);
     return setPhase(Phase::Joining);
   }
@@ -262,6 +272,7 @@ static void scanned() {
       pick ? "a remembered one among them" : "none of ours");
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(mem().networks.size()), n);
   say("joining network #%u of %u", unsigned(*pick + 1), unsigned(mem().networks.size()));
+  joinPick = *pick;
   station.join(mem().networks[*pick]);
   setPhase(Phase::Joining);
 }
@@ -353,11 +364,17 @@ static void readManifest() {
     return closeWindow();
   }
   schedule.checked(millis());
+  // A version that rolled back is tried kTriesAfterRollback times in all before
+  // it is refused for good: a trial that could not reach the site (a weak
+  // signal for 5 minutes) is not a bad image, and the owner is far away.
+  const std::optional<ota::Version> rb = trialPort.rolledBack();
+  const uint8_t rbs = rb ? trialPort.rollbacks() : 0;
   const wifiota::Offer offer = wifiota::judge(*m, BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion),
-                                              blorb::kFormatVersion, trialPort.rolledBack());
-  say("manifest %s %u.%u.%u size=%u fmt=%u auto=%d: %s (running %s fmt=%u)", m->image.board, unsigned(v.major),
+                                              blorb::kFormatVersion, rbs >= kTriesAfterRollback ? rb : std::nullopt);
+  say("manifest %s %u.%u.%u size=%u fmt=%u auto=%d: %s (running %s fmt=%u)%s", m->image.board, unsigned(v.major),
       unsigned(v.minor), unsigned(v.patch), unsigned(m->image.size), unsigned(m->image.fmt), int(m->autoInstall),
-      wifiota::offerName(offer), blorb::kFirmwareVersion, unsigned(blorb::kFormatVersion));
+      wifiota::offerName(offer), blorb::kFirmwareVersion, unsigned(blorb::kFormatVersion),
+      rb && *rb == v && offer == wifiota::Offer::Install ? " (it rolled back here before: trying it again)" : "");
   if (offer != wifiota::Offer::Install) {
     outcome("%s, nothing to install", wifiota::offerName(offer));
     return startLines();
@@ -473,6 +490,16 @@ static void poll(uint32_t now) {
   switch (phase) {
     case Phase::Scanning: return scanned();
     case Phase::Joining:
+      if (const hw::WifiStation::Join j = station.joining();
+          j != hw::WifiStation::Join::Joined && joinPick && !joinRetried &&
+          (j == hw::WifiStation::Join::Failed || millis() - phaseAt > kJoinMs)) {
+        joinRetried = true;
+        say("join of network #%u failed (%s, reason %u): one more try", unsigned(*joinPick + 1), station.reasonName(),
+            unsigned(station.reason()));
+        station.join(mem().networks[*joinPick]);
+        phaseAt = millis();
+        return;
+      }
       switch (station.joining()) {
         case hw::WifiStation::Join::Joined: return joined();
         case hw::WifiStation::Join::Failed:

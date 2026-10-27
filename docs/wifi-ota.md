@@ -174,7 +174,7 @@ minheap=)`.
 1. The Check reads `https://blorb.hypnodroid.com/fw/lcd128/manifest.json`.
 2. `wifiota::judge`, logged `[wifi] manifest ...: <verdict>`: `wrong_board`,
    `up_to_date` (never a downgrade unattended), `older_format`, `rolled_back`
-   (this version rolled back here once: only a page retries it), `auto_off`
+   (this version rolled back here three times: only a page retries it), `auto_off`
    (the manifest's `"auto": false`, **the owner's kill switch** for every
    badge), or `install`.
 3. `ota::Session::install` runs BEGIN's checks, among them **the P-256
@@ -187,8 +187,10 @@ minheap=)`.
 6. **Trial.** It writes nothing to the pet, opens a `confirm` window every
    20 s, and keeps itself 30 s after boot once it has read the manifest over
    Wi-Fi with the panel up and the same pet. No site in 5 minutes, or a failed
-   check: it rolls back, and never auto-installs that version again (publish
-   a newer patch version instead).
+   check: it rolls back, and installs that version again at the next check,
+   three times in all (a weak signal for 5 minutes is not a bad image), then
+   never (publish a newer patch version instead). A failed join gets one
+   more try inside the same window.
 
 ## The time, without a phone
 

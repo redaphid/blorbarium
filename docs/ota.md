@@ -59,8 +59,8 @@ flipped badges** (the flip is per badge, in NVS); it refuses to release
 `badge128_pm` (too little RAM for its Wi-Fi trial). Badges install it at their
 next check (within about 6 h at home), restart only while dark and alone, and
 keep it only after reaching the site again over Wi-Fi with the same pet;
-otherwise they roll back by themselves within 5 minutes and never retry that
-version (release a newer one). A bad signature, hash, truncated or stalled
+otherwise they roll back by themselves within 5 minutes and try it again at
+the next check, three times in all, then never (release a newer one). A bad signature, hash, truncated or stalled
 download changes nothing and is retried at the next check.
 
 - **Kill switch:** add `"auto": false` to the live manifest and publish it:

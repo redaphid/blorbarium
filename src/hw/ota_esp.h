@@ -189,15 +189,29 @@ class EspTrialPort : public ota::TrialPort {
     return ota::Version{uint16_t(v[0] | v[1] << 8), uint16_t(v[2] | v[3] << 8), uint16_t(v[4] | v[5] << 8)};
   }
 
+  // How many times running the version rolledBack() names has rolled back here.
+  uint8_t rollbacks() {
+    nvs_handle_t n;
+    if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return 0;
+    uint8_t c = 0;
+    nvs_get_u8(n, "rbn", &c);
+    nvs_close(n);
+    return c;
+  }
+
   void noteRolledBack(std::optional<ota::Version> v) override {
+    const std::optional<ota::Version> was = rolledBack();
+    const uint8_t count = v && was && *was == *v ? rollbacks() : 0;
     nvs_handle_t n;
     if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return;
     if (v) {
       const uint8_t b[6] = {uint8_t(v->major), uint8_t(v->major >> 8), uint8_t(v->minor),
                             uint8_t(v->minor >> 8), uint8_t(v->patch), uint8_t(v->patch >> 8)};
       nvs_set_blob(n, "rb", b, sizeof b);
+      nvs_set_u8(n, "rbn", uint8_t(count < 255 ? count + 1 : count));
     } else {
       nvs_erase_key(n, "rb");
+      nvs_erase_key(n, "rbn");
     }
     nvs_commit(n);
     nvs_close(n);
