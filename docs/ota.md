@@ -1,4 +1,64 @@
-# Updating the firmware over Bluetooth
+# Updating the firmware
+
+## Pre-flight: before the owner leaves
+
+Every badge updates itself over Wi-Fi from the live site, unattended
+(docs/wifi-ota.md). For that, each one needs **one cable flash** of a build
+that trusts the current signing key and keeps its own home (upright or
+flipped) in NVS, plus a Wi-Fi network it can reach.
+
+1. **Flash over USB** from `main`/`integration` at or after the live release
+   (`./flash.sh` keeps the pet: it writes only the image, never the pet or NVS):
+
+   | Badge | Command | Boot log must say |
+   |---|---|---|
+   | Upright (every other 1.28) | `./flash.sh --once` | `home rot=2 (USB-C up, default ...)` |
+   | Flipped: 5C94094497, 5C94094999, 5C94095003 | `./flash.sh --once --flip` | `home rot=0 (USB-C down, migrated: written ...)`, then `nvs` on later boots |
+
+   The flipped badges must run the `--flip` build once (or take
+   `DEBUG home down` over the cable): that writes `home=down` to NVS, and from
+   then on the one universal release keeps them flipped.
+2. **Give it the kids' home Wi-Fi** (2.4 GHz; up to three networks kept). No laptop needed:
+   - **Phone:** on Android Chrome (or desktop Chrome/Edge; not iPhone Safari,
+     which has no Web Bluetooth) open https://blorb.hypnodroid.com, connect the
+     badge, open the **Wi-Fi** card, type the network. The badge asks "Join
+     Wi-Fi? Turn me around!": turn it or press its button. The card says it joined.
+   - **Cable:** `uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --env <file with ssid= and password=>`,
+     or `DEBUG wifi set "Network Name" password` in a serial console.
+3. **Check it** (cable): `DEBUG ota check` answers `up_to_date`, and `DEBUG wifi`
+   says `networks=1 auto=1`. Then leave it: it checks by itself when it has
+   been dark and alone for a minute, every 6 h, and never in the car (no
+   network: one 2 s scan, backing off to every 8 h).
+
+## Away from home: releasing
+
+One command on the owner's laptop (it holds `~/.config/blorbarium/ota-signing-key.pem`;
+needs `npx wrangler` logged in to the Cloudflare account):
+
+    # bump kFirmwareVersion (lib/blorb/include/blorb/protocol.h) past the live one, commit, then:
+    uv run --with cryptography python tools/ota_release.py ship --prefix lcd128-test   # try it first
+    #   on a badge on the cable: DEBUG ota check https://blorb.hypnodroid.com/fw/lcd128-test/manifest.json
+    uv run --with cryptography python tools/ota_release.py ship                         # live: every badge
+    git add web/public/fw/lcd128/manifest.json && git commit -m "Release x.y.z" && git push
+
+`ship` builds `badge128`, signs it and publishes the image, then the manifest,
+to the bucket the site serves `/fw/` from. It is **one image for upright and
+flipped badges** (the flip is per badge, in NVS); it refuses to release
+`badge128_flip` (it would turn every upright badge upside down) and
+`badge128_pm` (too little RAM for its Wi-Fi trial). Badges install it at their
+next check (within about 6 h at home), restart only while dark and alone, and
+keep it only after reaching the site again over Wi-Fi with the same pet;
+otherwise they roll back by themselves within 5 minutes and never retry that
+version (release a newer one). A bad signature, hash, truncated or stalled
+download changes nothing and is retried at the next check.
+
+- **Kill switch:** add `"auto": false` to the live manifest and publish it:
+  no badge installs anything unattended.
+- **Current version on the site:** `curl https://blorb.hypnodroid.com/fw/lcd128/manifest.json`.
+
+The rest of this document is the Bluetooth update path and the trial in detail.
+
+## Updating over Bluetooth
 
 The website can put a new firmware on a dish over Bluetooth, from Android
 Chrome, with no cable and no Wi-Fi. These dishes belong to children, so the
@@ -521,10 +581,10 @@ so a cable flash always takes priority over an update.
    ```
 
    The tool refuses a tree with uncommitted changes, so the image is a
-   commit's. It builds `badge128` (pass `--env badge128_pm` for the light-sleep
-   build the releases use; on this laptop build first through the one-at-a-time
-   wrapper, `~/Worktrees/blorbarium/pio run -e badge128_pm`, then release with
-   `--no-build --env badge128_pm`) and checks the following:
+   commit's. It builds `badge128`, the one image for upright and flipped
+   badges (it refuses `badge128_flip` and `badge128_pm`; on this laptop set
+   `BLORB_PIO=~/Worktrees/blorbarium/pio`, the one-at-a-time wrapper, or build
+   through it first and pass `--no-build`) and checks the following:
    - `src/hw/ota_pubkey.h` holds this key's public half.
    - The image's own stamp (`kReleaseStamp` in `src/main.cpp`: version,
      board, save format and commit) agrees with `protocol.h`, the board and
