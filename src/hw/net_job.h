@@ -68,7 +68,10 @@ class NetJob {
   // http:// (only a cable's `DEBUG ota check http://...` asks for one).
   // False when one is still running, or PSRAM or the task could not be had.
   // `post`: a JSON body to POST instead (a text GET's reply, the pet's line pack, #59).
-  bool start(const char* url, bool text, const char* post = nullptr) {
+  // `borrowLen` > 0: `post` is that many bytes the caller keeps alive (in
+  // PSRAM) until busy() is false, sent as it is rather than copied: the
+  // remote debug report, which may carry a screenshot (src/remote_debug.h).
+  bool start(const char* url, bool text, const char* post = nullptr, size_t borrowLen = 0) {
     if (busy()) return false;
     reap();
     if (!m_) {
@@ -77,7 +80,9 @@ class NetJob {
       m_ = new (p) Mem;
     }
     std::snprintf(m_->url, sizeof m_->url, "%s", url);
-    std::snprintf(m_->post, sizeof m_->post, "%s", post ? post : "");
+    std::snprintf(m_->post, sizeof m_->post, "%s", post && !borrowLen ? post : "");
+    body_ = borrowLen ? post : m_->post;
+    bodyLen_ = borrowLen ? borrowLen : std::strlen(m_->post);
     text_ = text;
     textLen_ = 0;
     size_ = -1;
@@ -202,8 +207,8 @@ class NetJob {
     http.setUserAgent("blorbarium");
     const uint32_t t0 = millis();
     if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
-    if (m_->post[0]) http.addHeader("content-type", "application/json");
-    const int code = m_->post[0] ? http.POST(reinterpret_cast<uint8_t*>(m_->post), std::strlen(m_->post)) : http.GET();
+    if (bodyLen_) http.addHeader("content-type", "application/json");
+    const int code = bodyLen_ ? http.POST(reinterpret_cast<uint8_t*>(const_cast<char*>(body_)), bodyLen_) : http.GET();
     openMs_ = millis() - t0;
     heapAfterOpen_ = ESP.getFreeHeap();
     bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -272,6 +277,8 @@ class NetJob {
   }
 
   Mem* m_ = nullptr;
+  const char* body_ = nullptr;   // m_->post, or the caller's (borrowLen)
+  size_t bodyLen_ = 0;
   bool text_ = true;
   // Each written by one side and read by the other: plain words, never a
   // compare-and-swap.

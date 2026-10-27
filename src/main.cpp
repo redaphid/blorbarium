@@ -29,6 +29,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #elif defined(BADGE_BOARD_LCD146)
 #error "the 1.46's panel comes after build unit 20, which brings up the 1.28"
 #else
+#include "hw/log_tee.h"   // from here on `Serial` also keeps the log's last 8 KB, for remote debug
 #include <esp_heap_caps.h>
 #include <soc/soc_memory_layout.h>
 #include "hw/board_lcd128.h"
@@ -93,6 +94,7 @@ class SerialLink : public blorb::Link {
   };
   Queue* q_ = nullptr;
   uint8_t debugHead_ = 0, debugTail_ = 0;
+  const char* injected_ = nullptr;
 
   bool queue() {
 #if !defined(BADGE_BOARD_SIM)
@@ -104,12 +106,19 @@ class SerialLink : public blorb::Link {
 
  public:
   bool connected() override { return heard_; }
+  // Remote debug's `state` (src/remote_debug.h): a protocol line as if the
+  // cable had sent it (a literal), read once; it does not count as hearing a host.
+  void inject(const char* line) { injected_ = line; }
   const char* takeDebug() {
     if (debugHead_ == debugTail_ || !q_) return nullptr;
     std::memcpy(q_->taken, q_->lines[debugTail_++ % kDebugQueue], sizeof(q_->taken));
     return q_->taken;
   }
   std::optional<std::string_view> readLine() override {
+    if (const char* l = injected_) {
+      injected_ = nullptr;
+      return std::string_view(l);
+    }
     while (Serial.available() > 0) {
       const int c = Serial.read();
       cableByte();
@@ -2074,6 +2083,46 @@ static void petLinesTick(uint32_t now) {
     blorb::setPackLines(nullptr);
     Serial.printf("[lines] the pet changed: built-in lines until a check brings his own\n");
   }
+}
+
+// Remote debug (src/remote_debug.h): the pet, as a JSON value, into `out`.
+static size_t petReport(char* out, size_t cap) {
+  const int n = [&] {
+    if (!dish) return std::snprintf(out, cap, "null");
+    const OccupantSummary o = summarize(dish->occupant());
+    const blorb::Creature* c = petlines::creature();
+    constexpr const char* kStage[] = {"hatchling", "child", "adult", "elder"};
+    if (!c)
+      return std::snprintf(out, cap, "{\"kind\":\"%s\",\"gen\":%u,\"genome\":\"%08x\",\"boot_ctx\":%u}", o.kind,
+                           unsigned(o.gen), unsigned(o.genome), unsigned(dish->bootContext()));
+    return std::snprintf(out, cap,
+                         "{\"kind\":\"%s\",\"gen\":%u,\"genome\":\"%08x\",\"stage\":\"%s\",\"age_min\":%u,"
+                         "\"hunger_pct\":%d,\"boot_ctx\":%u}",
+                         o.kind, unsigned(o.gen), unsigned(o.genome),
+                         size_t(c->stage()) < 4 ? kStage[size_t(c->stage())] : "?",
+                         unsigned(o.age / blorb::kTicksPerMinute),
+                         int((int64_t(c->chemistry().drive(blorb::drive::hunger).raw) * 100) >> blorb::Fx::kFrac),
+                         unsigned(dish->bootContext()));
+  }();
+  return n > 0 && size_t(n) < cap ? size_t(n) : 0;
+}
+
+// Remote debug's `marquee <text>` (src/remote_debug.h): a message for the kids,
+// full-screen scrolling text, at most rdebug::kMarqueeMax printable ASCII
+// characters. A stub until the marquee branch brings showMarquee itself:
+// delete this one when it lands (its limit must match kMarqueeMax).
+static void showMarquee(const char* text) {
+  Serial.printf("[remote] marquee (not on this firmware yet): \"%s\"\n", text);
+}
+
+// Remote debug's `state`: what the cable's STATE and status verbs print, into
+// the log, whence the next report takes it. STATE is the protocol's, answered
+// on its next pass.
+static void remoteStateVerbs() {
+  phone.inject("STATE");
+  runDebug("power status");
+  runDebug("power stats");
+  runDebug("fps");
 }
 
 #include "wifi_ota.h"
