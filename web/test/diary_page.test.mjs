@@ -38,6 +38,47 @@ test("a pet's page data carries only his own diary, newest first, exactly as sto
   assert.ok(!JSON.stringify(q).includes("moth"), "never another pet's entries");
 });
 
+test("life stats riding in the badge's pet-lines POST are stored as /api/stats would, and feed the night's diary", async () => {
+  const env = fakeEnv();
+  const db = env.DB.raw;
+  const MAC = "3c0f026f2aec";
+  // No stats: as before, nothing stored, and the reply is the same pack.
+  const plain = await worker.fetch(new Request("https://blorb.test/api/pet-lines", { method: "POST",
+    body: JSON.stringify({ mac: MAC, genome: fixtures[2].genome, format: "pack" }) }), env, { waitUntil() {} });
+  assert.equal(plain.status, 200);
+  const packText = await plain.text();
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM life_stats").get().n, 0);
+  assert.equal(await runDiaries(env, { day: "2099-06-01" }), 0);
+
+  // With stats: the same reply, and a life_stats row exactly like /api/stats makes.
+  const withStats = await worker.fetch(new Request("https://blorb.test/api/pet-lines", { method: "POST",
+    body: JSON.stringify({ mac: MAC, genome: fixtures[2].genome, format: "pack", stats_version: 2,
+      stats: { feeds: 4, knocks: 1, fights: { won: 1, lost: 0 } } }) }), env, { waitUntil() {} });
+  assert.equal(await withStats.text(), packText);
+  const row = db.prepare("SELECT id, mac, creature_id, stats_version, stats_json FROM life_stats").get();
+  assert.equal(row.mac, MAC);
+  assert.equal(row.stats_version, 2);
+  assert.deepEqual(JSON.parse(row.stats_json), { feeds: 4, knocks: 1, fights: { won: 1, lost: 0 } });
+  const viaStats = (await req(env, "/api/stats", { mac: MAC, genome: fixtures[2].genome,
+    genome_hash: (await req(env, "/api/pet-lines", { mac: MAC, genome: fixtures[2].genome })).body.genome_hash,
+    stats_version: 2, stats: { feeds: 4, knocks: 1, fights: { won: 1, lost: 0 } } })).body;
+  const twin = db.prepare("SELECT mac, creature_id, stats_version, stats_json, parents_json FROM life_stats WHERE id = ?").get(viaStats.stats_id);
+  const ours = db.prepare("SELECT mac, creature_id, stats_version, stats_json, parents_json FROM life_stats WHERE id = ?").get(row.id);
+  assert.deepEqual({ ...ours }, { ...twin }, "the same row /api/stats would write");
+  db.prepare("DELETE FROM life_stats WHERE id = ?").run(viaStats.stats_id);
+
+  // A stats value that is not an object is ignored; the lines still come back.
+  const bad = await req(env, "/api/pet-lines", { mac: MAC, genome: fixtures[2].genome, stats: [1, 2] });
+  assert.equal(bad.status, 200);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM life_stats").get().n, 1);
+
+  // The 04:00 cron writes his entry from them, and his page shows it.
+  assert.equal(await runDiaries(env, { day: "2099-06-02" }), 1);
+  const p = (await req(env, `/api/pet?genome_hash=${bad.body.genome_hash}`)).body;
+  assert.equal(p.diary[0].day, "2099-06-02");
+  assert.match(p.diary[0].entry, /fed 4 times/);
+});
+
 // A tiny DOM: enough of document, elements and fetch for the diary box's script.
 function fakePage({ search = "", stored = null, pet }) {
   const els = {};

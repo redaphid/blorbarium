@@ -149,6 +149,17 @@ async function postPetLines(request, env) {
     parentHash: /^[0-9a-f]{64}$/.test(String(body.parent_genome_hash ?? "")) ? body.parent_genome_hash : null,
   });
   const creature = await store.findCreature(env.DB, mac, hash);
+  // His life stats, riding along in the same Wi-Fi window (#38/#39): stored as
+  // POST /api/stats stores them, so the nightly diary has something to tell.
+  // Optional; a bad one never costs him his lines.
+  if (body.stats && typeof body.stats === "object" && !Array.isArray(body.stats)) {
+    try {
+      await storeUpload(env.DB, { mac, creatureId: creature.id, statsVersion: Number(body.stats_version) || 1,
+        stats: body.stats, parents: body.parents });
+    } catch (e) {
+      console.error(JSON.stringify({ msg: "pet-lines stats not stored", mac, error: String(e?.message ?? e) }));
+    }
+  }
 
   const have = await store.latestPack(env.DB, creature.id);
   if (have) return packOr(body, packReply(have, creature, { cached: true }));
