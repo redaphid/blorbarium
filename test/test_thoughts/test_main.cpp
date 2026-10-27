@@ -409,14 +409,15 @@ TEST(Prophecy, OneLongShakeIsOneProphecy) {
   EXPECT_EQ(r.prophecies(), 1);
 }
 
-TEST(Prophecy, TheVoiceChangesHowTheSameLineIsSaid) {
-  char mystic[kThoughtLineCap], hoarder[kThoughtLineCap], terse[kThoughtLineCap];
-  thoughtLine(thought::p_mud, 0, voice::mystic, 0, mystic);
-  thoughtLine(thought::p_mud, 0, voice::hoarder, 0, hoarder);
-  thoughtLine(thought::p_mud, 0, voice::terse, 0, terse);
-  EXPECT_STRNE(mystic, hoarder);
-  EXPECT_STRNE(mystic, terse);
-  EXPECT_NE(std::string(hoarder).find("MUD"), std::string::npos) << "the voice frames the line; it keeps its meaning";
+TEST(Prophecy, ASharedLineIsSaidPlainInEveryVoice) {
+  const std::string bare = thoughtInfo(thought::p_mud)->text;
+  char out[kThoughtLineCap];
+  for (const VoiceInfo& v : VOICES)
+    for (uint32_t pick = 0; pick < 256; ++pick) {
+      thoughtLine(thought::p_mud, 0, v.id, uint8_t(pick), out);
+      if (v.firstOnly) EXPECT_EQ(bare.rfind(out, 0), 0u) << v.name << ": a terse voice only cuts it short: " << out;
+      else EXPECT_EQ(out, bare) << v.name << " wrapped the shared line";
+    }
 }
 
 TEST(Heirloom, TheLineageNamesTheGenerationThatLearnedAFear) {
@@ -465,7 +466,7 @@ TEST(Voice, ATerseVoiceStopsAtTheFirstSentenceAndAnEllipsisIsNotOne) {
   EXPECT_STREQ(out, "GEN 12.");
 }
 
-TEST(Voice, AVoicesOwnLineReplacesTheFrame) {
+TEST(Voice, AVoicesOwnLineReplacesTheSharedOne) {
   char out[kThoughtLineCap];
   thoughtLine(thought::p_pond_no, 0, voice::terse, 0, out);
   EXPECT_STREQ(out, "NO.");
@@ -482,7 +483,7 @@ TEST(Personality, PreviewSaysWhatTheDeviceSays) {
   char out[kThoughtLineCap];
   for (const Case& k : kCases) {
     thoughtLine(ThoughtId{k.thought}, k.num, VoiceId{k.voice}, k.pick, out, SpeciesId{k.species}, kParityWords);
-    ASSERT_STREQ(out, k.text) << "tools/personality.py frames thought " << int(k.thought) << " differently; port the change";
+    ASSERT_STREQ(out, k.text) << "tools/personality.py says thought " << int(k.thought) << " differently; port the change";
   }
 }
 
@@ -515,7 +516,7 @@ TEST(Personality, ASpeciesLineIsHisAlone) {
 }
 
 // The owner's complaint (#34): every line came wrapped in a voice frame, so
-// half the dish said "..., OR SOMETHING" and "SO, UM, ...". A species' own line
+// half the pets said "..., OR SOMETHING" and "SO, UM, ...". A species' own line
 // is his voice already: said exactly as written, whatever the voice or draw.
 TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
   char out[kThoughtLineCap];
@@ -524,7 +525,7 @@ TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
     uint8_t lines = 0;
     for (const SpeciesLine& m : SPECIES_LINES) lines += m.species == l.species && m.thought == l.thought;
     for (const VoiceInfo& v : VOICES)
-      for (uint32_t pick = 0; pick < 2u * kFrameOneIn * lines; ++pick) {
+      for (uint32_t pick = 0; pick < 8u * lines; ++pick) {
         thoughtLine(l.thought, 0, v.id, uint8_t(pick), out, l.species);
         bool known = false;
         for (const SpeciesLine& m : SPECIES_LINES)
@@ -534,20 +535,56 @@ TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
   }
 }
 
-// A shared line (the fallback, when his file has none for the row) wears a
-// frame only one draw in kFrameOneIn.
-TEST(Voice, ASharedLineIsFramedOnlyNowAndThen) {
+// The owner (2026-10-27) saw "THE REEDS SAY: YUM." and "SO IT IS... CRUNCH."
+// on a badge with no pack: the voice frames came back. No line wears one, for
+// any thought, species, voice or draw: each is one of the row's lines as
+// written (a terse voice may only cut a shared line short), and none starts or
+// ends with a frame the firmware used to add.
+TEST(Voice, NoSaidLineWearsAFrame) {
+  static constexpr const char* kLeads[] = {"THE REEDS SAY", "SO IT IS", "HEED:", "OOH, WAIT.", "GOOD NEWS:", "PSST."};
+  static constexpr const char* kTags[] = {"SO IT IS.", "... SOON.", ". HOORAY!", ". TELL NO ONE."};
+  std::vector<SpeciesId> who{kSharedOnly};
+  for (const SpeciesInfo& sp : SPECIES) who.push_back(sp.id);
   char out[kThoughtLineCap];
-  const std::string bare = thoughtInfo(thought::p_mud)->text;
-  for (const VoiceInfo& v : VOICES) {
-    int framed = 0;
-    for (uint32_t pick = 0; pick < 256; ++pick) {
-      thoughtLine(thought::p_mud, 0, v.id, uint8_t(pick), out);
-      framed += out != bare;
-    }
-    if (std::string(v.name) == "terse") EXPECT_EQ(framed, 0);
-    else EXPECT_EQ(framed, 256 / kFrameOneIn) << v.name;
-  }
+  for (SpeciesId s : who)
+    for (const VoiceInfo& v : VOICES)
+      for (const ThoughtInfo& t : THOUGHTS) {
+        // What the row may say, as written: his own lines, else the voice's, else the shared one.
+        std::vector<std::string> written;
+        for (const SpeciesLine& l : SPECIES_LINES) if (l.species == s && l.thought == t.id) written.emplace_back(l.text);
+        const bool own = !written.empty();
+        if (!own) for (const VoicedLine& l : VOICED_LINES) if (l.voice == v.id && l.thought == t.id) written.emplace_back(l.text);
+        const bool shared = written.empty();
+        if (shared) written.emplace_back(t.text);
+        const bool marked = std::any_of(written.begin(), written.end(), [](const std::string& w) {
+          return w.find_first_of("#@*") != std::string::npos;
+        });
+        for (uint32_t pick = 0; pick < 32; ++pick) {
+          thoughtLine(t.id, 7, v.id, uint8_t(pick), out, s);
+          const std::string said(out);
+          for (const char* lead : kLeads) ASSERT_NE(said.rfind(lead, 0), 0u) << v.name << " " << t.name << ": " << said;
+          for (const char* tag : kTags) {
+            const size_t n = std::strlen(tag);
+            ASSERT_FALSE(said.size() >= n && said.compare(said.size() - n, n, tag) == 0) << v.name << " " << t.name << ": " << said;
+          }
+          if (marked) continue;
+          const bool asWritten = std::any_of(written.begin(), written.end(), [&](const std::string& w) {
+            return said == w || (shared && v.firstOnly && w.rfind(said, 0) == 0);
+          });
+          ASSERT_TRUE(asWritten) << v.name << " " << t.name << " said \"" << said << "\", not a line as written";
+        }
+      }
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+    for (const char* lead : kLeads) EXPECT_NE(std::string(v.text).rfind(lead, 0), 0u) << v.text;
+}
+
+// The kids do not know "dish" (the code's name for the habitat): no line says it.
+TEST(Voice, NoLineSaysDish) {
+  auto clean = [](const char* text) { return std::string(text).find("DISH") == std::string::npos; };
+  for (const ThoughtInfo& t : THOUGHTS) EXPECT_TRUE(clean(t.text)) << t.name << ": " << t.text;
+  for (const VoicedLine& l : VOICED_LINES) EXPECT_TRUE(clean(l.text)) << l.text;
+  for (const SpeciesLine& l : SPECIES_LINES) EXPECT_TRUE(clean(l.text)) << l.text;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) EXPECT_TRUE(clean(v.text)) << v.text;
 }
 
 // Half of later shakes are the ball's bare answer: in the species' own words

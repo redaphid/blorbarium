@@ -1,7 +1,7 @@
 GRUNGO
 frog: a skittish oracle
 Element Splash, style Trick, power foresee. Voice: mystic. His own lines below are said exactly as written, so they carry
-the voice themselves; the mystic frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -36,7 +36,7 @@ I FORESAW THIS. HOOD UP. THE REEDS KNOW.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   I FORESEE FLIES. IN MY MOUTH.
@@ -48,7 +48,7 @@ peckish
   THE ORACLE ACCEPTS CRUMBS.
 starving
   I WOULD EAT MY OWN HOOD.
-  I FORESEE ME EATING THE DISH.
+  I FORESEE ME EATING MY HOME.
   THE PROPHECY IS: LUNCH. NOW.
 hoarding
   I HIDE IT IN MY HOOD. SHH.
@@ -120,7 +120,7 @@ dream_pellets
   ZZZ... A RAINY FLY PARADE...
   ZZZ... A FLY BUFFET... HOOD UP
 see_pellet
-  I SEE... A PELLET. IN THE DISH
+  I SEE... A PELLET. RIGHT HERE
   I SEE... A CRUMB. IT IS MINE.
   I SEE... SNACK. RIGHT THERE.
 see_phone
@@ -296,7 +296,7 @@ legs
 shiny
   SOMETHING SHINY. MY EYES.
 guard
-  I GUARD THE DISH. I FORESAW IT
+  I GUARD MY HOME. I FORESAW IT
 old_fly
   I REMEMBER A FLY. IT WAS FAT.
 hi_you
@@ -403,11 +403,9 @@ teach_shake
 # A shake's bare answer (the Magic 8-Ball half), in his words instead of the
 # ball's plain YES. / NO. / ASK AGAIN LATER.
 verdict_yes
-  THE REEDS SAY YES.
   YES. I SAW IT IN THE MUD.
   YES. CROAK. YES.
 verdict_no
-  THE REEDS SAY NO.
   NO. HOOD UP. NO.
   NO. THE FLIES LAUGHED.
 verdict_later
@@ -461,5 +459,4 @@ cant_see
   I AM NOT HIDING. HOODED.
   HOOD UP. NO ONE SEES ME.
 yuck
-  THE REEDS SAY: NOT THAT ONE.
   A ROTTEN OMEN. NO THANKS.

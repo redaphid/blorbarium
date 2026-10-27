@@ -1,7 +1,7 @@
 GILLY
 axolotl: never down for long
 Element Splash, style Guard, power mend. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry
-the voice themselves; the cheerful_doom frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -37,7 +37,7 @@ IT'LL GROW BACK! I'M FINE! HUGS!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   SNACK? I'D LOVE A SNACK!
@@ -130,7 +130,7 @@ see_phone
   I SEE... A PHONE! IT'S SMILING
   I SEE... YOU! HOLDING A PHONE!
 see_nothing
-  I SEE... AN EMPTY DISH! OH.
+  I SEE... NOTHING HERE! OH.
   I SEE... NO FOOD! A NEW START!
   I SEE... NOTHING! FRESH IDEAS!
 see_damp
@@ -273,7 +273,7 @@ no_echo
   HELLO! NO ECHO! HELLO ANYWAY!
   HELLO! NO ECHO! HELLO AGAIN!
 king
-  BEST FRIEND OF THE DISH!
+  BEST FRIEND OF THIS PLACE!
 smells_me
   SMELLS LIKE POND! HOME!
 todo
@@ -297,7 +297,7 @@ legs
 shiny
   SOMETHING SHINY! MY SMILE!
 guard
-  GUARDING THE DISH! WITH LOVE!
+  GUARDING HOME! WITH LOVE!
 old_fly
   I REMEMBER A BIG SPLASH! FUN!
 hi_you

@@ -4,10 +4,8 @@
 // A species' own answers to a shake stand in for the ball's plain ones
 // (kVerdicts in thoughts.cpp), kind by kind: 0 yes, 1 no, 2 not yet.
 // BLORB_SPECIES_VERDICT(speciesId, species, kind, text)
-BLORB_SPECIES_VERDICT(0, grungo, 0, "THE REEDS SAY YES.")
 BLORB_SPECIES_VERDICT(0, grungo, 0, "YES. I SAW IT IN THE MUD.")
 BLORB_SPECIES_VERDICT(0, grungo, 0, "YES. CROAK. YES.")
-BLORB_SPECIES_VERDICT(0, grungo, 1, "THE REEDS SAY NO.")
 BLORB_SPECIES_VERDICT(0, grungo, 1, "NO. HOOD UP. NO.")
 BLORB_SPECIES_VERDICT(0, grungo, 1, "NO. THE FLIES LAUGHED.")
 BLORB_SPECIES_VERDICT(0, grungo, 2, "MIST IN MY HOOD. ASK LATER.")

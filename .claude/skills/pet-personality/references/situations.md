@@ -25,13 +25,13 @@ pet that never meets a phone never says them; he still says everything else.
 |---|---|
 | hungry | He is half hungry or more. |
 | starving | He is very hungry (eight tenths or more). |
-| hoarding | He is awake and not hungry, and a fresh pellet sits in the dish. |
+| hoarding | He is awake and not hungry, and a fresh pellet sits in his home. |
 | chewing | He has a fresh pellet in his mouth. |
 | rotten_bite | He has bitten a rotten pellet. |
-| rotten_near | He is awake and a rotten pellet sits in the dish. |
+| rotten_near | He is awake and a rotten pellet sits in his home. |
 | sick | Poison from rotten food is in him. |
 | hurt | He is injured (a battle, a bad fall). |
-| knocked | He is awake and someone just tapped the dish. |
+| knocked | He is awake and someone just tapped his home. |
 | shaken | He is hopping from a shake right now. |
 | dreads_shake | He is awake, being held, and has learned that shaking frightens him. |
 | dreads | He has learned that shaking frightens him. |
@@ -50,7 +50,7 @@ pet that never meets a phone never says them; he still says everything else.
 | singing | He is singing to himself (the sing idle): notes rise round him. |
 | dancing | He is dancing on his own (the dance idle): a wiggle, notes about him. |
 | chasing_tail | He is spinning round after his own tail (the chase_tail idle). |
-| digging | He is digging at the dish floor, dirt flying (the dig idle). |
+| digging | He is digging at the floor of his home, dirt flying (the dig idle). |
 | peeking | He has come up to the glass to peek at the kid (the peek idle). |
 | shadow_boxing | He is practising his duel stance, jabbing at the air (the shadow_box idle). |
 | juggling | He is juggling a pebble over his head (the juggle idle). |
@@ -64,9 +64,9 @@ pet that never meets a phone never says them; he still says everything else.
 | discovering | He has found something small at his feet: a flower or a beetle (the discover idle). |
 | hiding | He is hiding in his hood, shell or wings (the hide idle). |
 | foreseeing | He is in his oracle trance. |
-| sees_pellet | He is in the trance and there is a pellet in the dish. |
+| sees_pellet | He is in the trance and there is a pellet in his home. |
 | sees_phone | He is in the trance and a phone is near. |
-| sees_famine | He is in the trance, the dish is empty and the pantry is bare. |
+| sees_famine | He is in the trance, his home is empty and the pantry is bare. |
 | elder | He is awake and an elder. |
 | old | He is an elder. |
 | night | He is awake at night. |

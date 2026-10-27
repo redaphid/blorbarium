@@ -1,7 +1,7 @@
 HUSHWING
 marsh owl: silent wings
 Element Sprout, style Trick, power hush. Voice: ominous. His own lines below are said exactly as written, so they carry
-the voice themselves; the ominous frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -39,7 +39,7 @@ SHH. NOTED. I SAW. HOO.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   HUNGER STIRS. QUIETLY.
@@ -96,7 +96,7 @@ inherited
 counted
   I COUNTED THE QUIET. ALL OF IT
   A STARING CONTEST. WALL WON.
-  I HAVE READ THE DISH. TWICE.
+  I HAVE READ THIS PLACE. TWICE.
 put_me_down
   PUT ME DOWN. GENTLY. SILENTLY.
   I PREFER A BRANCH. A STILL ONE
@@ -131,7 +131,7 @@ see_phone
   I SEE... A GLOWING SLAB. SHH.
   I SEE... A FACE. TOO CLOSE.
 see_nothing
-  I SEE... AN EMPTY DISH. GRAVE.
+  I SEE... NOTHING HERE. GRAVE.
   I SEE... NOTHING. NOT A CRUMB.
   I SEE... A VERY QUIET TUMMY.
 see_damp
@@ -273,7 +273,7 @@ serious_face
 no_echo
   HOO. HOO? THE ECHO IS SHY.
 king
-  WARDEN OF THE QUIET DISH.
+  WARDEN OF THE QUIET HOME.
 smells_me
   SMELLS LIKE MARSH. LIKE HOME.
 todo
@@ -297,7 +297,7 @@ legs
 shiny
   SOMETHING SHINY. NOTED.
 guard
-  I GUARD THE DISH. UNBLINKING.
+  I GUARD MY HOME. UNBLINKING.
 old_fly
   I REMEMBER A MOONLESS NIGHT.
 hi_you
