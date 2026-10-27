@@ -749,9 +749,10 @@ TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
 
 // ---- feeding (feed_show.h, feeding.cpp) ------------------------------------------------
 
-// Nothing heard, dropped, refused or eaten lately: no meter, no bubble, no
-// cookie; only the pantry bar, which is always there.
-TEST(Feeding, NoNewsDrawsNothingButThePantry) {
+// Nothing heard, dropped, refused or eaten lately: no bubble, no cookie
+// springing out; only the hunger cookies up the left rim, which are always
+// there and always show how full he is.
+TEST(Feeding, NoNewsDrawsNothingButTheHungerCookies) {
   const auto& pack = paint::placeholderPack();
   Appearance a = adult(0.1, 0.1);
   a.pantry = 2;
@@ -759,10 +760,17 @@ TEST(Feeding, NoNewsDrawsNothingButThePantry) {
   a.feed.fullness = fx(0.5);
   Appearance hungry = a;
   hungry.feed.fullness = fx(0.1);
-  EXPECT_EQ(countChanged(*render(a, pack), *render(hungry, pack)), 0) << "no meter";
+  auto rest = [](const Canvas240& cv) {   // all but the left rim, where the cookies are
+    std::vector<uint16_t> v;
+    for (int y = 0; y < kSide; ++y)
+      for (int x = 50; x < kSide; ++x) v.push_back(cv.px[y * kSide + x]);
+    return v;
+  };
+  EXPECT_GT(countChanged(*render(a, pack), *render(hungry, pack)), 0) << "the cookies follow how full he is";
+  EXPECT_EQ(rest(*render(a, pack)), rest(*render(hungry, pack))) << "and nothing else does";
   Appearance none = a;
   none.feed.pantryMax = 0;
-  EXPECT_GT(countChanged(*render(a, pack), *render(none, pack)), 200) << "the pantry bar";
+  EXPECT_GT(countChanged(*render(a, pack), *render(none, pack)), 200) << "the hunger cookies";
 }
 
 // The second knock says FOOD at once: a cookie springs out of the rim's
@@ -834,14 +842,8 @@ TEST(Feeding, AnEmptyPantryIsAThoughtOfEmojiNotWords) {
   EXPECT_GT(find(*render(a, pack), kWords).count, 20) << "I'M FULL! is still words";
 }
 
-// ---- the pantry bar -----------------------------------------------------------------
+// ---- the pantry colour ---------------------------------------------------------------
 
-// A pixel in the bar's band at `turn` (1/1024 turn clockwise from three o'clock).
-uint16_t barAt(const Canvas240& cv, int turn) {
-  const double t = turn * 6.283185307179586 / 1024;
-  const int x = int(std::lround(119.5 + 108 * std::cos(t))), y = int(std::lround(119.5 + 108 * std::sin(t)));
-  return cv.px[y * kSide + x];
-}
 int red(uint16_t p) { return ((p >> 11) & 31) * 255 / 31; }
 int greenOf(uint16_t p) { return ((p >> 5) & 63) * 255 / 63; }
 
@@ -855,33 +857,15 @@ TEST(Pantry, ItsColourGoesFromGreenToRed) {
   for (int f = 64; f < 256; f += 16) EXPECT_LE(greenOf(paint::pantryColour(f)), greenOf(paint::pantryColour(f + 16)) + 24) << f;
 }
 
-// Its fill is the pellets left: at each level the bar is lit that far along,
-// in that level's colour, and past it is the dark track.
-TEST(Pantry, TheBarIsFilledToThePelletsLeftInTheirColour) {
-  const auto& pack = paint::placeholderPack();
-  constexpr int kA0 = 668, kA1 = 762;   // feeding.cpp kBarA0, kBarA1
-  for (int left = 0; left <= 4; ++left) {
-    Appearance a = adult();
-    a.pantry = uint8_t(left);
-    a.feed.pantryMax = 4;
-    auto cv = render(a, pack);
-    const uint16_t want = paint::pantryColour(256 * left / 4);
-    const int lit = kA0 + (kA1 - kA0) * left / 4;
-    if (left > 0) EXPECT_EQ(barAt(*cv, kA0 + 4), want) << left << " left: lit from the start";
-    if (left > 0) EXPECT_EQ(barAt(*cv, lit - 4), want) << left << " left: up to its level";
-    if (left < 4) EXPECT_NE(barAt(*cv, lit + 6), want) << left << " left: dark past it";
-  }
-}
-
-// A knock knock on an empty pantry shakes it hard; nothing else does.
+// A knock knock on an empty pantry shakes the hunger cookies hard; nothing else does.
 TEST(Pantry, ItShakesOnlyWhenAKnockKnockFindsItEmpty) {
   const auto& pack = paint::placeholderPack();
   Appearance a = adult();
   a.feed.pantryMax = 4;
-  auto bar = [&](const Canvas240& cv) {   // the bar's corner of the panel, clear of the thought bubble
+  auto bar = [&](const Canvas240& cv) {   // the cookies' stretch of the left rim, clear of the thought bubble
     std::vector<uint16_t> v;
-    for (int y = 4; y < 50; ++y)
-      for (int x = 30; x < 122; ++x) v.push_back(cv.px[y * kSide + x]);
+    for (int y = 50; y < 190; ++y)
+      for (int x = 0; x < 30; ++x) v.push_back(cv.px[y * kSide + x]);
     return v;
   };
   Appearance still = a;
@@ -968,14 +952,13 @@ TEST(Picker, TheChosenMomentHandsOverToTheEgg) {
   EXPECT_EQ(differs(*render(chosen, pack), *plain, 0, 0, kSide, kSide), 0) << "then the plain egg";
 }
 
-// The belly meter up the left rim: fuller, more of it lit.
-TEST(Feeding, TheBellyMeterShowsHowFullHeIs) {
+// The hunger cookies up the left rim: fuller, more of them whole.
+TEST(Feeding, TheHungerCookiesShowHowFullHeIs) {
   const auto& pack = paint::placeholderPack();
   Appearance plain = adult();
   plain.feed.pantryMax = 4;
   auto lit = [&](double full) {
     Appearance a = plain;
-    a.feed.meterMs = 100;
     a.feed.fullness = fx(full);
     auto cv = render(a, pack);
     auto base = render(plain, pack);
