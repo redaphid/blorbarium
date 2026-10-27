@@ -169,7 +169,12 @@ async function postPetLines(request, env) {
   }
 
   const busy = await store.activeJob(env.DB, creature.id);
-  if (busy) return json({ status: busy.status, job: busy.id, retry_after_s: 30 }, 202, { "retry-after": "30" });
+  if (busy) {
+    // Asked again while it waits: queue it again too (a claim runs it once), so
+    // a job no runner has picked up (a lost message, a stopped cron) is not stranded.
+    if (busy.status === "queued") await sendToQueue(env, busy.id);
+    return json({ status: busy.status, job: busy.id, retry_after_s: 30 }, 202, { "retry-after": "30" });
+  }
   if (await store.generationsSince(env.DB, mac, Date.now() - DAY_MS) >= s.dailyCap) {
     return fail(429, "this badge has had its packs for today");
   }

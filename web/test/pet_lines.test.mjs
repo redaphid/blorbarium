@@ -117,10 +117,16 @@ test("wait:false hands the job to the queue, and the badge's next POST gets its 
   assert.equal(r.status, 202);
   const { job } = await r.json();
   assert.deepEqual(PACKS.sent.map((m) => m.body), [{ job }]);
-  assert.equal((await post(env, badge)).status, 202);   // still being written: no second job, no second message
-  assert.equal(PACKS.sent.length, 1);
+  // Asked again before it is written: the same job, sent again (so a lost message
+  // or a job queued before the queue existed is not stranded), and run once.
+  const r2 = await post(env, badge);
+  assert.equal(r2.status, 202);
+  assert.equal((await r2.json()).job, job);
+  assert.deepEqual(PACKS.sent.map((m) => m.body), [{ job }, { job }]);
 
-  assert.deepEqual(await deliver(env, PACKS), ["ack"]);
+  assert.deepEqual(await deliver(env, PACKS), ["ack", "ack"]);
+  assert.equal(env.AI.calls.filter((c) => /character bible/.test(c.input.messages.at(-1).content)
+    && !/lines for each situation/.test(c.input.messages.at(-1).content)).length, 1);
   const again = await post(env, badge);
   assert.equal(again.status, 200);
   assert.match(again.headers.get("content-type"), /^text\/plain/);
