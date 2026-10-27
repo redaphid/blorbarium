@@ -89,8 +89,8 @@ test("joining from the page folds it; a failed try brings it back open; another 
   assert.equal(page.els.wifiFold.open, true);
 });
 
-test("the page's Wi-Fi code reports joins, failures and a new dish to the box", () => {
-  assert.match(html, /wifiTell\("ok", `The dish joined[^\n]*\n\s*BlorbWifi\.joined\(\);/);
+test("the page's Wi-Fi code reports joins, failures and a new Blorb to the box", () => {
+  assert.match(html, /wifiTell\("ok", `The Blorb joined[^\n]*\n\s*BlorbWifi\.joined\(\);/);
   assert.match(html, /\} catch \(err\) \{\n\s*BlorbWifi\.failed\(\);/);
   assert.match(html, /BlorbWifi\.reset\(\);/);
   assert.match(html, /dispatchEvent\(new CustomEvent\("blorb:pet", \{ detail: \{ pet: p, fromBadge: !!genome \} \}\)\)/);

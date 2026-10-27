@@ -91,7 +91,7 @@
       const r = await channel.send(cmd);
       for (const l of r.lines) log(`  ${l}`);
       log(`← ${r.text}`, r.ok ? "ok" : "err");
-      if (/^ERR 423/.test(r.text)) say("Locked: press Unlock, then BOOT on the dish.");
+      if (/^ERR 423/.test(r.text)) say("Locked: press Unlock, then BOOT on the Blorb.");
       if (/^(UNLOCK|LOCK|SCALE|LOOK|WALL)/.test(cmd) || !r.ok) refresh();
       if (cmd === "STATUS" && r.ok) applyFight(r.text);
       return r;
@@ -110,7 +110,7 @@
     applyFight(r.text);
     const unlock = (/unlock=(\w+)/.exec(r.text) || [])[1];
     panel.dataset.unlock = unlock;
-    if (unlock === "asking") say("Press BOOT on the dish now (after 1.5 s, within 30 s).");
+    if (unlock === "asking") say("Press BOOT on the Blorb now (after 1.5 s, within 30 s).");
     else if (unlock === "open") say("Unlocked for this connection.");
     if (mock) panel.querySelector("#dbgMockPress").hidden = unlock !== "asking";
   }
@@ -185,7 +185,7 @@
 
     panel = el("section", { id: "debugPanel", className: "dbg" },
       el("h2", { textContent: "Debug" }),
-      el("p", { className: "hint", id: "dbgSay", textContent: "Connect to the dish. Harmful commands need Unlock and a BOOT press." }),
+      el("p", { className: "hint", id: "dbgSay", textContent: "Connect to the Blorb. Harmful commands need Unlock and a BOOT press." }),
       el("p", { className: "dbg-status", id: "dbgStatus", textContent: "not connected" }),
       el("p", { className: "dbg-status", id: "dbgFight", textContent: "Fight: ?" }),
       retry,
@@ -294,7 +294,7 @@
       channel = null;
       showRetry(true);
       if (e && e.name === "NotFoundError") {
-        say(`This dish shows no debug link (${e.message}). Firmware 0.7.0 and newer has one: update it first. ` +
+        say(`This Blorb shows no debug link (${e.message}). Firmware 0.7.0 and newer has one: update it first. ` +
           "If it already runs 0.7.0, the phone may hold an old copy of its Bluetooth layout: in Android Settings, " +
           "Apps, show system apps, Bluetooth, Storage, clear the cache; then connect again.");
       } else {

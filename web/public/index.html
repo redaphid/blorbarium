@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blorbarium</title>
-<meta name="description" content="Talk to grungo's dish over Bluetooth.">
+<meta name="description" content="Talk to grungo's Blorb over Bluetooth.">
 <meta name="theme-color" content="#2f3a1c">
 <link rel="icon" href="grungo.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -186,18 +186,18 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <div class="dish-wrap">
     <div class="dish" id="dish"><img src="grungo.png" alt="grungo, a green frog in a brown hood" width="384" height="384"></div>
     <h1 id="name">grungo</h1>
-    <p class="meta" id="meta">Bring your phone close to the dish and connect.</p>
+    <p class="meta" id="meta">Bring your phone close to the Blorb and connect.</p>
     <p class="doing" id="doing" hidden></p>
     <div class="actions">
-      <button id="connect" type="button">Connect to a dish</button>
+      <button id="connect" type="button">Connect to a Blorb</button>
       <button id="reconnect" type="button" class="ghost" hidden>Reconnect</button>
-      <button id="another" type="button" class="ghost" hidden>Connect another dish</button>
+      <button id="another" type="button" class="ghost" hidden>Connect another Blorb</button>
       <button id="wider" type="button" class="ghost" hidden>Can't find it? Search wider</button>
     </div>
   </div>
 
   <section id="mockChooser" hidden>
-    <h2>Choose a dish (pretend)</h2>
+    <h2>Choose a Blorb (pretend)</h2>
     <div class="actions" id="mockChoices"></div>
   </section>
 
@@ -209,7 +209,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
     <div class="actions">
       <button id="updateGo" type="button" class="big" hidden>Update</button>
-      <button id="mockPress" type="button" class="ghost" hidden>Press the dish's button (pretend)</button>
+      <button id="mockPress" type="button" class="ghost" hidden>Press the Blorb's button (pretend)</button>
     </div>
   </section>
 
@@ -218,13 +218,13 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <section id="wifiBox" hidden>
     <details id="wifiFold" open>
     <summary id="wifiSummary">Wi-Fi</summary>
-    <p class="hint">Give the dish your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
+    <p class="hint">Give the Blorb your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
     <form id="wifiForm" autocomplete="off">
       <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
       <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
       <button type="submit">Connect to Wi-Fi</button>
     </form>
-    <p class="hint" id="wifiHint" role="status">The password goes to the dish and nowhere else.</p>
+    <p class="hint" id="wifiHint" role="status">The password goes to the Blorb and nowhere else.</p>
     </details>
     <script>
     // Once the dish's Wi-Fi works, this box folds away at the bottom of the page:
@@ -270,7 +270,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <dl class="kv">
       <dt>Genome hash</dt><dd class="hash" id="genomeHash">…</dd>
       <dt>Genes</dt><dd id="geneCount">…</dd>
-      <dt>Dish hash</dt><dd id="dishHash">…</dd>
+      <dt>Blorb hash</dt><dd id="dishHash">…</dd>
       <dt>Firmware</dt><dd id="fw">…</dd>
     </dl>
     <details>
@@ -319,7 +319,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       const tell = (tone, text) => { el("teachHint").dataset.tone = tone; el("teachHint").textContent = text; };
       const refused = (err) => err.code === 404 ? "This needs the next firmware."
         : err.code === 409 && /TRIAL/.test(err.message) ? "The new version is still checking itself. Try again in a few minutes."
-        : `The dish said no (${err.message}).`;
+        : `The Blorb said no (${err.message}).`;
       el("teachInput").addEventListener("input", (e) => {
         const at = e.target.selectionStart;
         e.target.value = e.target.value.toUpperCase();
@@ -410,7 +410,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
         el("saveBible").hidden = !genome;
         el("bibleHint").textContent = genome
           ? "This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online."
-          : "This is who he is, in words. Connect his dish to change it.";
+          : "This is who he is, in words. Connect his Blorb to change it.";
         el("selfBody").hidden = false;
       }
       async function look() {
@@ -912,7 +912,7 @@ async function refreshHello() {
   $("nameInput").placeholder = h.name || "grungo";
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
   $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
-  $("updateFw").textContent = `${transport.name || "This dish"} runs version ${h.fw || "?"}.`;
+  $("updateFw").textContent = `${transport.name || "This Blorb"} runs version ${h.fw || "?"}.`;
   return h;
 }
 
@@ -995,7 +995,7 @@ let trialTimer = null, awaitingTrial = null;
 const TRIAL_POLL_MS = 2000;
 
 const petName = () => { const n = $("name").textContent || "grungo"; return n[0].toUpperCase() + n.slice(1); };
-const connectedTo = () => `Connected to ${transport.name || "the dish"}`;
+const connectedTo = () => `Connected to ${transport.name || "the Blorb"}`;
 
 // This page's update tokens, one store per dish for as long as the page is open.
 // Keyed by the device, not its name: the update that needs the token renames the dish.
@@ -1008,13 +1008,13 @@ function pageTokens() {
 
 const UPDATE_STEP = {
   checking: "Getting the update ready…",
-  begin: "Asking the dish…",
+  begin: "Asking the Blorb…",
   confirm: "Turn the badge around to say yes (or press its button).",
   sending: "Sending the update…",
   resuming: "Moved out of reach, keep the phone close.",
-  finishing: "Restarting the dish…",
-  rebooting: "Restarting the dish…",
-  verifying: "Saying hello to the dish…",
+  finishing: "Restarting the Blorb…",
+  rebooting: "Restarting the Blorb…",
+  verifying: "Saying hello to the Blorb…",
   trial: "Checking that the new version works…",
 };
 
@@ -1031,14 +1031,14 @@ function showSteps(at, failed = false) {
 
 // Why an update stopped, by the dish's last= or ERR text. Nothing here changes the pet.
 const UPDATE_FAILED = {
-  no_confirm: "Nobody pressed the button on the dish, so nothing changed.",
+  no_confirm: "Nobody pressed the button on the Blorb, so nothing changed.",
   download: "Couldn't download the update, so nothing changed.",
-  unreachable: "Couldn't reach the dish again. Bring the phone close and connect.",
+  unreachable: "Couldn't reach the Blorb again. Bring the phone close and connect.",
   BUSY: () => `${petName()} is busy right now, so nothing changed. Try again in a minute.`,
-  BAD_SIGNATURE: "The dish didn't trust this update, so nothing changed.",
-  WRONG_BOARD: "This update is for a different dish, so nothing changed.",
-  TRIAL: "The dish is still checking its last update. Try again in a few minutes.",
-  NOT_YOURS: "Another phone is updating this dish right now, so nothing changed.",
+  BAD_SIGNATURE: "The Blorb didn't trust this update, so nothing changed.",
+  WRONG_BOARD: "This update is for a different Blorb, so nothing changed.",
+  TRIAL: "The Blorb is still checking its last update. Try again in a few minutes.",
+  NOT_YOURS: "Another phone is updating this Blorb right now, so nothing changed.",
 };
 
 function updateSay(text, tone = "") {
@@ -1123,8 +1123,8 @@ async function offerUpdate() {
   let st, confirm;
   try { ({ status: st, confirm } = await readOtaStatus()); } catch (e) {
     if (transport !== here) return;
-    if (e.code === 404) return updateSay("This dish needs one update over a cable first. After that it can update by Bluetooth.");
-    return checkAgain("Couldn't ask the dish about updates.");
+    if (e.code === 404) return updateSay("This Blorb needs one update over a cable first. After that it can update by Bluetooth.");
+    return checkAgain("Couldn't ask the Blorb about updates.");
   }
   if (transport !== here) return;
   if (st.trial === "1") return sayOnTrial(st, confirm);
@@ -1146,8 +1146,8 @@ async function offerUpdate() {
   // A version that went back is offered by name, so it is never retried in a silent loop.
   const failedBefore = !halfway && st.rolledback === v;
   updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.`
-    : failedBefore ? `Last time, ${v} didn't work on this dish, so it went back to ${st.fw}. ${petName()} is fine.`
-    : `Version ${v} is ready for the dish.`);
+    : failedBefore ? `Last time, ${v} didn't work on this Blorb, so it went back to ${st.fw}. ${petName()} is fine.`
+    : `Version ${v} is ready for the Blorb.`);
   $("updateGo").textContent = halfway ? `Finish updating to ${v}` : failedBefore ? "Try again" : `Update to ${v}`;
   ui.show("updateGo", true);
   showSteps(-1);
@@ -1180,8 +1180,8 @@ function showUpdateOutcome(o) {
   nextDishFirst(o.ok && o.kind !== "unconfirmed" && o.kind !== "rolled_back");
   if (o.ok && o.kind === "updated") return updateSay(`Updated to ${o.fw}. ${fine}`, "ok");
   if (o.ok && o.kind === "unconfirmed") return updateSay(`The new version ${o.fw} is still checking itself. ${fine} Keep this page open, or come back within five minutes.`);
-  if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the dish went back to ${o.fw}. ${fine}`, "err");
-  if (o.ok) return updateSay(`The dish is already up to date. ${fine}`, "ok");
+  if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the Blorb went back to ${o.fw}. ${fine}`, "err");
+  if (o.ok) return updateSay(`The Blorb is already up to date. ${fine}`, "ok");
   const why = UPDATE_FAILED[o.reason] || "The update didn't finish, so nothing changed.";
   updateSay(`${typeof why === "function" ? why() : why} ${fine}`, "err");
 }
@@ -1241,7 +1241,7 @@ async function connect(wide = false) {
       mine = transport = new MockTransport(onDrop);
       globalThis.BlorbDebug?.attachMock(transport.dish);
     } else if (params.has("mock")) {
-      ui.status("connecting", "Choose the dish…");
+      ui.status("connecting", "Choose the Blorb…");
       const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide));
       if (!ad.dish) throw new Error("no UART service");
       mine = transport = new MockTransport(onDrop, ad.dish);
@@ -1250,7 +1250,7 @@ async function connect(wide = false) {
       await transport.open();
     } else {
       mine = transport = new BleTransport(onDrop);
-      ui.status("connecting", "Choose the dish…");
+      ui.status("connecting", "Choose the Blorb…");
       await transport.pick(wide);
       ui.status("connecting", "Connecting…");
       await transport.open();
@@ -1261,7 +1261,7 @@ async function connect(wide = false) {
     console.error(e);
     if (mine && mine !== transport) return;
     if (e.name === "NotFoundError") {
-      ui.status("idle", "No dish chosen");
+      ui.status("idle", "No Blorb chosen");
       ui.show("wider", !wide && !params.get("d"));
     } else { ui.status("lost", "Couldn't connect"); ui.show("reconnect", !!(transport && (transport.device || transport.dish))); }
   }
@@ -1313,7 +1313,7 @@ async function reconnect() {
     if (transport !== here) return;
     // Say what failed, and offer the chooser too: a fresh pick never reuses a stale link.
     const why = e && e.message ? ` (${e.message})` : "";
-    ui.status("lost", `Couldn't reconnect${why}. Try again, or tap Connect to choose the dish afresh.`);
+    ui.status("lost", `Couldn't reconnect${why}. Try again, or tap Connect to choose the Blorb afresh.`);
     ui.show("connect", true);
   }
 }
@@ -1329,7 +1329,7 @@ $("adopt").addEventListener("click", async () => {
     await refreshState();
   } catch (err) {
     hint.dataset.tone = "err";
-    hint.textContent = err.code === 409 ? "Not now: the dish is busy updating. Try again in a few minutes." : `The dish said no (${err.message}).`;
+    hint.textContent = err.code === 409 ? "Not now: the Blorb is busy updating. Try again in a few minutes." : `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1343,7 +1343,7 @@ $("nameForm").addEventListener("submit", async (e) => {
     await link.send(`TWIST rename ${name}`);
     const h = await refreshHello();
     hint.dataset.tone = "ok";
-    hint.textContent = h.name === name ? `He answers to ${name} now.` : `The dish replied with ${h.name}.`;
+    hint.textContent = h.name === name ? `He answers to ${name} now.` : `The Blorb replied with ${h.name}.`;
     $("nameInput").value = "";
   } catch (err) {
     if (err.code === 409 && /TRIAL/.test(err.message)) {
@@ -1351,7 +1351,7 @@ $("nameForm").addEventListener("submit", async (e) => {
       return readOtaStatus().catch(() => {});
     }
     hint.dataset.tone = "err";
-    hint.textContent = `The dish said no (${err.message}).`;
+    hint.textContent = `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1364,19 +1364,19 @@ $("wifiForm").addEventListener("submit", async (e) => {
   const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
   const improv = transport && transport.improv;
   if (!improv || !ssid) return;
-  wifiTell("", `Asking the dish…`);
+  wifiTell("", `Asking the Blorb…`);
   try {
-    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the dish: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
+    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the Blorb: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
     $("wifiPassword").value = "";
-    wifiTell("ok", `The dish joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
+    wifiTell("ok", `The Blorb joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
     BlorbWifi.joined();
   } catch (err) {
     BlorbWifi.failed();
     debugLog("err", `improv join: ${err.message}`);
     wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
-      : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`
-      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the dish. Try again, and turn the dish around when it asks \u201cJoin Wi-Fi?\u201d"
-      : err.code === "TIMEOUT" ? "The dish didn't answer. If it is in a fight, try again once it's over."
+      : err.code === BlorbImprov.ERROR.unableToConnect ? `The Blorb couldn't join "${ssid}". Check the password, and that the Blorb is in reach of the router.`
+      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the Blorb. Try again, and turn the Blorb around when it asks \u201cJoin Wi-Fi?\u201d"
+      : err.code === "TIMEOUT" ? "The Blorb didn't answer. If it is in a fight, try again once it's over."
       : `Something went wrong (${err.message}). Try again.`);
   }
 });
@@ -1396,10 +1396,10 @@ $("sayForm").addEventListener("submit", async (e) => {
   try {
     const r = await link.send(`TWIST say ${text}`);
     hint.dataset.tone = "ok";
-    hint.textContent = `He said "${text}" (dish replied OK ${r.ok}).`;
+    hint.textContent = `He said "${text}" (Blorb replied OK ${r.ok}).`;
   } catch (err) {
     hint.dataset.tone = "err";
-    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The dish said no (${err.message}).`;
+    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1417,7 +1417,7 @@ $("updateGo").addEventListener("click", () => $("updateGo").dataset.check ? offe
 $("mockPress").addEventListener("click", () => transport.dish.press());
 
 if (params.has("mock")) {
-  $("footer").textContent = "Mock mode: a pretend dish, nothing is sent over Bluetooth.";
+  $("footer").textContent = "Mock mode: a pretend Blorb, nothing is sent over Bluetooth.";
   if (!params.has("nearby")) connect();
 } else if (!navigator.bluetooth) {
   ui.show("unsupported", true);

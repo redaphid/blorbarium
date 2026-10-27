@@ -1,7 +1,7 @@
 {
   "name": "Blorbarium",
   "short_name": "Blorbarium",
-  "description": "Talk to a blorb dish over Bluetooth, and update it.",
+  "description": "Talk to a Blorb over Bluetooth, and update it.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
