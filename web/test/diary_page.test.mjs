@@ -91,7 +91,7 @@ function fakePage({ search = "", stored = null, pet }) {
   const ids = ["selfBox", "diaryTitle", "selfHint", "selfBody", "journal", "says", "bible", "bibleHint", "saveBible", "family", "petLink"];
   for (const id of ids) els[id] = node("x");
   els.selfBox.hidden = els.selfBody.hidden = true;
-  const fetched = [];
+  const fetched = [], events = [];
   const store = { "blorb.pet": stored };
   const globals = {
     document: { getElementById: (id) => els[id], createElement: node },
@@ -99,10 +99,12 @@ function fakePage({ search = "", stored = null, pet }) {
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
     fetch: async (url) => { fetched.push(url); return { ok: true, status: 200, json: async () => pet }; },
     addEventListener: () => {},
+    dispatchEvent: (e) => { events.push(e); },
+    CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o.detail; } },
     crypto: globalThis.crypto,
     URLSearchParams,
   };
-  return { els, fetched, globals };
+  return { els, fetched, events, globals };
 }
 function runBox(page) {
   const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
@@ -136,6 +138,7 @@ test("?pet=<genome hash> shows his diary, newest first, as written, without the 
   assert.equal(els.saveBible.hidden, true, "changing him needs the badge's genome");
   assert.equal(els.bible.readOnly, true);
   assert.equal(els.petLink.href, `./?pet=${HASH}`);
+  assert.deepEqual(page.events.map((e) => [e.type, e.detail.fromBadge]), [["blorb:pet", false]], "a link is not the dish in hand");
 });
 
 test("with no link the page shows the last pet this phone met; nothing at all without one", async () => {

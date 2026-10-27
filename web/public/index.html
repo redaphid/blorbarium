@@ -115,6 +115,9 @@ h2 { margin: 0; font: 500 0.8rem/1 var(--font-display); text-transform: uppercas
 .kv dd { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; overflow-wrap: anywhere; }
 .hash { color: var(--teal); }
 details summary { cursor: pointer; color: var(--teal); font-weight: 700; }
+#wifiFold > summary { font: 500 0.8rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+#wifiFold > :not(summary) { margin: 12px 0 0; }
+#wifiBox[data-connected="1"] #wifiFold > summary { color: var(--teal); }
 .genes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; max-height: 18rem; overflow-y: auto; }
 .genes li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 0.9rem; }
 .genes li:nth-child(odd) { background: var(--bg); }
@@ -213,7 +216,8 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <!-- Wi-Fi: Improv over the same connection (improv.js, docs/wifi-ota.md).
        Shown only for a dish that has the Improv service. -->
   <section id="wifiBox" hidden>
-    <h2>Wi-Fi</h2>
+    <details id="wifiFold" open>
+    <summary id="wifiSummary">Wi-Fi</summary>
     <p class="hint">Give the dish your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
     <form id="wifiForm" autocomplete="off">
       <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
@@ -221,6 +225,39 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Connect to Wi-Fi</button>
     </form>
     <p class="hint" id="wifiHint" role="status">The password goes to the dish and nowhere else.</p>
+    </details>
+    <script>
+    // Once the dish's Wi-Fi works, this box folds away at the bottom of the page:
+    // it joined from this page, or its badge checked in with the site over Wi-Fi
+    // (the pet-lines check, which only the badge makes) in the last week. Not set
+    // up, or the last try failed: it stays open where it is, so setup stays easy.
+    window.BlorbWifi = (() => {
+      const el = (id) => document.getElementById(id);
+      const FRESH_MS = 7 * 24 * 3600 * 1000;
+      const home = document.createComment("the Wi-Fi box's place");
+      el("wifiBox").before(home);
+      const st = { joined: false, failed: false, checkedIn: false };
+      function place() {
+        const ok = !st.failed && (st.joined || st.checkedIn);
+        const box = el("wifiBox");
+        if (ok) el("debugBox").before(box);
+        else home.after(box);
+        el("wifiFold").open = !ok;
+        el("wifiSummary").textContent = ok ? "Wi-Fi: connected \u2713" : "Wi-Fi";
+        box.dataset.connected = ok ? "1" : "";
+      }
+      addEventListener("blorb:pet", (e) => {
+        if (!e.detail.fromBadge) return;   // a ?pet= link or a remembered pet may not be the dish in hand
+        st.checkedIn = Date.now() - (Number(e.detail.pet.checked_in_at) || 0) < FRESH_MS;
+        place();
+      });
+      return {
+        joined() { Object.assign(st, { joined: true, failed: false }); place(); },
+        failed() { st.failed = true; place(); },
+        reset() { Object.assign(st, { joined: false, failed: false, checkedIn: false }); place(); },
+      };
+    })();
+    </script>
   </section>
 
   <section id="drivesBox" hidden>
@@ -384,6 +421,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
         const p = await r.json();
         tell("ok", p.version ? `Personality version ${p.personality_version}, lines version ${p.version}.` : "His lines are being written.");
         render(p);
+        dispatchEvent(new CustomEvent("blorb:pet", { detail: { pet: p, fromBadge: !!genome } }));
       }
       function show(h) {
         hash = h;
@@ -1250,6 +1288,7 @@ function leave() {
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
   $("wifiPassword").value = "";
+  BlorbWifi.reset();
   for (const [el, text] of FRESH.hints) {
     el.textContent = text;
     el.dataset.tone = "";
@@ -1330,7 +1369,9 @@ $("wifiForm").addEventListener("submit", async (e) => {
     await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the dish: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
     $("wifiPassword").value = "";
     wifiTell("ok", `The dish joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
+    BlorbWifi.joined();
   } catch (err) {
+    BlorbWifi.failed();
     debugLog("err", `improv join: ${err.message}`);
     wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
       : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`

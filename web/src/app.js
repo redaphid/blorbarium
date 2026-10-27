@@ -335,6 +335,8 @@ async function getPet(url, env) {
      FROM creatures c WHERE c.id = ?1`).bind(c.parent_id).first() : null;
   return json({
     species: c.species, name: c.name, generation: c.generation, stage: c.stage, status: c.status,
+    // When his badge last checked in over Wi-Fi (only its pet-lines POST sets it): the page folds its Wi-Fi box away.
+    checked_in_at: c.last_seen ?? null,
     bible: pack?.bible ?? null, catchphrases: pack ? JSON.parse(pack.catchphrases_json ?? "[]") : [],
     version: pack?.version ?? null, personality_version: pack?.personality_version ?? null,
     lines: Object.fromEntries(SAMPLE.filter((k) => lines[k]).map((k) => [k, lines[k]])),
