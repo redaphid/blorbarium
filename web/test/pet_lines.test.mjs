@@ -78,7 +78,7 @@ test("the same genome on another badge reuses its pack without a model call", as
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM creatures").get().n, 2);
 });
 
-test("wait:false queues the work, the cron writes it, and GET then returns it", async () => {
+test("wait:false queues the work, the backstop run writes it, and GET then returns it", async () => {
   const env = fakeEnv();
   const f = fixtures[4];
   const r = await post(env, { mac: MAC, genome: f.genome, wait: false });
@@ -148,7 +148,7 @@ test("a job the queue's consumer fails on is retried from the queue, and stops a
   assert.deepEqual({ ...row }, { status: "failed", attempts: 3 });
 });
 
-test("with no queue, the 04:00 cron runs a job the 10-minute cron never got to", async () => {
+test("a job no queue message ran is written by the daily 04:00 cron", async () => {
   const env = fakeEnv();
   await post(env, { mac: MAC, genome: fixtures[2].genome, wait: false });
   await worker.scheduled({ cron: "0 4 * * *", scheduledTime: Date.UTC(2026, 9, 27, 4) }, env);
@@ -156,7 +156,7 @@ test("with no queue, the 04:00 cron runs a job the 10-minute cron never got to",
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM packs").get().n, 1);
 });
 
-test("a model outage leaves the job queued for the cron, and the badge keeps its built-in lines", async () => {
+test("a model outage leaves the job queued to be tried again, and the badge keeps its built-in lines", async () => {
   const env = fakeEnv({ failWith: "HTTP 400: model says no" });
   const r = await post(env, { mac: MAC, genome: fixtures[6].genome });
   assert.equal(r.status, 202);
