@@ -60,7 +60,7 @@ class NetJob {
   static constexpr uint32_t kStackHttpBytes = 6 * 1024;
   static inline uint32_t stackTlsBytes = kStackTlsDefault;
   static constexpr uint16_t kConnectMs = 5000;
-  static constexpr uint32_t kHandshakeS = 8;
+  static constexpr uint32_t kHandshakeS = 20;   // 4.5 to 8.7 s seen at RSSI -75 (Cloudflare, a P-256 chain): 8 cut good ones off
   static constexpr uint16_t kHeadersMs = 6000;
   static constexpr uint32_t kStallMs = 20000;           // a body that sends nothing this long has failed
 
