@@ -469,10 +469,13 @@ static void heardClock(const hw::NetJob::Clock& c) {
 static void poll(uint32_t now) {
   improvBle.poll();
   if (const std::optional<hw::NetJob::Clock> c = job.takeClock(millis())) heardClock(*c);
-  // Advertising paused while a GET opens (DNS, connect, TLS handshake,
-  // headers), so the radio's time is the handshake's: only with no phone.
-  ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) && job.busy() &&
-                      job.state() == hw::NetJob::State::Opening && !ble.connected());
+  // Advertising paused while joining (the test board's joins failed AUTH_EXPIRE
+  // and TIMEOUT more often than not at RSSI -77 with it on) and while a GET
+  // opens (DNS, connect, TLS handshake, headers), so the radio's time is
+  // Wi-Fi's: only with no phone.
+  ble.holdAdvertising((phase == Phase::Joining || ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) &&
+                                                   job.busy() && job.state() == hw::NetJob::State::Opening)) &&
+                      !ble.connected());
   pollConsent(now);
   const bool dark = powerPolicy.low();
   if (dark && !wasDark) darkSince = now;
