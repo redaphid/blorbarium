@@ -180,3 +180,8 @@ BLORB_THOUGHT(149, ooh_what,      none,   discovering,   7,  300, "OOH. WHAT IS 
 BLORB_THOUGHT(150, cant_see,      none,   hiding,        6,  600, "YOU CAN'T SEE ME.")
 // A rotten pellet sniffed and turned down (actions.h Picky).
 BLORB_THOUGHT(151, yuck,          none,   refusing_rot,  8,  300, "YUCK. NOT THAT ONE.")
+// Growing up (#aging): the Dish says these, plain, as he reaches a stage and a
+// hand is on him to see it (dish.cpp showGrowth). The chooser never picks them.
+BLORB_THOUGHT(152, grew_child,    none,   grown,         9,    0, "LOOK! I GREW BIGGER!")
+BLORB_THOUGHT(153, grew_adult,    none,   grown,         9,    0, "I AM ALL GROWN UP NOW!")
+BLORB_THOUGHT(154, grew_elder,    none,   grown,         9,    0, "I AM OLD AND WISE NOW.")

@@ -101,7 +101,12 @@ class Dish {
 
   // As often as you like. Runs zero or more 100 ms ticks to catch nowMs up
   // (at most 10 per call, so a frame is never starved), handles inbound
-  // lines, pumps events, and saves when SavePolicy says so.
+  // lines, pumps events, and saves when SavePolicy says so. A shorter gap (a
+  // minute's nap) is ticked in full by calling again until caught up; one of
+  // kNapLiveMs or more (a long nap, a long stall) is lived first, in one call,
+  // at the unpowered catch-up's stride (and its cap), so he wakes as old and
+  // as hungry as if he had stayed up, without thousands of ticks at a wake.
+  static constexpr uint32_t kNapLiveMs = 5 * 60 * 1000;
   void tick(uint32_t nowMs, Link&);
 
   Appearance appearance() const;
@@ -243,6 +248,7 @@ class Dish {
   uint32_t phoneAwayTicks() const;
   FromPhone fromPhone() const;     // what his lines may use beyond his own clock
   void welcomePhone();
+  void showGrowth(Creature&);     // a stage he reached, shown once a hand is on him (#aging)
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
@@ -334,6 +340,8 @@ class Dish {
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
+  bool ticking_ = false;   // a tick() has run this boot: a gap after it is a nap, not the boot
+  std::optional<Stage> grewTo_;   // a stage reached and not yet shown (a nap's, or behind a duel)
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
   bool hatchNeedsPhone_ = false, hatchFree_ = false, adopted_ = false;
   uint64_t mac_ = 0;

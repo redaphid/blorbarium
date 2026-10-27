@@ -134,6 +134,7 @@ bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, loc
 bool drowsy(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::sleepiness) >= kHigh; }
 bool dreaming(const Observed& o, uint16_t&) { return o.c.body().asleep && o.c.body().dreaming; }
 bool dozing(const Observed& o, uint16_t&) { return o.c.body().asleep; }
+bool grown(const Observed&, uint16_t&) { return false; }   // said by the Dish as he grows, never chosen
 bool young(const Observed& o, uint16_t&) { return o.c.stats().ageTicks < PetClock::kDayTicks; }   // his first day: when the teaching lines run
 bool foreseeing(const Observed& o, uint16_t&) { return doing(o, action::foresee); }
 bool sees_pellet(const Observed& o, uint16_t&) { return doing(o, action::foresee) && anyPellet(o); }
