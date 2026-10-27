@@ -80,16 +80,16 @@ dream_pellets   dreaming
   ZZZ... LUNCH... ZZZ
 
 see_pellet      sees_pellet
-  I SEE... A MORSEL. MINE.
+  A MORSEL. MINE.
 
 see_phone       sees_phone
-  I SEE... A GLOWING RECTANGLE
+  A GLOWING RECTANGLE
 
 see_nothing     sees_famine
-  I SEE... NO CRUMBS. NONE.
+  NO CRUMBS. NONE.
 
 see_damp        foreseeing
-  BRRRUP. I SEE... DAMP.
+  BRRRUP. DAMP.
 
 knees           elder
   MY KNEES ARE MOSTLY RUMOUR

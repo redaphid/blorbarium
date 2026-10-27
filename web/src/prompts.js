@@ -10,7 +10,7 @@ const FONT_RULE = `Only capital letters A-Z, digits 0-9, spaces and these marks:
 // The owner (2026-10-27): no line wrapped in a voice frame, and never the word
 // DISH (the code's name for the habitat; the kids do not know it). validate.js
 // throws such a line away.
-const PLAIN_RULE = `Said plain, as a whole line: never wrap it in a lead-in or tag such as "THE REEDS SAY:", "SO IT IS", "HEED:", "GOOD NEWS:", "PSST." or "... SOON."`;
+const PLAIN_RULE = `Said plain, as a whole line: never wrap it in a lead-in or tag such as "THE REEDS SAY:", "SO IT IS", "HEED:", "GOOD NEWS:", "PSST." or "... SOON.", and no stock opener or closer he repeats across his lines (like "I SEE...", "SHH.", "NOTED.", "DIBS.", ", GO!"): each line stands on its own`;
 const NO_DISH_RULE = `Never the word DISH: the kids do not know it. Where he lives is his home, here or this place.`;
 
 function speciesNotes(species) {

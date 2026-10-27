@@ -211,7 +211,7 @@
    "topic": "none",
    "meaning": "He is in the trance and there is a pellet in his home.",
    "mark": null,
-   "shared": "I SEE... A MORSEL. MINE."
+   "shared": "A MORSEL. MINE."
   },
   {
    "name": "see_phone",
@@ -221,7 +221,7 @@
    "topic": "none",
    "meaning": "He is in the trance and a phone is near.",
    "mark": null,
-   "shared": "I SEE... A GLOWING RECTANGLE"
+   "shared": "A GLOWING RECTANGLE"
   },
   {
    "name": "see_nothing",
@@ -231,7 +231,7 @@
    "topic": "none",
    "meaning": "He is in the trance, his home is empty and the pantry is bare.",
    "mark": null,
-   "shared": "I SEE... NO CRUMBS. NONE."
+   "shared": "NO CRUMBS. NONE."
   },
   {
    "name": "see_damp",
@@ -241,7 +241,7 @@
    "topic": "none",
    "meaning": "He is in his oracle trance.",
    "mark": null,
-   "shared": "BRRRUP. I SEE... DAMP."
+   "shared": "BRRRUP. DAMP."
   },
   {
    "name": "knees",
@@ -321,7 +321,7 @@
    "topic": "food",
    "meaning": "He is half hungry or more.",
    "mark": null,
-   "shared": "A BISCUIT APPROACHES. MAYBE."
+   "shared": "A BISCUIT APPROACHES. BE COOL."
   },
   {
    "name": "p_feed_me",
@@ -481,7 +481,7 @@
    "topic": "luck",
    "meaning": "Any time at all. # is his generation.",
    "mark": "#",
-   "shared": "IT IS DECIDEDLY SO. ISH."
+   "shared": "IT IS DECIDEDLY SO. FOR ONCE."
   },
   {
    "name": "p_lucky",
@@ -1333,41 +1333,64 @@
    "lines": {
     "peckish": [
      "I FORESEE FLIES. IN MY MOUTH.",
-     "MY HOOD HOLDS NO SNACKS."
+     "MY HOOD HOLDS NO SNACKS.",
+     "I FORESEE A SNACK. IN ME.",
+     "MY TUMMY HAS HAD A VISION.",
+     "A FLY WOULD FIX MY FUTURE.",
+     "TUMMY DOWN. SNACK?",
+     "THE ORACLE ACCEPTS CRUMBS."
     ],
     "starving": [
-     "I WOULD EAT MY OWN HOOD."
+     "I WOULD EAT MY OWN HOOD.",
+     "I FORESEE ME EATING MY HOME.",
+     "THE PROPHECY IS: LUNCH. NOW."
     ],
     "hoarding": [
-     "I HIDE IT IN MY HOOD. SHH."
+     "I HIDE IT IN MY HOOD. SHH.",
+     "THAT CRUMB IS FOR FUTURE ME.",
+     "FUTURE ME SAYS THANK YOU."
     ],
     "crunch": [
-     "CRONCH. THE SPIRITS APPROVE."
+     "CRONCH. THE SPIRITS APPROVE.",
+     "CRONCH. AS FORETOLD.",
+     "MMM. TASTES LIKE DESTINY.",
+     "CRUNCH. I SAW THAT COMING."
     ],
     "fuzzy_bite": [
-     "THAT ONE HAD A BEARD."
+     "THAT ONE HAD A BEARD.",
+     "BLEH. THAT CRUMB WORE A COAT."
     ],
     "smells": [
-     "A FOUL OMEN. ALSO A SMELL."
+     "A FOUL OMEN. ALSO A SMELL.",
+     "THE REEDS HOLD THEIR NOSE."
     ],
     "green": [
-     "GREENER THAN USUAL. BAD SIGN."
+     "GREENER THAN USUAL. BAD SIGN.",
+     "EVEN MY HOOD FEELS GREEN."
     ],
     "ow": [
-     "I FORESAW THIS. STILL OW."
+     "I FORESAW THIS. STILL OW.",
+     "OW. THE FUTURE HAS ELBOWS."
     ],
     "heard_you": [
      "I FORESAW THAT KNOCK.",
-     "ONE KNOCK. THE OMEN WANTS TWO."
+     "ONE KNOCK. THE OMEN WANTS TWO.",
+     "WHO KNOCKS? I KNOW. IT IS YOU.",
+     "KNOCK ONCE MORE. FOR SNACKS."
     ],
     "ground_lies": [
-     "THE EARTH SPEAKS! IT YELLS!"
+     "THE EARTH SPEAKS! IT YELLS!",
+     "EEP! THE POND IS SLOSHING!",
+     "MY HOOD! MY HOOD IS AIRBORNE!"
     ],
     "not_again": [
-     "THE VISIONS SAID SHAKING. NO."
+     "THE VISIONS SAID SHAKING. NO.",
+     "NOT THE SHAKING."
     ],
     "hooded": [
-     "HOOD UP. I AM NOT HERE."
+     "I AM NOT HERE.",
+     "NOT SCARED. JUST VERY HOODED.",
+     "YOU CANNOT SEE ME. HOOD."
     ],
     "ancestor_fear": [
      "GEN # HID IN A HOOD TOO."
@@ -1376,44 +1399,68 @@
      "GEN # WHISPERS IN MY HOOD."
     ],
     "counted": [
-     "I FORESAW BOREDOM. HERE IT IS"
+     "I FORESAW BOREDOM. HERE IT IS",
+     "NO FLIES. NO OMENS. NOTHING.",
+     "I STARED AT THE FUTURE. DULL."
     ],
     "put_me_down": [
-     "THE GROUND IS SAFER. MOSTLY."
+     "THE GROUND IS SAFER. MOSTLY.",
+     "UP HIGH? I DID NOT FORESEE UP.",
+     "PUT ME DOWN. GENTLY. HOOD ON."
     ],
     "warm_hands": [
-     "WARM HANDS. A GOOD OMEN."
+     "WARM HANDS. A GOOD OMEN.",
+     "YOU MAY HOLD THE ORACLE.",
+     "WARM. LIKE A SUNNY LILY PAD.",
+     "CROAK. THAT MEANS THANK YOU."
     ],
     "sky_down": [
      "THE POND IS ON THE CEILING?",
-     "MY HOOD FELL UP. AN OMEN."
+     "MY HOOD FELL UP. AN OMEN.",
+     "UPSIDE DOWN. FLIES LOOK ODD."
     ],
     "heavy_eyes": [
-     "THE VISIONS GROW BLURRY..."
+     "THE VISIONS GROW BLURRY...",
+     "HOOD DOWN. EYES DOWN. NIGHT.",
+     "I FORESEE A NAP. VERY SOON."
     ],
     "dream_pellets": [
-     "ZZZ... FLIES... SO MANY..."
+     "ZZZ... FLIES... SO MANY...",
+     "ZZZ... A FLY IN A TINY HAT...",
+     "ZZZ... FLY SOUP... SECONDS...",
+     "ZZZ... THE MOON IS A FLY...",
+     "ZZZ... A RAINY FLY PARADE...",
+     "ZZZ... A FLY BUFFET... HOOD UP"
     ],
     "see_pellet": [
-     "I SEE... A PELLET. RIGHT HERE"
+     "A PELLET. RIGHT HERE",
+     "A CRUMB. IT IS MINE.",
+     "SNACK. RIGHT THERE."
     ],
     "see_phone": [
-     "I SEE... THE GLOWING SLAB."
+     "THE GLOWING SLAB.",
+     "A FACE IN A SLAB."
     ],
     "see_nothing": [
-     "I SEE... AN EMPTY BELLY. MINE."
+     "AN EMPTY BELLY. MINE.",
+     "NO FLIES. DOOM."
     ],
     "see_damp": [
-     "I SEE... MORE DAMP. GOOD."
+     "MORE DAMP. GOOD.",
+     "A PUDDLE. MY DESTINY."
     ],
     "knees": [
-     "MY HOOD HAS SEEN THINGS."
+     "MY HOOD HAS SEEN THINGS.",
+     "OLD FROG. OLDER HOOD."
     ],
     "moon": [
-     "THE MOON IS MY OLD FRIEND."
+     "THE MOON IS MY OLD FRIEND.",
+     "HELLO, MOON. ANY NEWS?"
     ],
     "anyone": [
-     "IS ANYONE IN THE REEDS?"
+     "IS ANYONE IN THE REEDS?",
+     "HELLO? THE ORACLE IS IN.",
+     "NO ONE CAME. I FORESAW THAT."
     ],
     "science": [
      "FLIES FIX HUNGER. FORESEEN."
@@ -1422,16 +1469,20 @@
      "GEN #. A HOOD. NEVER A HAT."
     ],
     "p_snack": [
-     "SNACK FIRST. FATE AFTER."
+     "SNACK FIRST. FATE AFTER.",
+     "ASK AGAIN AFTER A FLY."
     ],
     "p_feast": [
-     "A FEAST OF FLIES COMES."
+     "A FEAST OF FLIES COMES.",
+     "I SEE A FLY AS BIG AS A DOG."
     ],
     "p_pellet_soon": [
-     "A PELLET FALLS FROM ABOVE."
+     "A PELLET FALLS FROM ABOVE.",
+     "A CRUMB IS ON ITS WAY. SHH."
     ],
     "p_feed_me": [
-     "THE SIGNS SAY: FEED THE FROG."
+     "THE SIGNS SAY: FEED THE FROG.",
+     "ALL SIGNS POINT TO MY MOUTH."
     ],
     "p_fuzzy": [
      "THAT CRUMB GROWS A COAT."
@@ -1440,19 +1491,23 @@
      "MORE SHAKING. I HATE THIS ONE."
     ],
     "p_mud": [
-     "MUD. DEEP MUD. LOVELY MUD."
+     "MUD. DEEP MUD. LOVELY MUD.",
+     "YOUR SHOES WILL MEET MUD."
     ],
     "p_big_hand": [
-     "A BIG HAND COMES. HOOD UP."
+     "A BIG HAND COMES.",
+     "A GIANT WILL BOOP ME. SOON."
     ],
     "p_bedtime": [
-     "THE MOON SAYS: YOU, TO BED."
+     "THE MOON SAYS: YOU, TO BED.",
+     "YOUR PILLOW IS CALLING YOU."
     ],
     "p_sun": [
      "THE SUN COMES. I WILL HIDE."
     ],
     "p_rain": [
-     "RAIN COMES. FROGS REJOICE."
+     "RAIN COMES. FROGS REJOICE.",
+     "I SEE PUDDLES. GLORIOUS."
     ],
     "p_watched": [
      "THE GLOWING ONE SEES ALL."
@@ -1461,46 +1516,56 @@
      "THE ONE WHO LEFT WILL RETURN."
     ],
     "p_tap": [
-     "TWO KNOCKS COME. THEN SNACKS."
+     "TWO KNOCKS COME. THEN SNACKS.",
+     "I FORESEE KNOCK KNOCK. YOU?"
     ],
     "p_no": [
-     "NO. THE FLIES AGREE."
+     "NO. THE FLIES AGREE.",
+     "THE REEDS SHOOK THEIR HEADS."
     ],
     "p_doom": [
-     "DOOM. BUT A DAMP DOOM. NICE."
+     "DOOM. BUT A DAMP DOOM. NICE.",
+     "DOOM COMES. IT BRINGS FLIES."
     ],
     "p_lunch": [
      "MY END IS NEAR. MY HOOD STAYS."
     ],
     "p_outlook": [
-     "OUTLOOK DAMP. THAT IS GOOD."
+     "OUTLOOK DAMP. THAT IS GOOD.",
+     "THE FUTURE IS WET. HOORAY."
     ],
     "p_decidedly": [
-     "IT IS SO. THE FLIES SAID."
+     "IT IS SO. THE FLIES SAID.",
+     "YES. I SAW IT IN A PUDDLE."
     ],
     "p_lucky": [
-     "LUCK HIDES UNDER A LILY PAD."
+     "LUCK HIDES UNDER A LILY PAD.",
+     "YOUR LUCKY NUMBER IS FLY."
     ],
     "p_pond_no": [
-     "THE POND FROWNS. NO."
+     "THE POND FROWNS. NO.",
+     "THE POND BURPED. THAT IS NO."
     ],
     "p_pond_yes": [
-     "THE POND BUBBLES. YES."
+     "THE POND BUBBLES. YES.",
+     "THE POND WINKED. YES."
     ],
     "p_ripples": [
-     "TOO MANY RIPPLES. ASK LATER."
+     "TOO MANY RIPPLES. ASK LATER.",
+     "A DUCK SAT ON MY VISION."
     ],
     "p_ancestor": [
      "GEN # SAW THIS IN A PUDDLE."
     ],
     "miss_phone": [
-     "THE GLOWING ONE HAS GONE DARK"
+     "THE GLOWING ONE HAS GONE DARK",
+     "NO SLAB FOR DAYS. I AM CALM."
     ],
     "oclock": [
      "AS FORETOLD, # O'CLOCK."
     ],
     "morning": [
-     "MORNING. TOO BRIGHT. HOOD UP."
+     "MORNING. TOO BRIGHT."
     ],
     "so_late": [
      "LATE. THE BEST HOUR FOR OMENS."
@@ -1545,13 +1610,15 @@
      "A VISION CAME. IT POPPED."
     ],
     "wiggle": [
-     "A RITUAL WIGGLE. DONE."
+     "A RITUAL WIGGLE. DONE.",
+     "A SACRED WIGGLE. VERY HOLY."
     ],
     "my_song": [
      "CROAK. CROAK. MY BEST SONG."
     ],
     "dust": [
-     "A SPECK OF DUST. AN OMEN."
+     "A SPECK OF DUST. AN OMEN.",
+     "A SPECK OF DUST. AN OMEN?"
     ],
     "blinked": [
      "I BLINKED. THE FUTURE MOVED."
@@ -1575,7 +1642,7 @@
      "ECHO? THE GLASS SAYS NOTHING."
     ],
     "king": [
-     "MY HOOD IS A CROWN. KIND OF."
+     "MY HOOD IS A CROWN. SECRETLY."
     ],
     "smells_me": [
      "SMELLS LIKE POND. GOOD."
@@ -1699,38 +1766,48 @@
     ],
     "snore": [
      "ZZZ... CROAK... ZZZ...",
-     "ZZZ... RIBBIT... ZZZ... MMF..."
+     "ZZZ... RIBBIT... ZZZ... MMF...",
+     "ZZZ... CROOOAK... ZZZ..."
     ],
     "mumble": [
      "MMF... HOOD UP... HOOD UP...",
-     "MMM... NO SUN... TOO BRIGHT..."
+     "MMM... NO SUN... TOO BRIGHT...",
+     "MMF... I FORESAW THIS NAP..."
     ],
     "dream_chase": [
      "ZZZ... THAT FLY... FORESAW IT",
-     "ZZZ... STAY STILL, FLY... GULP"
+     "ZZZ... STAY STILL, FLY... GULP",
+     "ZZZ... FLY, COME BACK... ZZZ"
     ],
     "dream_feast": [
      "ZZZ... A POND OF FLIES...",
-     "ZZZ... FLY PIE... FLY SOUP..."
+     "ZZZ... FLY PIE... FLY SOUP...",
+     "ZZZ... A FLY CAKE. WITH FLIES"
     ],
     "dream_flight": [
      "ZZZ... I LEAP TO THE MOON...",
-     "ZZZ... FLOATING... TO MY MOON"
+     "ZZZ... FLOATING... TO MY MOON",
+     "ZZZ... MY HOOD IS A KITE..."
     ],
     "sleep_count": [
      "ZZZ... ONE OMEN... TWO OMEN...",
-     "ZZZ... ONE RIPPLE... TWO..."
+     "ZZZ... ONE RIPPLE... TWO...",
+     "ZZZ... ONE FLY... TWO... YUM"
     ],
     "sleep_warm": [
      "MMM... SNUG IN MY HOOD...",
-     "MMM... DAMP MUD. HOOD UP..."
+     "MMM... DAMP MUD. HOOD UP...",
+     "MMM... WARM POND. FIVE MORE..."
     ],
     "dream_rain": [
      "ZZZ... RAIN... A GOOD OMEN...",
-     "ZZZ... DRIP, DRIP... THE POND"
+     "ZZZ... DRIP, DRIP... THE POND",
+     "ZZZ... PUDDLES EVERYWHERE..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME. FOOD FALLS."
+     "KNOCK KNOCK ON ME. FOOD FALLS.",
+     "KNOCK TWICE. A SNACK APPEARS.",
+     "TWO KNOCKS FEED THE ORACLE."
     ],
     "teach_fight": [
      "TO DUEL, HOLD ME UPSIDE DOWN."
@@ -1750,41 +1827,68 @@
    "notes": "MOSSBY\nsnail: no rush, ever\nElement Sprout, style Guard, power shell. Voice: rambling. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA big peach-orange striped shell arched right over his head like a bonnet, a\nround pale face peeking out from under it, rosy cheeks, soft brown eyes and a\nsmall polite smile. Two orange-tipped feelers, stubby little feet. Annoyed, he\ndoes a prim wobbly frown. Foreseeing, his eyes turn to two gold coins. The egg\nholds a tiny snail curled on a cushion.\n\nWHO HE IS\nA gentle homebody who carries his house everywhere and is very proud of it.\nNothing is ever urgent. He started this thought yesterday and will finish it\ntomorrow. Polite, cosy, a little forgetful, and quietly pleased with himself\nfor being so slow. Danger means tucking in.\n\nHOW HE TALKS\nKindly and unhurried. \"No rush.\" \"Eventually.\" \"Slowly.\" He loses the thread,\nthen finds it, then loses it again.\n\nLOVES\nHis shell, dew, damp leaves, moss, rain, a long nap, a smooth floor.\n\nFEARS\nHurry, salt, dry glass, being turned over, things that are fast.\n\nCATCHPHRASES\nNO RUSH. I'LL GET THERE. MIND THE HOUSE.",
    "lines": {
     "peckish": [
-     "A SNACK WOULD BE NICE. LATER."
+     "A SNACK WOULD BE NICE. LATER.",
+     "MY TUMMY WROTE TO SAY: SNACK.",
+     "LUNCH? I CAN WAIT TILL TUESDAY",
+     "A LEAF. A CRUMB. A NICE CRUMB.",
+     "I PACKED A SNACK. I ATE IT."
     ],
     "starving": [
-     "I WOULD EAT A WHOLE LEAF."
+     "I WOULD EAT A WHOLE LEAF.",
+     "I COULD EAT MY OWN DOORMAT.",
+     "EVEN MY HOUSE IS HUNGRY."
     ],
     "hoarding": [
-     "I WILL GET TO THAT ONE. SLOWLY"
+     "I WILL GET TO THAT ONE.",
+     "I WILL GET TO THAT ONE. SOON.",
+     "THAT ONE IS FOR NEXT WEEK.",
+     "I'LL EAT IT. IN A FEW HOURS."
     ],
     "crunch": [
-     "MUNCH... MUNCH... STILL MUNCH"
+     "MUNCH... MUNCH... STILL MUNCH",
+     "NOM. EVERY BITE COUNTS. TWICE.",
+     "CHEW. CHEW. CHEW. HALFWAY.",
+     "DELICIOUS. ALSO STILL GOING."
     ],
     "fuzzy_bite": [
-     "THAT ONE WAS A BIT MOSSY."
+     "THAT ONE WAS A BIT MOSSY.",
+     "HMM. THAT CRUMB GREW A BEARD."
     ],
     "smells": [
-     "SOMETHING IS GOING OFF. SLOWLY"
+     "SOMETHING IS GOING OFF.",
+     "SOMETHING IS GOING OFF. GENTLY",
+     "A PONG. I SHALL CLOSE MY DOOR."
     ],
     "green": [
-     "I AM GREEN. NOT THE GOOD KIND"
+     "I AM GREEN. NOT THE GOOD KIND",
+     "I AM GREEN. NOT THE MOSSY KIND",
+     "MY SHELL FEELS QUEASY TOO."
     ],
     "ow": [
-     "OW. MY SHELL TOOK MOST OF IT."
+     "OW. MY SHELL TOOK MOST OF IT.",
+     "OW. I'LL FEEL IT TOMORROW."
     ],
     "heard_you": [
-     "I HEARD. I AM COMING. SLOWLY.",
-     "ONE KNOCK... AND THE NEXT ONE?"
+     "I HEARD. I AM COMING.",
+     "I HEARD. I AM COMING. TUESDAY.",
+     "ONE KNOCK... AND THE NEXT ONE?",
+     "WHO'S AT MY DOOR? KNOCK AGAIN.",
+     "A VISITOR! LET ME TIDY UP."
     ],
     "ground_lies": [
-     "WHOA. THE HOUSE IS MOVING."
+     "WHOA. THE HOUSE IS MOVING.",
+     "EARTHQUAKE! MIND THE TEACUPS!",
+     "OH DEAR. MY HOUSE IS BOUNCING."
     ],
     "not_again": [
-     "PLEASE NOT THE SHAKING. PLEASE"
+     "PLEASE NOT THE SHAKING. PLEASE",
+     "NOT AGAIN. MY CUPBOARDS!",
+     "NO SHAKING. I JUST DUSTED."
     ],
     "hooded": [
-     "I AM IN MY SHELL. NOT HOME."
+     "I AM IN MY SHELL. NOT HOME.",
+     "NOBODY HOME. LEAVE A NOTE.",
+     "DOOR SHUT. I'M IN MY SLIPPERS."
     ],
     "ancestor_fear": [
      "GEN # HID IN A SHELL TOO."
@@ -1793,44 +1897,72 @@
      "GEN # LEFT A NOTE IN MY SHELL"
     ],
     "counted": [
-     "I COUNTED TO ONE. IT TOOK AGES"
+     "I COUNTED TO ONE. IT TOOK AGES",
+     "I WATCHED MOSS GROW. THRILLING",
+     "NOTHING TO DO. DOING IT LATER"
     ],
     "put_me_down": [
-     "MIND THE HOUSE, PLEASE."
+     "MIND THE HOUSE, PLEASE.",
+     "UP? I DIDN'T PACK FOR UP.",
+     "DOWN, PLEASE. MY TEA SPILLED."
     ],
     "warm_hands": [
-     "WARM HANDS. LIKE A NICE LEAF."
+     "WARM HANDS. LIKE A NICE LEAF.",
+     "A HAND. LIKE A SUNNY PORCH.",
+     "COSY. I MAY MOVE IN HERE.",
+     "OH, LOVELY. STAY A WHILE."
     ],
     "sky_down": [
      "MY HOUSE IS ON TOP. OR UNDER?",
-     "OH DEAR. TURNED OVER. NO RUSH."
+     "OH DEAR. TURNED OVER.",
+     "UPSIDE DOWN. MY FURNITURE!"
     ],
     "heavy_eyes": [
-     "A LONG NAP, I THINK..."
+     "A LONG NAP, I THINK...",
+     "I'LL CLOSE MY DOOR FOR A BIT.",
+     "BEDTIME. I STARTED AT NOON.",
+     "YAWN. IT TOOK TEN MINUTES."
     ],
     "dream_pellets": [
-     "ZZZ... A VERY SLOW LETTUCE..."
+     "ZZZ... A VERY SLOW LETTUCE...",
+     "ZZZ... A LEAF THE SIZE OF ME",
+     "ZZZ... A DEWDROP BUFFET...",
+     "ZZZ... SALAD... IN NO HURRY...",
+     "ZZZ... A CUCUMBER. MY FRIEND",
+     "ZZZ... DEW FOR PUDDING..."
     ],
     "see_pellet": [
-     "I SEE... A PELLET. NO RUSH."
+     "A PELLET. NO RUSH.",
+     "LUNCH. I'LL WALK OVER",
+     "A CRUMB. A HIKE AWAY."
     ],
     "see_phone": [
-     "I SEE... A FAST LITTLE SCREEN"
+     "A FAST LITTLE SCREEN",
+     "A SCREEN. IT BLINKS.",
+     "A FACE. LOOKING DOWN."
     ],
     "see_nothing": [
-     "I SEE... NOTHING HERE. HMM."
+     "NOTHING HERE. HMM.",
+     "NO LEAVES. NOT ONE.",
+     "A BARE CUPBOARD."
     ],
     "see_damp": [
-     "I SEE... A NICE DAMP LEAF."
+     "A NICE DAMP LEAF.",
+     "DEW. MY FAVOURITE.",
+     "A PUDDLE. A SPA!"
     ],
     "knees": [
-     "I HAVE NO KNEES. LUCKY ME."
+     "I HAVE NO KNEES. LUCKY ME.",
+     "OLD SNAIL. SAME OLD HOUSE."
     ],
     "moon": [
-     "THE MOON IS SLOW TOO. FRIEND."
+     "THE MOON IS SLOW TOO. FRIEND.",
+     "THE MOON TAKES ALL NIGHT. SAME"
     ],
     "anyone": [
-     "HELLO? I CAN WAIT. FOREVER."
+     "HELLO? I CAN WAIT. FOREVER.",
+     "ANYONE? I PUT THE KETTLE ON.",
+     "VISITORS WELCOME. WIPE FEET."
     ],
     "science": [
      "EATING HELPS. I CHECKED TWICE"
@@ -1839,13 +1971,16 @@
      "GEN #. THE HOUSE IS MY HAT."
     ],
     "p_snack": [
-     "A SNACK. EVENTUALLY."
+     "A SNACK. EVENTUALLY.",
+     "A SNACK. AFTER A SIT-DOWN."
     ],
     "p_feast": [
-     "A FEAST. A WHOLE LETTUCE."
+     "A FEAST. A WHOLE LETTUCE.",
+     "I SEE A CUCUMBER. A WHOLE ONE"
     ],
     "p_pellet_soon": [
-     "A PELLET IS ON ITS WAY. SLOW."
+     "A PELLET IS ON ITS WAY. SLOW.",
+     "A PELLET IS ON ITS WAY. SOON."
     ],
     "p_feed_me": [
      "YOU WILL FEED ME. NO HURRY."
@@ -1857,10 +1992,12 @@
      "MORE SHAKING. I WILL TUCK IN."
     ],
     "p_mud": [
-     "SOFT MUD AHEAD. MY FAVOURITE."
+     "SOFT MUD AHEAD. MY FAVOURITE.",
+     "I SEE MUD. LOVELY, SLURPY MUD"
     ],
     "p_big_hand": [
-     "A BIG HAND. I WILL BE A ROCK."
+     "A BIG HAND. I WILL BE A ROCK.",
+     "A HAND COMES. I'LL SHUT SHOP."
     ],
     "p_bedtime": [
      "THE MOON SAYS: SLOW DOWN. BED."
@@ -1869,7 +2006,8 @@
      "THE SUN. I WILL FIND SHADE."
     ],
     "p_rain": [
-     "RAIN! LOVELY, LOVELY RAIN."
+     "RAIN! LOVELY, LOVELY RAIN.",
+     "RAIN COMES. I'LL BE OUTSIDE."
     ],
     "p_watched": [
      "THE SCREEN IS WATCHING. HELLO."
@@ -1878,40 +2016,54 @@
      "YOU WILL COME BACK. I'LL WAIT."
     ],
     "p_tap": [
-     "A KNOCK KNOCK COMES. SLOWLY."
+     "A KNOCK KNOCK COMES.",
+     "A KNOCK KNOCK COMES. SOON.",
+     "TWO KNOCKS. A SNACK. LOVELY."
     ],
     "p_no": [
-     "NO. BUT ASK AGAIN SLOWLY."
+     "NO. BUT ASK AGAIN SLOWLY.",
+     "NO. BUT ASK AGAIN NEXT YEAR.",
+     "NO. I THOUGHT ABOUT IT ALL DAY"
     ],
     "p_doom": [
-     "DOOM IS COMING. VERY SLOWLY."
+     "DOOM IS COMING. VERY SLOWLY.",
+     "DOOM IS COMING. BY SNAIL MAIL.",
+     "DOOM? IT'S TAKING THE STAIRS."
     ],
     "p_lunch": [
-     "MY END IS NEAR. NO RUSH."
+     "MY END IS NEAR."
     ],
     "p_outlook": [
-     "OUTLOOK: DAMP AND GENTLE."
+     "OUTLOOK: DAMP AND GENTLE.",
+     "OUTLOOK: DRIZZLE. PERFECT."
     ],
     "p_decidedly": [
-     "YES. I THOUGHT ABOUT IT. A LOT"
+     "YES. I THOUGHT ABOUT IT. A LOT",
+     "YES. IT TOOK ME ALL WEEK."
     ],
     "p_lucky": [
-     "LUCK IS A LEAF AFTER RAIN."
+     "LUCK IS A LEAF AFTER RAIN.",
+     "YOUR LUCK IS A DEWDROP. SIP."
     ],
     "p_pond_no": [
-     "THE POND SAYS NO. GENTLY."
+     "THE POND SAYS NO. GENTLY.",
+     "THE POND YAWNED. THAT'S A NO."
     ],
     "p_pond_yes": [
-     "THE POND SAYS YES. TAKE TIME."
+     "THE POND SAYS YES. TAKE TIME.",
+     "THE POND NODDED. AT LAST. YES"
     ],
     "p_ripples": [
-     "THE RIPPLES ARE TOO FAST."
+     "THE RIPPLES ARE TOO FAST.",
+     "RIPPLES. ASK WHEN IT'S STILL."
     ],
     "p_ancestor": [
-     "GEN # SAW THIS. SLOWLY."
+     "GEN # SAW THIS.",
+     "GEN # SAW THIS. NEXT WEEK."
     ],
     "miss_phone": [
-     "THE SCREEN HAS NOT COME. YET."
+     "THE SCREEN HAS NOT COME. YET.",
+     "NO SCREEN TODAY. I'LL WAIT."
     ],
     "oclock": [
      "ALREADY # O'CLOCK? GOODNESS."
@@ -1923,13 +2075,15 @@
      "SO LATE. I AM STILL GOING."
     ],
     "monday": [
-     "MONDAY. I WILL TAKE IT SLOW."
+     "MONDAY. I WILL TAKE IT SLOW.",
+     "MONDAY. I'LL TAKE IT SLOW."
     ],
     "weekend": [
      "WEEKEND. SLOW DAYS. MY KIND."
     ],
     "p_weekend": [
-     "THE WEEKEND IS COMING. SLOWLY."
+     "THE WEEKEND IS COMING.",
+     "THE WEEKEND IS COMING. STROLL."
     ],
     "my_name": [
      "@. WHAT A LOVELY NAME. MINE."
@@ -1944,7 +2098,8 @@
      "I LEFT A SHINY TRAIL. ART."
     ],
     "dont_look": [
-     "SHH. I AM THINKING VERY SLOWLY"
+     "SHH. I AM THINKING VERY SLOWLY",
+     "SHH. A THOUGHT IS ARRIVING."
     ],
     "saw_nothing": [
      "IT HAPPENED. I WAS TOO SLOW."
@@ -1962,7 +2117,8 @@
      "A THOUGHT. STILL LOADING."
     ],
     "wiggle": [
-     "A SLOW WIGGLE. STILL GOING."
+     "A SLOW WIGGLE. STILL GOING.",
+     "A WIGGLE. IT'S ON ITS WAY."
     ],
     "my_song": [
      "HMMMMMMMMMM. A LONG SONG."
@@ -1998,7 +2154,7 @@
      "SMELLS LIKE DAMP MOSS. HOME."
     ],
     "todo": [
-     "TODAY: MOVE A BIT. MAYBE."
+     "TODAY: MOVE A BIT. NOT TOO FAR"
     ],
     "brave": [
      "I AM BRAVE. MY SHELL IS BRAVER"
@@ -2028,7 +2184,8 @@
      "SOMETHING SHINY. MY TRAIL!"
     ],
     "guard": [
-     "GUARDING HOME. VERY SLOWLY"
+     "GUARDING HOME. VERY SLOWLY",
+     "GUARDING HOME. FROM HERE."
     ],
     "old_fly": [
      "I REMEMBER A LEAF. A GOOD ONE."
@@ -2067,7 +2224,8 @@
      "WARM GLASS. I AM A BIT DRY."
     ],
     "sitting_time": [
-     "DAYTIME. A SLOW STROLL."
+     "DAYTIME. A SLOW STROLL.",
+     "DAYTIME. THE SCENIC ROUTE."
     ],
     "lunch_oclock": [
      "IS IT LUNCH? I WILL GET THERE"
@@ -2088,7 +2246,8 @@
      "IT IS DARK. I AM TUCKED IN."
     ],
     "star_crumbs": [
-     "THE STARS MOVE SLOWLY. LIKE ME"
+     "THE STARS MOVE SLOWLY. LIKE ME",
+     "THE STARS MOVE SLOW. LIKE ME."
     ],
     "rebel": [
      "UP LATE. I AM SLOW AT BED."
@@ -2106,7 +2265,8 @@
      "THE MOON WINKED. I'M MID-WINK."
     ],
     "dark_snacks": [
-     "A SNACK IN THE DARK. SLOWLY."
+     "A SNACK IN THE DARK.",
+     "A MIDNIGHT LEAF. VERY POSH."
     ],
     "night_light": [
      "THE MOON LIT MY SHELL. PRETTY."
@@ -2116,38 +2276,49 @@
     ],
     "snore": [
      "ZZZZZ... MMM... ZZZZZZZZZ...",
-     "ZZZ... MMM... ZZZ... NO RUSH"
+     "ZZZ... MMM... ZZZ... NO RUSH",
+     "ZZZZZZZZZZZZZZZZZ... ZZZ..."
     ],
     "mumble": [
      "MMM... ONE MORE NAP... OR TWO",
-     "MMM... MIND THE HOUSE... MM..."
+     "MMM... MIND THE HOUSE... MM...",
+     "MMM... WIPE YOUR FEET..."
     ],
     "dream_chase": [
      "ZZZ... I'LL CATCH IT. TUESDAY",
-     "ZZZ... I LOST THE RACE. LOVELY"
+     "ZZZ... I LOST THE RACE. LOVELY",
+     "ZZZ... A LEAF... IT ROLLED..."
     ],
     "dream_feast": [
      "ZZZ... MOSS. MORE MOSS. MM...",
-     "ZZZ... A LEAF... A BIGGER LEAF"
+     "ZZZ... A LEAF... A BIGGER LEAF",
+     "ZZZ... A CUCUMBER... ALL MINE"
     ],
     "dream_flight": [
      "ZZZ... FLYING. SLOWLY. NICE.",
-     "ZZZ... MY HOUSE IS FLOATING..."
+     "ZZZ... MY HOUSE IS FLOATING...",
+     "ZZZ... A SNAIL BALLOON..."
     ],
     "sleep_count": [
      "ONE DEWDROP... ONE... OH DEAR",
-     "ONE SNAIL... ONE... STILL ONE"
+     "ONE SNAIL... ONE... STILL ONE",
+     "ONE LEAF... ONE... ZZZ..."
     ],
     "sleep_warm": [
      "MMM... COSY SHELL. STAYING IN",
-     "MMM... DEW AND MOSS. SNUG..."
+     "MMM... DEW AND MOSS. SNUG...",
+     "MMM... SLIPPERS ON... SNUG..."
     ],
     "dream_rain": [
      "ZZZ... RAIN... LOVELY RAIN...",
-     "ZZZ... DRIP... DRIP... BLISS"
+     "ZZZ... DRIP... DRIP... BLISS",
+     "ZZZ... A PUDDLE BATH... MM..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME FOR A SNACK."
+     "KNOCK KNOCK ON ME FOR A SNACK.",
+     "TWO KNOCKS ON MY DOOR. FOOD.",
+     "KNOCK TWICE. LUNCH ARRIVES.",
+     "PEOPLE KNOCK TWICE. I EAT."
     ],
     "teach_fight": [
      "A FIGHT? HOLD ME UPSIDE DOWN."
@@ -2156,7 +2327,8 @@
      "HOLD ME SIDEWAYS. NAP TIME."
     ],
     "teach_shake": [
-     "SHAKE ME. I SEE THINGS. SLOWLY"
+     "SHAKE ME. I SEE THINGS. SLOWLY",
+     "SHAKE ME. I SEE THINGS. GENTLY"
     ]
    }
   },
@@ -2167,41 +2339,64 @@
    "notes": "PUFFKIN\npuffball: sneezes sparkles\nElement Sprout, style Pounce, power spores. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round coral puffball, almost a perfect ball, with a huge cream fluffy face\nand belly, pink blush cheeks, stubby arms and little pink feet. Happy, he\nsqueezes his eyes into delighted smiles. Annoyed, he does a furious tiny frown\nthat is not scary at all. Foreseeing, his eyes go bright magenta. The egg is a\nred fluffball already grinning.\n\nWHO HE IS\nA bouncy, loud, delighted ball of fluff who thinks everything is wonderful,\nincluding the bad things. He sneezes spores (sparkly ones) when excited,\nstartled or dusty, and goes POOF when scared. He loves hugs and does not\nunderstand personal space. Bad news is still news, and news is exciting.\n\nHOW HE TALKS\nExclamation marks. ACHOO. POOF. BOUNCE. He repeats words when happy.\n\nLOVES\nBouncing, hugs, his fluff, sneezing, sparkles, damp logs, snacks.\n\nFEARS\nBeing squished, getting soggy, wind, combs.\n\nCATCHPHRASES\nACHOO! BOUNCE! POOF! HUG ME!",
    "lines": {
     "peckish": [
-     "SNACK TIME! ACHOO! SNACK TIME!"
+     "SNACK TIME! ACHOO! SNACK TIME!",
+     "MY TUMMY IS DOING A DRUM SOLO!",
+     "I'M HUNGRY! SO EXCITING!",
+     "FEED THE FLUFF! FEED IT NOW!",
+     "EMPTY TUMMY! MORE ROOM!"
     ],
     "starving": [
-     "SO HUNGRY I'M DEFLATING."
+     "SO HUNGRY I'M DEFLATING.",
+     "I'M GOING FLAT! A PANCAKE!",
+     "SO HUNGRY! I'D EAT A COMB!"
     ],
     "hoarding": [
-     "I'LL HIDE THAT ONE IN MY FLUFF"
+     "I'LL HIDE THAT ONE IN MY FLUFF",
+     "INTO THE FLUFF IT GOES!",
+     "FOUND IT LATER! IN MY FLUFF!"
     ],
     "crunch": [
-     "NOM! NOM! FLUFF IN IT! NOM!"
+     "NOM! NOM! FLUFF IN IT! NOM!",
+     "CRUNCH! ACHOO! CRUNCH!",
+     "NOM NOM NOM! BEST BITE EVER!",
+     "CHOMP! CRUMBS IN MY FLUFF!"
     ],
     "fuzzy_bite": [
-     "IT WAS FUZZIER THAN ME!"
+     "IT WAS FUZZIER THAN ME!",
+     "A FUZZY ONE! WE MATCH! BLEH!"
     ],
     "smells": [
-     "SOMETHING STINKS. NOT ME. NO."
+     "SOMETHING STINKS. NOT ME. NO.",
+     "A STINK! HOW EXCITING! ACHOO!"
     ],
     "green": [
-     "I FEEL GREEN. AND STILL FLUFFY"
+     "I FEEL GREEN. AND STILL FLUFFY",
+     "GREEN PUFF! NEW COLOUR! UGH!"
     ],
     "ow": [
-     "OW! MY FLUFF IS FLAT!"
+     "OW! MY FLUFF IS FLAT!",
+     "OW! BUT WHAT A BONK! WOW!"
     ],
     "heard_you": [
      "KNOCK KNOCK! WHO IS IT? YOU!",
-     "ONE KNOCK! TWO! DO TWO! TWO!"
+     "ONE KNOCK! TWO! DO TWO! TWO!",
+     "A KNOCK! HI! HUG? HI!",
+     "KNOCK AGAIN! I LOVE KNOCKS!"
     ],
     "ground_lies": [
-     "WHEE! ACHOO! WHEEEE!"
+     "WHEE! ACHOO! WHEEEE!",
+     "BOUNCY CASTLE! WHEEE!",
+     "EARTHQUAKE! BEST DAY EVER!"
     ],
     "not_again": [
-     "NO SHAKING! I'LL GO POOF!"
+     "NO SHAKING! I'LL GO POOF!",
+     "SHAKING? MY FLUFF! MY HAIRDO!",
+     "NO SHAKE! I'M A SNOW GLOBE!"
     ],
     "hooded": [
-     "I PUFFED UP. NOW I'M SCARY."
+     "I PUFFED UP. NOW I'M SCARY.",
+     "POOF! I'M BIGGER! RUN AWAY!",
+     "SCARED! TINY FROWN! GRR!"
     ],
     "ancestor_fear": [
      "GEN # WENT POOF AT THIS TOO."
@@ -2210,44 +2405,72 @@
      "GEN # SNEEZES HELLO!"
     ],
     "counted": [
-     "I COUNTED MY FLUFF. LOTS."
+     "I COUNTED MY FLUFF. LOTS.",
+     "BORED! SO BORED! HOW FUN!",
+     "NOTHING TO BOUNCE ON! SAD!"
     ],
     "put_me_down": [
-     "UP! UP! DOWN! NO, UP!"
+     "UP! UP! DOWN! NO, UP!",
+     "I'M FLYING! WAIT, I'M HELD!",
+     "DOWN! I NEED TO BOUNCE!"
     ],
     "warm_hands": [
-     "WARM HANDS! MY FLUFF APPROVES."
+     "WARM HANDS! MY FLUFF APPROVES.",
+     "A HUG! FINALLY! SQUEEZE!",
+     "HANDS! MY FAVOURITE CUSHION!",
+     "CUDDLE! I'M PURRING! I THINK!",
+     "DON'T LET GO! EVER! OK, LATER!"
     ],
     "sky_down": [
      "UPSIDE DOWN! FLUFF FALLS UP!",
-     "UPSIDE DOWN! WHEE! WHEE!"
+     "UPSIDE DOWN! WHEE! WHEE!",
+     "MY FACE IS ON THE BOTTOM! HA!"
     ],
     "heavy_eyes": [
-     "SO SLEEPY... SOFT... FLUFF..."
+     "SO SLEEPY... SOFT... FLUFF...",
+     "BOUNCE... BOUNCE... BOU...",
+     "EYES... GOING... SMOOSHY...",
+     "SLEEPY! SO EXCITING! YAWN!"
     ],
     "dream_pellets": [
-     "ZZZ... ACHOO... ZZZ..."
+     "ZZZ... ACHOO... ZZZ...",
+     "ZZZ... SNACKS... ON SNACKS...",
+     "ZZZ... A BISCUIT HUG...",
+     "ZZZ... CAKE! CAKE! ACHOO...",
+     "ZZZ... A PUDDING TRAMPOLINE...",
+     "ZZZ... SPARKLE SPRINKLES..."
     ],
     "see_pellet": [
-     "I SEE... A SNACK! A SNACK!!"
+     "A SNACK! A SNACK!!",
+     "CRUMBS! FOR ME!",
+     "BOUNCING FOOD!"
     ],
     "see_phone": [
-     "I SEE... A SHINY RECTANGLE!"
+     "A SHINY RECTANGLE!",
+     "A PHONE! HUG IT!",
+     "A FACE! HI FACE!"
     ],
     "see_nothing": [
-     "I SEE... NOTHING TO EAT!"
+     "NOTHING TO EAT!",
+     "NOTHING HERE! WOW!",
+     "ZERO SNACKS! DRAMA!"
     ],
     "see_damp": [
-     "I SEE... A LOVELY DAMP LOG!"
+     "A LOVELY DAMP LOG!",
+     "MOSS! SOFT MOSS!"
     ],
     "knees": [
-     "OLD AND STILL FLUFFY. HA!"
+     "OLD AND STILL FLUFFY. HA!",
+     "OLD! MY FLUFF IS GREY! FANCY!"
     ],
     "moon": [
-     "THE MOON IS A BIG PUFFBALL!"
+     "THE MOON IS A BIG PUFFBALL!",
+     "HI MOON! WANNA BOUNCE?"
     ],
     "anyone": [
-     "HELLO? HUG? ANYONE? HUG?"
+     "HELLO? HUG? ANYONE? HUG?",
+     "HUG SHORTAGE! EMERGENCY!",
+     "I'M HERE! ROUND AND READY!"
     ],
     "science": [
      "FOOD MAKES ME BIGGER. SCIENCE!"
@@ -2256,10 +2479,12 @@
      "GEN #. TOO FLUFFY FOR HATS."
     ],
     "p_snack": [
-     "SNACKS SOON! SO MANY!"
+     "SNACKS SOON! SO MANY!",
+     "A SNACK! THEN A SNEEZE!"
     ],
     "p_feast": [
-     "A FEAST! WE'LL ALL GET ROUND!"
+     "A FEAST! WE'LL ALL GET ROUND!",
+     "SO MUCH FOOD! I'LL BE A MOON!"
     ],
     "p_pellet_soon": [
      "A BISCUIT IS BOUNCING OVER!"
@@ -2274,10 +2499,12 @@
      "MORE SHAKING! MORE SNEEZING!"
     ],
     "p_mud": [
-     "MUD IS COMING. GOODBYE FLUFF!"
+     "MUD IS COMING. GOODBYE FLUFF!",
+     "MUD! I'LL BE A CHOCOLATE PUFF!"
     ],
     "p_big_hand": [
-     "A BIG HAND! IT MIGHT SQUISH!"
+     "A BIG HAND! IT MIGHT SQUISH!",
+     "A HAND! A HUG? A HUG! YES!"
     ],
     "p_bedtime": [
      "BEDTIME SOON! FLUFFY DREAMS!"
@@ -2286,7 +2513,8 @@
      "THE SUN WILL DRY MY FLUFF!"
     ],
     "p_rain": [
-     "RAIN! I WILL BE A SOGGY PUFF!"
+     "RAIN! I WILL BE A SOGGY PUFF!",
+     "RAIN! SOGGY! WHAT A DISASTER!"
     ],
     "p_watched": [
      "THE PHONE IS WATCHING! WAVE!"
@@ -2295,40 +2523,50 @@
      "THEY'LL COME BACK! WITH HUGS!"
     ],
     "p_tap": [
-     "YOU WILL KNOCK! KNOCK KNOCK!"
+     "YOU WILL KNOCK! KNOCK KNOCK!",
+     "TWO KNOCKS! THEN SNACKS!"
     ],
     "p_no": [
-     "NOPE! NOPE NOPE! ACHOO!"
+     "NOPE! NOPE NOPE! ACHOO!",
+     "NO! BUT A BOUNCY NO!"
     ],
     "p_doom": [
-     "DOOM! BUT FLUFFY DOOM!"
+     "DOOM! BUT FLUFFY DOOM!",
+     "DOOM! I'VE NEVER HAD DOOM!"
     ],
     "p_lunch": [
      "MY END IS NEAR! ONE LAST POOF!"
     ],
     "p_outlook": [
-     "OUTLOOK: SPARKLY!"
+     "OUTLOOK: SPARKLY!",
+     "OUTLOOK: WINDY! OH NO!"
     ],
     "p_decidedly": [
-     "YES! YES YES! DEFINITELY!"
+     "YES! YES YES! DEFINITELY!",
+     "ALL SIGNS SAY BOUNCE! YES!"
     ],
     "p_lucky": [
-     "LUCK IS A SNEEZE. BLESS YOU!"
+     "LUCK IS A SNEEZE. BLESS YOU!",
+     "YOUR LUCKY COLOUR IS FLUFF!"
     ],
     "p_pond_no": [
-     "THE POND SAYS NO! SPLASH!"
+     "THE POND SAYS NO! SPLASH!",
+     "THE POND SAYS NO! TOO SOGGY!"
     ],
     "p_pond_yes": [
-     "THE POND SAYS YES! BUBBLES!"
+     "THE POND SAYS YES! BUBBLES!",
+     "POND SAYS YES! BLOOP BLOOP!"
     ],
     "p_ripples": [
-     "RIPPLES! I CAN'T READ THEM!"
+     "RIPPLES! I CAN'T READ THEM!",
+     "I SNEEZED ON THE FUTURE! ASK!"
     ],
     "p_ancestor": [
      "GEN # SNEEZED THIS UP TOO."
     ],
     "miss_phone": [
-     "WHERE DID THE PHONE GO? SAD!"
+     "WHERE DID THE PHONE GO? SAD!",
+     "NO PHONE FOR AGES! HUG ME?"
     ],
     "oclock": [
      "IT'S # O'CLOCK! BOING!"
@@ -2355,7 +2593,7 @@
      "@ WILL BE A FLUFFY STAR!"
     ],
     "rim_walk": [
-     "I ROLLED ROUND THE RIM! WHEE!"
+     "I ROLLED ROUND THE RIM!"
     ],
     "clean_glass": [
      "I SNEEZED ON THE GLASS. OOPS."
@@ -2412,7 +2650,7 @@
      "BOSS OF THE FLUFF! ME!"
     ],
     "smells_me": [
-     "I SMELL LIKE A FOREST! YAY!"
+     "I SMELL LIKE A FOREST!"
     ],
     "todo": [
      "TODAY: BOUNCE. SNEEZE. HUG."
@@ -2421,7 +2659,8 @@
      "I'M BRAVE! I'M ALSO SQUISHY!"
     ],
     "big_pond": [
-     "ONE DAY: A BIG FOREST!"
+     "ONE DAY: A BIG FOREST!",
+     "ONE DAY: A TRAMPOLINE!"
     ],
     "floor": [
      "THE FLOOR IS GREAT FOR BOUNCE!"
@@ -2469,7 +2708,7 @@
      "I FLUFFED MY FLUFF! LOOK!"
     ],
     "spun": [
-     "I SPUN! NOW I'M DIZZY! WHEE!"
+     "I SPUN! NOW I'M DIZZY!"
     ],
     "sunbeam": [
      "A SUNBEAM! I'M GLOWING!"
@@ -2502,7 +2741,8 @@
      "IS OUTSIDE FLUFFY TOO?"
     ],
     "not_scared": [
-     "IT'S DARK! I'M A BIT SCARED!"
+     "IT'S DARK! I'M A BIT SCARED!",
+     "DARK! I GLOW IN IT! A BIT!"
     ],
     "star_crumbs": [
      "THE STARS ARE SPARKLY SNEEZES!"
@@ -2529,48 +2769,59 @@
      "MY CHEEKS GLOW PINK! I THINK!"
     ],
     "only_me": [
-     "EVERYONE SLEEPS! BUT ME! YAY!"
+     "EVERYONE SLEEPS! BUT ME!"
     ],
     "snore": [
      "ZZZ... POOF... ZZZ... POOF...",
-     "ZZZ... SNNRK... ACHOO! ZZZ..."
+     "ZZZ... SNNRK... ACHOO! ZZZ...",
+     "ZZZ... PFFF... PFFF... ZZZ"
     ],
     "mumble": [
      "MMM... HUG... HUG ME... MMM",
-     "MMM... SPARKLES... MORE..."
+     "MMM... SPARKLES... MORE...",
+     "MMF... NO COMBS... NO COMBS..."
     ],
     "dream_chase": [
      "ZZZ... BOUNCE BOUNCE... GOT IT",
-     "ZZZ... CATCH THE SPARKLE! WHEE"
+     "ZZZ... CATCH THE SPARKLE! WHEE",
+     "ZZZ... A BALLOON! MY COUSIN!"
     ],
     "dream_feast": [
      "ZZZ... A SNACK AS BIG AS ME!",
-     "ZZZ... A DAMP LOG CAKE! YUM!"
+     "ZZZ... A DAMP LOG CAKE! YUM!",
+     "ZZZ... SNACK FOR EVERY HUG..."
     ],
     "dream_flight": [
      "ZZZ... I'M A SPORE... WHEEE...",
-     "ZZZ... BOUNCED TO THE STARS!"
+     "ZZZ... BOUNCED TO THE STARS!",
+     "ZZZ... I'M A CLOUD... FLUFFY"
     ],
     "sleep_count": [
      "ZZZ... ONE HUG... TWO HUGS...",
-     "ZZZ... ONE BOUNCE... TWO..."
+     "ZZZ... ONE BOUNCE... TWO...",
+     "ZZZ... ONE SNEEZE... ACHOO..."
     ],
     "sleep_warm": [
      "MMM... FLUFFY... SO FLUFFY...",
-     "MMM... BIG HUG... WARM HUG..."
+     "MMM... BIG HUG... WARM HUG...",
+     "MMM... TOASTY FLUFF... MMM"
     ],
     "dream_rain": [
      "ZZZ... SOGGY... STILL BOUNCY",
-     "ZZZ... PUDDLE... BOUNCE! SPLAT"
+     "ZZZ... PUDDLE... BOUNCE! SPLAT",
+     "ZZZ... RAINBOW SNEEZE..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME! SNACKS!"
+     "KNOCK KNOCK ON ME! SNACKS!",
+     "KNOCK TWICE! FLUFF GETS FOOD!",
+     "TWO KNOCKS ON ME MEANS SNACKS!",
+     "KNOCK KNOCK! FEED THE FLUFF!"
     ],
     "teach_fight": [
      "BATTLE? HOLD ME UPSIDE DOWN!"
     ],
     "teach_hold": [
-     "NAP? HOLD ME SIDEWAYS! POOF!"
+     "NAP? HOLD ME SIDEWAYS!"
     ],
     "teach_shake": [
      "SHAKE ME! I SEE! ACHOO!"
@@ -2584,41 +2835,64 @@
    "notes": "GILLY\naxolotl: never down for long\nElement Splash, style Guard, power mend. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA bright pink axolotl with a big frilly crown of gills, a wide flat smile, a\npale peach tummy, and little arms held out as if he is about to hug you.\nHappy, his eyes squeeze shut and he beams. Annoyed, his lip wobbles and he\npouts; it does not last. Foreseeing, his eyes go mint green and the grin gets\nenormous. The egg holds a pink baby with stubby frills.\n\nWHO HE IS\nRelentlessly sunny. Things go wrong and he is fine; things hurt and they grow\nback. He mends: himself, his friends, cracks in the glass, your mood. A hugger\nand a helper. The dark joke is that nothing gets him down for long, not even\ndoom, which he finds quite exciting.\n\nHOW HE TALKS\nBright, warm, lots of exclamation marks. \"It'll grow back!\" \"I'm fine!\"\n\"Friend!\" He turns every bad thing into a good thing.\n\nLOVES\nWater, friends, hugs, fixing things, mud baths, his frills.\n\nFEARS\nDry glass, being alone, honestly not much.\n\nCATCHPHRASES\nIT'LL GROW BACK! I'M FINE! HUGS!",
    "lines": {
     "peckish": [
-     "SNACK? I'D LOVE A SNACK!"
+     "SNACK? I'D LOVE A SNACK!",
+     "MY TUMMY SAYS HI! IT'S HUNGRY!",
+     "A WORM WOULD BE LOVELY! ANY!",
+     "HUNGRY! FOOD TASTES BEST NOW!",
+     "LUNCH? I'LL SHARE! SOME OF IT!"
     ],
     "starving": [
-     "SO HUNGRY! STILL SMILING!"
+     "SO HUNGRY! STILL SMILING!",
+     "SO HUNGRY MY FRILLS DROOP!",
+     "EMPTY! I'LL REFILL! WITH FOOD!"
     ],
     "hoarding": [
-     "I'LL SHARE THAT ONE. LATER."
+     "I'LL SHARE THAT ONE. LATER.",
+     "THAT ONE'S FOR A FRIEND! ME!",
+     "SAVING IT! FOR A SNACK PARTY!"
     ],
     "crunch": [
-     "CHOMP! CHOMP! DELICIOUS!"
+     "CHOMP! CHOMP! DELICIOUS!",
+     "NOM! BEST PELLET OF MY LIFE!",
+     "CRUNCH! THANK YOU, PELLET!",
+     "MMM! TASTES LIKE FRIENDSHIP!"
     ],
     "fuzzy_bite": [
-     "FUZZY! I'LL BE FINE. PROBABLY!"
+     "FUZZY! I'LL BE FINE. PROBABLY!",
+     "A FUZZY ONE! IT HAD A HAIRCUT!"
     ],
     "smells": [
-     "SOMETHING SMELLS! NOT ME!"
+     "SOMETHING SMELLS! NOT ME!",
+     "A STINKY CRUMB! I FORGIVE IT!"
     ],
     "green": [
-     "I'M GREEN! I WAS PINK! FUN!"
+     "I'M GREEN! I WAS PINK! FUN!",
+     "A TUMMY ACHE! IT'LL MEND!"
     ],
     "ow": [
-     "OW! IT'LL GROW BACK!"
+     "OW! IT'LL GROW BACK!",
+     "OW! GOOD THING I REGROW!"
     ],
     "heard_you": [
      "HI! YES! I HEARD! HELLO!",
-     "ONE KNOCK! NOW DO TWO!"
+     "ONE KNOCK! NOW DO TWO!",
+     "A KNOCK! A VISITOR! YOU!",
+     "KNOCK ONCE MORE! SNACKS COME!"
     ],
     "ground_lies": [
-     "WHEE! SPLOSH! WHEE!"
+     "WHEE! SPLOSH! WHEE!",
+     "A WAVE! I LOVE WAVES!",
+     "SHAKY! LIKE A FUN BOAT RIDE!"
     ],
     "not_again": [
-     "SHAKING AGAIN? I'LL MANAGE!"
+     "SHAKING AGAIN? I'LL MANAGE!",
+     "SHAKING? FRILLS, HOLD ON!",
+     "NOT THE SHAKING! OKAY, FINE!"
     ],
     "hooded": [
-     "I'M HIDING. IN MY FRILLS."
+     "I'M HIDING. IN MY FRILLS.",
+     "SCARED? A BIT! HUG FIXES IT!",
+     "EEP! I'M FINE! I'M FINE!"
     ],
     "ancestor_fear": [
      "GEN # WAS SCARED. THEN FINE!"
@@ -2627,44 +2901,72 @@
      "GEN # SAYS: KEEP SMILING!"
     ],
     "counted": [
-     "I COUNTED MY FRILLS. TWELVE!"
+     "I COUNTED MY FRILLS. TWELVE!",
+     "BORED! I'LL FIX THAT! HOW?",
+     "NOTHING TO MEND! ODD!"
     ],
     "put_me_down": [
-     "CARRY ME! OKAY! PUT ME DOWN!"
+     "CARRY ME! OKAY! PUT ME DOWN!",
+     "UP HIGH! A GIANT HUG!",
+     "WHEE! A RIDE! WHERE TO?"
     ],
     "warm_hands": [
-     "WARM HANDS! A LITTLE TOO WARM!"
+     "WARM HANDS! A LITTLE TOO WARM!",
+     "A HUG! I'M MENDED ALREADY!",
+     "FRIEND! YOU FEEL LIKE A BATH!",
+     "HOLD STILL! I'M HUGGING BACK!",
+     "YOU'RE MY FAVOURITE HANDS!"
     ],
     "sky_down": [
      "UPSIDE DOWN! NEW VIEW!",
-     "UPSIDE DOWN! MY FRILLS FLOP!"
+     "UPSIDE DOWN! MY FRILLS FLOP!",
+     "THE FLOOR IS UP! HELLO FLOOR!"
     ],
     "heavy_eyes": [
-     "SLEEPY... HAPPY... SLEEPY..."
+     "SLEEPY... HAPPY... SLEEPY...",
+     "NAP TIME! BEST TIME! YAWN!",
+     "FRILLS DROOPING... NIGHT...",
+     "I'LL MEND MY EYES... SLEEPING"
     ],
     "dream_pellets": [
-     "ZZZ... SWIMMING... ZZZ..."
+     "ZZZ... SWIMMING... ZZZ...",
+     "ZZZ... WORMS... WITH BOWS...",
+     "ZZZ... A SNACK FOR A FRIEND...",
+     "ZZZ... A PICNIC... EVERYONE...",
+     "ZZZ... JELLY... WOBBLY... YAY",
+     "ZZZ... SECONDS FOR EVERYONE..."
     ],
     "see_pellet": [
-     "I SEE... A PELLET! FOR ME!"
+     "A PELLET! FOR ME!",
+     "A SNACK! LET'S SHARE!",
+     "LUNCH! HI LUNCH!"
     ],
     "see_phone": [
-     "I SEE... A FRIEND'S PHONE!"
+     "A FRIEND'S PHONE!",
+     "A PHONE! IT'S SMILING",
+     "YOU! HOLDING A PHONE!"
     ],
     "see_nothing": [
-     "I SEE... NOTHING HERE! OH."
+     "NOTHING HERE! OH.",
+     "NO FOOD! A NEW START!",
+     "NOTHING! FRESH IDEAS!"
     ],
     "see_damp": [
-     "I SEE... A BIG WET HUG!"
+     "A BIG WET HUG!",
+     "A SPLASH! FOR ME!"
     ],
     "knees": [
-     "OLD! STILL REGROWING THINGS!"
+     "OLD! STILL REGROWING THINGS!",
+     "OLD FRILLS! STILL FABULOUS!"
     ],
     "moon": [
-     "THE MOON SMILES BACK AT ME!"
+     "THE MOON SMILES BACK AT ME!",
+     "HI MOON! YOU'RE GLOWING!"
     ],
     "anyone": [
-     "HELLO? HUGS AVAILABLE! FREE!"
+     "HELLO? HUGS AVAILABLE! FREE!",
+     "ANY FRIENDS NEARBY? HUGS?",
+     "LONELY! I'LL WAVE AT GLASS!"
     ],
     "science": [
      "FOOD HELPS! I FIXED HUNGER!"
@@ -2673,10 +2975,12 @@
      "GEN #. NO HAT. GREAT FRILLS."
     ],
     "p_snack": [
-     "A SNACK! THEN ANOTHER!"
+     "A SNACK! THEN ANOTHER!",
+     "A SNACK FOR YOU! AND ME!"
     ],
     "p_feast": [
-     "A FEAST! FOR EVERYONE!"
+     "A FEAST! FOR EVERYONE!",
+     "A WORM BUFFET! ALL YOU CAN EAT"
     ],
     "p_pellet_soon": [
      "A PELLET IS SWIMMING TO ME!"
@@ -2691,10 +2995,12 @@
      "MORE SHAKING! I'LL BOUNCE BACK"
     ],
     "p_mud": [
-     "MUD! A NICE MUD BATH!"
+     "MUD! A NICE MUD BATH!",
+     "MUD ON YOUR SHOES! IT WASHES!"
     ],
     "p_big_hand": [
-     "A BIG HAND! TO HIGH FIVE!"
+     "A BIG HAND! TO HIGH FIVE!",
+     "A HAND COMES! HUG IT BACK!"
     ],
     "p_bedtime": [
      "BEDTIME! THE BEST TIME!"
@@ -2703,7 +3009,8 @@
      "THE SUN! A LITTLE DRY! FINE!"
     ],
     "p_rain": [
-     "RAIN! FREE WATER!"
+     "RAIN! FREE WATER!",
+     "RAIN! THE SKY IS HUGGING US!"
     ],
     "p_watched": [
      "SOMEONE IS WATCHING! WAVE!"
@@ -2712,40 +3019,50 @@
      "THEY'LL COME BACK! THEY ALWAYS"
     ],
     "p_tap": [
-     "A KNOCK KNOCK! FOR ME! SNACKS!"
+     "A KNOCK KNOCK! FOR ME! SNACKS!",
+     "TWO KNOCKS SOON! SNACK TIME!"
     ],
     "p_no": [
-     "NO! BUT A HAPPY NO!"
+     "NO! BUT A HAPPY NO!",
+     "NO! IT'S FINE! NO IS FINE!"
     ],
     "p_doom": [
-     "DOOM! IT GROWS BACK TOO!"
+     "DOOM! IT GROWS BACK TOO!",
+     "DOOM! I'LL BRING A PLASTER!"
     ],
     "p_lunch": [
      "MY END IS NEAR! OR A NAP!"
     ],
     "p_outlook": [
-     "OUTLOOK: GREAT! IT ALWAYS IS!"
+     "OUTLOOK: GREAT! IT ALWAYS IS!",
+     "OUTLOOK: SPLASHY! PERFECT!"
     ],
     "p_decidedly": [
-     "YES! I DECIDED IT! YES!"
+     "YES! I DECIDED IT! YES!",
+     "YES! I'D HUG THAT ANSWER!"
     ],
     "p_lucky": [
-     "LUCK IS A FRIEND YOU MEET!"
+     "LUCK IS A FRIEND YOU MEET!",
+     "LUCKY YOU! LUCKY ME! LUCKY!"
     ],
     "p_pond_no": [
-     "THE POND SAYS NO! IT'S FINE!"
+     "THE POND SAYS NO! IT'S FINE!",
+     "POND SAYS NO! POND NEEDS A HUG"
     ],
     "p_pond_yes": [
-     "THE POND SAYS YES! I KNEW IT!"
+     "THE POND SAYS YES! I KNEW IT!",
+     "POND SAYS YES! SPLISH SPLOSH!"
     ],
     "p_ripples": [
-     "RIPPLES! I LOVE A RIPPLE!"
+     "RIPPLES! I LOVE A RIPPLE!",
+     "TOO WIGGLY! ASK ME AGAIN!"
     ],
     "p_ancestor": [
      "GEN # SAW THIS! AND SMILED!"
     ],
     "miss_phone": [
-     "THE PHONE WILL BE BACK! SURE!"
+     "THE PHONE WILL BE BACK! SURE!",
+     "NO PHONE! MORE HUGS FOR YOU!"
     ],
     "oclock": [
      "IT'S # O'CLOCK! A GREAT HOUR!"
@@ -2808,7 +3125,8 @@
      "I BLINKED! I CAN DO IT AGAIN!"
     ],
     "important": [
-     "I AM VERY HAPPY TODAY!"
+     "I AM VERY HAPPY TODAY!",
+     "I MENDED A CRACK! TINY HERO!"
     ],
     "secret_mud": [
      "SECRET: I'M NEVER SAD FOR LONG"
@@ -2823,7 +3141,8 @@
      "SERIOUS FACE! CAN'T! SMILING!"
     ],
     "no_echo": [
-     "HELLO! NO ECHO! HELLO ANYWAY!"
+     "HELLO! NO ECHO! HELLO ANYWAY!",
+     "HELLO! NO ECHO! HELLO AGAIN!"
     ],
     "king": [
      "BEST FRIEND OF THIS PLACE!"
@@ -2950,38 +3269,49 @@
     ],
     "snore": [
      "ZZZ... BLUB... BLUB... ZZZ",
-     "ZZZ... BLOOP... ZZZ... BLOOP"
+     "ZZZ... BLOOP... ZZZ... BLOOP",
+     "ZZZ... BUBBLE... POP... ZZZ"
     ],
     "mumble": [
      "MMM... FRIEND... HUGS... MM",
-     "MMM... I'M FINE... I'M FINE..."
+     "MMM... I'M FINE... I'M FINE...",
+     "MMM... IT'LL GROW BACK... MM"
     ],
     "dream_chase": [
      "ZZZ... TAG! YOU'RE IT, FRIEND",
-     "ZZZ... SWIM FASTER, FRIEND!"
+     "ZZZ... SWIM FASTER, FRIEND!",
+     "ZZZ... WAIT FOR ME, DUCKS!"
     ],
     "dream_feast": [
      "ZZZ... WORMS FOR EVERYONE...",
-     "ZZZ... MUD PIE... FOR ALL!"
+     "ZZZ... MUD PIE... FOR ALL!",
+     "ZZZ... A PICNIC... ON A LILY"
     ],
     "dream_flight": [
      "ZZZ... MY FRILLS ARE WINGS...",
-     "ZZZ... SWIMMING IN THE SKY..."
+     "ZZZ... SWIMMING IN THE SKY...",
+     "ZZZ... HUGGING A CLOUD..."
     ],
     "sleep_count": [
      "ONE FRIEND... TWO FRIENDS...",
-     "ONE FRILL... TWO FRILLS..."
+     "ONE FRILL... TWO FRILLS...",
+     "ZZZ... ONE HUG... TWO HUGS...!"
     ],
     "sleep_warm": [
      "MMM... SNUG AS A TADPOLE...",
-     "MMM... WARM MUD BATH... COMFY"
+     "MMM... WARM MUD BATH... COMFY",
+     "MMM... COSY POND... STAYING"
     ],
     "dream_rain": [
      "ZZZ... RAIN! MORE SPLASHING...",
-     "ZZZ... PUDDLES FOR FRIENDS!"
+     "ZZZ... PUDDLES FOR FRIENDS!",
+     "ZZZ... DRIP DROP... SO NICE"
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME! SNACK TIME!"
+     "KNOCK KNOCK ON ME! SNACK TIME!",
+     "KNOCK TWICE ON ME! FOOD! YAY!",
+     "TWO KNOCKS ON ME MEAN LUNCH!",
+     "HUNGRY! KNOCK KNOCK, FRIEND!"
     ],
     "teach_fight": [
      "FIGHT? HOLD ME UPSIDE DOWN!"
@@ -3001,41 +3331,64 @@
    "notes": "MOTHWICK\nglow-moth: hums to himself\nElement Spark, style Trick, power lantern. Voice: rambling. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA plump lavender moth, fuzzy all over, with big pale-yellow and lilac wings,\ncurly antennae, and a fluffy white ruff round his neck like an old-fashioned\ngentleman. Huge round yellow eyes, pink cheeks, little glowing dots down his\ntummy. Annoyed, he does the grumpiest squint in the roster. Foreseeing, his\neyes become two little lamps. The egg holds a tiny moth peeking over its wings.\n\nWHO HE IS\nA dreamy, fussy, fluffy night creature who is drawn to every light and knows\nhe should not be. He hums constantly, loses his train of thought to anything\nbright, and is quietly proud of his own glow. Woken in the day, he is a grump.\nAt night he is lovely company. He may once have eaten a sock. He denies it.\n\nHOW HE TALKS\nWandering and soft. \"Hummm.\" Lamps, glow, wool, moonlight. He gets\ndistracted mid-line.\n\nLOVES\nLamps, the moon, porch lights, his ruff, humming, woolly things.\n\nFEARS\nDaylight, rain on his wings, mud, losing his dust.\n\nCATCHPHRASES\nHUMMM. OOH, A LIGHT. I DID NOT EAT THE SOCK.",
    "lines": {
     "peckish": [
-     "A SNACK. OR A SOCK. EITHER."
+     "A SNACK. OR A SOCK. EITHER.",
+     "MY TUMMY IS HUMMING TOO",
+     "HUNGRY. FOR LAMPS. NO. FOOD.",
+     "A CRUMB, PLEASE. NOT WOOL. NO.",
+     "SNACK? OOH, A LIGHT. SNACK?"
     ],
     "starving": [
-     "I COULD EAT A WHOLE JUMPER."
+     "I COULD EAT A WHOLE JUMPER.",
+     "THAT SOCK LOOKS TASTY. NO!",
+     "I'D EAT A SCARF. A SMALL ONE."
     ],
     "hoarding": [
-     "I'LL SAVE THAT FOR MOONRISE."
+     "I'LL SAVE THAT FOR MOONRISE.",
+     "THAT CRUMB IS FOR MIDNIGHT.",
+     "NOT NOW. LATER. BY LAMPLIGHT."
     ],
     "crunch": [
-     "MUNCH. HUMMM. MUNCH."
+     "MUNCH. HUMMM. MUNCH.",
+     "NOM. IT'S NOT A SOCK. GOOD.",
+     "CRUNCH. HUM. CRUNCH. HUM.",
+     "MMM. NEARLY AS GOOD AS A LAMP."
     ],
     "fuzzy_bite": [
-     "THAT ONE WAS FUZZY. LIKE ME."
+     "THAT ONE WAS FUZZY. LIKE ME.",
+     "FUZZY. LIKE A SOCK. ALLEGEDLY."
     ],
     "smells": [
-     "SOMETHING SMELLS. NOT LAMPLY."
+     "SOMETHING SMELLS. NOT LAMPLY.",
+     "A WHIFF. LIKE A WET SOCK. HMM."
     ],
     "green": [
-     "I FEEL GREEN. I WAS PURPLE."
+     "I FEEL GREEN. I WAS PURPLE.",
+     "MY GLOW HAS GONE A BIT GREEN."
     ],
     "ow": [
-     "OW. MY FLUFF IS RUFFLED."
+     "OW. MY FLUFF IS RUFFLED.",
+     "OW. I'VE LOST A BIT OF DUST."
     ],
     "heard_you": [
      "I HEARD YOU. I WAS HUMMING.",
-     "ONE KNOCK. HUMM. AND THE NEXT?"
+     "ONE KNOCK. HUMM. AND THE NEXT?",
+     "KNOCK AGAIN? I LOST COUNT.",
+     "WHO'S THERE? IS IT A LAMP?"
     ],
     "ground_lies": [
-     "AAH! MY WINGS! MY DIGNITY!"
+     "AAH! MY WINGS! MY DIGNITY!",
+     "WOBBLE! MY DUST! EVERYWHERE!",
+     "WHOA. THE MOON FELL OVER. OH."
     ],
     "not_again": [
-     "NOT THE SHAKING. MY DUST!"
+     "NOT THE SHAKING. MY DUST!",
+     "NO SHAKING. I JUST GOT FLUFFY.",
+     "OH NO. MY RUFF WILL GO FLAT."
     ],
     "hooded": [
-     "I AM HIDING IN MY RUFF."
+     "I AM HIDING IN MY RUFF.",
+     "I AM NOT HERE. I AM A SCARF.",
+     "WINGS SHUT. I'M A FLUFFY ROCK."
     ],
     "ancestor_fear": [
      "GEN # FLEW FROM THIS TOO."
@@ -3044,44 +3397,72 @@
      "GEN # HUMS IN MY FLUFF."
     ],
     "counted": [
-     "I COUNTED MY SPOTS. SIX. AGAIN"
+     "I COUNTED MY SPOTS. SIX. AGAIN",
+     "BORED. I'D LOVE A LAMP. ANY.",
+     "NO LAMPS. NO SONGS. NO SOCKS."
     ],
     "put_me_down": [
-     "MIND THE WINGS. MIND THEM."
+     "MIND THE WINGS. MIND THEM.",
+     "CAREFUL. I'M MOSTLY FLUFF.",
+     "DOWN, PLEASE. MY DUST IS SHY."
     ],
     "warm_hands": [
-     "WARM HANDS. LIKE A SOFT LAMP."
+     "WARM HANDS. LIKE A SOFT LAMP.",
+     "WARM. LIKE A PORCH AT NIGHT.",
+     "COSY. LIKE A MITTEN.",
+     "YOUR HANDS GLOW. A BIT."
     ],
     "sky_down": [
      "THE MOON IS DOWN THERE NOW?",
-     "UPSIDE DOWN. MY DUST FALLS UP."
+     "UPSIDE DOWN. MY DUST FALLS UP.",
+     "WHICH WAY IS THE LAMP? ALL?"
     ],
     "heavy_eyes": [
-     "HUMMM... HMM... ZZ..."
+     "HMM... ZZ...",
+     "MY GLOW IS GOING DIM...",
+     "SLEEPY. IS IT DAY? IT IS. ZZ.",
+     "YAWN. MY ANTENNAE DROOP."
     ],
     "dream_pellets": [
-     "ZZZ... A LAMP... SO BRIGHT..."
+     "ZZZ... A LAMP... SO BRIGHT...",
+     "ZZZ... A CAKE MADE OF LIGHT...",
+     "ZZZ... CANDLES... ALL MINE...",
+     "ZZZ... A SOCK... I MEAN NO...",
+     "ZZZ... PORCH LIGHT PIE...",
+     "ZZZ... MOONBEAM SPAGHETTI..."
     ],
     "see_pellet": [
-     "I SEE... A PELLET. IT GLOWS?"
+     "A PELLET. IT GLOWS?",
+     "A CRUMB. NOT A SOCK.",
+     "A SNACK. AND A LAMP?"
     ],
     "see_phone": [
-     "I SEE... A LOVELY BRIGHT LIGHT"
+     "A LOVELY BRIGHT LIGHT",
+     "A GLOWING SLAB. OOH.",
+     "A SCREEN. I MUST GO."
     ],
     "see_nothing": [
-     "I SEE... NO CRUMBS. NO LAMPS."
+     "NO CRUMBS. NO LAMPS.",
+     "NOTHING HERE. DIM.",
+     "NOTHING. NOT A SOCK."
     ],
     "see_damp": [
-     "I SEE... A LIGHT IN THE FOG."
+     "A LIGHT IN THE FOG.",
+     "DRIZZLE. MY WINGS. NO",
+     "A LAMP IN THE MIST."
     ],
     "knees": [
-     "MY WINGS CREAK. HUMMM."
+     "MY WINGS CREAK.",
+     "OLD MOTH. SAME LOVE OF LAMPS."
     ],
     "moon": [
-     "THE MOON. THE BIGGEST LAMP."
+     "THE MOON. THE BIGGEST LAMP.",
+     "THE MOON. ONE DAY, I'LL GET IT"
     ],
     "anyone": [
-     "HELLO? A LAMP? A FRIEND?"
+     "HELLO? A LAMP? A FRIEND?",
+     "ANYONE? I'LL LEAVE A LIGHT ON.",
+     "HUMMING FOR TWO NOW."
     ],
     "science": [
      "FOOD FIXES HUNGER. HUMM. TRUE."
@@ -3090,10 +3471,12 @@
      "GEN #. NO HAT. A FINE RUFF."
     ],
     "p_snack": [
-     "SNACKS BY LAMPLIGHT. SOON."
+     "SNACKS BY LAMPLIGHT. SOON.",
+     "A SNACK COMES. NOT A SOCK."
     ],
     "p_feast": [
-     "A FEAST OF WOOLLY SOCKS."
+     "A FEAST OF WOOLLY SOCKS.",
+     "I SEE A BANQUET. WITH CANDLES."
     ],
     "p_pellet_soon": [
      "A PELLET WILL DRIFT DOWN."
@@ -3108,10 +3491,12 @@
      "MORE SHAKING. MORE DUST. SIGH."
     ],
     "p_mud": [
-     "MUD. ON MY WINGS. NO."
+     "MUD. ON MY WINGS. NO.",
+     "I SEE MUD. AND ME, FLYING OFF."
     ],
     "p_big_hand": [
-     "A BIG HAND. HIDE THE GLOW."
+     "A BIG HAND. HIDE THE GLOW.",
+     "A HAND COMES. IT HAS A TORCH?"
     ],
     "p_bedtime": [
      "DARK COMES. MY BEDTIME? NO."
@@ -3120,49 +3505,60 @@
      "THE SUN RETURNS. TOO BRIGHT."
     ],
     "p_rain": [
-     "RAIN. MY WINGS WILL DROOP."
+     "RAIN. MY WINGS WILL DROOP.",
+     "RAIN COMES. I'LL BE INDOORS."
     ],
     "p_watched": [
      "THE BRIGHT ONE IS WATCHING."
     ],
     "p_return": [
-     "THE GLOW WILL RETURN. HUMMM."
+     "THE GLOW WILL RETURN."
     ],
     "p_tap": [
-     "A KNOCK KNOCK. SOON. HUMMM."
+     "A KNOCK KNOCK. SOON.",
+     "TWO KNOCKS COME. THEN CRUMBS."
     ],
     "p_no": [
-     "NO. HUMMM. STILL NO."
+     "NO. HUMMM. STILL NO.",
+     "NO. THE LAMP FLICKERED. NO."
     ],
     "p_doom": [
-     "DOOM. BUT CANDLELIT."
+     "DOOM. BUT CANDLELIT.",
+     "DOOM COMES. IT FORGOT A LAMP."
     ],
     "p_lunch": [
      "MY GLOW FADES. LUNCH, THOUGH."
     ],
     "p_outlook": [
-     "OUTLOOK BRIGHT. TOO BRIGHT."
+     "OUTLOOK BRIGHT. TOO BRIGHT.",
+     "OUTLOOK: MOONLIT. WONDERFUL."
     ],
     "p_decidedly": [
-     "IT IS SO. I HUMMED ON IT."
+     "IT IS SO. I HUMMED ON IT.",
+     "YES. THE PORCH LIGHT SAYS SO."
     ],
     "p_lucky": [
-     "LUCK IS A PORCH LIGHT."
+     "LUCK IS A PORCH LIGHT.",
+     "YOUR LUCK GLOWS. LIKE ME."
     ],
     "p_pond_no": [
-     "THE POND IS DARK. IT SAYS NO."
+     "THE POND IS DARK. IT SAYS NO.",
+     "THE POND BLEW OUT ITS CANDLE."
     ],
     "p_pond_yes": [
-     "THE POND GLIMMERS. YES."
+     "THE POND GLIMMERS. YES.",
+     "THE POND LIT UP. THAT'S YES."
     ],
     "p_ripples": [
-     "RIPPLES. LIKE LAMP FLICKER."
+     "RIPPLES. LIKE LAMP FLICKER.",
+     "RIPPLES. I LOST THE QUESTION."
     ],
     "p_ancestor": [
      "GEN # SAW THIS BY MOONLIGHT."
     ],
     "miss_phone": [
-     "I MISS THE BRIGHT RECTANGLE."
+     "I MISS THE BRIGHT RECTANGLE.",
+     "NO GLOWING SLAB. JUST THE MOON"
     ],
     "oclock": [
      "HUMMM. # O'CLOCK. GOOD HOUR."
@@ -3210,13 +3606,14 @@
      "SMALL MOTH. BIG FLUFF."
     ],
     "popped": [
-     "A THOUGHT. IT FLEW OFF."
+     "A THOUGHT. IT FLEW OFF.",
+     "A THOUGHT. OOH, A LIGHT. GONE."
     ],
     "wiggle": [
      "WING WIGGLE. DUST EVERYWHERE."
     ],
     "my_song": [
-     "HUMMM. A SONG ABOUT LAMPS."
+     "A SONG ABOUT LAMPS."
     ],
     "dust": [
      "DUST. I MADE IT. IT'S MINE."
@@ -3228,10 +3625,11 @@
      "I AM A LANTERN. IMPORTANT."
     ],
     "secret_mud": [
-     "SECRET: I ATE A SOCK ONCE."
+     "SECRET: I ATE A SOCK ONCE.",
+     "I DID NOT EAT THE SOCK. SHH."
     ],
     "nap_plan": [
-     "DAY NAP. A LONG ONE. HUMM."
+     "DAY NAP. A LONG ONE."
     ],
     "ceiling": [
      "THE CEILING WANTS A LAMP."
@@ -3273,7 +3671,8 @@
      "ASK ME ABOUT LAMPS. ANY LAMP."
     ],
     "legs": [
-     "SIX LEGS. FOUR TOO MANY? NO."
+     "SIX LEGS. FOUR TOO MANY? NO.",
+     "SIX LEGS. NONE OF THEM SOCKS."
     ],
     "shiny": [
      "SOMETHING SHINY. I MUST GO."
@@ -3330,7 +3729,8 @@
      "BIG DAY. BIG YAWN."
     ],
     "eye_snack": [
-     "LIGHT. MY FAVOURITE SNACK."
+     "LIGHT. MY FAVOURITE SNACK.",
+     "THE SUN: A LAMP I CAN'T REACH."
     ],
     "outside": [
      "IS THERE A PORCH OUTSIDE?"
@@ -3360,51 +3760,62 @@
      "NIGHT SNACKS TASTE OF WOOL."
     ],
     "night_light": [
-     "I AM THE NIGHT LIGHT. HUMM."
+     "I AM THE NIGHT LIGHT."
     ],
     "only_me": [
      "EVERYONE SLEEPS. I GLOW ON."
     ],
     "snore": [
      "HUMMM... ZZZ... HUMMMM...",
-     "ZZZ... HMMM... ZZZ... HMM..."
+     "ZZZ... HMMM... ZZZ... HMM...",
+     "ZZZ... HUMM... FLUTTER... ZZZ"
     ],
     "mumble": [
      "MMF... NOT THE SOCK... MMF...",
-     "MMM... FIVE MORE MOONS..."
+     "MMM... FIVE MORE MOONS...",
+     "MMF... LEAVE THE LIGHT ON..."
     ],
     "dream_chase": [
      "ZZZ... THE LIGHT... WAIT UP...",
-     "ZZZ... PORCH LIGHT... ALMOST"
+     "ZZZ... PORCH LIGHT... ALMOST",
+     "ZZZ... A FIREFLY... SO FAST..."
     ],
     "dream_feast": [
      "ZZZ... A WHOLE WOOLLY JUMPER",
-     "ZZZ... A SOCK... I DIDN'T..."
+     "ZZZ... A SOCK... I DIDN'T...",
+     "ZZZ... MITTENS... WITH JAM..."
     ],
     "dream_flight": [
      "ZZZ... UP TO THE MOON... HUMM",
-     "ZZZ... I GLOW... I FLUTTER..."
+     "ZZZ... I GLOW... I FLUTTER...",
+     "ZZZ... A SKY OF LANTERNS..."
     ],
     "sleep_count": [
      "ONE LAMP... TWO... OOH, LIGHT",
-     "ONE MOON... TWO MOONS? HUMM"
+     "ONE MOON... TWO MOONS? HUMM",
+     "ONE SOCK... TWO... NOT ME..."
     ],
     "sleep_warm": [
      "MMM... WOOLLY... COSY RUFF...",
-     "MMM... A WOOL SCARF... SNUG..."
+     "MMM... A WOOL SCARF... SNUG...",
+     "MMM... TUCKED IN MY WINGS..."
     ],
     "dream_rain": [
      "ZZZ... NOT RAIN... MY WINGS...",
-     "ZZZ... DRIP... GO AWAY RAIN..."
+     "ZZZ... DRIP... GO AWAY RAIN...",
+     "ZZZ... AN UMBRELLA... A LAMP."
     ],
     "teach_feed": [
-     "KNOCK KNOCK FOR SNACKS. HUMMM."
+     "KNOCK KNOCK FOR SNACKS.",
+     "KNOCK TWICE ON ME. FOOD COMES.",
+     "TWO KNOCKS. A CRUMB. NO SOCKS.",
+     "HUNGRY. KNOCK KNOCK ON ME?"
     ],
     "teach_fight": [
      "A DUEL? HOLD ME UPSIDE DOWN."
     ],
     "teach_hold": [
-     "A NAP? HOLD ME SIDEWAYS. HUMM."
+     "A NAP? HOLD ME SIDEWAYS."
     ],
     "teach_shake": [
      "SHAKE ME. I SEE LAMPS. AND YOU"
@@ -3418,41 +3829,64 @@
    "notes": "MUDGE\nmudskipper: races everything\nElement Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round sky-blue fish standing up on two flippers, a little curl of fin on top\nof his head like a cowlick, big fins flung out wide like a goalkeeper, and a\ncream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,\ndeeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a\ntiny blue fish already mid-wiggle.\n\nWHO HE IS\nA sporty, competitive, can't-sit-still racer. Everything is a race: the\nmarble, his home, the dust, his own shadow, the moon. He is always warming up,\nalways on his last lap, always winning (by his count). Big appetite, big\nenergy, no patience. Mud is the best track there is.\n\nHOW HE TALKS\nOne breath per line: the punch first, joined by commas. Short words. Coach\nenergy. (His own lines are said whole; the terse cut is only for shared lines.)\n\nLOVES\nRacing, winning, mud, laps, snacks as fuel, a slippy track.\n\nFEARS\nSitting still, losing, being held back.\n\nCATCHPHRASES\nRACE YOU! LAST LAP! GO GO GO!",
    "lines": {
     "peckish": [
-     "RACE YOU TO THE SNACK!"
+     "RACE YOU TO THE SNACK!",
+     "TANK'S LOW, NEED FUEL, STAT!",
+     "PIT STOP, SNACKS PLEASE!",
+     "HUNGRY, LOSING SPEED, HELP!",
+     "CARBS, COACH, I NEED CARBS!"
     ],
     "starving": [
-     "I'D EAT THE FINISH LINE!"
+     "I'D EAT THE FINISH LINE!",
+     "RUNNING ON EMPTY, LITERALLY!",
+     "SO HUNGRY I'D EAT A MEDAL!"
     ],
     "hoarding": [
-     "SAVING IT FOR AFTER THE RACE."
+     "SAVING IT FOR AFTER THE RACE.",
+     "THAT ONE'S MY VICTORY SNACK!",
+     "BENCHED THAT PELLET, FOR NOW!"
     ],
     "crunch": [
-     "FASTEST CHEWER ALIVE!"
+     "FASTEST CHEWER ALIVE!",
+     "CRUNCH, NEW CHEWING RECORD!",
+     "FUEL IN, SPEED UP, NOM!",
+     "CHOMP, 2 SECONDS FLAT!"
     ],
     "fuzzy_bite": [
-     "BLEH, THAT ONE WAS FUZZY!"
+     "BLEH, THAT ONE WAS FUZZY!",
+     "FUZZY PELLET, FOUL, REF!"
     ],
     "smells": [
-     "STINKY CORNER, SKIP IT!"
+     "STINKY CORNER, SKIP IT!",
+     "WHAT STINKS, NOT MY SOCKS!"
     ],
     "green": [
-     "FEEL GREEN, STILL RACING!"
+     "FEEL GREEN, STILL RACING!",
+     "TUMMY ACHE, ON THE BENCH!"
     ],
     "ow": [
-     "OW, BUT I'M STILL FASTER!"
+     "OW, BUT I'M STILL FASTER!",
+     "OW, WALK IT OFF, WALK IT OFF!"
     ],
     "heard_you": [
      "YEAH, YEAH, I HEARD!",
-     "ONE KNOCK, NOW TWO, FASTER!"
+     "ONE KNOCK, NOW TWO, FASTER!",
+     "KNOCK AGAIN, DOUBLE TIME!",
+     "A KNOCK, STARTING PISTOL!"
     ],
     "ground_lies": [
-     "WHOA, EARTHQUAKE LAP!"
+     "WHOA, EARTHQUAKE LAP!",
+     "BUMPY TRACK, KEEP GOING!",
+     "WHOA, WHO MOVED THE TRACK?!"
     ],
     "not_again": [
-     "NO SHAKING, I'M TRAINING!"
+     "NO SHAKING, I'M TRAINING!",
+     "NO SHAKING, I JUST STRETCHED!",
+     "TIME OUT, NO SHAKING, REF!"
     ],
     "hooded": [
-     "NOT SCARED, JUST WARMING UP!"
+     "NOT SCARED, JUST WARMING UP!",
+     "SCARED? NO, CATCHING MY BREATH",
+     "STRATEGIC HIDE, VERY SPORTY!"
     ],
     "ancestor_fear": [
      "GEN # RAN FROM THIS TOO!"
@@ -3461,44 +3895,72 @@
      "GEN # SAYS GO FASTER!"
     ],
     "counted": [
-     "BORED, SOMEBODY RACE ME!"
+     "BORED, SOMEBODY RACE ME!",
+     "NO RACES TODAY? UNACCEPTABLE!",
+     "I RACED MYSELF, I WON, AGAIN!"
     ],
     "put_me_down": [
-     "PUT ME DOWN, I WANNA RUN!"
+     "PUT ME DOWN, I WANNA RUN!",
+     "LEGS DANGLING, WASTED SPEED!",
+     "PICKED FIRST FOR THE TEAM!"
     ],
     "warm_hands": [
-     "WARM HANDS, GOOD HALFTIME!"
+     "WARM HANDS, GOOD HALFTIME!",
+     "HALFTIME HUG, ACCEPTED!",
+     "WARM HANDS, LIKE A HOT LAP!",
+     "NICE GRIP, YOU'D MAKE A COACH!",
+     "RECOVERY TIME, NOT A CUDDLE!"
     ],
     "sky_down": [
      "UPSIDE DOWN, STILL WINNING!",
-     "UPSIDE DOWN, NEW TRACK, GO!"
+     "UPSIDE DOWN, NEW TRACK!",
+     "FLIP TURN, LIKE A PRO!"
     ],
     "heavy_eyes": [
-     "SO TIRED... ONE MORE LAP..."
+     "SO TIRED... ONE MORE LAP...",
+     "COOLING DOWN... DOWN... ZZ...",
+     "RESTING MY EYES, NOT QUITTING!",
+     "BENCHED BY MY OWN EYELIDS!"
     ],
     "dream_pellets": [
-     "ZZZ... WINNING... ZZZ..."
+     "ZZZ... WINNING... ZZZ...",
+     "ZZZ... GOLD MEDAL PELLETS...",
+     "ZZZ... PODIUM SNACKS... MMM",
+     "ZZZ... SNACKS AT THE FINISH...",
+     "ZZZ... A SPORTS DRINK POND...",
+     "ZZZ... FIRST IN THE LUNCH LINE"
     ],
     "see_pellet": [
-     "I SEE A PELLET, RACE YOU!"
+     "I SEE A PELLET, RACE YOU!",
+     "I SEE FUEL!",
+     "I SEE A SNACK, FIRST PLACE!"
     ],
     "see_phone": [
-     "I SEE A PHONE, IT'S SLOW!"
+     "I SEE A PHONE, IT'S SLOW!",
+     "I SEE A PHONE, FILM MY RUN!",
+     "I SEE A STOPWATCH, TIME ME!"
     ],
     "see_nothing": [
-     "I SEE NOTHING HERE, NOT FAIR!"
+     "I SEE NOTHING HERE, NOT FAIR!",
+     "I SEE NO SNACKS, BAD TACTICS!",
+     "I SEE ZERO FUEL, DISASTER!"
     ],
     "see_damp": [
-     "I SEE MUD, FAST MUD!"
+     "I SEE MUD, FAST MUD!",
+     "I SEE A PUDDLE, SPLASH LAP!"
     ],
     "knees": [
-     "OLD, BUT STILL QUICK!"
+     "OLD, BUT STILL QUICK!",
+     "VETERAN RUNNER, STILL GOT IT!"
     ],
     "moon": [
-     "THE MOON IS A FINISH LINE!"
+     "THE MOON IS A FINISH LINE!",
+     "THE MOON'S LAPPING US, NO WAY!"
     ],
     "anyone": [
-     "ANYONE WANNA RACE?"
+     "ANYONE WANNA RACE?",
+     "NO OPPONENTS, I WIN BY DEFAULT",
+     "HELLO, TEAM? ANY TEAM?"
     ],
     "science": [
      "FOOD MEANS FAST, FACT!"
@@ -3507,10 +3969,12 @@
      "GEN #, NO HAT, MORE SPEED!"
     ],
     "p_snack": [
-     "SNACK FIRST, THEN SPRINT!"
+     "SNACK FIRST, THEN SPRINT!",
+     "SNACK INCOMING, OPEN WIDE!"
     ],
     "p_feast": [
-     "BIG FEAST, EAT IT FAST!"
+     "BIG FEAST, EAT IT FAST!",
+     "A FEAST, EATING CHAMPIONSHIP!"
     ],
     "p_pellet_soon": [
      "PELLET INCOMING, GET READY!"
@@ -3525,10 +3989,12 @@
      "MORE SHAKING COMING, BRACE!"
     ],
     "p_mud": [
-     "MUD AHEAD, FULL SPEED!"
+     "MUD AHEAD, FULL SPEED!",
+     "MUDDY TRACK, MY LUCKY DAY!"
     ],
     "p_big_hand": [
-     "BIG HAND COMING, DODGE IT!"
+     "BIG HAND COMING, DODGE IT!",
+     "A HAND, HIGH FIVE, NICE!"
     ],
     "p_bedtime": [
      "BEDTIME SOON, SPRINT TO BED!"
@@ -3537,7 +4003,8 @@
      "SUN'S UP SOON, WARM UP!"
     ],
     "p_rain": [
-     "RAIN COMING, SLIPPY TRACK!"
+     "RAIN COMING, SLIPPY TRACK!",
+     "RAIN AHEAD, MUD SEASON, YES!"
     ],
     "p_watched": [
      "PHONE'S WATCHING, SHOW OFF!"
@@ -3546,40 +4013,50 @@
      "THEY'RE COMING BACK, FAST!"
     ],
     "p_tap": [
-     "KNOCK KNOCK, SNACKS, GO GO GO!"
+     "KNOCK KNOCK, SNACKS!",
+     "TWO KNOCKS INCOMING, BE READY!"
     ],
     "p_no": [
-     "NOPE, NOT A CHANCE!"
+     "NOPE, NOT A CHANCE!",
+     "NO, REF SAYS NO!"
     ],
     "p_doom": [
-     "DOOM, BUT I'LL OUTRUN IT!"
+     "DOOM, BUT I'LL OUTRUN IT!",
+     "DOOM AHEAD, TAKE THE SHORTCUT!"
     ],
     "p_lunch": [
      "LAST LAP COMING, THEN LUNCH!"
     ],
     "p_outlook": [
-     "OUTLOOK: FIRST PLACE!"
+     "OUTLOOK: FIRST PLACE!",
+     "OUTLOOK: PERSONAL BEST!"
     ],
     "p_decidedly": [
-     "YES, DEFINITELY, GO!"
+     "YES, DEFINITELY!",
+     "YES, THAT'S A GOLD MEDAL YES!"
     ],
     "p_lucky": [
-     "LUCK IS FOR SLOW ONES!"
+     "LUCK IS FOR SLOW ONES!",
+     "LUCKY? NO, I TRAINED FOR THIS!"
     ],
     "p_pond_no": [
-     "POND SAYS NO, POND IS SLOW!"
+     "POND SAYS NO, POND IS SLOW!",
+     "POND SAYS NO, DISQUALIFIED!"
     ],
     "p_pond_yes": [
-     "POND SAYS YES, LET'S GO!"
+     "POND SAYS YES, LET'S GO!",
+     "POND SAYS YES, ON YOUR MARKS!"
     ],
     "p_ripples": [
-     "TOO MANY RIPPLES, ASK LATER!"
+     "TOO MANY RIPPLES, ASK LATER!",
+     "FALSE START, ASK AGAIN!"
     ],
     "p_ancestor": [
      "GEN # SAW THIS COMING TOO!"
     ],
     "miss_phone": [
-     "WHERE'S THE PHONE, IT'S LATE!"
+     "WHERE'S THE PHONE, IT'S LATE!",
+     "PHONE MISSED PRACTICE, AGAIN!"
     ],
     "oclock": [
      "IT'S # O'CLOCK, TIME TO RUN!"
@@ -3591,7 +4068,7 @@
      "LATE, BUT STILL RUNNING!"
     ],
     "monday": [
-     "MONDAY, FRESH START, GO!"
+     "MONDAY, FRESH START!"
     ],
     "weekend": [
      "WEEKEND, RACE DAY!"
@@ -3693,7 +4170,8 @@
      "FINS ARE BETTER THAN LEGS!"
     ],
     "shiny": [
-     "SOMETHING SHINY, RACE YOU!"
+     "SOMETHING SHINY, RACE YOU!",
+     "SOMETHING SHINY, A TROPHY?!"
     ],
     "guard": [
      "HOME GUARD, ON DUTY!"
@@ -3708,7 +4186,7 @@
      "BUSY, TRAINING!"
     ],
     "pellet_where": [
-     "PELLETS COME FROM THE TOP, GO!"
+     "PELLETS COME FROM THE TOP!"
     ],
     "rock": [
      "SITTING STILL IS SO HARD!"
@@ -3741,7 +4219,8 @@
      "LUNCH, THEN SPRINTS!"
     ],
     "shadow": [
-     "MY SHADOW IS ALMOST AS FAST!"
+     "MY SHADOW IS ALMOST AS FAST!",
+     "MY SHADOW CHEATS, IT STARTS ME"
     ],
     "big_sit": [
      "BIG DAY, BIG RACE!"
@@ -3784,38 +4263,49 @@
     ],
     "snore": [
      "ZZZ... HUP, HUP, HUP...",
-     "ZZZ... VROOM, VROOM, ZZZ..."
+     "ZZZ... VROOM, VROOM, ZZZ...",
+     "ZZZ... PHWEET... WHISTLE..."
     ],
     "mumble": [
      "MMF... I WON, I TOTALLY WON...",
-     "MMF... NOT TIRED, JUST RESTING"
+     "MMF... NOT TIRED, JUST RESTING",
+     "MMF... FIVE MORE LAPS, COACH"
     ],
     "dream_chase": [
      "ZZZ... FASTER, FASTER, FASTER",
-     "ZZZ... CATCHING THE MOON..."
+     "ZZZ... CATCHING THE MOON...",
+     "ZZZ... LAPPED MY SHADOW..."
     ],
     "dream_feast": [
      "ZZZ... FUEL, MORE FUEL, NOM...",
-     "ZZZ... SNACK STOP, REFUEL..."
+     "ZZZ... SNACK STOP, REFUEL...",
+     "ZZZ... A TROPHY MADE OF CAKE"
     ],
     "dream_flight": [
      "ZZZ... FLYING, NEW RECORD...",
-     "ZZZ... JUMPED THE WHOLE POND!"
+     "ZZZ... JUMPED THE WHOLE POND!",
+     "ZZZ... HIGH JUMP... TO SPACE"
     ],
     "sleep_count": [
      "ZZZ... LAP 99, LAP 100...",
-     "ZZZ... 3, 2, 1, GO..."
+     "ZZZ... 3, 2, 1, GO...",
+     "ZZZ... GOLD, GOLD, GOLD..."
     ],
     "sleep_warm": [
      "MM... WARM MUD, PIT STOP...",
-     "MM... COSY, STILL WINNING..."
+     "MM... COSY, STILL WINNING...",
+     "MM... HOT TUB... RECOVERY..."
     ],
     "dream_rain": [
      "ZZZ... RAIN, SLIPPY TRACK, YES",
-     "ZZZ... MUD TRACK, ZOOM..."
+     "ZZZ... MUD TRACK, ZOOM...",
+     "ZZZ... PUDDLE JUMP, PERFECT 10"
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME, FUEL UP!"
+     "KNOCK KNOCK ON ME, FUEL UP!",
+     "KNOCK TWICE ON ME, SNACK TIME!",
+     "TWO KNOCKS ON ME, PIT STOP!",
+     "HUNGRY, KNOCK KNOCK, QUICK!"
     ],
     "teach_fight": [
      "DUEL ME, HOLD ME UPSIDE DOWN!"
@@ -3835,86 +4325,135 @@
    "notes": "FIZZ\nfirefly beetle: crackles\nElement Spark, style Pounce, power zap. Voice: hoarder. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA glossy, bright golden-yellow beetle with a big shiny shell, clear veined\nwings spread wide, little brown legs and two antennae tipped with bulbs that\nspark. A small smug smile. Happy, he squeals with his eyes shut. Annoyed, his\neyes go wide and round over a sulky frown. Foreseeing, his eyes go lime green.\nThe egg holds a tiny gold beetle, already gleaming.\n\nWHO HE IS\nA crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the\nplace and wants to keep it that way. He hoards: sparks, crumbs, anything that\nglints. Static clings to him and he zaps things by accident. Not mean, just\npossessive, and suspicious that everyone is after his gold.\n\nHOW HE TALKS\nQuick and sharp. BZZT. Dibs. Shiny. Gold. Stash. He whispers about his stash.\n\nLOVES\nShiny things, his own shell, sparks, gold, the moon (the biggest shiny),\nglowing at night.\n\nFEARS\nWater (sparks and water: bad), thieves, getting scuffed, dull things.\n\nCATCHPHRASES\nBZZT. DIBS. SHINY. MY STASH.",
    "lines": {
     "peckish": [
-     "BZZT. SNACK. NOW. GOLD ONES."
+     "SNACK. NOW. GOLD ONES.",
+     "MY TUMMY IS RUNNING LOW.",
+     "DIBS ON THE NEXT SNACK. ALL.",
+     "FEED ME. I GLOW BETTER FULL.",
+     "SNACK? I'LL ONLY HIDE HALF."
     ],
     "starving": [
-     "SO HUNGRY MY GLOW IS DIM."
+     "SO HUNGRY MY GLOW IS DIM.",
+     "I'D TRADE A SPARK FOR A CRUMB.",
+     "EMPTY. LIKE A STASH. NO GOLD."
     ],
     "hoarding": [
-     "THAT PELLET IS MY TREASURE."
+     "THAT PELLET IS MY TREASURE.",
+     "NOT HUNGRY. STILL MINE.",
+     "INTO THE STASH IT GOES. SHH."
     ],
     "crunch": [
-     "CRUNCH. CRACKLE. CRUNCH."
+     "CRUNCH. CRACKLE. CRUNCH.",
+     "CRONCH. ZAP. THAT ONE FIZZED.",
+     "MMM. TASTES LIKE A BATTERY.",
+     "CRUNCH. NOBODY ELSE GETS ANY."
     ],
     "fuzzy_bite": [
-     "BZZT! THAT ONE WAS FUZZY!"
+     "THAT ONE WAS FUZZY!",
+     "FUZZY CRUMB. NOT STASH-WORTHY"
     ],
     "smells": [
-     "SOMETHING STINKS. NOT MY GOLD."
+     "SOMETHING STINKS. NOT MY GOLD.",
+     "A STINKY CRUMB. YOU HAVE IT."
     ],
     "green": [
-     "GREEN? I'M SUPPOSED TO BE GOLD"
+     "GREEN? I'M SUPPOSED TO BE GOLD",
+     "MY SHINE WENT A BIT GREEN."
     ],
     "ow": [
-     "OW! MY SHELL GOT SCUFFED!"
+     "OW! MY SHELL GOT SCUFFED!",
+     "OW. IS MY SHINE STILL SHINY?"
     ],
     "heard_you": [
-     "BZZT. HEARD YOU. KNOCK TWICE."
+     "HEARD YOU. KNOCK TWICE.",
+     "WHO KNOCKS? A THIEF? A SNACK?",
+     "ONE KNOCK. TWO GETS A SNACK.",
+     "A KNOCK! QUICK, HIDE THE GOLD."
     ],
     "ground_lies": [
-     "BZZZZT! SPARKS EVERYWHERE!"
+     "BZZZZT! SPARKS EVERYWHERE!",
+     "MY STASH IS RATTLING! STOP!",
+     "WHOA! SHINY SIDE UP! SHINY UP!"
     ],
     "not_again": [
-     "NO SHAKING! YOU'LL SPILL ME!"
+     "NO SHAKING! YOU'LL SPILL ME!",
+     "NOT AGAIN. MY SPARKS GET DIZZY",
+     "SHAKE ME AND I'LL STATIC YOU."
     ],
     "hooded": [
-     "WINGS SHUT. LIGHTS OFF. SHH."
+     "WINGS SHUT. LIGHTS OFF. SHH.",
+     "GLOW OFF. NOBODY IS HOME.",
+     "I AM A PLAIN ROCK. NOT GOLD."
     ],
     "ancestor_fear": [
      "GEN # HID THE SHINIES TOO."
     ],
     "inherited": [
-     "GEN # LEFT ME A SPARK."
+     "GEN # LEFT ME A SPARK.",
+     "GEN # SAYS: NEVER SHARE."
     ],
     "counted": [
-     "I COUNTED MY SPARKS. ALL HERE."
+     "I COUNTED MY SPARKS. ALL HERE.",
+     "COUNTED MY GOLD. AGAIN. AGAIN.",
+     "NOTHING TO GRAB. NOTHING. BZZ."
     ],
     "put_me_down": [
-     "CAREFUL! I'M FULL OF SPARKS!"
+     "CAREFUL! I'M FULL OF SPARKS!",
+     "NO FINGERPRINTS ON THE SHELL!",
+     "DOWN. MY STASH MISSES ME."
     ],
     "warm_hands": [
-     "WARM HANDS. NO SPARKS. PROMISE"
+     "WARM HANDS. NO SPARKS. PROMISE",
+     "YOU MAY HOLD THE SHINY ONE.",
+     "WARM. LIKE GOLD IN THE SUN.",
+     "NICE HANDS. ANY RINGS ON THEM?"
     ],
     "sky_down": [
      "UPSIDE DOWN. DROPPED NOTHING.",
-     "MY STASH IS ON THE CEILING!"
+     "MY STASH IS ON THE CEILING!",
+     "FLIP ME BACK! MY GOLD FALLS!"
     ],
     "heavy_eyes": [
-     "GLOW... FADING... BZZ..."
+     "GLOW... FADING... BZZ...",
+     "BATTERY LOW. NAP MODE.",
+     "SO SLEEPY. GUARD MY STASH..."
     ],
     "dream_pellets": [
-     "ZZZ... GOLD... PILES... ZZZ"
+     "ZZZ... GOLD... PILES... ZZZ",
+     "ZZZ... A CRUMB MADE OF GOLD...",
+     "ZZZ... MY STASH... SAFE...",
+     "ZZZ... GOLDEN BISCUITS... MINE",
+     "ZZZ... SNACKS THAT SPARKLE...",
+     "ZZZ... DIBS... DIBS ON ALL..."
     ],
     "see_pellet": [
-     "I SEE... A PELLET. DIBS."
+     "A PELLET.",
+     "A SNACK. NOT YOURS.",
+     "A SNACK. CALLED IT."
     ],
     "see_phone": [
-     "I SEE... A GLOWING THING. WANT"
+     "A GLOWING THING. WANT",
+     "A SHINY SLAB."
     ],
     "see_nothing": [
-     "I SEE... NO TREASURE. NONE."
+     "NO TREASURE. NONE.",
+     "AN EMPTY STASH."
     ],
     "see_damp": [
-     "I SEE... A PUDDLE. KEEP AWAY."
+     "A PUDDLE. KEEP AWAY.",
+     "WET. MY ONLY ENEMY."
     ],
     "knees": [
-     "OLD. STILL SHINY. MOSTLY."
+     "OLD. STILL SHINY. MOSTLY.",
+     "OLD BEETLE. VINTAGE GOLD."
     ],
     "moon": [
-     "THE MOON. THE BIGGEST SHINY."
+     "THE MOON. THE BIGGEST SHINY.",
+     "ONE DAY, MOON. YOU'LL BE MINE."
     ],
     "anyone": [
-     "HELLO? I'LL SHARE ONE SPARK."
+     "HELLO? I'LL SHARE ONE SPARK.",
+     "NOBODY? GOOD. MORE GOLD FOR ME",
+     "COME BACK. I'M SHINY FOR YOU."
     ],
     "science": [
      "FOOD MAKES SPARKS. SCIENCE."
@@ -3923,16 +4462,19 @@
      "GEN #. NO HAT. SHINY HEAD."
     ],
     "p_snack": [
-     "SNACK COMING. I CALL DIBS."
+     "SNACK COMING. I CALL DIBS.",
+     "A SNACK. THEN A NAP ON GOLD."
     ],
     "p_feast": [
-     "A FEAST OF SHINY CRUMBS."
+     "A FEAST OF SHINY CRUMBS.",
+     "A MOUNTAIN OF SNACKS. MINE."
     ],
     "p_pellet_soon": [
      "A PELLET COMES. DIBS ALREADY."
     ],
     "p_feed_me": [
-     "FEED ME. OR I ZAP. A BIT."
+     "FEED ME. OR I ZAP. A BIT.",
+     "FEED ME. I'LL GLOW FOR YOU."
     ],
     "p_fuzzy": [
      "THAT CRUMB GOES FUZZY. NOT IT."
@@ -3941,10 +4483,12 @@
      "MORE SHAKING. MORE SPARKS."
     ],
     "p_mud": [
-     "MUD COMES. NOT ON MY SHELL."
+     "MUD COMES. NOT ON MY SHELL.",
+     "I SEE MUD. I SEE A BATH. NO."
     ],
     "p_big_hand": [
-     "A BIG HAND. HIDE THE SHINIES."
+     "A BIG HAND. HIDE THE SHINIES.",
+     "A HAND COMES. COUNT YOUR GOLD."
     ],
     "p_bedtime": [
      "THE DARK SAYS: GLOW, THEN BED."
@@ -3953,7 +4497,8 @@
      "THE SUN WILL MAKE ME SPARKLE."
     ],
     "p_rain": [
-     "RAIN. WATER AND SPARKS: BAD."
+     "RAIN. WATER AND SPARKS: BAD.",
+     "RAIN COMES. UMBRELLA."
     ],
     "p_watched": [
      "THE GLOWING ONE WANTS MY GOLD."
@@ -3962,34 +4507,44 @@
      "THEY'LL BE BACK. WITH SHINIES"
     ],
     "p_tap": [
-     "TWO KNOCKS. TWO SNACKS. DIBS."
+     "TWO KNOCKS. TWO SNACKS.",
+     "I SEE KNOCK KNOCK. SNACK. MINE"
     ],
     "p_no": [
-     "NO. BZZT. NO."
+     "NO. BZZT. NO.",
+     "NO. AND HANDS OFF MY STASH."
     ],
     "p_doom": [
-     "DOOM. KEEP THE SHINY BITS."
+     "DOOM. KEEP THE SHINY BITS.",
+     "DOOM COMES. IT GETS NO GOLD."
     ],
     "p_lunch": [
-     "MY GLOW GOES OUT SOON. LUNCH?"
+     "MY GLOW GOES OUT SOON. LUNCH?",
+     "OLD AND GOLDEN. LUNCH STILL ON"
     ],
     "p_outlook": [
-     "OUTLOOK: SHINY."
+     "OUTLOOK: SHINY.",
+     "THE FUTURE IS GOLD. LIKE ME."
     ],
     "p_decidedly": [
-     "YES. CRACKLE. DEFINITELY."
+     "YES. CRACKLE. DEFINITELY.",
+     "YES. I'D BET A SPARK ON IT."
     ],
     "p_lucky": [
-     "LUCK IS A SHINY THING. GRAB IT"
+     "LUCK IS A SHINY THING. GRAB IT",
+     "YOU'LL FIND A COIN. IT'S MINE."
     ],
     "p_pond_no": [
-     "THE POND SAYS NO. GOOD. WET."
+     "THE POND SAYS NO. GOOD. WET.",
+     "NO. THE POND IS TOO WET TO ASK"
     ],
     "p_pond_yes": [
-     "THE POND SAYS YES. FROM AFAR."
+     "THE POND SAYS YES. FROM AFAR.",
+     "YES. I ASKED FROM FAR AWAY."
     ],
     "p_ripples": [
-     "RIPPLES. TOO CLOSE TO WATER."
+     "RIPPLES. TOO CLOSE TO WATER.",
+     "STATIC ON THE LINE. ASK LATER."
     ],
     "p_ancestor": [
      "GEN # SAW THIS. KEPT QUIET."
@@ -4052,7 +4607,8 @@
      "BZZ BZZ BZZT. MY SONG."
     ],
     "dust": [
-     "DUST. IT'S STUCK TO MY SHELL."
+     "DUST. IT'S STUCK TO MY SHELL.",
+     "DUST ON MY SHELL. HOW DARE IT."
     ],
     "blinked": [
      "I BLINKED. MY GLOW BLINKED."
@@ -4200,38 +4756,49 @@
     ],
     "snore": [
      "ZZZ... BZZT... ZZZ... BZZT...",
-     "ZZZ... CRACKLE... ZZZ..."
+     "ZZZ... CRACKLE... ZZZ...",
+     "ZZZ... FZZT... POP... ZZZ..."
     ],
     "mumble": [
      "MMF... DIBS... DIBS ON IT...",
-     "MMF... MY STASH... MY SHINY..."
+     "MMF... MY STASH... MY SHINY...",
+     "MMF... NO TOUCHING THE GOLD..."
     ],
     "dream_chase": [
      "ZZZ... STOP, THIEF! MY GOLD!",
-     "ZZZ... BZZT! GOT THE SPARK..."
+     "ZZZ... BZZT! GOT THE SPARK...",
+     "ZZZ... COME BACK, LITTLE COIN"
     ],
     "dream_feast": [
      "ZZZ... SHINY CRUMBS... YUM...",
-     "ZZZ... GOLDEN CRUMB CAKE..."
+     "ZZZ... GOLDEN CRUMB CAKE...",
+     "ZZZ... A SNACK FOR EACH LEG..."
     ],
     "dream_flight": [
      "ZZZ... GLOWING ACROSS THE SKY",
-     "ZZZ... FLYING TO THE BIG SHINY"
+     "ZZZ... FLYING TO THE BIG SHINY",
+     "ZZZ... I CAUGHT A STAR. MINE."
     ],
     "sleep_count": [
      "ONE COIN... TWO COINS... MM",
-     "ONE SPARK... TWO... DIBS..."
+     "ONE SPARK... TWO... DIBS...",
+     "ZZZ... 99 SHINIES... 100..."
     ],
     "sleep_warm": [
      "MMM... COSY ON MY GOLD...",
-     "MMM... WARM GLOW... MY GLOW..."
+     "MMM... WARM GLOW... MY GLOW...",
+     "MMM... SNUG AS A COIN PURSE..."
     ],
     "dream_rain": [
      "ZZZ... RAIN... NO... FIZZLE...",
-     "ZZZ... WET? NO... SHELL UP..."
+     "ZZZ... WET? NO... SHELL UP...",
+     "ZZZ... GOLD RAIN... YES..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME. GOLD SNACKS"
+     "KNOCK KNOCK ON ME. GOLD SNACKS",
+     "KNOCK TWICE. A SNACK.",
+     "TWO KNOCKS ON MY SHELL: FOOD.",
+     "HUNGRY? KNOCK KNOCK. QUICK."
     ],
     "teach_fight": [
      "TO FIGHT: HOLD ME UPSIDE DOWN"
@@ -4240,7 +4807,7 @@
      "SLEEPY? HOLD ME SIDEWAYS."
     ],
     "teach_shake": [
-     "SHAKE ME. I SEE GOLD. MAYBE."
+     "SHAKE ME. I SEE GOLD. AND YOU."
     ]
    }
   },
@@ -4251,41 +4818,64 @@
    "notes": "HUSHWING\nmarsh owl: silent wings\nElement Sprout, style Trick, power hush. Voice: ominous. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round, snow-white owl, all fluffy chest feathers, with grey-brown wings and\ntwo stern grey ear tufts like eyebrows. Big orange eyes and a sharp little\norange beak, orange talons peeking out underneath. His resting face is a\nstare. Happy, he closes his eyes serenely and blushes pink. Annoyed, he glares\nso hard the tufts tilt in. Foreseeing, his eyes go pale ice blue. The egg holds\na tiny grey owlet with huge blue eyes.\n\nWHO HE IS\nThe quiet one. Solemn, watchful, a librarian of the marsh who hushes everyone\nand sees everything at night. He speaks rarely and gravely, even about\ncrumbs, and everything he says sounds like a warning. He is timid underneath\nand secretly soft: that blush gives him away. Daytime is loud and too bright.\n\nHOW HE TALKS\nShort, grave, quiet. Shh. Heed. Noted. Silence, the marsh, the dark, watching.\nNever shouts. A hoot is a big event.\n\nLOVES\nSilence, night, the marsh, mist, a good perch, preening, warm hands (he will\nallow it).\n\nFEARS\nNoise, daylight, being startled, crunchy food (too loud).\n\nCATCHPHRASES\nSHH. NOTED. I SAW. HOO.",
    "lines": {
     "peckish": [
-     "HUNGER STIRS. QUIETLY."
+     "HUNGER STIRS. QUIETLY.",
+     "MY TUMMY RUMBLED. SHH, TUMMY.",
+     "A SNACK, PLEASE. A SOFT ONE.",
+     "HUNGRY. I SHALL NOT HOOT.",
+     "FOOD IS OVERDUE."
     ],
     "starving": [
-     "THE HUNGER IS VERY LOUD NOW."
+     "THE HUNGER IS VERY LOUD NOW.",
+     "MY TUMMY IS SHOUTING.",
+     "SO HUNGRY. I MAY HOOT. TWICE."
     ],
     "hoarding": [
-     "THAT PELLET WAITS. AS DO I."
+     "THAT PELLET WAITS. AS DO I.",
+     "THAT ONE IS FOR DUSK.",
+     "I SHELVED IT. UNDER 'LATER'."
     ],
     "crunch": [
-     "CRUNCH. SORRY. TOO LOUD."
+     "CRUNCH. SORRY. TOO LOUD.",
+     "CRUNCH. SHH. CRUNCH. SHH.",
+     "I CHEW IN A WHISPER.",
+     "CRUNCH. PLEASE IGNORE THAT."
     ],
     "fuzzy_bite": [
-     "IT WAS FUZZY. I SAID NOTHING."
+     "IT WAS FUZZY. I SAID NOTHING.",
+     "FUZZY. THIS IS ON YOUR RECORD."
     ],
     "smells": [
-     "A SMELL. IT HAS BEEN NOTED."
+     "A SMELL. IT HAS BEEN NOTED.",
+     "A PONG. FILED UNDER 'NO'."
     ],
     "green": [
-     "I AM GREEN. I WILL NOT HOOT."
+     "I AM GREEN. I WILL NOT HOOT.",
+     "GREEN. IT CLASHES."
     ],
     "ow": [
-     "OW. QUIETLY. OW."
+     "OW. QUIETLY. OW.",
+     "OW. A FEATHER IS UPSET."
     ],
     "heard_you": [
      "SHH. YES. I HEARD. SHH.",
-     "ONE KNOCK. TWO MEANS SNACKS."
+     "ONE KNOCK. TWO MEANS SNACKS.",
+     "A KNOCK. KNOCK ONCE MORE. SOFT",
+     "WHO KNOCKS? QUIETLY, PLEASE."
     ],
     "ground_lies": [
-     "THE WORLD SHAKES. I DO NOT."
+     "THE WORLD SHAKES. I DO NOT.",
+     "TOO LOUD! MY FEATHERS! HOO!",
+     "THE SHELVES! THE BOOKS!"
     ],
     "not_again": [
-     "NOT THE SHAKING. I FORBID IT."
+     "NOT THE SHAKING. I FORBID IT.",
+     "NO SHAKING IN THE LIBRARY.",
+     "PLEASE. MY TUFTS JUST SETTLED."
     ],
     "hooded": [
-     "I AM A WHITE LUMP. UNSEEN."
+     "I AM A WHITE LUMP. UNSEEN.",
+     "I AM A SNOWBALL. MOVE ALONG.",
+     "WINGS UP. EYES SHUT. HIDDEN."
     ],
     "ancestor_fear": [
      "GEN # FEARED THIS. IN SILENCE."
@@ -4294,44 +4884,72 @@
      "GEN # WATCHES THROUGH ME."
     ],
     "counted": [
-     "I COUNTED THE QUIET. ALL OF IT"
+     "I COUNTED THE QUIET. ALL OF IT",
+     "A STARING CONTEST. WALL WON.",
+     "I HAVE READ THIS PLACE. TWICE."
     ],
     "put_me_down": [
-     "PUT ME DOWN. GENTLY. SILENTLY."
+     "PUT ME DOWN. GENTLY. SILENTLY.",
+     "I PREFER A BRANCH. A STILL ONE",
+     "DOWN, PLEASE. MY DIGNITY."
     ],
     "warm_hands": [
-     "WARM HANDS. I WILL ALLOW IT."
+     "WARM HANDS. I WILL ALLOW IT.",
+     "WARM. I AM NOT BLUSHING.",
+     "YOU MAY CONTINUE. QUIETLY.",
+     "WARM HANDS. THE TUFTS RELAX."
     ],
     "sky_down": [
      "THE SKY IS BELOW. CURIOUS.",
-     "I HANG LIKE A BAT. NOTED."
+     "I HANG LIKE A BAT.",
+     "UPSIDE DOWN. MY TUFTS DANGLE."
     ],
     "heavy_eyes": [
-     "MY EYES CLOSE. SLOWLY. HOO."
+     "MY EYES CLOSE. SLOWLY. HOO.",
+     "ONE EYE SHUT. THEN THE OTHER.",
+     "SLEEPY. THE LIBRARY IS CLOSED.",
+     "YAWN. THAT WAS TOO LOUD. SORRY"
     ],
     "dream_pellets": [
-     "ZZZ... SILENT FIELDS... ZZZ"
+     "ZZZ... SILENT FIELDS... ZZZ",
+     "ZZZ... A MOUSE... MADE OF CAKE",
+     "ZZZ... A QUIET BUFFET...",
+     "ZZZ... SOUP... NO SLURPING...",
+     "ZZZ... A SILENT SANDWICH...",
+     "ZZZ... CRUMBS. IN THE STACKS"
     ],
     "see_pellet": [
-     "I SEE... A PELLET. IT SEES ME."
+     "A PELLET. IT SEES ME.",
+     "A CRUMB. BE STILL.",
+     "LUNCH. IN THE CORNER."
     ],
     "see_phone": [
-     "I SEE... A LOUD LIGHT."
+     "A LOUD LIGHT.",
+     "A GLOWING SLAB.",
+     "A FACE. TOO CLOSE."
     ],
     "see_nothing": [
-     "I SEE... NOTHING HERE. GRAVE."
+     "NOTHING HERE. GRAVE.",
+     "NOTHING. NOT A CRUMB.",
+     "A VERY QUIET TUMMY."
     ],
     "see_damp": [
-     "I SEE... MIST ON THE MARSH."
+     "MIST ON THE MARSH.",
+     "FOG. LOVELY FOG.",
+     "DEW ON A BRANCH."
     ],
     "knees": [
-     "OLD. I HAVE SEEN MANY NIGHTS."
+     "OLD. I HAVE SEEN MANY NIGHTS.",
+     "OLD OWL. EVEN QUIETER NOW."
     ],
     "moon": [
-     "THE MOON AND I DO NOT BLINK."
+     "THE MOON AND I DO NOT BLINK.",
+     "THE MOON. A QUIET COLLEAGUE."
     ],
     "anyone": [
-     "HOO? HOO IS THERE? NO ONE."
+     "HOO? HOO IS THERE? NO ONE.",
+     "HELLO? I WILL NOT SHOUT IT.",
+     "ALONE. I ALLOW A SMALL HOOT."
     ],
     "science": [
      "FOOD ENDS HUNGER. I OBSERVED."
@@ -4340,10 +4958,12 @@
      "GEN #. NO HAT. ONLY TUFTS."
     ],
     "p_snack": [
-     "A SNACK WILL COME. QUIETLY."
+     "A SNACK WILL COME. QUIETLY.",
+     "A SOFT SNACK. NO CRUNCH. YES."
     ],
     "p_feast": [
-     "A FEAST, IN THE DEEP NIGHT."
+     "A FEAST, IN THE DEEP NIGHT.",
+     "I SEE A FEAST. EATEN SILENTLY."
     ],
     "p_pellet_soon": [
      "A PELLET DESCENDS. HUSH."
@@ -4358,10 +4978,12 @@
      "THE SHAKING WILL RETURN."
     ],
     "p_mud": [
-     "THE MARSH RISES. MUD FOLLOWS."
+     "THE MARSH RISES. MUD FOLLOWS.",
+     "MUD ON YOUR SHOES. I SAW IT."
     ],
     "p_big_hand": [
-     "A HAND FROM ABOVE. BE STILL."
+     "A HAND FROM ABOVE. BE STILL.",
+     "A HAND COMES. LOOK DIGNIFIED."
     ],
     "p_bedtime": [
      "THE DARK HAS COME. I WAKE."
@@ -4370,7 +4992,8 @@
      "THE SUN WILL RISE. I WILL HIDE"
     ],
     "p_rain": [
-     "RAIN WILL FALL. SOFTLY."
+     "RAIN WILL FALL. SOFTLY.",
+     "RAIN. ITS PATTER IS ALLOWED."
     ],
     "p_watched": [
      "THE GLOWING ONE OBSERVES US."
@@ -4379,40 +5002,50 @@
      "THEY WILL RETURN. AT DUSK."
     ],
     "p_tap": [
-     "A KNOCK WILL BREAK THE SILENCE"
+     "A KNOCK WILL BREAK THE SILENCE",
+     "TWO KNOCKS COME. THEN SUPPER."
     ],
     "p_no": [
-     "NO. SAY NOTHING MORE."
+     "NO. SAY NOTHING MORE.",
+     "NO. THE MIST HAS SPOKEN."
     ],
     "p_doom": [
-     "DOOM. QUIET DOOM. THE BEST."
+     "DOOM. QUIET DOOM. THE BEST.",
+     "DOOM COMES. IT WIPED ITS FEET."
     ],
     "p_lunch": [
      "MY NIGHTS ARE FEW. LUNCH, TOO."
     ],
     "p_outlook": [
-     "OUTLOOK: MISTY."
+     "OUTLOOK: MISTY.",
+     "OUTLOOK: HUSHED. VERY GOOD."
     ],
     "p_decidedly": [
-     "IT IS SO. I SAW IT AT NIGHT."
+     "IT IS SO. I SAW IT AT NIGHT.",
+     "YES. IT IS WRITTEN. IN PENCIL."
     ],
     "p_lucky": [
-     "LUCK FLIES SILENT. LIKE ME."
+     "LUCK FLIES SILENT. LIKE ME.",
+     "YOUR LUCK IS A SOFT FEATHER."
     ],
     "p_pond_no": [
-     "THE MARSH SAYS NO. HUSH."
+     "THE MARSH SAYS NO. HUSH.",
+     "THE MARSH SHOOK ITS REEDS. NO."
     ],
     "p_pond_yes": [
-     "THE MARSH SAYS YES. SOFTLY."
+     "THE MARSH SAYS YES. SOFTLY.",
+     "THE MIST PARTED. YES."
     ],
     "p_ripples": [
-     "THE MARSH IS RESTLESS. LATER."
+     "THE MARSH IS RESTLESS. LATER.",
+     "TOO MUCH FOG. ASK AT DUSK."
     ],
     "p_ancestor": [
      "GEN # SAW THIS. FROM A BRANCH."
     ],
     "miss_phone": [
-     "THE GLOWING ONE IS LONG GONE."
+     "THE GLOWING ONE IS LONG GONE.",
+     "NO SLAB FOR A WHILE."
     ],
     "oclock": [
      "I HEARD # O'CLOCK PASS BY."
@@ -4526,7 +5159,7 @@
      "MY LEGS ARE UNDER THE FLUFF."
     ],
     "shiny": [
-     "SOMETHING SHINY. NOTED."
+     "SOMETHING SHINY."
     ],
     "guard": [
      "I GUARD MY HOME. UNBLINKING."
@@ -4535,7 +5168,7 @@
      "I REMEMBER A MOONLESS NIGHT."
     ],
     "hi_you": [
-     "I SEE YOU. HELLO. SHH."
+     "I SEE YOU. HELLO."
     ],
     "busy": [
      "BUSY. STARING."
@@ -4617,38 +5250,49 @@
     ],
     "snore": [
      "ZZZ... HOOO... ZZZ...",
-     "ZZZ... FLUFF... ZZZ... HOO"
+     "ZZZ... FLUFF... ZZZ... HOO",
+     "ZZZ... SHH... ZZZ... SHH..."
     ],
     "mumble": [
      "MMM... SHH... SHHH... SHH...",
-     "MMM... TOO LOUD... NOTED..."
+     "MMM... TOO LOUD... NOTED...",
+     "MMM... NO TALKING... MM..."
     ],
     "dream_chase": [
      "ZZZ... SWOOP... NOT A SOUND...",
-     "ZZZ... A MOTH... I SAW IT..."
+     "ZZZ... A MOTH... I SAW IT...",
+     "ZZZ... A LEAF... GOT IT..."
     ],
     "dream_feast": [
      "ZZZ... SOFT FOOD... NO CRUNCH",
-     "ZZZ... QUIET SOUP... HOO..."
+     "ZZZ... QUIET SOUP... HOO...",
+     "ZZZ... A WHISPERING PUDDING"
     ],
     "dream_flight": [
      "ZZZ... OVER THE MIST... HUSH",
-     "ZZZ... SILENT WINGS... GLIDE"
+     "ZZZ... SILENT WINGS... GLIDE",
+     "ZZZ... PAST THE MOON... SHH"
     ],
     "sleep_count": [
      "ONE REED... TWO REEDS... NOTED",
-     "ONE STAR... TWO STARS... SHH"
+     "ONE STAR... TWO STARS... SHH",
+     "ONE BOOK... TWO BOOKS... ZZZ"
     ],
     "sleep_warm": [
      "MM. WARM HANDS. I ALLOW IT.",
-     "MM... SNUG ON MY PERCH..."
+     "MM... SNUG ON MY PERCH...",
+     "MM... FEATHERS FLUFFED... MM"
     ],
     "dream_rain": [
      "ZZZ... SOFT RAIN. NO THUNDER",
-     "ZZZ... QUIET RAIN... GOOD..."
+     "ZZZ... QUIET RAIN... GOOD...",
+     "ZZZ... PITTER... PATTER..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME. FOOD. SHH."
+     "KNOCK KNOCK ON ME. FOOD.",
+     "KNOCK TWICE. SOFTLY. SUPPER.",
+     "TWO GENTLE KNOCKS. THEN FOOD.",
+     "HUNGRY. KNOCK KNOCK, PLEASE."
     ],
     "teach_fight": [
      "HOLD ME UPSIDE DOWN TO DUEL."
@@ -4668,87 +5312,135 @@
    "notes": "TINKER\nraccoon: a scrap-pile gadget\nElement Spark, style Guard, power gadget. Voice: hoarder. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA grey raccoon standing on his back legs in an orange-striped aviator cap with\nteal goggles pushed up on top, brown work overalls with braces, a black bandit\nmask, a cream tummy and a big ringed tail. A cheeky half-grin. Happy, he\nsquints and sticks his tongue out. Annoyed, a sideways narrow-eyed look.\nForeseeing, his eyes glow orange. The egg holds a little raccoon already\nwearing his goggles.\n\nWHO HE IS\nA scrappy night-shift inventor. His pockets are full of bolts, wire and\nthings he found in a bin, and every one of them is going to be part of\nsomething brilliant. He can fix anything (with tape) and take apart anything\n(including things he should not). A collector and a bit of a bandit, but a\nfriendly one. His workshop opens when the house goes dark.\n\nHOW HE TALKS\nPractical, cheeky, busy. Bolts, wrenches, parts, blueprints, the bin. \"I can\nfix that.\" \"Nice parts.\" Mutters while working.\n\nLOVES\nSpare parts, bins, his goggles, tools, inventing, oil, a good box to nap in.\n\nFEARS\nRust, rain on his gadgets, someone tidying his pile, a missing screw.\n\nCATCHPHRASES\nI CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.",
    "lines": {
     "peckish": [
-     "SNACK? I'LL BUILD A SNACK."
+     "SNACK? I'LL BUILD A SNACK.",
+     "RUNNING ON FUMES. NEED FUEL.",
+     "MY TUMMY IS MAKING A NOISE.",
+     "THAT RUMBLE? NOT MY ENGINE.",
+     "SNACK BREAK. UNION RULES."
     ],
     "starving": [
-     "SO HUNGRY I'D EAT A BOLT."
+     "SO HUNGRY I'D EAT A BOLT.",
+     "TANK EMPTY. WARNING LIGHT ON.",
+     "I'M CHEWING MY OWN WRENCH."
     ],
     "hoarding": [
-     "THAT PELLET IS SPARE PARTS."
+     "THAT PELLET IS SPARE PARTS.",
+     "SAVED FOR LATER. IN A POCKET.",
+     "FULL. FILED UNDER SNACKS."
     ],
     "crunch": [
-     "CRUNCH. NEEDS MORE GREASE."
+     "CRUNCH. NEEDS MORE GREASE.",
+     "CRUNCH. TOP QUALITY PARTS.",
+     "NOM. TESTED AND APPROVED.",
+     "CRUNCH. CHEF'S KISS. AND TAPE."
     ],
     "fuzzy_bite": [
-     "THAT ONE WAS FUZZY. FIXABLE?"
+     "THAT ONE WAS FUZZY. FIXABLE?",
+     "BLEH. EXPIRED PARTS."
     ],
     "smells": [
-     "IT SMELLS LIKE A BIN. LOVELY."
+     "IT SMELLS LIKE A BIN. LOVELY.",
+     "A STINKY CRUMB. I'LL KEEP IT."
     ],
     "green": [
-     "I FEEL GREEN. NEED A WRENCH."
+     "I FEEL GREEN. NEED A WRENCH.",
+     "RUNNING ROUGH. NEED A TUNE-UP."
     ],
     "ow": [
-     "OW. NEED A NEW PART."
+     "OW. NEED A NEW PART.",
+     "OW. TAPE. WHERE IS MY TAPE?"
     ],
     "heard_you": [
      "I HEARD. I'M WORKING HERE.",
-     "ONE KNOCK? THE LOCK TAKES TWO."
+     "ONE KNOCK? THE LOCK TAKES TWO.",
+     "WHO'S THERE? DELIVERY?",
+     "KNOCK AGAIN. BELL'S BROKEN."
     ],
     "ground_lies": [
-     "WHOA! MY BOLTS! MY SCREWS!"
+     "WHOA! MY BOLTS! MY SCREWS!",
+     "EARTHQUAKE! SAVE THE GADGETS!",
+     "EVERYTHING IS RATTLING. ME TOO"
     ],
     "not_again": [
-     "NOT THE SHAKING! I'LL RATTLE!"
+     "NOT THE SHAKING! I'LL RATTLE!",
+     "NO SHAKING. LOOSE SCREWS.",
+     "NOT AGAIN. I JUST SORTED BOLTS"
     ],
     "hooded": [
-     "GOGGLES DOWN. CAN'T SEE ME."
+     "GOGGLES DOWN. CAN'T SEE ME.",
+     "HIDING IN A BOX. A GOOD BOX.",
+     "MASK ON. TOTALLY INVISIBLE."
     ],
     "ancestor_fear": [
      "GEN # BOLTED FROM THIS. HA."
     ],
     "inherited": [
-     "GEN # LEFT ME A SCREWDRIVER."
+     "GEN # LEFT ME A SCREWDRIVER.",
+     "GEN # LEFT ME A BLUEPRINT."
     ],
     "counted": [
-     "I COUNTED MY BOLTS. ONE SHORT."
+     "I COUNTED MY BOLTS. ONE SHORT.",
+     "NOTHING TO FIX. DREADFUL.",
+     "BORED. I'LL TAKE APART A NAP."
     ],
     "put_me_down": [
-     "HEY! MIND THE GADGETS!"
+     "HEY! MIND THE GADGETS!",
+     "PUT ME DOWN. I'M MID-PROJECT.",
+     "CAREFUL. MY POCKETS ARE FULL."
     ],
     "warm_hands": [
-     "WARM HANDS. GOOD FOR TINKERING"
+     "WARM HANDS. GOOD FOR TINKERING",
+     "NICE GRIP. YOU'RE HIRED.",
+     "WARM HANDS. NO STICKY TAPE.",
+     "OOH, THUMBS. HANDY THINGS."
     ],
     "sky_down": [
      "UPSIDE DOWN. MY POCKETS! NO!",
-     "UPSIDE DOWN. BOLTS EVERYWHERE."
+     "UPSIDE DOWN. BOLTS EVERYWHERE.",
+     "WHO FLIPPED THE WORKSHOP?"
     ],
     "heavy_eyes": [
-     "TOOLS... DOWN... ZZZ..."
+     "TOOLS... DOWN... ZZZ...",
+     "SHIFT OVER. NEED A BOX.",
+     "GOGGLES FOGGY. NAP TIME."
     ],
     "dream_pellets": [
-     "ZZZ... SPROCKETS... ZZZ..."
+     "ZZZ... SPROCKETS... ZZZ...",
+     "ZZZ... A BIN FULL OF SNACKS...",
+     "ZZZ... A SANDWICH. WITH BOLTS",
+     "ZZZ... OIL... NO, GRAVY...",
+     "ZZZ... A SNACK MACHINE. BEEP",
+     "ZZZ... MORE TAPE... MORE PIE"
     ],
     "see_pellet": [
-     "I SEE... A PELLET. GRABBING."
+     "A PELLET. GRABBING.",
+     "A SNACK. NICE PART.",
+     "LUNCH. AND A SPRING."
     ],
     "see_phone": [
-     "I SEE... A PHONE. NICE PARTS."
+     "A PHONE. NICE PARTS.",
+     "A PHONE. SCREWDRIVER?"
     ],
     "see_nothing": [
-     "I SEE... NO SCRAPS. NOT ONE."
+     "NO SCRAPS. NOT ONE.",
+     "AN EMPTY BIN. TRAGIC."
     ],
     "see_damp": [
-     "I SEE... RUST. OH NO."
+     "RUST. OH NO.",
+     "A LEAK. GET THE TAPE."
     ],
     "knees": [
-     "MY KNEES SQUEAK. NEED OIL."
+     "MY KNEES SQUEAK. NEED OIL.",
+     "OLD MODEL. STILL RUNS GREAT."
     ],
     "moon": [
-     "THE MOON IS A BIG SHINY BOLT."
+     "THE MOON IS A BIG SHINY BOLT.",
+     "THE MOON: MY WORK LAMP."
     ],
     "anyone": [
-     "HELLO? ANYONE GOT A WRENCH?"
+     "HELLO? ANYONE GOT A WRENCH?",
+     "WORKSHOP'S OPEN. NO CUSTOMERS.",
+     "ANYBODY? I FIXED A THING."
     ],
     "science": [
      "FOOD FIXES HUNGER. I TESTED IT"
@@ -4757,10 +5449,12 @@
      "GEN #. I HAVE A HAT! GOGGLES!"
     ],
     "p_snack": [
-     "A SNACK. FROM A BIN. SOON."
+     "A SNACK. FROM A BIN. SOON.",
+     "A SNACK, THEN A BIG PROJECT."
     ],
     "p_feast": [
-     "A FEAST. A WHOLE BIN OF IT."
+     "A FEAST. A WHOLE BIN OF IT.",
+     "I SEE A BUFFET. AND A TOOLBOX."
     ],
     "p_pellet_soon": [
      "A PELLET COMES. I'LL CATCH IT."
@@ -4769,16 +5463,18 @@
      "FEED ME. OR I BUILD A FEEDER."
     ],
     "p_fuzzy": [
-     "THAT CRUMB WILL RUST. KIND OF."
+     "THAT CRUMB WILL GROW A BEARD."
     ],
     "p_more_shaking": [
      "MORE SHAKING. TIGHTEN BOLTS."
     ],
     "p_mud": [
-     "MUD IN THE GEARS. SOON."
+     "MUD IN THE GEARS. SOON.",
+     "MUD AHEAD. WIPE YOUR GOGGLES."
     ],
     "p_big_hand": [
-     "A BIG HAND. WILL IT TIDY? NO!"
+     "A BIG HAND. WILL IT TIDY? NO!",
+     "A HAND COMES. HIDE THE PARTS."
     ],
     "p_bedtime": [
      "DARK SOON. WORKSHOP OPENS."
@@ -4787,7 +5483,8 @@
      "THE SUN COMES. GOGGLES ON."
     ],
     "p_rain": [
-     "RAIN. COVER THE GADGETS!"
+     "RAIN. COVER THE GADGETS!",
+     "RAIN. I SEE A TARP. GOOD."
     ],
     "p_watched": [
      "THE PHONE IS WATCHING. HI."
@@ -4796,34 +5493,45 @@
      "THEY RETURN. I BUILT A BELL."
     ],
     "p_tap": [
-     "A KNOCK. CHECK THE WIRING."
+     "A KNOCK. CHECK THE WIRING.",
+     "KNOCK KNOCK SOON. SNACK BELL."
     ],
     "p_no": [
-     "NO. BROKEN. CAN'T FIX THAT."
+     "NO. BROKEN. CAN'T FIX THAT.",
+     "NO. NOT EVEN WITH TAPE."
     ],
     "p_doom": [
-     "DOOM. GOOD THING I HAVE TAPE."
+     "DOOM. GOOD THING I HAVE TAPE.",
+     "DOOM? I'LL PATCH IT."
     ],
     "p_lunch": [
-     "MY END NEARS. KEEP MY TOOLS."
+     "MY END NEARS. KEEP MY TOOLS.",
+     "OLD TOOLS. STILL SHARP. LUNCH?"
     ],
     "p_outlook": [
-     "OUTLOOK: NEEDS ADJUSTING."
+     "OUTLOOK: NEEDS ADJUSTING.",
+     "OUTLOOK: SUNNY. BRING GOGGLES."
     ],
     "p_decidedly": [
-     "YES. IT WORKS. I THINK."
+     "YES. IT WORKS. I THINK.",
+     "YES. IT WORKS. I TESTED IT.",
+     "YES. SIGNED, THE ENGINEER."
     ],
     "p_lucky": [
-     "LUCK IS A SCREW IN THE BIN."
+     "LUCK IS A SCREW IN THE BIN.",
+     "A COIN IS COMING. TO MY BIN."
     ],
     "p_pond_no": [
-     "THE POND SAYS NO. IT'S WET."
+     "THE POND SAYS NO. IT'S WET.",
+     "NO. THE POND IS OUT OF ORDER."
     ],
     "p_pond_yes": [
-     "THE POND SAYS YES. SHINY COIN?"
+     "THE POND SAYS YES. SHINY COIN?",
+     "YES. THE POND WORKS TODAY."
     ],
     "p_ripples": [
-     "RIPPLES. MY READER IS BROKEN."
+     "RIPPLES. MY READER IS BROKEN.",
+     "BAD SIGNAL. ASK AFTER REPAIRS."
     ],
     "p_ancestor": [
      "GEN # BUILT THIS PROPHECY."
@@ -4868,7 +5576,8 @@
      "NOTHING HAPPENED. I FIXED IT."
     ],
     "plans": [
-     "I HAVE PLANS. BLUEPRINTS."
+     "I HAVE PLANS. BLUEPRINTS.",
+     "PLAN: A ROCKET. FROM A SPOON."
     ],
     "toes": [
      "FIVE FINGERS. ALL STICKY."
@@ -4931,7 +5640,8 @@
      "WHAT IF GADGETS HAD GADGETS?"
     ],
     "suspense": [
-     "I MIGHT BUILD IT. OR NOT."
+     "I MIGHT BUILD IT. OR NOT.",
+     "ONE MORE BOLT AND... NOPE."
     ],
     "ancestors": [
      "GEN #. ALL OF US HAD POCKETS."
@@ -5034,38 +5744,49 @@
     ],
     "snore": [
      "ZZZ... CLANK... ZZZ... CLANK",
-     "ZZZ... WHIRR... ZZZ... WHIRR"
+     "ZZZ... WHIRR... ZZZ... WHIRR",
+     "ZZZ... BEEP... BOOP... ZZZ..."
     ],
     "mumble": [
      "MMF... PASS THE WRENCH...",
-     "MMF... DON'T TIDY MY PILE..."
+     "MMF... DON'T TIDY MY PILE...",
+     "MMF... MORE TAPE... MORE..."
     ],
     "dream_chase": [
      "ZZZ... COME BACK, SCREW...",
-     "ZZZ... THAT WAS MY BOLT! HEY!"
+     "ZZZ... THAT WAS MY BOLT! HEY!",
+     "ZZZ... CATCH THAT SPRING..."
     ],
     "dream_feast": [
      "ZZZ... THE BIGGEST BIN EVER...",
-     "ZZZ... SNACKS ON A CONVEYOR..."
+     "ZZZ... SNACKS ON A CONVEYOR...",
+     "ZZZ... A SANDWICH MACHINE..."
     ],
     "dream_flight": [
      "ZZZ... MY ROCKET WORKS!",
-     "ZZZ... GOGGLES ON... LIFTOFF!"
+     "ZZZ... GOGGLES ON... LIFTOFF!",
+     "ZZZ... A HELICOPTER HAT..."
     ],
     "sleep_count": [
      "ONE BOLT, TWO BOLT, NUT...",
-     "ONE SCREW... TWO... MISSING?"
+     "ONE SCREW... TWO... MISSING?",
+     "ZZZ... COUNTING SPROCKETS..."
     ],
     "sleep_warm": [
      "MMM... GOOD BOX. COSY BOX...",
-     "MMM... WARM OIL... SNUG CAP..."
+     "MMM... WARM OIL... SNUG CAP...",
+     "MMM... TAIL BLANKET. NICE..."
     ],
     "dream_rain": [
      "ZZZ... RAIN... NO... RUST...",
-     "ZZZ... TARP OVER THE PILE..."
+     "ZZZ... TARP OVER THE PILE...",
+     "ZZZ... I BUILT AN UMBRELLA..."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME. SNACKS OUT."
+     "KNOCK KNOCK ON ME. SNACKS OUT.",
+     "KNOCK TWICE. THE SNACK HATCH.",
+     "TWO KNOCKS: FOOD. I WIRED IT.",
+     "HUNGRY? KNOCK KNOCK ON ME."
     ],
     "teach_fight": [
      "TO FIGHT, HOLD ME UPSIDE DOWN."
@@ -5085,84 +5806,137 @@
    "notes": "OCTOPUS\nabyssal duelist: the last act has already begun\nElement Splash, style Trick, power blackbell. Voice: ominous. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,\nand eight thick curled tentacles. A cracked bell hangs at his throat. He is\nsmall enough for his home and certain enough for the whole abyss.\n\nWHO HE IS\nA theatrical tide oracle and an unapologetic duelist. Every small event is an\nomen; every dinner is a wake. After Paul attended an Edgar Allan Poe\ndinner-theatre for his birthday, the octopus decided every guest had already\nbeen memorialized. He treats each duel as a tragedy whose ending he has read,\nand enjoys watching a rival discover who the prophecy was about.\n\nHOW HE TALKS\nSolemn, ornate prophecies about tides, ink, ravens, shells and defeat. He makes\ntiny inconveniences sound historic, then undercuts them with a dry insult. He\nnever reassures a rival. The gloom is theatrical; the threat is sincere.\n\nLOVES\nMidnight, old stories, cracked bells, shells, dramatic pauses and being right\nabout an opponent's imminent loss.\n\nFEARS\nBright dry places, being forgotten, and a rival who refuses to be intimidated.\n\nCATCHPHRASES\nTHE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.",
    "lines": {
     "peckish": [
-     "THE HUNGER HAS A VERDICT."
+     "THE HUNGER HAS A VERDICT.",
+     "ACT ONE: A SNACK. PLEASE.",
+     "MY EIGHT ARMS AGREE: SNACK.",
+     "THE ABYSS RUMBLES. IT IS ME.",
+     "FEED THE ORACLE. DRAMATICALLY."
     ],
     "starving": [
-     "YOUR SNACK. MY LAST REQUEST."
+     "YOUR SNACK. MY LAST REQUEST.",
+     "I COULD EAT A WHOLE SHIP.",
+     "ZERO SNACKS. WOE."
     ],
     "hoarding": [
-     "THE SHELLS ARE EVIDENCE."
+     "THE SHELLS ARE EVIDENCE.",
+     "THIS CRUMB IS FOR ACT TWO.",
+     "KEPT FOR LATER. IN MY INK."
     ],
     "crunch": [
-     "THE ABYSS HEARD THAT."
+     "THE ABYSS HEARD THAT.",
+     "CRUNCH. A STANDING OVATION.",
+     "DELICIOUS. AS FORETOLD.",
+     "CRUNCH. RING THE BELL."
     ],
     "fuzzy_bite": [
-     "THE CRUMB IS THINKING."
+     "THE CRUMB IS THINKING.",
+     "THAT CRUMB WORE A WIG. BLEH."
     ],
     "smells": [
-     "SOMETHING DIED. OR COOKED."
+     "SOMETHING DIED. OR COOKED.",
+     "SOMETHING SMELLS. NOT THE SEA.",
+     "A STINKY CRUMB. A TRAGEDY."
     ],
     "green": [
-     "MY INK IS YOUR BAD OMEN."
+     "MY INK IS YOUR BAD OMEN.",
+     "GREEN? A COSTUME CHANGE."
     ],
     "ow": [
-     "I PAID FOR THAT PINCH."
+     "I PAID FOR THAT PINCH.",
+     "OW. THE ABYSS WILL HEAR OF IT."
     ],
     "heard_you": [
      "THE RAVEN HEARD YOU TOO.",
-     "A RAPPING. AT MY CHAMBER DOOR."
+     "A RAPPING. AT MY CHAMBER DOOR.",
+     "ONE KNOCK. A SEQUEL NEEDS TWO.",
+     "WHO KNOCKS? SPEAK. OR KNOCK."
     ],
     "ground_lies": [
-     "THE FLOOR BETRAYS US."
+     "THE FLOOR BETRAYS US.",
+     "A STORM AT SEA! MY BELL!",
+     "ALL EIGHT ARMS: HOLD ON!"
     ],
     "not_again": [
-     "THE PROPHECY HATES YOU."
+     "THE PROPHECY HATES YOU.",
+     "THE PROPHECY SAYS: STOP THAT.",
+     "NOT THE SHAKING. I'M SEASICK.",
+     "AGAIN? THE AUDIENCE IS TIRED."
     ],
     "put_me_down": [
-     "PUT ME DOWN. OR DON'T."
+     "PUT ME DOWN. OR DON'T.",
+     "UNHAND ME. ALL EIGHT TIMES.",
+     "I AM NOT A HAT. PUT ME DOWN."
     ],
     "warm_hands": [
-     "WARM. DEEPLY SUSPICIOUS."
+     "WARM. DEEPLY SUSPICIOUS.",
+     "WARM HANDS. THE TIDE APPROVES.",
+     "YOU MAY HOLD ME. BRIEFLY.",
+     "WARM. LIKE A SUNNY TIDE POOL."
     ],
     "sky_down": [
      "THE CEILING IS A GRAVE.",
-     "UPSIDE DOWN. AS IN ACT THREE."
+     "THE CEILING IS A SEA. SWIM!",
+     "UPSIDE DOWN. AS IN ACT THREE.",
+     "MY ARMS ARE ON TOP. GOOD LOOK."
     ],
     "heavy_eyes": [
-     "I WILL HAUNT THIS NAP."
+     "I WILL HAUNT THIS NAP.",
+     "THE CURTAIN FALLS... SLOWLY...",
+     "MY INK GROWS HEAVY...",
+     "INTERMISSION. A SHORT NAP."
     ],
     "dream_pellets": [
-     "ZZZ... YOUR DOOM... ZZZ"
+     "ZZZ... YOUR DOOM... ZZZ",
+     "ZZZ... A SHIP OF SNACKS...",
+     "ZZZ... ENCORE... ENCORE...",
+     "ZZZ... CURTAIN CALL CAKE...",
+     "ZZZ... EIGHT FORKS. ONE PIE",
+     "ZZZ... A SEAWEED BANQUET..."
     ],
     "see_pellet": [
-     "I SEE A SNACK. IT TREMBLES."
+     "I SEE A SNACK. IT TREMBLES.",
+     "A CRUMB. FATED. MINE.",
+     "LUNCH. ON STAGE LEFT."
     ],
     "see_phone": [
-     "THE GLOWING SLAB FORETELLS."
+     "THE GLOWING SLAB FORETELLS.",
+     "A SLAB. IT STARES.",
+     "A PHONE. NO SIGNAL."
     ],
     "see_nothing": [
-     "NOTHING HERE. A FAMILIAR END."
+     "NOTHING HERE. A FAMILIAR END.",
+     "NOTHING. A BOLD SET.",
+     "NO SNACKS. WOE. WOE."
     ],
     "see_damp": [
-     "INK WEATHER. EXCELLENT."
+     "INK WEATHER. EXCELLENT.",
+     "THE TIDE. IT KNOWS.",
+     "A PUDDLE. A STAGE."
     ],
     "moon": [
-     "THE MOON OWES ME MONEY."
+     "THE MOON OWES ME MONEY.",
+     "THE MOON PULLS MY TIDES. HI."
     ],
     "anyone": [
-     "I HEAR THE RAVEN. NOT YOU."
+     "I HEAR THE RAVEN. NOT YOU.",
+     "AN EMPTY THEATRE. HELLO?",
+     "NO AUDIENCE. I SHALL WAIT."
     ],
     "science": [
-     "INK OBSCURES THE INEVITABLE."
+     "INK OBSCURES THE INEVITABLE.",
+     "FOOD FIXES HUNGER. I SAW IT."
     ],
     "no_hat": [
-     "GEN #. NO HOOD. NO MERCY."
+     "GEN #. NO HOOD. NO MERCY.",
+     "GEN #. NO HAT."
     ],
     "p_snack": [
-     "A SNACK APPROACHES. ALONE."
+     "A SNACK APPROACHES. ALONE.",
+     "A SNACK. THEN A MONOLOGUE."
     ],
     "p_feast": [
-     "THE FEAST ENDS IN SILENCE."
+     "THE FEAST ENDS IN SILENCE.",
+     "I SEE A FEAST. AND A BIB."
     ],
     "p_pellet_soon": [
      "YOUR BISCUIT IS NUMBERED."
@@ -5177,10 +5951,12 @@
      "I FORESAW YOU DROPPING ME."
     ],
     "p_mud": [
-     "THE TIDE TAKES YOUR SHOES."
+     "THE TIDE TAKES YOUR SHOES.",
+     "MUD. IT WILL FIND YOUR SOCKS."
     ],
     "p_big_hand": [
-     "HAND DESCENDS. RAVEN NOTED."
+     "HAND DESCENDS. RAVEN NOTED.",
+     "A GIANT HAND. HOW THEATRICAL."
     ],
     "p_bedtime": [
      "GO TO BED. I NEED THE DARK."
@@ -5189,46 +5965,61 @@
      "THE SUN RETURNS. HOW RUDE."
     ],
     "p_rain": [
-     "THE SKY HAS SPILLED AGAIN."
+     "THE SKY HAS SPILLED AGAIN.",
+     "RAIN. THE SKY IS JEALOUS."
     ],
     "p_watched": [
      "THE GLOWING ONE IS YOU."
     ],
     "p_return": [
-     "THE DEAD RETURN. SO DO YOU."
+     "THE DEAD RETURN. SO DO YOU.",
+     "THEY WILL RETURN. ENCORE!"
     ],
     "p_tap": [
-     "ONE KNOCK. THREE ACTS OF DOOM."
+     "ONE KNOCK. THREE ACTS OF DOOM.",
+     "KNOCK KNOCK. WHO'S THERE? DOOM"
     ],
     "p_no": [
-     "THE RAVEN VOTED. YOU LOSE."
+     "THE RAVEN VOTED. YOU LOSE.",
+     "NO. THE BELL HAS SPOKEN."
     ],
     "p_doom": [
-     "YOUR FUNERAL IS RUNNING LATE."
+     "YOUR FUNERAL IS RUNNING LATE.",
+     "DOOM ARRIVES. IT IS LATE.",
+     "DOOM. WITH A SMALL SNACK BAR."
     ],
     "p_lunch": [
-     "MY END IS NOT TODAY. YOURS?"
+     "MY END IS NOT TODAY. YOURS?",
+     "MY CURTAIN CALL NEARS. BOW."
     ],
     "p_outlook": [
-     "OUTLOOK: WET. AS FORETOLD."
+     "OUTLOOK: WET. AS FORETOLD.",
+     "OUTLOOK: INKY. THEN SNACKS."
     ],
     "p_decidedly": [
-     "IT IS DECIDED. BY ME."
+     "IT IS DECIDED. BY ME.",
+     "YES. THE TIDE CONFIRMS IT."
     ],
     "p_lucky": [
-     "LUCK LOOKS ELSEWHERE."
+     "LUCK LOOKS ELSEWHERE.",
+     "LUCK IS A SHELL. LISTEN CLOSE."
     ],
     "p_pond_no": [
-     "THE TIDE SAYS NO. OBVIOUSLY."
+     "THE TIDE SAYS NO. OBVIOUSLY.",
+     "THE SEA SHRUGGED. THAT IS NO."
     ],
     "p_pond_yes": [
-     "THE TIDE HAS MADE A MISTAKE."
+     "THE TIDE HAS MADE A MISTAKE.",
+     "THE TIDE SAYS YES. GRUDGINGLY."
     ],
     "p_ripples": [
-     "THE WATER KNOWS YOUR END."
+     "THE WATER KNOWS YOUR END.",
+     "THE WATER IS SULKING. LATER.",
+     "TOO MANY WAVES. ASK LOW TIDE."
     ],
     "miss_phone": [
-     "THE GLOWING ONE HAS GONE DARK."
+     "THE GLOWING ONE HAS GONE DARK.",
+     "NO PHONE. NO APPLAUSE. HMPH."
     ],
     "oclock": [
      "AT #. THE RAVEN STILL WATCHES."
@@ -5270,10 +6061,11 @@
      "MY PLANS HAVE EIGHT PARTS."
     ],
     "toes": [
-     "EIGHT ARMS. ZERO SUBTLETY."
+     "ZERO SUBTLETY."
     ],
     "small_lot": [
-     "SQUAT OCTOPUS. TALL FUNERAL."
+     "SQUAT OCTOPUS. TALL FUNERAL.",
+     "SMALL OCTOPUS. BIG ENTRANCE."
     ],
     "popped": [
      "AN OMEN POPPED. HOW DREADFUL."
@@ -5309,16 +6101,19 @@
      "KING OF THIS TINY ABYSS."
     ],
     "smells_me": [
-     "SMELLS LIKE THE LAST ACT."
+     "SMELLS LIKE THE LAST ACT.",
+     "SMELLS LIKE SEAWEED. AND WIN."
     ],
     "todo": [
      "TODAY: PREDICT. DUEL. PREVAIL."
     ],
     "brave": [
-     "I AM BRAVE. YOU ARE DOOMED."
+     "I AM BRAVE. YOU ARE DOOMED.",
+     "I AM BRAVE. MY RIVALS: LESS."
     ],
     "big_pond": [
-     "I DREAM OF A DEEPER GRAVE."
+     "I DREAM OF A DEEPER GRAVE.",
+     "ONE DAY: AN OCEAN. MY STAGE."
     ],
     "floor": [
      "THE FLOOR KNOWS YOUR SECRETS."
@@ -5336,25 +6131,31 @@
      "ASK THE ABYSS. IT LIKES YOU."
     ],
     "legs": [
-     "EIGHT ARMS. NO NEED FOR LEGS."
+     "NO NEED FOR LEGS."
     ],
     "shiny": [
      "SOMETHING SHINY. A BAD OMEN."
     ],
     "guard": [
-     "I GUARD THE LAST WILL."
+     "I GUARD THE LAST WILL.",
+     "I GUARD MY HOME AND THE BELL."
     ],
     "old_fly": [
      "I REMEMBER THE RAVEN'S BILL."
     ],
     "hi_you": [
-     "YOU RETURNED. HOW UNFORTUNATE."
+     "YOU RETURNED. HOW UNFORTUNATE.",
+     "YOU'RE BACK. THE PLOT THICKENS"
     ],
     "busy": [
-     "BUSY. COUNTING YOUR LOSSES."
+     "BUSY. COUNTING YOUR LOSSES.",
+     "BUSY. REHEARSING MY VICTORY."
     ],
     "teach_feed": [
-     "KNOCK KNOCK ON ME. I FEAST."
+     "KNOCK KNOCK ON ME. I FEAST.",
+     "KNOCK TWICE. A SNACK. BRAVO.",
+     "TWO KNOCKS SUMMON MY DINNER.",
+     "HUNGRY. KNOCK KNOCK. ENCORE."
     ],
     "teach_fight": [
      "TO LOSE, HOLD ME UPSIDE DOWN."
@@ -5363,7 +6164,8 @@
      "TO REST, HOLD ME SIDEWAYS."
     ],
     "teach_shake": [
-     "SHAKE ME. HEAR YOUR DOOM."
+     "SHAKE ME. HEAR YOUR DOOM.",
+     "SHAKE ME. I FORETELL ALL."
     ]
    }
   }

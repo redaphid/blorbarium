@@ -1,8 +1,8 @@
 // Voices: the way he says things. The oracle gene picks one (its byte taken
 // modulo the rows), so siblings can talk differently and a lineage drifts.
-// A voice may have its own lines for a row (thought_lines.def), and a terse
-// voice (`firstOnly`) keeps just the first sentence of a shared line. Nothing
-// wraps a line: no prefix, no suffix, no frame (the owner asked: no
+// A terse voice (`firstOnly`) keeps just the first sentence of a shared line;
+// that is all a voice does. Nothing wraps or rewrites a line: no prefix, no
+// suffix, no frame, no voice's own version (the owner asked: no
 // "THE REEDS SAY:", no "... SO IT IS.").
 // Stable ids: never renumber, never reuse.
 // BLORB_VOICE(id, name, firstOnly)

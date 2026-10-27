@@ -87,13 +87,6 @@ inline constexpr ThoughtInfo THOUGHTS[] = {
 inline constexpr size_t kThoughtCount = countOf(THOUGHTS);
 const ThoughtInfo* thoughtInfo(ThoughtId);
 
-struct VoicedLine { ThoughtId thought; VoiceId voice; const char* text; };
-inline constexpr VoicedLine VOICED_LINES[] = {
-#define BLORB_LINE(t, v, text) {thought::t, voice::v, text},
-#include "blorb/defs/thought_lines.def"
-#undef BLORB_LINE
-};
-
 // A species' own lines for a row (species_lines.def, written by
 // tools/personality.py from personalities/<species>.txt).
 struct SpeciesLine { SpeciesId species; ThoughtId thought; const char* text; };
@@ -118,7 +111,7 @@ inline constexpr SpeciesVerdict SPECIES_VERDICTS[] = {
 
 // ---- the text ---------------------------------------------------------------------
 constexpr size_t kMaxThoughtText = 30;
-constexpr size_t kMaxVoicedText = 52;          // a row of thought_lines.def
+constexpr size_t kMaxVoicedText = 52;          // the room a said line has before its mark grows it
 constexpr size_t kMaxNameText = 15;           // the saved name's 16 bytes
 constexpr size_t kMaxTaughtText = kMaxThoughtText;
 constexpr uint8_t kUrgentThought = 7;
@@ -164,8 +157,6 @@ constexpr bool writable(const char* text, size_t max, const char* when) {
 constexpr bool thoughtsWritable() {
   for (const ThoughtInfo& t : THOUGHTS)
     if (!writable(t.text, kMaxThoughtText, t.whenName)) return false;
-  for (const VoicedLine& l : VOICED_LINES)
-    if (!writable(l.text, kMaxVoicedText, whenOf(l.thought))) return false;
   for (const SpeciesLine& l : SPECIES_LINES)
     if (l.species.v != 0xFF && !writable(l.text, kMaxThoughtText, whenOf(l.thought))) return false;
   for (const SpeciesVerdict& v : SPECIES_VERDICTS) {
@@ -201,15 +192,15 @@ struct Words { std::string_view name, taught; };
 // The line as said, its mark replaced: '#' by `num`, '@' and '*' by `words`.
 // If his species has its own lines for the row (species_lines.def), one of
 // them is said exactly as written: his file is already his voice, so no terse
-// cut shortens it. Otherwise: one of the voice's own lines for the row
-// (thought_lines.def) if it has any, else the row's shared text, which a terse
-// voice cuts to its first sentence. Nothing ever wraps a line: no voice frame,
-// prefix or suffix (the owner removed "THE REEDS SAY:" and "... SO IT IS.").
+// cut shortens it. Otherwise the row's shared text, which a terse voice cuts to
+// its first sentence. Nothing ever wraps or reshapes a line: no voice frame,
+// prefix, suffix or voice's own rewrite (the owner removed "THE REEDS SAY:",
+// "... SO IT IS." and the voices' versions of shared lines).
 // `pick` chooses among them, modulo their count. Returns the length.
 // The one mark grows a line most as a taught line ('#' is 5 digits, '@' a name).
 constexpr size_t kThoughtLineCap = kMaxVoicedText + (kMaxTaughtText - 1) + 1;
 static_assert(kMaxTaughtText >= kMaxNameText && kMaxTaughtText >= 5);
-// kSharedOnly is no species: the shared and voiced lines alone, as tests and
+// kSharedOnly is no species: the shared lines alone, as tests and
 // previews want them whatever lines the species files hold.
 inline constexpr SpeciesId kSharedOnly{0xFE};
 size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out, SpeciesId = kSharedOnly,
