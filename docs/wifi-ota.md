@@ -144,7 +144,7 @@ Phases: `off -> scanning -> joining -> manifest -> image -> closing -> off`.
 `provision` joins without a scan (the network may be hidden); so does a
 check whose scan failed. A failed scan (6 s), join (12 s), GET or manifest
 closes the window; a Check then backs off. The GET's own limits: 5 s
-connect, 8 s TLS handshake, 6 s headers, and 20 s with no byte in the body.
+connect, 20 s TLS handshake (4.5 to 8.7 s seen on a weak signal), 6 s headers, and 20 s with no byte in the body.
 A GET still running 60 s after it was told to stop has its connection cut.
 
 **Internal RAM** is the scarce kind: bringing the radio up (for a window or

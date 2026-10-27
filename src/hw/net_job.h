@@ -60,7 +60,7 @@ class NetJob {
   static constexpr uint32_t kStackHttpBytes = 6 * 1024;
   static inline uint32_t stackTlsBytes = kStackTlsDefault;
   static constexpr uint16_t kConnectMs = 5000;
-  static constexpr uint32_t kHandshakeS = 8;
+  static constexpr uint32_t kHandshakeS = 20;   // 4.5 to 8.7 s seen at RSSI -75: 8 cut good ones off
   static constexpr uint16_t kHeadersMs = 6000;
   static constexpr uint32_t kStallMs = 20000;           // a body that sends nothing this long has failed
 
@@ -70,6 +70,7 @@ class NetJob {
   // `post`: a JSON body to POST instead (a text GET's reply, the pet's line pack, #59).
   bool start(const char* url, bool text, const char* post = nullptr) {
     if (busy()) return false;
+    reap();
     if (!m_) {
       void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
       if (!p) return false;
@@ -91,7 +92,8 @@ class NetJob {
     running_ = true;
     startedAt_ = millis();
     stackBytes_ = std::strncmp(url, "https://", 8) == 0 ? stackTlsBytes : kStackHttpBytes;
-    if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", stackBytes_, this, 1, nullptr, 1) != pdPASS) {
+    if (xTaskCreatePinnedToCore(&NetJob::run, "wifiget", stackBytes_, this, 1, &task_, 1) != pdPASS) {
+      task_ = nullptr;
       running_ = false;
       state_ = fail("no RAM for the task (heap %u)", unsigned(ESP.getFreeHeap()));
       return false;
@@ -131,6 +133,7 @@ class NetJob {
   // Once the task has ended: ready for the next GET.
   void reset() {
     if (busy()) return;
+    reap();
     head_ = tail_ = 0;
     state_ = State::Idle;
   }
@@ -150,7 +153,18 @@ class NetJob {
     self->get();   // everything it made is gone when this returns
     self->stackFree_ = uxTaskGetStackHighWaterMark(nullptr);
     self->running_ = false;
-    vTaskDelete(nullptr);
+    // It waits to be deleted by the loop (reap) rather than deleting itself: a
+    // task that deletes itself keeps its stack until the idle task gets round
+    // to it, and a second GET started at once (the pet's lines straight after
+    // the manifest) then ran its TLS handshake with the first's 7 KB still
+    // held, down to 2.3 KB of internal RAM left.
+    vTaskSuspend(nullptr);
+  }
+
+  // The ended task, deleted from the loop: its stack is free when this returns
+  // (it is suspended, or ready on the loop's core, so never running now).
+  void reap() {
+    if (task_ && !running_) vTaskDelete(task_), task_ = nullptr;
   }
 
   // The task: `n` bytes into the ring, waiting while it is full.
@@ -262,6 +276,7 @@ class NetJob {
   // Each written by one side and read by the other: plain words, never a
   // compare-and-swap.
   volatile bool running_ = false, cancel_ = false;
+  TaskHandle_t task_ = nullptr;   // the GET's task, from start until reap
   volatile State state_ = State::Idle;
   volatile uint32_t head_ = 0, tail_ = 0;
   volatile size_t textLen_ = 0, got_ = 0;
