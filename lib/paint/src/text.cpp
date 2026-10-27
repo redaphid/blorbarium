@@ -63,4 +63,39 @@ void drawString(Canvas240& cv, const Font& f, const char* s, int x, int y, uint1
   }
 }
 
+namespace {
+// Floor division by 256, for pen positions left of the canvas too.
+int floorQ8(int64_t v) { return int(v >= 0 ? v >> 8 : -((-v + 255) >> 8)); }
+}  // namespace
+
+int textWidthScaled(const Font& f, const char* s, int scaleQ8) {
+  return int((int64_t(textWidth(f, s)) * scaleQ8 + 255) >> 8);
+}
+
+void drawStringScaled(Canvas240& cv, const Font& f, const char* s, int x, int y, uint16_t colour, const Clip& clip,
+                      int scaleQ8) {
+  if (!*s || scaleQ8 <= 0) return;
+  const VerticalMetric m = metricOf(f);
+  const int64_t baseline = int64_t(y) * 256 - int64_t(m.height) * scaleQ8 / 2 + int64_t(m.ascent) * scaleQ8;
+  const Glyph& first = glyphFor(f, *s);
+  int64_t pen = int64_t(x) * 256 + (first.xOffset < 0 ? -int64_t(first.xOffset) * scaleQ8 : 0);
+  const int cx0 = imax(clip.x, 0), cx1 = imin(clip.x + clip.w, kSide);
+  const int cy0 = imax(clip.y, 0), cy1 = imin(clip.y + clip.h, kSide);
+  for (; *s; ++s) {
+    const Glyph& g = glyphFor(f, *s);
+    const int64_t x0 = pen + int64_t(g.xOffset) * scaleQ8, y0 = baseline + int64_t(g.yOffset) * scaleQ8;
+    pen += int64_t(g.xAdvance) * scaleQ8;
+    if (floorQ8(x0 + int64_t(g.width) * scaleQ8) < cx0 || floorQ8(x0) >= cx1) continue;   // off the glass
+    const uint8_t* bits = f.bitmap + g.bitmapOffset;
+    for (int i = 0; i < g.width * g.height; ++i) {
+      if (!(bits[i >> 3] & (0x80 >> (i & 7)))) continue;
+      const int ix = i % g.width, iy = i / g.width;
+      const int xa = imax(floorQ8(x0 + int64_t(ix) * scaleQ8), cx0), xb = imin(floorQ8(x0 + int64_t(ix + 1) * scaleQ8), cx1);
+      const int ya = imax(floorQ8(y0 + int64_t(iy) * scaleQ8), cy0), yb = imin(floorQ8(y0 + int64_t(iy + 1) * scaleQ8), cy1);
+      for (int py = ya; py < yb; ++py)
+        for (int px = xa; px < xb; ++px) plot(cv, px, py, colour, clip);
+    }
+  }
+}
+
 }  // namespace paint

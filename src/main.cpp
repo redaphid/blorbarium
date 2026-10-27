@@ -93,7 +93,7 @@ class SerialLink : public blorb::Link {
   // made in PSRAM at the first DEBUG line: internal RAM is the scarce kind
   // (a duel's radio takes about 37 KB of it), and a cable is rare.
   static constexpr uint8_t kDebugQueue = 8;
-  static constexpr size_t kDebugLine = 128;
+  static constexpr size_t kDebugLine = 136;   // and `DEBUG marquee` with its 120 characters
   struct Queue {
     char lines[kDebugQueue][kDebugLine];
     char taken[kDebugLine];
@@ -300,6 +300,7 @@ static blorb::BodySample lastBody;
 // Dim at half of BLORB_IDLE_SECONDS (60), dark at all of it, the nap BLORB_NAP_SECONDS (120)
 // after that, with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
+#include "marquee.h"   // the full-screen marquee: showMarquee() (src/marquee.h)
 // Which way up is home on this badge: the build's ORIENT_HOME until setup()
 // reads the badge's own from NVS (src/hw/home.h), and `DEBUG home` sets it.
 static volatile uint8_t homeRot = ORIENT_HOME;
@@ -904,7 +905,7 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   }
 #endif
   applyLean(f.screen, ms);
-  f.screen.buttonDown = petFeels(f.screen.buttonDown, remote);
+  f.screen.buttonDown = marqueefw::takesButton(petFeels(f.screen.buttonDown, remote));   // a press takes the marquee down
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
   // A hard shake is a no to the shell's questions (#35): the update's "Turn
@@ -939,7 +940,7 @@ static void step(uint32_t now) {
   }
 #endif
   [[maybe_unused]] const uint32_t ticks = dish->tickCount();
-  dish->tick(now, host);
+  dish->tick(now, marqueefw::link());
 #if !defined(BADGE_BOARD_SIM)
   if (dish->tickCount() != ticks) lat::rec->ticked(micros());   // what spoke is taken
 #endif
@@ -1309,7 +1310,7 @@ static uint32_t warpMs = 0;
 static void warp(uint32_t ticks) {
   for (uint32_t done = 0; done < ticks; done += 10) {
     warpMs += 10 * blorb::kTickMs;
-    dish->tick(millis() + warpMs, host);    // at most 10 ticks a call
+    dish->tick(millis() + warpMs, marqueefw::link());    // at most 10 ticks a call
     if (done % 2000 == 0) delay(1);          // let the idle task run
   }
 }
@@ -1719,6 +1720,9 @@ static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
   if (std::strcmp(verb, "home") == 0) return homeVerb(a);
+  if (std::strcmp(verb, "marquee") == 0) {   // `DEBUG marquee <text>`: the whole screen says it (src/marquee.h)
+    return showMarquee(line + std::strlen("marquee"));
+  }
   if (std::strcmp(verb, "hang") == 0) return hang(line);
   if (std::strcmp(verb, "side") == 0) return side(line);
   if (std::strcmp(verb, "knock") == 0) return knock(a);
@@ -1780,7 +1784,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, die [remains], species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|nap|idle <s>|napafter <s>|wom <mg>|remind [<s>]|stats], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
+                  "power [low|wake|nap|idle <s>|napafter <s>|wom <mg>|remind [<s>]|stats], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url], marquee <text>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1898,7 +1902,7 @@ static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 M
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
 static bool powerHeld() {
-  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 ||
+  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || marqueefw::holds() ||
          (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || wifiAsks() || bool(shot) ||
          dish->hangCharging();   // a hang under way: a kid holding it still on its edge
 }
@@ -2465,14 +2469,6 @@ static size_t petReport(char* out, size_t cap) {
   return n > 0 && size_t(n) < cap ? size_t(n) : 0;
 }
 
-// Remote debug's `marquee <text>` (src/remote_debug.h): a message for the kids,
-// full-screen scrolling text, at most rdebug::kMarqueeMax printable ASCII
-// characters. A stub until the marquee branch brings showMarquee itself:
-// delete this one when it lands (its limit must match kMarqueeMax).
-static void showMarquee(const char* text) {
-  Serial.printf("[remote] marquee (not on this firmware yet): \"%s\"\n", text);
-}
-
 // Remote debug's `state`: what the cable's STATE and status verbs print, into
 // the log, whence the next report takes it. STATE is the protocol's, answered
 // on its next pass.
@@ -2519,6 +2515,7 @@ void loop() {
   constexpr bool holdFrame = false;
 #endif
   step(now);
+  marqueefw::tick(now);   // before the power policy, so one put up wakes the screen this pass
 #if !defined(BADGE_BOARD_SIM)
   dbgfw::poll();
 #endif
@@ -2543,7 +2540,7 @@ void loop() {
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
-    const bool overlay = update || dbgfw::drawing() || wififw::drawing() || powerPolicy.nudging();   // the reminder's rim moves every frame
+    const bool overlay = update || dbgfw::drawing() || wififw::drawing() || powerPolicy.nudging() || marqueefw::on();   // the reminder's rim moves every frame
     const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
     if (still) fps::same();
 #else
@@ -2553,12 +2550,16 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
       const uint32_t drawAt = micros();
 #endif
-      drawFrame(look, now);
-      paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
+      if (marqueefw::on()) {
+        marqueefw::draw(canvas, now);   // the whole glass, over the pet
+      } else {
+        drawFrame(look, now);
+        paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
+      }
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
       else dbgfw::draw(canvas), wififw::draw(canvas);
-      paint::drawIdleBar(canvas, idleBar);
+      if (!marqueefw::on()) paint::drawIdleBar(canvas, idleBar);
       if (powerPolicy.nudging()) paint::drawRimPulse(canvas, remind::rimLevel());
       framememo::drew(look, idleBar, overlay);
       const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();

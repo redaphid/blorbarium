@@ -26,6 +26,7 @@
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
 //   DEBUG idle <name|off>               draw him playing that idle (paint only, the brain never sees it)
+//   DEBUG marquee <text>                the whole screen says it (src/marquee.h)
 //   @0 DEBUG found <slug|id>            found the pet as that species (before boot; later, refused)
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
@@ -221,6 +222,8 @@ static void simLine(const std::string& line) {
   if (line[0] == '!') {
     sscanf(line.c_str() + 1, "%31s %479s %63s", word, a, b);
     hand(word, a, b);
+  } else if (line.rfind("DEBUG marquee", 0) == 0) {
+    showMarquee(line.c_str() + 13);
   } else {
     sscanf(line.c_str() + 6, "%31s %479s %63s", word, a, b);
     debug(word, a, b);
