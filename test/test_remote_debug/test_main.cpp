@@ -3,10 +3,13 @@
 // the allowlist, only in bounds, each at most once, only from the site.
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
 #include "rdebug/remote.h"
+#include "rdebug/shot.h"
 
 using rdebug::Command;
 using rdebug::LogRing;
@@ -167,6 +170,115 @@ TEST(WriteChunked, APartialWriteCarriesOn) {
       [] {});
   EXPECT_EQ(n, body.size());
   for (size_t k : sizes) EXPECT_LE(k, 1024u);
+}
+
+// ---- the screenshot (rdebug/shot.h) ----
+
+// tools/shot.py's decoder, here: base64 lines to PackBits to pixels.
+static std::vector<uint16_t> decodeShot(const std::string& text, int& w, int& h, uint32_t& crc) {
+  std::vector<uint8_t> bytes;
+  std::vector<uint16_t> px;
+  size_t at = 0;
+  auto b64 = [](char c) -> int {
+    const char* k = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const char* f = std::strchr(k, c);
+    return c && f ? int(f - k) : -1;
+  };
+  while (at < text.size()) {
+    const size_t end = text.find('\n', at);
+    const std::string line = text.substr(at, end - at);
+    at = end + 1;
+    EXPECT_EQ(line.rfind("[hw] shot ", 0), 0u) << line;
+    const std::string rest = line.substr(10);
+    if (std::sscanf(rest.c_str(), "begin w=%d h=%d", &w, &h) == 2) continue;
+    if (rest.rfind("end ", 0) == 0) {
+      unsigned n = 0;
+      std::sscanf(rest.c_str(), "end bytes=%u crc=%x", &n, &crc);
+      EXPECT_EQ(n, bytes.size());
+      break;
+    }
+    for (size_t i = 0; i + 3 < rest.size(); i += 4) {
+      const int a = b64(rest[i]), b = b64(rest[i + 1]), c = b64(rest[i + 2]), d = b64(rest[i + 3]);
+      bytes.push_back(uint8_t(a << 2 | b >> 4));
+      if (c >= 0) bytes.push_back(uint8_t(b << 4 | c >> 2));
+      if (d >= 0) bytes.push_back(uint8_t(c << 6 | d));
+    }
+  }
+  for (size_t i = 0; i < bytes.size();) {
+    const uint8_t hd = bytes[i++];
+    if (hd < 128) {
+      const uint16_t p = uint16_t(bytes[i] | bytes[i + 1] << 8);
+      i += 2;
+      for (int k = 0; k <= hd; ++k) px.push_back(p);
+    } else {
+      for (int k = 0; k < hd - 127; ++k, i += 2) px.push_back(uint16_t(bytes[i] | bytes[i + 1] << 8));
+    }
+  }
+  return px;
+}
+
+TEST(Shot, HalvesEachPixelToTheMeanOfFour) {
+  std::vector<uint16_t> src(4 * 2);
+  // Left 2x2: red 31,31,0,0 and green 0..; right 2x2: one white, three black.
+  const uint16_t red = 31 << 11, white = 0xffff;
+  src[0] = red, src[1] = red, src[4] = 0, src[5] = 0;
+  src[2] = white, src[3] = 0, src[6] = 0, src[7] = 0;
+  uint16_t dst[2];
+  rdebug::halve565(src.data(), 4, 2, dst);
+  EXPECT_EQ(dst[0], uint16_t(16 << 11));                    // (31+31+0+0+2)/4 = 16
+  EXPECT_EQ(dst[1], uint16_t(8 << 11 | 16 << 5 | 8));       // a quarter of white, rounded
+  std::vector<uint16_t> big(240 * 240, 0x1234), small(120 * 120, 0);
+  rdebug::halve565(big.data(), 240, 240, small.data());
+  for (uint16_t p : small) ASSERT_EQ(p, 0x1234);
+}
+
+TEST(Shot, TheCrcIsZlibs) {
+  const uint16_t px[] = {0x3231, 0x3433, 0x3635, 0x3837};   // "12345678" little-endian
+  EXPECT_EQ(rdebug::crc565(px, 4), 0x9ae0daafu);
+}
+
+TEST(Shot, ItDecodesToTheHalvedFrameAndFitsAtWorst) {
+  std::vector<uint16_t> frame(240 * 240);
+  for (size_t i = 0; i < frame.size(); ++i) frame[i] = uint16_t(i % 240 < 120 ? 0x07e0 : (i * 2654435761u) >> 7);
+  std::vector<uint16_t> small(120 * 120);
+  rdebug::halve565(frame.data(), 240, 240, small.data());
+  std::vector<uint8_t> packed(120 * 120 * 2 + 512);
+  const size_t n = rdebug::packBits565(small.data(), small.size(), packed.data(), packed.size());
+  ASSERT_GT(n, 0u);
+  std::string text(rdebug::kShotMax, '\0');
+  text.resize(rdebug::shotLines(packed.data(), n, 120, 120, rdebug::crc565(small.data(), small.size()), text.data(), text.size()));
+  ASSERT_FALSE(text.empty());
+  int w = 0, h = 0;
+  uint32_t crc = 0;
+  EXPECT_EQ(decodeShot(text, w, h, crc), small);
+  EXPECT_EQ(w, 120);
+  EXPECT_EQ(h, 120);
+  EXPECT_EQ(crc, rdebug::crc565(small.data(), small.size()));
+  // The worst frame, no two pixels alike in a row, still fits kShotMax (its own POST stays under the site's 64 KB).
+  for (size_t i = 0; i < small.size(); ++i) small[i] = uint16_t(i * 7 + 1);
+  const size_t worst = rdebug::packBits565(small.data(), small.size(), packed.data(), packed.size());
+  ASSERT_GT(worst, 0u);
+  text.assign(rdebug::kShotMax, '\0');
+  const size_t len = rdebug::shotLines(packed.data(), worst, 120, 120, 0, text.data(), text.size());
+  EXPECT_GT(len, 0u);
+  EXPECT_LT(len + len / 128 + 512, 64u * 1024);   // escaped newlines and the JSON around it
+  EXPECT_EQ(rdebug::shotLines(packed.data(), worst, 120, 120, 0, text.data(), 1000), 0u);   // too small: nothing
+}
+
+TEST(Shot, ItGoesOnceAndWaitsOnlyForRam) {
+  rdebug::ShotSlot s;
+  EXPECT_FALSE(s.waiting());
+  EXPECT_FALSE(s.go(100000, 50000));
+  s.hold(42, 30000);
+  EXPECT_TRUE(s.waiting());
+  EXPECT_FALSE(s.go(20000, 15000));   // short of 24 KB free: it waits, still held
+  EXPECT_FALSE(s.go(30000, 8000));    // no 9 KB block: it waits
+  EXPECT_TRUE(s.waiting());
+  EXPECT_TRUE(s.go(33168, 15348));    // the badge's numbers before the failed report
+  s.tried();                          // one try: it failed (or went), and either way it is gone
+  EXPECT_FALSE(s.waiting());
+  EXPECT_FALSE(s.go(100000, 50000));  // never again, in any later window
+  EXPECT_EQ(s.id(), 42u);             // its result still names the command
 }
 
 // ---- commands ----

@@ -27,7 +27,7 @@ constexpr size_t kStateBytes = rdebug::kStateMax;
 // Internal RAM the report wants free before its GET task starts (7 KB of stack
 // and the handshake's bounce buffers); short of it, no report this window.
 constexpr uint32_t kReportHeap = 24 * 1024, kReportBig = 9 * 1024;
-constexpr size_t kShotBytes = 180 * 1024;   // a 240x240 PackBits frame as the cable's shot lines, at worst
+constexpr const char* kShotUrl = "https://blorb.hypnodroid.com/api/debug";   // device debug, kind "shot"
 constexpr uint32_t kStateSettleMs = 1500;   // STATE's reply goes out from the protocol's next pass
 constexpr size_t kResults = 8, kPending = 8;
 
@@ -52,13 +52,14 @@ struct Mem {
 static Mem* m = nullptr;
 static char* body = nullptr;
 static size_t bodyCap = 0;
-static char* shotText = nullptr;   // the cable's shot lines, '\n' between
-static size_t shotLen = 0;
+// A `shot`: 120x120 as the cable's shot lines (rdebug/shot.h), in PSRAM until its one try.
+static char* shotText = nullptr;
+static char* shotBody = nullptr;
+static rdebug::ShotSlot shotSlot;
 static uint32_t lastId = 0;        // the newest command id seen this boot
 static uint64_t stateMark = 0;
 static uint32_t stateAt = 0, stateId = 0;
 static uint32_t reports = 0, reportFails = 0;
-static uint32_t shotFor = 0;        // the `shot` command whose frame is waiting to go
 static bool noReports = false;      // the last boot restarted inside a report: none this boot
 static esp_reset_reason_t resetWhy = ESP_RST_UNKNOWN;
 // A remote reboot's id, kept through the restart (RTC memory): its result goes in the first report after.
@@ -173,7 +174,7 @@ struct Out {
 };
 
 static const char* build(size_t& len) {
-  const size_t want = rdebug::kReportMax + 64 + (shotText ? shotLen + shotLen / 64 + 64 : 0);
+  const size_t want = rdebug::kReportMax + 64;
   if (bodyCap < want) {
     heap_caps_free(body);
     body = static_cast<char*>(heap_caps_malloc(want, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -233,7 +234,6 @@ static const char* build(size_t& len) {
   const size_t used = o.n + std::strlen("\"log\":\"\",}");
   const size_t room = used + 2 < rdebug::kReportMax ? std::min(rdebug::kLogTailMax, rdebug::kReportMax - used - 2) : 0;
   o.tail("log", m->log, logLen, room);
-  if (shotText) o.str("shot", shotText, shotLen);
   o.drop();
   o.f("}");
   if (o.full) return nullptr;
@@ -261,7 +261,7 @@ static bool start() {
     return false;
   }
   job.reset();
-  say("remote: report of %u bytes%s: heap=%u big=%u before the task", unsigned(len), shotText ? " with a screenshot" : "",
+  say("remote: report of %u bytes: heap=%u big=%u before the task", unsigned(len),
       unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   // A restart from here on is the report's: it never counts against the update check.
   inWindow = 0;
@@ -279,10 +279,6 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
   if (!done) {
     ++reportFails;
     m->sentResults = 0;
-    if (shotText) {   // a screenshot goes once: one that failed is not tried in every window after
-      heap_caps_free(shotText), shotText = nullptr, shotLen = 0;
-      result(shotFor, false, "shot: the upload failed (%s)", error);
-    }
     return say("remote: the report did not go (%s); the next window sends a fresh one", error);
   }
   ++reports;
@@ -290,7 +286,6 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
   m->nResults -= m->sentResults;
   m->sentResults = 0;
   m->stateLen = 0;
-  if (shotText) heap_caps_free(shotText), shotText = nullptr, shotLen = 0;
   if (!rdebug::trustedReplyUrl(kReportUrl)) return;   // only the site, over HTTPS with its pinned roots, may ask
   rdebug::Command* got = m->got;   // PSRAM: a Command holds a marquee's text
   const size_t n = rdebug::parseCommands(std::string_view(text, len), lastId, got, kPending - m->nPending);
@@ -304,21 +299,81 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
 
 // ---- the commands, once the window has closed ------------------------------------------
 
-static void shot() {
-  if (!shotText) shotText = static_cast<char*>(heap_caps_malloc(kShotBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!shotText) return void(shotLen = 0);
-  shotLen = 0;
-  paint::ShotEncoder enc(canvas);   // dark: nothing repaints the canvas while this runs (one pass)
-  for (const char* line; (line = enc.next());) {
-    const size_t k = std::strlen(line);
-    if (shotLen + k + 2 > kShotBytes) {
-      heap_caps_free(shotText), shotText = nullptr, shotLen = 0;
-      return;
-    }
-    std::memcpy(shotText + shotLen, line, k);
-    shotLen += k;
-    shotText[shotLen++] = '\n';
+static void dropShot() {
+  heap_caps_free(shotText), heap_caps_free(shotBody);
+  shotText = shotBody = nullptr;
+}
+
+// The screen's last frame (it is dark: nothing repaints the canvas while this
+// runs, in one pass), halved and coded; it waits for a window of its own POST.
+static void shot(uint32_t id) {
+  const auto ps = [](size_t n) { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); };
+  constexpr size_t kPx = size_t(rdebug::kShotSide) * rdebug::kShotSide;
+  auto* small = static_cast<uint16_t*>(ps(kPx * 2));
+  auto* packed = static_cast<uint8_t*>(ps(kPx * 2 + kPx / 64 + 16));
+  if (!shotText) shotText = static_cast<char*>(ps(rdebug::kShotMax));
+  size_t len = 0;
+  if (small && packed && shotText) {
+    rdebug::halve565(canvas.px, 240, 240, small);
+    const size_t n = rdebug::packBits565(small, kPx, packed, kPx * 2 + kPx / 64 + 16);
+    if (n) len = rdebug::shotLines(packed, n, rdebug::kShotSide, rdebug::kShotSide, rdebug::crc565(small, kPx), shotText, rdebug::kShotMax);
   }
+  heap_caps_free(small), heap_caps_free(packed);
+  if (!len) {
+    dropShot();
+    return result(id, false, "shot: no PSRAM for it");
+  }
+  shotSlot.hold(id, len);
+  say("remote %u: shot taken, 120x120 in %u bytes; it goes in the next window, alone", unsigned(id), unsigned(len));
+}
+
+// After the report: the shot, in its own POST, when there is RAM for it; one try only.
+static bool startShot(bool reportWent) {
+  if (noReports || !reportWent || !shotSlot.waiting()) return false;   // the site did not answer: it waits
+  const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                 big = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!shotSlot.go(have, big)) {
+    say("remote: the shot waits for a later window: internal RAM %u free, %u largest", unsigned(have), unsigned(big));
+    return false;
+  }
+  const size_t cap = rdebug::kShotMax + rdebug::kShotMax / 64 + 512;
+  if (!shotBody) shotBody = static_cast<char*>(heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!shotBody) return false;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  Out o{shotBody, cap};
+  o.f("{\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"fw\":\"%s\",\"via\":\"wifi\",\"items\":[{\"kind\":\"shot\","
+      "\"summary\":\"screenshot 120x120 for command #%u\",\"data\":{",
+      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], blorb::kFirmwareVersion, unsigned(shotSlot.id()));
+  o.str("lines", shotText, shotSlot.bytes());
+  o.drop();
+  o.f("}}]}");
+  if (o.full) {
+    shotSlot.tried();
+    dropShot();
+    result(shotSlot.id(), false, "shot: did not fit its body");
+    return false;
+  }
+  job.reset();
+  say("remote: shot of %u bytes, alone: heap=%u big=%u before the task", unsigned(o.n), unsigned(have), unsigned(big));
+  inWindow = 0;
+  inReport = kReportMagic;   // a restart in it is remote debug's, never the update check's
+  shotSlot.tried();          // one try, whatever comes of it
+  if (job.start(kShotUrl, true, shotBody, o.n)) return true;
+  inReport = 0;
+  dropShot();
+  result(shotSlot.id(), false, "shot: could not start (%s); dropped", job.error());
+  return false;
+}
+
+static void shotArrived(bool done, const char* text, size_t len, const char* error) {
+  inReport = 0;
+  dropShot();
+  if (!done) return result(shotSlot.id(), false, "shot: the upload failed (%s); dropped", error);
+  const std::string_view reply(text, len);
+  const size_t at = reply.find("\"ids\":[");   // {"ok":true,"ids":[<its device debug id>]}
+  const unsigned id = at == std::string_view::npos ? 0 : unsigned(std::strtoul(text + at + 7, nullptr, 10));
+  result(shotSlot.id(), true, "shot: 120x120 uploaded as #%u", id);
 }
 
 // One a loop pass, with the radio down; a reboot waits for dark and alone.
@@ -350,10 +405,7 @@ static void poll(uint32_t now) {
       remoteStateVerbs();
       return statusLine();
     case rdebug::Verb::Shot:
-      shot();
-      shotFor = c.id;
-      return shotText ? result(c.id, true, "shot: %u bytes of the screen's last frame", unsigned(shotLen))
-                      : result(c.id, false, "shot: no PSRAM for it");
+      return shot(c.id);
     case rdebug::Verb::Reboot:
       rebootId = c.id;
       rebootMagic = kRebootMagic;

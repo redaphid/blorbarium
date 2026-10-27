@@ -20,7 +20,7 @@ its own check soon. The report is JSON:
 | `vbat_mv`, `rssi`, `dark` | the battery, the signal, the screen asleep |
 | `pet` | kind, generation, stage, age in minutes, hunger % |
 | `results` | the last commands' results |
-| `state`, `shot` | a `state` command's capture, a `shot` command's frame (the cable's shot lines) |
+| `state` | a `state` command's capture |
 | `log` | the serial log's newest bytes: what the rest of the 5 KB leaves, at most 4 KB |
 
 The log is everything printed through `Serial` (src/hw/log_tee.h: main.cpp's
@@ -29,8 +29,8 @@ panic's register dump are not in it; the core dump covers a panic.
 
 Size and memory. A report stays under 5 KB (`rdebug::kReportMax`): the log's
 tail is fitted into what the other fields leave, at most 4 KB, and a state
-capture is 2 KB. Only a screenshot the owner asked for goes past it, and only
-once. The first version sent 8.8 KB as one TLS write; on a badge at RSSI -77
+capture is 2 KB. Every report is under it: a screenshot never rides in one
+(see `shot` below). The first version sent 8.8 KB as one TLS write; on a badge at RSSI -77
 that failed ("Failed to send chunk!", send payload failed) with internal RAM
 down to 9.9 KB. Now every HTTPS body (the lines' POST too) goes to TLS 1 KB a
 write (`hw::ChunkedTls`, `rdebug::writeChunked`), straight from PSRAM, a failed
@@ -57,7 +57,7 @@ has closed, one a loop pass, and the next report carries the results.
 | `check` | the next update check is due now; it still waits until dark and alone |
 | `interval <30..720>` | minutes between checks until the next restart (the default is 6 h) |
 | `state` | STATE, `DEBUG power status`, `power stats`, `fps` and `wifi status` printed, and what they printed (2 KB) captured for the next report |
-| `shot` | the screen's last frame (it is dark: nothing repaints it) for the next report; `/admin` draws it |
+| `shot` | the screen's last frame (it is dark: nothing repaints it), halved to 120x120 (each pixel the mean of four), PackBits-coded as the cable's shot lines (`rdebug/shot.h`, about 10 to 42 KB). It goes in the next window, after the report and only if the report went, in its own POST to `/api/debug` (kind `shot`), 1 KB a write, when 24 KB of internal RAM is free with a 9 KB block (else it waits). One try: sent or failed, it is gone, and the result says which (`shot: 120x120 uploaded as #<id>`). `/admin` draws it. The first version put the 240x240 frame (132 KB) in the report: it failed twice on the board with minheap 2.6 KB, and every report after carried it again |
 | `reboot` | restarts once dark and alone, dark after the restart (like an update's trial); its result comes from the next boot |
 | `marquee <text>` | a message for the kids: `showMarquee(text)`, full-screen scrolling text. At most 120 printable ASCII characters (`rdebug::kMarqueeMax`); the site turns accents into plain letters, anything else into spaces, and cuts it to 120. Until the marquee branch lands, main.cpp's stub only logs it |
 

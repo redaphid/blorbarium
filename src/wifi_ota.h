@@ -44,6 +44,7 @@
 #include "paint/shot.h"
 #include "paint/text.h"
 #include "rdebug/remote.h"
+#include "rdebug/shot.h"
 #include "wifiota/consent.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
@@ -74,9 +75,9 @@ constexpr uint32_t kBatteryEveryMs = 10 * 60 * 1000;
 constexpr const char* kSiteUrl = "https://blorb.hypnodroid.com/?d=";
 constexpr const char* kPetLinesUrl = "https://blorb.hypnodroid.com/api/pet-lines";
 
-enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing, Lines, Report };
+enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing, Lines, Report, Shot };
 const char* phaseName(Phase p) {
-  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing", "lines", "report"};
+  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing", "lines", "report", "shot"};
   return kNames[uint8_t(p)];
 }
 
@@ -308,6 +309,13 @@ static void finishWithReport() {
 static void readReport() {
   if (job.busy()) return;
   rd::arrived(job.state() == hw::NetJob::State::Done, job.text(), job.textLen(), job.error());
+  if (rd::startShot(job.state() == hw::NetJob::State::Done)) return setPhase(Phase::Shot);   // a screenshot the owner asked for: alone, after
+  closeWindow();
+}
+
+static void readShot() {
+  if (job.busy()) return;
+  rd::shotArrived(job.state() == hw::NetJob::State::Done, job.text(), job.textLen(), job.error());
   closeWindow();
 }
 
@@ -500,7 +508,8 @@ static void poll(uint32_t now) {
   // opens (DNS, connect, TLS handshake, headers), so the radio's time is
   // Wi-Fi's: only with no phone.
   ble.holdAdvertising((phase == Phase::Joining ||
-                       ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines || phase == Phase::Report) &&
+                       ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines || phase == Phase::Report ||
+                         phase == Phase::Shot) &&
                         job.busy() && job.state() == hw::NetJob::State::Opening)) &&
                       !ble.connected());
   pollConsent(now);
@@ -548,6 +557,7 @@ static void poll(uint32_t now) {
     case Phase::Image: return download();
     case Phase::Lines: return readLines();
     case Phase::Report: return readReport();
+    case Phase::Shot: return readShot();
     case Phase::Closing: return closing();
     case Phase::Off: break;
   }
