@@ -12,11 +12,11 @@
 //   refused   beside his head, why: I'M FULL! or ZZZ... in a bubble, or, with
 //             the pantry empty, a thought bubble of emoji (the food, NO, a
 //             sad face), and the pantry bar shaking red;
-//   pantry    a bar at the top of the rim, green full to red empty, draining
+//   pantry    a thin bar up the left rim, green full to red empty, draining
 //             a step at each feed, the next pellet's return a lighter sliver;
 //   chomp     a burst and crumbs at his mouth, YUM! and hearts rising (a
 //             rotten one: green crumbs and YUCK);
-//   belly     a meter up the left rim, its level his fullness (1 - hunger),
+//   belly     a meter up the right rim, its level his fullness (1 - hunger),
 //             rising as he eats; there after any of the above, then gone.
 #include <cstdint>
 
@@ -49,15 +49,13 @@ constexpr int kCrumbsMs = 900;
 constexpr int kWordMs = 1500;      // YUM!
 constexpr int kHeartMs = 1600;     // one heart's rise...
 constexpr int kHeartGapMs = 260;   // ...three of them, this far apart
-constexpr int kRiseMs = 900;       // the belly meter rising to its new level
-constexpr int kMeterMs = 3600;     // the meter, after the last event
+constexpr int kRiseMs = 900;       // the cookies filling back after a meal
 constexpr int kFadeMs = 300;
 
 // ---- where -------------------------------------------------------------------
 constexpr int kGlyphX = 146, kGlyphY = 18;    // the rim's pellet glyph (duel_scene.cpp kBootAt), drawn over the dish
 constexpr int kFromX = 142, kFromY = 68;      // just under it, where the cookie waits and is tossed from (its stand point)
 constexpr int kArcPx = 34;                    // how high the toss rises over the straight line
-constexpr int kMeterTop = 62, kMeterBottom = 150, kMeterIn = 100, kMeterOut = 114;   // up the left rim
 constexpr int kFoodR = kFoodFloorR;          // a cookie on the floor: 19 px across (the pack's pellet was 15 x 13)
 
 struct Rgb { int r, g, b; };
@@ -67,7 +65,6 @@ constexpr Rgb kRotGreen{120, 170, 60};
 constexpr Rgb kWhite{255, 255, 255};
 constexpr Rgb kInk{52, 36, 24};
 constexpr Rgb kNo{226, 64, 52};
-constexpr Rgb kTrack{4, 10, 10};
 constexpr Rgb kFoodBody{236, 168, 76}, kFoodEdge{96, 52, 22}, kFoodChip{78, 42, 20};
 constexpr Rgb kFoodRot{150, 158, 88}, kFoodRotEdge{66, 74, 36};
 
@@ -273,7 +270,7 @@ void sadThought(Canvas240& cv, const FeedView& f, const blorb::Appearance& app, 
   const int t = f.refusedMs;
   if (t >= kThinkMs) return;
   const int hx = s.him ? s.x : kSide / 2, top = s.him ? s.top : 60;
-  // To his right (the pantry bar and the belly meter are on the left), unless he stands far right.
+  // To his right (the pantry bar is on the left), unless he stands far right.
   const int side = hx <= 140 ? 1 : -1;
   const int cx = clampi(hx + side * 68, 62, 184), cy = clampi(top + 32, 66, kSide - 70);
   constexpr Emoji kFoods[4] = {Emoji::Drumstick, Emoji::Cookie, Emoji::Apple, Emoji::Fish};
@@ -286,20 +283,16 @@ void sadThought(Canvas240& cv, const FeedView& f, const blorb::Appearance& app, 
   drawThoughtFrames(cv, cx, cy, hx + side * 20, top + 22, beats, 3, t, kThinkMs);
 }
 
-// ---- the pantry: a bar at the top of the rim ------------------------------------
-// The owner: "a bar representing the amount of food, that goes down upon
-// feeding, and changes color green->red based on amount of food left, and
-// shakes when a user tries to feed the pet and it's empty". An arc on the rim
-// from about ten to twelve o'clock (the belly meter is on the left rim below
-// it, the BOOT hint at one o'clock), a cookie at its start: its fill is the
-// pellets left of the pantry's, green full through yellow and amber to red,
-// and a lighter sliver past it, the next pellet coming back. A feed drains it
-// a step, eased, a chunk flying off; a knock knock on an empty pantry shakes
-// it hard and flashes it red. Drawn with lib/paint's HUD arcs (hud.cpp: row
-// spans from compile-time tables, no trig per pixel).
-constexpr int kBarA0 = 668, kBarA1 = 762;     // 1/1024 turn clockwise from three o'clock: 235 to 268 degrees
-constexpr int kBarIn = 103, kBarOut = 113;    // its band, px from the middle
-constexpr int kDrainMs = 450, kShakeMs = 550;
+// ---- hunger, in cookies, up the left rim ------------------------------------------
+// The owner: "measure hunger in cookies - like hearts": five cookies up the
+// left rim from about half past seven to half past ten, each a fifth of how
+// full he is. A whole cookie is full, a bitten one part full, a faint grey one
+// empty: the fewer cookies, the hungrier. A meal fills them back from the
+// bottom, eased, the new part glowing; an empty pantry shakes them, red.
+constexpr int kCookies = 5;
+constexpr int kRowA0 = 420, kRowA1 = 616;     // 1/1024 turn clockwise from three o'clock: 148 to 217 degrees
+constexpr int kRowR = 104, kCookieR = 8;      // where along the rim, px from the middle; each cookie's radius
+constexpr int kShakeMs = 550;
 
 }  // namespace
 
@@ -313,36 +306,32 @@ uint16_t pantryColour(int full) {
   return to565({a.r + (b.r - a.r) * u / 192, a.g + (b.g - a.g) * u / 192, a.b + (b.b - a.b) * u / 192});
 }
 
-void pantryBar(Canvas240& cv, const blorb::Appearance& app) {
+void hungerCookies(Canvas240& cv, const blorb::Appearance& app) {
   const FeedView& f = app.feed;
   if (app.kind != blorb::Appearance::Kind::Creature || app.sealed || f.pantryMax == 0) return;
-  const int max = f.pantryMax;
-  // Its level, Q8 of the bar: a feed slides it down from where it was.
-  int level = 256 * imin(app.pantry, max) / max;
-  if (f.droppedMs < kDrainMs) {
-    const int was = 256 * imin(app.pantry + 1, max) / max;
-    level = was + (level - was) * easeOut(f.droppedMs, kDrainMs) / 256;
+  int level = unit256(f.fullness), from = level;
+  if (f.chompMs < kRiseMs) {   // he just ate: they fill from where they were
+    from = unit256(f.fullnessFrom);
+    level = from + (level - from) * easeOut(f.chompMs, kRiseMs) / 256;
   }
-  const int refill = app.pantry < max ? unit256(f.refill) / max : 0;
-  // An empty try: it shakes hard, flashing red.
+  // An empty try: they shake hard, flashing red.
   const bool shaking = f.refused == FeedRefusal::Empty && f.refusedMs < kShakeMs;
-  const int jolt = shaking ? wave(f.refusedMs, 90, hud::span(5, 108)) : 0;
+  const int jolt = shaking ? wave(f.refusedMs, 90, hud::span(5, kRowR)) : 0;
   const bool flash = shaking && (f.refusedMs / 90) % 2 == 0;
-  const int a0 = kBarA0 + jolt, a1 = kBarA1 + jolt, len = a1 - a0;
-  const int filled = a0 + len * level / 256;
-  hud::arc(cv, 240, 240, kBarIn - 2, kBarOut + 2, a0 - 4, a1 + 4, hud::rgb(10, 14, 20), 230);   // its dark well
-  hud::arc(cv, 240, 240, kBarIn, kBarOut, a0, a1, flash ? to565(kNoRed) : hud::rgb(36, 44, 50), 256);   // the empty track
-  if (level > 0) hud::arc(cv, 240, 240, kBarIn, kBarOut, a0, filled, pantryColour(level), 256);
-  if (refill > 0) hud::arc(cv, 240, 240, kBarIn + 2, kBarOut - 2, filled, filled + len * refill / 256, hud::rgb(150, 160, 150), 200);
-  // A chunk flies off the end as a feed drains it, toward the cookie it became.
-  if (f.droppedMs < kDrainMs) {
-    const int u = f.droppedMs, ax = 120 + 108 * hud::cos1024(filled) / 16384, ay = 120 + 108 * hud::sin1024(filled) / 16384;
-    const int x = ax + (kFromX - ax) * u / kDrainMs, y = ay + (kFromY - 20 - ay) * u / kDrainMs;
-    disc(cv, x, y, 3, {255, 236, 170}, 256 - 256 * u / kDrainMs);
+  for (int i = 0; i < kCookies; ++i) {
+    const int at = kRowA0 + jolt + (kRowA1 - kRowA0) * i / (kCookies - 1);
+    const int x = 120 + kRowR * hud::cos1024(at) / 16384, y = 120 + kRowR * hud::sin1024(at) / 16384;
+    disc(cv, x, y, kCookieR + 2, {10, 14, 20}, 200);   // a dark well, so it reads over anything
+    const int part = clampi(level * kCookies - 256 * i, 0, 256);   // how much of this one is left
+    if (part < 64) {   // gone: a faint grey cookie, to show where one goes
+      drawFood(cv, x, y, kCookieR, Food{0, false, true}, flash ? 256 : 110);
+      if (flash) ring(cv, x, y, kCookieR - 1, kCookieR + 2, kNoRed, 256);
+      continue;
+    }
+    drawFood(cv, x, y, kCookieR, Food{uint8_t(part >= 256 ? 0 : 3 - (part - 64) / 64), false, false, true}, 256);
+    if (level > from && part > clampi(from * kCookies - 256 * i, 0, 256))   // the part he just ate glows
+      ring(cv, x, y, kCookieR, kCookieR + 2, {255, 236, 170}, 256 - easeOut(f.chompMs, kRiseMs));
   }
-  // A cookie at its start: this bar is food (the belly meter has its own at its foot).
-  const int ca = a0 - hud::span(12, 108);
-  drawFood(cv, 120 + 108 * hud::cos1024(ca) / 16384, 120 + 108 * hud::sin1024(ca) / 16384, 6, Food{});
 }
 
 namespace {
@@ -425,38 +414,6 @@ void chomp(Canvas240& cv, const FeedView& f, const DishSpots& s) {
   }
 }
 
-// ---- the belly: a meter up the left rim ----------------------------------------
-void belly(Canvas240& cv, const FeedView& f) {
-  if (f.meterMs >= kMeterMs || f.pantryMax == 0) return;
-  const int alpha = fadeOut(f.meterMs, kMeterMs);
-  int level = unit256(f.fullness);
-  int rising = -1;
-  if (f.chompMs < kRiseMs) {   // he just ate: it rises from where it was
-    const int from = unit256(f.fullnessFrom);
-    rising = from;
-    level = from + (level - from) * easeOut(f.chompMs, kRiseMs) / 256;
-  }
-  const int span = kMeterBottom - kMeterTop;
-  const int yLevel = kMeterBottom - span * level / 256, yFrom = rising < 0 ? yLevel : kMeterBottom - span * rising / 256;
-  for (int y = kMeterTop; y <= kMeterBottom; ++y) {
-    const int dy = 2 * y + 1 - kSide;
-    const int xo = (kSide - 1 - isqrt(4 * kMeterOut * kMeterOut - dy * dy)) / 2, xi = (kSide - 1 - isqrt(4 * kMeterIn * kMeterIn - dy * dy)) / 2;
-    // The ends rounded off: a row near either end is narrower.
-    const int end = imin(y - kMeterTop, kMeterBottom - y), trim = end < 3 ? 3 - end : 0;
-    for (int x = xo + 1 + trim; x <= xi - trim; ++x) {
-      Rgb c = kTrack;
-      int a = alpha * 210 / 256;
-      if (y >= yLevel) {
-        c = y < yFrom ? Rgb{255, 236, 170} : kPelletOrange;   // the part he just ate glows as it fills
-        a = alpha;
-        if (y <= yLevel + 1) c = kWhite;                      // the surface
-      }
-      put(cv, x, y, c, a);
-    }
-  }
-  drawFood(cv, 22, kMeterBottom + 11, 6, Food{}, alpha);   // food goes in here
-}
-
 }  // namespace
 
 bool pelletAloft(const FeedView& f, int landX, int landY, int& x, int& y, int& scalePct) {
@@ -491,7 +448,6 @@ void drawFeeding(Canvas240& cv, const blorb::Appearance& a, const DishSpots& s) 
     if (f.heardMs < kPopMs) glyphPop(cv, f.heardMs);   // a knock knock is heard on any screen the dish draws
     return;
   }
-  belly(cv, f);
   if (f.droppedMs != kNever) puff(cv, s, f.droppedMs);
   refused(cv, f, a, s);
   chomp(cv, f, s);

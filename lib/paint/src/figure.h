@@ -167,11 +167,11 @@ void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
 // on the idle's clock (Appearance::idleTicks), so it moves between ticks.
 void drawIdleProps(Canvas240&, const blorb::Appearance&, const DishSpots&);
 
-// The pantry: a bar on the rim from about ten to twelve o'clock, its fill the
-// pellets left, green full to red empty (pantryColour, `full` 0..256), a feed
-// draining it a step, an empty try shaking it red. Over the dish, before the
-// round mask; it took the place of the pantry's pips.
-void pantryBar(Canvas240&, const blorb::Appearance&);
+// Hunger, like hearts: five cookies up the left rim, each a fifth of how full
+// he is, whole, bitten, or a faint grey one gone; an empty pantry shakes them
+// red. Over the dish, before the round mask. pantryColour (`full` 0..256) is
+// the green-to-red ramp, kept for anything that shows the pantry.
+void hungerCookies(Canvas240&, const blorb::Appearance&);
 uint16_t pantryColour(int full);
 
 }  // namespace paint

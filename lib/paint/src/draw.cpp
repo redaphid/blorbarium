@@ -1658,7 +1658,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     case Kind::Clutch: drawClutchPicker(a, cv); break;
   }
   phaseEnd(Phase::Figure);
-  pantryBar(cv, a);   // feeding.cpp: the pantry, a bar on the rim (it was pips)
+  hungerCookies(cv, a);   // feeding.cpp: how full he is, five cookies up the left rim (like hearts)
   rimTokens(cv, a);
   hint(cv, a);
   phaseEnd(Phase::Rim);
