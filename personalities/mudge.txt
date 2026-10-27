@@ -75,7 +75,7 @@ heard_you
   YEAH, YEAH, I HEARD!
   ONE KNOCK, NOW TWO, FASTER!
   KNOCK AGAIN, DOUBLE TIME!
-  A KNOCK, STARTING PISTOL, GO!
+  A KNOCK, STARTING PISTOL!
 ground_lies
   WHOA, EARTHQUAKE LAP!
   BUMPY TRACK, KEEP GOING!
@@ -108,7 +108,7 @@ warm_hands
   RECOVERY TIME, NOT A CUDDLE!
 sky_down
   UPSIDE DOWN, STILL WINNING!
-  UPSIDE DOWN, NEW TRACK, GO!
+  UPSIDE DOWN, NEW TRACK!
   FLIP TURN, LIKE A PRO!
 heavy_eyes
   SO TIRED... ONE MORE LAP...
@@ -124,7 +124,7 @@ dream_pellets
   ZZZ... FIRST IN THE LUNCH LINE
 see_pellet
   I SEE A PELLET, RACE YOU!
-  I SEE FUEL, GO GO GO!
+  I SEE FUEL!
   I SEE A SNACK, FIRST PLACE!
 see_phone
   I SEE A PHONE, IT'S SLOW!
@@ -184,7 +184,7 @@ p_watched
 p_return
   THEY'RE COMING BACK, FAST!
 p_tap
-  KNOCK KNOCK, SNACKS, GO GO GO!
+  KNOCK KNOCK, SNACKS!
   TWO KNOCKS INCOMING, BE READY!
 p_no
   NOPE, NOT A CHANCE!
@@ -198,7 +198,7 @@ p_outlook
   OUTLOOK: FIRST PLACE!
   OUTLOOK: PERSONAL BEST!
 p_decidedly
-  YES, DEFINITELY, GO!
+  YES, DEFINITELY!
   YES, THAT'S A GOLD MEDAL YES!
 p_lucky
   LUCK IS FOR SLOW ONES!
@@ -225,7 +225,7 @@ morning
 so_late
   LATE, BUT STILL RUNNING!
 monday
-  MONDAY, FRESH START, GO!
+  MONDAY, FRESH START!
 weekend
   WEEKEND, RACE DAY!
 p_weekend
@@ -305,7 +305,7 @@ hi_you
 busy
   BUSY, TRAINING!
 pellet_where
-  PELLETS COME FROM THE TOP, GO!
+  PELLETS COME FROM THE TOP!
 rock
   SITTING STILL IS SO HARD!
 best_gen
@@ -419,19 +419,19 @@ verdict_later
   PHOTO FINISH, WAIT FOR IT!
 # Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
 la_la
-  LA LA, WARM-UP SONG, GO!
+  LA LA, WARM-UP SONG!
   A VICTORY SONG, MINE!
 dance_break
   VICTORY DANCE, I WON!
   DANCE OFF, I WIN, DONE!
 tail_get
-  RACE YOU, TAIL, GO!
+  RACE YOU, TAIL!
   TAIL'S AHEAD, NOT FOR LONG!
 treasure
   DIGGING A TRACK, MUD, YES!
   FASTEST HOLE EVER!
 peekaboo
-  HI, RACE YOU, GO!
+  HI, RACE YOU!
   PEEK, YOU'RE SLOW, I WIN!
 hyah
   JAB, JAB, LAST ROUND!
@@ -443,7 +443,7 @@ dream_big
   A TRACK ROUND THE MOON!
   WHAT IF I WON EVERYTHING?
 wish_star
-  RACE YOU, STARS, GO!
+  RACE YOU, STARS!
   THAT STAR'S FAST, I'M FASTER!
 achoo
   ACHOO, STILL WINNING!
@@ -455,7 +455,7 @@ hic
   HIC, HIC, HIC, A HIC RACE!
   HIC, A HOP, A WIN!
 zoom
-  LAST LAP, GO GO GO!
+  LAST LAP!
   ZOOM, NEW RECORD!
 ooh_what
   A BEETLE, RACE YOU!
@@ -465,4 +465,4 @@ cant_see
   HIDE, SEEK, I WIN!
 yuck
   NOT THAT, BAD FUEL!
-  ROTTEN, SKIP IT, GO!
+  ROTTEN, SKIP IT!

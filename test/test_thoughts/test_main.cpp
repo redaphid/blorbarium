@@ -528,17 +528,22 @@ TEST(Voice, ATerseVoiceStopsAtTheFirstSentenceAndAnEllipsisIsNotOne) {
   thoughtLine(thought::peckish, 0, voice::terse, 0, out);
   EXPECT_STREQ(out, "SNACK?");
   thoughtLine(thought::see_pellet, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "I SEE... A MORSEL.");
+  EXPECT_STREQ(out, "A MORSEL.");
   thoughtLine(thought::no_hat, 12, voice::terse, 0, out);
   EXPECT_STREQ(out, "GEN 12.");
 }
 
-TEST(Voice, AVoicesOwnLineReplacesTheSharedOne) {
+// A voice has no version of a shared line of its own (they were a voice's
+// stock tags stuck on the shared line: "... AS FORETOLD.", "NO SHARING.").
+TEST(Voice, AVoiceSaysTheSharedLineNotItsOwnVersion) {
   char out[kThoughtLineCap];
-  thoughtLine(thought::p_pond_no, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "NO.");
-  thoughtLine(thought::no_hat, 4, voice::ominous, 0, out);
-  EXPECT_STREQ(out, "GEN 4. HATLESS. AS FORETOLD.");
+  for (const VoiceInfo& v : VOICES) {
+    if (v.firstOnly) continue;
+    thoughtLine(thought::p_pond_no, 0, v.id, 0, out);
+    EXPECT_STREQ(out, thoughtInfo(thought::p_pond_no)->text) << v.name;
+    thoughtLine(thought::no_hat, 4, v.id, 0, out);
+    EXPECT_STREQ(out, "GEN 4. STILL NO HAT.") << v.name;
+  }
 }
 
 TEST(Personality, PreviewSaysWhatTheDeviceSays) {
@@ -620,7 +625,6 @@ TEST(Voice, NoSaidLineWearsAFrame) {
         std::vector<std::string> written;
         for (const SpeciesLine& l : SPECIES_LINES) if (l.species == s && l.thought == t.id) written.emplace_back(l.text);
         const bool own = !written.empty();
-        if (!own) for (const VoicedLine& l : VOICED_LINES) if (l.voice == v.id && l.thought == t.id) written.emplace_back(l.text);
         const bool shared = written.empty();
         if (shared) written.emplace_back(t.text);
         const bool marked = std::any_of(written.begin(), written.end(), [](const std::string& w) {
@@ -645,11 +649,47 @@ TEST(Voice, NoSaidLineWearsAFrame) {
     for (const char* lead : kLeads) EXPECT_NE(std::string(v.text).rfind(lead, 0), 0u) << v.text;
 }
 
+// The owner: "make sure those stock lines wrapping are removed for all the
+// different pets." A stock opener or closer is a phrase stuck on many of one
+// pet's lines ("I SEE... X", "X. SHH.", "X. NOTED.", "X, GO!"). For each
+// species, across everything he can say (his own lines, the shared ones he
+// falls back on, every draw, his verdicts), no opening pair of words and no
+// last word is on more than a tenth of his lines.
+TEST(Voice, NoPetHasAStockOpenerOrCloser) {
+  auto wordsOf = [](const std::string& line) {
+    std::vector<std::string> w;
+    std::string cur;
+    for (char c : line + " ") {
+      if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '\'' || c == '#' || c == '@' || c == '*') cur += c;
+      else if (!cur.empty()) { w.push_back(cur); cur.clear(); }
+    }
+    return w;
+  };
+  char out[kThoughtLineCap];
+  for (const SpeciesInfo& sp : SPECIES) {
+    std::vector<std::string> said;
+    for (const ThoughtInfo& t : THOUGHTS)
+      for (uint32_t pick = 0; pick < 32; ++pick) {
+        thoughtLine(t.id, 7, sp.starter.voice, uint8_t(pick), out, sp.id);
+        if (std::find(said.begin(), said.end(), out) == said.end()) said.emplace_back(out);
+      }
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS) if (v.species == sp.id) said.emplace_back(v.text);
+    std::map<std::string, int> openers, closers;
+    for (const std::string& l : said) {
+      const auto w = wordsOf(l);
+      if (w.size() >= 2) ++openers[w[0] + " " + w[1]];
+      if (!w.empty()) ++closers[w.back()];
+    }
+    const int cap = int(said.size()) / 10;
+    for (const auto& [o, n] : openers) EXPECT_LE(n, cap) << sp.name << " opens " << n << " of " << said.size() << " lines with \"" << o << "\"";
+    for (const auto& [c, n] : closers) EXPECT_LE(n, cap) << sp.name << " ends " << n << " of " << said.size() << " lines with \"" << c << "\"";
+  }
+}
+
 // The kids do not know "dish" (the code's name for the habitat): no line says it.
 TEST(Voice, NoLineSaysDish) {
   auto clean = [](const char* text) { return std::string(text).find("DISH") == std::string::npos; };
   for (const ThoughtInfo& t : THOUGHTS) EXPECT_TRUE(clean(t.text)) << t.name << ": " << t.text;
-  for (const VoicedLine& l : VOICED_LINES) EXPECT_TRUE(clean(l.text)) << l.text;
   for (const SpeciesLine& l : SPECIES_LINES) EXPECT_TRUE(clean(l.text)) << l.text;
   for (const SpeciesVerdict& v : SPECIES_VERDICTS) EXPECT_TRUE(clean(v.text)) << v.text;
 }

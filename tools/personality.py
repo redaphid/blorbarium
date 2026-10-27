@@ -85,7 +85,6 @@ class Engine:
     rows: list
     voices: dict
     species: dict
-    voiced: list          # (thought, voice, text) from thought_lines.def
     numbered: set         # situations that give a number for '#'
 
     def row(self, name):
@@ -110,13 +109,9 @@ def load_engine():
     for line in (DEFS / "species.def").read_text().splitlines():
         if m := re.match(r"BLORB_SPECIES\((\d+),\s*(\w+),(?:[^,]*,){6}\s*(\w+)\)\s*(?://\s*(.*))?", line):
             species[m[2]] = Species(int(m[1]), m[2], m[3], m[4] or "")
-    voiced = []
-    for line in (DEFS / "thought_lines.def").read_text().splitlines():
-        if m := re.match(r"BLORB_LINE\((\w+),\s*(\w+),", line):
-            voiced.append((m[1], m[2], _strings(line)[0]))
     cpp = (ROOT / "lib/blorb/src/thoughts.cpp").read_text()
     numbered = set(re.findall(r"bool (\w+)\(const Observed& o, uint16_t& num\)", cpp))
-    return Engine(rows, voices, species, voiced, numbered)
+    return Engine(rows, voices, species, numbered)
 
 
 # ---- the source files --------------------------------------------------------------
@@ -262,9 +257,6 @@ def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, tau
     mine = book.own.get(species, {}).get(row.name, [])
     if mine:   # his own line is already in his voice: said as written, never cut
         text = mine[pick % len(mine)]
-    own = [] if mine else [t for (th, v, t) in engine.voiced if th == row.name and v == voice]
-    if own:
-        text = own[pick % len(own)]
     v = engine.voices[voice]
     # Nothing wraps a line: no voice frame, prefix or suffix.
     out = []
@@ -276,7 +268,7 @@ def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, tau
 
     body = len(out)
     put(text.replace("#", str(num)).replace("@", name).replace("*", taught))
-    if v.first_only and not mine and not own and "*" not in text:
+    if v.first_only and not mine and "*" not in text:
         for i in range(body, len(out) - 1):
             if out[i] in ".!?" and out[i + 1] == " " and (i == body or out[i - 1] != "."):
                 del out[i + 1:]

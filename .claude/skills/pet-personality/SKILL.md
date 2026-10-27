@@ -27,7 +27,10 @@ The pets go to children aged 6 to 13. Every line must suit them.
 - His own lines are said exactly as written: the `terse` cut does not shorten
   them, so the line itself carries his voice. Nothing wraps any line: there are
   no voice frames, prefixes or suffixes (the owner removed "THE REEDS SAY:" and
-  "... SO IT IS."), so never write one into a line either.
+  "... SO IT IS."), so never write one into a line either. No stock opener or
+  closer stuck on many of a pet's lines ("I SEE... X", "X. SHH.", "X. NOTED.",
+  "X, GO!"): each line stands on its own. test_thoughts fails when any opening
+  word pair or last word is on more than a tenth of a pet's lines.
 - Never the word DISH: the kids do not know it (it is the code's name for the
   habitat). Say home, here or this place.
 - No filler. A line ends on its joke, not on a hedge or tag ("OR SOMETHING",

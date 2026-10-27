@@ -216,14 +216,6 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
         if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
     }
   }
-  uint8_t own = 0;
-  if (!mine)
-    for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
-  if (own) {
-    uint8_t want = uint8_t(pick % own);
-    for (const VoicedLine& l : VOICED_LINES)
-      if (l.thought == id && l.voice == voice && want-- == 0) { text = l.text; break; }
-  }
   const VoiceInfo* v = nullptr;
   if (!mine)
     for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
@@ -244,7 +236,7 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   }
   // A terse voice stops at the first sentence's end (an ellipsis is not one),
   // but says what the owner taught him whole.
-  if (v && v->firstOnly && !own && !std::strchr(text, kTaughtMark))
+  if (v && v->firstOnly && !std::strchr(text, kTaughtMark))
     for (size_t i = body; i + 1 < n; ++i)
       if ((out[i] == '.' || out[i] == '!' || out[i] == '?') && out[i + 1] == ' ' && (i == body || out[i - 1] != '.')) {
         n = i + 1;
