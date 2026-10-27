@@ -115,7 +115,7 @@ struct Body { int top, h, w; int fx0, fy0, fx1, fy1; };
 Body bodyOf(const Fighter& f, const SpritePack& pack, int scalePct) {
   const FrameRef b = pack.body(blorb::pose::idle, f.look.stage, 0);
   const FrameRef face = pack.face(expr::neutral, f.look.stage);
-  const bool small = f.look.stage == blorb::Stage::Baby || f.look.stage == blorb::Stage::Child;
+  const bool small = f.look.stage == blorb::Stage::Baby;   // squat as draw.cpp draws a hatchling
   const int k = f.look.scalePct * scalePct / 100;   // percent
   const int ky = small ? k * 90 / 100 : k, kx = small ? k * 116 / 100 : k;
   return {b.originY * ky / 100, b.h * ky / 100, b.w * kx / 100,

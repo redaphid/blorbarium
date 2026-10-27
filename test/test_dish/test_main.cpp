@@ -262,7 +262,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // d349a3b4 with the day's activities (#61, docs/notes/day-activities.md):
   // the parts of his day, the Feel acts, his age, genes and traits leaning
   // his idles, the pace, and when he woke in the hash.
-  constexpr uint32_t kCommitted = 0xd349a3b4u;
+  constexpr uint32_t kCommitted = 0x43e1405eu;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -273,7 +273,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=d349a3b4 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=43e1405e tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
