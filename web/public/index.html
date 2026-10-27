@@ -126,7 +126,10 @@ form { display: flex; gap: 10px; flex-wrap: wrap; }
 #bible { width: 100%; font: 0.98rem/1.45 var(--font-body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; }
 .says { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .says li { font: 0.8rem var(--font-mono); background: var(--fg); color: var(--bg); padding: 3px 10px; border-radius: 999px; }
-.journal { margin: 0; padding-left: 1.2rem; display: grid; gap: 8px; font-size: 0.95rem; }
+.journal { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.journal li { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.journal time { display: block; font: 500 0.78rem var(--font-mono); color: var(--muted); }
+.journal p { margin: 4px 0 0; font-size: 1.02rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 input {
   flex: 1 1 10rem; min-width: 0; font: 1rem var(--font-body); padding: 11px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--bg); color: var(--fg);
@@ -309,54 +312,94 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   </section>
 
   <section id="selfBox" hidden>
-    <!-- His personality and journal (#42), and the owner's own words for him
-         (#43). The server knows him by his genome, read from the badge above;
-         Web Bluetooth never shows the badge's address. -->
-    <h2>Who he is</h2>
+    <!-- His diary, his lines, his personality (#42) and the owner's own words
+         for him (#43). The server knows him by his genome hash, read from the
+         badge above (Web Bluetooth never shows the badge's address), or from
+         this page's own link, ?pet=<genome hash>, so the diary reads without
+         the badge. The text is shown exactly as the server wrote it. -->
+    <h2 id="diaryTitle">His diary</h2>
     <p class="hint" id="selfHint">Looking him up…</p>
     <div id="selfBody" hidden>
-      <textarea id="bible" rows="7" aria-label="His personality, in words"></textarea>
-      <p class="hint">This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online.</p>
-      <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
-      <ul class="says" id="says"></ul>
-      <h2>His journal</h2>
       <ol class="journal" id="journal"></ol>
+      <h2>Things he says</h2>
+      <ul class="says" id="says"></ul>
+      <h2>Who he is</h2>
+      <textarea id="bible" rows="7" aria-label="His personality, in words"></textarea>
+      <p class="hint" id="bibleHint">This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online.</p>
+      <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
       <h2>His family</h2>
       <p class="hint" id="family"></p>
+      <p class="hint">His diary has its own page, no badge needed: <a id="petLink" href="./">open it</a>.</p>
     </div>
     <script>
     (() => {
       const el = (id) => document.getElementById(id);
-      let genome = null;
+      const HASH_RE = /^[0-9a-f]{64}$/;
+      let genome = null, hash = null;
       const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
       const tell = (tone, text) => { el("selfHint").dataset.tone = tone; el("selfHint").textContent = text; };
+      const remember = (h) => { try { localStorage.setItem("blorb.pet", h); } catch {} };
+      const remembered = () => { try { return localStorage.getItem("blorb.pet"); } catch { return null; } };
+      // "2026-10-27" -> "Tuesday, October 27" (plus the year when it is not this one).
+      function niceDay(day) {
+        const d = new Date(`${day}T12:00:00Z`);
+        if (Number.isNaN(d.getTime())) return day;
+        const o = { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" };
+        if (d.getUTCFullYear() !== new Date().getUTCFullYear()) o.year = "numeric";
+        return d.toLocaleDateString(undefined, o);
+      }
       function render(p) {
-        el("bible").value = p.bible || "";
+        el("diaryTitle").textContent = p.name || p.species ? `${p.name || p.species}'s diary` : "His diary";
+        el("journal").replaceChildren(...(p.diary.length ? p.diary : [{ day: "", entry: "No entries yet. He writes one each night after he has been online." }]).map((d) => {
+          const li = document.createElement("li");
+          const t = document.createElement("time");
+          if (d.day) { t.dateTime = d.day; t.textContent = niceDay(d.day); }
+          const text = document.createElement("p");
+          text.textContent = d.entry;
+          li.append(t, text);
+          return li;
+        }));
         el("says").replaceChildren(...Object.values(p.lines).flat().slice(0, 12).map((l) => {
           const li = document.createElement("li"); li.textContent = l; return li;
         }));
-        el("journal").replaceChildren(...(p.diary.length ? p.diary : [{ day: "", entry: "No entries yet. He writes one each night after he has been online." }]).map((d) => {
-          const li = document.createElement("li");
-          const b = document.createElement("b"); b.textContent = d.day ? d.day + " " : "";
-          li.append(b, d.entry); return li;
-        }));
+        el("bible").value = p.bible || "";
         const f = p.family, bits = [];
         if (f.parent) bits.push(`Child of ${f.parent.name || "a"} ${f.parent.species}, generation ${f.parent.generation ?? "?"}${f.parent.status === "dead" ? ", now gone" : ""}.`);
         if (f.children.length) bits.push(`Parent of ${f.children.map((c) => `${c.name || "a"} ${c.species} (generation ${c.generation ?? "?"})`).join(", ")}.`);
         el("family").textContent = bits.join(" ") || `Generation ${p.generation ?? "?"}. The first of his line the server has met.`;
+        el("petLink").href = `./?pet=${hash}`;
+        // Changing who he is needs his whole genome, which only the badge has.
+        el("bible").readOnly = !genome;
+        el("saveBible").hidden = !genome;
+        el("bibleHint").textContent = genome
+          ? "This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online."
+          : "This is who he is, in words. Connect his dish to change it.";
         el("selfBody").hidden = false;
       }
       async function look() {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", genome));
-        const r = await fetch(`/api/pet?genome_hash=${hex(digest)}`).catch(() => null);
-        if (!r) return tell("err", "Offline: his personality shows when the phone is online.");
+        const r = await fetch(`/api/pet?genome_hash=${hash}`).catch(() => null);
+        if (!r) return tell("err", "Offline: his diary shows when the phone is online.");
         if (r.status === 404) return tell("", "He has not been online yet. The first time he is, the server writes his personality and his own lines.");
         if (!r.ok) return tell("err", `The server said no (${r.status}).`);
         const p = await r.json();
         tell("ok", p.version ? `Personality version ${p.personality_version}, lines version ${p.version}.` : "His lines are being written.");
         render(p);
       }
-      addEventListener("blorb:genome", (e) => { genome = e.detail; el("selfBox").hidden = false; look().catch((err) => tell("err", err.message)); });
+      function show(h) {
+        hash = h;
+        el("selfBox").hidden = false;
+        return look().catch((err) => tell("err", err.message));
+      }
+      addEventListener("blorb:genome", async (e) => {
+        genome = e.detail;
+        const h = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", genome)));
+        remember(h);
+        show(h);
+      });
+      // Before any badge: the pet in the link, else the last one this phone met.
+      const linked = String(new URLSearchParams(location.search).get("pet") ?? "").toLowerCase();
+      const first = HASH_RE.test(linked) ? linked : remembered();
+      if (HASH_RE.test(first ?? "")) show(first);
       el("saveBible").addEventListener("click", async () => {
         const bible = el("bible").value.trim();
         if (!genome || bible.length < 20) return tell("err", "Write at least a sentence about him.");
