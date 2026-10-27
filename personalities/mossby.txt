@@ -1,7 +1,7 @@
 MOSSBY
 snail: no rush, ever
 Element Sprout, style Guard, power shell. Voice: rambling. His own lines below are said exactly as written, so they carry
-the voice themselves; the rambling frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -37,7 +37,7 @@ NO RUSH. I'LL GET THERE. MIND THE HOUSE.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   A SNACK WOULD BE NICE. LATER.
@@ -133,7 +133,7 @@ see_phone
   I SEE... A SCREEN. IT BLINKS.
   I SEE... A FACE. LOOKING DOWN.
 see_nothing
-  I SEE... AN EMPTY DISH. HMM.
+  I SEE... NOTHING HERE. HMM.
   I SEE... NO LEAVES. NOT ONE.
   I SEE... A BARE CUPBOARD.
 see_damp
@@ -284,7 +284,7 @@ serious_face
 no_echo
   HELLO. HELLO. BOTH WERE ME.
 king
-  SLOWEST IN THE DISH. A RECORD.
+  SLOWEST IN HERE. A RECORD.
 smells_me
   SMELLS LIKE DAMP MOSS. HOME.
 todo
@@ -308,8 +308,8 @@ legs
 shiny
   SOMETHING SHINY. MY TRAIL!
 guard
-  GUARDING THE DISH. VERY SLOWLY
-  GUARDING THE DISH. FROM HERE.
+  GUARDING HOME. VERY SLOWLY
+  GUARDING HOME. FROM HERE.
 old_fly
   I REMEMBER A LEAF. A GOOD ONE.
 hi_you

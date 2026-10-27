@@ -1,15 +1,11 @@
 // Voices: the way he says things. The oracle gene picks one (its byte taken
 // modulo the rows), so siblings can talk differently and a lineage drifts.
-// A shared line (thoughts.def's text) passes through its voice: `firstOnly`
-// keeps just the first sentence, and one time in kFrameOneIn one of the
-// voice's frames (BLORB_FRAME, drawn when the line starts) wraps it. A
-// species' own line (personalities/<species>.txt) is already in his voice and
-// is said as written. A frame is a seasoning, not a tag: no hedges ("OR
-// SOMETHING"), only a twist the voice would really add. Frames use the
-// renderer's font, as thoughts do.
+// A voice may have its own lines for a row (thought_lines.def), and a terse
+// voice (`firstOnly`) keeps just the first sentence of a shared line. Nothing
+// wraps a line: no prefix, no suffix, no frame (the owner asked: no
+// "THE REEDS SAY:", no "... SO IT IS.").
 // Stable ids: never renumber, never reuse.
 // BLORB_VOICE(id, name, firstOnly)
-// BLORB_FRAME(voice, prefix, suffix)
 #ifdef BLORB_VOICE
 BLORB_VOICE(0, terse,         1)
 BLORB_VOICE(1, ominous,       0)
@@ -17,18 +13,4 @@ BLORB_VOICE(2, rambling,      0)
 BLORB_VOICE(3, cheerful_doom, 0)
 BLORB_VOICE(4, hoarder,       0)
 BLORB_VOICE(5, mystic,        0)
-#endif
-#ifdef BLORB_FRAME
-BLORB_FRAME(terse,         "", "")
-BLORB_FRAME(ominous,       "", "... SOON.")
-BLORB_FRAME(ominous,       "HEED: ", "")
-BLORB_FRAME(ominous,       "", ". IT IS WRITTEN.")
-BLORB_FRAME(rambling,      "", "... WHERE WAS I?")
-BLORB_FRAME(rambling,      "OOH, WAIT. ", "")
-BLORB_FRAME(cheerful_doom, "GOOD NEWS: ", "")
-BLORB_FRAME(cheerful_doom, "", ". HOORAY!")
-BLORB_FRAME(hoarder,       "", ". MINE.")
-BLORB_FRAME(hoarder,       "PSST. ", ". TELL NO ONE.")
-BLORB_FRAME(mystic,        "THE REEDS SAY: ", "")
-BLORB_FRAME(mystic,        "", "... SO IT IS.")
 #endif

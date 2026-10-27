@@ -1,7 +1,7 @@
 FIZZ
 firefly beetle: crackles
 Element Spark, style Pounce, power zap. Voice: hoarder. His own lines below are said exactly as written, so they carry
-the voice themselves; the hoarder frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -16,7 +16,7 @@ The egg holds a tiny gold beetle, already gleaming.
 
 WHO HE IS
 A crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the
-dish and wants to keep it that way. He hoards: sparks, crumbs, anything that
+place and wants to keep it that way. He hoards: sparks, crumbs, anything that
 glints. Static clings to him and he zaps things by accident. Not mean, just
 possessive, and suspicious that everyone is after his gold.
 
@@ -37,7 +37,7 @@ BZZT. DIBS. SHINY. MY STASH.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   BZZT. SNACK. NOW. GOLD ONES.
@@ -270,7 +270,7 @@ serious_face
 no_echo
   BZZT. BZZT? NO ECHO. BZZT.
 king
-  GOLDEN KING OF THE DISH.
+  GOLDEN KING OF THIS PLACE.
 smells_me
   SMELLS LIKE A STORM. ME.
 todo
@@ -294,7 +294,7 @@ legs
 shiny
   SHINY THING! DIBS! OH. ME.
 guard
-  GUARDING MY STASH. AND DISH.
+  GUARDING MY STASH. AND HOME.
 old_fly
   I REMEMBER A COIN. I MISS IT.
 hi_you
@@ -436,7 +436,7 @@ pebble
   SHINY PEBBLE. SHINIER ME.
   ONE PEBBLE. ALL MINE.
 dream_big
-  A DISH MADE OF GOLD. SIGH.
+  A HOME MADE OF GOLD. SIGH.
   WHAT IF THE MOON WAS MINE?
 wish_star
   DIBS ON THAT STAR. AND THAT.

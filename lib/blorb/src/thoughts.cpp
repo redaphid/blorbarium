@@ -227,18 +227,8 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   const VoiceInfo* v = nullptr;
   if (!mine)
     for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
-  // A shared line wears a frame now and then, never every time.
-  const FrameInfo* f = nullptr;
-  if (v && !own && pick % kFrameOneIn == 0) {
-    uint8_t frames = 0;
-    for (const FrameInfo& row : FRAMES) frames += row.voice == voice;
-    uint8_t want = uint8_t(pick / kFrameOneIn % frames);
-    for (const FrameInfo& row : FRAMES)
-      if (row.voice == voice && want-- == 0) { f = &row; break; }
-  }
   size_t n = 0;
   auto put = [&](char c) { if (n + 1 < kThoughtLineCap) out[n++] = c; };
-  if (f) for (const char* s = f->prefix; *s; ++s) put(*s);
   const size_t body = n;
   for (const char* s = text; *s; ++s) {
       if (*s == kNameMark || *s == kTaughtMark) {
@@ -260,13 +250,6 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
         n = i + 1;
         break;
       }
-  // A suffix's own leading stop gives way to the line's ("PELLET!" + ". MINE." -> "PELLET! MINE.").
-  if (f) {
-    const char* s = f->suffix;
-    if (n > body && (out[n - 1] == '.' || out[n - 1] == '!' || out[n - 1] == '?'))
-      while (*s == '.' || *s == ',') ++s;
-    for (; *s; ++s) put(*s);
-  }
   out[n] = 0;
   return n;
 }

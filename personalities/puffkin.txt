@@ -1,7 +1,7 @@
 PUFFKIN
 puffball: sneezes sparkles
 Element Sprout, style Pounce, power spores. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry
-the voice themselves; the cheerful_doom frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -36,7 +36,7 @@ ACHOO! BOUNCE! POOF! HUG ME!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   SNACK TIME! ACHOO! SNACK TIME!
@@ -130,7 +130,7 @@ see_phone
   I SEE... A FACE! HI FACE!
 see_nothing
   I SEE... NOTHING TO EAT!
-  I SEE... AN EMPTY DISH! WOW!
+  I SEE... NOTHING HERE! WOW!
   I SEE... ZERO SNACKS! DRAMA!
 see_damp
   I SEE... A LOVELY DAMP LOG!
@@ -295,7 +295,7 @@ legs
 shiny
   SPARKLES! FROM MY SNEEZE!
 guard
-  GUARDING THE DISH! WITH FLUFF!
+  GUARDING HOME! WITH FLUFF!
 old_fly
   I REMEMBER MY BEST SNEEZE!
 hi_you
@@ -438,7 +438,7 @@ pebble
   PEBBLE! BOUNCE! PEBBLE!
   BONK! FLUFF STOPPED IT!
 dream_big
-  A DISH OF HUGS! FOREVER!
+  A HOME OF HUGS! FOREVER!
   WHAT IF I WAS EVEN ROUNDER?
 wish_star
   STARS! SPARKLY! LIKE ME!

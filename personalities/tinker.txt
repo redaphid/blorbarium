@@ -1,7 +1,7 @@
 TINKER
 raccoon: a scrap-pile gadget
 Element Spark, style Guard, power gadget. Voice: hoarder. His own lines below are said exactly as written, so they carry
-the voice themselves; the hoarder frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -39,7 +39,7 @@ I CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   SNACK? I'LL BUILD A SNACK.
@@ -272,7 +272,7 @@ serious_face
 no_echo
   HELLO? NO ECHO. I'LL BUILD ONE
 king
-  CHIEF ENGINEER OF THE DISH.
+  CHIEF ENGINEER OF MY HOME.
 smells_me
   SMELLS LIKE OIL. PERFECT.
 todo
@@ -440,7 +440,7 @@ pebble
   JUGGLING. TESTING GRAVITY.
 dream_big
   A MACHINE THAT MAKES SNACKS.
-  WHAT IF THE DISH HAD WHEELS?
+  WHAT IF MY HOME HAD WHEELS?
 wish_star
   WORKSHOP'S OPEN. STARS ARE UP
   I COULD FIX THAT STAR.
