@@ -100,7 +100,7 @@ test("the Worker's entry module exports only its handler (workerd takes named ex
 test("/fw/ still serves the firmware releases from R2 (main's route, kept through the merge)", async () => {
   const objects = { "lcd128/manifest.json": '{"v":1}' };
   const fw = {
-    async get(key) { return objects[key] === undefined ? null : { body: objects[key], httpEtag: '"e1"', writeHttpMetadata() {} }; },
+    async get(key) { return objects[key] === undefined ? null : { body: objects[key], httpEtag: '"e1"', writeHttpMetadata() {}, async arrayBuffer() { return new TextEncoder().encode(objects[key]).buffer; } }; },
     async head(key) { return objects[key] === undefined ? null : { size: objects[key].length, httpEtag: '"e1"', writeHttpMetadata() {} }; },
   };
   const env = { ...fakeEnv(), FW: fw };
@@ -111,6 +111,36 @@ test("/fw/ still serves the firmware releases from R2 (main's route, kept throug
   assert.equal((await worker.fetch(new Request("https://blorb.test/fw/lcd128/../x"), env, {})).status, 404);
   assert.equal((await worker.fetch(new Request("https://blorb.test/fw/nope.bin"), env, {})).status, 404);
   assert.equal((await worker.fetch(new Request("https://blorb.test/fw/a.bin", { method: "POST" }), env, {})).status, 405);
+});
+
+test("/fw/ sends an image whole, with its length, and a Range as 206 (a badge stalled at 1 MiB on a streamed body)", async () => {
+  const image = new Uint8Array(3000).map((_, i) => i & 255);
+  const fw = {
+    async get(key, opts = {}) {
+      if (key !== "lcd128/a.bin") return null;
+      const m = /^bytes=(\d+)-(\d*)$/.exec(opts.range?.get?.("range") ?? "");
+      const from = m ? Number(m[1]) : 0, to = m && m[2] ? Number(m[2]) + 1 : image.length;
+      if (m && from >= image.length) throw new Error("InvalidRange");
+      const part = image.slice(from, to);
+      return { size: image.length, httpEtag: '"e2"', writeHttpMetadata() {}, body: part,
+               range: m ? { offset: from, length: part.length } : undefined,
+               async arrayBuffer() { return part.buffer; } };
+    },
+  };
+  const env = { ...fakeEnv(), FW: fw };
+  const whole = await worker.fetch(new Request("https://blorb.test/fw/lcd128/a.bin"), env, {});
+  assert.equal(whole.status, 200);
+  assert.equal(whole.headers.get("content-length"), "3000");
+  assert.equal(whole.headers.get("accept-ranges"), "bytes");
+  assert.deepEqual(new Uint8Array(await whole.arrayBuffer()), image);
+  const rest = await worker.fetch(new Request("https://blorb.test/fw/lcd128/a.bin", { headers: { range: "bytes=1024-" } }), env, {});
+  assert.equal(rest.status, 206);
+  assert.equal(rest.headers.get("content-range"), "bytes 1024-2999/3000");
+  assert.equal(rest.headers.get("content-length"), "1976");
+  assert.deepEqual(new Uint8Array(await rest.arrayBuffer()), image.slice(1024));
+  const mid = await worker.fetch(new Request("https://blorb.test/fw/lcd128/a.bin", { headers: { range: "bytes=10-19" } }), env, {});
+  assert.equal(mid.headers.get("content-range"), "bytes 10-19/3000");
+  assert.equal((await worker.fetch(new Request("https://blorb.test/fw/lcd128/a.bin", { headers: { range: "bytes=5000-" } }), env, {})).status, 416);
 });
 
 test("the dashboard page is served, holds no data, and its script parses", async () => {
