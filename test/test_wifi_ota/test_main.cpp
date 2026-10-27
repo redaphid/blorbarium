@@ -629,7 +629,7 @@ TEST(Schedule, ACheckOpensOnlyDarkAloneAndDue) {
   EXPECT_EQ(s.checkHold(kDarkAndAlone, 5), Hold::Open) << "due once dark after boot";
   Facts f = kDarkAndAlone;
   f.enabled = false;
-  EXPECT_EQ(s.checkHold(f, 5), Hold::Disabled) << "no network remembered, or DEBUG wifi off";
+  EXPECT_EQ(s.checkHold(f, 5), Hold::Disabled) << "no network remembered (there is no off switch)";
   f = kDarkAndAlone, f.darkMs = 0;
   EXPECT_EQ(s.checkHold(f, 5), Hold::NotIdle) << "awake: never, whatever else";
   f = kDarkAndAlone, f.darkMs = Schedule::kDarkMs - 1;
@@ -690,11 +690,40 @@ TEST(Schedule, ASiteThatFailsBacksOffOnItsOwnAndCountsTheNetworkAsThere) {
   EXPECT_EQ(s.dueIn(0), Schedule::kAbsentFirstMs) << "absence starts its own count";
 }
 
-TEST(Schedule, ARestartInsideAWindowWaitsTheLongest) {
+TEST(Schedule, ARestartInsideAWindowBacksOff) {
   Schedule s;
   s.crashed(100);
-  EXPECT_EQ(s.dueIn(100), Schedule::kAbsentMaxMs);
-  EXPECT_EQ(s.checkHold(kDarkAndAlone, 100 + Schedule::kAbsentMaxMs - 1), Hold::NotDue);
+  EXPECT_EQ(s.dueIn(100), Schedule::kCrashFirstMs);
+  EXPECT_EQ(s.checkHold(kDarkAndAlone, 100 + Schedule::kCrashFirstMs - 1), Hold::NotDue);
+  s.crashed(100, 2);
+  EXPECT_EQ(s.dueIn(100), 2 * Schedule::kCrashFirstMs) << "more in a row, longer";
+}
+
+// The owner (2026-10-27): "Automatic updates should never be switched off. It
+// will be my only access to the pets when I'm gone." However many restarts in
+// a row came inside a window, the next check is due within kCrashMostMs (a few
+// hours), and it opens then.
+TEST(Schedule, AnyNumberOfCrashesInAWindowStillLeavesACheckWithinTheCap) {
+  EXPECT_LE(Schedule::kCrashMostMs, 4 * kHour) << "a few hours at most";
+  for (uint32_t n : {1u, 2u, 3u, 4u, 10u, 100u, 1000000u}) {
+    Schedule s;
+    s.crashed(1000, n);
+    EXPECT_GT(s.dueIn(1000), 0u) << n;
+    EXPECT_LE(s.dueIn(1000), Schedule::kCrashMostMs) << n;
+    EXPECT_EQ(s.checkHold(kDarkAndAlone, 1000 + Schedule::kCrashMostMs), Hold::Open) << n << " crashes in a row";
+  }
+}
+
+// A battery that reads low holds checks, but never for good: a reading stuck
+// low (a bad divider, a cell that never charges past it) must not end updates.
+TEST(Schedule, ALowBatteryHoldsChecksForAFewHoursAtMost) {
+  Schedule s;
+  EXPECT_FALSE(s.holdForBattery(false, 0));
+  EXPECT_TRUE(s.holdForBattery(true, 10));
+  EXPECT_TRUE(s.holdForBattery(true, 10 + Schedule::kLowBatteryMostMs - 1));
+  EXPECT_FALSE(s.holdForBattery(true, 10 + Schedule::kLowBatteryMostMs)) << "low that long: check anyway";
+  EXPECT_FALSE(s.holdForBattery(false, 10 + Schedule::kLowBatteryMostMs + 1));
+  EXPECT_TRUE(s.holdForBattery(true, 20 + Schedule::kLowBatteryMostMs)) << "a new stretch of low readings holds again";
 }
 
 // `DEBUG wifi due` (#55): a test run's warp moves the pet's clock, not the

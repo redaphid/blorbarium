@@ -1,5 +1,10 @@
 # Updating the firmware
 
+**The owner's rule:** "Automatic updates should never be switched off. It will
+be my only access to the pets when I'm gone." No setting, verb, crash count or
+battery reading stops a badge checking for updates; a crash inside a check
+backs off to 4 h at most, and a bad image rolls itself back.
+
 ## Pre-flight: before the owner leaves
 
 Every badge updates itself over Wi-Fi from the live site, unattended
@@ -26,7 +31,7 @@ flipped) in NVS, plus a Wi-Fi network it can reach.
    - **Cable:** `uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --env <file with ssid= and password=>`,
      or `DEBUG wifi set "Network Name" password` in a serial console.
 3. **Check it** (cable): `DEBUG ota check` answers `up_to_date`, and `DEBUG wifi`
-   says `networks=1 auto=1`. Then leave it: it checks by itself when it has
+   says `networks=1`. Then leave it: it checks by itself when it has
    been dark and alone for a minute, every 6 h, and never in the car (no
    network: one 2 s scan, backing off to every 8 h).
 
