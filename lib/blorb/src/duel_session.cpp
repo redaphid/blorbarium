@@ -444,23 +444,31 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
 }
 
 void DuelSession::stake(Battle& b, const DuelInput& in, uint32_t tick) {
-  // BOOT alone picks the stakes, never a tilt or a knock: a press steps to the
-  // next tier this pair may enter (Spar, Scrap, Mortal, Spar), a 3 s hold
-  // locks the pick, and after kStakeAutoTicks it locks itself. Mortal is only
-  // ever agreed with the hold: unheld, it locks as Scrap, the tier its press
-  // already agreed to on the way past.
+  // Picked as a stance is (the owner, 2026-10-27: "It should use tilting like
+  // the battles"): tilt to aim at a tier, knock to lock it. A BOOT press or a
+  // knock knock locks too. Mortal is only ever agreed with the 3 s hold (BOOT,
+  // or turned onto a side, which keeps the aim from before the turn), so no
+  // knock or press reaches it. A tier this pair may not enter is never picked:
+  // the pick stays on the last one it may, and a knock there locks nothing.
+  // When the rim ring runs out the picked tier locks itself, an unheld Mortal
+  // as Scrap (a hold under way finishes first); never aimed, that is Spar.
   if (!b.confirmed) {
-    if (in.press || in.doublePress) {
-      const uint8_t next = uint8_t(u8(b.chosen) + 1);
-      b.chosen = next > u8(b.pair.top) ? Stakes::Spar : Stakes(next);
+    const int8_t aimed = tierAimed(in.aim);
+    const bool barred = aimed > int8_t(u8(b.pair.top));
+    if (aimed >= 0 && !barred && Stakes(aimed) != b.chosen) {
+      b.chosen = Stakes(aimed);
       b.holdTicks = 0;
     }
+    // A knock at a struck-through tier locks nothing, not even the last pick.
+    const bool lock = in.knock || in.doubleKnock || in.press || in.doublePress;
+    if (lock && !barred && b.chosen != Stakes::Mortal) b.confirmed = true;
     if (in.bootDown) {
       if (++b.holdTicks >= kFinishHoldTicks) b.confirmed = true;
     } else {
       b.holdTicks = 0;
     }
-    if (!b.confirmed && tick - b.phaseTick >= T::kStakeAutoTicks) {
+    const bool holding = b.chosen == Stakes::Mortal && b.holdTicks > 0;
+    if (!b.confirmed && !holding && tick - b.phaseTick >= T::kStakeAutoTicks) {
       if (b.chosen == Stakes::Mortal) b.chosen = Stakes::Scrap;
       b.confirmed = true;
     }
@@ -923,6 +931,12 @@ DuelView DuelSession::view(uint32_t tick) const {
       v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, Assist::steps(setup_.card.prowess, b.theirs.prowess),
                          b.battle.seed);
     }
+  }
+  if (b.phase == DuelPhase::Staking && !b.confirmed) {
+    // The rim ring runs as a turn's does, until the pick locks itself.
+    const uint32_t spent = tick - b.phaseTick;
+    v.chooseTicks = T::kStakeAutoTicks;
+    v.chooseTicksLeft = uint16_t(spent >= T::kStakeAutoTicks ? 0 : T::kStakeAutoTicks - spent);
   }
   v.aim = aim_;
   if (b.phase == DuelPhase::Mercy) {

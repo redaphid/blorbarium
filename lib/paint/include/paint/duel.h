@@ -29,7 +29,7 @@ namespace paint {
 // The beat of the duel the screen is on.
 enum class DuelAct : uint8_t {
   Meeting,    // VS: both pets bounce into their corners
-  Staking,    // three tiers on the rim; each pet wears his risk: a feather, a plaster, a skull filled to his forecast
+  Staking,    // three tiers where a tilt points, picked as a stance is; each pet wears his risk: a feather, a plaster, a skull
   Choosing,   // stance glyphs at 9, 3 and 6 o'clock (tilt left, right, toward you); the rim ring is the timer
   Clash,      // the reveal: both stances pop, each pet plays his stance, the loser is hit (or heads bonk)
   Mercy,      // Mortal: the loser is down; the skull over him fills with the winner's hold

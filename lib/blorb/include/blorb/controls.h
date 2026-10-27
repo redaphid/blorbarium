@@ -13,12 +13,12 @@
 //   hold (level)     turned onto a side, held there    SideHoldDetector
 //   double press     the hang: upside down, held       HangDetector
 //
-// So, with no button: knock knock to feed him (or step the stakes, peek in
+// So, with no button: knock knock to feed him (or lock the stakes, peek in
 // the egg, lay a flower, ask for a rematch, throw a quick special); turn him
 // onto his side and hold to tuck him in, throw a heavy special,
 // and, held the 3 s the ring takes, to agree to Mortal, to Finish or to hug;
 // hang him upside down to open fight mode or leave it. Tilt still aims, one
-// knock still locks the aimed stance and spares, a shake still tells the
+// knock still locks the aimed stance (or the aimed stakes) and spares, a shake still tells the
 // future, a cuddle still hugs and a turn still answers an update. A clutch is
 // picked as a duel aims (pickEgg, creature.h): tilt toward an egg, then knock
 // (or knock knock, or hold) to keep it.

@@ -60,6 +60,13 @@ BodySample sampleOf(const Frame& f, uint8_t i) {
 
 enum class Mercy : uint8_t { Spare, Finish };
 
+// The tilt that points at a tier (blorb::tierAimed's inverse).
+int8_t aimOfTier(Stakes t) {
+  for (int8_t a = 0; a < 4; ++a)
+    if (tierAimed(a) == int8_t(t)) return a;
+  return -1;
+}
+
 // How one kid plays, everything read off the view.
 struct Kid {
   Stakes tier = Stakes::Spar;
@@ -122,15 +129,17 @@ struct Kid {
         }
         return hold(int8_t(rng.below(4)), 1, Frame{});
       case DuelPhase::Staking: {
-        // BOOT only, whatever the tilt: a press per step up from Spar, then a
-        // 3 s hold locks it (a kid pressing for Mortal and never holding gets Scrap).
+        // Picked as a turn is: tilt toward the tier, then knock. Mortal is the
+        // 3 s hold under the skull (BOOT, or turned onto a side, which keeps
+        // the aim from before the turn); a kid who presses and knocks under
+        // it and never holds gets Scrap when the ring runs out.
         if (v.confirmed) return hold(-1, 1, Frame{});
-        const int8_t t = int8_t(std::min(uint8_t(tier), uint8_t(v.ceiling[0])));
-        const int8_t lean = int8_t(rng.below(3));
-        hold(lean, 4, Frame{});
-        for (int8_t i = 0; i < t; ++i) hold(lean, 1, Frame{-1, true}), hold(lean, 2, Frame{});
-        if (!pressForMortal) hold(lean, 33, Frame{-1, true}), hold(lean, 1, Frame{});
-        else hold(lean, 90, Frame{});
+        const Stakes t = Stakes(std::min(uint8_t(tier), uint8_t(v.ceiling[0])));
+        const int8_t aim = aimOfTier(t);
+        hold(aim, t == Stakes::Mortal ? 18 : 4, Frame{});
+        if (t != Stakes::Mortal) hold(aim, 1, Frame{-1, false, true}), hold(aim, 2, Frame{});
+        else if (!pressForMortal) hold(aim, 33, Frame{-1, true}), hold(aim, 1, Frame{});
+        else hold(aim, 1, Frame{-1, true}), hold(aim, 6, Frame{}), hold(aim, 1, Frame{-1, false, true}), hold(aim, 90, Frame{});
         return;
       }
       case DuelPhase::Choosing:
@@ -1104,7 +1113,12 @@ TEST(Shake, AHardShakeBeforeTheStakesAreAgreedLeavesAndTheFriendHearsIt) {
 TEST(Shake, NeverOnceTheDuelHasStarted) {
   Bout bout(3, kGrungo, SpeciesId{6});
   int t = 0;
-  while (t++ < 3000 && !(phaseOf(bout.a) == DuelPhase::Choosing && !bout.a.dish->duelView().locked)) bout.step();
+  // A turn being chosen, and nothing else on screen a shake could dismiss: the
+  // fight ask's first press fed him (or was refused) and shows for 4 s, and a
+  // quick stakes pick reaches the first turn inside that.
+  while (t++ < 3000 && !(phaseOf(bout.a) == DuelPhase::Choosing && !bout.a.dish->duelView().locked &&
+                         bout.a.dish->appearance().feed.refusedMs == FeedView::kNever))
+    bout.step();
   ASSERT_EQ(phaseOf(bout.a), DuelPhase::Choosing);
   const uint8_t locks = bout.a.dish->duelView().locked;
   shakeHard(bout.a);
