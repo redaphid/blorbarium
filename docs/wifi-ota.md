@@ -277,8 +277,8 @@ a test release signed with the owner's key (docs/ota.md "The key"). Flash this b
    ms`, and `next_check_in` about 6 h.
 6. **Remote-update rehearsal.** On a throwaway branch from this one, bump
    `kFirmwareVersion` past what the badge runs (e.g. 0.7.14), commit, build
-   `badge128_pm` through the wrapper, and sign it on this laptop
-   (`tools/ota_release.py release --no-build --env badge128_pm`). Serve that
+   `badge128` through the wrapper, and sign it on this laptop
+   (`tools/ota_release.py release --no-build`). Serve that
    manifest and image from the laptop (`python3 -m http.server 8000` in a
    folder holding both), or publish it to R2 (`tools/ota_release.py publish`).
    On the badge: `DEBUG ota check http://<laptop-ip>:8000/manifest.json` (or
@@ -301,18 +301,10 @@ a test release signed with the owner's key (docs/ota.md "The key"). Flash this b
 
 ## Releasing from afar
 
-Every release from now on must be built from a tree that has this branch:
-an image without it would leave the badges unable to update over Wi-Fi again
-(and the flipped badges keep their NVS home only while the code reads it).
-
-1. Bump `kFirmwareVersion` past what the badges run, commit, release as
-   `docs/ota.md` "Releasing" says (build `badge128_pm`, sign with
-   `tools/ota_release.py release` on the owner's laptop, which holds the key),
-   and commit the manifest.
-2. Publish it to R2: `tools/ota_release.py publish
-   web/public/fw/lcd128/manifest.json`. No site deploy is needed: the site
-   serves /fw/ from the bucket at the same manifest URL the badges read.
-3. Each badge picks it up at its next Check: within about 6 h of being left
-   alone at home, sooner after a trip. Nobody does anything.
-4. To stop every badge's unattended installs at once, set `"auto": false` in
-   the manifest and deploy.
+See docs/ota.md, "Away from home: releasing": `tools/ota_release.py ship`
+builds `badge128` (one image for upright and flipped badges alike; never
+`badge128_pm`, whose internal RAM cannot hold Wi-Fi up for its trial),
+signs it and publishes it to the live prefix. Each badge picks it up at its
+next Check: within about 6 h of being left alone at home, sooner after a
+trip. To stop every badge's unattended installs at once, publish the
+manifest with `"auto": false`.
