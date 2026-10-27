@@ -99,6 +99,76 @@ TEST(JsonEscape, NeverCutsAnEscapeAndSkipsACutUtf8Start) {
   EXPECT_EQ(std::string(big, n), "ok \xc3\xa9");
 }
 
+TEST(JsonEscapeTail, KeepsTheNewestBytesThatFit) {
+  const std::string log = "old line\nnewer \"line\"\nnewest\n";
+  char out[16];
+  const size_t n = rdebug::jsonEscapeTail(log.data(), log.size(), out, sizeof out);
+  EXPECT_EQ(std::string(out, n), "ine\\\"\\nnewest\\n");   // 15 bytes and the NUL
+  EXPECT_LT(n, sizeof out);
+  char big[128];
+  EXPECT_EQ(std::string(big, rdebug::jsonEscapeTail(log.data(), log.size(), big, sizeof big)),
+            "old line\\nnewer \\\"line\\\"\\nnewest\\n");
+  EXPECT_EQ(rdebug::jsonEscapeTail(log.data(), log.size(), big, 1), 0u);
+}
+
+// The badge's report: 8 KB of the log, all of it a worst case for escaping,
+// never takes the log's part of the report past its cap.
+TEST(JsonEscapeTail, AWorstCaseLogStaysInItsRoom) {
+  const std::string log(8192, '\x01');   // every byte becomes \u0001
+  std::string out(rdebug::kLogTailMax + 1, '\0');
+  const size_t n = rdebug::jsonEscapeTail(log.data(), log.size(), out.data(), out.size());
+  EXPECT_LE(n, rdebug::kLogTailMax);
+  EXPECT_EQ(n % 6, 0u);   // whole escapes only
+  EXPECT_LT(rdebug::kReportMax, 5 * 1024u);
+}
+
+// ---- the body in small writes (hw/net_job.h ChunkedTls) ----
+
+TEST(WriteChunked, NeverHandsTlsMoreThanAChunk) {
+  std::vector<uint8_t> body(8870);
+  for (size_t i = 0; i < body.size(); ++i) body[i] = uint8_t(i * 7);
+  std::vector<uint8_t> sent;
+  std::vector<size_t> sizes;
+  int pauses = 0;
+  const size_t n = rdebug::writeChunked(
+      body.data(), body.size(), rdebug::kWriteChunk,
+      [&](const uint8_t* p, size_t k) { sizes.push_back(k), sent.insert(sent.end(), p, p + k); return k; },
+      [&] { ++pauses; });
+  EXPECT_EQ(n, body.size());
+  EXPECT_EQ(sent, body);
+  EXPECT_EQ(pauses, 0);
+  for (size_t k : sizes) EXPECT_LE(k, rdebug::kWriteChunk);
+  EXPECT_EQ(sizes.size(), 9u);
+}
+
+TEST(WriteChunked, AFailedWriteIsTriedOnceMore) {
+  const std::vector<uint8_t> body(3000, 0x5a);
+  int calls = 0, pauses = 0;
+  size_t n = rdebug::writeChunked(
+      body.data(), body.size(), 1024, [&](const uint8_t*, size_t k) { return ++calls == 2 ? size_t(0) : k; },
+      [&] { ++pauses; });
+  EXPECT_EQ(n, body.size());   // the second piece failed once, then went
+  EXPECT_EQ(pauses, 1);
+  EXPECT_EQ(calls, 4);
+  calls = pauses = 0;
+  n = rdebug::writeChunked(
+      body.data(), body.size(), 1024, [&](const uint8_t*, size_t k) { return ++calls >= 2 ? size_t(0) : k; },
+      [&] { ++pauses; });
+  EXPECT_EQ(n, 1024u);   // twice in a row: it stops, and says how far it got
+  EXPECT_EQ(calls, 3);
+  EXPECT_EQ(pauses, 1);
+}
+
+TEST(WriteChunked, APartialWriteCarriesOn) {
+  const std::vector<uint8_t> body(2500, 1);
+  std::vector<size_t> sizes;
+  const size_t n = rdebug::writeChunked(
+      body.data(), body.size(), 1024, [&](const uint8_t*, size_t k) { sizes.push_back(k); return k > 600 ? size_t(600) : k; },
+      [] {});
+  EXPECT_EQ(n, body.size());
+  for (size_t k : sizes) EXPECT_LE(k, 1024u);
+}
+
 // ---- commands ----
 
 static std::vector<Command> parse(const std::string& reply, uint32_t last = 0, size_t max = 8) {

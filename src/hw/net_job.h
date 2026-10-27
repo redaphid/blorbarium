@@ -40,9 +40,24 @@
 #include <optional>
 
 #include "hw/tls_roots.h"
+#include "rdebug/remote.h"
 #include "wifiota/net_clock.h"
 
 namespace hw {
+
+// An HTTPS client whose writes go to TLS at most rdebug::kWriteChunk bytes at
+// a time, each straight from the caller's buffer (PSRAM): HTTPClient hands a
+// POST's whole body to one write(), and an 8.8 KB one failed on the badge at
+// RSSI -77 ("Failed to send chunk!") with internal RAM down to 9.9 KB. A
+// piece that fails is tried once more 100 ms later.
+class ChunkedTls : public WiFiClientSecure {
+ public:
+  size_t write(const uint8_t* p, size_t n) override {
+    return rdebug::writeChunked(
+        p, n, rdebug::kWriteChunk, [this](const uint8_t* q, size_t k) { return WiFiClientSecure::write(q, k); },
+        [] { vTaskDelay(pdMS_TO_TICKS(100)); });
+  }
+};
 
 class NetJob {
  public:
@@ -212,7 +227,7 @@ class NetJob {
   void get() {
     std::unique_ptr<WiFiClient> client;
     if (std::strncmp(m_->url, "https://", 8) == 0) {
-      auto* secure = new WiFiClientSecure;
+      auto* secure = new ChunkedTls;
       secure->setCACert(kTlsRoots);
       secure->setHandshakeTimeout(kHandshakeS);
       client.reset(secure);

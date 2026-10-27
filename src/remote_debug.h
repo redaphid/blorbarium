@@ -20,8 +20,13 @@
 namespace rd {
 
 constexpr const char* kReportUrl = "https://blorb.hypnodroid.com/api/badge/report";
-constexpr size_t kBodyBytes = 28 * 1024;   // all but a shot: the log's 8 KB escaped, the state's 6 KB escaped, the rest
-constexpr size_t kStateBytes = 6 * 1024;
+// The report stays under rdebug::kReportMax (5 KB): the log's tail gets what the
+// rest leaves, at most 4 KB; a state capture is 2 KB. Only a screenshot the
+// owner asked for goes past it, once (a failed one is dropped).
+constexpr size_t kStateBytes = rdebug::kStateMax;
+// Internal RAM the report wants free before its GET task starts (7 KB of stack
+// and the handshake's bounce buffers); short of it, no report this window.
+constexpr uint32_t kReportHeap = 24 * 1024, kReportBig = 9 * 1024;
 constexpr size_t kShotBytes = 180 * 1024;   // a 240x240 PackBits frame as the cable's shot lines, at worst
 constexpr uint32_t kStateSettleMs = 1500;   // STATE's reply goes out from the protocol's next pass
 constexpr size_t kResults = 8, kPending = 8;
@@ -53,6 +58,8 @@ static uint32_t lastId = 0;        // the newest command id seen this boot
 static uint64_t stateMark = 0;
 static uint32_t stateAt = 0, stateId = 0;
 static uint32_t reports = 0, reportFails = 0;
+static uint32_t shotFor = 0;        // the `shot` command whose frame is waiting to go
+static bool noReports = false;      // the last boot restarted inside a report: none this boot
 static esp_reset_reason_t resetWhy = ESP_RST_UNKNOWN;
 // A remote reboot's id, kept through the restart (RTC memory): its result goes in the first report after.
 constexpr uint32_t kRebootMagic = 0x2EB0071Du;
@@ -118,6 +125,14 @@ static void boot() {
   }
   rebootMagic = 0;
 }
+// wififw::begin: the boot before ended inside a report (a crash, a watchdog).
+// The update checks go on as ever; the reports stop until the next restart,
+// so a fault in the report can never loop.
+static void crashedInReport() {
+  noReports = true;
+  say("!!! the last boot ended inside a remote debug report: no reports this boot (update checks as ever)");
+}
+
 // Restarted by a remote reboot: it came in a quiet moment and stays dark (wififw::quietBoot).
 static bool quietBoot() { return rebootMagic == kRebootMagic && esp_reset_reason() == ESP_RST_SW; }
 
@@ -146,10 +161,19 @@ struct Out {
     n += rdebug::jsonEscape(s, len, p + n, cap - n - 3);
     f("\",");
   }
+  // "key":"<the newest of s, escaped into at most `room` bytes>",
+  void tail(const char* key, const char* s, size_t len, size_t room) {
+    if (full) return;
+    f("\"%s\":\"", key);
+    if (full || cap - n < 4) return void(full = true);
+    const size_t most = std::min(room + 1, cap - n - 3);
+    n += rdebug::jsonEscapeTail(s, len, p + n, most);
+    f("\",");
+  }
 };
 
 static const char* build(size_t& len) {
-  const size_t want = kBodyBytes + (shotText ? shotLen + shotLen / 64 + 64 : 0);
+  const size_t want = rdebug::kReportMax + 64 + (shotText ? shotLen + shotLen / 64 + 64 : 0);
   if (bodyCap < want) {
     heap_caps_free(body);
     body = static_cast<char*>(heap_caps_malloc(want, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -204,9 +228,12 @@ static const char* build(size_t& len) {
   }
   o.f("],");
   if (m->stateLen) o.str("state", m->state, m->stateLen);
-  if (shotText) o.str("shot", shotText, shotLen);
+  // The log's newest bytes, in what is left of kReportMax (the 2 closing bytes kept).
   const size_t logLen = hw::logTee.tail(m->log, sizeof m->log);
-  o.str("log", m->log, logLen);
+  const size_t used = o.n + std::strlen("\"log\":\"\",}");
+  const size_t room = used + 2 < rdebug::kReportMax ? std::min(rdebug::kLogTailMax, rdebug::kReportMax - used - 2) : 0;
+  o.tail("log", m->log, logLen, room);
+  if (shotText) o.str("shot", shotText, shotLen);
   o.drop();
   o.f("}");
   if (o.full) return nullptr;
@@ -219,6 +246,14 @@ static const char* build(size_t& len) {
 
 // After the manifest (and the pet's lines): the report, then the window closes.
 static bool start() {
+  if (noReports) return false;
+  const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                 big = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (have < kReportHeap || big < kReportBig) {
+    say("remote: no report this window: internal RAM %u free, %u largest (wants %u, %u)", unsigned(have), unsigned(big),
+        unsigned(kReportHeap), unsigned(kReportBig));
+    return false;
+  }
   size_t len = 0;
   const char* b = build(len);
   if (!b) {
@@ -228,7 +263,11 @@ static bool start() {
   job.reset();
   say("remote: report of %u bytes%s: heap=%u big=%u before the task", unsigned(len), shotText ? " with a screenshot" : "",
       unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  // A restart from here on is the report's: it never counts against the update check.
+  inWindow = 0;
+  inReport = kReportMagic;
   if (job.start(kReportUrl, true, b, len)) return true;
+  inReport = 0;
   say("remote: the report could not start: %s", job.error());   // not the check's failure: the manifest was read
   return false;
 }
@@ -236,10 +275,15 @@ static bool start() {
 // The reply: the report is home (what it carried is dropped), and the commands it brought queue.
 static void arrived(bool done, const char* text, size_t len, const char* error) {
   if (!ready()) return;
+  inReport = 0;
   if (!done) {
     ++reportFails;
     m->sentResults = 0;
-    return say("remote: the report did not go (%s); it goes again next time", error);
+    if (shotText) {   // a screenshot goes once: one that failed is not tried in every window after
+      heap_caps_free(shotText), shotText = nullptr, shotLen = 0;
+      result(shotFor, false, "shot: the upload failed (%s)", error);
+    }
+    return say("remote: the report did not go (%s); the next window sends a fresh one", error);
   }
   ++reports;
   std::memmove(m->results, m->results + m->sentResults, sizeof(Result) * (m->nResults - m->sentResults));
@@ -307,6 +351,7 @@ static void poll(uint32_t now) {
       return statusLine();
     case rdebug::Verb::Shot:
       shot();
+      shotFor = c.id;
       return shotText ? result(c.id, true, "shot: %u bytes of the screen's last frame", unsigned(shotLen))
                       : result(c.id, false, "shot: no PSRAM for it");
     case rdebug::Verb::Reboot:

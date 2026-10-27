@@ -53,6 +53,40 @@ class LogRing {
 // sequence cut at the start (a ring's oldest byte) is skipped. Returns the
 // length written (without the NUL).
 size_t jsonEscape(const char* in, size_t n, char* out, size_t cap);
+// The same, but of the newest bytes: the longest end of `in` whose escaped
+// form fits `cap` (with its NUL). For a log's tail, whose newest lines matter.
+size_t jsonEscapeTail(const char* in, size_t n, char* out, size_t cap);
+
+// ---- the report's size and how it goes out --------------------------------------
+//
+// On the badge at RSSI -77 a 8.8 KB report failed ("Failed to send chunk!",
+// send payload failed) and took internal RAM down to 9.9 KB: it went to TLS
+// as one write, so one record and its buffers. Now the report stays under
+// kReportMax (the log's tail gets what the rest leaves, at most kLogTailMax),
+// and every HTTPS body goes out kWriteChunk bytes a write (hw/net_job.h).
+constexpr size_t kReportMax = 5000;
+constexpr size_t kLogTailMax = 4096;
+constexpr size_t kStateMax = 2048;     // a `state` capture: it shares the cap with the log
+constexpr size_t kWriteChunk = 1024;
+
+// `n` bytes through `write(p, k)` (returns the bytes it took, 0 when it
+// failed), at most `chunk` a call. A call that takes nothing is tried once
+// more after `pause()`; a second failure ends it. Returns the bytes written.
+template <class Write, class Pause>
+size_t writeChunked(const uint8_t* p, size_t n, size_t chunk, Write&& write, Pause&& pause) {
+  size_t done = 0;
+  while (done < n) {
+    const size_t k = n - done < chunk ? n - done : chunk;
+    size_t got = write(p + done, k);
+    if (!got) {
+      pause();
+      got = write(p + done, k);
+      if (!got) break;
+    }
+    done += got < k ? got : k;
+  }
+  return done;
+}
 
 // ---- commands ----------------------------------------------------------------
 

@@ -21,19 +21,29 @@ its own check soon. The report is JSON:
 | `pet` | kind, generation, stage, age in minutes, hunger % |
 | `results` | the last commands' results |
 | `state`, `shot` | a `state` command's capture, a `shot` command's frame (the cable's shot lines) |
-| `log` | the serial log's last 8 KB |
+| `log` | the serial log's newest bytes: what the rest of the 5 KB leaves, at most 4 KB |
 
 The log is everything printed through `Serial` (src/hw/log_tee.h: main.cpp's
 `Serial` is a tee into an 8 KB PSRAM ring). The IDF's own `ESP_LOG` lines and a
 panic's register dump are not in it; the core dump covers a panic.
 
-Memory: the ring, the report's body (28 KB, more with a shot) and everything
-else is PSRAM, made at the first use. The POST's body is borrowed by the GET
-task (`NetJob::start(..., borrowLen)`), not copied. Internal RAM gains a few
-words and two RTC words; the TLS handshake is the same one the lines' POST makes.
+Size and memory. A report stays under 5 KB (`rdebug::kReportMax`): the log's
+tail is fitted into what the other fields leave, at most 4 KB, and a state
+capture is 2 KB. Only a screenshot the owner asked for goes past it, and only
+once. The first version sent 8.8 KB as one TLS write; on a badge at RSSI -77
+that failed ("Failed to send chunk!", send payload failed) with internal RAM
+down to 9.9 KB. Now every HTTPS body (the lines' POST too) goes to TLS 1 KB a
+write (`hw::ChunkedTls`, `rdebug::writeChunked`), straight from PSRAM, a failed
+write tried once more 100 ms later. The ring, the body and everything else are
+PSRAM; the GET task borrows the body (`NetJob::start(..., borrowLen)`). The
+report is skipped when internal RAM is short of 24 KB free or a 9 KB block.
 
-A report that fails is not retried in the window: the next window's is newer
-and carries the same unsent results.
+A failed report is harmless. It comes after the manifest was read and the
+schedule set, so the update check is already done and its schedule untouched;
+it is not retried in the window, and the next window sends a fresh one with the
+same unsent results (a failed screenshot is dropped, and says so). A restart
+inside a report clears the window's crash mark first, so it never makes the
+update check back off; instead the reports stop until the next restart.
 
 ## Commands
 
@@ -46,7 +56,7 @@ has closed, one a loop pass, and the next report carries the results.
 |---|---|
 | `check` | the next update check is due now; it still waits until dark and alone |
 | `interval <30..720>` | minutes between checks until the next restart (the default is 6 h) |
-| `state` | STATE, `DEBUG power status`, `power stats`, `fps` and `wifi status` printed, and what they printed (6 KB) captured for the next report |
+| `state` | STATE, `DEBUG power status`, `power stats`, `fps` and `wifi status` printed, and what they printed (2 KB) captured for the next report |
 | `shot` | the screen's last frame (it is dark: nothing repaints it) for the next report; `/admin` draws it |
 | `reboot` | restarts once dark and alone, dark after the restart (like an update's trial); its result comes from the next boot |
 | `marquee <text>` | a message for the kids: `showMarquee(text)`, full-screen scrolling text. At most 120 printable ASCII characters (`rdebug::kMarqueeMax`); the site turns accents into plain letters, anything else into spaces, and cuts it to 120. Until the marquee branch lands, main.cpp's stub only logs it |

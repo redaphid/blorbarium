@@ -62,6 +62,20 @@ size_t jsonEscape(const char* in, size_t n, char* out, size_t cap) {
   return o;
 }
 
+size_t jsonEscapeTail(const char* in, size_t n, char* out, size_t cap) {
+  if (!cap) return 0;
+  // Walk back from the newest byte while the escaped size still fits.
+  size_t need = 0, from = n;
+  while (from > 0) {
+    const uint8_t c = uint8_t(in[from - 1]);
+    const size_t k = c == '"' || c == '\\' || c == '\n' || c == '\t' ? 2 : c < 0x20 || c == 0x7f ? 6 : 1;
+    if (need + k + 1 > cap) break;
+    need += k;
+    --from;
+  }
+  return jsonEscape(in + from, n - from, out, cap);
+}
+
 const char* verbName(Verb v) {
   switch (v) {
     case Verb::Check: return "check";

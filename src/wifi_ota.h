@@ -126,6 +126,10 @@ static uint32_t windows = 0, scans = 0;   // since boot, for DEBUG wifi
 // crash or a watchdog's reset, not a power cut): src/wifi_ota.h begin().
 constexpr uint32_t kWindowMagic = 0x3A1F1000u;
 RTC_NOINIT_ATTR static uint32_t inWindow;
+// The remote debug report under way (src/remote_debug.h): a restart in it is
+// the report's, never the update check's (inWindow is cleared when it starts).
+constexpr uint32_t kReportMagic = 0x2E9027D0u;
+RTC_NOINIT_ATTR static uint32_t inReport;
 RTC_NOINIT_ATTR static uint32_t crashesInARow;
 
 // What is asked of the next window.
@@ -191,6 +195,7 @@ static void radioDown() {
   station.off();
   job.reset();
   inWindow = 0;
+  inReport = 0;
   crashesInARow = 0;
   say("window %s closed after %u ms (heap=%u minheap=%u)", wifiota::windowName(window), unsigned(millis() - windowAt),
       unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
@@ -634,7 +639,9 @@ static void begin() {
   // off, more the more in a row, to a few hours at most (Schedule::crashed);
   // checks are never turned off. A power cut clears RTC memory, and the count with it.
   const esp_reset_reason_t why = esp_reset_reason();
-  if (why == ESP_RST_POWERON) inWindow = 0, crashesInARow = 0;
+  if (why == ESP_RST_POWERON) inWindow = 0, crashesInARow = 0, inReport = 0;
+  if (inReport == kReportMagic) rd::crashedInReport();
+  inReport = 0;
   if (inWindow == kWindowMagic) {
     crashesInARow = crashesInARow < 100 ? crashesInARow + 1 : crashesInARow;
     schedule.crashed(millis(), crashesInARow);
