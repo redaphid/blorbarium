@@ -32,6 +32,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/log_tee.h"   // from here on `Serial` also keeps the log's last 8 KB, for remote debug
 #include <esp_heap_caps.h>
 #include <soc/soc_memory_layout.h>
+#include "build_info.h"
 #include "hw/board_lcd128.h"
 #include "hw/paint_core0.h"
 #include "hw/storage_nvs_fs.h"
@@ -75,8 +76,11 @@ static uint32_t cableHeardAt = 0;
 static inline void cableByte() { cableHeardAt = millis(); }
 
 // The protocol over the serial line. A cable has no connect event, so the
-// owner counts as near once a line has arrived. A `DEBUG ` line is held back
-// from the protocol for the loop to run after the tick (src/debug_verbs.h).
+// owner counts as near once a protocol line has arrived. A `DEBUG ` line is
+// held back from the protocol for the loop to run after the tick
+// (src/debug_verbs.h), and it is not the owner: a developer's `DEBUG ota
+// check` once made him see the glowing slab with no phone anywhere
+// (owner_near drives sees_phone, thoughts.cpp). Nor is an empty line.
 class SerialLink : public blorb::Link {
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
@@ -127,7 +131,6 @@ class SerialLink : public blorb::Link {
         if (len_ < sizeof(line_)) line_[len_++] = char(c);
         continue;
       }
-      heard_ = true;
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
@@ -139,6 +142,7 @@ class SerialLink : public blorb::Link {
         d[k] = 0;
         continue;
       }
+      heard_ = heard_ || n > 0;
       return std::string_view(line_, n);
     }
     return std::nullopt;
@@ -1008,27 +1012,8 @@ static void restartIntoUpdate() {
   ESP.restart();
 }
 
-// What tools/ota_release.py reads back out of firmware.bin, so a release can
-// only be signed as the version, board and save format the image really is.
-// reportBoot() prints from it, which keeps the linker from dropping it.
-template <size_t N>
-constexpr std::array<char, N> stampField(const char* s) {
-  std::array<char, N> a{};
-  for (size_t i = 0; i + 1 < N && s[i]; ++i) a[i] = s[i];
-  return a;
-}
-struct ReleaseStamp {
-  std::array<char, 12> magic;
-  std::array<char, 16> fw, board;
-  uint16_t fmt;
-  std::array<char, 24> commit;   // git describe --always --dirty, as fw_stamp.py saw it
-};
-extern const ReleaseStamp kReleaseStamp = {stampField<12>("blorbstamp1"), stampField<16>(blorb::kFirmwareVersion),
-                                           stampField<16>(BOARD_NAME), blorb::kFormatVersion,
-                                           stampField<24>(BLORB_FW)};
-
 static void reportBoot() {
-  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", BLORB_FW, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
+  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", kBuildFw, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
                 kReleaseStamp.board.data());
   Serial.printf("[hw] home rot=%u (USB-C %s, %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot), homeWhy,
                 hw::home::name(ORIENT_HOME));

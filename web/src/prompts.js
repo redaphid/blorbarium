@@ -7,6 +7,11 @@ import catalog from "./catalog.json" with { type: "json" };
 import { MAX_TEXT, MIN_LINES, MAX_LINES } from "./validate.js";
 
 const FONT_RULE = `Only capital letters A-Z, digits 0-9, spaces and these marks: . , ! ? - ' : (no other punctuation, no quotes, no emoji).`;
+// The owner (2026-10-27): no line wrapped in a voice frame, and never the word
+// DISH (the code's name for the habitat; the kids do not know it). validate.js
+// throws such a line away.
+const PLAIN_RULE = `Said plain, as a whole line: never wrap it in a lead-in or tag such as "THE REEDS SAY:", "SO IT IS", "HEED:", "GOOD NEWS:", "PSST." or "... SOON."`;
+const NO_DISH_RULE = `Never the word DISH: the kids do not know it. Where he lives is his home, here or this place.`;
 
 function speciesNotes(species) {
   return catalog.species[species]?.notes ?? "";
@@ -88,6 +93,8 @@ Hard rules for every line (a line that breaks one is thrown away):
 - At most ${MAX_TEXT} characters, counting spaces. Short is good.
 - ${FONT_RULE}
 - # and @ only where a situation says it may use them (# shows its number, @ his name).
+- ${PLAIN_RULE}
+- ${NO_DISH_RULE}
 - Not a copy of the example line, and no two lines the same.
 
 Situations (name: when he says it; the old generic example):
@@ -133,6 +140,8 @@ Rules for every line:
 - At most ${MAX_TEXT} characters, counting spaces.
 - ${FONT_RULE}
 - # and @ only where a situation says it may use them (# shows its number, @ his name).
+- ${PLAIN_RULE}
+- ${NO_DISH_RULE}
 - Not a copy of the example line.
 
 Situations (name: when he says it; example):
@@ -185,7 +194,7 @@ export function retryMessages(messages, reply, failures, stillNeeded, structural
 ${[...structural.slice(0, 10).map((s) => `- ${s}`), ...failures.slice(0, 40).map((f) => `- ${f.situation}: "${f.text}" ${f.why}`)].join("\n") || "- (the reply was missing situations or was not the JSON asked for)"}
 
 Write new lines for these situations only, keyed by exactly these names: ${stillNeeded.join(", ")}.
-Same rules: at most ${MAX_TEXT} characters, only A-Z 0-9 space . , ! ? - ' : (plus # or @ only where marked), no repeats.
+Same rules: at most ${MAX_TEXT} characters, only A-Z 0-9 space . , ! ? - ' : (plus # or @ only where marked), no repeats, no lead-in or tag wrapped round a line, never the word DISH.
 Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}}` },
   ];
 }

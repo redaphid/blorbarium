@@ -167,11 +167,11 @@ static const char* build(size_t& len) {
       unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
       unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
       unsigned(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)), unsigned(cellMv), int(WiFi.RSSI()), int(powerPolicy.low()));
-  // The update checks: never off is the rule; auto=0 says something turned them off.
+  // The update checks: never off (the owner's rule); auto=0 only while no network is remembered.
   const std::optional<ota::Version> back = trialPort.rolledBack();
   o.f("\"ota\":{\"auto\":%d,\"window\":\"%s\",\"next_s\":%u,\"every_min\":%u,\"absent_streak\":%u,\"server_streak\":%u,"
       "\"on_trial\":%d,\"rolled_back\":",
-      int(autoOn), wifiota::windowName(window), unsigned(schedule.dueIn(now) / 1000), unsigned(schedule.everyMs() / 60000),
+      int(facts(now).enabled), wifiota::windowName(window), unsigned(schedule.dueIn(now) / 1000), unsigned(schedule.everyMs() / 60000),
       unsigned(schedule.absentStreak()), unsigned(schedule.serverStreak()), int(trial.onTrial()));
   if (back) o.f("\"%u.%u.%u\",", unsigned(back->major), unsigned(back->minor), unsigned(back->patch));
   else o.f("null,");

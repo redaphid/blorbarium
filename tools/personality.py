@@ -15,7 +15,7 @@ stay hand-written in thoughts.def.
 import difflib
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,13 +44,14 @@ PARITY_NAME, PARITY_TAUGHT = "MOSS BOY", "I LOVE YOU, LITTLE ONE"
 
 def _limits():
     h = (ROOT / "lib/blorb/include/blorb/thoughts.h").read_text()
-    text, frame, one_in = (int(re.search(rf"{k} = (\d+);", h)[1])
-                           for k in ("kMaxThoughtText", "kMaxFrameText", "kFrameOneIn"))
+    text, voiced = (int(re.search(rf"{k} = (\d+);", h)[1]) for k in ("kMaxThoughtText", "kMaxVoicedText"))
     # kThoughtLineCap: '*' can grow to a taught line (kMaxTaughtText)
-    return text, text + frame + (text - 1) + 1, one_in
+    return text, voiced + (text - 1) + 1
 
 
-MAX_TEXT, LINE_CAP, FRAME_ONE_IN = _limits()
+MAX_TEXT, LINE_CAP = _limits()
+# How many draws the parity fixture tries per row: enough to see every line.
+PARITY_PICKS = 9
 
 
 @dataclass
@@ -69,7 +70,6 @@ class Voice:
     id: int
     name: str
     first_only: bool
-    frames: list = field(default_factory=list)
 
 
 @dataclass
@@ -106,8 +106,6 @@ def load_engine():
     for line in (DEFS / "voices.def").read_text().splitlines():
         if m := re.match(r"BLORB_VOICE\((\d+),\s*(\w+),\s*(\d)\)", line):
             voices[m[2]] = Voice(int(m[1]), m[2], m[3] == "1")
-        elif m := re.match(r"BLORB_FRAME\((\w+),", line):
-            voices[m[1]].frames.append(tuple(_strings(line)))
     species = {}
     for line in (DEFS / "species.def").read_text().splitlines():
         if m := re.match(r"BLORB_SPECIES\((\d+),\s*(\w+),(?:[^,]*,){6}\s*(\w+)\)\s*(?://\s*(.*))?", line):
@@ -262,16 +260,13 @@ def read_book(engine, problems, root=PERSONALITIES):
 def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, taught=PARITY_TAUGHT):
     text = book.shared.get(row.name, row.text)
     mine = book.own.get(species, {}).get(row.name, [])
-    if mine:   # his own line is already in his voice: said as written, never framed or cut
+    if mine:   # his own line is already in his voice: said as written, never cut
         text = mine[pick % len(mine)]
     own = [] if mine else [t for (th, v, t) in engine.voiced if th == row.name and v == voice]
     if own:
         text = own[pick % len(own)]
     v = engine.voices[voice]
-    # A shared line takes a frame only one time in FRAME_ONE_IN, so the frame
-    # stays a seasoning rather than a tag on every line.
-    framed = not mine and not own and pick % FRAME_ONE_IN == 0
-    frame = v.frames[pick // FRAME_ONE_IN % len(v.frames)] if framed else None
+    # Nothing wraps a line: no voice frame, prefix or suffix.
     out = []
 
     def put(s):
@@ -279,8 +274,6 @@ def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, tau
             if len(out) + 1 < LINE_CAP:
                 out.append(c)
 
-    if frame:
-        put(frame[0])
     body = len(out)
     put(text.replace("#", str(num)).replace("@", name).replace("*", taught))
     if v.first_only and not mine and not own and "*" not in text:
@@ -288,11 +281,6 @@ def say_line(engine, book, row, num, voice, pick, species, name=PARITY_NAME, tau
             if out[i] in ".!?" and out[i + 1] == " " and (i == body or out[i - 1] != "."):
                 del out[i + 1:]
                 break
-    if frame:
-        suffix = frame[1]
-        if len(out) > body and out[-1] in ".!?":
-            suffix = suffix.lstrip(".,")
-        put(suffix)
     return "".join(out)
 
 
@@ -382,7 +370,7 @@ def render_parity(engine, book):
                 if sname and row.name not in book.own[sname]:
                     continue
                 seen = set()
-                for pick in range(2 * FRAME_ONE_IN + 1):
+                for pick in range(PARITY_PICKS):
                     s = say_line(engine, book, row, 7, v.name, pick, sname)
                     if s not in seen:
                         seen.add(s)

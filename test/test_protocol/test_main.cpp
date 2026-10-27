@@ -483,7 +483,8 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
 
 TEST(Golden, Hello) {
   Rig r;
-  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.13 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
+  EXPECT_EQ(r.send("#1a HELLO"), (Lines{std::string("#1a OK fw=") + blorb::kFirmwareVersion +
+                                        " fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
 }
 
 TEST(Golden, State) {
@@ -492,8 +493,8 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=wander face=happy asleep=0 day=waking species=grungo mac=none",
-      "#2b + drives hunger=301 sleepiness=232 boredom=1 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=peek face=happy asleep=0 day=waking species=grungo mac=none",
+      "#2b + drives hunger=301 sleepiness=232 boredom=0 loneliness=0 fear=8 pain=1 discomfort=3 need_touch=1",
       "#2b + body life=1000 injury=0 glow=0 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=1",
       "#2b OK",
@@ -554,9 +555,9 @@ TEST(Golden, Diff) {
       "#3c + to=252",
       "#3c + point=91",
       "#3c + kind=palette",
-      "#3c + byte=1",
-      "#3c + from=139",
-      "#3c + to=167",
+      "#3c + byte=3",
+      "#3c + from=128",
+      "#3c + to=156",
       "#3c OK 5",
   };
   EXPECT_EQ(link.sent, want);
@@ -628,7 +629,7 @@ TEST(Golden, Genome) {
   Lines out = r.send("#60 GENOME");
   EXPECT_EQ(unchunk(out, "#60"), std::get<Creature>(r.dish.occupant()).genome().bytes());
   EXPECT_EQ(out.size(), 14u);
-  EXPECT_EQ(out.back(), "#60 OK 1497 564cc693") << "length and CRC of the quick-egg starter";
+  EXPECT_EQ(out.back(), "#60 OK 1497 fd85d058") << "length and CRC of the quick-egg starter";
 }
 
 TEST(Golden, Chem) {
@@ -640,14 +641,13 @@ TEST(Golden, Chem) {
   Lines want = {
       "#62 + chem=1 name=hunger level=301",
       "#62 + chem=2 name=sleepiness level=232",
-      "#62 + chem=3 name=boredom level=1",
-      "#62 + chem=4 name=loneliness level=1",
       "#62 + chem=5 name=fear level=8",
       "#62 + chem=6 name=pain level=1",
       "#62 + chem=7 name=discomfort level=3",
       "#62 + chem=8 name=need_touch level=1",
       "#62 + chem=16 name=life level=1000",
       "#62 + chem=18 name=energy level=451",
+      "#62 + chem=24 name=vision level=3",
       "#62 + locus=0 name=always level=1000",
       "#62 + locus=1 name=tilt_x level=500",
       "#62 + locus=2 name=tilt_y level=500",
@@ -656,8 +656,7 @@ TEST(Golden, Chem) {
       "#62 + locus=8 name=day_cos level=500",
       "#62 + locus=9 name=owner_near level=1000",
       "#62 + locus=18 name=pantry level=1000",
-      "#62 + locus=98 name=recent_woke level=63",
-      "#62 OK 19",
+      "#62 OK 17",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);
 }
@@ -716,7 +715,7 @@ TEST(Golden, Portrait) {
   Lines nine = ask(dish, link, "#68 PORTRAIT 9");
   got.insert(got.end(), nine.begin(), nine.end());
   Lines want = {
-      "#67 + stage=baby scale=55 seed=6cade548 marks=1",
+      "#67 + stage=baby scale=55 seed=499b722b marks=1",
       "#67 + region=skin hue=11 sat=128 val=128",
       "#67 + region=belly hue=0 sat=128 val=137",
       "#67 + region=cloak hue=0 sat=128 val=118",
@@ -726,14 +725,14 @@ TEST(Golden, Portrait) {
       "#67 + region=shell hue=11 sat=128 val=128",
       "#67 + mark layer=0 variant=4 hue=0",
       "#67 OK",
-      "#68 + stage=adult scale=103 seed=6a70f067 marks=0",
-      "#68 + region=skin hue=14 sat=128 val=160",
+      "#68 + stage=adult scale=103 seed=4a45fce0 marks=0",
+      "#68 + region=skin hue=-3 sat=128 val=101",
       "#68 + region=belly hue=0 sat=128 val=137",
       "#68 + region=cloak hue=-90 sat=110 val=120",
       "#68 + region=eye hue=0 sat=128 val=128",
       "#68 + region=mouth hue=0 sat=128 val=128",
       "#68 + region=glow hue=0 sat=170 val=235",
-      "#68 + region=shell hue=14 sat=128 val=160",
+      "#68 + region=shell hue=-3 sat=128 val=101",
       "#68 OK",
   };
   EXPECT_EQ(got, want);
@@ -754,9 +753,9 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=-16,128,128 cloak=0,128,118 shell=-16,128,128 look=1 mind=4",
-      "#6d + egg=1 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=4",
-      "#6d + egg=2 skin=40,128,128 cloak=0,128,118 shell=40,128,128 look=3 mind=5",
+      "#6d + egg=0 skin=11,128,97 cloak=0,128,118 shell=11,128,97 look=3 mind=7",
+      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=3 mind=4",
+      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=4",
       "#6d OK eggs=3 cursor=0 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);

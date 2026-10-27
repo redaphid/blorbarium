@@ -290,7 +290,7 @@ TEST(Show, TheBiteIsAChompAndHisBellyRises) {
   const FeedView f = feedOf(b);
   EXPECT_FALSE(f.rotten);
   EXPECT_GT(f.fullness, f.fullnessFrom) << "fuller after the bite";
-  EXPECT_LT(f.meterMs, 400);
+  EXPECT_EQ(f.meterMs, f.chompMs) << "the meter shows from the bite";
 }
 
 // ---- home at run time (src/hw/home.h): set from NVS at boot, or by DEBUG home ----------

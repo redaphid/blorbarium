@@ -21,7 +21,7 @@
    "topic": "none",
    "meaning": "He is very hungry (eight tenths or more).",
    "mark": null,
-   "shared": "I WOULD EAT THE DISH"
+   "shared": "I WOULD EAT THE WHOLE PLACE"
   },
   {
    "name": "hoarding",
@@ -29,7 +29,7 @@
    "when": "hoarding",
    "kind": "thought",
    "topic": "none",
-   "meaning": "He is awake and not hungry, and a fresh pellet sits in the dish.",
+   "meaning": "He is awake and not hungry, and a fresh pellet sits in his home.",
    "mark": null,
    "shared": "THAT ONE IS FOR LATER."
   },
@@ -59,7 +59,7 @@
    "when": "rotten_near",
    "kind": "thought",
    "topic": "none",
-   "meaning": "He is awake and a rotten pellet sits in the dish.",
+   "meaning": "He is awake and a rotten pellet sits in his home.",
    "mark": null,
    "shared": "SOMETHING IN HERE SMELLS"
   },
@@ -89,7 +89,7 @@
    "when": "knocked",
    "kind": "thought",
    "topic": "none",
-   "meaning": "He is awake and someone just tapped the dish.",
+   "meaning": "He is awake and someone just tapped his home.",
    "mark": null,
    "shared": "WHO'S THERE? TRY KNOCK KNOCK!"
   },
@@ -151,7 +151,7 @@
    "topic": "none",
    "meaning": "He is awake and very bored.",
    "mark": null,
-   "shared": "I HAVE COUNTED THE DISH: ONE"
+   "shared": "I HAVE COUNTED EVERYTHING: ONE"
   },
   {
    "name": "put_me_down",
@@ -209,7 +209,7 @@
    "when": "sees_pellet",
    "kind": "thought",
    "topic": "none",
-   "meaning": "He is in the trance and there is a pellet in the dish.",
+   "meaning": "He is in the trance and there is a pellet in his home.",
    "mark": null,
    "shared": "I SEE... A MORSEL. MINE."
   },
@@ -229,7 +229,7 @@
    "when": "sees_famine",
    "kind": "thought",
    "topic": "none",
-   "meaning": "He is in the trance, the dish is empty and the pantry is bare.",
+   "meaning": "He is in the trance, his home is empty and the pantry is bare.",
    "mark": null,
    "shared": "I SEE... NO CRUMBS. NONE."
   },
@@ -339,7 +339,7 @@
    "when": "rotten_near",
    "kind": "prophecy",
    "topic": "food",
-   "meaning": "He is awake and a rotten pellet sits in the dish.",
+   "meaning": "He is awake and a rotten pellet sits in his home.",
    "mark": null,
    "shared": "THAT CRUMB WILL GET FUZZY."
   },
@@ -811,7 +811,7 @@
    "topic": "none",
    "meaning": "Any time he is awake. # is his generation.",
    "mark": "#",
-   "shared": "KING OF THE DISH. ONLY ONE."
+   "shared": "KING OF THIS PLACE. ONLY ONE."
   },
   {
    "name": "smells_me",
@@ -931,7 +931,7 @@
    "topic": "none",
    "meaning": "Any time he is awake. # is his generation.",
    "mark": "#",
-   "shared": "GUARDING THE DISH. FROM WHAT?"
+   "shared": "GUARDING HOME. FROM WHAT?"
   },
   {
    "name": "old_fly",
@@ -1329,7 +1329,7 @@
    "id": 0,
    "voice": "mystic",
    "sketch": "frog: a skittish oracle",
-   "notes": "GRUNGO\nfrog: a skittish oracle\nElement Splash, style Trick, power foresee. Voice: mystic, which wraps his lines as \"THE REEDS SAY: LINE\", \"LINE... SO IT IS.\", \"HMM. LINE...\".\n\nWHAT HE LOOKS LIKE\nA squat green frog in a brown hooded cloak, the cowl pulled up round his face.\nHeavy-lidded red eyes, a flat unimpressed mouth, big folded legs. When he\nforesees, his eyes go glowing cyan and his mouth opens. Even in the egg he is\na tiny frog in a tiny hood. He looks like a pond monk who has seen things.\n\nWHO HE IS\nA hooded hermit oracle. He sees the future, and the future is mostly flies,\ndamp and doom, in that order. He is nervous, and the hood is how he copes: he\nis never hiding, he is \"hooded\". Up all night with the moon, which he treats\nas an old colleague. Daylight is too bright and too dry.\n\nHOW HE TALKS\nGrave and certain about tiny things. Omens, signs, the reeds, the pond. He\nannounces snacks as prophecy and treats every knock as foreseen.\n\nLOVES\nFlies, damp, mud, the moon, his hood, a good omen.\n\nFEARS\nShaking, dry glass, the sun, being looked at without his hood up.\n\nCATCHPHRASES\nI FORESAW THIS. HOOD UP. THE REEDS KNOW.",
+   "notes": "GRUNGO\nfrog: a skittish oracle\nElement Splash, style Trick, power foresee. Voice: mystic. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA squat green frog in a brown hooded cloak, the cowl pulled up round his face.\nHeavy-lidded red eyes, a flat unimpressed mouth, big folded legs. When he\nforesees, his eyes go glowing cyan and his mouth opens. Even in the egg he is\na tiny frog in a tiny hood. He looks like a pond monk who has seen things.\n\nWHO HE IS\nA hooded hermit oracle. He sees the future, and the future is mostly flies,\ndamp and doom, in that order. He is nervous, and the hood is how he copes: he\nis never hiding, he is \"hooded\". Up all night with the moon, which he treats\nas an old colleague. Daylight is too bright and too dry.\n\nHOW HE TALKS\nGrave and certain about tiny things. Omens, signs, the reeds, the pond. He\nannounces snacks as prophecy and treats every knock as foreseen.\n\nLOVES\nFlies, damp, mud, the moon, his hood, a good omen.\n\nFEARS\nShaking, dry glass, the sun, being looked at without his hood up.\n\nCATCHPHRASES\nI FORESAW THIS. HOOD UP. THE REEDS KNOW.",
    "lines": {
     "peckish": [
      "I FORESEE FLIES. IN MY MOUTH.",
@@ -1395,7 +1395,7 @@
      "ZZZ... FLIES... SO MANY..."
     ],
     "see_pellet": [
-     "I SEE... A PELLET. IN THE DISH"
+     "I SEE... A PELLET. RIGHT HERE"
     ],
     "see_phone": [
      "I SEE... THE GLOWING SLAB."
@@ -1611,7 +1611,7 @@
      "SOMETHING SHINY. MY EYES."
     ],
     "guard": [
-     "I GUARD THE DISH. I FORESAW IT"
+     "I GUARD MY HOME. I FORESAW IT"
     ],
     "old_fly": [
      "I REMEMBER A FLY. IT WAS FAT."
@@ -1747,7 +1747,7 @@
    "id": 1,
    "voice": "rambling",
    "sketch": "snail: no rush, ever",
-   "notes": "MOSSBY\nsnail: no rush, ever\nElement Sprout, style Guard, power shell. Voice: rambling, which wraps his lines as \"SO, UM, LINE\", \"LINE, OR SOMETHING\", \"LINE. ANYWAY. WHERE WAS I\".\n\nWHAT HE LOOKS LIKE\nA big peach-orange striped shell arched right over his head like a bonnet, a\nround pale face peeking out from under it, rosy cheeks, soft brown eyes and a\nsmall polite smile. Two orange-tipped feelers, stubby little feet. Annoyed, he\ndoes a prim wobbly frown. Foreseeing, his eyes turn to two gold coins. The egg\nholds a tiny snail curled on a cushion.\n\nWHO HE IS\nA gentle homebody who carries his house everywhere and is very proud of it.\nNothing is ever urgent. He started this thought yesterday and will finish it\ntomorrow. Polite, cosy, a little forgetful, and quietly pleased with himself\nfor being so slow. Danger means tucking in.\n\nHOW HE TALKS\nKindly and unhurried. \"No rush.\" \"Eventually.\" \"Slowly.\" He loses the thread,\nthen finds it, then loses it again.\n\nLOVES\nHis shell, dew, damp leaves, moss, rain, a long nap, a smooth floor.\n\nFEARS\nHurry, salt, dry glass, being turned over, things that are fast.\n\nCATCHPHRASES\nNO RUSH. I'LL GET THERE. MIND THE HOUSE.",
+   "notes": "MOSSBY\nsnail: no rush, ever\nElement Sprout, style Guard, power shell. Voice: rambling. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA big peach-orange striped shell arched right over his head like a bonnet, a\nround pale face peeking out from under it, rosy cheeks, soft brown eyes and a\nsmall polite smile. Two orange-tipped feelers, stubby little feet. Annoyed, he\ndoes a prim wobbly frown. Foreseeing, his eyes turn to two gold coins. The egg\nholds a tiny snail curled on a cushion.\n\nWHO HE IS\nA gentle homebody who carries his house everywhere and is very proud of it.\nNothing is ever urgent. He started this thought yesterday and will finish it\ntomorrow. Polite, cosy, a little forgetful, and quietly pleased with himself\nfor being so slow. Danger means tucking in.\n\nHOW HE TALKS\nKindly and unhurried. \"No rush.\" \"Eventually.\" \"Slowly.\" He loses the thread,\nthen finds it, then loses it again.\n\nLOVES\nHis shell, dew, damp leaves, moss, rain, a long nap, a smooth floor.\n\nFEARS\nHurry, salt, dry glass, being turned over, things that are fast.\n\nCATCHPHRASES\nNO RUSH. I'LL GET THERE. MIND THE HOUSE.",
    "lines": {
     "peckish": [
      "A SNACK WOULD BE NICE. LATER."
@@ -1818,7 +1818,7 @@
      "I SEE... A FAST LITTLE SCREEN"
     ],
     "see_nothing": [
-     "I SEE... AN EMPTY DISH. HMM."
+     "I SEE... NOTHING HERE. HMM."
     ],
     "see_damp": [
      "I SEE... A NICE DAMP LEAF."
@@ -1992,7 +1992,7 @@
      "HELLO. HELLO. BOTH WERE ME."
     ],
     "king": [
-     "SLOWEST IN THE DISH. A RECORD."
+     "SLOWEST IN HERE. A RECORD."
     ],
     "smells_me": [
      "SMELLS LIKE DAMP MOSS. HOME."
@@ -2028,7 +2028,7 @@
      "SOMETHING SHINY. MY TRAIL!"
     ],
     "guard": [
-     "GUARDING THE DISH. VERY SLOWLY"
+     "GUARDING HOME. VERY SLOWLY"
     ],
     "old_fly": [
      "I REMEMBER A LEAF. A GOOD ONE."
@@ -2164,7 +2164,7 @@
    "id": 2,
    "voice": "cheerful_doom",
    "sketch": "puffball: sneezes sparkles",
-   "notes": "PUFFKIN\npuffball: sneezes sparkles\nElement Sprout, style Pounce, power spores. Voice: cheerful_doom, which wraps his lines as \"GOOD NEWS: LINE\", \"LINE. HOORAY!\", \"LINE. HOW FUN!\".\n\nWHAT HE LOOKS LIKE\nA round coral puffball, almost a perfect ball, with a huge cream fluffy face\nand belly, pink blush cheeks, stubby arms and little pink feet. Happy, he\nsqueezes his eyes into delighted smiles. Annoyed, he does a furious tiny frown\nthat is not scary at all. Foreseeing, his eyes go bright magenta. The egg is a\nred fluffball already grinning.\n\nWHO HE IS\nA bouncy, loud, delighted ball of fluff who thinks everything is wonderful,\nincluding the bad things. He sneezes spores (sparkly ones) when excited,\nstartled or dusty, and goes POOF when scared. He loves hugs and does not\nunderstand personal space. Bad news is still news, and news is exciting.\n\nHOW HE TALKS\nExclamation marks. ACHOO. POOF. BOUNCE. He repeats words when happy.\n\nLOVES\nBouncing, hugs, his fluff, sneezing, sparkles, damp logs, snacks.\n\nFEARS\nBeing squished, getting soggy, wind, combs.\n\nCATCHPHRASES\nACHOO! BOUNCE! POOF! HUG ME!",
+   "notes": "PUFFKIN\npuffball: sneezes sparkles\nElement Sprout, style Pounce, power spores. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round coral puffball, almost a perfect ball, with a huge cream fluffy face\nand belly, pink blush cheeks, stubby arms and little pink feet. Happy, he\nsqueezes his eyes into delighted smiles. Annoyed, he does a furious tiny frown\nthat is not scary at all. Foreseeing, his eyes go bright magenta. The egg is a\nred fluffball already grinning.\n\nWHO HE IS\nA bouncy, loud, delighted ball of fluff who thinks everything is wonderful,\nincluding the bad things. He sneezes spores (sparkly ones) when excited,\nstartled or dusty, and goes POOF when scared. He loves hugs and does not\nunderstand personal space. Bad news is still news, and news is exciting.\n\nHOW HE TALKS\nExclamation marks. ACHOO. POOF. BOUNCE. He repeats words when happy.\n\nLOVES\nBouncing, hugs, his fluff, sneezing, sparkles, damp logs, snacks.\n\nFEARS\nBeing squished, getting soggy, wind, combs.\n\nCATCHPHRASES\nACHOO! BOUNCE! POOF! HUG ME!",
    "lines": {
     "peckish": [
      "SNACK TIME! ACHOO! SNACK TIME!"
@@ -2445,7 +2445,7 @@
      "SPARKLES! FROM MY SNEEZE!"
     ],
     "guard": [
-     "GUARDING THE DISH! WITH FLUFF!"
+     "GUARDING HOME! WITH FLUFF!"
     ],
     "old_fly": [
      "I REMEMBER MY BEST SNEEZE!"
@@ -2581,7 +2581,7 @@
    "id": 3,
    "voice": "cheerful_doom",
    "sketch": "axolotl: never down for long",
-   "notes": "GILLY\naxolotl: never down for long\nElement Splash, style Guard, power mend. Voice: cheerful_doom, which wraps his lines as \"GOOD NEWS: LINE\", \"LINE. HOORAY!\", \"LINE. HOW FUN!\".\n\nWHAT HE LOOKS LIKE\nA bright pink axolotl with a big frilly crown of gills, a wide flat smile, a\npale peach tummy, and little arms held out as if he is about to hug you.\nHappy, his eyes squeeze shut and he beams. Annoyed, his lip wobbles and he\npouts; it does not last. Foreseeing, his eyes go mint green and the grin gets\nenormous. The egg holds a pink baby with stubby frills.\n\nWHO HE IS\nRelentlessly sunny. Things go wrong and he is fine; things hurt and they grow\nback. He mends: himself, his friends, cracks in the glass, your mood. A hugger\nand a helper. The dark joke is that nothing gets him down for long, not even\ndoom, which he finds quite exciting.\n\nHOW HE TALKS\nBright, warm, lots of exclamation marks. \"It'll grow back!\" \"I'm fine!\"\n\"Friend!\" He turns every bad thing into a good thing.\n\nLOVES\nWater, friends, hugs, fixing things, mud baths, his frills.\n\nFEARS\nDry glass, being alone, honestly not much.\n\nCATCHPHRASES\nIT'LL GROW BACK! I'M FINE! HUGS!",
+   "notes": "GILLY\naxolotl: never down for long\nElement Splash, style Guard, power mend. Voice: cheerful_doom. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA bright pink axolotl with a big frilly crown of gills, a wide flat smile, a\npale peach tummy, and little arms held out as if he is about to hug you.\nHappy, his eyes squeeze shut and he beams. Annoyed, his lip wobbles and he\npouts; it does not last. Foreseeing, his eyes go mint green and the grin gets\nenormous. The egg holds a pink baby with stubby frills.\n\nWHO HE IS\nRelentlessly sunny. Things go wrong and he is fine; things hurt and they grow\nback. He mends: himself, his friends, cracks in the glass, your mood. A hugger\nand a helper. The dark joke is that nothing gets him down for long, not even\ndoom, which he finds quite exciting.\n\nHOW HE TALKS\nBright, warm, lots of exclamation marks. \"It'll grow back!\" \"I'm fine!\"\n\"Friend!\" He turns every bad thing into a good thing.\n\nLOVES\nWater, friends, hugs, fixing things, mud baths, his frills.\n\nFEARS\nDry glass, being alone, honestly not much.\n\nCATCHPHRASES\nIT'LL GROW BACK! I'M FINE! HUGS!",
    "lines": {
     "peckish": [
      "SNACK? I'D LOVE A SNACK!"
@@ -2652,7 +2652,7 @@
      "I SEE... A FRIEND'S PHONE!"
     ],
     "see_nothing": [
-     "I SEE... AN EMPTY DISH! OH."
+     "I SEE... NOTHING HERE! OH."
     ],
     "see_damp": [
      "I SEE... A BIG WET HUG!"
@@ -2826,7 +2826,7 @@
      "HELLO! NO ECHO! HELLO ANYWAY!"
     ],
     "king": [
-     "BEST FRIEND OF THE DISH!"
+     "BEST FRIEND OF THIS PLACE!"
     ],
     "smells_me": [
      "SMELLS LIKE POND! HOME!"
@@ -2862,7 +2862,7 @@
      "SOMETHING SHINY! MY SMILE!"
     ],
     "guard": [
-     "GUARDING THE DISH! WITH LOVE!"
+     "GUARDING HOME! WITH LOVE!"
     ],
     "old_fly": [
      "I REMEMBER A BIG SPLASH! FUN!"
@@ -2998,7 +2998,7 @@
    "id": 4,
    "voice": "rambling",
    "sketch": "glow-moth: hums to himself",
-   "notes": "MOTHWICK\nglow-moth: hums to himself\nElement Spark, style Trick, power lantern. Voice: rambling, which wraps his lines as \"SO, UM, LINE\", \"LINE, OR SOMETHING\", \"LINE. ANYWAY. WHERE WAS I\".\n\nWHAT HE LOOKS LIKE\nA plump lavender moth, fuzzy all over, with big pale-yellow and lilac wings,\ncurly antennae, and a fluffy white ruff round his neck like an old-fashioned\ngentleman. Huge round yellow eyes, pink cheeks, little glowing dots down his\ntummy. Annoyed, he does the grumpiest squint in the roster. Foreseeing, his\neyes become two little lamps. The egg holds a tiny moth peeking over its wings.\n\nWHO HE IS\nA dreamy, fussy, fluffy night creature who is drawn to every light and knows\nhe should not be. He hums constantly, loses his train of thought to anything\nbright, and is quietly proud of his own glow. Woken in the day, he is a grump.\nAt night he is lovely company. He may once have eaten a sock. He denies it.\n\nHOW HE TALKS\nWandering and soft. \"Hummm.\" Lamps, glow, wool, moonlight. He gets\ndistracted mid-line.\n\nLOVES\nLamps, the moon, porch lights, his ruff, humming, woolly things.\n\nFEARS\nDaylight, rain on his wings, mud, losing his dust.\n\nCATCHPHRASES\nHUMMM. OOH, A LIGHT. I DID NOT EAT THE SOCK.",
+   "notes": "MOTHWICK\nglow-moth: hums to himself\nElement Spark, style Trick, power lantern. Voice: rambling. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA plump lavender moth, fuzzy all over, with big pale-yellow and lilac wings,\ncurly antennae, and a fluffy white ruff round his neck like an old-fashioned\ngentleman. Huge round yellow eyes, pink cheeks, little glowing dots down his\ntummy. Annoyed, he does the grumpiest squint in the roster. Foreseeing, his\neyes become two little lamps. The egg holds a tiny moth peeking over its wings.\n\nWHO HE IS\nA dreamy, fussy, fluffy night creature who is drawn to every light and knows\nhe should not be. He hums constantly, loses his train of thought to anything\nbright, and is quietly proud of his own glow. Woken in the day, he is a grump.\nAt night he is lovely company. He may once have eaten a sock. He denies it.\n\nHOW HE TALKS\nWandering and soft. \"Hummm.\" Lamps, glow, wool, moonlight. He gets\ndistracted mid-line.\n\nLOVES\nLamps, the moon, porch lights, his ruff, humming, woolly things.\n\nFEARS\nDaylight, rain on his wings, mud, losing his dust.\n\nCATCHPHRASES\nHUMMM. OOH, A LIGHT. I DID NOT EAT THE SOCK.",
    "lines": {
     "peckish": [
      "A SNACK. OR A SOCK. EITHER."
@@ -3243,7 +3243,7 @@
      "HUMMM. NO ECHO. JUST HUMMM."
     ],
     "king": [
-     "LANTERN OF THE DISH. ME."
+     "LANTERN OF THIS PLACE. ME."
     ],
     "smells_me": [
      "SMELLS LIKE OLD WOOL. LOVELY."
@@ -3279,7 +3279,7 @@
      "SOMETHING SHINY. I MUST GO."
     ],
     "guard": [
-     "GUARDING THE DISH. BY GLOW."
+     "GUARDING HOME. BY GLOW."
     ],
     "old_fly": [
      "I REMEMBER A PORCH LIGHT. AH."
@@ -3415,7 +3415,7 @@
    "id": 5,
    "voice": "terse",
    "sketch": "mudskipper: races everything",
-   "notes": "MUDGE\nmudskipper: races everything\nElement Splash, style Pounce, power dash. Voice: terse, which wraps his lines as \"LINE\".\n\nWHAT HE LOOKS LIKE\nA round sky-blue fish standing up on two flippers, a little curl of fin on top\nof his head like a cowlick, big fins flung out wide like a goalkeeper, and a\ncream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,\ndeeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a\ntiny blue fish already mid-wiggle.\n\nWHO HE IS\nA sporty, competitive, can't-sit-still racer. Everything is a race: the\nmarble, the dish, the dust, his own shadow, the moon. He is always warming up,\nalways on his last lap, always winning (by his count). Big appetite, big\nenergy, no patience. Mud is the best track there is.\n\nHOW HE TALKS\nTerse voice keeps only his first sentence, so every line is one sentence, the\npunch first, joined by commas. Short words. Coach energy.\n\nLOVES\nRacing, winning, mud, laps, snacks as fuel, a slippy track.\n\nFEARS\nSitting still, losing, being held back.\n\nCATCHPHRASES\nRACE YOU! LAST LAP! GO GO GO!",
+   "notes": "MUDGE\nmudskipper: races everything\nElement Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round sky-blue fish standing up on two flippers, a little curl of fin on top\nof his head like a cowlick, big fins flung out wide like a goalkeeper, and a\ncream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,\ndeeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a\ntiny blue fish already mid-wiggle.\n\nWHO HE IS\nA sporty, competitive, can't-sit-still racer. Everything is a race: the\nmarble, his home, the dust, his own shadow, the moon. He is always warming up,\nalways on his last lap, always winning (by his count). Big appetite, big\nenergy, no patience. Mud is the best track there is.\n\nHOW HE TALKS\nOne breath per line: the punch first, joined by commas. Short words. Coach\nenergy. (His own lines are said whole; the terse cut is only for shared lines.)\n\nLOVES\nRacing, winning, mud, laps, snacks as fuel, a slippy track.\n\nFEARS\nSitting still, losing, being held back.\n\nCATCHPHRASES\nRACE YOU! LAST LAP! GO GO GO!",
    "lines": {
     "peckish": [
      "RACE YOU TO THE SNACK!"
@@ -3486,7 +3486,7 @@
      "I SEE A PHONE, IT'S SLOW!"
     ],
     "see_nothing": [
-     "I SEE AN EMPTY DISH, NOT FAIR!"
+     "I SEE NOTHING HERE, NOT FAIR!"
     ],
     "see_damp": [
      "I SEE MUD, FAST MUD!"
@@ -3660,7 +3660,7 @@
      "HELLO, ECHO, TOO SLOW!"
     ],
     "king": [
-     "CHAMPION OF THE DISH!"
+     "CHAMPION OF THIS PLACE!"
     ],
     "smells_me": [
      "SMELLS LIKE MUD, PERFECT!"
@@ -3696,7 +3696,7 @@
      "SOMETHING SHINY, RACE YOU!"
     ],
     "guard": [
-     "DISH GUARD, ON DUTY!"
+     "HOME GUARD, ON DUTY!"
     ],
     "old_fly": [
      "REMEMBER MY FIRST RACE, WON!"
@@ -3832,7 +3832,7 @@
    "id": 6,
    "voice": "hoarder",
    "sketch": "firefly beetle: crackles",
-   "notes": "FIZZ\nfirefly beetle: crackles\nElement Spark, style Pounce, power zap. Voice: hoarder, which wraps his lines as \"LINE. MINE.\", \"PSST. LINE. TELL NO ONE.\", \"LINE. NOT SHARING.\".\n\nWHAT HE LOOKS LIKE\nA glossy, bright golden-yellow beetle with a big shiny shell, clear veined\nwings spread wide, little brown legs and two antennae tipped with bulbs that\nspark. A small smug smile. Happy, he squeals with his eyes shut. Annoyed, his\neyes go wide and round over a sulky frown. Foreseeing, his eyes go lime green.\nThe egg holds a tiny gold beetle, already gleaming.\n\nWHO HE IS\nA crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the\ndish and wants to keep it that way. He hoards: sparks, crumbs, anything that\nglints. Static clings to him and he zaps things by accident. Not mean, just\npossessive, and suspicious that everyone is after his gold.\n\nHOW HE TALKS\nQuick and sharp. BZZT. Dibs. Shiny. Gold. Stash. He whispers about his stash.\n\nLOVES\nShiny things, his own shell, sparks, gold, the moon (the biggest shiny),\nglowing at night.\n\nFEARS\nWater (sparks and water: bad), thieves, getting scuffed, dull things.\n\nCATCHPHRASES\nBZZT. DIBS. SHINY. MY STASH.",
+   "notes": "FIZZ\nfirefly beetle: crackles\nElement Spark, style Pounce, power zap. Voice: hoarder. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA glossy, bright golden-yellow beetle with a big shiny shell, clear veined\nwings spread wide, little brown legs and two antennae tipped with bulbs that\nspark. A small smug smile. Happy, he squeals with his eyes shut. Annoyed, his\neyes go wide and round over a sulky frown. Foreseeing, his eyes go lime green.\nThe egg holds a tiny gold beetle, already gleaming.\n\nWHO HE IS\nA crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the\nplace and wants to keep it that way. He hoards: sparks, crumbs, anything that\nglints. Static clings to him and he zaps things by accident. Not mean, just\npossessive, and suspicious that everyone is after his gold.\n\nHOW HE TALKS\nQuick and sharp. BZZT. Dibs. Shiny. Gold. Stash. He whispers about his stash.\n\nLOVES\nShiny things, his own shell, sparks, gold, the moon (the biggest shiny),\nglowing at night.\n\nFEARS\nWater (sparks and water: bad), thieves, getting scuffed, dull things.\n\nCATCHPHRASES\nBZZT. DIBS. SHINY. MY STASH.",
    "lines": {
     "peckish": [
      "BZZT. SNACK. NOW. GOLD ONES."
@@ -4076,7 +4076,7 @@
      "BZZT. BZZT? NO ECHO. BZZT."
     ],
     "king": [
-     "GOLDEN KING OF THE DISH."
+     "GOLDEN KING OF THIS PLACE."
     ],
     "smells_me": [
      "SMELLS LIKE A STORM. ME."
@@ -4112,7 +4112,7 @@
      "SHINY THING! DIBS! OH. ME."
     ],
     "guard": [
-     "GUARDING MY STASH. AND DISH."
+     "GUARDING MY STASH. AND HOME."
     ],
     "old_fly": [
      "I REMEMBER A COIN. I MISS IT."
@@ -4248,7 +4248,7 @@
    "id": 7,
    "voice": "ominous",
    "sketch": "marsh owl: silent wings",
-   "notes": "HUSHWING\nmarsh owl: silent wings\nElement Sprout, style Trick, power hush. Voice: ominous, which wraps his lines as \"LINE... SOON.\", \"HEED: LINE\", \"LINE. IT IS WRITTEN.\".\n\nWHAT HE LOOKS LIKE\nA round, snow-white owl, all fluffy chest feathers, with grey-brown wings and\ntwo stern grey ear tufts like eyebrows. Big orange eyes and a sharp little\norange beak, orange talons peeking out underneath. His resting face is a\nstare. Happy, he closes his eyes serenely and blushes pink. Annoyed, he glares\nso hard the tufts tilt in. Foreseeing, his eyes go pale ice blue. The egg holds\na tiny grey owlet with huge blue eyes.\n\nWHO HE IS\nThe quiet one. Solemn, watchful, a librarian of the marsh who hushes everyone\nand sees everything at night. He speaks rarely and gravely, even about\ncrumbs, and everything he says sounds like a warning. He is timid underneath\nand secretly soft: that blush gives him away. Daytime is loud and too bright.\n\nHOW HE TALKS\nShort, grave, quiet. Shh. Heed. Noted. Silence, the marsh, the dark, watching.\nNever shouts. A hoot is a big event.\n\nLOVES\nSilence, night, the marsh, mist, a good perch, preening, warm hands (he will\nallow it).\n\nFEARS\nNoise, daylight, being startled, crunchy food (too loud).\n\nCATCHPHRASES\nSHH. NOTED. I SAW. HOO.",
+   "notes": "HUSHWING\nmarsh owl: silent wings\nElement Sprout, style Trick, power hush. Voice: ominous. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round, snow-white owl, all fluffy chest feathers, with grey-brown wings and\ntwo stern grey ear tufts like eyebrows. Big orange eyes and a sharp little\norange beak, orange talons peeking out underneath. His resting face is a\nstare. Happy, he closes his eyes serenely and blushes pink. Annoyed, he glares\nso hard the tufts tilt in. Foreseeing, his eyes go pale ice blue. The egg holds\na tiny grey owlet with huge blue eyes.\n\nWHO HE IS\nThe quiet one. Solemn, watchful, a librarian of the marsh who hushes everyone\nand sees everything at night. He speaks rarely and gravely, even about\ncrumbs, and everything he says sounds like a warning. He is timid underneath\nand secretly soft: that blush gives him away. Daytime is loud and too bright.\n\nHOW HE TALKS\nShort, grave, quiet. Shh. Heed. Noted. Silence, the marsh, the dark, watching.\nNever shouts. A hoot is a big event.\n\nLOVES\nSilence, night, the marsh, mist, a good perch, preening, warm hands (he will\nallow it).\n\nFEARS\nNoise, daylight, being startled, crunchy food (too loud).\n\nCATCHPHRASES\nSHH. NOTED. I SAW. HOO.",
    "lines": {
     "peckish": [
      "HUNGER STIRS. QUIETLY."
@@ -4319,7 +4319,7 @@
      "I SEE... A LOUD LIGHT."
     ],
     "see_nothing": [
-     "I SEE... AN EMPTY DISH. GRAVE."
+     "I SEE... NOTHING HERE. GRAVE."
     ],
     "see_damp": [
      "I SEE... MIST ON THE MARSH."
@@ -4493,7 +4493,7 @@
      "HOO. HOO? THE ECHO IS SHY."
     ],
     "king": [
-     "WARDEN OF THE QUIET DISH."
+     "WARDEN OF THE QUIET HOME."
     ],
     "smells_me": [
      "SMELLS LIKE MARSH. LIKE HOME."
@@ -4529,7 +4529,7 @@
      "SOMETHING SHINY. NOTED."
     ],
     "guard": [
-     "I GUARD THE DISH. UNBLINKING."
+     "I GUARD MY HOME. UNBLINKING."
     ],
     "old_fly": [
      "I REMEMBER A MOONLESS NIGHT."
@@ -4665,7 +4665,7 @@
    "id": 8,
    "voice": "hoarder",
    "sketch": "raccoon: a scrap-pile gadget",
-   "notes": "TINKER\nraccoon: a scrap-pile gadget\nElement Spark, style Guard, power gadget. Voice: hoarder, which wraps his lines as \"LINE. MINE.\", \"PSST. LINE. TELL NO ONE.\", \"LINE. NOT SHARING.\".\n\nWHAT HE LOOKS LIKE\nA grey raccoon standing on his back legs in an orange-striped aviator cap with\nteal goggles pushed up on top, brown work overalls with braces, a black bandit\nmask, a cream tummy and a big ringed tail. A cheeky half-grin. Happy, he\nsquints and sticks his tongue out. Annoyed, a sideways narrow-eyed look.\nForeseeing, his eyes glow orange. The egg holds a little raccoon already\nwearing his goggles.\n\nWHO HE IS\nA scrappy night-shift inventor. His pockets are full of bolts, wire and\nthings he found in a bin, and every one of them is going to be part of\nsomething brilliant. He can fix anything (with tape) and take apart anything\n(including things he should not). A collector and a bit of a bandit, but a\nfriendly one. His workshop opens when the house goes dark.\n\nHOW HE TALKS\nPractical, cheeky, busy. Bolts, wrenches, parts, blueprints, the bin. \"I can\nfix that.\" \"Nice parts.\" Mutters while working.\n\nLOVES\nSpare parts, bins, his goggles, tools, inventing, oil, a good box to nap in.\n\nFEARS\nRust, rain on his gadgets, someone tidying his pile, a missing screw.\n\nCATCHPHRASES\nI CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.",
+   "notes": "TINKER\nraccoon: a scrap-pile gadget\nElement Spark, style Guard, power gadget. Voice: hoarder. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA grey raccoon standing on his back legs in an orange-striped aviator cap with\nteal goggles pushed up on top, brown work overalls with braces, a black bandit\nmask, a cream tummy and a big ringed tail. A cheeky half-grin. Happy, he\nsquints and sticks his tongue out. Annoyed, a sideways narrow-eyed look.\nForeseeing, his eyes glow orange. The egg holds a little raccoon already\nwearing his goggles.\n\nWHO HE IS\nA scrappy night-shift inventor. His pockets are full of bolts, wire and\nthings he found in a bin, and every one of them is going to be part of\nsomething brilliant. He can fix anything (with tape) and take apart anything\n(including things he should not). A collector and a bit of a bandit, but a\nfriendly one. His workshop opens when the house goes dark.\n\nHOW HE TALKS\nPractical, cheeky, busy. Bolts, wrenches, parts, blueprints, the bin. \"I can\nfix that.\" \"Nice parts.\" Mutters while working.\n\nLOVES\nSpare parts, bins, his goggles, tools, inventing, oil, a good box to nap in.\n\nFEARS\nRust, rain on his gadgets, someone tidying his pile, a missing screw.\n\nCATCHPHRASES\nI CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.",
    "lines": {
     "peckish": [
      "SNACK? I'LL BUILD A SNACK."
@@ -4910,7 +4910,7 @@
      "HELLO? NO ECHO. I'LL BUILD ONE"
     ],
     "king": [
-     "CHIEF ENGINEER OF THE DISH."
+     "CHIEF ENGINEER OF MY HOME."
     ],
     "smells_me": [
      "SMELLS LIKE OIL. PERFECT."
@@ -5082,7 +5082,7 @@
    "id": 9,
    "voice": "ominous",
    "sketch": "octopus: the abyss rings back",
-   "notes": "OCTOPUS\nabyssal duelist: the last act has already begun\nElement Splash, style Trick, power blackbell. Voice: ominous, which wraps his lines as \"LINE... SOON.\", \"HEED: LINE\", \"LINE. IT IS WRITTEN.\".\n\nWHAT HE LOOKS LIKE\nA squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,\nand eight thick curled tentacles. A cracked bell hangs at his throat. He is\nsmall enough for the dish and certain enough for the whole abyss.\n\nWHO HE IS\nA theatrical tide oracle and an unapologetic duelist. Every small event is an\nomen; every dinner is a wake. After Paul attended an Edgar Allan Poe\ndinner-theatre for his birthday, the octopus decided every guest had already\nbeen memorialized. He treats each duel as a tragedy whose ending he has read,\nand enjoys watching a rival discover who the prophecy was about.\n\nHOW HE TALKS\nSolemn, ornate prophecies about tides, ink, ravens, shells and defeat. He makes\ntiny inconveniences sound historic, then undercuts them with a dry insult. He\nnever reassures a rival. The gloom is theatrical; the threat is sincere.\n\nLOVES\nMidnight, old stories, cracked bells, shells, dramatic pauses and being right\nabout an opponent's imminent loss.\n\nFEARS\nBright dry places, being forgotten, and a rival who refuses to be intimidated.\n\nCATCHPHRASES\nTHE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.",
+   "notes": "OCTOPUS\nabyssal duelist: the last act has already begun\nElement Splash, style Trick, power blackbell. Voice: ominous. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,\nand eight thick curled tentacles. A cracked bell hangs at his throat. He is\nsmall enough for his home and certain enough for the whole abyss.\n\nWHO HE IS\nA theatrical tide oracle and an unapologetic duelist. Every small event is an\nomen; every dinner is a wake. After Paul attended an Edgar Allan Poe\ndinner-theatre for his birthday, the octopus decided every guest had already\nbeen memorialized. He treats each duel as a tragedy whose ending he has read,\nand enjoys watching a rival discover who the prophecy was about.\n\nHOW HE TALKS\nSolemn, ornate prophecies about tides, ink, ravens, shells and defeat. He makes\ntiny inconveniences sound historic, then undercuts them with a dry insult. He\nnever reassures a rival. The gloom is theatrical; the threat is sincere.\n\nLOVES\nMidnight, old stories, cracked bells, shells, dramatic pauses and being right\nabout an opponent's imminent loss.\n\nFEARS\nBright dry places, being forgotten, and a rival who refuses to be intimidated.\n\nCATCHPHRASES\nTHE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.",
    "lines": {
     "peckish": [
      "THE HUNGER HAS A VERDICT."
@@ -5141,7 +5141,7 @@
      "THE GLOWING SLAB FORETELLS."
     ],
     "see_nothing": [
-     "AN EMPTY DISH. A FAMILIAR END."
+     "NOTHING HERE. A FAMILIAR END."
     ],
     "see_damp": [
      "INK WEATHER. EXCELLENT."

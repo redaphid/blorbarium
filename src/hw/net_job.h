@@ -37,8 +37,10 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <optional>
 
 #include "hw/tls_roots.h"
+#include "wifiota/net_clock.h"
 
 namespace hw {
 
@@ -93,6 +95,7 @@ class NetJob {
     openMs_ = 0;
     stackFree_ = 0;
     head_ = tail_ = 0;
+    clockAt_ = 0;
     state_ = State::Opening;
     running_ = true;
     startedAt_ = millis();
@@ -123,6 +126,22 @@ class NetJob {
   // Internal heap and its largest block just after the handshake and headers.
   uint32_t heapAfterOpen() const { return heapAfterOpen_; }
   uint32_t bigAfterOpen() const { return bigAfterOpen_; }
+
+  // The wall time the last HTTPS reply carried (its Date, and the site's zone
+  // when it sent X-Blorb-Tz), whatever its status: a 202 is as sure of the
+  // time as a 200. Plain http is never believed (anything on the way could
+  // say anything). Taken once, after the task has ended, aged by the time
+  // since the headers came.
+  struct Clock {
+    uint32_t unixSeconds;
+    std::optional<int16_t> tzMinutes;
+  };
+  std::optional<Clock> takeClock(uint32_t nowMs) {
+    if (busy() || !clockAt_) return std::nullopt;
+    const Clock c{clockUnix_ + (nowMs - clockAt_) / 1000, hasTz_ ? std::optional<int16_t>(tz_) : std::nullopt};
+    clockAt_ = 0;
+    return c;
+  }
 
   // The loop: up to `cap` streamed bytes that have arrived, without waiting.
   size_t take(uint8_t* out, size_t cap) {
@@ -208,10 +227,14 @@ class NetJob {
     const uint32_t t0 = millis();
     if (!http.begin(*client, m_->url)) return finish(fail("bad url"));
     if (bodyLen_) http.addHeader("content-type", "application/json");
+    const bool secure = std::strncmp(m_->url, "https://", 8) == 0;
+    static const char* kClockHeaders[] = {"Date", wifiota::kTzHeader};
+    if (secure) http.collectHeaders(kClockHeaders, 2);   // two short Strings
     const int code = bodyLen_ ? http.POST(reinterpret_cast<uint8_t*>(const_cast<char*>(body_)), bodyLen_) : http.GET();
     openMs_ = millis() - t0;
     heapAfterOpen_ = ESP.getFreeHeap();
     bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (secure && code > 0) heardClock(http);
     if (cancel_) return finish(fail("cancelled"), http);
     if (code != HTTP_CODE_OK)
       return finish(code < 0 ? fail("%s", HTTPClient::errorToString(code).c_str()) : fail("http %d", code), http);
@@ -262,6 +285,16 @@ class NetJob {
     finish(State::Done, http);
   }
 
+  void heardClock(HTTPClient& http) {
+    const std::optional<uint32_t> t = wifiota::parseHttpDate(http.header("Date").c_str());
+    if (!t) return;
+    const std::optional<int16_t> tz = wifiota::parseTzMinutes(http.header(wifiota::kTzHeader).c_str());
+    clockUnix_ = *t;
+    hasTz_ = tz.has_value();
+    tz_ = tz.value_or(0);
+    clockAt_ = std::max<uint32_t>(millis(), 1);   // 0 means none
+  }
+
   void finish(State s) { state_ = s; }
   void finish(State s, HTTPClient& http) {
     http.end();
@@ -291,6 +324,10 @@ class NetJob {
   volatile uint32_t openMs_ = 0, stackFree_ = 0, startedAt_ = 0;
   uint32_t stackBytes_ = 0;
   volatile uint32_t heapAfterOpen_ = 0, bigAfterOpen_ = 0;
+  // Written by the task before it ends, read by the loop only after (takeClock).
+  volatile uint32_t clockUnix_ = 0, clockAt_ = 0;
+  volatile int16_t tz_ = 0;
+  volatile bool hasTz_ = false;
 };
 
 }  // namespace hw

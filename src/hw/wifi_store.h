@@ -49,15 +49,15 @@ class WifiStore {
     return ok;
   }
 
-  // Automatic checks and installs: on unless `DEBUG wifi off` turned them off.
-  // Provisioning and `DEBUG ota check` work either way.
-  static bool autoOn() {
+  // Automatic checks are always on (the owner, 2026-10-27: "Automatic updates
+  // should never be switched off. It will be my only access to the pets when
+  // I'm gone."). Older builds kept a `DEBUG wifi off` switch as key "off": it
+  // is erased at boot and never read.
+  static void forgetOffSwitch() {
     nvs_handle_t n;
-    if (nvs_open(kNamespace, NVS_READONLY, &n) != ESP_OK) return true;
-    uint8_t off = 0;
-    nvs_get_u8(n, "off", &off);
+    if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return;
+    if (nvs_erase_key(n, "off") == ESP_OK) nvs_commit(n);
     nvs_close(n);
-    return !off;
   }
 
   // The manifest URL an update over Wi-Fi came from, when it was not the
@@ -80,16 +80,6 @@ class WifiStore {
     const bool ok = nvs_get_str(n, "src", out, &len) == ESP_OK;
     nvs_close(n);
     if (!ok) out[0] = 0;
-    return ok;
-  }
-
-  static bool setAuto(bool on) {
-    if (on == autoOn()) return true;   // and a badge never given a network gets no namespace for it
-    nvs_handle_t n;
-    if (nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
-    const esp_err_t e = on ? nvs_erase_key(n, "off") : nvs_set_u8(n, "off", 1);
-    const bool ok = (e == ESP_OK || (on && e == ESP_ERR_NVS_NOT_FOUND)) && nvs_commit(n) == ESP_OK;
-    nvs_close(n);
     return ok;
   }
 };

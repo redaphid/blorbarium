@@ -19,10 +19,10 @@ namespace {
 // 2026-10-21 (#36): one recipe for every pet, so starterGenome() is the recipe
 // every board founds from (sleep as pressure, a 15-minute egg).
 constexpr uint32_t kStarterSeed = 15048;
-constexpr uint32_t kStarterHash = 0x35adac41u;
+constexpr uint32_t kStarterHash = 0x7c0029dau;
 // The two life prints moved again with sleep-idle (#20: melatonin at its genes' rate,
 // the sleep cut): were 0xd266da47 / 0x340dc47a on the one recipe alone. Hash unchanged.
-constexpr uint32_t kStarterLifePrint = 0xef89032du, kStarterLifePrintAllFeats = 0xbb13127cu;
+constexpr uint32_t kStarterLifePrint = 0x857229e8u, kStarterLifePrintAllFeats = 0xba73ca59u;
 
 Phenotype lifeOf(const Genome& g, uint32_t feats = 0) {
   Phenotype p{};

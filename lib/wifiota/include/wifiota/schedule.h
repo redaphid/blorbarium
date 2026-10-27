@@ -33,11 +33,11 @@
 namespace wifiota {
 
 struct Facts {
-  bool enabled;        // a network remembered, and the badge's own switch is on
+  bool enabled;        // a network remembered (there is no switch: checks are never turned off)
   uint32_t darkMs;     // how long low power has lasted: 0 while awake
   bool someoneThere;   // a phone connected, or a question or a Bluetooth update on the screen
   bool radioBusy;      // fight mode, a duel, or ESP-NOW open: they need the radio on channel 1
-  bool lowBattery;     // a real battery reading under kLowBatteryMv
+  bool lowBattery;     // a real battery reading under kLowBatteryMv, for under kLowBatteryMostMs (holdForBattery)
 };
 
 enum class Window : uint8_t { None, Check, Forced, Confirm, Provision };
@@ -63,6 +63,15 @@ class Schedule {
   static constexpr uint32_t kServerFirstMs = 15 * kMinute;
   static constexpr uint32_t kServerMaxMs = 6 * 60 * kMinute;
   static constexpr uint16_t kLowBatteryMv = 3550;
+  // The owner (2026-10-27): automatic updates are never switched off; they are
+  // the only way to reach the pets from afar. So nothing holds checks for
+  // good: a restart inside a window backs off kCrashFirstMs doubling to
+  // kCrashMostMs (a few hours, never forever; a crashing new image rolls
+  // back on its own), and a battery that reads low holds them at most
+  // kLowBatteryMostMs at a stretch (a reading stuck low must not end updates).
+  static constexpr uint32_t kCrashFirstMs = 30 * kMinute;
+  static constexpr uint32_t kCrashMostMs = 4 * 60 * kMinute;
+  static constexpr uint32_t kLowBatteryMostMs = 12 * 60 * kMinute;
 
   // Whether a Check window may open now.
   Hold checkHold(const Facts& f, uint32_t now) const {
@@ -108,9 +117,21 @@ class Schedule {
     if (why == Failure::Server) absent_ = 0;   // the network was there
     next_ = now + wait;
   }
-  // The last boot ended inside a window (a crash, a watchdog): the longest wait,
-  // so a fault in Wi-Fi can never become a loop of restarts.
-  void crashed(uint32_t now) { next_ = now + kAbsentMaxMs; }
+  // The last boot ended inside a window (a crash, a watchdog, a brownout), the
+  // `inARow`th time running: kCrashFirstMs doubling to kCrashMostMs, so a fault
+  // in Wi-Fi never becomes a loop of restarts, and never stops the checks.
+  void crashed(uint32_t now, uint32_t inARow = 1) {
+    uint32_t wait = kCrashFirstMs;
+    for (uint32_t i = 1; i < inARow && wait < kCrashMostMs; ++i) wait *= 2;
+    next_ = now + (wait < kCrashMostMs ? wait : kCrashMostMs);
+  }
+  // Whether a low battery reading (`low`) holds a check now: only for the
+  // first kLowBatteryMostMs of an unbroken stretch of low readings.
+  bool holdForBattery(bool low, uint32_t now) {
+    if (!low) return lowSince_.reset(), false;
+    if (!lowSince_) lowSince_ = now;
+    return now - *lowSince_ < kLowBatteryMostMs;
+  }
   // `DEBUG wifi due`: the next check is due now (the schedule runs on the real
   // clock, which DEBUG warp does not move). It still waits to be dark and
   // alone, and the streaks stand: a check that fails again backs off as far
@@ -135,6 +156,7 @@ class Schedule {
 
  private:
   std::optional<uint32_t> next_;   // unset: due at once (after boot, once dark)
+  std::optional<uint32_t> lowSince_;   // when the battery started reading low
   uint8_t absent_ = 0, server_ = 0;
   uint32_t everyMs_ = kCheckEveryMs;
 };

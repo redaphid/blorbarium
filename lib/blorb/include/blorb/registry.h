@@ -103,7 +103,6 @@ struct CareInfo   { CareId id; const char* name; DriveId drive; StimId gesture; 
 struct FeatInfo   { uint8_t bit; const char* name; };
 struct TopicInfo  { TopicId id; const char* name; };
 struct VoiceInfo  { VoiceId id; const char* name; bool firstOnly; };
-struct FrameInfo  { VoiceId voice; const char* prefix; const char* suffix; };
 
 inline constexpr ChemInfo CHEMICALS[] = {
 #define BLORB_CHEM(id, name, rgb, show) {ChemId{id}, #name, rgb, show != 0},
@@ -170,11 +169,6 @@ inline constexpr VoiceInfo VOICES[] = {
 #define BLORB_VOICE(id, name, firstOnly) {VoiceId{id}, #name, firstOnly != 0},
 #include "blorb/defs/voices.def"
 #undef BLORB_VOICE
-};
-inline constexpr FrameInfo FRAMES[] = {
-#define BLORB_FRAME(v, prefix, suffix) {voice::v, prefix, suffix},
-#include "blorb/defs/voices.def"
-#undef BLORB_FRAME
 };
 
 // ---- derived dimensions --------------------------------------------------------

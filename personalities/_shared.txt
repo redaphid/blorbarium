@@ -1,9 +1,8 @@
 Lines EVERY pet can say, one per line name.
 
 A shared line is the fallback: a pet says it only when his own file has no
-line for that name. Now and then (one time in four) his voice seasons it, for
-example mystic turns SNACK? into THE REEDS SAY: SNACK? His own lines are said
-exactly as written.
+line for that name. Nothing wraps a line: no frame, no tag. His own lines are
+said exactly as written.
 
 A line name is followed by its situation (when he might say it). The meaning of
 every situation: .claude/skills/pet-personality/references/situations.md
@@ -24,7 +23,7 @@ peckish         hungry
   SNACK? SNACK. THE GOOD BITS!
 
 starving        starving
-  I WOULD EAT THE DISH
+  I WOULD EAT THE WHOLE PLACE
 
 hoarding        hoarding
   THAT ONE IS FOR LATER.
@@ -63,7 +62,7 @@ inherited       heirloom
   GEN # SAYS HI. FROM IN HERE.
 
 counted         bored
-  I HAVE COUNTED THE DISH: ONE
+  I HAVE COUNTED EVERYTHING: ONE
 
 put_me_down     held
   PUT ME DOWN. NO, WAIT.
@@ -270,7 +269,7 @@ no_echo         always
   HELLO. HELLO. ECHO? NO ECHO.
 
 king            always
-  KING OF THE DISH. ONLY ONE.
+  KING OF THIS PLACE. ONLY ONE.
 
 smells_me       always
   IT SMELLS LIKE ME. GOOD.
@@ -306,7 +305,7 @@ shiny           always
   SOMETHING SHINY. OH. ME.
 
 guard           always
-  GUARDING THE DISH. FROM WHAT?
+  GUARDING HOME. FROM WHAT?
 
 old_fly         always
   I REMEMBER A FLY. GOOD TIMES.
@@ -450,7 +449,7 @@ pebble          juggling
   ONE PEBBLE. TWO PEBBLE.
 
 dream_big       daydreaming
-  WHAT IF... A BIGGER DISH?
+  WHAT IF... A BIGGER HOME?
 
 wish_star       stargazing
   THAT STAR IS MINE. AND THAT.

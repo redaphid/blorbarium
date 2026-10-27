@@ -13,8 +13,10 @@
 //   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
-// Crons (wrangler.jsonc triggers): every 10 minutes, the packs a POST queued
-// instead of waiting for; once a day (DIARY_CRON), each pet's diary entry.
+// A POST with wait:false hands its job to the PACKS queue (wrangler.jsonc), whose
+// consumer writes the pack about a minute later. The one cron (wrangler.jsonc
+// triggers, DIARY_CRON, daily) runs any job still queued, each pet's diary
+// entry, and the night's packs.
 import { hexToBytes, rawSheet, genomeHash } from "./genome.js";
 import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
@@ -24,6 +26,7 @@ import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
+import { withZone } from "./zone.js";
 import { storeGenDebug, storeDeviceDebug, recordInstall, purgeOld } from "./debug.js";
 import { newMeter } from "./pipeline.js";
 
@@ -167,20 +170,29 @@ async function postPetLines(request, env) {
   }
 
   const busy = await store.activeJob(env.DB, creature.id);
-  if (busy) return json({ status: busy.status, job: busy.id, retry_after_s: 30 }, 202, { "retry-after": "30" });
+  if (busy) {
+    // Asked again while it waits: queue it again too (a claim runs it once), so
+    // a job no runner has picked up (a lost message, a stopped cron) is not stranded.
+    if (busy.status === "queued") await sendToQueue(env, busy.id);
+    return json({ status: busy.status, job: busy.id, retry_after_s: 30 }, 202, { "retry-after": "30" });
+  }
   if (await store.generationsSince(env.DB, mac, Date.now() - DAY_MS) >= s.dailyCap) {
     return fail(429, "this badge has had its packs for today");
   }
   const job = await store.openJob(env.DB, creature.id, body.egg ? "hatch" : "lines", body.parents ? { parents: body.parents } : null);
-  if (body.wait === false) return json({ status: "queued", job, retry_after_s: 60 }, 202, { "retry-after": "60" });
+  if (body.wait === false) {
+    await sendToQueue(env, job);
+    return json({ status: "queued", job, retry_after_s: 60 }, 202, { "retry-after": "60" });
+  }
   await store.setJob(env.DB, job, { status: "running", attempt: true });
   try {
     const row = await generateFor(env, creature, { s, source: body.egg ? "hatch" : "genes", carried: body.parents });
     await store.setJob(env.DB, job, { status: "done", packId: row.id });
     return packOr(body, packReply(row, creature, { cached: false, created: up.created }));
   } catch (e) {
-    // Left queued, so the cron tries again; the badge keeps its built-in lines meanwhile.
+    // Left queued, so the queue tries again; the badge keeps its built-in lines meanwhile.
     await store.setJob(env.DB, job, { status: "queued", error: String(e.message ?? e) });
+    await sendToQueue(env, job, 300);
     return json({ status: "queued", job, error: "generation failed; it will be retried", retry_after_s: 600 }, 202);
   }
 }
@@ -377,8 +389,8 @@ export async function revisionReason(db, c) {
 // its last three packs. The bible changes only on the life triggers
 // (revisionReason: a new stage, fights or hunger, a week of diary) or an
 // owner's edit (#43). A creature is done for the night once it has a pack
-// newer than tonight's 04:00, so the 10-minute cron finishes whatever one run
-// had no time for.
+// newer than tonight's 04:00, so the PACKS queue finishes whatever the 04:00
+// run had no time for (runQueueBatch, until NIGHT_END_HOUR).
 export const NIGHT_START_HOUR = 4, NIGHT_END_HOUR = 10;   // UTC
 export function nightStart(t = Date.now()) {
   const d = new Date(t);
@@ -426,29 +438,76 @@ export async function runNightly(env, { limit = 12, concurrency = 4, now = Date.
   return done;
 }
 
+// The queue is how a queued job gets written within the minute. It replaced a
+// 10-minute cron, which stopped firing on 2026-10-23 and left a badge's job
+// queued for good. Without the binding (tests, wrangler dev) the daily cron runs it.
+async function sendToQueue(env, job, delaySeconds = 0) {
+  if (!env.PACKS) return;
+  try { await env.PACKS.send({ job }, delaySeconds ? { delaySeconds } : undefined); }
+  catch (e) { console.error(JSON.stringify({ msg: "queue send failed; the badge's next ask or the daily cron will run it", job, error: String(e.message ?? e) })); }
+}
+
+// One job, if this run can claim it: "done" | "queued" (failed; tried again later) | "failed" | null (not ours to run).
+export async function runJob(env, id) {
+  const j = await store.claimJob(env.DB, id);
+  if (!j) return null;
+  try {
+    const input = (j.input_json && JSON.parse(j.input_json)) || {};
+    const row = await generateFor(env, { id: j.creature_id, genome_hex: j.genome_hex, genome_hash: j.genome_hash,
+      stage: j.stage, generation: j.generation, name: j.name, feats: j.feats },
+      { source: j.kind === "lines" ? "genes" : j.kind, carried: input.parents, bible: input.bible, editedBy: input.editedBy });
+    await store.setJob(env.DB, j.job_id, { status: "done", packId: row.id });
+    return "done";
+  } catch (e) {
+    const status = j.attempts >= 3 ? "failed" : "queued";   // attempts already counts this try
+    await store.setJob(env.DB, j.job_id, { status, error: String(e.message ?? e) });
+    console.error(JSON.stringify({ msg: "pack job failed", job: j.job_id, status, error: String(e.message ?? e) }));
+    return status;
+  }
+}
+
 export async function runQueuedJobs(env, limit = 3) {
   const jobs = await store.queuedJobs(env.DB, limit);
-  for (const j of jobs) {
-    await store.setJob(env.DB, j.job_id, { status: "running", attempt: true });
-    try {
-      const input = (j.input_json && JSON.parse(j.input_json)) || {};
-      const row = await generateFor(env, { id: j.creature_id, genome_hex: j.genome_hex, genome_hash: j.genome_hash,
-        stage: j.stage, generation: j.generation, name: j.name, feats: j.feats },
-        { source: j.kind === "lines" ? "genes" : j.kind, carried: input.parents, bible: input.bible, editedBy: input.editedBy });
-      await store.setJob(env.DB, j.job_id, { status: "done", packId: row.id });
-    } catch (e) {
-      await store.setJob(env.DB, j.job_id, { status: j.attempts + 1 >= 3 ? "failed" : "queued", error: String(e.message ?? e) });
+  let ran = 0;
+  for (const j of jobs) if (await runJob(env, j.job_id)) ran++;
+  return ran;
+}
+
+// The night's packs past the 04:00 run's first NIGHTLY_FIRST, NIGHTLY_MORE per
+// queue message, each sending the next while a batch comes back full, until NIGHT_END_HOUR.
+export const NIGHTLY_FIRST = 12, NIGHTLY_MORE = 6;
+async function sendNightly(env) {
+  if (!env.PACKS) return;
+  try { await env.PACKS.send({ nightly: true }); }
+  catch (e) { console.error(JSON.stringify({ msg: "queue send failed; the rest of tonight's packs wait for tomorrow", error: String(e.message ?? e) })); }
+}
+
+// The PACKS consumer: one job (or one nightly batch) per message. A failed
+// generation comes back from the queue a minute later; the job row's count of
+// tries still caps it at 3.
+export async function runQueueBatch(batch, env, now = Date.now()) {
+  for (const msg of batch.messages) {
+    if (msg.body?.nightly) {
+      const hour = new Date(now).getUTCHours();
+      if (hour >= NIGHT_START_HOUR && hour < NIGHT_END_HOUR
+          && (await runNightly(env, { limit: NIGHTLY_MORE, now })).length >= NIGHTLY_MORE) await sendNightly(env);
+      msg.ack();
+      continue;
     }
+    const status = await runJob(env, Number(msg.body?.job));
+    if (status === "queued") msg.retry({ delaySeconds: 60 });
+    else msg.ack();
   }
-  return jobs.length;
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/pet-lines" && request.method === "POST") return await postPetLines(request, env, ctx);
-      if (url.pathname === "/api/pet-lines" && request.method === "GET") return await getPetLines(url, env);
+      // What a badge fetches over Wi-Fi (its line packs, manifest and image) also
+      // tells it its zone, so it knows the local time without a phone (zone.js).
+      if (url.pathname === "/api/pet-lines" && request.method === "POST") return withZone(request, await postPetLines(request, env, ctx));
+      if (url.pathname === "/api/pet-lines" && request.method === "GET") return withZone(request, await getPetLines(url, env));
       if (url.pathname === "/api/pet-lines/ack" && request.method === "POST") return await ackPetLines(request, env);
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
       if (url.pathname === "/api/debug" && request.method === "POST") return await postDebug(request, env);
@@ -471,24 +530,26 @@ export default {
       }
       if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
-      if (url.pathname.startsWith("/fw/")) return await firmware(request, env, decodeURIComponent(url.pathname.slice(4)));
+      if (url.pathname.startsWith("/fw/")) return withZone(request, await firmware(request, env, decodeURIComponent(url.pathname.slice(4))));
       return env.ASSETS.fetch(request);
     } catch (e) {
       console.error(JSON.stringify({ msg: "unhandled", path: url.pathname, error: String(e?.stack ?? e) }));
       return fail(500, "internal error");
     }
   },
+  // The PACKS queue: a consumer run has 15 minutes of wall time; a pack takes about one.
+  async queue(batch, env) {
+    await runQueueBatch(batch, env);
+  },
   // A cron run awaits its work (it has minutes, not the request's waitUntil budget).
+  // The one cron, DIARY_CRON (the 10-minute one is gone: the PACKS queue does its work).
   async scheduled(controller, env) {
-    if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) {
-      await runDiaries(env);
-      await runNightly(env);
-      await purgeOld(env);   // keeps everything unless RETENTION_DAYS is set
-    } else {
-      await runQueuedJobs(env);
-      // The night's packs a 04:00 run had no time for.
-      const hour = new Date(controller.scheduledTime ?? Date.now()).getUTCHours();
-      if (hour >= NIGHT_START_HOUR && hour < NIGHT_END_HOUR) await runNightly(env, { limit: 6 });
-    }
+    if (controller.cron !== (env.DIARY_CRON || DIARY_CRON)) return;
+    await runQueuedJobs(env);   // the backstop: any job whose queue message was lost
+    await runDiaries(env);
+    const done = await runNightly(env, { limit: NIGHTLY_FIRST });
+    // The night's packs one run had no time for: the queue carries on, a batch per message.
+    if (done.length >= NIGHTLY_FIRST) await sendNightly(env);
+    await purgeOld(env);   // keeps everything unless RETENTION_DAYS is set
   },
 };

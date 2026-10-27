@@ -66,10 +66,14 @@ battery reads the same as a charger, and a wrong guess either way is bad
   was read. With no network in range: 15 min, 30, 1 h, 2, 4, 8 h, then every
   8 h. With the network there but the site failing: 15 min doubling to 6 h. A
   week in a car is about 25 scans in all (`Schedule.NoNetworkInRangeBacksOffToHours`).
-- **No reboot loops.** A window marks RTC memory while it is open. A boot
-  that finds the mark (a crash or watchdog inside a window) waits 8 h before
-  the next Check, and after three in a row turns automatic checks off until a
-  power cut. An update over Wi-Fi restarts only dark and with no phone.
+- **No reboot loops, and never off.** A window (not a trial's confirm) marks
+  RTC memory while it is open. A boot that finds the mark (a crash, watchdog
+  or brownout inside a window) waits 30 min before the next Check, doubling
+  with each in a row to 4 h at most. Nothing turns checks off: not crashes,
+  not a setting (there is no `DEBUG wifi off`), not a battery that reads low
+  (it holds checks for 12 h at most). The owner: "Automatic updates should
+  never be switched off. It will be my only access to the pets when I'm
+  gone." An update over Wi-Fi restarts only dark and with no phone.
 - **Nothing waits on the loop.** The scan runs on the Wi-Fi driver's task and
   is polled; the join is polled; the GET (DNS, connect, TLS, headers, body)
   runs on its own task (`hw::NetJob`, core 1, priority 1: never above the
@@ -186,6 +190,21 @@ minheap=)`.
    check: it rolls back, and never auto-installs that version again (publish
    a newer patch version instead).
 
+## The time, without a phone
+
+Every HTTPS reply a window gets (the manifest, the image, a line pack, a 202
+included) carries a `Date`, and the site adds `X-Blorb-Tz`: the offset in
+minutes east of UTC of the zone Cloudflare places the request in
+(`request.cf.timezone`, web/src/zone.js). The badge hands both to
+`Dish::netTime`, which reads them as a phone's TIME is read: an unlived gap
+is lived, the pet hours snap to the local day, and his wall-clock lines
+(o'clock, morning, Monday) can speak. A zone a phone gave this boot outranks
+the site's guess; no `X-Blorb-Tz` (an older Worker) still sets the wall, just
+not the hour. Plain http (a cable's test URL) is never believed. It is not a
+phone: no "returns" welcome, and he still misses the phone after half a day
+without one. Offline nothing changes. The log line is
+`[wifi] clock: <unix> from the server (zone ...)`.
+
 ## Home orientation survives updates
 
 Three badges (USB serials 5C94094497, 5C94094999, 5C94095003) sit in cases
@@ -230,7 +249,7 @@ Every line starts `[wifi] `; every window, phase and Check-hold change is one li
 | `DEBUG wifi` | Window, phase, networks, auto, hold (why no Check), next check, backoff streaks, vbat, station, Improv state, consent, trial, OTA owner, windows and scans since boot, last outcome, heap |
 | `DEBUG wifi set <ssid> [password]` | Remember a network (quote an SSID with spaces) |
 | `DEBUG wifi forget [ssid]` | Forget one, or all |
-| `DEBUG wifi on` / `off` | This badge's automatic checks (NVS). `off`: it never brings Wi-Fi up by itself |
+| `DEBUG wifi due` | The next automatic check is due now (still only dark and alone) |
 | `DEBUG ota check [url]` | A check now, whoever is there; the url (http or https) for a test manifest |
 | `DEBUG home [up\|down]` | Which way up is home on this badge (NVS) |
 
@@ -258,7 +277,7 @@ a test release signed with the owner's key (docs/ota.md "The key"). Flash this b
    feed, hang, side hold, knock, aim, duels (Spar and Scrap), the web app
    connected and disconnected, `tools/ble_ota.py status`, and stretches left
    alone dark. Expect zero visible difference: no prompt, no error, no stutter.
-   Measure against the same badge with `DEBUG wifi off` for the same script:
+   Measure against the same badge with no network remembered for the same script:
    `DEBUG fps` (fps, worst_ms, same), `DEBUG latency` (p50/p95 per control),
    `DEBUG power stats` (time light-sleeping), and the battery drop over the
    same hours (`DEBUG wifi` vbat at start and end). Expect differences within

@@ -58,8 +58,8 @@ bool datedHeirloom(const Observed& o, bool fearOnly, uint16_t& num) {
 
 Rng seededFor(uint32_t life, uint32_t tick, uint64_t salt = 0) { return Rng::seeded(((uint64_t(life) << 32) | tick) ^ salt); }
 
-// The owner's local clock, only once a phone's TIME has given it this boot:
-// a wall-clock line never guesses.
+// The owner's local clock, only once a phone's TIME (or a Wi-Fi window's
+// clock, Dish::netTime) has given it this boot: a wall-clock line never guesses.
 constexpr uint32_t kSecondsPerDay = 86400;
 std::optional<uint32_t> hourNow(const Observed& o) {
   if (!o.phone.localNow) return std::nullopt;
@@ -134,6 +134,7 @@ bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, loc
 bool drowsy(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::sleepiness) >= kHigh; }
 bool dreaming(const Observed& o, uint16_t&) { return o.c.body().asleep && o.c.body().dreaming; }
 bool dozing(const Observed& o, uint16_t&) { return o.c.body().asleep; }
+bool grown(const Observed&, uint16_t&) { return false; }   // said by the Dish as he grows, never chosen
 bool young(const Observed& o, uint16_t&) { return o.c.stats().ageTicks < PetClock::kDayTicks; }   // his first day: when the teaching lines run
 bool foreseeing(const Observed& o, uint16_t&) { return doing(o, action::foresee); }
 bool sees_pellet(const Observed& o, uint16_t&) { return doing(o, action::foresee) && anyPellet(o); }
@@ -143,10 +144,10 @@ bool sees_famine(const Observed& o, uint16_t&) {
 }
 bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_near) >= kHalf; }
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
-// No battery: the phone is his only clock, so after half a day of play without
-// one he asks for it, rarely, in his own voice rather than a nagging banner.
+// After half a day of play without a phone (a Wi-Fi window's clock is no
+// visit: Dish::phoneAwayTicks) he asks for it, rarely, in his own voice rather than a nagging banner.
 bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phone.awayTicks >= Thinker::kMissPhoneTicks; }
-// What a phone adds. Each holds only once the phone has given it.
+// What a phone adds (the wall clock, a Wi-Fi window too). Each holds only once given.
 bool wall_hour(const Observed& o, uint16_t& num) {
   const std::optional<uint32_t> h = hourNow(o);
   if (!h) return false;
@@ -226,18 +227,8 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   const VoiceInfo* v = nullptr;
   if (!mine)
     for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
-  // A shared line wears a frame now and then, never every time.
-  const FrameInfo* f = nullptr;
-  if (v && !own && pick % kFrameOneIn == 0) {
-    uint8_t frames = 0;
-    for (const FrameInfo& row : FRAMES) frames += row.voice == voice;
-    uint8_t want = uint8_t(pick / kFrameOneIn % frames);
-    for (const FrameInfo& row : FRAMES)
-      if (row.voice == voice && want-- == 0) { f = &row; break; }
-  }
   size_t n = 0;
   auto put = [&](char c) { if (n + 1 < kThoughtLineCap) out[n++] = c; };
-  if (f) for (const char* s = f->prefix; *s; ++s) put(*s);
   const size_t body = n;
   for (const char* s = text; *s; ++s) {
       if (*s == kNameMark || *s == kTaughtMark) {
@@ -259,13 +250,6 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
         n = i + 1;
         break;
       }
-  // A suffix's own leading stop gives way to the line's ("PELLET!" + ". MINE." -> "PELLET! MINE.").
-  if (f) {
-    const char* s = f->suffix;
-    if (n > body && (out[n - 1] == '.' || out[n - 1] == '!' || out[n - 1] == '?'))
-      while (*s == '.' || *s == ',') ++s;
-    for (; *s; ++s) put(*s);
-  }
   out[n] = 0;
   return n;
 }
