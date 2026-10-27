@@ -215,7 +215,7 @@
       row("Gesture", button("Hang", "HANG 2500"), button("Wobbly hang", "HANG 3000 1"), button("Cradle", "CRADLE"),
         aim, button("Lean", () => `LEAN ${aim.value}`)),
       row("Radio", net, button("Faults", () => `NET ${net.value.trim()}`.trim()), button("Clear", "NET clear")),
-      row("Reboot", button("Reboot", "REBOOT", { confirm: "Restart the badge (it saves first)?" }),
+      row("Reboot", button("Reboot", "REBOOT", { confirm: "Restart the Blorb (it saves first)?" }),
         button("Reboot quiet", "REBOOT quiet", { confirm: "Restart with the radio dark until NET blackout 0?" })),
       row("Wipe", wipe, button("Wipe the pet", () => `WIPE ${wipe.value}`.trim(),
         { className: "danger", confirm: "Erase this pet and its whole lineage, and restart as a fresh board?" })),

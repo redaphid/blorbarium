@@ -204,7 +204,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <section id="updateBox" hidden>
     <h2>Update</h2>
     <p class="hint" id="updateFw"></p>
-    <ol class="steps" id="updateSteps" hidden><li>Get ready</li><li>Turn the badge</li><li>Send</li><li>Restart</li><li>Check</li></ol>
+    <ol class="steps" id="updateSteps" hidden><li>Get ready</li><li>Turn the Blorb</li><li>Send</li><li>Restart</li><li>Check</li></ol>
     <p class="update-text" id="updateText" role="status" aria-live="polite">Checking for updates…</p>
     <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
     <div class="actions">
@@ -366,7 +366,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
       <h2>His family</h2>
       <p class="hint" id="family"></p>
-      <p class="hint">His diary has its own page, no badge needed: <a id="petLink" href="./">open it</a>.</p>
+      <p class="hint">His diary has its own page, no Blorb needed: <a id="petLink" href="./">open it</a>.</p>
     </div>
     <script>
     (() => {
@@ -911,7 +911,7 @@ async function refreshHello() {
   $("name").textContent = h.name || "grungo";
   $("nameInput").placeholder = h.name || "grungo";
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
-  $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
+  $("fw").textContent = `${h.fw || "?"} on ${transport.name || "Blorb"}`;
   $("updateFw").textContent = `${transport.name || "This Blorb"} runs version ${h.fw || "?"}.`;
   return h;
 }
@@ -1009,7 +1009,7 @@ function pageTokens() {
 const UPDATE_STEP = {
   checking: "Getting the update ready…",
   begin: "Asking the Blorb…",
-  confirm: "Turn the badge around to say yes (or press its button).",
+  confirm: "Turn the Blorb around to say yes (or press its button).",
   sending: "Sending the update…",
   resuming: "Moved out of reach, keep the phone close.",
   finishing: "Restarting the Blorb…",
