@@ -430,8 +430,10 @@ BigString lifeStatsJson(const Dish& dish, const StatsIdentity& id) {
     j.life(t.ancestors[i].life);
     j.s += '}';
   }
-  j.s += ',';
-  analyticsJson(st.analytics, j.s);
+  if (id.withAnalytics) {
+    j.s += ',';
+    analyticsJson(st.analytics, j.s);
+  }
   j.s += '}';
   return j.s;
 }

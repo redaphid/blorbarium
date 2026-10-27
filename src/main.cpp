@@ -43,6 +43,7 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/home_store.h"
 #include <mbedtls/sha256.h>
 #include <nvs.h>
+#include "blorb/life_tally.h"
 #include "blorb/pack_lines.h"
 #include "hw/net_job.h"
 #include "ota/held_storage.h"
@@ -1975,7 +1976,7 @@ namespace petlines {
 constexpr size_t kEntries = 1024;
 struct Mem {
   char text[hw::NetJob::kTextMax + 1];
-  char body[2 * blorb::kMaxGenomeBytes + 256];
+  char body[hw::NetJob::kPostMax];   // the POST: his genome as hex and his life stats, no more than NetJob sends
   blorb::PackLines::Entry entries[kEntries];
   blorb::PackLines pack;
   uint32_t forGenome = 0;   // Genome::hash() of the pet the active pack was checked against
@@ -2033,9 +2034,27 @@ static const char* petLinesBody() {
   int n = std::snprintf(b, 64, "{\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"genome\":\"", mac[0], mac[1], mac[2], mac[3], mac[4],
                         mac[5]);
   for (uint8_t x : c->genome().bytes()) n += std::snprintf(b + n, 3, "%02x", x);
-  std::snprintf(b + n, sizeof petlines::mem->body - size_t(n),
-                "\",\"stage\":%u,\"generation\":%u,\"fw\":\"%s\",\"wait\":false,\"format\":\"pack\"}",
-                unsigned(c->stage()), unsigned(c->generation()), blorb::kFirmwareVersion);
+  constexpr size_t kCap = sizeof petlines::mem->body;
+  n += std::snprintf(b + n, kCap - size_t(n),
+                     "\",\"stage\":%u,\"generation\":%u,\"fw\":\"%s\",\"wait\":false,\"format\":\"pack\"",
+                     unsigned(c->stage()), unsigned(c->generation()), blorb::kFirmwareVersion);
+  // His life stats ride along (the STATS json document, less the analytics), for
+  // the site's nightly diary (#38/#39). Built in PSRAM (BigString); left out when
+  // the pet is sealed on the flash, or when they would not fit beside his genome.
+  if (!dish->sealed()) {
+    blorb::StatsIdentity lifeOnly;
+    lifeOnly.withAnalytics = false;
+    const blorb::BigString life = blorb::lifeStatsJson(*dish, lifeOnly);
+    constexpr size_t kFrame = sizeof ",\"stats_version\":255,\"stats\":}";
+    if (size_t(n) + kFrame + life.size() < kCap) {
+      n += std::snprintf(b + n, kCap - size_t(n), ",\"stats_version\":%u,\"stats\":%s",
+                         unsigned(blorb::Stats::kVersion), life.c_str());
+    } else {
+      Serial.printf("[lines] life stats left out: %u bytes beside a %u-byte genome\n", unsigned(life.size()),
+                    unsigned(c->genome().bytes().size()));
+    }
+  }
+  std::snprintf(b + n, kCap - size_t(n), "}");
   return b;
 }
 

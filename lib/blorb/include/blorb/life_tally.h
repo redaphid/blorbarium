@@ -163,8 +163,9 @@ const char* lifeStatCauseName(uint32_t deathCode);   // "starved", or "" while a
 // species, phase, stage, genome hash, firmware), this life, the ancestors',
 // and the analytics. `mac`: the badge's MAC as "d4:05:...", for the Wi-Fi
 // upload (the phone knows which badge it reads); `withGenome`: the genome
-// itself, base64, for a server that has never seen it.
-struct StatsIdentity { const char* mac = nullptr; bool withGenome = false; };
+// itself, base64, for a server that has never seen it; `withAnalytics`: false
+// leaves the analytics out (the pet-lines POST carries the life alone, for his diary).
+struct StatsIdentity { const char* mac = nullptr; bool withGenome = false; bool withAnalytics = true; };
 BigString lifeStatsJson(const Dish&, const StatsIdentity& = {});
 
 }  // namespace blorb

@@ -597,6 +597,13 @@ TEST(Protocol, StatsAsLinesAndAsJson) {
   const BigString up = lifeStatsJson(*p.box.dish, StatsIdentity{"d4:05:92:77:1b:44", true});
   EXPECT_NE(up.find("\"mac\":\"d4:05:92:77:1b:44\""), std::string::npos);
   EXPECT_NE(up.find("\"genome\":\""), std::string::npos);
+  StatsIdentity lifeOnly;
+  lifeOnly.withAnalytics = false;
+  const BigString life = lifeStatsJson(*p.box.dish, lifeOnly);   // the pet-lines POST's "stats"
+  EXPECT_EQ(life.find("\"analytics\""), std::string::npos);
+  EXPECT_NE(life.find("\"face_downs\":1"), std::string::npos);
+  EXPECT_EQ(life.back(), '}');
+  EXPECT_LT(life.size(), doc.size());
 
   EXPECT_EQ(p.send("#9 STATS xml"), (std::vector<std::string>{"#9 ERR 400 BAD_ARGS"}));
   EXPECT_NE(doc.find("\"analytics\":{\"powered_s\":"), std::string::npos);

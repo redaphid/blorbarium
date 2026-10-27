@@ -46,6 +46,7 @@ class NetJob {
  public:
   enum class State : uint8_t { Idle, Opening, Body, Done, Failed };
 
+  static constexpr size_t kPostMax = 2 * 8192 + 512;   // a POST body (the pet-lines one), with its NUL
   static constexpr size_t kTextMax = 16 * 1024;         // a manifest is a few hundred bytes, a pet's line pack (#59) some KB
   static constexpr size_t kRingBytes = 32 * 1024;
   // The task's stack, internal RAM while it runs (FreeRTOS on this framework
@@ -138,7 +139,7 @@ class NetJob {
  private:
   struct Mem {
     char url[200];
-    char post[2 * 8192 + 512];   // a genome (at most 8 KB) as hex, and the rest of the pet-lines body
+    char post[kPostMax];   // a genome (at most 8 KB) as hex, and the rest of the pet-lines body
     char text[kTextMax + 1];
     char error[96];
     uint8_t chunk[1024];   // off the task's stack
