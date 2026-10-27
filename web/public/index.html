@@ -162,6 +162,7 @@ button.big { width: 100%; font-size: 1.2rem; padding: 18px 22px; }
 .steps li[data-s="err"]::before { content: "!"; border-color: var(--warn); color: var(--warn); }
 #updateBar > i { background: var(--teal); }
 #sayInput { text-transform: uppercase; }
+#marqueeInput { text-transform: uppercase; }
 .debug { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
 .debug ol { list-style: none; margin: 10px 0 0; padding: 0; font: 0.72rem/1.45 var(--font-mono); max-height: 60vh; overflow: auto; }
 .debug li { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -293,6 +294,15 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Rename</button>
     </form>
     <p class="hint" id="nameHint">Up to 15 letters, numbers, - or _.</p>
+  </section>
+
+  <section id="marqueeBox" hidden>
+    <h2>Marquee</h2>
+    <form id="marqueeForm" autocomplete="off">
+      <input id="marqueeInput" name="marquee" maxlength="120" placeholder="HAPPY BIRTHDAY" aria-label="Words for the whole screen" required>
+      <button type="submit">Show it</button>
+    </form>
+    <p class="hint" id="marqueeHint">Up to 120 characters, in giant letters across the whole Blorb screen. A press of the button ends it.</p>
   </section>
 
   <section id="sayBox" hidden>
@@ -770,6 +780,7 @@ class MockTransport {
     else if (verb === "TWIST" && this.dish.twist(args)) lines.push(this.dish.twist(args));
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
+    else if (verb === "MARQUEE") lines.push(args.trim() ? `OK shown=1 len=${Math.min(args.trim().length, 120)}` : "ERR 400 BAD_ARGS");
     else if (verb === "OTA") lines.push(this.dish.command(args));
     else lines.push("ERR 404 UNKNOWN_VERB");
     this.deliver(lines.map((l) => `#${id} ${l}`));
@@ -974,6 +985,7 @@ async function session({ offer = true } = {}) {
   ui.show("another", true);
   ui.show("nameBox", true);
   ui.show("sayBox", true);
+  ui.show("marqueeBox", true);
   ui.show("wifiBox", !!transport.improv);
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
@@ -1397,6 +1409,31 @@ $("sayForm").addEventListener("submit", async (e) => {
     const r = await link.send(`TWIST say ${text}`);
     hint.dataset.tone = "ok";
     hint.textContent = `He said "${text}" (Blorb replied OK ${r.ok}).`;
+  } catch (err) {
+    hint.dataset.tone = "err";
+    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The Blorb said no (${err.message}).`;
+  }
+});
+
+// MARQUEE (docs/ble.md): the whole screen says it, then the pet comes back.
+$("marqueeInput").addEventListener("input", (e) => {
+  const el = e.target, at = el.selectionStart;
+  el.value = el.value.toUpperCase();
+  el.setSelectionRange(at, at);
+});
+
+$("marqueeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("marqueeInput").value.toUpperCase().replace(/\s+/g, " ").trim().slice(0, 120);
+  const hint = $("marqueeHint");
+  if (!text) return;
+  hint.dataset.tone = ""; hint.textContent = "Sending…";
+  try {
+    const r = await link.send(`MARQUEE ${text}`);
+    hint.dataset.tone = "ok";
+    hint.textContent = kv(r.ok).queued === "1"
+      ? `"${text}" will show once the fight is over.`
+      : `"${text}" is on the Blorb's screen.`;
   } catch (err) {
     hint.dataset.tone = "err";
     hint.textContent = err.code === 404 ? "This needs the next firmware." : `The Blorb said no (${err.message}).`;
