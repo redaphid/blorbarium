@@ -138,8 +138,11 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
 
   // ---- Life: seeded full, halves every 3 days; stages and old age read it ----
   g.chem(life, 3 * kDay, 255, kVital);
-  g.receive(life, locus::become_child.v, 227, 255, 128, kDigital | kInvert, kVital);   // about day 0.5
-  g.receive(life, locus::become_adult.v, 162, 255, 128, kDigital | kInvert, kVital);   // about day 2
+  // The badges have no battery, so his life is the hours he is powered (and
+  // what a wall clock lets a catch-up live). Growing up is early so a kid sees
+  // it on the first day; old age and death keep the 3-day half-life (#aging).
+  g.receive(life, locus::become_child.v, 248, 255, 128, kDigital | kInvert, kVital);   // about hour 3
+  g.receive(life, locus::become_adult.v, 202, 255, 128, kDigital | kInvert, kVital);   // about day 1
   g.receive(life, locus::become_elder.v, 46, 255, 128, kDigital | kInvert, kVital);    // about day 7.5
   g.receive(life, locus::die.v, 26, 255, 128, kDigital | kInvert, kVital);             // about day 10
   g.receive(life, locus::cause.v, 26, kCauseOldAge, 128, kDigital | kInvert, kVital);

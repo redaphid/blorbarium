@@ -22,7 +22,7 @@ int scaled(Fx level, int steps) { return int((int64_t(clamp01(level).raw) * step
 // region tints (the later gene wins, chemical-bound value, hue_shift), the
 // same size and the first four marks. test_duel_card holds this equal to
 // present() for every starter, so the friend sees him as his own screen does.
-constexpr uint8_t kHatchlingScalePct = 55;
+constexpr uint8_t kHatchlingScalePct = 55, kChildScalePct = 75;
 constexpr int kSizeLocusPct = 10;
 constexpr int kHueShiftSteps = 64;
 constexpr int kBoundValSteps = 127;
@@ -33,7 +33,8 @@ CardLook lookOf(const Creature& c) {
   CardLook l;
   l.stage = c.stage();
   l.lifeSeed = c.genome().hash();
-  if (c.stage() == Stage::Baby || c.stage() == Stage::Child) l.scalePct = kHatchlingScalePct;
+  if (c.stage() == Stage::Baby) l.scalePct = kHatchlingScalePct;
+  else if (c.stage() == Stage::Child) l.scalePct = kChildScalePct;
   else if (c.stage() == Stage::Adult)
     l.scalePct = clampByte(100 * (128 + int(p.size.base ? p.size.base : 128)) / 256 +
                            scaled(chem.locus[locus::size.v], kSizeLocusPct));
