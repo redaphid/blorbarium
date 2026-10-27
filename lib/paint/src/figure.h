@@ -129,6 +129,8 @@ struct DishSpots {
   bool him = false;
   int x = 0, y = 0;                         // his stand point, between his feet
   int top = 0;                              // the top of his body frame, standing
+  int left = 0, right = 0, crown = 0;       // his resting body as drawn: its edges and the top of his head
+  int mid = 0;                              // his middle, under his eyes (a tail or an arm can make it no box's middle)
   bool mouth = false;
   int mouthX = 0, mouthY = 0;               // the pellet in his mouth, while he chews
   bool landing = false;

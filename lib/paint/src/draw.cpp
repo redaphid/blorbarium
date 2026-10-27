@@ -281,6 +281,29 @@ bool sameFrame(const FrameRef& a, const FrameRef& b) {
   return true;
 }
 
+// The box round a frame's opaque pixels, from its origin: `lo` its top left,
+// `hi` one past its bottom right. Both zero when nothing in it is drawn. The
+// last frame's is kept: he walks on one resting body, and the placing memo
+// asks again each step.
+void opaqueBox(const FrameRef& f, Pt& lo, Pt& hi) {
+  static FrameRef last{};
+  static Pt lastLo{}, lastHi{};
+  if (last.rle && sameFrame(last, f)) { lo = lastLo, hi = lastHi; return; }
+  lo = hi = Pt{};
+  last = f, lastLo = lastHi = Pt{};
+  if (!drawable(f)) return;
+  int x0 = f.w, x1 = -1, y0 = f.h, y1 = -1;
+  RowReader rows(f);
+  for (int y = 0; y < f.h; ++y) {
+    const uint8_t* row = rows.seek(y);
+    for (int x = 0; x < f.w; ++x)
+      if (row[x]) x0 = imin(x0, x), x1 = imax(x1, x), y0 = imin(y0, y), y1 = imax(y1, y);
+  }
+  if (x1 < 0) return;
+  lo = {x0 - f.originX, y0 - f.originY}, hi = {x1 + 1 - f.originX, y1 + 1 - f.originY};
+  lastLo = lo, lastHi = hi;
+}
+
 // Each frame's rows are walked once and every transform visits that row's
 // corners. The callers keep only a max or a min of each coordinate or of the
 // distance from a point, so the order is free and a frame met twice (his idle
@@ -892,6 +915,8 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     Place p;
     Pt q{};   // p before rounding (Q4)
     int maxLift = 0;
+    Pt lo{}, hi{};   // the resting body's opaque pixels, frame px from its origin: the top left, past the right
+    int midX = 0;    // his middle, frame px from its origin, Q4: under his eyes, else the box's
   };
   static Memo memos[2];
   static uint8_t newest = 0;
@@ -937,6 +962,13 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     m.p = placeAt(at, m.d, base);
     m.q = standQ4(at, m.d);
     m.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, m.p, kMarginQ4));
+    opaqueBox(bodies[0], m.lo, m.hi);
+    m.midX = (m.lo.x + m.hi.x) * 8;
+    if (const int eyes = imin(bodies[0].eyeCount, 2)) {
+      int ex = 0;
+      for (int e = 0; e < eyes; ++e) ex += bodies[0].eyes[e].x;
+      m.midX = ex * 16 / eyes + 8 - bodies[0].originX * 16;
+    }
     return m;
   };
   const Memo& here = placed(a.at);
@@ -970,6 +1002,9 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   spots_.him = true, spots_.x = p.x, spots_.y = p.y, spots_.top = p.y - body.originY * base.ky / kOne;
+  spots_.left = p.x + floorDiv(int64_t(here.lo.x) * base.kx, kOne), spots_.right = p.x + floorDiv(int64_t(here.hi.x) * base.kx, kOne);
+  spots_.crown = p.y + floorDiv(int64_t(here.lo.y) * base.ky, kOne);
+  spots_.mid = p.x + floorDiv(int64_t(here.midX) * base.kx, 16 * int64_t(kOne));
   drawItems(a, cv, d, p, foot, false);
 
   Motion m = motionOf(a, maxLift);

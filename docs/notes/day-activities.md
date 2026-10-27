@@ -45,10 +45,10 @@ the evening; the stars and fireflies in the dark.
 | fireflies | wanders after blinking fireflies, swipes up | evening and the dark; mothwick, puffkin, grungo |
 | exercise | squats, each counted ("1!" "2!"), a drop of sweat | mornings; mudge |
 | yawn | up into a great yawn | waking, evening, or sleepy (0.35) |
-| tummy | hunched, rubbing a rumbling tummy | hungry (0.5) |
+| tummy | hunched over his tummy, dreaming of a cookie | hungry (0.5) |
 | beg | up at the glass, his empty bowl held up | hungry (0.5), the more when lonely |
 | nod_off | his head droops with a "z", jerks up with a "!" | sleepy (0.4) and awake |
-| nurse | rocking, a plaster on his side, patting it | hurt: pain, discomfort or injury 0.25 |
+| nurse | rocking, a sticking plaster on him | hurt: pain, discomfort or injury 0.25 |
 | queasy | a slow wobble, a green swirl | poisoned: toxin 0.05 |
 | mope | low, eyes down, a sigh, a little raincloud | lonely or bored past 0.55 |
 | beam | a happy bounce, hearts floating up | content (no drive past its mark) |

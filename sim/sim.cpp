@@ -25,6 +25,7 @@
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
+//   DEBUG idle <name|off>               draw him playing that idle (paint only, the brain never sees it)
 //   @0 DEBUG found <slug|id>            found the pet as that species (before boot; later, refused)
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
@@ -175,6 +176,13 @@ static void debug(const char* verb, const char* a, const char* b) {
     if (!strcmp(a, "off")) pinnedSpecies.reset();
     else if (debugverbs::speciesByName(a, s)) pinnedSpecies = s;
     else fprintf(stderr, "sim: DEBUG species: %s is not a species.def name or 0..255\n", a);
+    return;
+  }
+  if (!strcmp(verb, "idle")) {
+    simIdle = blorb::idles::none;
+    for (const auto& row : blorb::IDLES)
+      if (!strcmp(row.name, a)) simIdle = row.id, simIdleFrom = millis();
+    if (simIdle == blorb::idles::none && strcmp(a, "off")) fprintf(stderr, "sim: DEBUG idle: no idle named %s\n", a);
     return;
   }
   if (!strcmp(verb, "stage")) {

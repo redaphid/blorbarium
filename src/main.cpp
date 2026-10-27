@@ -455,6 +455,12 @@ static void lcdVerb(const char* a) {
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
+#if defined(BADGE_BOARD_SIM)
+// The sim's `DEBUG idle <name>` draws him playing that idle from then on (paint
+// only: the brain never sees it), to look at one idle's props on any species.
+static blorb::IdleId simIdle = blorb::idles::none;
+static uint32_t simIdleFrom = 0;
+#endif
 
 #if !defined(BADGE_BOARD_SIM)
 static uint32_t shellDismissedAt = 0;   // a hard shake answered the shell's question no (#35): the whoosh
@@ -467,6 +473,13 @@ static blorb::Appearance shown() {
     a.dismissedMs = uint16_t(std::min<uint32_t>(a.dismissedMs, millis() - shellDismissedAt));
 #endif
   if (pinnedSpecies) a.species = *pinnedSpecies;
+#if defined(BADGE_BOARD_SIM)
+  if (simIdle != blorb::idles::none && !a.asleep) {
+    const uint32_t q = (millis() - simIdleFrom) * 256 / blorb::kTickMs;
+    a.idle = simIdle, a.idleLength = 600, a.idlePace = 100;
+    a.idleTicks = uint16_t(q / 256 % 600), a.idleSub = uint16_t(q % 256);
+  }
+#endif
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
   if (updater.asking() || debugAsks() || wifiAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);

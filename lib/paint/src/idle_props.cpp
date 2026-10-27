@@ -22,7 +22,7 @@ constexpr Rgb kInk{40, 30, 24}, kWhite{255, 255, 255}, kNote{255, 226, 92}, kPeb
     kMoon{250, 236, 170}, kStem{80, 170, 70}, kPetal{250, 150, 200}, kBeetle{70, 120, 220},
     // #61
     kSun{255, 214, 70}, kFirefly{210, 255, 110}, kQueasy{140, 210, 90}, kRain{120, 170, 240}, kCloud{160, 164, 178},
-    kPlaster{236, 204, 168}, kBowl{110, 170, 230}, kSweat{160, 215, 255}, kShell{246, 240, 222};
+    kPlaster{240, 196, 150}, kPad{196, 140, 96}, kBowl{110, 170, 230}, kSweat{160, 215, 255}, kShell{246, 240, 222};
 constexpr Rgb kSpark[] = {{255, 120, 200}, {120, 220, 255}, {255, 240, 120}, {170, 255, 150}, {220, 160, 255}};
 
 constexpr int imin(int a, int b) { return a < b ? a : b; }
@@ -102,6 +102,29 @@ void heart(Canvas240& cv, int cx, int cy, int alpha) {
   for (int y = 0; y < 6; ++y)
     for (int x = -6 + y; x <= 6 - y; ++x) put(cv, cx + x, cy + y, kHeart, alpha);
 }
+// A sticking plaster, as a kid knows one from his own knee: a tan strip with
+// round ends across the sore spot, slanted, its pad in the middle, holes either
+// side. `len` long; `slant` +1 rises to the right, -1 to the left.
+void plaster(Canvas240& cv, int cx, int cy, int len, int slant, int alpha) {
+  constexpr int kW = 9;   // across, px
+  const int reach = len / 2 - kW / 2;   // the round ends' centres, along the strip
+  for (int y = -len / 2 - 2; y <= len / 2 + 2; ++y)
+    for (int x = -len / 2 - 2; x <= len / 2 + 2; ++x) {
+      // Along (u) and across (v) the strip, Q8: a 45 degree turn.
+      const int u = (x - slant * y) * 181, v = (x + slant * y) * 181;
+      const int uc = imax(-reach * 256, imin(reach * 256, u)), du = (u - uc) / 16, dv = v / 16;
+      const int d2 = du * du + dv * dv, r = kW * 8;   // Q4 squared against half the width, Q4
+      if (d2 > (r + 16) * (r + 16)) continue;
+      Rgb c = kInk;
+      if (d2 <= r * r) {
+        c = kPlaster;
+        const int au = iabs(u) / 256, av = iabs(v) / 256;
+        if (au <= 3 && av <= kW / 2 - 2) c = kPad;
+        else if ((au == 6 || au == 9) && (av == 0 || av == 2)) c = kPad;   // the little holes
+      }
+      put(cv, cx + x, cy + y, c, c.r == kInk.r && c.g == kInk.g ? alpha * 3 / 4 : alpha);
+    }
+}
 void word(Canvas240& cv, const char* s, int cx, int cy, Rgb c) {
   const Clip all{0, 0, kSide, kSide, 0};
   inside(cx, cy, 22);
@@ -165,8 +188,11 @@ void egg(Canvas240& cv, int cx, int cy, int alpha) {
   disc(cv, cx - 2, cy - 1, 1, kStem, alpha), disc(cv, cx + 2, cy + 3, 1, kStem, alpha);
 }
 
-void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed, bool memory = false) {
-  const int side = m.x < kSide / 2 ? 1 : -1;
+enum class Dream { His, Egg, Cookie };   // his own (by seed), the egg he was, the cookie he wants
+
+void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed, Dream what = Dream::His) {
+  // To his right unless he stands well right: the left rim holds his cookies (feeding.cpp).
+  const int side = m.x < kSide / 2 + 24 ? 1 : -1;
   int cx = m.x + side * (m.w + 22), cy = m.top + 4;
   inside(cx, cy, 30);
   const int grow = imin(256, c.ms * 256 / 700);
@@ -180,7 +206,8 @@ void bubbleCloud(Canvas240& cv, const Him& m, const Clock& c, uint32_t seed, boo
   disc(cv, cx - 11, cy + 2, r, kWhite, a), disc(cv, cx + 11, cy + 2, r, kWhite, a), disc(cv, cx, cy - 5, r + 2, kWhite, a),
       disc(cv, cx, cy + 5, r, kWhite, a);
   if (grow < 256) return;
-  if (memory) return egg(cv, cx, cy, c.alpha);   // an elder's: the egg he was
+  if (what == Dream::Egg) return egg(cv, cx, cy, c.alpha);   // an elder's: the egg he was
+  if (what == Dream::Cookie) return drawFood(cv, cx, cy, 7, Food{}, c.alpha);   // hungry: the cookie he wants
   // What he dreams of, his own: a cookie, a heart, the moon, a star.
   switch (seed % 4) {
     case 0: drawFood(cv, cx, cy, 6, Food{}, c.alpha); break;
@@ -196,9 +223,13 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
   const blorb::IdleInfo* row = blorb::idleInfo(a.idle);
   if (!row || !s.him || a.asleep || a.reflexActive) return;
   Him m;
-  m.x = s.x, m.y = s.y, m.top = s.top;
-  m.h = imax(8, s.y - s.top);
-  m.w = m.h * 45 / 100;
+  // Anchored to his body as drawn (his stage's resting frame: its own edges,
+  // his middle under his eyes), not to his frame's box and its feet: a
+  // hatchling or a child is shorter and wider than an adult, and his art need
+  // not stand in the middle of its frame (a tail out to one side).
+  m.x = s.mid, m.y = s.y, m.top = s.crown;
+  m.h = imax(8, s.y - s.crown);
+  m.w = imax(4, imin(s.mid - s.left, s.right - s.mid));   // the near side's, so a tail does not push a prop off
   m.headY = m.top + m.h / 3;
   m.side = iabs(a.facing.raw) < blorb::Fx::kOne / 2 ? 1 : -1;
   const int tq = int(a.idleTicks) * 256 + a.idleSub;
@@ -397,18 +428,8 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
       if (rep >= 3) disc(cv, m.x - m.side * (m.w / 2 + 2), m.headY - 2 + (within * 10 / 900), 2, kSweat, c.alpha);
       break;
     }
-    case idles::tummy.v:   // the rumble, zigzags at his tummy
-      if (c.ms % 1600 < 1100) {
-        const int jig = (c.ms / 90) & 1;
-        for (int side = -1; side <= 1; side += 2) {
-          const int x = m.x + side * (m.w + 3), y = m.y - m.h / 3 + jig;
-          for (int k = 0; k < 3; ++k) {
-            const int x0 = x + side * k * 5, y0 = y + (k & 1 ? 4 : -4), x1 = x + side * (k + 1) * 5, y1 = y + (k & 1 ? -4 : 4);
-            stroke(cv, x0, y0, x1, y1, 1, kInk, c.alpha * 3 / 4);
-            stroke(cv, x0, y0, x1, y1, 0, kWhite, c.alpha);
-          }
-        }
-      }
+    case idles::tummy.v:   // hungry: hunched over his tummy (lively.cpp), dreaming of a cookie
+      bubbleCloud(cv, m, c, seed, Dream::Cookie);
       break;
     case idles::beg.v: {   // his bowl held up, empty
       if (walking) break;
@@ -425,16 +446,9 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
       else word(cv, "!", m.x, m.top - 8, kNote);
       break;
     }
-    case idles::nurse.v: {   // a plaster on his side, and his paw patting it
-      int px = m.x - m.side * (m.w / 2), py = m.y - m.h / 3;
-      stroke(cv, px - 6, py - 6, px + 6, py + 6, 3, kInk, c.alpha * 3 / 4);
-      stroke(cv, px - 6, py + 6, px + 6, py - 6, 3, kInk, c.alpha * 3 / 4);
-      stroke(cv, px - 6, py - 6, px + 6, py + 6, 2, kPlaster, c.alpha);
-      stroke(cv, px - 6, py + 6, px + 6, py - 6, 2, kPlaster, c.alpha);
-      put(cv, px, py, kDirt, c.alpha);
-      blob(cv, px + m.side * 4, py - 6 + iabs(sin256(c.ms * 1024 / 900)) / 64, 4, kWhite, c.alpha);
+    case idles::nurse.v:   // hurt: a plaster on him, over the sore spot; he rocks it better (lively.cpp)
+      plaster(cv, m.x - m.side * (m.w / 3), m.y - m.h * 2 / 5, imax(16, imin(24, m.w)), m.side, c.alpha);
       break;
-    }
     case idles::queasy.v: {   // a green swirl over his head, bubbles off him
       const int turn = c.ms * 1024 / 1500;
       for (int k = 0; k < 12; ++k) {
@@ -476,7 +490,7 @@ void drawIdleProps(Canvas240& cv, const Appearance& a, const DishSpots& s) {
           twinkle(cv, m.x + (m.w / 2 + 4) * cos256(ph) / 256, m.top - 2 + 4 * sin256(ph) / 256, 4, kStar, c.alpha);
         }
       break;
-    case idles::reminisce.v: bubbleCloud(cv, m, c, seed, /*memory=*/true); break;
+    case idles::reminisce.v: bubbleCloud(cv, m, c, seed, Dream::Egg); break;
     default: break;   // explore: his walk round the rim is the show; a yawn is all his face
   }
 }
