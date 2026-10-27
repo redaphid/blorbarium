@@ -15,7 +15,7 @@ its own check soon. The report is JSON:
 |---|---|
 | `fw`, `board`, `uptime_s`, `reset` | the firmware, how long it has run, why the boot before ended (`panic`, `task_wdt`, `brownout`, `sw`, ...) |
 | `crash` | when that was a panic or a watchdog: the core dump's summary (task, PC, cause, up to 16 backtrace PCs, the ELF's SHA prefix), read at boot from the `coredump` partition. Decode with `xtensa-esp32s3-elf-addr2line -e firmware.elf <pcs>` |
-| `ota` | automatic checks on (`auto`, must be 1), the window, seconds to the next check, the interval, the absent and server streaks, on trial, the version that rolled back, crashes inside a window in a row, how the last window ended |
+| `ota` | a network remembered (`auto`: checks are never switched off, so 0 means only that), the window, seconds to the next check, the interval, the absent and server streaks, on trial, the version that rolled back, crashes inside a window in a row, how the last window ended |
 | `heap`, `minheap`, `big`, `psram` | internal heap now and its low-water mark since boot, the largest internal block, free PSRAM |
 | `vbat_mv`, `rssi`, `dark` | the battery, the signal, the screen asleep |
 | `pet` | kind, generation, stage, age in minutes, hunger % |
@@ -81,9 +81,9 @@ dashboard but never reaches a badge.
 ## The owner's side
 
 - `/admin` → **Health**: every badge, its last report's age, firmware, uptime,
-  last reset (red after a crash), updates (auto on, next check, interval,
+  last reset (red after a crash), updates (next check, interval,
   streaks, rollbacks, how the last window ended), heap and low-water mark,
-  battery, signal, pet. Red: updates off or crashed; amber: silent 36 h or
+  battery, signal, pet. Red: no network remembered, or crashed; amber: silent 36 h or
   minheap under 4 KB.
 - A badge's page → **Remote debug**: the command buttons, the commands and
   their results, and the last 40 reports, each with its log, crash, state and
