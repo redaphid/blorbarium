@@ -21,6 +21,7 @@ struct Font {
 };
 
 extern const Font kFreeSans9pt7b;
+extern const Font kFreeSansBold24pt7b;   // the full-screen marquee's (paint/banner.h)
 
 // Where text may land. Pixels outside are left alone; `feather` px at either
 // end of the rect ramp the ink in from nothing, so a line running into the
@@ -31,5 +32,12 @@ int textWidth(const Font&, const char*);
 // LovyanGFX's middle_left datum: x is the pen's start, y the middle of the
 // font's full height (tallest ascent to deepest descent).
 void drawString(Canvas240&, const Font&, const char*, int x, int y, uint16_t colour, const Clip&);
+
+// The same at `scaleQ8`/256 times the size, as LovyanGFX's setTextSize does it:
+// each bit of a glyph is a block of pixels, no smoothing. A glyph wholly
+// outside the clip's columns costs nothing, so a long line can be drawn whole
+// when only a few letters of it are on the glass.
+int textWidthScaled(const Font&, const char*, int scaleQ8);
+void drawStringScaled(Canvas240&, const Font&, const char*, int x, int y, uint16_t colour, const Clip&, int scaleQ8);
 
 }  // namespace paint

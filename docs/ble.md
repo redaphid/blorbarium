@@ -211,6 +211,28 @@ he knows changes.
 He forgets every taught line. It takes no arguments (`TWIST unteach now` is
 `ERR 400 BAD_ARGS`) and fails like `teach` when the board cannot write.
 
+### MARQUEE
+
+```
+#80 MARQUEE Happy birthday!
+#80 OK shown=1 len=15
+```
+
+The whole screen says the rest of the line: a crimson ground and enormous
+black letters (FreeSans Bold 24pt at 2.5, three on the glass) marching right
+to left at 110 px a second, as cyber-puck's banner does. It goes round twice
+(more for a short word, at least 8 s; once, for a line too wide for two in a
+minute), then the pet comes back. A press of the button takes it down
+early, and the pet never feels that press. It
+wakes a dark screen and keeps it lit while it runs. The text is uppercased
+and kept to printable ASCII (the font has all of it), runs of spaces become
+one, and the line stops at 120 characters, remote debug's limit.
+Nothing showable is `ERR 400 BAD_ARGS`. During a duel, or while fight mode
+looks for one, it is `OK queued=1` and goes up when the duel is over; one
+running when a duel starts gives way and comes back after it. Only the
+newest line waits. It is never saved. The cable's `DEBUG marquee <text>`
+does the same (src/marquee.h).
+
 ### HASH
 
 ```
