@@ -24,12 +24,19 @@
   // Every badge, creature, personality, pack, stat, diary entry and queued action (web/migrations).
   "d1_databases": [{ "binding": "DB", "database_name": "blorbarium", "database_id": "75d6e526-cca9-443f-a9a9-6352a42ba41a",
                      "migrations_dir": "web/migrations" }],
+  // The packs a badge asked for without waiting (wait:false): the POST sends the job id,
+  // and the consumer (app.js queue()) writes the pack about a minute later; it also
+  // carries on the night's packs. It replaced a 10-minute cron that stopped firing on 2026-10-23.
+  "queues": {
+    "producers": [{ "binding": "PACKS", "queue": "blorbarium-packs" }],
+    "consumers": [{ "queue": "blorbarium-packs", "max_batch_size": 1, "max_batch_timeout": 1, "max_retries": 3 }]
+  },
   // Per badge (keyed by MAC): a few requests a minute.
   "ratelimits": [{ "name": "PET_LINES_LIMITER", "namespace_id": "3701", "simple": { "limit": 6, "period": 60 } }],
-  // Every 10 minutes: the packs a badge asked for without waiting (and eggs, #40).
-  // Daily at 04:00 UTC: each pet's diary (#39), then every living pet's new nightly pack (#47);
-  // the 10-minute cron finishes the night's packs until 10:00 UTC.
-  "triggers": { "crons": ["*/10 * * * *", "0 4 * * *"] },
+  // Daily at 04:00 UTC, the only cron: any job still queued (a lost queue message), each
+  // pet's diary (#39), then every living pet's new nightly pack (#47); the PACKS queue
+  // finishes the night's packs until 10:00 UTC. (The 10-minute cron is gone: the queue does its work.)
+  "triggers": { "crons": ["0 4 * * *"] },
   "vars": {
     // docs/ai-lines/EVAL.md: the owner's pick from run r2, with prompt v4 (unhinged but coherent).
     "LINES_MODEL": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",

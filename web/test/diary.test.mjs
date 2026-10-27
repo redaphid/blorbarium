@@ -69,7 +69,8 @@ test("an egg reported before hatching gets its personality from its genes and it
   assert.equal(egg.parent_id, db.prepare("SELECT id FROM creatures WHERE genome_hash = ?").get(parentHash).id);
   assert.equal(db.prepare("SELECT kind FROM jobs ORDER BY id DESC").get().kind, "hatch");
   const before = env.AI.calls.length;
-  await worker.scheduled({ cron: "*/10 * * * *" }, env, { waitUntil() {} });
+  const { job } = await r.json();
+  await worker.queue({ messages: [{ body: { job }, ack() {}, retry() {} }] }, env);   // the PACKS consumer
   const bibleCall = env.AI.calls.slice(before).find((c) => /character bible/.test(c.input.messages.at(-1).content));
   const prompt = bibleCall.input.messages.at(-1).content;
   assert.match(prompt, /From the parent's diary, 2099-03-01: Dear diary/);
@@ -115,6 +116,39 @@ test("every night, every living pet gets new lines from the same personality; a 
   const tomorrow = nightStart() + 24 * 3600 * 1000 + 60000;
   // Tomorrow night: tonight's packs are then from before it.
   assert.equal((await runNightly(env, { now: tomorrow })).length, 2, "and again the next night");
+});
+
+test("the night's packs past one batch are carried on by the PACKS queue, not a 10-minute cron", async () => {
+  const { runQueueBatch, nightStart, NIGHTLY_MORE } = await import("../src/app.js");
+  const sent = [];
+  const env = fakeEnv({ env: { MAX_GENERATIONS_PER_DAY: "50", PACKS: { async send(body) { sent.push(body); } } } });
+  for (const f of fixtures.slice(0, NIGHTLY_MORE + 1)) await petWithPack(env, f);
+  env.DB.raw.prepare("UPDATE packs SET created_at = created_at - 172800000").run();
+  const night = nightStart() + 3600 * 1000;   // 05:00 UTC tonight, inside the night's window
+  const nightly = () => ({ messages: [{ body: sent.shift(), ack() {}, retry() {} }] });
+  const fresh = () => env.DB.raw.prepare("SELECT COUNT(*) AS n FROM packs WHERE created_at >= ?").get(nightStart()).n;
+
+  sent.push({ nightly: true });   // what the 04:00 run sends when its own batch came back full
+  await runQueueBatch(nightly(), env, night);
+  assert.equal(fresh(), NIGHTLY_MORE, "one batch per message");
+  assert.deepEqual(sent, [{ nightly: true }], "a full batch sends the next");
+  await runQueueBatch(nightly(), env, night);
+  assert.equal(fresh(), NIGHTLY_MORE + 1, "every pet has tonight's pack");
+  assert.deepEqual(sent, [], "a short batch is the last");
+
+  sent.push({ nightly: true });
+  env.DB.raw.prepare("UPDATE packs SET created_at = created_at - 172800000").run();
+  await runQueueBatch(nightly(), env, nightStart() + 7 * 3600 * 1000);   // 11:00 UTC: the night is over
+  assert.equal(fresh(), 0, "nothing written after NIGHT_END_HOUR");
+});
+
+test("the only cron is the daily one; any other cron name does nothing", async () => {
+  const env = fakeEnv();
+  await req(env, "/api/pet-lines", { mac: MAC, genome: fixtures[4].genome, wait: false });
+  await worker.scheduled({ cron: "*/10 * * * *" }, env, { waitUntil() {} });
+  assert.equal(env.DB.raw.prepare("SELECT status FROM jobs").get().status, "queued");
+  await worker.scheduled({ cron: DIARY_CRON }, env, { waitUntil() {} });
+  assert.equal(env.DB.raw.prepare("SELECT status FROM jobs").get().status, "done");
 });
 
 test("a nightly pack's lines are new: his recent packs' lines are refused like repeats", async () => {
