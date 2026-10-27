@@ -24,6 +24,7 @@ import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
+import { postReport } from "./reports.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
 import { withZone } from "./zone.js";
@@ -541,6 +542,8 @@ export default {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");
         return await handleAdmin(request, url, env, helpers);
       }
+      // Remote debug (reports.js): the report each Wi-Fi window ends with; the reply is its commands.
+      if (url.pathname === "/api/badge/report" && request.method === "POST") return await postReport(request, env, helpers);
       if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
       if (url.pathname.startsWith("/fw/")) return withZone(request, await firmware(request, env, decodeURIComponent(url.pathname.slice(4))));
