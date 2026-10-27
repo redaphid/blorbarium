@@ -91,7 +91,7 @@ export async function postReport(request, env, { fail, normaliseMac }) {
     const text = str(res.text, 200);
     await db.prepare(`UPDATE actions SET status = ?3, completed_at = ?4, result_json = ?5
        WHERE id = ?1 AND mac = ?2 AND kind = 'debug' AND status IN ('pending', 'delivered')`)
-      .bind(id, mac, res.ok ? "done" : "failed", t, JSON.stringify({ text, report_id: reportId, shot_id: /^shot/.test(text ?? "") ? shotId : undefined })).run();
+      .bind(id, mac, res.ok ? "done" : "failed", t, JSON.stringify({ text, report_id: reportId, shot_id: shotOf(text, shotId) })).run();
   }
   // The commands queued since, each handed over once (a reboot must never come twice).
   await db.prepare(`UPDATE actions SET status = 'expired' WHERE mac = ?1 AND kind = 'debug' AND status = 'pending'
@@ -111,6 +111,16 @@ export async function postReport(request, env, { fail, normaliseMac }) {
     lines.push(`${a.id} ${ok.payload.verb}${ok.payload.arg !== undefined ? " " + ok.payload.arg : ""}`);
   }
   return new Response(lines.join("\n") + "\n", { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+}
+
+// A shot command's frame: carried in this report (older firmware), or, since
+// the badge sends it alone to /api/debug, the device debug id its result names
+// ("shot: 120x120 uploaded as #123").
+function shotOf(text, inReport) {
+  if (!/^shot/.test(text ?? "")) return undefined;
+  if (inReport) return inReport;
+  const m = /uploaded as #(\d+)/.exec(text);
+  return m && Number(m[1]) > 0 ? Number(m[1]) : undefined;
 }
 
 const parse = (row) => {

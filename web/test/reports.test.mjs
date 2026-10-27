@@ -133,3 +133,20 @@ test("a marquee is clamped to what the badge draws, and goes out on one line", a
   const r = await call(env, "/api/badge/report", report(), { raw: true });
   assert.equal(r.body, `blorb-cmds 1\n${q.body.id} marquee Goodnight! 99 reboot\n`, "the text cannot start a line of its own");
 });
+
+test("a shot sent alone to /api/debug is linked from its command's result", async () => {
+  const env = fakeEnv();
+  await call(env, "/api/badge/report", report(), { raw: true });
+  const q = await call(env, `/api/admin/badges/${MAC}/debug`, { verb: "shot" }, { admin: true });
+  await call(env, "/api/badge/report", report(), { raw: true });   // handed over
+  const lines = "[hw] shot begin w=120 h=120 rle565\n[hw] shot AAAA\n[hw] shot end bytes=3 crc=00000000\n";
+  const up = await call(env, "/api/debug", { mac: MAC, fw: "0.7.25", via: "wifi", items: [{ kind: "shot", summary: "screenshot 120x120", data: { lines } }] });
+  assert.equal(up.status, 200);
+  const id = up.body.ids[0];
+  await call(env, "/api/badge/report", report({ results: [{ id: q.body.id, ok: true, text: `shot: 120x120 uploaded as #${id}` }] }), { raw: true });
+  const d = (await call(env, `/api/admin/badges/${MAC}/reports`, undefined, { admin: true })).body;
+  const c = d.commands.find((x) => x.id === q.body.id);
+  assert.equal(c.status, "done");
+  assert.equal(c.result.shot_id, id);
+  assert.equal((await call(env, `/api/admin/blob/device/${id}`, undefined, { admin: true })).body.lines, lines);
+});
