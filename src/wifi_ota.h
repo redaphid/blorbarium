@@ -575,7 +575,7 @@ static void begin() {
     if (const std::optional<ota::Handover> h = trialPort.handover(); h && wifiota::isWifiToken(h->token)) {
       confirmToken = h->token;
       confirmAt = millis() + kConfirmFirstMs;
-      powerPolicy.sleepNow();   // restarted at a quiet moment: it stays dark
+      powerPolicy.sleepNow(millis());   // restarted at a quiet moment: it stays dark
       hw::WifiStore::source(mem().forcedUrl, sizeof mem().forcedUrl);
       say("on trial after an update over Wi-Fi: confirming over Wi-Fi at %s, screen dark",
           mem().forcedUrl[0] ? mem().forcedUrl : "the site");
@@ -595,6 +595,8 @@ static bool quietBoot() {
 // ---- the question on the screen ------------------------------------------------------
 
 static bool asks() { return consent.asking(); }
+// No window open: the radio is off, so the chip may nap (main.cpp).
+static bool idle() { return window == Window::None; }
 // The button, or a turn (main.cpp TurnYes): true when the question took it.
 static bool press(uint32_t now) { return consent.yes(now); }
 static bool drawing() { return consent.asking(); }

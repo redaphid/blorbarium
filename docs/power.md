@@ -1,16 +1,78 @@
 # Low power
 
-The badges run on a battery. After **10 minutes with no user input** a badge
-drops to low power, and anything a person does brings it back at once.
+The badges run on a battery, and the owner wants about a week between charges
+(2026-10-27: "make sure we actually make it in to the low power mode on idle,
+and that the screen times out earlier if it isn't being used"). With no user
+input a badge steps down, and anything a person does brings it back at once:
 
-The timeout is `BLORB_IDLE_SECONDS` (default 600, `src/hw/power.h`). A test
-build overrides it without touching the code:
+| After no input for | State | What changes |
+|---|---|---|
+| 30 s (half the timeout) | **dim** | backlight at a quarter of his brightness (never under 12) |
+| 60 s (`BLORB_IDLE_SECONDS`) | **low** (dark) | panel asleep, backlight off, 80 MHz, BLE advertises once a second |
+| dark 120 s more (`BLORB_NAP_SECONDS`) | **nap** | the chip light-sleeps a second at a time, BLE off, the IMU's wake-on-motion armed |
+| face down 15 s | low | bedtime: dark without waiting the full minute |
+
+It was 10 minutes to dark, and dark never got below about 20-30 mA on the
+stock framework (80 MHz, BLE advertising every 100-150 ms, a loop pass every
+20 ms), so a badge left on a table emptied its battery in about a day. The nap
+is what reaches a week.
+
+The timeouts are `BLORB_IDLE_SECONDS` (default 60) and `BLORB_NAP_SECONDS`
+(default 120) in `src/hw/power.h`. A test build overrides them without
+touching the code:
 
     PLATFORMIO_BUILD_FLAGS="-DBLORB_IDLE_SECONDS=30" pio run -e badge128
 
 Rebuild without the flag before a release. At run time `POWER idle <s>`
-(debug link) or `DEBUG power idle <s>` (cable) changes it until reset, and
-`idle default` goes back to the built-in value.
+(debug link) or `DEBUG power idle <s>` (cable) changes the timeout until
+reset, and `idle default` goes back to the built-in value; `DEBUG power
+napafter <s>|default` does the same for the nap, and `DEBUG power nap` naps
+now.
+
+Nothing times out while something holds it awake (below): a duel or fight
+mode, an update or its question, the debug unlock's question, a screenshot
+going out, or a hang under way.
+
+## The nap
+
+Dark for two minutes with nothing that needs the radio or the cable, the chip
+light-sleeps (`esp_light_sleep_start`, on the stock framework: no rebuilt
+SDK needed):
+
+- **Bluetooth** stops advertising first, so the controller has nothing to do
+  while the chip sleeps. A phone cannot find a napping badge; picking it up
+  wakes it, and it advertises again at once.
+- **The IMU** goes to wake-on-motion: accelerometer only, 21 Hz low power, its
+  INT1 (GPIO47, `tools/wom_probe`) toggling on anything past 100 mg.
+- **Every second** the timer wakes it for one loop pass: the pet's ticks (up
+  to ten a pass, a second's worth) run on `millis()`, which `esp_timer` moves
+  on by the time slept, so he ages and gets hungry exactly as awake; the
+  policy gets one gravity sample, so a slow tilt still wakes it within a few
+  seconds; the Wi-Fi schedule and the OTA trial are looked at as awake.
+- **The IMU's pin or BOOT** wakes it for 2 s of 50 Hz senses, and the policy
+  decides as it does awake: a hand wakes it, a bumped table does not, and it
+  naps again.
+- **The cable** (UART0, 3 edges) wakes it; the bytes that woke it are lost,
+  and the nap is held off 3 s after any cable byte. Scripts send a few `\r`
+  first, as for `badge128_pm`.
+
+It does not nap (`nap_block=` in `DEBUG power`) while: awake or not yet due,
+a hold is up, a phone is connected, a Wi-Fi window is open (the scheduled
+check opens one while napping, and the nap ends for it), ESP-NOW is open, the
+image is on its OTA trial, an update runs, or the cable spoke in the last 3 s.
+
+Every change is a `[power]` line on the cable:
+
+    [power] dim brightness=50 of 200, dark in 30000 ms
+    [power] power=low why=idle ... ble_adv=slow
+    [power] nap in: dark 120 s, ble adv off, imu wake-on-motion 100 mg on gpio47 (ok), a pass every 1000 ms, pet tick=...
+    [power] napping 60 s: slept_ms=59400 awake_ms=600 asleep_pct=99 wakes timer=60 imu=0 button=0 cable=0 other=0 pet tick=... age=...
+    [power] nap out why=drift nap_ms=... slept_ms=... awake_ms=... asleep_pct=... wakes ...
+    [power] power=full why=drift ...
+
+`DEBUG power` adds a line of the time in each state since boot:
+
+    [power] since boot: lit_ms=... dim_ms=... dark_ms=... nap_ms=... (asleep ..., passes ...) nap_pct=... nap_wakes timer=... imu=...
 
 ## What low power is
 
@@ -21,12 +83,12 @@ Rebuild without the flag before a release. At run time `POWER idle <s>`
 | Panel SPI | 40 MHz (`BLORB_LCD_SPI_MHZ`) | idle |
 | The pet | lives | lives: every 100 ms tick still runs, so he ages, sleeps and gets hungry as before |
 | Body sensing | 50 Hz | 50 Hz (this is what wakes it) |
-| Bluetooth | advertising, connectable | the same: a phone still finds it |
+| Bluetooth | advertising every 100-150 ms, connectable | advertising every 1.0-1.3 s, connectable: a phone still finds it (napping: off) |
 | ESP-NOW | only in fight mode | only in fight mode (fight mode keeps it awake) |
 
 Waking turns the CPU back up, takes the panel out of sleep, draws a fresh
 frame and only then lights the backlight, so the screen never flashes the
-frame from ten minutes ago.
+frame from before it went dark.
 
 ## Light sleep (`badge128_pm`)
 

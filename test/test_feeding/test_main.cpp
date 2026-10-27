@@ -193,7 +193,7 @@ TEST(KnockKnock, AQuestionOnTheScreenTakesTheKnockKnock) {
 TEST(KnockKnock, ADarkBadgeIsLitAndNeverFedInTheDark) {
   for (uint8_t home : {kHomeUp, kHomeDown}) {
     Badge b(home);
-    b.policy.sleepNow();
+    b.policy.sleepNow(0);
     b.run(1000);
     ASSERT_TRUE(b.policy.low());
     const Count c = b.knock({0, 300});

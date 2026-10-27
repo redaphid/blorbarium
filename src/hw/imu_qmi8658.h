@@ -106,6 +106,43 @@ inline bool begin(int sda, int scl, bool& tapReady) {
   return true;
 }
 
+// The nap (main.cpp, docs/power.md "The nap"): wake on motion. INT1 is GPIO47
+// on the 1.28 (tools/wom_probe, measured on badge 1) and toggles on every
+// event, so the chip waits for the level it does not have. Not an RTC pin: it
+// wakes light sleep, not deep sleep. read() goes on working: the axes come at
+// 21 Hz instead of 250, on the same +-2 g.
+constexpr int kIntPin = 47;
+constexpr uint8_t kCmdWom = 0x08;   // CTRL_CMD_WRITE_WOM_SETTING
+
+// Accelerometer only, 21 Hz low power, INT1 on any axis moving `mg` (1 mg/LSB).
+inline bool wakeOnMotion(uint8_t mg) {
+  if (!addr) return false;
+  put(kCtrl7, 0x00);   // sensors off while it is set
+  put(kCtrl8, 0x80);
+  put(kCtrl2, 0x0D);   // +-2 g, 21 Hz low power
+  put(kCal1L, mg);
+  put(kCal1L + 1, 0x02);   // INT1, starting low, the first 2 samples blanked
+  const bool ok = command(kCmdWom);
+  put(kCtrl1, 0x48);   // auto-increment, INT1 out
+  put(kCtrl7, 0x01);
+  return ok;
+}
+
+// Back to begin()'s: 250 Hz, wake on motion off (a threshold of 0), no INT pin.
+inline bool awake() {
+  if (!addr) return false;
+  put(kCtrl7, 0x00);
+  put(kCtrl8, 0x80);
+  put(kCal1L, 0);
+  put(kCal1L + 1, 0);
+  const bool ok = command(kCmdWom);
+  put(kCtrl1, 0x40);
+  put(kCtrl2, 0x05);
+  put(kCtrl7, 0x01);
+  put(kCtrl8, 0x81);
+  return ok;
+}
+
 // Temperature and the three axes are one 8-byte block from TEMP_L. Each byte
 // is read into its own local: Wire.read() is a moving cursor, and the order
 // of `lo | hi << 8` operands is unspecified.
