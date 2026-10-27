@@ -58,8 +58,8 @@ bool datedHeirloom(const Observed& o, bool fearOnly, uint16_t& num) {
 
 Rng seededFor(uint32_t life, uint32_t tick, uint64_t salt = 0) { return Rng::seeded(((uint64_t(life) << 32) | tick) ^ salt); }
 
-// The owner's local clock, only once a phone's TIME has given it this boot:
-// a wall-clock line never guesses.
+// The owner's local clock, only once a phone's TIME (or a Wi-Fi window's
+// clock, Dish::netTime) has given it this boot: a wall-clock line never guesses.
 constexpr uint32_t kSecondsPerDay = 86400;
 std::optional<uint32_t> hourNow(const Observed& o) {
   if (!o.phone.localNow) return std::nullopt;
@@ -143,10 +143,10 @@ bool sees_famine(const Observed& o, uint16_t&) {
 }
 bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_near) >= kHalf; }
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
-// No battery: the phone is his only clock, so after half a day of play without
-// one he asks for it, rarely, in his own voice rather than a nagging banner.
+// After half a day of play without a phone (a Wi-Fi window's clock is no
+// visit: Dish::phoneAwayTicks) he asks for it, rarely, in his own voice rather than a nagging banner.
 bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phone.awayTicks >= Thinker::kMissPhoneTicks; }
-// What a phone adds. Each holds only once the phone has given it.
+// What a phone adds (the wall clock, a Wi-Fi window too). Each holds only once given.
 bool wall_hour(const Observed& o, uint16_t& num) {
   const std::optional<uint32_t> h = hourNow(o);
   if (!h) return false;

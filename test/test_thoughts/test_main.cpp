@@ -219,6 +219,73 @@ TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
   EXPECT_NE(r.said.back().text, "THE GLOWING ONE RETURNS!") << "only a phone he missed is welcomed";
 }
 
+// ---- a Wi-Fi window's clock (Dish::netTime) ----------------------------------------
+
+TEST(Thoughts, AWifiClockGivesTheWallAndTheZoneWithNoPhone) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.run(kSecond);
+  ASSERT_FALSE(r.dish.timeKnown());
+  ASSERT_FALSE(r.dish.localNow());
+  r.dish.netTime(1790000000, int16_t(-420));
+  EXPECT_TRUE(r.dish.timeKnown());
+  ASSERT_TRUE(r.dish.localNow());
+  EXPECT_EQ(*r.dish.localNow(), 1790000000u - 420u * 60u) << "his wall-clock lines read the zone the site sent";
+  EXPECT_TRUE(r.dish.clock().aligned) << "the pet hours snap to the wall, as TIME does";
+  r.run(500);
+  EXPECT_TRUE(r.dish.clock().trusted) << "and are believed: his day and night run without a phone";
+  for (const Line& l : r.said) EXPECT_NE(l.text, "THE GLOWING ONE RETURNS!") << "a network is no visit";
+}
+
+TEST(Thoughts, AWifiClockWithNoZoneKnowsTheWallButGuessesNoHour) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.dish.netTime(1790000000, std::nullopt);
+  EXPECT_TRUE(r.dish.timeKnown());
+  EXPECT_FALSE(r.dish.localNow()) << "no zone, no o'clock: a wall-clock line never guesses";
+  EXPECT_FALSE(r.dish.clock().aligned);
+}
+
+TEST(Thoughts, APhonesZoneOutranksTheNetworks) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.dish.phoneTime().set(1790000000);
+  r.dish.checkWall();
+  r.dish.setZone(60);
+  r.dish.netTime(1790000010, int16_t(-420));
+  ASSERT_TRUE(r.dish.localNow());
+  EXPECT_EQ(*r.dish.localNow(), 1790000000u + 60u * 60u) << "the owner's own phone knows better than a guess from the address";
+}
+
+TEST(Thoughts, AWifiClockIsNoVisitHeStillMissesThePhone) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  auto missed = [&r] {
+    int n = 0;
+    for (const Line& l : r.said) n += l.id == thought::miss_phone;
+    return n;
+  };
+  auto play = [&r](uint32_t forMs) {   // fed and knocked on, as HalfADayWithoutAPhone...
+    for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
+      r.dish.fire(stim::button);
+      r.knock();
+      r.run(20 * kMinute - 500);
+    }
+  };
+  constexpr uint32_t kWall = 1790000000;
+  play(6 * 60 * kMinute);
+  r.dish.netTime(kWall, int16_t(0));   // the first window: the wall anchors here
+  const uint32_t anchoredMs = r.ms;
+  play(5 * 60 * kMinute);
+  // The next window finds an hour he never lived (a power cut): it is lived, the wall re-anchors.
+  r.dish.netTime(kWall + (r.ms - anchoredMs) / 1000 + 3600, int16_t(0));
+  EXPECT_GT(r.dish.lastCatchUp().awaySeconds, 0u);
+  EXPECT_EQ(missed(), 0);
+  play(2 * 60 * kMinute);
+  ASSERT_GT(missed(), 0) << "fourteen hours with no phone: two Wi-Fi windows are not one";
+  r.dish.phoneTime().set(*r.dish.wallNow());
+  r.dish.checkWall();
+  r.run(500);
+  ASSERT_FALSE(r.said.empty());
+  EXPECT_EQ(r.said.back().text, "THE GLOWING ONE RETURNS!") << "the phone he missed is still welcomed";
+}
+
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
   auto routine = [](Rig& r) {
     r.pastWarmUp();

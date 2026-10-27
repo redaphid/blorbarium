@@ -723,7 +723,7 @@ std::optional<uint32_t> Dish::localNow() const {
 FromPhone Dish::fromPhone() const { return FromPhone{phoneAwayTicks(), localNow(), lineage_.named(), &taught_}; }
 
 uint32_t Dish::phoneAwayTicks() const {
-  uint32_t since = live_.wall ? live_.wall->tick : 0;
+  uint32_t since = phoneSince_ ? *phoneSince_ : live_.wall ? live_.wall->tick : 0;
   if (lastPhoneTick_) since = std::max(since, *lastPhoneTick_);   // a catch-up re-anchors after the phone spoke
   return tick_ - since;
 }
@@ -731,14 +731,17 @@ uint32_t Dish::phoneAwayTicks() const {
 void Dish::checkWall() {
   lastWallCheckTick_ = tick_;
   std::optional<uint32_t> now;
-  bool welcome = false;
+  bool welcome = false, phoneSpoke = false;
+  const uint32_t phoneSince = tick_ - phoneAwayTicks();
   // Every source is read, so a phone reading behind a working RTC is spent, not kept for later.
-  for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_)}) {
+  for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_), static_cast<TimeSource*>(&net_)}) {
     if (!source) continue;
     std::optional<uint32_t> t = source->unixSeconds();
     if (t && source == &phone_) {
       welcome = phoneAwayTicks() >= Thinker::kMissPhoneTicks;
       lastPhoneTick_ = tick_;
+      phoneSince_.reset();
+      phoneSpoke = true;
     }
     if (!now) now = t;
   }
@@ -766,14 +769,27 @@ void Dish::checkWall() {
       stats_.away(lastCatchUp_.awaySeconds, lastCatchUp_.hurt);
     }
   }
+  // A re-anchor no phone was part of leaves the phone's absence where it was.
+  if (!phoneSpoke) phoneSince_ = phoneSince;
   live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
   if (welcome) welcomePhone();
 }
 
+void Dish::netTime(uint32_t unixSeconds, std::optional<int16_t> tzMinutes) {
+  net_.set(unixSeconds);
+  checkWall();
+  const std::optional<int16_t> zone = zone_ ? zone_ : tzMinutes;
+  if (!zone) return;   // no zone: the wall is known, the pet hours keep the phase they had
+  // After any catch-up the pet tick stands for this wall time, so the day snaps here (as TIME).
+  live_.clock.alignToWall(unixSeconds, *zone);
+  zone_ = zone;
+}
+
 void Dish::forgetWall() {
   wallKnown_ = false;
   live_.wall.reset();
+  phoneSince_.reset();
   lastCatchUp_ = CatchUp{};
   eventDirty_ = true;
 }

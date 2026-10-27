@@ -71,8 +71,8 @@ BLORB_THOUGHT(51, p_pond_yes,     pond,   anytime,       1,  300, "THE POND SAYS
 BLORB_THOUGHT(52, p_ripples,      pond,   anytime,       1,  300, "RIPPLES. ASK AGAIN LATER.")
 BLORB_THOUGHT(53, p_ancestor,     pond,   foreseen,      3,  300, "GEN # FORESAW THIS TOO.")
 BLORB_THOUGHT(54, miss_phone,     none,   phone_long_gone, 2, 3600, "I MISS THE GLOWING RECTANGLE")
-// What a phone adds. Wall-clock rows hold only once a TIME has given the
-// owner's local time this boot; named rows once the owner chose his name; the
+// What a phone adds. Wall-clock rows hold only once a TIME (or a Wi-Fi
+// window's clock, Dish::netTime) has given the owner's local time this boot; named rows once the owner chose his name; the
 // parrot once the owner taught him a line (TWIST teach), which its '*' says.
 BLORB_THOUGHT(55, oclock,         none,   wall_hour,     1, 10800, "IT IS # O'CLOCK. I FEEL IT.")
 BLORB_THOUGHT(56, morning,        none,   wall_morning,  2, 10800, "MORNING. BEST TIME FOR FLIES.")

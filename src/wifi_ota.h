@@ -43,6 +43,7 @@
 #include "wifiota/consent.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
+#include "wifiota/net_clock.h"
 #include "wifiota/remembered.h"
 #include "wifiota/schedule.h"
 
@@ -432,8 +433,22 @@ static void readBattery(uint32_t now, bool force) {
 }
 
 // Every loop.
+// Every HTTPS reply carries the time: the pet learns it from the network as
+// from a phone's TIME (Dish::netTime), so his day and his wall-clock lines
+// need no phone. No window, no reply: nothing changes.
+static void heardClock(const hw::NetJob::Clock& c) {
+  if (!dish) return;
+  const bool knew = dish->timeKnown();
+  dish->netTime(c.unixSeconds, c.tzMinutes);
+  char zone[16] = "none sent";
+  if (c.tzMinutes) std::snprintf(zone, sizeof zone, "%+d min", int(*c.tzMinutes));
+  say("clock: %u from the server (zone %s); the time was %s", unsigned(c.unixSeconds), zone,
+      knew ? "known already" : "unknown until now");
+}
+
 static void poll(uint32_t now) {
   improvBle.poll();
+  if (const std::optional<hw::NetJob::Clock> c = job.takeClock(millis())) heardClock(*c);
   // Advertising paused while a GET opens (DNS, connect, TLS handshake,
   // headers), so the radio's time is the handshake's: only with no phone.
   ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) && job.busy() &&
