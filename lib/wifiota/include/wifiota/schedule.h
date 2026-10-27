@@ -102,7 +102,7 @@ class Schedule {
 
   // A manifest was read: the next check is a while away, and the waits start over.
   void checked(uint32_t now) {
-    next_ = now + kCheckEveryMs;
+    next_ = now + everyMs_;
     absent_ = server_ = 0;
   }
   // A Check failed: the next waits longer the more there were in a row.
@@ -137,6 +137,19 @@ class Schedule {
   // alone, and the streaks stand: a check that fails again backs off as far
   // as it would have.
   void dueNow() { next_.reset(); }
+  // The remote debug's `interval` (docs/remote-debug.md): the time between
+  // checks from now until a restart, within kEveryMinMs..kEveryMaxMs (false,
+  // and nothing changed, outside them). A check further off than the new
+  // interval comes in to it. Checks can be made rarer, never stopped.
+  static constexpr uint32_t kEveryMinMs = 30 * kMinute;
+  static constexpr uint32_t kEveryMaxMs = 12 * 60 * kMinute;
+  bool setEvery(uint32_t ms, uint32_t now) {
+    if (ms < kEveryMinMs || ms > kEveryMaxMs) return false;
+    everyMs_ = ms;
+    if (next_ && int32_t(*next_ - (now + ms)) > 0) next_ = now + ms;
+    return true;
+  }
+  uint32_t everyMs() const { return everyMs_; }
 
   uint8_t absentStreak() const { return absent_; }
   uint8_t serverStreak() const { return server_; }
@@ -145,6 +158,7 @@ class Schedule {
   std::optional<uint32_t> next_;   // unset: due at once (after boot, once dark)
   std::optional<uint32_t> lowSince_;   // when the battery started reading low
   uint8_t absent_ = 0, server_ = 0;
+  uint32_t everyMs_ = kCheckEveryMs;
 };
 
 }  // namespace wifiota

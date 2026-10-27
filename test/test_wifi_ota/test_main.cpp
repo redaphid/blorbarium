@@ -1001,6 +1001,28 @@ TEST(NetClock, TheZoneIsMinutesEastWithinTimesRange) {
 
 }  // namespace
 
+// Remote debug's `interval` (lib/rdebug: 30..720 min): the schedule takes only those bounds, and
+// no setting stops the checks.
+TEST(Schedule, TheScheduleKeepsItsBounds) {
+  using wifiota::Schedule;
+  constexpr uint32_t kMin = 60u * 1000;
+  EXPECT_EQ(Schedule::kEveryMinMs, 30u * kMin);
+  EXPECT_EQ(Schedule::kEveryMaxMs, 720u * kMin);
+  Schedule s;
+  s.checked(1000);
+  EXPECT_EQ(s.dueIn(1000), Schedule::kCheckEveryMs);
+  EXPECT_FALSE(s.setEvery(29 * kMin, 1000));
+  EXPECT_FALSE(s.setEvery(0, 1000));
+  EXPECT_FALSE(s.setEvery(Schedule::kEveryMaxMs + 1, 1000));
+  EXPECT_EQ(s.everyMs(), Schedule::kCheckEveryMs);
+  EXPECT_TRUE(s.setEvery(30 * kMin, 2000));     // the next check comes in to it
+  EXPECT_EQ(s.dueIn(2000), 30 * kMin);
+  s.checked(5000);
+  EXPECT_EQ(s.dueIn(5000), 30 * kMin);
+  EXPECT_TRUE(s.setEvery(12 * 60 * kMin, 6000));   // longer: the check already due stays where it was
+  EXPECT_EQ(s.dueIn(6000), 30 * kMin - 1000);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

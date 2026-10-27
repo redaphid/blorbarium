@@ -21,6 +21,7 @@
 //                            --none in range---------> closing                      --nothing--> closing
 #pragma once
 
+#include <esp_core_dump.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
 #include <esp_system.h>
@@ -36,10 +37,13 @@
 
 #include "hw/battery.h"
 #include "hw/improv_ble.h"
+#include "hw/log_tee.h"
 #include "hw/net_job.h"
 #include "hw/wifi_station.h"
 #include "hw/wifi_store.h"
+#include "paint/shot.h"
 #include "paint/text.h"
+#include "rdebug/remote.h"
 #include "wifiota/consent.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
@@ -70,9 +74,9 @@ constexpr uint32_t kBatteryEveryMs = 10 * 60 * 1000;
 constexpr const char* kSiteUrl = "https://blorb.hypnodroid.com/?d=";
 constexpr const char* kPetLinesUrl = "https://blorb.hypnodroid.com/api/pet-lines";
 
-enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing, Lines };
+enum class Phase : uint8_t { Off, Scanning, Joining, Manifest, Image, Closing, Lines, Report };
 const char* phaseName(Phase p) {
-  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing", "lines"};
+  constexpr const char* kNames[] = {"off", "scanning", "joining", "manifest", "image", "closing", "lines", "report"};
   return kNames[uint8_t(p)];
 }
 
@@ -286,6 +290,22 @@ static bool startGet(const char* url, bool text, const char* post = nullptr) {
   return false;
 }
 
+static void statusLine();
+#include "remote_debug.h"
+
+// The window's last step, once the manifest was read: the remote debug report
+// (src/remote_debug.h), in a Check or a cable's check, then the radio goes.
+static void finishWithReport() {
+  if ((window == Window::Check || window == Window::Forced) && rd::start()) return setPhase(Phase::Report);
+  closeWindow();
+}
+
+static void readReport() {
+  if (job.busy()) return;
+  rd::arrived(job.state() == hw::NetJob::State::Done, job.text(), job.textLen(), job.error());
+  closeWindow();
+}
+
 static void joined() {
   say("joined in %u ms rssi=%d ch=%u ip=%s heap=%u", unsigned(millis() - phaseAt), int(WiFi.RSSI()), unsigned(WiFi.channel()),
       WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
@@ -328,7 +348,8 @@ static void startImage(const wifiota::Manifest& m) {
 static void startLines() {
   const char* body = petLinesBody();
   job.reset();
-  if (!body || !startGet(kPetLinesUrl, true, body)) return closeWindow();
+  if (!body) return finishWithReport();   // no pet: the report alone
+  if (!startGet(kPetLinesUrl, true, body)) return;   // failWindow closed it
   setPhase(Phase::Lines);
 }
 
@@ -336,7 +357,7 @@ static void readLines() {
   if (job.busy()) return;
   if (job.state() == hw::NetJob::State::Done) petLinesArrived(job.text(), job.textLen());
   else say("lines: none this time (%s); the ones he has stay", job.error());
-  closeWindow();
+  finishWithReport();
 }
 
 static void readManifest() {
@@ -473,8 +494,9 @@ static void poll(uint32_t now) {
   // and TIMEOUT more often than not at RSSI -77 with it on) and while a GET
   // opens (DNS, connect, TLS handshake, headers), so the radio's time is
   // Wi-Fi's: only with no phone.
-  ble.holdAdvertising((phase == Phase::Joining || ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) &&
-                                                   job.busy() && job.state() == hw::NetJob::State::Opening)) &&
+  ble.holdAdvertising((phase == Phase::Joining ||
+                       ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines || phase == Phase::Report) &&
+                        job.busy() && job.state() == hw::NetJob::State::Opening)) &&
                       !ble.connected());
   pollConsent(now);
   const bool dark = powerPolicy.low();
@@ -520,10 +542,12 @@ static void poll(uint32_t now) {
     case Phase::Manifest: return readManifest();
     case Phase::Image: return download();
     case Phase::Lines: return readLines();
+    case Phase::Report: return readReport();
     case Phase::Closing: return closing();
     case Phase::Off: break;
   }
-  // Off: what to open, the person waiting first.
+  // Off: the owner's remote commands, one a pass (src/remote_debug.h); then what to open, the person waiting first.
+  rd::poll(now);
   if (mem().provisionAsked) {
     mem().provisioning = mem().provisionAsked;
     mem().provisionAsked.reset();
@@ -596,6 +620,8 @@ static void tlsFree(void* p) { heap_caps_free(p); }
 static void begin() {
   const uint32_t heap0 = ESP.getFreeHeap();
   mbedtls_platform_set_calloc_free(tlsCalloc, tlsFree);
+  if (rd::quietBoot()) powerPolicy.sleepNow();   // a remote reboot came at a quiet moment: it stays dark
+  rd::boot();
   battery.begin();
   if (const std::optional<wifiota::Networks> n = hw::WifiStore::load()) mem().networks = *n;
   hw::WifiStore::forgetOffSwitch();   // checks are never off (Schedule: the owner's rule)
@@ -634,6 +660,7 @@ static void begin() {
 // This boot is an update over Wi-Fi on trial: it came in a quiet moment and
 // stays dark (main.cpp setup(), before the backlight).
 static bool quietBoot() {
+  if (rd::quietBoot()) return true;
   if (!trialPort.pending()) return false;
   const std::optional<ota::Handover> h = trialPort.handover();
   return h && wifiota::isWifiToken(h->token);
