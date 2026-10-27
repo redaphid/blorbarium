@@ -75,8 +75,11 @@ static uint32_t cableHeardAt = 0;
 static inline void cableByte() { cableHeardAt = millis(); }
 
 // The protocol over the serial line. A cable has no connect event, so the
-// owner counts as near once a line has arrived. A `DEBUG ` line is held back
-// from the protocol for the loop to run after the tick (src/debug_verbs.h).
+// owner counts as near once a protocol line has arrived. A `DEBUG ` line is
+// held back from the protocol for the loop to run after the tick
+// (src/debug_verbs.h), and it is not the owner: a developer's `DEBUG ota
+// check` once made him see the glowing slab with no phone anywhere
+// (owner_near drives sees_phone, thoughts.cpp). Nor is an empty line.
 class SerialLink : public blorb::Link {
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
@@ -119,7 +122,6 @@ class SerialLink : public blorb::Link {
         if (len_ < sizeof(line_)) line_[len_++] = char(c);
         continue;
       }
-      heard_ = true;
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
@@ -131,6 +133,7 @@ class SerialLink : public blorb::Link {
         d[k] = 0;
         continue;
       }
+      heard_ = heard_ || n > 0;
       return std::string_view(line_, n);
     }
     return std::nullopt;

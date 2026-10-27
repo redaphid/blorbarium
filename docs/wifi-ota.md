@@ -190,6 +190,21 @@ minheap=)`.
    check: it rolls back, and never auto-installs that version again (publish
    a newer patch version instead).
 
+## The time, without a phone
+
+Every HTTPS reply a window gets (the manifest, the image, a line pack, a 202
+included) carries a `Date`, and the site adds `X-Blorb-Tz`: the offset in
+minutes east of UTC of the zone Cloudflare places the request in
+(`request.cf.timezone`, web/src/zone.js). The badge hands both to
+`Dish::netTime`, which reads them as a phone's TIME is read: an unlived gap
+is lived, the pet hours snap to the local day, and his wall-clock lines
+(o'clock, morning, Monday) can speak. A zone a phone gave this boot outranks
+the site's guess; no `X-Blorb-Tz` (an older Worker) still sets the wall, just
+not the hour. Plain http (a cable's test URL) is never believed. It is not a
+phone: no "returns" welcome, and he still misses the phone after half a day
+without one. Offline nothing changes. The log line is
+`[wifi] clock: <unix> from the server (zone ...)`.
+
 ## Home orientation survives updates
 
 Three badges (USB serials 5C94094497, 5C94094999, 5C94095003) sit in cases

@@ -43,7 +43,7 @@ Heirlooms heirloomsOf(const Genome&, const Lineage&);
 // still thinks and foretells on his own clock. None is saved with him or hashed.
 struct FromPhone {
   uint32_t awayTicks = 0;             // powered ticks since a phone last gave the time
-  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME this boot
+  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME (or a Wi-Fi window's clock) this boot
   bool named = false;                 // the owner chose his name (TWIST rename)
   const Taught* taught = nullptr;     // what the owner taught him to say (TWIST teach)
 };

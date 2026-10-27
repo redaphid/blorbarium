@@ -18,6 +18,7 @@
 #include "ota/session.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
+#include "wifiota/net_clock.h"
 #include "wifiota/remembered.h"
 #include "wifiota/power_sense.h"
 #include "wifiota/schedule.h"
@@ -969,6 +970,33 @@ TEST(WifiInstall, ACorruptedDownloadEndsBadHashAndNeverSwitches) {
   EXPECT_FALSE(rig.session.active());
   EXPECT_EQ(rig.session.last(), ota::Last::BadHash);
   EXPECT_FALSE(rig.slot.activated);
+}
+
+// ---- the clock a Wi-Fi window brings back (net_clock.h) ------------------------------
+
+TEST(NetClock, AnHttpDateIsItsSecondsSince1970) {
+  EXPECT_EQ(wifiota::parseHttpDate("Thu, 01 Jan 2026 00:00:00 GMT"), std::optional<uint32_t>(1767225600u));
+  EXPECT_EQ(wifiota::parseHttpDate("Tue, 27 Oct 2026 12:34:56 GMT"), std::optional<uint32_t>(1793104496u));
+  EXPECT_EQ(wifiota::parseHttpDate("Thu, 29 Feb 2024 23:59:59 GMT"), std::optional<uint32_t>(1709251199u));
+  EXPECT_EQ(wifiota::parseHttpDate("Sun, 31 Dec 2034 06:00:00 GMT"), std::optional<uint32_t>(2051157600u));
+}
+
+TEST(NetClock, AMalformedOrImplausibleDateIsNone) {
+  for (const char* bad : {"", "Tue, 27 Oct 2026 12:34:56", "Tue, 27 Oct 2026 12:34:56 UTC", "Tue, 27 Okt 2026 12:34:56 GMT",
+                          "Tue, 27 Oct 2026 24:00:00 GMT", "Tue, 00 Oct 2026 12:00:00 GMT", "Tue, 2a Oct 2026 12:34:56 GMT",
+                          "Tuesday, 27-Oct-26 12:34:56 GMT", "Thu, 01 Jan 1970 00:00:00 GMT", "Sun, 31 Dec 2023 23:59:59 GMT"})
+    EXPECT_FALSE(wifiota::parseHttpDate(bad)) << bad;
+}
+
+TEST(NetClock, TheZoneIsMinutesEastWithinTimesRange) {
+  EXPECT_EQ(wifiota::parseTzMinutes("-420"), std::optional<int16_t>(-420));
+  EXPECT_EQ(wifiota::parseTzMinutes("330"), std::optional<int16_t>(330));
+  EXPECT_EQ(wifiota::parseTzMinutes("+60"), std::optional<int16_t>(60));
+  EXPECT_EQ(wifiota::parseTzMinutes("0"), std::optional<int16_t>(0));
+  EXPECT_EQ(wifiota::parseTzMinutes("840"), std::optional<int16_t>(840));
+  EXPECT_EQ(wifiota::parseTzMinutes("-720"), std::optional<int16_t>(-720));
+  for (const char* bad : {"", "-", "841", "-721", "1000", "7.5", "abc", " 60"})
+    EXPECT_FALSE(wifiota::parseTzMinutes(bad)) << bad;
 }
 
 }  // namespace
