@@ -1726,4 +1726,9 @@ void drawIdleBar(Canvas240& cv, uint16_t permille) {
     if (permille >= p.from) cv.px[p.at] = c;
 }
 
+void drawRimPulse(Canvas240& cv, uint8_t level) {
+  const uint16_t c = to565({uint8_t(255 * level / 255), uint8_t(190 * level / 255), uint8_t(70 * level / 255)});
+  for (const IdleLit& p : kIdleLit.px) cv.px[p.at] = c;
+}
+
 }  // namespace paint

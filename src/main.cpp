@@ -269,6 +269,7 @@ static bool debugPress(uint32_t ms);
 // Wi-Fi's question, "Join Wi-Fi? Turn me around!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
 static bool wifiAsks();
 static bool wifiIdle();
+static uint32_t wifiCheckInMs(uint32_t now);
 static bool wifiPress(uint32_t ms);
 static void wifiSaysNo();   // a hard shake answers Wi-Fi's question no (#35)
 static bool wifiQuietBoot();
@@ -1772,7 +1773,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "stage") != 0) {
     Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, die [remains], species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|nap|idle <s>|napafter <s>|stats], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
+                  "power [low|wake|nap|idle <s>|napafter <s>|wom <mg>|remind [<s>]|stats], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url])\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1897,15 +1898,18 @@ static bool powerHeld() {
 
 // ---- The nap (docs/power.md "The nap") ---------------------------------------------
 // Dark for napMs (power.h) with nothing that needs the radio or the cable, the
-// chip light-sleeps a second at a time: both cores, every task, the radio and
-// the panel's clocks stop, and esp_timer (so millis()) is moved on by the time
-// slept when it wakes. Bluetooth stops advertising first (a controller with
-// nothing to do sleeps with the chip), and the IMU watches for motion on its
-// own pin. Each second the timer wakes it for one loop pass: the pet's ticks
-// (up to ten a pass, a second's worth) run on the same clock as awake, so he
-// ages exactly as he would, and the policy gets one gravity sample (a slow
-// tilt wakes it within a few seconds). The IMU's pin (anything past kWomMg)
-// and BOOT wake it for kListenMs of 50 Hz senses, so the policy decides as it
+// chip light-sleeps: both cores, every task, the radio and the panel's clocks
+// stop, and esp_timer (so millis()) is moved on by the time slept, measured on
+// the RTC clock that light sleep calibrates against the crystal each time it
+// goes down. Bluetooth stops advertising first (a controller with nothing to
+// do sleeps with the chip), and the IMU watches for motion on its own pin.
+// The timer wakes it at the next scheduled Wi-Fi check or after a minute
+// (power::napSleepMs), whichever is first: the check opens on that pass, so a
+// nap never delays an update. Each timer wake catches the pet's ticks up to
+// now in one go (petCatchUp: the same 100 ms ticks on the same clock, so he
+// ages exactly as awake) and glances at gravity (power::Policy::glance: a
+// lift too gentle for the IMU's pin). The IMU's pin (anything past womMg) and
+// BOOT wake it for kListenMs of 50 Hz senses, so the policy decides as it
 // does awake: a hand wakes it, a bumped table does not. A cable byte wakes it
 // and holds the nap off kCableAwakeMs (the bytes that woke it are lost).
 namespace napq {
@@ -1914,20 +1918,88 @@ constexpr bool kBoard = false;   // its IMU's pin is not known
 #else
 constexpr bool kBoard = true;
 #endif
-constexpr uint32_t kWakeEveryMs = 1000;
 constexpr uint32_t kListenMs = 2000;
-constexpr uint8_t kWomMg = 100;   // the probe: 2 mg is noise, 150 mg a still desk never crosses
-constexpr uint32_t kReportMs = 60000;   // a `[power] napping` line this often, for the cable's proof
+// Wake on motion, mg. The probe (tools/wom_probe): 2 mg is noise, 150 mg a
+// still desk never crossed; a gentle lift is a few tens of mg a sample at
+// 21 Hz, so 64. `DEBUG power wom <mg>` tries others until reset.
+constexpr uint8_t kWomMg = 64;
+static uint8_t womMg = kWomMg;
+constexpr uint32_t kReportMs = 60000;   // a `[power] napping` line at most this often, for the cable's proof
 constexpr gpio_num_t kButton = gpio_num_t(PIN_BOOT_BUTTON), kImuPin = gpio_num_t(imu::kIntPin);
 enum Wake : uint8_t { Timer, Imu, Button, Cable, Other, kWakes };
 static bool on = false, womOk = false;
-static uint32_t since = 0, listenUntil = 0, reportAt = 0, naps = 0;
+static uint32_t since = 0, listenUntil = 0, reportAt = 0, naps = 0, lastSleepMs = 0, catchUpUs = 0, catchUpWorstUs = 0;
 static uint32_t wakes[kWakes] = {}, napWakes[kWakes] = {};   // since boot, and this nap
 static uint64_t sleptUs = 0, awakeUs = 0;                     // in naps since boot: asleep, and the passes between
 static uint64_t napSleptUs = 0, napAwakeUs = 0, wokeAt = 0;   // this nap
 static const char* blocker = "awake";                         // what keeps it from napping now
 static bool listening() { return on && int32_t(listenUntil - millis()) > 0; }
 }  // namespace napq
+
+// The reminder (power.h): 3 to 5 days after the last real interaction the
+// screen lights for 8 s and he says hello, at any hour. Its countdown is kept
+// in NVS ("power"/"remind_s") at each nap and each reminder, so restarts and
+// naps neither reset nor lose it.
+namespace remind {
+static power::Reminder clock;
+static uint32_t seenInteractions = 0, shown = 0, startedAt = 0, step = 0;
+static void save() {
+  nvs_handle_t h;
+  if (nvs_open("power", NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_u32(h, "remind_s", clock.remainingS(millis()));
+  nvs_commit(h);
+  nvs_close(h);
+}
+static void begin() {
+  nvs_handle_t h = 0;
+  uint32_t s = 0;
+  bool kept = false;
+  if (nvs_open("power", NVS_READONLY, &h) == ESP_OK) kept = nvs_get_u32(h, "remind_s", &s) == ESP_OK, nvs_close(h);
+  if (kept) clock.resume(millis(), s);
+  else clock.restart(millis(), esp_random());
+  seenInteractions = powerPolicy.interactions();
+  Serial.printf("[power] reminder in %u h %u min (%s)\n", unsigned(clock.remainingS(millis()) / 3600),
+                unsigned(clock.remainingS(millis()) / 60 % 60), kept ? "kept" : "new: 3 to 5 days");
+}
+// Every pass, before applyPower: a real interaction starts the countdown
+// over; dark and due, the screen lights (the panel follows in applyPower).
+static void poll(uint32_t now) {
+  if (const uint32_t n = powerPolicy.interactions(); n != seenInteractions)
+    seenInteractions = n, clock.restart(millis(), esp_random());
+  if (!clock.due(millis()) || !powerPolicy.low() || powerHeld()) return;
+  powerPolicy.nudge(now, power::kReminderLitMs);
+  clock.restart(millis(), esp_random());
+  ++shown;
+  save();
+  startedAt = millis(), step = 0;
+  Serial.printf("[power] reminder: lit %u s at full brightness, he waves and calls out; next in %u h\n",
+                unsigned(power::kReminderLitMs / 1000), unsigned(clock.remainingS(millis()) / 3600));
+}
+
+// While it is lit: something new every kStepMs, so he never stands still. The
+// carry shows (a whee, a jelly wobble, a glance about) are the moves a hand
+// gives him; a plain line every third step. A hand or a phone ends it
+// (Policy::nudging), and from there it is an ordinary wake.
+constexpr uint32_t kStepMs = 5000;
+constexpr blorb::Carry kMoves[] = {blorb::Carry::Whee, blorb::Carry::Jelly, blorb::Carry::Glance, blorb::Carry::Whee,
+                                   blorb::Carry::Dizzy, blorb::Carry::Jelly};
+constexpr const char* kLines[] = {"HELLO!", "HI! OVER HERE!", "PLAY WITH ME?", "I MISSED YOU!"};
+static void animate() {
+  if (!powerPolicy.nudging()) return;
+  const uint32_t due = (millis() - startedAt) / kStepMs;
+  if (step > due) return;
+  if (std::holds_alternative<blorb::Creature>(dish->occupant())) {
+    dish->forceCarry(kMoves[step % (sizeof kMoves / sizeof kMoves[0])]);
+    if (step % 3 == 0) dish->say(kLines[step / 3 % (sizeof kLines / sizeof kLines[0])]);
+  }
+  ++step;
+}
+// The rim's glow, 0..255, breathing about once every 1.6 s.
+static uint8_t rimLevel() {
+  const uint32_t t = (millis() - startedAt) % 1600;
+  return uint8_t(60 + (t < 800 ? t : 1600 - t) * 195 / 800);
+}
+}  // namespace remind
 
 // Why it may not nap now; null when it may.
 static const char* napBlocker(uint32_t now) {
@@ -1959,17 +2031,19 @@ static void napWakesLine(char* out, size_t n, const uint32_t (&w)[napq::kWakes])
 
 static void napEnter(uint32_t now) {
   sensePause(true, true);
-  napq::womOk = imu::wakeOnMotion(napq::kWomMg);
+  napq::womOk = imu::wakeOnMotion(napq::womMg);
   pinMode(napq::kImuPin, INPUT);
   ble.napAdvertising(true);
+  remind::save();   // the countdown as it stands, should the battery or a restart come before the next
   napq::on = true, napq::since = millis(), ++napq::naps;
   napq::napSleptUs = napq::napAwakeUs = 0, napq::wokeAt = uint64_t(esp_timer_get_time());
   napq::listenUntil = millis(), napq::reportAt = millis() + napq::kReportMs;
   std::memset(napq::napWakes, 0, sizeof napq::napWakes);
-  Serial.printf("[power] nap in: dark %u s, ble adv off, imu wake-on-motion %u mg on gpio%d (%s), a pass every %u ms, pet tick=%u\n",
-                unsigned((now - powerPolicy.lowSince()) / 1000), unsigned(napq::kWomMg), imu::kIntPin,
-                napq::womOk ? "ok" : "NOT SET: timer and button only", unsigned(napq::kWakeEveryMs),
-                unsigned(dish->tickCount()));
+  Serial.printf("[power] nap in: dark %u s, ble adv off, imu wake-on-motion %u mg on gpio%d (%s), timer up to %u ms "
+                "(next wifi check in %u s), pet tick=%u\n",
+                unsigned((now - powerPolicy.lowSince()) / 1000), unsigned(napq::womMg), imu::kIntPin,
+                napq::womOk ? "ok" : "NOT SET: timer and button only", unsigned(power::kNapCapMs),
+                unsigned(std::min<uint32_t>(wifiCheckInMs(millis()), 99999999u) / 1000), unsigned(dish->tickCount()));
 }
 
 static void napLeave(const char* why) {
@@ -1997,17 +2071,32 @@ static void napPoll(uint32_t now) {
   if (napq::on) bodyq::paused = !napq::listening();   // between seconds the task does not read, and the chip sleeps
 }
 
-// One sleep, to the next second or a wake.
-static void napSleep() {
+// The pet's ticks up to now, in one go after a sleep: Dish::tick runs at most
+// ten a call, so a minute asleep is sixty calls of the same 100 ms ticks on
+// the same clock as awake (test_dish NapCatchUp). The only catch-up the nap
+// has; the aging branch's bulk catch-up (deep sleep, power off) is another path.
+static void petCatchUp() {
+  const uint32_t t0 = micros();
+  for (uint32_t calls = 0, now = millis() + warpMs; now - dish->lastTickMs() >= blorb::kTickMs && calls < 100000; ++calls) {
+    dish->tick(now, host);
+    if (calls % 100 == 99) delay(1);   // let the idle task run
+  }
+  const uint32_t us = micros() - t0;
+  napq::catchUpUs = us, napq::catchUpWorstUs = std::max(napq::catchUpWorstUs, us);
+}
+
+// One sleep, `ms` long at most.
+static void napSleep(uint32_t ms) {
   using namespace napq;
+  lastSleepMs = ms;
   const int imuWas = gpio_get_level(kImuPin);
-  esp_sleep_enable_timer_wakeup(uint64_t(kWakeEveryMs) * 1000);
+  esp_sleep_enable_timer_wakeup(uint64_t(ms) * 1000);
   gpio_wakeup_enable(kButton, GPIO_INTR_LOW_LEVEL);
   if (womOk) gpio_wakeup_enable(kImuPin, imuWas ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);   // it toggles: the other level
   esp_sleep_enable_gpio_wakeup();
   uart_set_wakeup_threshold(UART_NUM_0, 3);
   esp_sleep_enable_uart_wakeup(0);
-  Serial.flush();   // what is still in the driver's buffer would wait a second
+  Serial.flush();   // what is still in the driver's buffer would wait for the next wake
   const uint64_t t0 = uint64_t(esp_timer_get_time());
   napAwakeUs += t0 - wokeAt, awakeUs += t0 - wokeAt;
   const esp_err_t slept = esp_light_sleep_start();
@@ -2029,15 +2118,17 @@ static void napSleep() {
   else if (cause == ESP_SLEEP_WAKEUP_UART) w = Cable;
   else if (cause == ESP_SLEEP_WAKEUP_GPIO) w = gpio_get_level(kButton) == 0 ? Button : Imu;
   ++wakes[w], ++napWakes[w];
+  petCatchUp();   // before anything else looks at him: a wake by a hand draws him as he is now
   if (w == Cable) cableByte();   // the bytes that woke it are lost; the line after the preamble is not
   if (w == Imu || w == Button || w == Other) listenUntil = millis() + kListenMs;   // the 50 Hz senses decide
-  if (w == Timer && imuOk) {   // a slow tilt: one gravity sample a second (no button: a press is the senses')
+  if (w == Timer && imuOk) {   // a lift too gentle for the pin (no button: a press is the senses')
     blorb::BodySample g;
-    if (imu::read(g)) powerPolicy.sample(g, millis() + warpMs);
+    if (imu::read(g)) powerPolicy.glance(g, millis() + warpMs);
   }
 }
 
-// The end of every loop pass: dark, it rests; napping (and caught up), it sleeps.
+// The end of every loop pass: dark, it rests; napping, it sleeps to the next
+// Wi-Fi check or a minute.
 static void napRest(uint32_t now) {
   if (!napq::on || napq::listening()) {
     if (panelLow) delay(kLowRestMs);
@@ -2047,18 +2138,22 @@ static void napRest(uint32_t now) {
   // have opened its window, or a trial or an update begun, since napPoll. Never
   // sleep through one: the next pass leaves the nap for it.
   if (napBlocker(now)) return delay(kLowRestMs);
-  if (now - dish->lastTickMs() >= 2 * blorb::kTickMs) return;   // the pet is behind: another pass first
+  if (now - dish->lastTickMs() >= 2 * blorb::kTickMs) return petCatchUp();
   if (int32_t(millis() - napq::reportAt) >= 0) {
     napq::reportAt = millis() + napq::kReportMs;
     const uint32_t ms = millis() - napq::since;
     const uint64_t slept = napq::napSleptUs / 1000;
     char w[96];
     napWakesLine(w, sizeof w, napq::napWakes);
-    Serial.printf("[power] napping %u s: slept_ms=%u awake_ms=%u asleep_pct=%u wakes %s pet tick=%u age=%u\n",
+    Serial.printf("[power] napping %u s: slept_ms=%u awake_ms=%u asleep_pct=%u wakes %s last_sleep_ms=%u "
+                  "catchup_ms=%u worst=%u pet tick=%u age=%u\n",
                   unsigned(ms / 1000), unsigned(slept), unsigned(napq::napAwakeUs / 1000),
-                  unsigned(ms ? slept * 100 / ms : 0), w, unsigned(dish->tickCount()), unsigned(summarize(dish->occupant()).age));
+                  unsigned(ms ? slept * 100 / ms : 0), w, unsigned(napq::lastSleepMs), unsigned(napq::catchUpUs / 1000),
+                  unsigned(napq::catchUpWorstUs / 1000), unsigned(dish->tickCount()),
+                  unsigned(summarize(dish->occupant()).age));
   }
-  napSleep();
+  // To the next Wi-Fi check, the reminder, or a minute: whichever is first (never 0: it is due on this pass).
+  napSleep(std::max<uint32_t>(1, std::min(power::napSleepMs(wifiCheckInMs(millis())), remind::clock.dueIn(millis()))));
 }
 
 static const char* sleepState() { return napq::listening() ? "listen" : napq::on ? "nap" : pmSleepState(); }
@@ -2076,7 +2171,7 @@ static void applyDim(uint32_t now) {
   }
   const uint8_t full = dish->settings().brightness;
   const bool dim = powerPolicy.dim(now) && full > kDimFloor;
-  const uint8_t want = dim ? std::max<uint8_t>(kDimFloor, full / 4) : full;
+  const uint8_t want = powerPolicy.nudging() ? 255 : dim ? std::max<uint8_t>(kDimFloor, full / 4) : full;
   if (want == litLevel) return;
   const bool logIt = litLevel >= 0;   // not the first lighting after a wake: that is the wake's own line
   litLevel = want;
@@ -2099,14 +2194,15 @@ static void note(uint32_t now) {
 static const char* powerLine(char* out, size_t n, uint32_t now) {
   std::snprintf(out, n,
                 "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s sleep=%s slept_ms=%u "
-                "dim=%d nap_after_ms=%u nap_block=%s naps=%u nap_slept_ms=%u nap_awake_ms=%u ble_adv=%s",
+                "dim=%d nap_after_ms=%u nap_block=%s naps=%u nap_slept_ms=%u nap_awake_ms=%u ble_adv=%s remind_in_s=%u reminders=%u",
                 powerPolicy.low() ? "low" : "full", power::whyName(powerPolicy.why()), unsigned(powerPolicy.idleMs()),
                 unsigned(powerPolicy.msLeft(now)), unsigned(cpuMaxMhz), unsigned(framesDrawn),
                 unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()),
                 sleepState(), unsigned(sleptMs()), int(powerPolicy.dim(now)), unsigned(powerPolicy.napMs()),
                 napq::on ? "napping" : napq::blocker, unsigned(napq::naps), unsigned(napq::sleptUs / 1000),
                 unsigned(napq::awakeUs / 1000),
-                ble.advertisingHeld() ? "held" : ble.advertisingSlow() ? "slow" : "fast");
+                ble.advertisingHeld() ? "held" : ble.advertisingSlow() ? "slow" : "fast",
+                unsigned(remind::clock.remainingS(millis())), unsigned(remind::shown));
   return out;
 }
 
@@ -2176,6 +2272,21 @@ static void powerVerb(const char* a, const char* line) {
     applyPower(now);
     return (void)Serial.printf("[power] nap asked: it naps once nothing blocks it (cable: %u s quiet)\n",
                                unsigned(kCableAwakeMs / 1000));
+  }
+  if (!std::strcmp(a, "remind")) {   // the reminder in <s> (default: now, once dark)
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    remind::clock.resume(millis(), uint32_t(std::strtoul(what, nullptr, 10)));
+    remind::save();
+    return (void)Serial.printf("[power] reminder in %u s (once dark)\n", unsigned(remind::clock.remainingS(millis())));
+  }
+  if (!std::strcmp(a, "wom")) {   // the nap's wake-on-motion threshold, from the next nap
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    const long mg = std::strtol(what, nullptr, 10);
+    if (mg < 1 || mg > 255) return (void)Serial.printf("[power] want: power wom <mg 1..255> (now %u)\n", unsigned(napq::womMg));
+    napq::womMg = uint8_t(mg);
+    return (void)Serial.printf("[power] wom_mg=%u from the next nap\n", unsigned(napq::womMg));
   }
   if (!std::strcmp(a, "napafter")) {
     char what[16] = "";
@@ -2331,6 +2442,7 @@ static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
 static void wifiBegin() { wififw::begin(); }
 static bool wifiAsks() { return wififw::asks(); }
 static bool wifiIdle() { return wififw::idle(); }
+static uint32_t wifiCheckInMs(uint32_t now) { return wififw::checkInMs(now); }
 static void wifiSaysNo() { wififw::dismiss(); }
 static bool wifiQuietBoot() { return wififw::quietBoot(); }
 static bool wifiPress(uint32_t ms) { return wififw::press(ms); }
@@ -2364,6 +2476,8 @@ void loop() {
   dbgfw::poll();
 #endif
 #if !defined(BADGE_BOARD_SIM)
+  remind::poll(now);
+  remind::animate();
   applyPower(now);
   napPoll(now);
   applyDim(now);
@@ -2382,7 +2496,7 @@ void loop() {
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
-    const bool overlay = update || dbgfw::drawing() || wififw::drawing();
+    const bool overlay = update || dbgfw::drawing() || wififw::drawing() || powerPolicy.nudging();   // the reminder's rim moves every frame
     const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
     if (still) fps::same();
 #else
@@ -2398,6 +2512,7 @@ void loop() {
       if (update) ota::drawUpdate(canvas, *update);
       else dbgfw::draw(canvas), wififw::draw(canvas);
       paint::drawIdleBar(canvas, idleBar);
+      if (powerPolicy.nudging()) paint::drawRimPulse(canvas, remind::rimLevel());
       framememo::drew(look, idleBar, overlay);
       const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
 #endif

@@ -69,9 +69,10 @@ constexpr int kFaceDownMg = -800;                 // smoothed az below this: the
 enum class Mode : uint8_t { Full, Low };
 
 // What woke it, or sent it to sleep; for the log and the debug link.
-enum class Why : uint8_t { Boot, Button, Tap, Drift, Jolt, Phone, Hold, Idle, Asked, FaceDown };
+enum class Why : uint8_t { Boot, Button, Tap, Drift, Jolt, Phone, Hold, Idle, Asked, FaceDown, Reminder };
 inline const char* whyName(Why w) {
-  constexpr const char* kNames[] = {"boot", "button", "tap", "drift", "jolt", "phone", "hold", "idle", "asked", "facedown"};
+  constexpr const char* kNames[] = {"boot",  "button", "tap",      "drift",   "jolt",    "phone",
+                                    "hold",  "idle",   "asked",    "facedown", "reminder"};
   return kNames[uint8_t(w)];
 }
 
@@ -88,10 +89,25 @@ class Policy {
   // Awake with no input for half the timeout: the backlight dims. Any input
   // (or a hold, which counts as one) brings it straight back.
   uint32_t dimMs() const { return idleMs_ / 2; }
-  bool dim(uint32_t now) const { return !low() && sinceInput(now) >= dimMs(); }
+  bool dim(uint32_t now) const { return !low() && !nudging_ && sinceInput(now) >= dimMs(); }
   // Dark for napMs: the chip may nap (light sleep between seconds).
   bool napDue(uint32_t now) const { return low() && int32_t(now - lowSince_) >= int32_t(napMs_); }
   uint32_t lowSince() const { return lowSince_; }
+  // Every real interaction (an input, a phone, a hold) counts one; a reminder
+  // does not. The reminder's clock starts over when this moves.
+  uint32_t interactions() const { return interactions_; }
+  bool nudging() const { return nudging_; }
+
+  // The reminder (Reminder, below): lit for `litMs` from dark, full
+  // brightness, then dark again and the nap due at once. Any input meanwhile
+  // makes it an ordinary wake with the whole timeout. False when not dark.
+  bool nudge(uint32_t now, uint32_t litMs) {
+    if (!low()) return false;
+    set(Mode::Full, Why::Reminder, now);
+    lastInput_ = now - (litMs < idleMs_ ? idleMs_ - litMs : 0);
+    nudging_ = true;
+    return true;
+  }
   Why why() const { return why_; }                // the last change's reason
   uint32_t changes() const { return changes_; }   // every sleep and wake since boot
   uint32_t lastInput() const { return lastInput_; }
@@ -135,12 +151,26 @@ class Policy {
     return input(jolt ? Why::Jolt : Why::Drift, now);
   }
 
+  // The nap's look at gravity each time it wakes (minutes apart, so no
+  // smoothing): a sample kDriftMg off where the badge last settled is a move,
+  // one the IMU's wake-on-motion missed (lifted too gently). True when it is input.
+  bool glance(const blorb::BodySample& s, uint32_t now) {
+    if (!seeded_) return sample(s, now);
+    const int32_t a[3] = {s.ax, s.ay, s.az};
+    bool moved = false;
+    for (int i = 0; i < 3; ++i) moved |= std::abs(a[i] - (ref_[i] >> kSmoothShift)) > kDriftMg;
+    if (!moved) return false;
+    for (int i = 0; i < 3; ++i) smooth_[i] = ref_[i] = a[i] << kSmoothShift;   // it settles here next
+    return input(Why::Drift, now);
+  }
+
   // A phone connected or spoke. Wakes the badge unless the debug link asked
   // for low power: that holds until a hand wakes it, so the page that asked
   // does not undo it with its next line.
   void phone(uint32_t now) {
     if (int32_t(now - lastInput_) > 0) lastInput_ = now;
     inputWhy_ = Why::Phone;
+    ++interactions_, nudging_ = false;
     if (low() && why_ != Why::Asked) set(Mode::Full, Why::Phone, now);
   }
 
@@ -149,9 +179,14 @@ class Policy {
   bool update(uint32_t now, bool held) {
     if (held) {
       if (int32_t(now - lastInput_) > 0) lastInput_ = now;
+      ++interactions_, nudging_ = false;
       return low() ? set(Mode::Full, Why::Hold, now) : false;
     }
-    if (!low() && sinceInput(now) >= idleMs_) return set(Mode::Low, Why::Idle, now);
+    if (!low() && sinceInput(now) >= idleMs_) {
+      set(Mode::Low, Why::Idle, now);
+      if (nudging_) lowSince_ = now - napMs_, nudging_ = false;   // a reminder ends straight in the nap
+      return true;
+    }
     if (!low() && faceDown_ && sinceInput(now) >= std::min(kFaceDownMs, idleMs_)) return set(Mode::Low, Why::FaceDown, now);
     return false;
   }
@@ -177,6 +212,7 @@ class Policy {
     if (int32_t(now - lastInput_) < 0) now = lastInput_;   // never move it back
     lastInput_ = now;
     inputWhy_ = w;
+    ++interactions_, nudging_ = false;
     if (low()) set(Mode::Full, w, now);
     return true;
   }
@@ -186,13 +222,55 @@ class Policy {
     return true;
   }
 
-  uint32_t idleMs_, napMs_, lowSince_ = 0;
+  uint32_t idleMs_, napMs_, lowSince_ = 0, interactions_ = 0;
+  bool nudging_ = false;
   Mode mode_ = Mode::Full;
   Why why_ = Why::Boot, inputWhy_ = Why::Boot;
   uint32_t changes_ = 0, lastInput_ = 0;
   bool seeded_ = false, tapped_ = false, jolted_ = false, faceDown_ = false;
   uint32_t lastTap_ = 0, lastJolt_ = 0;
   int32_t smooth_[3] = {}, ref_[3] = {};   // milli-g << kSmoothShift
+};
+
+// One nap sleep: to the next scheduled Wi-Fi check, or kNapCapMs, whichever
+// comes first. The check opens on the pass that wakes at its due time, so it
+// is never later than its schedule (the owner: automatic updates never switch
+// off). `checkInMs`: until the next check is due, UINT32_MAX when no check
+// can open (no network remembered, Wi-Fi switched off). A check already due
+// that the pass did not open is held by something time does not change while
+// napping (a low battery): the cap, and it is asked again then.
+constexpr uint32_t kNapCapMs = 60000;
+inline uint32_t napSleepMs(uint32_t checkInMs, uint32_t capMs = kNapCapMs) {
+  return checkInMs == 0 ? capMs : std::min(checkInMs, capMs);
+}
+
+// The reminder (the owner, 2026-10-27: "have the screen turn on occasionally
+// to remind the children that the badge exists"): kReminderMinS to
+// kReminderMaxS after the last real interaction, at any hour (a dark bedroom
+// included), the screen lights for kReminderLitMs and he says hello. A badge
+// played with never needs one. It runs on a countdown the board keeps in NVS
+// (remainingS, resume), so naps and restarts do not reset or lose it; time
+// with the battery flat does not count (whoever charges it has seen it).
+constexpr uint32_t kReminderMinS = 3u * 24 * 3600;
+constexpr uint32_t kReminderMaxS = 5u * 24 * 3600;
+constexpr uint32_t kReminderLitMs = 60000;   // the owner: a whole minute, full brightness, never dimmed
+
+class Reminder {
+ public:
+  // A real interaction, or a reminder just shown: the next is 3 to 5 days off.
+  // `rnd`: any random number.
+  void restart(uint32_t nowMs, uint32_t rnd) {
+    at(nowMs, kReminderMinS + rnd % (kReminderMaxS - kReminderMinS + 1));
+  }
+  // At boot, the countdown NVS kept (clamped to the longest wait).
+  void resume(uint32_t nowMs, uint32_t remainingS) { at(nowMs, std::min(remainingS, kReminderMaxS)); }
+  uint32_t remainingS(uint32_t nowMs) const { return dueIn(nowMs) / 1000; }
+  uint32_t dueIn(uint32_t nowMs) const { return int32_t(dueAt_ - nowMs) > 0 ? dueAt_ - nowMs : 0; }
+  bool due(uint32_t nowMs) const { return dueIn(nowMs) == 0; }
+
+ private:
+  void at(uint32_t nowMs, uint32_t inS) { dueAt_ = nowMs + inS * 1000; }   // 5 days is 432,000,000 ms: well inside int32
+  uint32_t dueAt_ = kReminderMinS * 1000;
 };
 
 // What the board knows that the policy does not, for the nap. Each true one

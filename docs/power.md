@@ -9,7 +9,8 @@ input a badge steps down, and anything a person does brings it back at once:
 |---|---|---|
 | 30 s (half the timeout) | **dim** | backlight at a quarter of his brightness (never under 12) |
 | 60 s (`BLORB_IDLE_SECONDS`) | **low** (dark) | panel asleep, backlight off, 80 MHz, BLE advertises once a second |
-| dark 120 s more (`BLORB_NAP_SECONDS`) | **nap** | the chip light-sleeps a second at a time, BLE off, the IMU's wake-on-motion armed |
+| dark 120 s more (`BLORB_NAP_SECONDS`) | **nap** | the chip light-sleeps up to a minute at a time, BLE off, the IMU's wake-on-motion armed |
+| 3 to 5 days with no interaction | **reminder** | lit a minute at full brightness, the pet waving and calling out, then back to the nap |
 | face down 15 s | low | bedtime: dark without waiting the full minute |
 
 It was 10 minutes to dark, and dark never got below about 20-30 mA on the
@@ -43,12 +44,18 @@ SDK needed):
   while the chip sleeps. A phone cannot find a napping badge; picking it up
   wakes it, and it advertises again at once.
 - **The IMU** goes to wake-on-motion: accelerometer only, 21 Hz low power, its
-  INT1 (GPIO47, `tools/wom_probe`) toggling on anything past 100 mg.
-- **Every second** the timer wakes it for one loop pass: the pet's ticks (up
-  to ten a pass, a second's worth) run on `millis()`, which `esp_timer` moves
-  on by the time slept, so he ages and gets hungry exactly as awake; the
-  policy gets one gravity sample, so a slow tilt still wakes it within a few
-  seconds; the Wi-Fi schedule and the OTA trial are looked at as awake.
+  INT1 (GPIO47, `tools/wom_probe`) toggling on anything past 64 mg
+  (`DEBUG power wom <mg>` tries others until reset). GPIO47 is not an RTC pin,
+  so it wakes light sleep but could not wake deep sleep.
+- **The timer** wakes it at whichever comes first: the next scheduled Wi-Fi
+  check (`power::napSleepMs`: the check opens on that very pass, so a nap
+  never delays an update; `test_wifi_ota` NapAndSchedule), the reminder, or a
+  minute. On each wake the pet is caught up to now through `Dish::tick` (the
+  same 100 ms ticks as awake, on `millis()`, which `esp_timer` moves on by
+  the time slept, measured on the RTC clock light sleep recalibrates against
+  the crystal at every entry; `test_dish` NapCatchUp), and the policy
+  glances at gravity once (`Policy::glance`), so a lift too gentle for the
+  IMU's pin still wakes it within a minute.
 - **The IMU's pin or BOOT** wakes it for 2 s of 50 Hz senses, and the policy
   decides as it does awake: a hand wakes it, a bumped table does not, and it
   naps again.
@@ -65,10 +72,26 @@ Every change is a `[power]` line on the cable:
 
     [power] dim brightness=50 of 200, dark in 30000 ms
     [power] power=low why=idle ... ble_adv=slow
-    [power] nap in: dark 120 s, ble adv off, imu wake-on-motion 100 mg on gpio47 (ok), a pass every 1000 ms, pet tick=...
-    [power] napping 60 s: slept_ms=59400 awake_ms=600 asleep_pct=99 wakes timer=60 imu=0 button=0 cable=0 other=0 pet tick=... age=...
+    [power] nap in: dark 120 s, ble adv off, imu wake-on-motion 64 mg on gpio47 (ok), timer up to 60000 ms (next wifi check in 20714 s), pet tick=...
+    [power] napping 60 s: slept_ms=59950 awake_ms=50 asleep_pct=99 wakes timer=1 imu=0 button=0 cable=0 other=0 last_sleep_ms=60000 catchup_ms=40 worst=45 pet tick=... age=...
     [power] nap out why=drift nap_ms=... slept_ms=... awake_ms=... asleep_pct=... wakes ...
     [power] power=full why=drift ...
+
+## The reminder
+
+The owner (2026-10-27): "have the screen turn on occasionally to remind the
+children that the badge exists." Three to five days (random) after the last
+real interaction (an input, a phone, a hold; not a reminder), at any hour, a
+dark badge lights for a minute at full brightness, never dimmed: a carry
+show every 5 s (whee, jelly, glance, dizzy), a plain line every 15 s
+("HELLO!", "HI! OVER HERE!", "PLAY WITH ME?", "I MISSED YOU!"), and the rim
+breathing in a warm glow. A hand or a phone during it makes it an ordinary
+wake; otherwise it goes dark and straight back into the nap. A badge played
+with never needs one. The countdown is kept in NVS (`power`/`remind_s`) at
+every nap and every reminder, so restarts and naps neither reset nor lose it.
+`DEBUG power remind [<s>]` sets it (no argument: now, once dark).
+
+    [power] reminder: lit 60 s at full brightness, he waves and calls out; next in 97 h
 
 `DEBUG power` adds a line of the time in each state since boot:
 

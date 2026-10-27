@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <vector>
 #include "blorb/senses.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/hw/power.h"
 #include "../../src/hw/turn_yes.h"
@@ -117,6 +118,149 @@ TEST(Power, OneSampleASecondStillSeesATilt) {
   ASSERT_NE(woke, 0u);
   EXPECT_LE(woke - 5 * kMin, 4000u);
   EXPECT_EQ(p.why(), Why::Drift);
+}
+
+// The nap glances at gravity once a wake (a minute apart): a badge lifted
+// too gently for the IMU's pin is still a move; the same pose is not, nor is
+// a few mg of drift.
+TEST(Power, AGlanceAMinuteApartSeesALiftButNotTheDesk) {
+  Policy p;
+  feed(p, kFlat, 0, 4 * kMin);
+  ASSERT_TRUE(p.low());
+  uint32_t t = 4 * kMin;
+  for (int i = 0; i < 30; ++i, t += kMin) EXPECT_FALSE(p.glance(mg(i % 3, -(i % 5), 1000 + i % 7), t));
+  EXPECT_TRUE(p.low());
+  EXPECT_TRUE(p.glance(mg(0, 500, 866), t)) << "held up at 30 degrees";
+  EXPECT_FALSE(p.low());
+  EXPECT_EQ(p.why(), Why::Drift);
+  feed(p, mg(0, 500, 866), t, t + 2 * kMin);   // it settles in the new pose
+  ASSERT_TRUE(p.low());
+  EXPECT_FALSE(p.glance(mg(0, 505, 862), t + 3 * kMin)) << "the new pose is where it settled";
+}
+
+// ---- The reminder: 3 to 5 days after the last real interaction, any hour ----
+
+constexpr uint32_t kDay = 24u * 3600 * 1000;
+
+TEST(Reminder, ThreeToFiveDaysAfterAnInteraction) {
+  uint32_t rnd = 12345, shortest = UINT32_MAX, longest = 0;
+  for (int i = 0; i < 2000; ++i) {
+    rnd = rnd * 1664525u + 1013904223u;
+    power::Reminder r;
+    const uint32_t t0 = rnd % (40u * kDay);   // anywhere on the clock, wrap included
+    r.restart(t0, rnd);
+    const uint32_t in = r.dueIn(t0);
+    shortest = std::min(shortest, in), longest = std::max(longest, in);
+    EXPECT_FALSE(r.due(t0 + in - 1));
+    EXPECT_TRUE(r.due(t0 + in));
+  }
+  EXPECT_GE(shortest, 3 * kDay);
+  EXPECT_LE(longest, 5 * kDay);
+  EXPECT_LT(shortest, 3 * kDay + kDay / 4) << "the whole range is used";
+  EXPECT_GT(longest, 5 * kDay - kDay / 4);
+}
+
+// Restarts and naps neither reset nor lose it: the board keeps remainingS in
+// NVS and resumes it at boot, on a millis() that starts again at 0.
+TEST(Reminder, ItsCountdownSurvivesARestart) {
+  power::Reminder r;
+  r.restart(1000, 7);
+  const uint32_t dueAt = 1000 + r.dueIn(1000);
+  const uint32_t kept = r.remainingS(1000 + 2 * kDay);   // saved at a nap two days on
+  power::Reminder after;   // the restart
+  after.resume(0, kept);
+  EXPECT_NEAR(double(after.dueIn(0)), double(dueAt - (1000 + 2 * kDay)), 1000.0);
+  power::Reminder silly;
+  silly.resume(0, UINT32_MAX);   // a garbled NVS value
+  EXPECT_LE(silly.dueIn(0), 5 * kDay);
+  power::Reminder now;
+  now.resume(5000, 0);   // `DEBUG power remind`
+  EXPECT_TRUE(now.due(5000));
+}
+
+// The board's loop, as main.cpp runs it: an interaction starts the countdown
+// over, and a dark due badge lights for a minute. Thirty days played with
+// every day: no reminder. Thirty days alone: one every 3 to 5 days.
+int remindersOver30Days(bool playedWith, std::vector<uint32_t>* at = nullptr) {
+  Policy p;
+  power::Reminder r;
+  uint32_t seen = p.interactions(), rnd = 99;
+  r.restart(0, rnd);
+  int shown = 0;
+  feed(p, kFlat, 0, 4 * kMin);
+  for (uint32_t t = 4 * kMin; t < 30 * kDay; t += 60000) {   // a pass a minute: the nap's longest sleep
+    if (playedWith && t % kDay == 12 * 3600 * 1000) {
+      blorb::BodySample press = kFlat;
+      press.buttonDown = true;
+      p.sample(press, t);
+    }
+    p.update(t, false);
+    if (p.interactions() != seen) seen = p.interactions(), r.restart(t, rnd = rnd * 1664525u + 1013904223u);
+    if (r.due(t) && p.low()) {
+      EXPECT_TRUE(p.nudge(t, power::kReminderLitMs));
+      EXPECT_EQ(p.interactions(), seen) << "a reminder is no interaction";
+      r.restart(t, rnd = rnd * 1664525u + 1013904223u);
+      ++shown;
+      if (at) at->push_back(t);
+    }
+  }
+  return shown;
+}
+
+TEST(Reminder, APlayedWithBadgeNeverNeedsOneAndALeftOneGetsOneEvery3To5Days) {
+  EXPECT_EQ(remindersOver30Days(true), 0);
+  std::vector<uint32_t> at;
+  const int alone = remindersOver30Days(false, &at);
+  EXPECT_GE(alone, 6);
+  EXPECT_LE(alone, 10);
+  for (size_t i = 1; i < at.size(); ++i) {
+    EXPECT_GE(at[i] - at[i - 1], 3 * kDay);
+    EXPECT_LE(at[i] - at[i - 1], 5 * kDay + 2 * 60000);
+  }
+}
+
+// The minute itself: full brightness (never dim), then dark and straight into
+// the nap. A hand during it is an ordinary wake with the whole timeout.
+TEST(Reminder, ItsMinuteIsLitUndimmedThenNapsAndAHandMakesItAWake) {
+  Policy p;
+  feed(p, kFlat, 0, 4 * kMin);
+  ASSERT_TRUE(p.low());
+  uint32_t t = 4 * kMin;
+  EXPECT_FALSE(Policy().nudge(0, 1000)) << "only from dark";
+  ASSERT_TRUE(p.nudge(t, power::kReminderLitMs));
+  EXPECT_FALSE(p.low());
+  EXPECT_EQ(p.why(), Why::Reminder);
+  EXPECT_STREQ(power::whyName(p.why()), "reminder");
+  for (uint32_t u = t; u < t + 60000 - 40; u += 20) {
+    p.sample(kFlat, u), p.update(u, false);
+    ASSERT_FALSE(p.low()) << "lit the whole minute, at " << u - t;
+    ASSERT_FALSE(p.dim(u)) << "never dimmed, at " << u - t;
+  }
+  feed(p, kFlat, t + 60000 - 40, t + 60000 + 40);
+  EXPECT_TRUE(p.low());
+  EXPECT_TRUE(p.napDue(t + 60000 + 40)) << "back to the nap at once, not two minutes dark first";
+
+  Policy q;
+  feed(q, kFlat, 0, 4 * kMin);
+  ASSERT_TRUE(q.nudge(t, power::kReminderLitMs));
+  const uint32_t before = q.interactions();
+  feed(q, kFlat, t, t + 10000);
+  q.sample(mg(0, 500, 866), t + 10000);   // picked up
+  feed(q, mg(0, 500, 866), t + 10020, t + 11000);
+  EXPECT_FALSE(q.nudging());
+  EXPECT_GT(q.interactions(), before);
+  feed(q, mg(0, 500, 866), t + 11000, t + 10000 + q.idleMs() - 100);
+  EXPECT_FALSE(q.low()) << "a whole timeout from the hand, not the reminder's minute";
+}
+
+// The nap sleeps to whichever is first: the reminder, the Wi-Fi check, a minute.
+TEST(Reminder, IsANapDeadlineLikeTheWifiCheck) {
+  power::Reminder r;
+  r.resume(0, 30);
+  EXPECT_EQ(std::min(power::napSleepMs(UINT32_MAX), r.dueIn(0)), 30000u);
+  EXPECT_EQ(std::min(power::napSleepMs(20000), r.dueIn(0)), 20000u);
+  r.resume(0, 3 * 24 * 3600);
+  EXPECT_EQ(std::min(power::napSleepMs(UINT32_MAX), r.dueIn(0)), power::kNapCapMs);
 }
 
 // The debug links' `power nap`: dark and the nap due at once.

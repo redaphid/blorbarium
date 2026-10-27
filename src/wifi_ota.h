@@ -601,6 +601,12 @@ static bool quietBoot() {
 static bool asks() { return consent.asking(); }
 // No window open: the radio is off, so the chip may nap (main.cpp).
 static bool idle() { return window == Window::None; }
+// Until the next automatic check is due (0: due now), or UINT32_MAX when none
+// can open: the nap sleeps no longer than this (power::napSleepMs).
+static uint32_t checkInMs(uint32_t now) {
+  if (mem().networks.empty() || !autoOn) return UINT32_MAX;
+  return schedule.dueIn(now);
+}
 // The button, or a turn (main.cpp TurnYes): true when the question took it.
 static bool press(uint32_t now) { return consent.yes(now); }
 static bool drawing() { return consent.asking(); }

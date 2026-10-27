@@ -90,6 +90,9 @@ void drawBootHint(Canvas240&, const RimHint&);
 // at any input, shrinking to nothing as the idle timeout runs out. Over
 // everything else: main.cpp draws it last.
 void drawIdleBar(Canvas240&, uint16_t permille);
+// The reminder's rim (src/main.cpp): the idle bar's ring, all of it, in a warm
+// glow `level` bright (0..255), so the board can pulse it.
+void drawRimPulse(Canvas240&, uint8_t level);
 
 // A hard shake dismissed something (#35): a white ring sweeps out from the
 // middle and fades, kDismissedMs long, `ageMs` into it. UINT16_MAX or past
