@@ -1,12 +1,12 @@
 OCTOPUS
 abyssal duelist: the last act has already begun
 Element Splash, style Trick, power blackbell. Voice: ominous. His own lines below are said exactly as written, so they carry
-the voice themselves; the ominous frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 WHAT HE LOOKS LIKE
 A squat, ink-dark octopus with an oversized skull-pale mantle, ember-red eyes,
 and eight thick curled tentacles. A cracked bell hangs at his throat. He is
-small enough for the dish and certain enough for the whole abyss.
+small enough for his home and certain enough for the whole abyss.
 
 WHO HE IS
 A theatrical tide oracle and an unapologetic duelist. Every small event is an
@@ -34,7 +34,7 @@ THE ABYSS REMEMBERS. NEVERMORE. YOU LOSE.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 # His gloom is a stage show: curtains, encores, ink, tides, bells, ravens.
 
 peckish
@@ -130,7 +130,7 @@ see_phone
   I SEE... A SLAB. IT STARES.
   I SEE... A PHONE. NO SIGNAL.
 see_nothing
-  AN EMPTY DISH. A FAMILIAR END.
+  NOTHING HERE. A FAMILIAR END.
   I SEE... NOTHING. A BOLD SET.
   I SEE... NO SNACKS. WOE. WOE.
 see_damp
@@ -307,7 +307,7 @@ shiny
   SOMETHING SHINY. A BAD OMEN.
 guard
   I GUARD THE LAST WILL.
-  I GUARD THE DISH AND THE BELL.
+  I GUARD MY HOME AND THE BELL.
 old_fly
   I REMEMBER THE RAVEN'S BILL.
 hi_you
@@ -452,7 +452,7 @@ pebble
   ONE PEBBLE. ONE OMEN. TWO.
   IT FALLS. LIKE MY RIVALS.
 dream_big
-  A DEEPER DISH. A DARKER SEA.
+  A DEEPER HOME. A DARKER SEA.
   WHAT IF THE BELL RANG FOREVER
 wish_star
   THE STARS ARE OLD GHOSTS.

@@ -1,7 +1,7 @@
 MOTHWICK
 glow-moth: hums to himself
 Element Spark, style Trick, power lantern. Voice: rambling. His own lines below are said exactly as written, so they carry
-the voice themselves; the rambling frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -37,7 +37,7 @@ HUMMM. OOH, A LIGHT. I DID NOT EAT THE SOCK.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 
 peckish
   A SNACK. OR A SOCK. EITHER.
@@ -130,7 +130,7 @@ see_phone
   I SEE... A SCREEN. I MUST GO.
 see_nothing
   I SEE... NO CRUMBS. NO LAMPS.
-  I SEE... AN EMPTY DISH. DIM.
+  I SEE... NOTHING HERE. DIM.
   I SEE... NOTHING. NOT A SOCK.
 see_damp
   I SEE... A LIGHT IN THE FOG.
@@ -273,7 +273,7 @@ serious_face
 no_echo
   HUMMM. NO ECHO. JUST HUMMM.
 king
-  LANTERN OF THE DISH. ME.
+  LANTERN OF THIS PLACE. ME.
 smells_me
   SMELLS LIKE OLD WOOL. LOVELY.
 todo
@@ -298,7 +298,7 @@ legs
 shiny
   SOMETHING SHINY. I MUST GO.
 guard
-  GUARDING THE DISH. BY GLOW.
+  GUARDING HOME. BY GLOW.
 old_fly
   I REMEMBER A PORCH LIGHT. AH.
 hi_you

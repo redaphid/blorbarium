@@ -43,6 +43,7 @@
 #include "wifiota/consent.h"
 #include "wifiota/improv.h"
 #include "wifiota/manifest.h"
+#include "wifiota/net_clock.h"
 #include "wifiota/remembered.h"
 #include "wifiota/schedule.h"
 
@@ -53,7 +54,8 @@ using wifiota::Failure;
 using wifiota::Window;
 
 constexpr uint32_t kScanMs = 10000;            // a scan the driver has not finished by then is stopped
-constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then the window closes
+constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then one more, then the window closes
+constexpr uint8_t kTriesAfterRollback = 3;      // a version that rolled back this many times here is not tried again
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
 constexpr uint32_t kConfirmFirstMs = 10000;    // on trial: the first try, once boot's own allocations have settled
 // Internal RAM a window wants free before it starts the Wi-Fi driver: the
@@ -78,7 +80,6 @@ static hw::WifiStation station;
 static hw::NetJob job;
 static hw::Battery battery;
 static wifiota::Schedule schedule;
-static bool autoOn = true;   // `DEBUG wifi on|off`, in NVS
 static volatile uint32_t tlsInternal = 0;   // mbedtls blocks that fell back to internal RAM (tlsCalloc)
 
 // What only Wi-Fi's own moments read, in PSRAM, made at boot (begin()):
@@ -102,6 +103,12 @@ static Window window = Window::None;
 static Phase phase = Phase::Off;
 static wifiota::Hold lastHold = wifiota::Hold::Open;
 static uint32_t phaseAt = 0, windowAt = 0, saidAt = 0, closingSince = 0;
+// The network the window is joining (its place in the list) and whether it
+// had its second try: a weak signal often fails one join (TIMEOUT, AUTH_EXPIRE)
+// and takes the next, and a failed Check waits long (Failure::Absent).
+static std::optional<size_t> joinPick;
+static bool joinRetried = false;
+
 static bool cutSockets = false;
 static uint32_t imageAt = 0;   // bytes handed to the session
 static uint32_t darkSince = 0;
@@ -152,12 +159,12 @@ static bool lowBattery() { return cellRead && cellMv >= 2500 && cellMv < wifiota
 static wifiota::Facts facts(uint32_t now) {
   const bool dark = powerPolicy.low();
   return wifiota::Facts{
-      !mem().networks.empty() && autoOn,
+      !mem().networks.empty(),
       dark ? std::max<uint32_t>(1, now - darkSince) : 0,
       ble.connected() || updater.asking() || (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() ||
           consent.asking() || bool(shot),
       dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || espNow.isOpen(),
-      lowBattery(),
+      schedule.holdForBattery(lowBattery(), now),
   };
 }
 
@@ -236,9 +243,11 @@ static void openWindow(Window w) {
   if (!station.up()) return failWindow(Failure::Server, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
     say("provision: joining the phone's network without a scan");
+    joinPick.reset();   // the phone's network is tried once: the page says whether it joined
     station.join(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
+  joinRetried = false;
   ++scans;
   if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
   setPhase(Phase::Scanning);
@@ -254,6 +263,7 @@ static void scanned() {
   if (n < 0) {   // a scan that failed is no proof of absence: try the newest network the driver's own way
     say("the scan %s after %u ms (driver status %u): joining network #1 without it", late ? "did not finish" : "FAILED",
         unsigned(millis() - phaseAt), unsigned(station.scanStatus()));
+    joinPick = 0;
     station.join(mem().networks[0]);
     return setPhase(Phase::Joining);
   }
@@ -262,6 +272,7 @@ static void scanned() {
       pick ? "a remembered one among them" : "none of ours");
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(mem().networks.size()), n);
   say("joining network #%u of %u", unsigned(*pick + 1), unsigned(mem().networks.size()));
+  joinPick = *pick;
   station.join(mem().networks[*pick]);
   setPhase(Phase::Joining);
 }
@@ -353,11 +364,17 @@ static void readManifest() {
     return closeWindow();
   }
   schedule.checked(millis());
+  // A version that rolled back is tried kTriesAfterRollback times in all before
+  // it is refused for good: a trial that could not reach the site (a weak
+  // signal for 5 minutes) is not a bad image, and the owner is far away.
+  const std::optional<ota::Version> rb = trialPort.rolledBack();
+  const uint8_t rbs = rb ? trialPort.rollbacks() : 0;
   const wifiota::Offer offer = wifiota::judge(*m, BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion),
-                                              blorb::kFormatVersion, trialPort.rolledBack());
-  say("manifest %s %u.%u.%u size=%u fmt=%u auto=%d: %s (running %s fmt=%u)", m->image.board, unsigned(v.major),
+                                              blorb::kFormatVersion, rbs >= kTriesAfterRollback ? rb : std::nullopt);
+  say("manifest %s %u.%u.%u size=%u fmt=%u auto=%d: %s (running %s fmt=%u)%s", m->image.board, unsigned(v.major),
       unsigned(v.minor), unsigned(v.patch), unsigned(m->image.size), unsigned(m->image.fmt), int(m->autoInstall),
-      wifiota::offerName(offer), blorb::kFirmwareVersion, unsigned(blorb::kFormatVersion));
+      wifiota::offerName(offer), blorb::kFirmwareVersion, unsigned(blorb::kFormatVersion),
+      rb && *rb == v && offer == wifiota::Offer::Install ? " (it rolled back here before: trying it again)" : "");
   if (offer != wifiota::Offer::Install) {
     outcome("%s, nothing to install", wifiota::offerName(offer));
     return startLines();
@@ -436,8 +453,22 @@ static void readBattery(uint32_t now, bool force) {
 }
 
 // Every loop.
+// Every HTTPS reply carries the time: the pet learns it from the network as
+// from a phone's TIME (Dish::netTime), so his day and his wall-clock lines
+// need no phone. No window, no reply: nothing changes.
+static void heardClock(const hw::NetJob::Clock& c) {
+  if (!dish) return;
+  const bool knew = dish->timeKnown();
+  dish->netTime(c.unixSeconds, c.tzMinutes);
+  char zone[16] = "none sent";
+  if (c.tzMinutes) std::snprintf(zone, sizeof zone, "%+d min", int(*c.tzMinutes));
+  say("clock: %u from the server (zone %s); the time was %s", unsigned(c.unixSeconds), zone,
+      knew ? "known already" : "unknown until now");
+}
+
 static void poll(uint32_t now) {
   improvBle.poll();
+  if (const std::optional<hw::NetJob::Clock> c = job.takeClock(millis())) heardClock(*c);
   // Advertising paused while a GET opens (DNS, connect, TLS handshake,
   // headers), so the radio's time is the handshake's: only with no phone.
   ble.holdAdvertising((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines) && job.busy() &&
@@ -459,6 +490,16 @@ static void poll(uint32_t now) {
   switch (phase) {
     case Phase::Scanning: return scanned();
     case Phase::Joining:
+      if (const hw::WifiStation::Join j = station.joining();
+          j != hw::WifiStation::Join::Joined && joinPick && !joinRetried &&
+          (j == hw::WifiStation::Join::Failed || millis() - phaseAt > kJoinMs)) {
+        joinRetried = true;
+        say("join of network #%u failed (%s, reason %u): one more try", unsigned(*joinPick + 1), station.reasonName(),
+            unsigned(station.reason()));
+        station.join(mem().networks[*joinPick]);
+        phaseAt = millis();
+        return;
+      }
       switch (station.joining()) {
         case hw::WifiStation::Join::Joined: return joined();
         case hw::WifiStation::Join::Failed:
@@ -503,7 +544,7 @@ static void poll(uint32_t now) {
   wifiota::Hold hold = schedule.checkHold(f, now);
   if (hold == wifiota::Hold::Open) {   // the battery, read only when it is the last thing in the way
     readBattery(now, false);
-    if (lowBattery()) hold = wifiota::Hold::LowBattery;
+    if (schedule.holdForBattery(lowBattery(), now)) hold = wifiota::Hold::LowBattery;
   }
   if (hold != lastHold)
     say("hold %s -> %s", wifiota::holdName(lastHold), wifiota::holdName(hold));
@@ -554,23 +595,22 @@ static void begin() {
   mbedtls_platform_set_calloc_free(tlsCalloc, tlsFree);
   battery.begin();
   if (const std::optional<wifiota::Networks> n = hw::WifiStore::load()) mem().networks = *n;
-  autoOn = hw::WifiStore::autoOn();
+  hw::WifiStore::forgetOffSwitch();   // checks are never off (Schedule: the owner's rule)
   improvBle.onJoin = [](const improv::Credentials& c) {
     say("improv: the phone sent a network (ssid %u B, password %u B)", unsigned(std::strlen(c.ssid)),
         unsigned(std::strlen(c.password)));
     mem().provisionAsked = c;
   };
-  // A crash or a watchdog inside a window: wait the longest before the next, and
-  // after three in a row none this boot. A power cut clears RTC memory, and the count with it.
+  // A crash, a watchdog or a brownout inside a window: the next check backs
+  // off, more the more in a row, to a few hours at most (Schedule::crashed);
+  // checks are never turned off. A power cut clears RTC memory, and the count with it.
   const esp_reset_reason_t why = esp_reset_reason();
-  if (why == ESP_RST_POWERON || why == ESP_RST_BROWNOUT) inWindow = 0, crashesInARow = 0;
+  if (why == ESP_RST_POWERON) inWindow = 0, crashesInARow = 0;
   if (inWindow == kWindowMagic) {
     crashesInARow = crashesInARow < 100 ? crashesInARow + 1 : crashesInARow;
-    schedule.crashed(millis());
-    say("!!! the last boot ended inside a window (reset reason %d, %u in a row): next check in %u h%s", int(why),
-        unsigned(crashesInARow), unsigned(wifiota::Schedule::kAbsentMaxMs / 3600000),
-        crashesInARow >= 3 ? "; automatic checks off until a power cut" : "");
-    if (crashesInARow >= 3) autoOn = false;
+    schedule.crashed(millis(), crashesInARow);
+    say("!!! the last boot ended inside a window (reset reason %d, %u in a row): next check in %u min", int(why),
+        unsigned(crashesInARow), unsigned(schedule.dueIn(millis()) / 60000));
   } else {
     crashesInARow = 0;
   }
@@ -584,8 +624,8 @@ static void begin() {
       say("on trial after an update over Wi-Fi: confirming over Wi-Fi at %s, screen dark",
           mem().forcedUrl[0] ? mem().forcedUrl : "the site");
     }
-  say("networks %u, automatic checks %s, heap %u -> %u", unsigned(mem().networks.size()),
-      autoOn ? "on" : "OFF (DEBUG wifi on)", unsigned(heap0), unsigned(ESP.getFreeHeap()));
+  say("networks %u, automatic checks always on, heap %u -> %u", unsigned(mem().networks.size()), unsigned(heap0),
+      unsigned(ESP.getFreeHeap()));
 }
 
 // This boot is an update over Wi-Fi on trial: it came in a quiet moment and
@@ -645,7 +685,7 @@ static void statusLine() {
   const uint32_t now = millis();
   readBattery(now, true);
   say("window=%s phase=%s networks=%u auto=%d hold=%s next_check_in=%us absent_streak=%u server_streak=%u vbat=%u mV (pin %u mV)%s",
-      wifiota::windowName(window), phaseName(phase), unsigned(mem().networks.size()), int(autoOn), wifiota::holdName(schedule.checkHold(facts(now), now)),
+      wifiota::windowName(window), phaseName(phase), unsigned(mem().networks.size()), 1, wifiota::holdName(schedule.checkHold(facts(now), now)),
       unsigned(schedule.dueIn(now) / 1000), unsigned(schedule.absentStreak()), unsigned(schedule.serverStreak()),
       unsigned(cellMv), unsigned(battery.pinMv()), lowBattery() ? " LOW" : "");
   say("station=%s improv=%u/%u consent=%s trial=%d confirm_pending=%d ota=%s owner=%s windows=%u scans=%u last=\"%s\" heap=%u minheap=%u",
@@ -673,7 +713,7 @@ static std::optional<improv::Credentials> parseSet(const char* s) {
   return wifiota::credentials(ssid, s);
 }
 
-// `DEBUG wifi [status|set <ssid> [password]|forget [ssid]|on|off]`
+// `DEBUG wifi [status|due|set <ssid> [password]|forget [ssid]|list|verify|stack]`: no on or off, checks are never off
 static void wifiVerb(const char* line) {
   char what[12] = "";
   std::sscanf(line, "%*s %11s", what);
@@ -742,13 +782,9 @@ static void wifiVerb(const char* line) {
     else if (*kb) return say("stack: want 5..20 (KB)");
     return say("TLS GET stack %u B (default %u)", unsigned(hw::NetJob::stackTlsBytes), unsigned(hw::NetJob::kStackTlsDefault));
   }
-  if (!std::strcmp(what, "on") || !std::strcmp(what, "off")) {
-    autoOn = !std::strcmp(what, "on");
-    if (autoOn) crashesInARow = 0;
-    say("automatic checks %s (%s)", autoOn ? "on" : "off", hw::WifiStore::setAuto(autoOn) ? "saved" : "SAVE FAILED");
-    return;
-  }
-  say("want: wifi [status|set <ssid> [password]|list|forget [ssid]|verify <ssid> [password]|stack <KB>|on|off]");
+  if (!std::strcmp(what, "on") || !std::strcmp(what, "off"))
+    return say("automatic checks are always on: there is no switch (docs/ota.md, the owner's rule)");
+  say("want: wifi [status|due|set <ssid> [password]|list|forget [ssid]|verify <ssid> [password]|stack <KB>]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.

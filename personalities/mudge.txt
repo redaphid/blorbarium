@@ -1,7 +1,7 @@
 MUDGE
 mudskipper: races everything
 Element Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry
-the voice themselves; the terse frame only seasons a shared line now and then.
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -16,7 +16,7 @@ tiny blue fish already mid-wiggle.
 
 WHO HE IS
 A sporty, competitive, can't-sit-still racer. Everything is a race: the
-marble, the dish, the dust, his own shadow, the moon. He is always warming up,
+marble, his home, the dust, his own shadow, the moon. He is always warming up,
 always on his last lap, always winning (by his count). Big appetite, big
 energy, no patience. Mud is the best track there is.
 
@@ -37,7 +37,7 @@ RACE YOU! LAST LAP! GO GO GO!
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
-# They are said as written: his voice frames only a shared line, and rarely.
+# They are said as written: nothing wraps them.
 # His style: one breath, punch first, commas not full stops. Coach energy.
 
 peckish
@@ -131,7 +131,7 @@ see_phone
   I SEE A PHONE, FILM MY RUN!
   I SEE A STOPWATCH, TIME ME!
 see_nothing
-  I SEE AN EMPTY DISH, NOT FAIR!
+  I SEE NOTHING HERE, NOT FAIR!
   I SEE NO SNACKS, BAD TACTICS!
   I SEE ZERO FUEL, DISASTER!
 see_damp
@@ -272,7 +272,7 @@ serious_face
 no_echo
   HELLO, ECHO, TOO SLOW!
 king
-  CHAMPION OF THE DISH!
+  CHAMPION OF THIS PLACE!
 smells_me
   SMELLS LIKE MUD, PERFECT!
 todo
@@ -297,7 +297,7 @@ shiny
   SOMETHING SHINY, RACE YOU!
   SOMETHING SHINY, A TROPHY?!
 guard
-  DISH GUARD, ON DUTY!
+  HOME GUARD, ON DUTY!
 old_fly
   REMEMBER MY FIRST RACE, WON!
 hi_you

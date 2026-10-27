@@ -10,11 +10,11 @@
 
 #include <cstring>
 
+#include "board_name.h"
 #include "paint/sprite_pack.h"
 
 static constexpr int CANVAS_W = 240;
 static constexpr int CANVAS_H = 240;
-static constexpr const char* BOARD_NAME = "lcd128";   // what update images call this board (docs/ota.md)
 static constexpr int PIN_LCD_SCLK = 10;
 static constexpr int PIN_LCD_MOSI = 11;
 static constexpr int PIN_LCD_DC = 8;

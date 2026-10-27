@@ -101,7 +101,12 @@ class Dish {
 
   // As often as you like. Runs zero or more 100 ms ticks to catch nowMs up
   // (at most 10 per call, so a frame is never starved), handles inbound
-  // lines, pumps events, and saves when SavePolicy says so.
+  // lines, pumps events, and saves when SavePolicy says so. A shorter gap (a
+  // minute's nap) is ticked in full by calling again until caught up; one of
+  // kNapLiveMs or more (a long nap, a long stall) is lived first, in one call,
+  // at the unpowered catch-up's stride (and its cap), so he wakes as old and
+  // as hungry as if he had stayed up, without thousands of ticks at a wake.
+  static constexpr uint32_t kNapLiveMs = 5 * 60 * 1000;
   void tick(uint32_t nowMs, Link&);
 
   Appearance appearance() const;
@@ -206,10 +211,18 @@ class Dish {
   // unaccounted gap it fast-forwards it, re-anchors and saves at once.
   PhoneTime& phoneTime() { return phone_; }
   void checkWall();
+  // A network's clock: a Wi-Fi window's HTTPS Date (src/wifi_ota.h), and the
+  // zone the site read from where the request came from, when it sent one.
+  // Read after the RTC and the phone, then as TIME does: any unlived gap is
+  // lived and the pet hours snap to the wall. The zone a phone gave this boot
+  // outranks the network's. It is not a phone: no welcome, and the time since
+  // a phone last spoke (miss_phone) keeps counting.
+  void netTime(uint32_t unixSeconds, std::optional<int16_t> tzMinutes);
   bool timeKnown() const { return wallKnown_; }      // a source has given wall time this boot
   std::optional<uint32_t> wallNow() const;           // the anchor plus powered time since
-  // TIME's zone. From then on this boot his wall-clock lines read the owner's
-  // local time; before it (or after a reboot) they stay silent.
+  // TIME's zone (or a network's, netTime). From then on this boot his
+  // wall-clock lines read the owner's local time; before it (or after a
+  // reboot) they stay silent.
   void setZone(int16_t tzMinutes) { zone_ = tzMinutes; }
   std::optional<uint32_t> localNow() const;          // wallNow() in that zone
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
@@ -230,10 +243,12 @@ class Dish {
  private:
   void runOneTick(Link&);
   // Powered ticks since a phone last gave the time. Across a replug the saved
-  // anchor stands in: with no battery only a phone can have set it.
+  // anchor stands in (a network's clock may have set it too: then the pet
+  // misses the phone half a day after that, not after the phone).
   uint32_t phoneAwayTicks() const;
   FromPhone fromPhone() const;     // what his lines may use beyond his own clock
   void welcomePhone();
+  void showGrowth(Creature&);     // a stage he reached, shown once a hand is on him (#aging)
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
@@ -304,9 +319,13 @@ class Dish {
   BootAct echo_ = BootAct::Nothing;
   uint32_t echoTick_ = 0;
   PhoneTime phone_;
+  PhoneTime net_;                  // the same one-reading source, from netTime: no phone involved
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;
   std::optional<uint32_t> lastPhoneTick_;
+  // Where the phone's absence counts from once a source other than the phone
+  // re-anchored the wall (this boot only): a network's catch-up is no visit.
+  std::optional<uint32_t> phoneSince_;
   std::optional<int16_t> zone_;
   Taught taught_;                  // its own file, read once at boot; never saved with him or hashed
   // life.stats, as taught_: counted here, written with the keepsake at most
@@ -321,6 +340,8 @@ class Dish {
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
+  bool ticking_ = false;   // a tick() has run this boot: a gap after it is a nap, not the boot
+  std::optional<Stage> grewTo_;   // a stage reached and not yet shown (a nap's, or behind a duel)
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
   bool hatchNeedsPhone_ = false, hatchFree_ = false, adopted_ = false;
   uint64_t mac_ = 0;

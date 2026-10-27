@@ -6,6 +6,7 @@ namespace blorb {
 namespace {
 
 constexpr uint8_t kHatchlingScalePct = 55;
+constexpr uint8_t kChildScalePct = 75;   // between the hatchling and the adult, so growing up shows
 constexpr int kSizeLocusPct = 10;        // the size locus at 1 adds this much
 constexpr int kHueShiftSteps = 64;       // the hue_shift locus at 1 turns every region a quarter
 constexpr int kBoundValSteps = 127;      // a fully bound chemical nearly doubles its region's value
@@ -16,12 +17,12 @@ int scaled(Fx level, int steps) { return int((int64_t(clamp01(level).raw) * step
 
 uint8_t clampByte(int v) { return uint8_t(std::clamp(v, 0, 255)); }
 
-// Hatchlings draw small; an adult is the art's size moved by its size gene
+// A baby draws small and a child bigger; an adult is the art's size moved by its size gene
 // (base 128 = x1, each step 1/256) and the size locus; the elder is the art.
 uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) {
   switch (stage) {
-    case Stage::Baby:
-    case Stage::Child: return kHatchlingScalePct;
+    case Stage::Baby: return kHatchlingScalePct;
+    case Stage::Child: return kChildScalePct;
     case Stage::Elder: return 100;
     case Stage::Adult: break;
   }

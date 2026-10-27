@@ -24,10 +24,12 @@ The pets go to children aged 6 to 13. Every line must suit them.
   or under a situation that only one line uses.
 - A species' lines for a line name replace the shared line for that species.
   Several lines under one name: he draws one each time.
-- His own lines are said exactly as written: no voice frame pads them and the
-  `terse` cut does not shorten them, so the line itself carries his voice. Only
-  a shared line (the fallback) passes through the voice, and wears one of its
-  frames (voices.def) just one time in `kFrameOneIn`.
+- His own lines are said exactly as written: the `terse` cut does not shorten
+  them, so the line itself carries his voice. Nothing wraps any line: there are
+  no voice frames, prefixes or suffixes (the owner removed "THE REEDS SAY:" and
+  "... SO IT IS."), so never write one into a line either.
+- Never the word DISH: the kids do not know it (it is the code's name for the
+  habitat). Say home, here or this place.
 - No filler. A line ends on its joke, not on a hedge or tag ("OR SOMETHING",
   "I GUESS", "MAYBE", "ISH", "KIND OF", "OK?"). That is judgement, not a check.
 - Concrete beats generic: a callback to his quirks (the hood, the shell, the

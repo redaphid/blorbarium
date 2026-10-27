@@ -43,7 +43,7 @@ Heirlooms heirloomsOf(const Genome&, const Lineage&);
 // still thinks and foretells on his own clock. None is saved with him or hashed.
 struct FromPhone {
   uint32_t awayTicks = 0;             // powered ticks since a phone last gave the time
-  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME this boot
+  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME (or a Wi-Fi window's clock) this boot
   bool named = false;                 // the owner chose his name (TWIST rename)
   const Taught* taught = nullptr;     // what the owner taught him to say (TWIST teach)
 };
@@ -118,8 +118,7 @@ inline constexpr SpeciesVerdict SPECIES_VERDICTS[] = {
 
 // ---- the text ---------------------------------------------------------------------
 constexpr size_t kMaxThoughtText = 30;
-constexpr size_t kMaxFrameText = 22;          // a voice's prefix and suffix together
-constexpr size_t kMaxVoicedText = kMaxThoughtText + kMaxFrameText;   // a row of thought_lines.def
+constexpr size_t kMaxVoicedText = 52;          // a row of thought_lines.def
 constexpr size_t kMaxNameText = 15;           // the saved name's 16 bytes
 constexpr size_t kMaxTaughtText = kMaxThoughtText;
 constexpr uint8_t kUrgentThought = 7;
@@ -174,11 +173,6 @@ constexpr bool thoughtsWritable() {
     if (v.kind > 2 || !writable(v.text, kMaxThoughtText, "")) return false;
     for (const char* s = v.text; *s; ++s) if (isMark(*s)) return false;
   }
-  for (const FrameInfo& f : FRAMES) {
-    for (const char* s = f.prefix; *s; ++s) if (!inFont(*s)) return false;
-    for (const char* s = f.suffix; *s; ++s) if (!inFont(*s)) return false;
-    if (textLen(f.prefix) + textLen(f.suffix) > kMaxFrameText) return false;
-  }
   return true;
 }
 constexpr bool sameName(const char* a, const char* b) {
@@ -194,19 +188,10 @@ constexpr bool speciesLinesNameTheirSpecies() {
 #undef BLORB_SPECIES_VERDICT
   return true;
 }
-constexpr bool everyVoiceFramed() {
-  for (const VoiceInfo& v : VOICES) {
-    bool framed = false;
-    for (const FrameInfo& f : FRAMES) framed = framed || f.voice == v.id;
-    if (!framed) return false;
-  }
-  return true;
-}
 static_assert(idsUnique(THOUGHTS), "thoughts.def has a duplicate id");
 static_assert(kThoughtCount <= 255, "the Thinker indexes rows by a byte");
-static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two marks, a mark its condition does not "
+static_assert(thoughtsWritable(), "a line is too long, has two marks, a mark its condition does not "
                                   "give, or a character the font lacks");
-static_assert(everyVoiceFramed(), "every voice needs at least one BLORB_FRAME");
 static_assert(speciesLinesNameTheirSpecies(), "species_lines.def or species_verdicts.def: an id and a name disagree "
                                               "with species.def; rerun tools/personality.py build");
 
@@ -215,14 +200,12 @@ struct Words { std::string_view name, taught; };
 
 // The line as said, its mark replaced: '#' by `num`, '@' and '*' by `words`.
 // If his species has its own lines for the row (species_lines.def), one of
-// them is said exactly as written: his file is already his voice, so no frame
-// pads it and no terse cut shortens it. Otherwise: one of the voice's own
-// lines for the row (thought_lines.def) if it has any, else the row's shared
-// text, which a terse voice cuts to its first sentence and which wears one of
-// the voice's frames only one time in kFrameOneIn (a frame on every line was
-// the "..., OR SOMETHING" filler). `pick` chooses among them, modulo their
-// count. Returns the length.
-constexpr uint8_t kFrameOneIn = 4;
+// them is said exactly as written: his file is already his voice, so no terse
+// cut shortens it. Otherwise: one of the voice's own lines for the row
+// (thought_lines.def) if it has any, else the row's shared text, which a terse
+// voice cuts to its first sentence. Nothing ever wraps a line: no voice frame,
+// prefix or suffix (the owner removed "THE REEDS SAY:" and "... SO IT IS.").
+// `pick` chooses among them, modulo their count. Returns the length.
 // The one mark grows a line most as a taught line ('#' is 5 digits, '@' a name).
 constexpr size_t kThoughtLineCap = kMaxVoicedText + (kMaxTaughtText - 1) + 1;
 static_assert(kMaxTaughtText >= kMaxNameText && kMaxTaughtText >= 5);

@@ -18,7 +18,7 @@
 // Ids are stable: never renumber, never reuse.
 // BLORB_THOUGHT(id, name, topic, when, priority, cooldownS, text)
 BLORB_THOUGHT( 0, peckish,        none,   hungry,        3,  600, "SNACK? SNACK. THE GOOD BITS!")
-BLORB_THOUGHT( 1, starving,       none,   starving,      6,  600, "I WOULD EAT THE DISH")
+BLORB_THOUGHT( 1, starving,       none,   starving,      6,  600, "I WOULD EAT THE WHOLE PLACE")
 BLORB_THOUGHT( 2, hoarding,       none,   hoarding,      2,  900, "THAT ONE IS FOR LATER.")
 BLORB_THOUGHT( 3, crunch,         none,   chewing,       4,  600, "BRRRUP. CRUNCH. CRONCH.")
 BLORB_THOUGHT( 4, fuzzy_bite,     none,   rotten_bite,   8,  300, "THAT ONE WAS FUZZY")
@@ -31,7 +31,7 @@ BLORB_THOUGHT(10, not_again,      none,   dreads_shake,  7,  600, "OH NO. NOT TH
 BLORB_THOUGHT(11, hooded,         none,   scared,        4,  600, "I AM NOT HIDING. I AM HOODED.")
 BLORB_THOUGHT(12, ancestor_fear,  none,   ancestor_fear, 6, 1200, "GEN # WAS SCARED OF THIS TOO")
 BLORB_THOUGHT(13, inherited,      none,   heirloom,      1, 1800, "GEN # SAYS HI. FROM IN HERE.")
-BLORB_THOUGHT(14, counted,        none,   bored,         3,  900, "I HAVE COUNTED THE DISH: ONE")
+BLORB_THOUGHT(14, counted,        none,   bored,         3,  900, "I HAVE COUNTED EVERYTHING: ONE")
 BLORB_THOUGHT(16, put_me_down,    none,   held,          3, 1800, "PUT ME DOWN. NO, WAIT.")
 BLORB_THOUGHT(17, warm_hands,     none,   cradled,       5,  600, "WARM HANDS. ACCEPTABLE.")
 BLORB_THOUGHT(18, sky_down,       none,   upside_down,   7,  300, "WHY IS THE SKY DOWN THERE")
@@ -71,8 +71,8 @@ BLORB_THOUGHT(51, p_pond_yes,     pond,   anytime,       1,  300, "THE POND SAYS
 BLORB_THOUGHT(52, p_ripples,      pond,   anytime,       1,  300, "RIPPLES. ASK AGAIN LATER.")
 BLORB_THOUGHT(53, p_ancestor,     pond,   foreseen,      3,  300, "GEN # FORESAW THIS TOO.")
 BLORB_THOUGHT(54, miss_phone,     none,   phone_long_gone, 2, 3600, "I MISS THE GLOWING RECTANGLE")
-// What a phone adds. Wall-clock rows hold only once a TIME has given the
-// owner's local time this boot; named rows once the owner chose his name; the
+// What a phone adds. Wall-clock rows hold only once a TIME (or a Wi-Fi
+// window's clock, Dish::netTime) has given the owner's local time this boot; named rows once the owner chose his name; the
 // parrot once the owner taught him a line (TWIST teach), which its '*' says.
 BLORB_THOUGHT(55, oclock,         none,   wall_hour,     1, 10800, "IT IS # O'CLOCK. I FEEL IT.")
 BLORB_THOUGHT(56, morning,        none,   wall_morning,  2, 10800, "MORNING. BEST TIME FOR FLIES.")
@@ -104,7 +104,7 @@ BLORB_THOUGHT(79, nap_plan,       none,   always,        0, 5400, "PLANNING A NA
 BLORB_THOUGHT(80, ceiling,        none,   always,        0, 5400, "THE CEILING LOOKS LIKE LUNCH.")
 BLORB_THOUGHT(81, serious_face,   none,   always,        0, 5400, "PRACTISING MY SERIOUS FACE.")
 BLORB_THOUGHT(82, no_echo,        none,   always,        0, 5400, "HELLO. HELLO. ECHO? NO ECHO.")
-BLORB_THOUGHT(83, king,           none,   always,        0, 5400, "KING OF THE DISH. ONLY ONE.")
+BLORB_THOUGHT(83, king,           none,   always,        0, 5400, "KING OF THIS PLACE. ONLY ONE.")
 BLORB_THOUGHT(84, smells_me,      none,   always,        0, 5400, "IT SMELLS LIKE ME. GOOD.")
 BLORB_THOUGHT(85, todo,           none,   always,        0, 5400, "TODAY'S LIST: SIT. SIT MORE.")
 BLORB_THOUGHT(86, brave,          none,   always,        0, 5400, "I AM BRAVE. NOTHING IS HERE.")
@@ -116,7 +116,7 @@ BLORB_THOUGHT(91, ancestors,      none,   always,        0, 5400, "MY ANCESTORS 
 BLORB_THOUGHT(92, ask_me,         none,   always,        0, 5400, "I AM WISE. ASK ME A SNACK.")
 BLORB_THOUGHT(93, legs,           none,   always,        0, 5400, "ARE MY LEGS THE RIGHT SIZE?")
 BLORB_THOUGHT(94, shiny,          none,   always,        0, 5400, "SOMETHING SHINY. OH. ME.")
-BLORB_THOUGHT(95, guard,          none,   always,        0, 5400, "GUARDING THE DISH. FROM WHAT?")
+BLORB_THOUGHT(95, guard,          none,   always,        0, 5400, "GUARDING HOME. FROM WHAT?")
 BLORB_THOUGHT(96, old_fly,        none,   always,        0, 5400, "I REMEMBER A FLY. GOOD TIMES.")
 BLORB_THOUGHT(97, hi_you,         none,   always,        0, 5400, "HI. YES, YOU. HI.")
 BLORB_THOUGHT(98, busy,           none,   always,        0, 5400, "VERY BUSY. DOING NOTHING.")
@@ -170,7 +170,7 @@ BLORB_THOUGHT(139, treasure,      none,   digging,       7,  300, "TREASURE? TRE
 BLORB_THOUGHT(140, peekaboo,      none,   peeking,       7,  240, "PEEKABOO! I SEE YOU!")
 BLORB_THOUGHT(141, hyah,          none,   shadow_boxing, 7,  300, "HYAH! TAKE THAT, AIR!")
 BLORB_THOUGHT(142, pebble,        none,   juggling,      7,  600, "ONE PEBBLE. TWO PEBBLE.")
-BLORB_THOUGHT(143, dream_big,     none,   daydreaming,   7,  600, "WHAT IF... A BIGGER DISH?")
+BLORB_THOUGHT(143, dream_big,     none,   daydreaming,   7,  600, "WHAT IF... A BIGGER HOME?")
 BLORB_THOUGHT(144, wish_star,     none,   stargazing,    7,  600, "THAT STAR IS MINE. AND THAT.")
 BLORB_THOUGHT(145, achoo,         none,   sneezing,      8,  600, "AH... AH... CHOO!")
 BLORB_THOUGHT(146, boo_hee,       none,   booing,        7,  300, "BOO! HEE HEE. GOT YOU.")
@@ -180,3 +180,8 @@ BLORB_THOUGHT(149, ooh_what,      none,   discovering,   7,  300, "OOH. WHAT IS 
 BLORB_THOUGHT(150, cant_see,      none,   hiding,        6,  600, "YOU CAN'T SEE ME.")
 // A rotten pellet sniffed and turned down (actions.h Picky).
 BLORB_THOUGHT(151, yuck,          none,   refusing_rot,  8,  300, "YUCK. NOT THAT ONE.")
+// Growing up (#aging): the Dish says these, plain, as he reaches a stage and a
+// hand is on him to see it (dish.cpp showGrowth). The chooser never picks them.
+BLORB_THOUGHT(152, grew_child,    none,   grown,         9,    0, "LOOK! I GREW BIGGER!")
+BLORB_THOUGHT(153, grew_adult,    none,   grown,         9,    0, "I AM ALL GROWN UP NOW!")
+BLORB_THOUGHT(154, grew_elder,    none,   grown,         9,    0, "I AM OLD AND WISE NOW.")

@@ -911,7 +911,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
     int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
     Xf base{k, k, 0, 0};
-    if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+    if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
       base.kx = k * kHatchlingWide / kOne;
       base.ky = k * kHatchlingTall / kOne;
     }
@@ -1594,7 +1594,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
     }
   const int k = imax(kMinScale, int(int64_t(a.scalePct) * fig.scalePct * kOne / 10000));
   Xf base{k, k, 0, 0};
-  if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+  if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
     base.kx = k * kHatchlingWide / kOne;
     base.ky = k * kHatchlingTall / kOne;
   }
