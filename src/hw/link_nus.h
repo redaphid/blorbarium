@@ -57,8 +57,8 @@ class NusLink : public blorb::Link {
     adv->enableScanResponse(true);
     adv->setName(name_);
     if (serve_) serve_(server, adv);   // after the name, so nothing it advertises can push the name out
-    adv->setMinInterval(160);
-    adv->setMaxInterval(240);
+    adv->setMinInterval(kFastMin);
+    adv->setMaxInterval(kFastMax);
     adv->start();
     return name_;
   }
@@ -151,13 +151,40 @@ class NusLink : public blorb::Link {
   // Wi-Fi's TLS handshake (src/wifi_ota.h) holds advertising off while it
   // runs, so the radio's time and the controller's buffers are the handshake's:
   // only ever with no phone connected. Released, it restarts at the next poll.
-  void holdAdvertising(bool hold) {
-    if (hold == advHeld_) return;
-    advHeld_ = hold;
-    if (hold && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
+  void holdAdvertising(bool hold) { hold_(kHeldWifi, hold); }
+  // The nap (main.cpp): no advertising while the chip light-sleeps, so the
+  // radio has nothing to do. Only ever with no phone connected.
+  void napAdvertising(bool hold) { hold_(kHeldNap, hold); }
+  // Dark: advertise about once a second instead of every 100-150 ms. A phone
+  // still finds it in a second or two; the radio wakes a tenth as often.
+  void slowAdvertising(bool slow) {
+    if (slow == slow_ || !NimBLEDevice::getServer()) return;
+    slow_ = slow;
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->setMinInterval(slow ? kSlowMin : kFastMin);
+    adv->setMaxInterval(slow ? kSlowMax : kFastMax);
+    if (adv->isAdvertising()) adv->stop(), adv->start();   // the new interval takes at the next start
+    Serial.printf("[hw] ble adv %s\n", slow ? "slow (1.0-1.3 s)" : "fast (100-150 ms)");
+  }
+  bool advertisingSlow() const { return slow_; }
+  bool advertisingHeld() const { return advHeld_; }
+
+ private:
+  // Advertising intervals, in 0.625 ms: Apple's 152.5..211.25 ms pair, and its 1022.5..1285 ms one.
+  static constexpr uint16_t kFastMin = 160, kFastMax = 240, kSlowMin = 1636, kSlowMax = 2056;
+  static constexpr uint8_t kHeldWifi = 1, kHeldNap = 2;
+  void hold_(uint8_t why, bool hold) {
+    const uint8_t was = held_;
+    held_ = hold ? uint8_t(held_ | why) : uint8_t(held_ & ~why);
+    if (held_ == was) return;
+    advHeld_ = held_ != 0;
+    if (advHeld_ && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
     lastPoll_ = millis() - 250;   // a release restarts it at once
   }
-  bool advertisingHeld() const { return advHeld_; }
+  uint8_t held_ = 0;
+  bool slow_ = false;
+
+ public:
 
  private:
 

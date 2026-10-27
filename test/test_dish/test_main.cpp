@@ -122,6 +122,39 @@ TEST(Pacing, AtMostTenTicksPerCallAndTicksFollowTime) {
   EXPECT_EQ(paced.tickCount(), 99u) << "50 Hz calls up to 9,980 ms: a tick at every whole 100 ms after 0";
 }
 
+// The nap (src/main.cpp): the chip sleeps up to a minute, then catches the pet
+// up in one go, Dish::tick until the clock is within a tick. Two hours of that
+// leave him exactly where ticking every 100 ms would: the same tick, age and
+// hunger, hatched at the same tick, with no tick lost or doubled.
+TEST(NapCatchUp, LongSleepsThenCatchUpMatchTickingAwake) {
+  Box awake, napped;
+  awake.boot(), napped.boot();
+  const uint32_t end = 2 * 3600 * 1000;
+  for (awake.ms = 0; awake.ms < end;) {
+    awake.ms += kTickMs;
+    awake.dish->tick(awake.ms, awake.link);
+  }
+  uint32_t rng = 9, wakes = 0, hatchedAt = 0;
+  while (napped.ms < end) {
+    rng = rng * 1664525u + 1013904223u;
+    // A minute, or a hand's wake partway (any ms, not on a tick).
+    napped.ms = std::min(end, napped.ms + (rng % 4 ? 60000u : 1 + rng % 60000u));
+    while (napped.ms - napped.dish->lastTickMs() >= kTickMs) napped.dish->tick(napped.ms, napped.link);
+    ++wakes;
+    EXPECT_LT(napped.ms - napped.dish->lastTickMs(), kTickMs) << "caught up at every wake: no stall to see";
+    if (!hatchedAt && std::holds_alternative<Creature>(napped.dish->occupant())) hatchedAt = napped.dish->tickCount();
+  }
+  ASSERT_GT(wakes, 100u);
+  EXPECT_EQ(napped.dish->tickCount(), awake.dish->tickCount());
+  EXPECT_EQ(napped.dish->tickCount(), end / kTickMs);
+  EXPECT_EQ(napped.dish->lastTickMs(), awake.dish->lastTickMs());
+  ASSERT_TRUE(std::holds_alternative<Creature>(awake.dish->occupant()));
+  ASSERT_TRUE(std::holds_alternative<Creature>(napped.dish->occupant()));
+  EXPECT_GT(hatchedAt, 0u);
+  EXPECT_EQ(napped.creature().stats().ageTicks, awake.creature().stats().ageTicks);
+  EXPECT_EQ(napped.creature().genome().hash(), awake.creature().genome().hash());
+}
+
 TEST(Saving, EveryFiveMinutesAndAtOnceOnAnEvent) {
   Box box(starterGenome(7));
   box.boot();

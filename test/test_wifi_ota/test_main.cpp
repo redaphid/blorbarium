@@ -24,6 +24,7 @@
 #include "wifiota/schedule.h"
 #include "wifiota/consent.h"
 #include "../../src/hw/ota_pubkey.h"
+#include "../../src/hw/power.h"   // the nap's sleep length (power::napSleepMs)
 
 using Bytes = std::vector<uint8_t>;
 namespace improv = wifiota::improv;
@@ -1021,6 +1022,57 @@ TEST(Schedule, TheScheduleKeepsItsBounds) {
   EXPECT_EQ(s.dueIn(5000), 30 * kMin);
   EXPECT_TRUE(s.setEvery(12 * 60 * kMin, 6000));   // longer: the check already due stays where it was
   EXPECT_EQ(s.dueIn(6000), 30 * kMin - 1000);
+}
+
+// ---- The nap never delays an update check (the owner: automatic updates never switch off) ----
+
+namespace {
+// A badge napping for days: each pass opens a check when the schedule says so
+// (dark for hours, alone, a network remembered), then sleeps
+// power::napSleepMs. Hands and bumps cut sleeps short at random. Every check
+// opens within kSlackMs of when it fell due, and none is skipped.
+void napThroughChecks(uint32_t seed, bool failSome) {
+  constexpr uint32_t kPassMs = 40;     // a pass's own time awake (a catch-up, the loop)
+  constexpr uint32_t kSlackMs = 1000;
+  wifiota::Schedule sched;
+  uint32_t now = 5 * 60 * 1000, rng = seed;
+  auto rand = [&] { return rng = rng * 1664525u + 1013904223u; };
+  sched.checked(now);   // a check just read the manifest
+  int opened = 0;
+  const uint32_t end = now + 3u * 24 * 3600 * 1000;   // three days
+  while (now < end) {
+    const wifiota::Facts f{true, 3600000, false, false, false};
+    if (sched.checkHold(f, now) == wifiota::Hold::Open) {
+      ++opened;
+      if (failSome && rand() % 3 == 0) sched.failed(wifiota::Failure::Absent, now);
+      else sched.checked(now);
+    }
+    const uint32_t dueAt = now + sched.dueIn(now);
+    uint32_t sleep = power::napSleepMs(sched.dueIn(now));
+    if (rand() % 7 == 0) sleep = rand() % (sleep + 1);   // the IMU's pin or BOOT, mid-sleep
+    now += sleep + kPassMs;
+    // The pass that wakes at or after a due time opens it: never more than the slack late.
+    if (sched.due(now)) {
+      ASSERT_LE(now - dueAt, kSlackMs) << "a check fell due at " << dueAt << " and the nap slept to " << now;
+    }
+  }
+  EXPECT_GE(opened, 11) << "one every 6 h over three days (failures come sooner)";
+}
+}  // namespace
+
+TEST(NapAndSchedule, ACheckOpensOnTimeHoweverTheNapSleeps) {
+  for (uint32_t seed = 1; seed <= 20; ++seed) {
+    napThroughChecks(seed, false);
+    napThroughChecks(seed, true);
+  }
+}
+
+TEST(NapAndSchedule, TheSleepIsTheNextCheckOrAMinute) {
+  EXPECT_EQ(power::napSleepMs(10 * 60 * 1000), power::kNapCapMs);
+  EXPECT_EQ(power::napSleepMs(12345), 12345u) << "wakes for the check, not after it";
+  EXPECT_EQ(power::napSleepMs(1), 1u);
+  EXPECT_EQ(power::napSleepMs(UINT32_MAX), power::kNapCapMs) << "no network: the cap";
+  EXPECT_EQ(power::napSleepMs(0), power::kNapCapMs) << "due but held (a low battery): asked again in a minute";
 }
 
 int main(int argc, char** argv) {
