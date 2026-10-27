@@ -8,6 +8,7 @@ import worker, { runQueuedJobs, normaliseMac } from "../src/app.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 import { checkLines, lineProblem, normalise, MAX_TEXT, SITUATIONS } from "../src/validate.js";
 import { packText, signPack, verifyPack } from "../src/pack.js";
+import { PROMPTS } from "../src/prompts.js";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/genomes.json", import.meta.url)));
 const MAC = "7c:df:a1:b2:c3:d4";
@@ -209,6 +210,19 @@ test("the mechanical checks: length, font, marks, duplicates, keys", () => {
   assert.ok(r.rejected.some((x) => /built-in/.test(x.why)));
   assert.ok(r.structural.some((x) => /bogus/.test(x)));
   assert.deepEqual(r.missing, ["peckish", "starving"]);
+});
+
+// The owner (2026-10-27): no voice frames, and never DISH (the kids do not know the word).
+test("a framed line or one saying DISH is thrown away, and every prompt forbids both", () => {
+  const sit = SITUATIONS.find((s) => s.name === "peckish");
+  for (const bad of ["THE REEDS SAY: YUM.", "SO IT IS... CRUNCH.", "CRUNCH... SO IT IS.", "HEED: SNACK", "I WOULD EAT THE DISH"])
+    assert.ok(lineProblem(bad, sit), bad);
+  assert.equal(lineProblem("I WOULD EAT MY HOME", sit), null);
+  for (const [v, p] of Object.entries(PROMPTS)) {
+    const text = p.lines({ bible: "B", traits: { text: "T" }, species: "grungo" }, [sit]).map((m) => m.content).join("\n");
+    assert.match(text, /THE REEDS SAY/, `${v} forbids the frames`);
+    assert.match(text, /Never the word DISH/, `${v} forbids DISH`);
+  }
 });
 
 test("a signed pack verifies with the public key, and a changed line does not", async () => {
