@@ -635,7 +635,7 @@ static void tlsFree(void* p) { heap_caps_free(p); }
 static void begin() {
   const uint32_t heap0 = ESP.getFreeHeap();
   mbedtls_platform_set_calloc_free(tlsCalloc, tlsFree);
-  if (rd::quietBoot()) powerPolicy.sleepNow();   // a remote reboot came at a quiet moment: it stays dark
+  if (rd::quietBoot()) powerPolicy.sleepNow(millis());   // a remote reboot came at a quiet moment: it stays dark
   rd::boot();
   battery.begin();
   if (const std::optional<wifiota::Networks> n = hw::WifiStore::load()) mem().networks = *n;
