@@ -13,8 +13,10 @@
 //   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
-// Crons (wrangler.jsonc triggers): every 10 minutes, the packs a POST queued
-// instead of waiting for; once a day (DIARY_CRON), each pet's diary entry.
+// A POST with wait:false hands its job to the PACKS queue (wrangler.jsonc), whose
+// consumer writes the pack about a minute later. The crons (wrangler.jsonc
+// triggers) are the backstop: every 10 minutes, and again at DIARY_CRON, any
+// job still queued; once a day (DIARY_CRON), each pet's diary entry.
 import { hexToBytes, rawSheet, genomeHash } from "./genome.js";
 import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
@@ -172,7 +174,10 @@ async function postPetLines(request, env) {
     return fail(429, "this badge has had its packs for today");
   }
   const job = await store.openJob(env.DB, creature.id, body.egg ? "hatch" : "lines", body.parents ? { parents: body.parents } : null);
-  if (body.wait === false) return json({ status: "queued", job, retry_after_s: 60 }, 202, { "retry-after": "60" });
+  if (body.wait === false) {
+    await sendToQueue(env, job);
+    return json({ status: "queued", job, retry_after_s: 60 }, 202, { "retry-after": "60" });
+  }
   await store.setJob(env.DB, job, { status: "running", attempt: true });
   try {
     const row = await generateFor(env, creature, { s, source: body.egg ? "hatch" : "genes", carried: body.parents });
@@ -181,6 +186,7 @@ async function postPetLines(request, env) {
   } catch (e) {
     // Left queued, so the cron tries again; the badge keeps its built-in lines meanwhile.
     await store.setJob(env.DB, job, { status: "queued", error: String(e.message ?? e) });
+    await sendToQueue(env, job, 300);
     return json({ status: "queued", job, error: "generation failed; it will be retried", retry_after_s: 600 }, 202);
   }
 }
@@ -426,21 +432,49 @@ export async function runNightly(env, { limit = 12, concurrency = 4, now = Date.
   return done;
 }
 
+// The queue is how a queued job gets written within the minute; a cron that
+// stops firing (the */10 one did, 2026-10-23, and a badge's job sat queued)
+// no longer strands it. Without the binding (tests, wrangler dev) the crons do it.
+async function sendToQueue(env, job, delaySeconds = 0) {
+  if (!env.PACKS) return;
+  try { await env.PACKS.send({ job }, delaySeconds ? { delaySeconds } : undefined); }
+  catch (e) { console.error(JSON.stringify({ msg: "queue send failed; the cron will run it", job, error: String(e.message ?? e) })); }
+}
+
+// One job, if this run can claim it: "done" | "queued" (failed; tried again later) | "failed" | null (not ours to run).
+export async function runJob(env, id) {
+  const j = await store.claimJob(env.DB, id);
+  if (!j) return null;
+  try {
+    const input = (j.input_json && JSON.parse(j.input_json)) || {};
+    const row = await generateFor(env, { id: j.creature_id, genome_hex: j.genome_hex, genome_hash: j.genome_hash,
+      stage: j.stage, generation: j.generation, name: j.name, feats: j.feats },
+      { source: j.kind === "lines" ? "genes" : j.kind, carried: input.parents, bible: input.bible, editedBy: input.editedBy });
+    await store.setJob(env.DB, j.job_id, { status: "done", packId: row.id });
+    return "done";
+  } catch (e) {
+    const status = j.attempts >= 3 ? "failed" : "queued";   // attempts already counts this try
+    await store.setJob(env.DB, j.job_id, { status, error: String(e.message ?? e) });
+    console.error(JSON.stringify({ msg: "pack job failed", job: j.job_id, status, error: String(e.message ?? e) }));
+    return status;
+  }
+}
+
 export async function runQueuedJobs(env, limit = 3) {
   const jobs = await store.queuedJobs(env.DB, limit);
-  for (const j of jobs) {
-    await store.setJob(env.DB, j.job_id, { status: "running", attempt: true });
-    try {
-      const input = (j.input_json && JSON.parse(j.input_json)) || {};
-      const row = await generateFor(env, { id: j.creature_id, genome_hex: j.genome_hex, genome_hash: j.genome_hash,
-        stage: j.stage, generation: j.generation, name: j.name, feats: j.feats },
-        { source: j.kind === "lines" ? "genes" : j.kind, carried: input.parents, bible: input.bible, editedBy: input.editedBy });
-      await store.setJob(env.DB, j.job_id, { status: "done", packId: row.id });
-    } catch (e) {
-      await store.setJob(env.DB, j.job_id, { status: j.attempts + 1 >= 3 ? "failed" : "queued", error: String(e.message ?? e) });
-    }
+  let ran = 0;
+  for (const j of jobs) if (await runJob(env, j.job_id)) ran++;
+  return ran;
+}
+
+// The PACKS consumer: one job per message. A failed generation comes back from
+// the queue a minute later; the job row's count of tries still caps it at 3.
+export async function runQueueBatch(batch, env) {
+  for (const msg of batch.messages) {
+    const status = await runJob(env, Number(msg.body?.job));
+    if (status === "queued") msg.retry({ delaySeconds: 60 });
+    else msg.ack();
   }
-  return jobs.length;
 }
 
 export default {
@@ -478,9 +512,14 @@ export default {
       return fail(500, "internal error");
     }
   },
+  // The PACKS queue: a consumer run has 15 minutes of wall time; a pack takes about one.
+  async queue(batch, env) {
+    await runQueueBatch(batch, env);
+  },
   // A cron run awaits its work (it has minutes, not the request's waitUntil budget).
   async scheduled(controller, env) {
     if (controller.cron === (env.DIARY_CRON || DIARY_CRON)) {
+      await runQueuedJobs(env);   // a second backstop, should the 10-minute cron stop firing
       await runDiaries(env);
       await runNightly(env);
       await purgeOld(env);   // keeps everything unless RETENTION_DAYS is set

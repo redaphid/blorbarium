@@ -94,6 +94,62 @@ test("wait:false queues the work, the cron writes it, and GET then returns it", 
   assert.equal(env.DB.raw.prepare("SELECT pending_device FROM packs").get().pending_device, 0);
 });
 
+// The live bug (2026-10-27): the badge's wait:false job sat queued for good,
+// because the 10-minute cron, its only runner, had stopped firing. Now the
+// POST hands the job to the PACKS queue, and no cron has to run at all.
+const fakeQueue = () => {
+  const sent = [];
+  return { sent, async send(body, opts) { sent.push({ body: structuredClone(body), opts }); } };
+};
+const deliver = async (env, queue) => {
+  const outcomes = [];
+  const batch = { messages: queue.sent.splice(0).map(({ body }) => ({ body,
+    ack() { outcomes.push("ack"); }, retry(o) { outcomes.push(`retry ${o?.delaySeconds ?? 0}`); } })) };
+  await worker.queue(batch, env);
+  return outcomes;
+};
+
+test("wait:false hands the job to the queue, and the badge's next POST gets its pack with no cron run", async () => {
+  const PACKS = fakeQueue();
+  const env = fakeEnv({ env: { PACKS } });
+  const badge = { mac: MAC, genome: fixtures[3].genome, stage: 3, generation: 0, fw: "0.7.13", wait: false, format: "pack" };
+  const r = await post(env, badge);
+  assert.equal(r.status, 202);
+  const { job } = await r.json();
+  assert.deepEqual(PACKS.sent.map((m) => m.body), [{ job }]);
+  assert.equal((await post(env, badge)).status, 202);   // still being written: no second job, no second message
+  assert.equal(PACKS.sent.length, 1);
+
+  assert.deepEqual(await deliver(env, PACKS), ["ack"]);
+  const again = await post(env, badge);
+  assert.equal(again.status, 200);
+  assert.match(again.headers.get("content-type"), /^text\/plain/);
+  assert.match(await again.text(), /^blorbpack1 [0-9a-f]{16} 1 \d+/);
+  assert.equal(env.DB.raw.prepare("SELECT status FROM jobs WHERE id = ?").get(job).status, "done");
+  assert.equal(await runQueuedJobs(env), 0);   // the cron finds nothing left: the pack is written once
+});
+
+test("a job the queue's consumer fails on is retried from the queue, and stops at three tries", async () => {
+  const PACKS = fakeQueue();
+  const env = fakeEnv({ failWith: "HTTP 400: model says no", env: { PACKS } });
+  await post(env, { mac: MAC, genome: fixtures[5].genome, wait: false });
+  const [msg] = PACKS.sent.splice(0);
+  for (const want of ["retry 60", "retry 60", "ack"]) {
+    PACKS.sent.push(msg);
+    assert.deepEqual(await deliver(env, PACKS), [want]);
+  }
+  const row = env.DB.raw.prepare("SELECT status, attempts FROM jobs").get();
+  assert.deepEqual({ ...row }, { status: "failed", attempts: 3 });
+});
+
+test("with no queue, the 04:00 cron runs a job the 10-minute cron never got to", async () => {
+  const env = fakeEnv();
+  await post(env, { mac: MAC, genome: fixtures[2].genome, wait: false });
+  await worker.scheduled({ cron: "0 4 * * *", scheduledTime: Date.UTC(2026, 9, 27, 4) }, env);
+  assert.equal(env.DB.raw.prepare("SELECT status FROM jobs").get().status, "done");
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM packs").get().n, 1);
+});
+
 test("a model outage leaves the job queued for the cron, and the badge keeps its built-in lines", async () => {
   const env = fakeEnv({ failWith: "HTTP 400: model says no" });
   const r = await post(env, { mac: MAC, genome: fixtures[6].genome });

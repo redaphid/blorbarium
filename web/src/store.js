@@ -136,6 +136,22 @@ export async function queuedJobs(db, limit, staleMs = 10 * 60 * 1000) {
   return r.results ?? [];
 }
 
+// Takes one job for this run: a queued job, or a running one whose run died
+// (stale). Atomic, so the queue consumer and the cron never run the same job
+// twice; null when another run has it, it is done, or it has used its tries.
+export async function claimJob(db, id, staleMs = 10 * 60 * 1000) {
+  const t = now();
+  const r = await db.prepare(
+    `UPDATE jobs SET status = 'running', attempts = attempts + 1, updated_at = ?2
+     WHERE id = ?1 AND (status = 'queued' OR (status = 'running' AND updated_at < ?3)) AND attempts < 3`)
+    .bind(id, t, t - staleMs).run();
+  if (!r.meta?.changes) return null;
+  return db.prepare(
+    `SELECT j.id AS job_id, j.kind, j.input_json, j.attempts, c.id AS creature_id, c.mac, c.genome_hex, c.genome_hash,
+       c.stage, c.generation, c.name, c.feats FROM jobs j JOIN creatures c ON c.id = j.creature_id WHERE j.id = ?1`)
+    .bind(id).first();
+}
+
 // Everything the server holds, for the owner's export (GET /api/creatures).
 export async function exportAll(db, { mac } = {}) {
   const where = mac ? "WHERE mac = ?1" : "";
