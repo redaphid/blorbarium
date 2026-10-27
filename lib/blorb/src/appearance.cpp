@@ -1,6 +1,7 @@
 #include "blorb/appearance.h"
 
 #include <algorithm>
+#include "blorb/look_genes.h"
 
 namespace blorb {
 namespace {
@@ -17,18 +18,7 @@ int scaled(Fx level, int steps) { return int((int64_t(clamp01(level).raw) * step
 
 uint8_t clampByte(int v) { return uint8_t(std::clamp(v, 0, 255)); }
 
-// A baby draws small and a child bigger; an adult is the art's size moved by its size gene
-// (base 128 = x1, each step 1/256) and the size locus; the elder is the art.
-uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) {
-  switch (stage) {
-    case Stage::Baby: return kHatchlingScalePct;
-    case Stage::Child: return kChildScalePct;
-    case Stage::Elder: return 100;
-    case Stage::Adult: break;
-  }
-  uint8_t base = p.size.base ? p.size.base : 128;
-  return clampByte(100 * (128 + int(base)) / 256 + scaled(sizeLocus, kSizeLocusPct));
-}
+uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) { return bodyScalePct(stage, p.size.base, sizeLocus); }
 
 // The species, region tints and marks from the genes; the later gene for a
 // region wins, so a woken dormant colour shows. With no shell gene the egg's jelly takes the
@@ -115,6 +105,7 @@ Moods moodsOf(const Chemistry& chem) {
 void bodyGenes(const Phenotype& p, Appearance& a) {
   a.bulk = p.size.base ? p.size.base : 128;
   a.squash = p.size.squash ? p.size.squash : 128;
+  a.build = p.size.growth ? p.size.growth : 128;
 }
 
 void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
@@ -199,6 +190,18 @@ void presentClutch(const Clutch& k, Appearance& a) {
 }
 
 }  // namespace
+
+// A baby draws small and a child bigger, an adult and an elder at the art's
+// size; at every stage his size gene moves that (look_genes.h sizePct), and
+// an adult's size locus adds to it.
+uint8_t bodyScalePct(Stage stage, uint8_t sizeBase, Fx sizeLocus) {
+  int pct = 100;
+  if (stage == Stage::Baby) pct = kHatchlingScalePct;
+  else if (stage == Stage::Child) pct = kChildScalePct;
+  int scaledPct = pct * sizePct(sizeBase) / 100;
+  if (stage == Stage::Adult) scaledPct += scaled(sizeLocus, kSizeLocusPct);
+  return clampByte(scaledPct);
+}
 
 Appearance present(const Occupant& occ, const Habitat& habitat, const PetClock& clock, uint32_t tick) {
   Appearance a;

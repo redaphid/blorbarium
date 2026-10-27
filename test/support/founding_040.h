@@ -58,6 +58,21 @@ inline blorb::Genome foundingGenome040(uint32_t speciesSeed) {
                                            0, 64, GeneUid{77}},
                    kInstinctBody);
   }
+  // 0.4.0's size genes: the baby's growth byte 140, and an adult's own size
+  // line (base 136) at the uid after it, which gene-looks retired (its line
+  // stands empty, as the marble's do).
+  {
+    const Genome cut = *b0.build();
+    cut.forEach([&](const GeneView& v) {
+      if (v.header.type != GeneKindOf<SizeGene>::value) return;
+      constexpr uint8_t kAdultSize[] = {136, 128, 128};
+      b0.setByte(v.header.uid, 1, 140);
+      b0.insertAfter(v.header.uid, GeneHeader{GeneKindOf<SizeGene>::value, uint8_t(sizeof(SizeGene)),
+                                              GeneFlags::Mutable | GeneFlags::Dupable | GeneFlags::Delable,
+                                              Stage::Adult, 0, 64, GeneUid{uint16_t(v.header.uid.v + 1)}},
+                     kAdultSize);
+    });
+  }
   const Genome starterWithMarble = *b0.build();
   // 0.4.0's hop_circles was action 10; the current table renumbered it to 9
   // when chase retired (action ids stay dense). The founder's hop instinct

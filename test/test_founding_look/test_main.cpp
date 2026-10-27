@@ -11,6 +11,7 @@
 #include "blorb/founding.h"
 #include "blorb/genes.h"
 #include "blorb/genome.h"
+#include "blorb/look_genes.h"
 #include "blorb/registry.h"
 #include "paint/sprite_pack.h"  // named here so PlatformIO's dependency finder links lib/paint
 
@@ -27,7 +28,8 @@ uint32_t seedOf(uint32_t n) {
 Genome founder(SpeciesId s, uint32_t seed) { return foundingGenome(s, seed, paint::bandsFor(s)); }
 
 bool isLook(const GeneView& v) {
-  return v.header.type == GeneKindOf<PaletteGene>::value || v.header.type == GeneKindOf<MarkGene>::value;
+  return v.header.type == GeneKindOf<PaletteGene>::value || v.header.type == GeneKindOf<MarkGene>::value ||
+         v.header.type == GeneKindOf<SizeGene>::value;   // size and build (look_genes.h)
 }
 
 }  // namespace
@@ -107,7 +109,8 @@ TEST(FoundingLook, EveryExpressedColourIsInsideItsSpeciesBandsAndReachesAcrossTh
       EXPECT_EQ(*hues[r.v].begin(), band.hueMin) << row.name << " region " << int(r.v);
       EXPECT_EQ(*hues[r.v].rbegin(), band.hueMax) << row.name << " region " << int(r.v);
     }
-    EXPECT_EQ(mottling, (std::set<int>{2, 3, 4})) << row.name;
+    EXPECT_EQ(*mottling.begin(), kFoundSpots.lo) << row.name;   // spots: the whole founding range (look_genes.h)
+    EXPECT_EQ(*mottling.rbegin(), kFoundSpots.hi) << row.name;
   }
 }
 

@@ -229,7 +229,9 @@ TEST(Cooldown, TheSameMotionAgainAtOnceStartsNothingNew) {
     int checked = 0;
     for (size_t sp = 0; sp < kSpeciesCount; ++sp) {
       Held h(SpeciesId{uint8_t(sp)});
-      if (after(h, c.ride)[c.react] == 0) continue;   // this pet did not take it the first time
+      // Half a second after each ride: a swing is 6 s, so two swings and two
+      // 3 s pauses outlast the shortest whee cooldown (12 s) for some seeds.
+      if (after(h, c.ride, 500)[c.react] == 0) continue;   // this pet did not take it the first time
       ++checked;
       EXPECT_EQ(after(h, c.ride, 500)[c.react], 0) << hw::ride::kRides[size_t(c.ride)].name << " "
                                                      << speciesInfo(SpeciesId{uint8_t(sp)}).name;

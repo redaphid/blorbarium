@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
+#include "blorb/look_genes.h"
 #include "carried.h"
 #include "duel/duel_art.h"
 #include "figure.h"
@@ -11,6 +12,7 @@
 #include "paint/parallel.h"
 #include "paint/phases.h"
 #include "paint/sprite_pack.h"
+#include "blorb/look_genes.h"
 
 namespace paint {
 namespace {
@@ -204,7 +206,10 @@ void buildColours(const SpritePack& pack, const Tint* tints, bool elder, int8_t 
     if (e.region < blorb::kRegionCount) c = tinted(c, clamped[e.region], elder ? kElderSat : 128);
     out.base[i] = out.spot[i] = to565(c);
     out.region[i] = e.region;
-    if (e.region == blorb::region::skin.v) out.spot[i] = to565(tinted(c, Tint{spotHue, 128, 92}, 128));
+    // A spot is his skin turned by the spot hue, darker on a light skin and
+    // lighter on a dark one (the octopus), so a spotted line shows either way.
+    if (e.region == blorb::region::skin.v)
+      out.spot[i] = to565(tinted(c, Tint{spotHue, 150, uint8_t(imax(c.r, imax(c.g, c.b)) < 96 ? 200 : 68)}, 128));
   }
 }
 
@@ -224,6 +229,20 @@ Pt project(const Xf& v, const FrameRef& f, int sx, int sy) {
   int64_t ry = int64_t(sy - f.originY * 16) * v.ky / kOne - int64_t(v.lift) * 16;
   int64_t rx = int64_t(sx - f.originX * 16) * v.kx / kOne - ry * v.shear / kOne;
   return {int(rx), int(ry)};
+}
+
+// His body's scale k (Q12) as drawn: a hatchling squat (a child stands up,
+// #aging), and his build gene (blorb/look_genes.h) stockier or lankier. Two
+// multiplies a draw; every pixel and eye anchor rides the one transform.
+Xf bodyXf(const Appearance& a, int k) {
+  Xf x{k, k, 0, 0};
+  if (a.stage == Stage::Baby) {
+    x.kx = k * kHatchlingWide / kOne;
+    x.ky = k * kHatchlingTall / kOne;
+  }
+  x.kx = x.kx * blorb::buildWidePct(a.build) / 100;
+  x.ky = x.ky * blorb::buildTallPct(a.build) / 100;
+  return x;
 }
 
 // An eye's halo radius (Q4, canvas). Small eyes (the egg's froglet) get a
@@ -414,8 +433,9 @@ Place placeAt(blorb::DishPos at, const Disc& d, const Xf& xf) {
   return p;
 }
 
-// Mottling (mark layer 0): a seeded spot in some 7 px cells of the skin, in
-// frame coordinates from the feet, so spots ride the body and siblings differ.
+// Spots (mark layer 0, blorb/look_genes.h): a seeded spot, about 5 px across,
+// in `density` of every 256 7 px cells of the skin, in frame coordinates from
+// the feet, so spots ride the body and siblings differ.
 struct Mottle { uint32_t seed = 0; int density = 0; };
 // floorDiv(a, 7) in 32 bits for |a| < 7 * 4096 (a frame is at most 320 px):
 // biased non-negative, so the compiler divides by multiplying, where
@@ -429,7 +449,7 @@ bool spotted(const Mottle& m, int rx, int ry) {
   int cx = floorDiv7(rx), cy = floorDiv7(ry);
   uint32_t h = mix32(m.seed ^ (uint32_t(cx) * 0x27D4EB2Du), uint32_t(cy));
   if (int(h & 255) >= m.density) return false;
-  int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 2 + int((h >> 12) % 3);
+  int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 4 + int((h >> 12) % 3);
   int lx = rx - cx * kCell - sx, ly = ry - cy * kCell - sy;
   return lx * lx + ly * ly <= r2;
 }
@@ -447,7 +467,7 @@ class SpotRow {
       const uint32_t h = mix32(m_.seed ^ (uint32_t(cx) * 0x27D4EB2Du), uint32_t(cy_));
       live_ = int(h & 255) < m_.density;
       if (live_) {
-        const int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 2 + int((h >> 12) % 3);
+        const int sx = 2 + int((h >> 8) % 3), sy = 2 + int((h >> 10) % 3), r2 = 4 + int((h >> 12) % 3);
         const int ly = ry_ - cy_ * 7 - sy;
         centre_ = cx * 7 + sx, room_ = r2 - ly * ly;
       }
@@ -910,11 +930,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     const int64_t away = imin(Fx::kOne, int(isqrt(uint64_t(ax * ax + ay * ay))));
     const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
     int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
-    Xf base{k, k, 0, 0};
-    if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
-      base.kx = k * kHatchlingWide / kOne;
-      base.ky = k * kHatchlingTall / kOne;
-    }
+    const Xf base = bodyXf(a, k);
     for (int i = 0; i < 2; ++i) {
       const Memo& m = memos[i];
       if (m.pack == &pack && m.stage == a.stage && m.base.kx == base.kx && m.base.ky == base.ky &&
@@ -1593,11 +1609,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
       col.spot[i] = blend(col.spot[i], 0xFFFF, fig.flash);
     }
   const int k = imax(kMinScale, int(int64_t(a.scalePct) * fig.scalePct * kOne / 10000));
-  Xf base{k, k, 0, 0};
-  if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
-    base.kx = k * kHatchlingWide / kOne;
-    base.ky = k * kHatchlingTall / kOne;
-  }
+  const Xf base = bodyXf(a, k);
   Place p;
   p.x = fig.x;
   p.y = fig.y;

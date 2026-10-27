@@ -11,6 +11,12 @@ namespace {
 
 // The source parent switches about once in this many genes.
 constexpr uint32_t kBlockGenes = 8;
+// Look genes blend: the child of a cross is between his parents in colour,
+// size, build and spots (look_genes.h).
+constexpr bool blended(uint8_t kind) {
+  return kind == GeneKindOf<PaletteGene>::value || kind == GeneKindOf<SizeGene>::value ||
+         kind == GeneKindOf<MarkGene>::value;
+}
 
 // friend.egg: magic "BFEG", version u8, friendLineage u64, friendSpecies u8,
 // battleSeed u32, friendGenomeHash u32, genome length u16, the genome, then a
@@ -49,11 +55,17 @@ MutationDiff crossDiff(const Genome& mine, const Genome& friends, Rng& rng) {
   bool fromFriend = (rng.next() & 1) != 0;
   mine.forEach([&](const GeneView& g) {
     if (rng.below(kBlockGenes) == 0) fromFriend = !fromFriend;
-    if (!fromFriend || !crossable(g.header.type)) return;
+    const bool look = blended(g.header.type);
+    if ((!fromFriend && !look) || !crossable(g.header.type)) return;
     std::optional<GeneView> f = friends.find(g.header.uid);
     if (!f || f->header.type != g.header.type || f->header.len != g.header.len) return;
-    for (uint8_t i = 0; i < g.header.len; ++i)
-      if (g.body[i] != f->body[i]) d.ops.push_back(MutPoint{g.header.uid, i, g.body[i], f->body[i], false});
+    for (uint8_t i = 0; i < g.header.len; ++i) {
+      // A look byte is the two parents' mean (gene-looks); which region or
+      // layer it paints, and every other gene, is one parent's, by block.
+      const bool selector = i == 0 && g.header.type != GeneKindOf<SizeGene>::value;
+      const uint8_t to = look && !selector ? uint8_t((g.body[i] + f->body[i] + 1) / 2) : fromFriend ? f->body[i] : g.body[i];
+      if (g.body[i] != to) d.ops.push_back(MutPoint{g.header.uid, i, g.body[i], to, false});
+    }
   });
   return d;
 }

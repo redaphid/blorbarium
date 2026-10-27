@@ -268,7 +268,7 @@ inline constexpr uint16_t kPaletteCount = 255;
 // By RegionId (regions.def): hueMin, hueMax, satMin, satMax, valMin, valMax.
 inline constexpr paint::RegionBand kBands[] = {
     {-24, 40, 96, 176, 96, 160},  // skin
-    {-8, 8, 104, 152, 112, 144},  // belly
+    {-16, 16, 96, 160, 96, 160},  // belly
     {-16, 36, 80, 200, 80, 176},  // cloak
     {-8, 30, 96, 176, 96, 192},  // eye
     {-6, 6, 104, 152, 112, 144},  // mouth

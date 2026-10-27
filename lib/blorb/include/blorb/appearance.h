@@ -87,6 +87,10 @@ struct Appearance {
   // 128 = as ever) a bigger one breathes and sways slower; squash (size
   // gene squash) how far his idles squash and stretch him.
   uint8_t bulk = 128, squash = 128;
+  // His build (size gene growth, look_genes.h): 128 as the art, above it
+  // stockier (wider, a little shorter), below it lankier. Paint stretches
+  // the body by buildWidePct and buildTallPct; the face and eyes ride along.
+  uint8_t build = 128;
   Moods moods{};
   Mouthful mouth = Mouthful::Nothing;   // drawn at his mouth, as the dish item it was
   Fx injury{}, wobble{};
@@ -190,6 +194,11 @@ struct Appearance {
 };
 
 Appearance present(const Occupant&, const Habitat&, const PetClock&, uint32_t tick);
+
+// How big he draws at `stage`, percent of the art: the stage's own size moved
+// by his size gene (look_genes.h sizePct) and, for an adult, the size locus.
+// The duel card uses it too, so a fighter is his own size.
+uint8_t bodyScalePct(Stage, uint8_t sizeBase, Fx sizeLocus);
 
 // A genome with no creature: phenotype at `stage`, at rest. The family tree
 // and the clutch preview use it.

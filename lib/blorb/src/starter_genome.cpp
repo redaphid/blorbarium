@@ -268,10 +268,10 @@ void authorStarter(GenomeBuilder& out, const SpeciesStarter& row, uint32_t speci
   g.put(PaletteGene{region::glow.v, 128, 140, 160, vision, 255}, kLook);
   g.put(PaletteGene{region::cloak.v, 38, 110, 120, kNone, 0}, kLook | kDormant);   // a bluer cloak
   g.put(PaletteGene{region::glow.v, 128, 170, 235, vision, 255}, kLook | kDormant); // a brighter seer glow
-  g.put(MarkGene{0, g.nudge(3, 1), 128, kNone}, kLook);                              // mottling density
+  g.put(MarkGene{0, g.nudge(24, 8), 128, kNone}, kLook);                             // spots: how many, their hue (look_genes.h)
   g.put(MarkGene{1, 2, 128, kNone}, kLook, Stage::Adult, /*featGate=*/2);           // longer stalks, after an elder
-  g.put(SizeGene{128, 140, 140}, kGene);
-  g.put(SizeGene{136, 128, 128}, kGene, Stage::Adult);
+  g.put(SizeGene{128, 128, 140}, kGene);   // size and build at every stage (look_genes.h), squash
+  g.skip(1);   // the adult's own size line: retired so size and build are one inherited pair (gene-looks)
 
   // ---- mind and life ----------------------------------------------------------------
   g.put(TemperamentGene{140, 16, 170, 110, 8, 3, 20}, kGene);   // calm learner, curious

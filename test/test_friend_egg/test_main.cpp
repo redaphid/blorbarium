@@ -256,10 +256,15 @@ TEST(Cross, AFizzledCrossIsThePlainEggInThatSlot) {
   ASSERT_TRUE(sick);
   ASSERT_FALSE(viability(*sick).ok);
   Clutch k = clutchOf(*sick, 3, 77);
-  FriendEgg f = friendEggOf(starterGenomeOf(SpeciesId{8}, 4), 99);
-  joinClutch(k, 99);
-  Rng r = Rng::seeded(99);
-  ASSERT_FALSE(crossDiff(k.parent, f.genome, r).ops.empty()) << "a cross that would have changed him";
+  // The first hug seed from 99 whose cross would have changed him.
+  uint32_t seed = 99;
+  for (;; ++seed) {
+    Rng r = Rng::seeded(seed);
+    if (!crossDiff(k.parent, starterGenomeOf(SpeciesId{8}, 4), r).ops.empty()) break;
+    ASSERT_LT(seed, 199u) << "a cross that would have changed him";
+  }
+  FriendEgg f = friendEggOf(starterGenomeOf(SpeciesId{8}, 4), seed);
+  joinClutch(k, seed);
   Offspring friendSlot = childOf(k, 2, &f), plain = k.child(2);
   EXPECT_EQ(friendSlot.genome.bytes(), plain.genome.bytes());
   EXPECT_EQ(friendSlot.diff.ops.size(), plain.diff.ops.size());

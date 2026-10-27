@@ -8,6 +8,7 @@
 #include "blorb/creature.h"
 #include "blorb/founding.h"
 #include "blorb/genes.h"
+#include "blorb/look_genes.h"
 
 namespace blorb {
 namespace {
@@ -41,19 +42,6 @@ struct LookSlot { uint8_t offset; int dir; };
 constexpr uint8_t kHueByte = 1, kValByte = 3;         // PaletteGene body offsets
 constexpr LookSlot kLookSlots[] = {{kHueByte, 1}, {kValByte, -1}, {kHueByte, -1}, {kValByte, 1}};
 constexpr LookSlot kValueSlots[] = {{kValByte, -1}, {kValByte, 1}};
-// Each region's band as byte - 128: the bands tools/sprite_pack.py writes into
-// every pack (test_founding_look holds these equal to paint::bandsFor).
-struct Reach { int hueLow, hueHigh, valLow, valHigh; };
-constexpr Reach kReach[] = {
-    {-24, 40, -32, 32},   // skin
-    {-8, 8, -16, 16},     // belly
-    {-16, 36, -48, 48},   // cloak
-    {-8, 30, -32, 64},    // eye
-    {-6, 6, -16, 16},     // mouth
-    {-20, 20, -16, 32},   // glow
-    {-24, 40, -32, 32},   // shell
-};
-static_assert(sizeof(kReach) / sizeof(kReach[0]) == kRegionCount, "a reach per regions.def row");
 
 // Bytes whose change shows on the creature, per Look kind: tint hue, sat and
 // val; mark density and tint; body size.
@@ -240,9 +228,9 @@ bool forceCoat(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& r
   const SpeciesInfo& species = speciesInfo(speciesOf(parent));
   const uint32_t pick = parent.hash() + pol.lookSlot;
   const LookSlot& slot = species.coatHue ? kLookSlots[pick % std::size(kLookSlots)] : kValueSlots[pick % std::size(kValueSlots)];
-  const Reach& reach = kReach[species.coat.v % kRegionCount];
-  const int low = slot.offset == kHueByte ? reach.hueLow : reach.valLow;
-  const int high = slot.offset == kHueByte ? reach.hueHigh : reach.valHigh;
+  const RegionBand& band = kLookBands[species.coat.v % kRegionCount];
+  const int low = slot.offset == kHueByte ? band.hueMin : band.valMin - 128;
+  const int high = slot.offset == kHueByte ? band.hueMax : band.valMax - 128;
   // A full step, or edge to edge where the band is narrower than two (the owl's belly).
   const int least = std::min(kForcedStep, (high - low) / 2);
   std::optional<GeneView> coat = coatGene(d.cur);
@@ -273,6 +261,68 @@ void forceLook(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& r
   uint8_t at = vis.offsets[rng.below(vis.count)], from = v.body[at];
   uint8_t delta = uint8_t(std::min<int>(pol.minVisibleDelta, 255));
   d.add(MutPoint{v.header.uid, at, from, nudged(from, delta, uint8_t(std::min(255, delta + 16)), rng), false});
+}
+
+// Every egg's look drifts a little beside the forced coat step (gene-looks):
+// each look byte that shows (look_genes.h) takes a small step with a fair
+// chance, inside its range, folding back at an edge. The steps are a random
+// walk: a child is near his parent, siblings differ, and a line wanders off
+// from its founder over generations while never leaving his species' bands.
+struct Drift { uint8_t offset; uint8_t lo, hi; uint8_t chancePct, stepMin, stepMax; };
+constexpr uint8_t kDriftChancePct = 45, kDriftMin = 4, kDriftMax = 12;
+
+uint8_t walked(uint8_t from, const Drift& r, Rng& rng) {
+  int at = std::clamp<int>(from, r.lo, r.hi);
+  int by = int(r.stepMin + rng.below(uint32_t(r.stepMax - r.stepMin) + 1));
+  if (rng.below(2)) by = -by;
+  int to = at + by;
+  if (to < r.lo || to > r.hi) to = at - by;   // fold back off the edge
+  return uint8_t(std::clamp<int>(to, r.lo, r.hi));
+}
+
+// Its own stream, from the parent and the egg's slot, so the drift never
+// moves what the rest of mutate() draws (the chemistry and mind a line keeps).
+void driftLooks(Draft& d, const Genome& parent, const MutationPolicy& pol) {
+  Rng rng = Rng::seeded(uint64_t(parent.hash()) << 8 ^ 0x6c6f6f6bu ^ pol.lookSlot);
+  // The coat is the forced step's (forceCoat): a drift there could walk a
+  // sibling's step back toward another's, so the coat's gene is left to it.
+  const std::optional<GeneView> coat = coatGene(d.cur);
+  const GeneUid coatUid = coat ? coat->header.uid : GeneUid{0};
+  constexpr uint8_t kPalette = GeneKindOf<PaletteGene>::value, kSize = GeneKindOf<SizeGene>::value,
+                    kMark = GeneKindOf<MarkGene>::value;
+  // Uids, not views: each step rebuilds d.cur, so a view into it goes stale.
+  std::vector<GeneUid> uids;
+  for (const GeneView& v : candidates(d.cur, [](const GeneView&, const GeneTypeInfo& i) { return i.cls == GeneClass::Look; }))
+    uids.push_back(v.header.uid);
+  for (GeneUid uid : uids) {
+    if (coat && uid == coatUid) continue;
+    const std::optional<GeneView> found = d.cur.find(uid);
+    if (!found) continue;
+    const GeneView& v = *found;
+    Drift rules[3];
+    uint8_t n = 0;
+    if (v.header.type == kPalette) {
+      const uint8_t r = v.body[0] % kRegionCount;
+      if (r != region::skin.v && r != region::belly.v && r != region::cloak.v && r != region::eye.v) continue;
+      const RegionBand& b = kLookBands[r];
+      rules[n++] = {1, uint8_t(128 + b.hueMin), uint8_t(128 + b.hueMax), kDriftChancePct, kDriftMin, kDriftMax};
+      rules[n++] = {2, b.satMin, b.satMax, kDriftChancePct / 2, kDriftMin, kDriftMax};
+      rules[n++] = {3, b.valMin, b.valMax, kDriftChancePct, kDriftMin, kDriftMax};
+    } else if (v.header.type == kSize) {
+      rules[n++] = {0, kSizeRange.lo, kSizeRange.hi, kDriftChancePct, kDriftMin, kDriftMax};
+      rules[n++] = {1, kBuildRange.lo, kBuildRange.hi, kDriftChancePct, kDriftMin, kDriftMax};
+    } else if (v.header.type == kMark && v.body[0] == 0) {
+      rules[n++] = {1, kSpotsRange.lo, kSpotsRange.hi, kDriftChancePct, kDriftMin, kDriftMax};
+      rules[n++] = {2, kSpotHueRange.lo, kSpotHueRange.hi, kDriftChancePct, kDriftMin, kDriftMax};
+    }
+    for (uint8_t i = 0; i < n; ++i) {
+      if (rng.below(100) >= rules[i].chancePct) continue;
+      std::optional<GeneView> now = d.cur.find(uid);
+      if (!now) break;
+      const uint8_t from = now->body[rules[i].offset], to = walked(from, rules[i], rng);
+      if (to != from) d.add(MutPoint{uid, rules[i].offset, from, to, false});
+    }
+  }
 }
 
 void forceMind(Draft& d, const Genome& parent, const MutationPolicy& pol, Rng& rng) {
@@ -392,11 +442,13 @@ Offspring mutate(const Genome& parent, const MutationPolicy& pol, const std::vec
     randomPass(d, parent, pol, rng);
     addHeirlooms(d, pol, heirlooms);
     forceLook(d, parent, pol, rng);
+    driftLooks(d, parent, pol);
     forceMind(d, parent, pol, rng);
     if (viability(d.cur).ok) return Offspring{std::move(d.cur), std::move(d.diff)};
   }
   Draft d = startFrom(parent);
   forceLook(d, parent, pol, rng);
+  driftLooks(d, parent, pol);
   forceMind(d, parent, pol, rng);
   if (viability(d.cur).ok) return Offspring{std::move(d.cur), std::move(d.diff)};
   return Offspring{parent, {}};

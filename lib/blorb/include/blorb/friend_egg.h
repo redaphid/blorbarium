@@ -8,6 +8,8 @@
 // genome in order, in linkage blocks (the source parent switches about once
 // every 8 genes), and where the friend's gene has the same uid, type and
 // length and its kind is crossable, copies the friend's body bytes over mine.
+// Look genes (palette, size, mark) blend instead, in every block: each look
+// byte is the two parents' mean, so the child sits between them (gene-looks).
 // Each copied byte is a MutPoint, so the cross is an ordinary MutationDiff:
 //
 //   apply(mine, crossDiff + mutateDiff) == child      (no friend genome needed)

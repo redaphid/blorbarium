@@ -277,7 +277,7 @@ TEST(Starter, CarriesEveryGeneKindAndExpressesEachAtSomeStage) {
   EXPECT_EQ(p.expressedStages, 0x0F);
   EXPECT_EQ(p.egg.incubateTicks, 15 * kTicksPerMinute);   // the FirstHours egg (docs/notes/first-hours.md)
   EXPECT_EQ(p.faces.size(), 10u);
-  EXPECT_EQ(p.size.base, 136);
+  EXPECT_EQ(p.size.base, 128);   // one size gene for every stage (look_genes.h); a founder rolls it
 }
 
 TEST(Starter, SpeciesSeedNudgesOnlyLookBytes) {

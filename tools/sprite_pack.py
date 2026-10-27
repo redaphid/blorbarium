@@ -62,7 +62,7 @@ BUDGET = {"skin": 60, "belly": 20, "cloak": 44, "eye": 32, "mouth": 24, "glow": 
 # reach (mutate.cpp: hue -24 to +40, val 96 to 160), so a sibling's step is never swallowed.
 BANDS = {
     "skin": (-24, 40, 96, 176, 96, 160),    # ochre olive to blue-green, frog greens only
-    "belly": (-8, 8, 104, 152, 112, 144),
+    "belly": (-16, 16, 96, 160, 96, 160),   # wide enough that a white or grey belly (the owl's coat) visibly steps
     "cloak": (-16, 36, 80, 200, 80, 176),   # rust through brown to moss
     "eye": (-8, 30, 96, 176, 96, 192),      # red-brown to amber and gold
     "mouth": (-6, 6, 104, 152, 112, 144),

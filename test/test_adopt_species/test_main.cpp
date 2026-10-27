@@ -122,7 +122,8 @@ std::map<uint16_t, std::vector<uint8_t>> genesByUid(const Genome& g) {
 
 // Gene for gene, an adopted pet is the founder his board founds today; only
 // the order differs (his recipe first, then the species' genes). Three
-// residues of 0.4.0 ride along: the retired marble genes at uids 63 and 77,
+// residues of 0.4.0 ride along: the retired marble genes at uids 63 and 77
+// (and the retired adult size line),
 // which adoption leaves because nothing in him can fire them any more (no def
 // row names stimulus 19, locus 16 or the chase); uid 79's action byte,
 // written when hop_circles was action 10 (it is 9 today); and 0.4.0's own
@@ -132,6 +133,11 @@ void expectHisFounder(const Genome& adopted, SpeciesId s, uint32_t seed, const c
   std::map<uint16_t, std::vector<uint8_t>> adoptedGenes = genesByUid(adopted), founderGenes = genesByUid(founder);
   adoptedGenes.erase(63);
   adoptedGenes.erase(77);
+  // 0.4.0's adult size line, the uid after the size gene, which gene-looks
+  // retired: adoption leaves it, as it leaves the marble's.
+  founder.forEach([&](const GeneView& v) {
+    if (v.header.type == GeneKindOf<SizeGene>::value) adoptedGenes.erase(uint16_t(v.header.uid.v + 1));
+  });
   if (auto hop = adoptedGenes.find(79); hop != adoptedGenes.end() && hop->second.size() > 9)
     hop->second[9] = 9;   // header (6) + action (body 3): hop_circles at today's id
   for (const Byte040& b : kRecipe040) {

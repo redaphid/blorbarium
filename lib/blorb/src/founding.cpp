@@ -4,6 +4,7 @@
 #include <vector>
 #include "blorb/creature.h"
 #include "blorb/genes.h"
+#include "blorb/look_genes.h"
 #include "blorb/starter_duel.h"
 
 namespace blorb {
@@ -52,8 +53,10 @@ std::optional<Roll> rollOf(const GeneView& v, uint8_t i, const LookBands& bands)
     if (i == 1) return Roll{uint8_t(128 + b.hueMin), uint8_t(128 + b.hueMax)};
     if (i == 2) return Roll{b.satMin, b.satMax};
     if (i == 3) return Roll{b.valMin, b.valMax};
-  } else if (v.header.type == GeneKindOf<MarkGene>::value && v.body[0] == 0 && i == 1) {
-    return Roll{2, 4};   // mottling density
+  } else if (v.header.type == GeneKindOf<MarkGene>::value && v.body[0] == 0 && (i == 1 || i == 2)) {
+    return i == 1 ? Roll{kFoundSpots.lo, kFoundSpots.hi} : Roll{kFoundSpotHue.lo, kFoundSpotHue.hi};   // spots
+  } else if (v.header.type == GeneKindOf<SizeGene>::value && v.header.stage == Stage::Baby && (i == 0 || i == 1)) {
+    return i == 0 ? Roll{kFoundSize.lo, kFoundSize.hi} : Roll{kFoundBuild.lo, kFoundBuild.hi};   // size, build
   }
   return std::nullopt;
 }

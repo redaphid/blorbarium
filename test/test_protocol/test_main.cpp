@@ -483,7 +483,7 @@ TEST(Schema, ListsEveryRegistryRowIncludingTwistKinds) {
 
 TEST(Golden, Hello) {
   Rig r;
-  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.13 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
+  EXPECT_EQ(r.send("#1a HELLO"), (Lines{"#1a OK fw=0.7.20 fmt=1 lineage=9f31c2d04a7b gen=0 name=Grungo phase=egg feats=0x00"}));
 }
 
 TEST(Golden, State) {
@@ -492,9 +492,9 @@ TEST(Golden, State) {
   r.run(30000);
   Lines got = r.send("#2b STATE");
   Lines want = {
-      "#2b + phase=creature gen=0 stage=baby age=309 action=peek face=happy asleep=0 day=waking species=grungo mac=none",
-      "#2b + drives hunger=301 sleepiness=232 boredom=0 loneliness=0 fear=8 pain=1 discomfort=3 need_touch=1",
-      "#2b + body life=1000 injury=0 glow=0 dreaming=0",
+      "#2b + phase=creature gen=0 stage=baby age=309 action=rest face=happy asleep=0 day=waking species=grungo mac=none",
+      "#2b + drives hunger=301 sleepiness=252 boredom=0 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1",
+      "#2b + body life=1000 injury=0 glow=550 dreaming=0",
       "#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=1",
       "#2b OK",
   };
@@ -535,29 +535,64 @@ TEST(Golden, Diff) {
   link.inbound.push_back("#3c DIFF 1");
   dish.tick(0, link);
   Lines want = {
-      "#3c + point=38",
-      "#3c + kind=receptor",
-      "#3c + byte=4",
-      "#3c + from=128",
-      "#3c + to=132",
-      "#3c + point=56",
+      "#3c + point=60",
       "#3c + kind=stimulus",
       "#3c + byte=6",
-      "#3c + from=115",
-      "#3c + to=123",
+      "#3c + from=102",
+      "#3c + to=106",
       "#3c + wake=71",
       "#3c + kind=stimulus",
-      "#3c + point=97",
-      "#3c + kind=palette",
+      "#3c + point=80",
+      "#3c + kind=instinct",
       "#3c + byte=5",
-      "#3c + from=255",
-      "#3c + to=252",
+      "#3c + from=64",
+      "#3c + to=72",
+      "#3c + point=93",
+      "#3c + kind=palette",
+      "#3c + byte=3",
+      "#3c + from=118",
+      "#3c + to=119",
       "#3c + point=91",
       "#3c + kind=palette",
       "#3c + byte=3",
       "#3c + from=128",
-      "#3c + to=156",
-      "#3c OK 5",
+      "#3c + to=102",
+      "#3c + point=92",
+      "#3c + kind=palette",
+      "#3c + byte=1",
+      "#3c + from=128",
+      "#3c + to=116",
+      "#3c + point=92",
+      "#3c + kind=palette",
+      "#3c + byte=2",
+      "#3c + from=128",
+      "#3c + to=118",
+      "#3c + point=92",
+      "#3c + kind=palette",
+      "#3c + byte=3",
+      "#3c + from=137",
+      "#3c + to=145",
+      "#3c + point=93",
+      "#3c + kind=palette",
+      "#3c + byte=1",
+      "#3c + from=128",
+      "#3c + to=121",
+      "#3c + point=93",
+      "#3c + kind=palette",
+      "#3c + byte=3",
+      "#3c + from=119",
+      "#3c + to=123",
+      "#3c + point=94",
+      "#3c + kind=palette",
+      "#3c + byte=3",
+      "#3c + from=128",
+      "#3c + to=134",
+      "#3c + point=100",
+      "#3c + kind=size",
+      "#3c + byte=1",
+      "#3c + from=128",
+      "#3c + to=121",
+      "#3c OK 12",
   };
   EXPECT_EQ(link.sent, want);
 }
@@ -628,7 +663,7 @@ TEST(Golden, Genome) {
   Lines out = r.send("#60 GENOME");
   EXPECT_EQ(unchunk(out, "#60"), std::get<Creature>(r.dish.occupant()).genome().bytes());
   EXPECT_EQ(out.size(), 14u);
-  EXPECT_EQ(out.back(), "#60 OK 1497 fd85d058") << "length and CRC of the quick-egg starter";
+  EXPECT_EQ(out.back(), "#60 OK 1486 fd60166e") << "length and CRC of the quick-egg starter";
 }
 
 TEST(Golden, Chem) {
@@ -639,14 +674,16 @@ TEST(Golden, Chem) {
   r.run(30000);
   Lines want = {
       "#62 + chem=1 name=hunger level=301",
-      "#62 + chem=2 name=sleepiness level=232",
+      "#62 + chem=2 name=sleepiness level=252",
+      "#62 + chem=3 name=boredom level=0",
+      "#62 + chem=4 name=loneliness level=1",
       "#62 + chem=5 name=fear level=8",
       "#62 + chem=6 name=pain level=1",
       "#62 + chem=7 name=discomfort level=3",
       "#62 + chem=8 name=need_touch level=1",
       "#62 + chem=16 name=life level=1000",
       "#62 + chem=18 name=energy level=451",
-      "#62 + chem=24 name=vision level=3",
+      "#62 + chem=24 name=vision level=203",
       "#62 + locus=0 name=always level=1000",
       "#62 + locus=1 name=tilt_x level=500",
       "#62 + locus=2 name=tilt_y level=500",
@@ -655,7 +692,8 @@ TEST(Golden, Chem) {
       "#62 + locus=8 name=day_cos level=500",
       "#62 + locus=9 name=owner_near level=1000",
       "#62 + locus=18 name=pantry level=1000",
-      "#62 OK 17",
+      "#62 + locus=136 name=glow level=550",
+      "#62 OK 20",
   };
   EXPECT_EQ(r.send("#62 CHEM"), want);
 }
@@ -668,24 +706,24 @@ TEST(Golden, LineageOverNineGenerations) {
   Lines want = {
       "#63 + founding id=9f31c2d04a7b species=Grungo",
       "#63 + death gen=0 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=1 chosen=0 of=1 ops=5",
+      "#63 + birth gen=1 chosen=0 of=1 ops=10",
       "#63 + death gen=1 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=2 chosen=0 of=1 ops=6",
+      "#63 + birth gen=2 chosen=0 of=1 ops=10",
       "#63 + death gen=2 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=3 chosen=0 of=1 ops=7",
+      "#63 + birth gen=3 chosen=0 of=1 ops=13",
       "#63 + death gen=3 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=4 chosen=0 of=1 ops=6",
+      "#63 + birth gen=4 chosen=0 of=1 ops=12",
       "#63 + death gen=4 cause=old_age age=0 feats=0x00 name=Grungo",
-      "#63 + birth gen=5 chosen=0 of=1 ops=7",
+      "#63 + birth gen=5 chosen=0 of=1 ops=14",
       "#63 + death gen=5 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=6 chosen=0 of=1 ops=8",
+      "#63 + birth gen=6 chosen=0 of=1 ops=12",
       "#63 + death gen=6 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=7 chosen=0 of=1 ops=6",
+      "#63 + birth gen=7 chosen=0 of=1 ops=11",
       "#63 + death gen=7 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=8 chosen=0 of=1 ops=5",
+      "#63 + birth gen=8 chosen=0 of=1 ops=17",
       "#63 + checkpoint gen=8",
       "#63 + death gen=8 cause=old_age age=0 feats=0x20 name=Grungo",
-      "#63 + birth gen=9 chosen=0 of=1 ops=5",
+      "#63 + birth gen=9 chosen=0 of=1 ops=11",
       "#63 + rename gen=9 name=Blorbo",
       "#63 OK 21",
   };
@@ -714,7 +752,7 @@ TEST(Golden, Portrait) {
   Lines nine = ask(dish, link, "#68 PORTRAIT 9");
   got.insert(got.end(), nine.begin(), nine.end());
   Lines want = {
-      "#67 + stage=baby scale=55 seed=499b722b marks=1",
+      "#67 + stage=baby scale=55 seed=a7bad0e5 marks=1",
       "#67 + region=skin hue=11 sat=128 val=128",
       "#67 + region=belly hue=0 sat=128 val=137",
       "#67 + region=cloak hue=0 sat=128 val=118",
@@ -722,16 +760,17 @@ TEST(Golden, Portrait) {
       "#67 + region=mouth hue=0 sat=128 val=128",
       "#67 + region=glow hue=0 sat=140 val=160",
       "#67 + region=shell hue=11 sat=128 val=128",
-      "#67 + mark layer=0 variant=4 hue=0",
+      "#67 + mark layer=0 variant=28 hue=0",
       "#67 OK",
-      "#68 + stage=adult scale=103 seed=4a45fce0 marks=0",
-      "#68 + region=skin hue=-3 sat=128 val=101",
-      "#68 + region=belly hue=0 sat=128 val=137",
-      "#68 + region=cloak hue=-90 sat=110 val=120",
-      "#68 + region=eye hue=0 sat=128 val=128",
+      "#68 + stage=adult scale=95 seed=5fc347f2 marks=1",
+      "#68 + region=skin hue=27 sat=128 val=130",
+      "#68 + region=belly hue=5 sat=107 val=149",
+      "#68 + region=cloak hue=-1 sat=121 val=89",
+      "#68 + region=eye hue=19 sat=131 val=152",
       "#68 + region=mouth hue=0 sat=128 val=128",
       "#68 + region=glow hue=0 sat=170 val=235",
-      "#68 + region=shell hue=-3 sat=128 val=101",
+      "#68 + region=shell hue=27 sat=128 val=130",
+      "#68 + mark layer=0 variant=35 hue=36",
       "#68 OK",
   };
   EXPECT_EQ(got, want);
@@ -752,9 +791,9 @@ TEST(Golden, Clutch) {
   EXPECT_EQ(r.send("#6c TWIST stimulus knock"), (Lines{"#6c OK stimulus"}));
   r.run(200);
   Lines want = {
-      "#6d + egg=0 skin=11,128,97 cloak=0,128,118 shell=11,128,97 look=3 mind=7",
-      "#6d + egg=1 skin=-15,128,128 cloak=0,128,118 shell=-15,128,128 look=3 mind=4",
-      "#6d + egg=2 skin=11,128,160 cloak=0,128,118 shell=11,128,160 look=1 mind=4",
+      "#6d + egg=0 skin=11,128,160 cloak=0,128,110 shell=11,128,160 look=5 mind=7",
+      "#6d + egg=1 skin=40,128,128 cloak=0,132,124 shell=40,128,128 look=6 mind=4",
+      "#6d + egg=2 skin=11,128,100 cloak=-90,110,120 shell=11,128,100 look=9 mind=5",
       "#6d OK eggs=3 cursor=0 previewed=3",
   };
   EXPECT_EQ(r.send("#6d CLUTCH"), want);
