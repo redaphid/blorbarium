@@ -1,11 +1,14 @@
 """Signing and releasing firmware for updates over Bluetooth (docs/ota.md).
 
     uv run --with cryptography python tools/ota_release.py keygen
-    uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build] [--env badge128_pm]
+    uv run --with cryptography python tools/ota_release.py ship [--prefix lcd128-test]
+    uv run --with cryptography python tools/ota_release.py release [--allow-older] [--no-build]
     uv run --with cryptography python tools/ota_release.py check web/public/fw/lcd128/manifest.json
     uv run --with cryptography python tools/ota_release.py publish web/public/fw/lcd128/manifest.json [--local] [--prefix lcd128-test]
     uv run --with cryptography python tools/ota_release.py fixture
 
+ship is release then publish, the one command to send every badge (upright
+and flipped alike) a new version from anywhere; see docs/ota.md "Away from home".
 keygen makes the signing key, outside the repo, and writes its public half
 into the firmware (src/hw/ota_pubkey.h). release builds the 1.28's firmware
 from a clean tree, signs it, and places the manifest and image under
@@ -38,6 +41,12 @@ PUBKEY_H = ROOT / "src" / "hw" / "ota_pubkey.h"
 VERSION_H = ROOT / "lib" / "blorb" / "include" / "blorb" / "protocol.h"
 FIXTURE_H = ROOT / "test" / "support" / "ota_fixture.h"
 BOARDS = {"lcd128": "badge128"}   # board name in images -> PlatformIO env
+# One image goes to every 1.28, upright or flipped: each badge keeps its own home
+# in NVS (src/hw/home.h). A flip build writes "down" on a badge that has none, so
+# released to the upright badges it would turn them all upside down for good.
+# badge128_pm has too little internal RAM left to bring Wi-Fi up for its trial.
+NEVER_RELEASE = {"badge128_flip": "it would turn every upright badge upside down (its first boot writes home=down)",
+                 "badge128_pm": "it lacks the internal RAM for Wi-Fi, so its trial cannot confirm and it rolls back"}
 FW_BUCKET = "blorbarium-fw"       # wrangler.jsonc's FW bucket: the site serves /fw/<key> from it
 
 
@@ -148,10 +157,14 @@ def cmd_release(args):
         sys.exit(f"{PUBKEY_H.relative_to(ROOT)} holds another key's public half: a dish built from this tree "
                  "would refuse what this key signs. Run `keygen` with this key first.")
     board, env = args.board, args.env or BOARDS[args.board]
+    if env in NEVER_RELEASE:
+        sys.exit(f"never release {env}: {NEVER_RELEASE[env]}. Release {BOARDS[board]}.")
     clean_tree(board)
     if not args.no_build:
-        pio = Path.home() / ".platformio" / "penv" / ("Scripts/pio.exe" if os.name == "nt" else "bin/pio")
-        subprocess.run([str(pio), "run", "-e", env], cwd=ROOT, check=True)
+        # BLORB_PIO: another pio to build with (e.g. a wrapper that takes a build lock).
+        pio = os.environ.get("BLORB_PIO") or str(
+            Path.home() / ".platformio" / "penv" / ("Scripts/pio.exe" if os.name == "nt" else "bin/pio"))
+        subprocess.run([pio, "run", "-e", env], cwd=ROOT, check=True)
     image = (ROOT / ".pio" / "build" / env / "firmware.bin").read_bytes()
     if image[0] != 0xE9:
         sys.exit("firmware.bin does not start with an ESP image header")
@@ -219,6 +232,22 @@ def cmd_publish(args):
     print(f"published {m['board']} {m['version']} to {FW_BUCKET}/{prefix} ({where[2:]}): /fw/{prefix}/manifest.json")
 
 
+def cmd_ship(args):
+    """release, then publish: build, sign and put it where the badges look, in one go."""
+    cmd_release(args)
+    prefix = args.prefix or args.board
+    manifest = ROOT / "web" / "public" / "fw" / args.board / "manifest.json"
+    if prefix == args.board and not args.local and not args.yes:
+        if not sys.stdin.isatty():
+            sys.exit(f"{prefix} is the LIVE prefix every badge reads: pass --yes to publish there unattended")
+        version = json.loads(manifest.read_text())["version"]
+        if input(f"publish {args.board} {version} to the LIVE /fw/{prefix}/, which every badge installs? [y/N] ").strip().lower() != "y":
+            sys.exit("not published; the signed release is in web/public/fw/ (publish it later with `publish`)")
+    cmd_publish(argparse.Namespace(manifest=str(manifest), local=args.local, prefix=prefix))
+    if prefix == args.board:
+        print(f"commit {manifest.relative_to(ROOT)} as the record of this release")
+
+
 def cmd_fixture(args):
     """A signed release from a throwaway key, so the C++ verifier is held to this tool's output."""
     key = ec.generate_private_key(ec.SECP256R1())
@@ -246,13 +275,18 @@ def main():
     k = sub.add_parser("keygen")
     k.add_argument("--key", default=str(DEFAULT_KEY))
     r = sub.add_parser("release")
-    r.add_argument("--key", default=str(DEFAULT_KEY))
-    r.add_argument("--board", default="lcd128", choices=sorted(BOARDS))
-    r.add_argument("--allow-older", action="store_true", help="sign flag 1: the dish takes it even if not newer")
-    r.add_argument("--no-build", action="store_true", help="sign the firmware.bin already built")
-    r.add_argument("--env", help="PlatformIO env to build and sign (default: the board's; badge128_pm for light "
-                                 "sleep, which needs tools/pm_framework.sh run once on this machine)")
-    r.add_argument("--format-change", action="store_true", help="release an image whose save format differs from the last")
+    sh = sub.add_parser("ship", help="release, then publish (to the live prefix unless --prefix)")
+    for q in (r, sh):
+        q.add_argument("--key", default=str(DEFAULT_KEY))
+        q.add_argument("--board", default="lcd128", choices=sorted(BOARDS))
+        q.add_argument("--allow-older", action="store_true", help="sign flag 1: the dish takes it even if not newer")
+        q.add_argument("--no-build", action="store_true", help="sign the firmware.bin already built")
+        q.add_argument("--env", help="PlatformIO env to build and sign (default: the board's, the one image for "
+                                     "upright and flipped badges alike; never badge128_flip or badge128_pm)")
+        q.add_argument("--format-change", action="store_true", help="release an image whose save format differs from the last")
+    sh.add_argument("--prefix", help="the bucket folder (default: the board's live one); lcd128-test to try it first")
+    sh.add_argument("--local", action="store_true", help="the bucket `wrangler dev` serves, not the site's")
+    sh.add_argument("--yes", action="store_true", help="publish to the live prefix without asking")
     c = sub.add_parser("check")
     c.add_argument("manifest")
     u = sub.add_parser("publish")
@@ -262,7 +296,7 @@ def main():
                                     "for a test release no badge reads unless told its URL (DEBUG ota check <url>)")
     sub.add_parser("fixture")
     args = p.parse_args()
-    {"keygen": cmd_keygen, "release": cmd_release, "check": cmd_check, "publish": cmd_publish,
+    {"keygen": cmd_keygen, "release": cmd_release, "ship": cmd_ship, "check": cmd_check, "publish": cmd_publish,
      "fixture": cmd_fixture}[args.cmd](args)
 
 
