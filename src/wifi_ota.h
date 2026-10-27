@@ -644,7 +644,7 @@ static bool idle() { return window == Window::None; }
 // Until the next automatic check is due (0: due now), or UINT32_MAX when none
 // can open: the nap sleeps no longer than this (power::napSleepMs).
 static uint32_t checkInMs(uint32_t now) {
-  if (mem().networks.empty() || !autoOn) return UINT32_MAX;
+  if (mem().networks.empty()) return UINT32_MAX;
   return schedule.dueIn(now);
 }
 // The button, or a turn (main.cpp TurnYes): true when the question took it.
