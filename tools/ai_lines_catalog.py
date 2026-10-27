@@ -24,7 +24,7 @@ import personality as P  # noqa: E402
 ROOT = P.ROOT
 OUT = ROOT / "web/src/catalog.json"
 SITUATIONS_MD = ROOT / ".claude/skills/pet-personality/references/situations.md"
-SKIP_ROWS = {"parrot", "teach_fight", "teach_shake", "teach_feed", "teach_hold"}
+SKIP_ROWS = {"parrot", "teach_fight", "teach_shake", "teach_feed", "teach_hold", "grew_child", "grew_adult", "grew_elder"}
 # The Magic 8-Ball's half of a shake (#34, species_verdicts.def): a pack may
 # give the species-own yes / no / not-yet too. Built-in: the ball's plain ones.
 VERDICTS = {

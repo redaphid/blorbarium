@@ -208,8 +208,8 @@ Lifespan live(bool fed) {
 
 TEST(Life, FedEveryTwoHoursHeLivesAboutTenDaysAndDiesOfOldAge) {
   Lifespan run = live(true);
-  EXPECT_NEAR(run.child, 0.5, 0.2);
-  EXPECT_NEAR(run.adult, 2.0, 0.3);
+  EXPECT_NEAR(run.child, 0.125, 0.05);   // about hour 3 (#aging): growing up shows on the first day
+  EXPECT_NEAR(run.adult, 1.0, 0.2);
   EXPECT_NEAR(run.elder, 7.5, 0.5);
   EXPECT_TRUE(run.child < run.adult && run.adult < run.elder && run.elder < run.died);
   EXPECT_GE(run.died, 8.5);

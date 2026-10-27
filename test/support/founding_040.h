@@ -15,12 +15,14 @@ namespace blorbtest {
 // 0.4.0's recipe numbers where today's starter differs: sleepiness made
 // around the clock (its chem's half-life and initial level, and the emitter's
 // locus, gain, fill and flags), a fuller first energy, a dimmer happy face
-// and a 30-minute egg. One body byte each, the same for every seed; read off
+// and a 30-minute egg, and Life's stage thresholds (child at 227, adult at
+// 162: day 0.5 and day 2, before #aging moved them). One body byte each, the same for every seed; read off
 // 0.4.0's starter before the recipe changed.
 struct Byte040 { uint16_t uid; uint8_t at, value; };
 inline constexpr Byte040 kRecipe040[] = {
     {9, 1, 0x9b},  {9, 2, 0x00},  {10, 0, 0x00}, {10, 2, 0x00}, {10, 3, 0xc9},
     {10, 4, 0x01}, {24, 2, 0xcc}, {82, 1, 0x8c}, {105, 0, 0x1e},
+    {2, 2, 227},   {3, 2, 162},
 };
 
 inline blorb::Genome foundingGenome040(uint32_t speciesSeed) {

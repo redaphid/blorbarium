@@ -217,6 +217,15 @@ void Dish::watchChoice(uint32_t ms) {
 
 void Dish::tick(uint32_t nowMs, Link& link) {
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
+  // A nap: everything but the last second is lived coarsely, now. Not in a
+  // duel, whose turns need every tick; the last second runs as usual below.
+  if (ticking_ && int32_t(nowMs - lastTickMs_) >= int32_t(kNapLiveMs) && !duel_.active()) {
+    const uint32_t ticks = (nowMs - lastTickMs_) / kTickMs - kMaxTicksPerCall;
+    lastTickMs_ += ticks * kTickMs;   // all of it, even past the cap: the rest is dropped, not ticked
+    catchUp(ticks);
+    lastCatchUp_.awaySeconds = 0;   // powered: never an absence
+  }
+  ticking_ = true;
   for (int n = 0; n < kMaxTicksPerCall && nowMs - lastTickMs_ >= kTickMs; ++n) {
     lastTickMs_ += kTickMs;
     runOneTick(link);
@@ -333,9 +342,10 @@ void Dish::runOneTick(Link& link) {
       stats_.bitten(c->body().mouth == Mouthful::RottenPellet);
     }
     stats_.lived(*c, 1);
-    if (c->stage() != before) eventDirty_ = statsUrgent_ = true;
+    if (c->stage() != before) eventDirty_ = statsUrgent_ = true, grewTo_ = c->stage();
     if (c->dead()) onDeath(*c);
     else {
+      if (grewTo_) showGrowth(*c);
       const uint32_t foretold = thinker_.foretold();
       thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
       if (thinker_.foretold() != foretold) stats_.foretold();
@@ -416,6 +426,7 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
 }
 
 void Dish::onDeath(Creature& c) {
+  grewTo_.reset();   // his growing up goes with him
   lineage_.recordDeath(c, lineage_.currentName(), tick_, duel_.book().featsThisLife(c.generation()));
   stats_.died(c.cause(), c.stats().ageTicks);
   statsUrgent_ = true;
@@ -805,6 +816,22 @@ void Dish::welcomePhone() {
   thinker_.say(lastCatchUp_.hurt ? "YOU LEFT ME. I AM HUNGRY." : "THE GLOWING ONE RETURNS!", *c, lineage_, tick_);
 }
 
+// He grew: he glows, as the phone's treat makes him, and says so, plain (no
+// voice frame, no pack line). Only with a hand on him in the last while, so
+// the screen is lit and a kid is looking: a stage reached in a nap or in the
+// night waits for the next touch. Never over a duel or the search for one.
+void Dish::showGrowth(Creature& c) {
+  constexpr uint32_t kSeenTicks = 20 * kTicksPerSecond;
+  if (*grewTo_ != c.stage()) return grewTo_.reset();   // not his any more
+  if (duel_.active() || duel_.searching() || duel_.pending() || live_.clock.stillRunTicks >= kSeenTicks) return;
+  const ThoughtId id = *grewTo_ == Stage::Child   ? thought::grew_child
+                       : *grewTo_ == Stage::Adult ? thought::grew_adult
+                                                  : thought::grew_elder;
+  grewTo_.reset();
+  c.inject(chem::vision, c.chemistry().chem[chem::vision.v] + kWelcomeVision);
+  thinker_.say(thoughtInfo(id)->text, c, lineage_, tick_);
+}
+
 // Nobody is there: no gestures, no feeding, no brain. The chemistry runs
 // coarse, stages express as their loci fire, the pantry refills, and a death
 // takes the normal path. An egg incubates and hatches; a clutch's vigil runs
@@ -820,13 +847,16 @@ void Dish::catchUp(uint32_t ticks) {
       SenseOut senses;
       detectors_.day.tick(TickContext{live_.clock, false, tick_}, senses);
       live_.habitat.step(c->phenotype().habitat, kLevel, kLevel, c->body().at, tick_ + n - 1, senses);
+      const Stage was = c->stage();
       c->tickCoarse(senses, n, tick_);
+      if (c->stage() != was) grewTo_ = c->stage();
       stats_.lived(*c, n, false);
       tick_ += n;
       if (c->dead()) onDeath(*c);
     } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
       bool ready = false;
       uint32_t i = 0;
+      if (hatchWaits()) i = n = left;   // he holds still until adopted, as when powered
       while (i < n && !ready) {
         ready = e->tick(SenseOut{});
         ++i;
