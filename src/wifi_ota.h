@@ -219,7 +219,11 @@ static void openWindow(Window w) {
   window = w;
   windowAt = phaseAt = millis();
   ++windows;
-  inWindow = kWindowMagic;
+  // A trial's confirm window is not marked: a restart in one is the trial
+  // rolling back (or the new image failing, which rolls it back), and the old
+  // image it returns to did nothing wrong; marked, it waited 8 h to check again
+  // and counted toward turning automatic checks off.
+  inWindow = w == Window::Confirm ? 0 : kWindowMagic;
   say("window %s opens: dark=%d networks=%u heap=%u", wifiota::windowName(w), int(powerPolicy.low()),
       unsigned(mem().networks.size()), unsigned(ESP.getFreeHeap()));
   // Never start the driver short of RAM: a half-made init ("Expected to init 4
