@@ -24,6 +24,7 @@ import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
+import { withZone } from "./zone.js";
 import { storeGenDebug, storeDeviceDebug, recordInstall, purgeOld } from "./debug.js";
 import { newMeter } from "./pipeline.js";
 
@@ -447,8 +448,10 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/pet-lines" && request.method === "POST") return await postPetLines(request, env, ctx);
-      if (url.pathname === "/api/pet-lines" && request.method === "GET") return await getPetLines(url, env);
+      // What a badge fetches over Wi-Fi (its line packs, manifest and image) also
+      // tells it its zone, so it knows the local time without a phone (zone.js).
+      if (url.pathname === "/api/pet-lines" && request.method === "POST") return withZone(request, await postPetLines(request, env, ctx));
+      if (url.pathname === "/api/pet-lines" && request.method === "GET") return withZone(request, await getPetLines(url, env));
       if (url.pathname === "/api/pet-lines/ack" && request.method === "POST") return await ackPetLines(request, env);
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
       if (url.pathname === "/api/debug" && request.method === "POST") return await postDebug(request, env);
@@ -471,7 +474,7 @@ export default {
       }
       if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
-      if (url.pathname.startsWith("/fw/")) return await firmware(request, env, decodeURIComponent(url.pathname.slice(4)));
+      if (url.pathname.startsWith("/fw/")) return withZone(request, await firmware(request, env, decodeURIComponent(url.pathname.slice(4))));
       return env.ASSETS.fetch(request);
     } catch (e) {
       console.error(JSON.stringify({ msg: "unhandled", path: url.pathname, error: String(e?.stack ?? e) }));
