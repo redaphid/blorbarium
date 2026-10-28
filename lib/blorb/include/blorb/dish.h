@@ -73,9 +73,10 @@ struct DishOptions {
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
   Air* air = nullptr;
-  // An egg holds still, neither incubating nor hatching, until the owner
+  // An egg's clock holds still, time never incubating it, until the owner
   // adopts it from the page (ADOPT), or the debug link's FREEHATCH lifts it.
-  // The firmware sets it; the sim and tests keep eggs on their own clock.
+  // A hand shaking it hatches it either way (Egg::shaken): no phone is ever
+  // needed. The firmware sets it; the sim and tests keep eggs on their own clock.
   bool hatchNeedsPhone = false;
   // The board's own MAC (the firmware's esp_read_mac, its six bytes high to
   // low), for STATE's mac=: the board, not the lineage a keepsake carries.
@@ -230,9 +231,10 @@ class Dish {
   // saved anchor, as a board that never met a phone. The next reading anchors
   // afresh and lives no gap. A time source still set will be read again.
   void forgetWall();
-  // True while an egg is held back until the owner adopts it from the page
-  // (ADOPT; DishOptions::hatchNeedsPhone). Adoption is kept in its own file,
-  // so a replug does not ask again. A phone merely connecting does not count.
+  // True while an egg's clock is held back until the owner adopts it from
+  // the page (ADOPT; DishOptions::hatchNeedsPhone); shaking hatches it all
+  // the same. Adoption is kept in its own file, so a replug does not ask
+  // again. A phone merely connecting does not count.
   bool hatchWaits() const { return hatchNeedsPhone_ && !hatchFree_ && !adopted_; }
   bool adopted() const { return adopted_; }
   bool adopt();                    // false when the flag cannot be written (a trial, a sealed pet)
@@ -304,6 +306,11 @@ class Dish {
   // When a hard shake last dismissed something (#35), for the whoosh.
   uint32_t dismissedAtMs_ = 0;
   bool dismissed_ = false;
+  // The hands hatching an egg (senses.h), and when one last hatched, for the
+  // shell flying off. Presentation and the hand only: never saved or hashed.
+  ShakeHatch shakeHatch_;
+  uint32_t hatchedAtMs_ = 0;
+  bool hatched_ = false;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
   // The aim counts only once a hand has moved the badge on this choice

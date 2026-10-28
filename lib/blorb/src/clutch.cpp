@@ -44,6 +44,24 @@ bool Egg::tick(const SenseOut& senses) {
   return incubated_ >= rules_.incubateTicks * kIncubateUnit;
 }
 
+bool Egg::shaken(bool shaking, bool settle) {
+  const uint32_t total = rules_.incubateTicks * kIncubateUnit;
+  if (shaking) {
+    incubated_ += std::max<uint32_t>(1, (total + kShakeTicks - 1) / kShakeTicks);
+  } else if (settle && incubated_ < total) {
+    const uint32_t stage = total / kCrackStages;
+    const uint32_t floor = stage ? incubated_ / stage * stage : 0;
+    incubated_ -= std::min(incubated_ - floor, std::max<uint32_t>(1, stage / kSettleTicks));
+  }
+  return incubated_ >= total;
+}
+
+uint8_t Egg::crackStage() const {
+  const uint64_t total = uint64_t(rules_.incubateTicks) * kIncubateUnit;
+  if (total == 0 || incubated_ >= total) return kCrackStages;
+  return uint8_t(uint64_t(incubated_) * kCrackStages / total);
+}
+
 Fx Egg::progress() const {
   uint64_t total = uint64_t(rules_.incubateTicks) * kIncubateUnit;
   if (total == 0) return Fx::one();

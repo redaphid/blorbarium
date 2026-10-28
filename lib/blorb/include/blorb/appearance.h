@@ -118,6 +118,12 @@ struct Appearance {
 
   // Egg, remains and clutch
   Fx eggProgress{};                 // whole -> cracking -> hatching
+  // How hard a hand is shaking the egg right now, 0..1 (Egg::shaken): it
+  // jiggles with it, and chips of shell jump off once it is coming apart.
+  Fx eggShaken{};
+  // He hatched this long ago, ms: the shell flying off him (paint). UINT16_MAX: not lately.
+  static constexpr uint16_t kHatchBurstMs = 1200;
+  uint16_t hatchedMs = UINT16_MAX;
   Fx remainsFade{};                 // 0..1 through the vigil
   EggPreview eggs[kMaxClutch]{};
   uint8_t eggCount = 0, cursor = 0;

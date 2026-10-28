@@ -25,6 +25,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "blorb/creature.h"
 #include "blorb/knocks.h"
 #include "blorb/senses.h"
 #include "blorb/dish_duel.h"
@@ -257,6 +258,50 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
   // ...and the words take about as long as they did (kSideHoldMs, kHangHoldMs).
   EXPECT_GE(all.sideWord.pct(50), 1900u);
   EXPECT_GE(all.hangWord.pct(50), 1100u);
+}
+
+// ---- shaking an egg open (Egg::shaken), against the same hands ----------------------
+
+// Every recording replayed into an egg waiting on a phone, as the badge runs
+// it: the shell, every detector, the ShakeHatch at each 100 ms tick, the egg
+// settling when not shaken. Everyday handling (picked up, carried, set down
+// hard, pocketed, upside down), knocks, turns and hangs never crack it; the
+// recordings' one real shake starts it cracking and is well short of a hatch.
+TEST(ShakeHatch, OnTheRecordingsOnlyTheShakeCracksTheEgg) {
+  const std::vector<Segment> segs = loadHands();
+  ASSERT_GE(segs.size(), 15u);
+  for (const Segment& seg : segs) {
+    ::power::Policy policy;
+    hw::Feel shell(kR0, kHome, policy);
+    Detectors d;
+    ShakeHatch hand;
+    Egg egg(Offspring{starterGenome(7), {}}, 0, 0);
+    SenseOut out;
+    bool shook = false;
+    int ticks = 0, shaking = 0, stage = 0, n = 0;
+    auto feed = [&](uint32_t ms, const BodySample& b) {
+      out.clear();
+      d.sample(shell.sample(b, ms, false).screen, ms, out);
+      for (uint8_t i = 0; i < out.stimCount; ++i) shook = shook || out.stimuli[i] == stim::shake;
+      if (++n % 5) return;   // the body tick, every fifth sample
+      const bool counts = hand.step(shook && d.motion.vigorous(), d.motion.swinging());
+      shook = false;
+      ++ticks, shaking += counts;
+      EXPECT_FALSE(egg.shaken(counts, true)) << seg.label << ": hatched";
+      stage = std::max<int>(stage, egg.crackStage());
+    };
+    uint32_t last = 0;
+    for (const auto& [ms, b] : seg.samples) feed(ms, b), last = ms;
+    BodySample still = seg.samples.back().second;
+    still.hasPeak = false;
+    for (uint32_t ms = last + 20; ms <= last + 2000; ms += 20) feed(ms, still);
+    std::printf("[ hatch ] %-26s %5d ticks, %3d shaking, crack stage %d\n", seg.label.c_str(), ticks, shaking, stage);
+    if (seg.label.rfind("9_", 0) == 0) {
+      EXPECT_GT(shaking, 0) << "the shake counts";
+    } else {
+      EXPECT_EQ(stage, 0) << seg.label << ": cracked by hands that were not shaking it";
+    }
+  }
 }
 
 // ---- the badge's harness (src/latency.h), driven by hand ---------------------------

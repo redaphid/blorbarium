@@ -231,6 +231,15 @@ void Gravity::sample(const BodySample& s) {
 void MotionDetector::sample(const BodySample& s, uint32_t ms, SenseOut& out) {
   grav_.sample(s);
   hard_ = (hard_ << 1 | uint64_t(grav_.squared() >= kShakeJoltMg * kShakeJoltMg)) & ((uint64_t(1) << 50) - 1);
+  // A swing turned back (swinging()): measured on its own, so a Shake's
+  // rearm below never stops the count of a shake kept up.
+  bool swung = false;
+  if (!s.knocking && grav_.squared() >= kShakeJoltMg * kShakeJoltMg) {
+    const int64_t way = int64_t(swingX_) * grav_.dx + int64_t(swingY_) * grav_.dy + int64_t(swingZ_) * grav_.dz;
+    if (way < 0 && ms - swungAt_ >= kShakeGapMs) swung = true, swungAt_ = ms;
+    if (way >= 0 || swung) swingX_ = grav_.dx, swingY_ = grav_.dy, swingZ_ = grav_.dz;
+  }
+  swings_ = (swings_ << 1 | uint64_t(swung)) & ((uint64_t(1) << 50) - 1);
   int32_t mag = magnitudeMg(s);
   int32_t dev = absMg(mag - kOneG);
   energy_ += (Fx::ratio(dev < kOneG ? dev : kOneG, kOneG) - energy_) * kMotionSmooth;
