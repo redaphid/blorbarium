@@ -95,7 +95,25 @@ def laptop_wifi():
         get = lambda f, *a: subprocess.run(["nmcli", *a, "-g", f, "connection", "show", con], capture_output=True,
                                            text=True, timeout=10, stdin=subprocess.DEVNULL).stdout.strip()
         ssid = get("802-11-wireless.ssid")
-        return (ssid, get("802-11-wireless-security.psk", "-s")) if ssid else None
+        if not ssid:
+            return None
+        # A badge hears only 2.4 GHz. When this network is 5 GHz only here,
+        # the router's 2.4 GHz twin (the owner's: another name, the same
+        # first part, the same password) is the one with the longest shared
+        # prefix.
+        seen = subprocess.run(["nmcli", "-t", "-f", "ssid,freq", "dev", "wifi", "list"], capture_output=True, text=True,
+                              timeout=20, stdin=subprocess.DEVNULL).stdout
+        low = {l.rsplit(":", 1)[0].replace("\\:", ":") for l in seen.splitlines()
+               if l.rsplit(":", 1)[-1].split()[0].isdigit() and int(l.rsplit(":", 1)[-1].split()[0]) < 3000}
+        if ssid not in low:
+            shared = lambda o: len(os.path.commonprefix([ssid, o]))
+            twin = max(low, key=shared, default="")
+            if shared(twin) < 4:
+                say("wifi: this laptop's network is 5 GHz only and has no 2.4 GHz twin here; the badge cannot use it")
+                return None
+            say(f"wifi: this laptop's network is 5 GHz only; its 2.4 GHz twin (first {shared(twin)} characters the same) instead")
+            ssid = twin
+        return ssid, get("802-11-wireless-security.psk", "-s")
     except (OSError, subprocess.SubprocessError):
         return None
 
