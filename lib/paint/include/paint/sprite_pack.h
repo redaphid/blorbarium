@@ -59,6 +59,13 @@ class SpritePack {
 // then the round mask.
 void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 
+// The firmware version, tiny and dim at the dish's right rim, drawn just
+// after the background so everything else lands on top of it: an adult
+// looking closely reads it, a kid never notices it. The firmware sets it once
+// from its stamp (src/build_info.cpp); unset (the native suites) draws nothing.
+// The string must outlive every draw.
+void setVersionTag(const char*);
+
 // The species' sprite pack (species.def's rows; every device holds all nine).
 // An id this firmware has no row for draws grungo, recoloured by the pet's own
 // genes like any pack, so a gap in the art is a frog in its colours, never a blank.

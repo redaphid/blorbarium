@@ -62,6 +62,15 @@ constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 constexpr int kMarqueeFeather = 20;
 constexpr Marquee kMarqueeStrip = {-76, 0, 20, 38, kMarqueeFeather};
 
+// The version tag: FreeSans 9pt (the smallest font there is) at the right
+// rim's middle, its right edge 6 px in from the glass's rim band, its digits
+// on rows 114..126. Nothing else draws there: the cookies are on the left
+// rim, the boot hint at the top, the trophies and care hint at the bottom,
+// lines above and below him. A wide pet (wings) covers it, as he should.
+// A pale teal a little lighter than the dish there, dimmed with the night as the dish is.
+constexpr int kTagRight = 228, kTagMidY = 122;
+constexpr uint8_t kTagColour[3] = {44, 84, 80};
+
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
 constexpr int ceilDiv(int64_t a, int64_t b) { return -floorDiv(-a, b); }
 constexpr int imin(int a, int b) { return a < b ? a : b; }
@@ -1828,7 +1837,19 @@ void rimTokens(Canvas240& cv, const Appearance& a) {
   if (a.vendetta) drawArt(cv, duel_art::kVendetta, kVendettaAt[0], kVendettaAt[1], kTokenPct, 256);
 }
 
+const char* versionTag_ = nullptr;   // setVersionTag()
+
+void versionTag(Canvas240& cv, Fx night) {
+  if (!versionTag_ || !*versionTag_) return;
+  const int lit = 256 - (blorb::clamp01(night).raw >> 17);   // as background() dims the dish
+  const uint16_t ink = to565({kTagColour[0] * lit / 256, kTagColour[1] * lit / 256, kTagColour[2] * lit / 256});
+  drawString(cv, kFreeSans9pt7b, versionTag_, kTagRight - textWidth(kFreeSans9pt7b, versionTag_), kTagMidY, ink,
+             Clip{0, 0, kSide, kSide, 0});
+}
+
 }  // namespace
+
+void setVersionTag(const char* s) { versionTag_ = s; }
 
 void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int alpha, int fillRows) {
   if (!drawable(f)) return;
@@ -1922,6 +1943,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   phaseStart();
   spots_ = DishSpots{};
   background(cv, a.night);
+  if (!a.sealed && a.kind != Kind::Clutch) versionTag(cv, a.night);   // first: all else lands on it; not under the clutch's eggs
   phaseEnd(Phase::Background);
   if (a.sealed) {
     amber(cv, kAmberBehind);

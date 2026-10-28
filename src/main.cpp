@@ -1178,6 +1178,14 @@ void setup() {
   Serial.setTxBufferSize(BLORB_SERIAL_TX);
 #endif
   Serial.begin(115200);
+  // The version, tiny and dim in the dish (paint::setVersionTag), as the stamp
+  // says it: build_info.cpp, the one file the stamp reaches. The simulator has
+  // no stamp and says "dev", so the frame goldens hold across releases.
+#if defined(BADGE_BOARD_SIM)
+  paint::setVersionTag("dev");
+#else
+  paint::setVersionTag(kReleaseStamp.fw.data());
+#endif
 #if !defined(BADGE_BOARD_SIM)
   heapMark("start");
   // In PSRAM (InPsram above), before anything uses them.
