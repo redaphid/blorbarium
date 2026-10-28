@@ -553,7 +553,7 @@ static void poll(uint32_t now) {
             return failWindow(Failure::Absent, "could not join in %u s: last disconnect %s (reason %u, %u disconnects, status %d)%s",
                               unsigned(station.joinBudgetMs() / 1000), station.reasonName(), unsigned(station.reason()),
                               unsigned(station.disconnectsSinceJoin()), int(WiFi.status()),
-                              hw::WifiStation::associated() ? ": associated, no DHCP answer" : "");
+                              hw::WifiStation::associated() ? ": no DHCP reply" : "");
           return;
       }
       return;
