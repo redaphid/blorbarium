@@ -41,6 +41,38 @@ Fx absFx(Fx v) { return v < Fx::zero() ? -v : v; }   // the idle's face, shown w
 constexpr LocusId kBehaviourLoci[] = {locus::eating, locus::foreseeing};
 constexpr uint8_t kRecentEnd = kRecentBase + 64;
 
+// A pellet feeds him, whatever his genes make of it (owner, 2026-10-27: the
+// kids' pets starved, and one press did not bring a starving pet back). His
+// genes add the pellet's food and their own fed response; on top of that a
+// bite leaves his hunger at most kFedHunger and his energy at least
+// kFedEnergy, with the pellet's food still to come, so he is above the
+// hunger call (starter_genome.cpp: energy under 0.35) for hours. One press
+// ends a starving spell, and a line whose fed gene drifted or was lost still
+// lives on pellets. Rotten or fresh, a pellet fills him (actions.cpp).
+constexpr Fx kFedHunger = Fx::ratio(2, 10);
+constexpr Fx kFedEnergy = Fx::ratio(5, 10);
+void fedByPellet(Chemistry& c) {
+  Fx& hunger = c.chem[driveChem(drive::hunger).v];
+  Fx& energy = c.chem[chem::energy.v];
+  hunger = fxMin(hunger, kFedHunger);
+  energy = fxMax(energy, kFedEnergy);
+}
+
+// Asleep, and through a stretch with nobody there, his belly runs slow:
+// energy burns at a third of its waking pace, and hunger does not rise while
+// he has energy left (kSleepReserve). A pet fed by day sleeps the night, and
+// the 12-hour catch-up, through and wakes peckish, not starving. Under the
+// reserve he is running out, and hunger rises asleep as it does awake:
+// neglect still starves him, only later (test_economy).
+constexpr int32_t kSleepBurnDivisor = 3;
+constexpr Fx kSleepReserve = Fx::ratio(1, 10);
+void restMetabolism(Chemistry& c, Fx energyBefore, Fx hungerBefore) {
+  Fx& energy = c.chem[chem::energy.v];
+  Fx& hunger = c.chem[driveChem(drive::hunger).v];
+  if (energy < energyBefore) energy = Fx{energyBefore.raw - (energyBefore.raw - energy.raw) / kSleepBurnDivisor};
+  if (hunger > hungerBefore && energy >= kSleepReserve) hunger = hungerBefore;
+}
+
 struct StageStep { Stage from; LocusId trigger; Stage to; };
 constexpr StageStep kStageSteps[] = {
     {Stage::Baby, locus::become_child, Stage::Child},
@@ -280,7 +312,9 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
   // 3 chemistry
   Fx before[kReflexCount];
   for (size_t r = 0; r < kReflexCount; ++r) before[r] = chem_.locus[REFLEXES[r].trigger.v];
+  const Fx energyBefore = chem_.chem[chem::energy.v], hungerBefore = chem_.drive(drive::hunger);
   chem_.step(pheno_.chem, tick);
+  if (body_.asleep) restMetabolism(chem_, energyBefore, hungerBefore);
 
   // 4 lifecycle
   growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
@@ -388,6 +422,7 @@ void Creature::tick(const SenseOut& senses, Habitat& habitat, Behaviours& behavi
     if (s == Status::Done) finish();
   }
   chem_.add(chem::food, ctx.foodEaten);
+  if (ctx.ate) fedByPellet(chem_);
   body_.poseTick = body_.pose == pose ? uint16_t(body_.poseTick + 1) : 0;
   if (body_.pose != pose::eat) body_.mouth = Mouthful::Nothing;   // a reflex or another action ended the chew
 
@@ -421,7 +456,9 @@ void Creature::tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick)
   if (dead()) return;
   ownLoci(chem_, body_);
   for (uint8_t i = 0; i < senses.lociCount; ++i) chem_.set(senses.loci[i].locus, senses.loci[i].value);
+  const Fx energyBefore = chem_.chem[chem::energy.v], hungerBefore = chem_.drive(drive::hunger);
   chem_.stepCoarse(pheno_.chem, ticks, tick);
+  restMetabolism(chem_, energyBefore, hungerBefore);   // nobody there: he rests it out
   growUp(stage_, stats_, genome_, legacyFeats_, pheno_, chem_, brain_);
   stats_.ageTicks += ticks;
   body_.at = DishPos{};   // a stretch with nobody there is lived at rest, so he is home when it ends
