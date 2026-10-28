@@ -294,8 +294,11 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // recipe every board founds from (sleep as pressure, a 15-minute egg).
   // d349a3b4 with the day's activities (#61, docs/notes/day-activities.md):
   // the parts of his day, the Feel acts, his age, genes and traits leaning
-  // his idles, the pace, and when he woke in the hash.
-  constexpr uint32_t kCommitted = 0x43e1405eu;
+  // his idles, the pace, and when he woke in the hash. 5a623961 with the food
+  // economy (test_economy): a pellet leaves hunger at most 0.2 and energy at
+  // least 0.5, and resting (asleep or dark) his belly runs slow. With those
+  // two rules switched off the routine still gives 43e1405e.
+  constexpr uint32_t kCommitted = 0x5a623961u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -306,7 +309,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=43e1405e tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=5a623961 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
