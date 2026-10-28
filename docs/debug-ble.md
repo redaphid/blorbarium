@@ -208,8 +208,8 @@ the time known again.
 #e OK freehatch=on
 ```
 
-An egg holds still, neither incubating nor hatching, until the owner presses
-Adopt on the page (`ADOPT`, docs/ble.md). FREEHATCH lets it run without one, until the next
+An egg's clock holds still, time never incubating it, until the owner presses
+Adopt on the page (`ADOPT`, docs/ble.md); shaking it hatches it either way. FREEHATCH lets it run without one, until the next
 reset (it is never saved). The page sends `FREEHATCH on` when it opens the
 debug link, so `?debug` hatches eggs without adopting.
 

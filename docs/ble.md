@@ -120,8 +120,10 @@ by newer firmware (an update rolled back) is sealed the same way and says
 #9 OK adopted=1 waiting=0
 ```
 
-A board that ships with `hatchNeedsPhone` holds its egg still, with no
-incubation and no hatch, until the owner adopts it. Connecting, `TIME` and
+A board that ships with `hatchNeedsPhone` holds its egg's clock still, with
+no incubation by time, until the owner adopts it. A phone is never needed to
+hatch it: a few seconds of hard shaking crack it open and hatch it, adopted
+or not (`Egg::shaken`, test/test_shake_hatch). Connecting, `TIME` and
 flashing do not count; only `ADOPT` does (the page's Adopt button). It is
 kept in its own file (`adopted.flag`) beside the keepsake, so a replug does
 not ask again, and a wipe clears it. `ADOPT status` only reports. `ERR 409

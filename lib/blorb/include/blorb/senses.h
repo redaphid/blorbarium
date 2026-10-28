@@ -157,13 +157,44 @@ struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 5 jol
   // down that fires a Shake has 9, a shake in a hand 28-31.
   static constexpr uint8_t kVigorSamples = 15;
   bool vigorous() const { return __builtin_popcountll(hard_) >= kVigorSamples; }
+  // Of the last second's 50 samples, how many were that far off gravity.
+  uint8_t hardSamples() const { return uint8_t(__builtin_popcountll(hard_)); }
+  // A hand shaking it back and forth now, kept up: in the last second, at
+  // least kSwingReversals jolts 0.8 g or more off gravity, each the other way
+  // from the one before (a knock's bounce never counts). Being turned over or
+  // carried leaves gravity behind, which vigorous() reads as hard, but it is
+  // off the one way; only a shake keeps turning back.
+  static constexpr uint8_t kSwingReversals = 4;
+  bool swinging() const { return __builtin_popcountll(swings_) >= kSwingReversals; }
  private:
-  uint64_t hard_ = 0;   // the last 50 samples, one bit each: this far off gravity
+  uint64_t hard_ = 0;
+  uint64_t swings_ = 0;   // the last 50 samples, one bit each: a swing turned back
+  int32_t swingX_ = 0, swingY_ = 0, swingZ_ = 0;   // the way the last swing went
+  uint32_t swungAt_ = 0;   // the last 50 samples, one bit each: this far off gravity
   enum class Fall : uint8_t { None, Falling, Free, Landing };
   Gravity grav_;
   uint32_t jolts_[5]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
   int32_t lastX_ = 0, lastY_ = 0, lastZ_ = 0;   // the last jolt's d
   bool rattled_ = false; Fall fall_ = Fall::None; uint32_t fallSince_ = 0;
+};
+// The hands that hatch an egg (Egg::shaken), at the body tick. A hard shake
+// opens it (a Shake while vigorous(): the one that dismisses, #35, never the
+// pick-up from face down or a knock's bounce), and from then every tick the
+// hand keeps swinging it (MotionDetector::swinging) is a tick of shaking,
+// until kLapseTicks pass with none. So a kid's shake counts from its first
+// second, kept up or in bursts, and a bump, a knock, a bag's jolt or being
+// carried about never opens it or keeps it going.
+struct ShakeHatch {
+  static constexpr uint8_t kLapseTicks = 10;   // a second
+  bool step(bool hardShake, bool swinging) {
+    if (hardShake) open_ = kLapseTicks;
+    if (!open_) return false;
+    if (swinging) return open_ = kLapseTicks, true;
+    --open_;
+    return false;
+  }
+ private:
+  uint8_t open_ = 0;
 };
 struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> held; PickedUp/PutDown; Cradle when still 3 s
   void sample(const BodySample&, uint32_t ms, SenseOut&);

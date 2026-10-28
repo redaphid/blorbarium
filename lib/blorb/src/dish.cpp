@@ -269,7 +269,8 @@ void Dish::runOneTick(Link& link) {
   // A hard shake dismisses anything modal before the tick runs (#35): fight
   // mode before a duel has started, an ask waiting on an update, why no
   // fight, a refusal's words. Never a duel. It still reaches him.
-  if (fired(out, stim::shake) && !(out.remote & duelStimBit(stim::shake)) && detectors_.motion.vigorous()) {
+  const bool hardShake = fired(out, stim::shake) && !(out.remote & duelStimBit(stim::shake)) && detectors_.motion.vigorous();
+  if (hardShake) {
     const DishDuel::Refusal& r = duel_.refusal();
     const bool refusalShown = r.any && (tick_ - r.tick < kEchoTicks || (r.kind != NoFight::None && tick_ - r.tick < kNoFightTicks));
     bool any = duel_.dismiss(air_, tick_, refusalShown);
@@ -351,7 +352,13 @@ void Dish::runOneTick(Link& link) {
       if (thinker_.foretold() != foretold) stats_.foretold();
     }
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
-    if (!hatchWaits() && e->tick(out)) onHatch(*e);
+    // Shaking hatches it, phone or none (owner, 2026-10-27): ADOPT and
+    // FREEHATCH only let time incubate it as well.
+    const uint8_t cracked = e->crackStage();
+    bool ready = e->shaken(shakeHatch_.step(hardShake, detectors_.motion.swinging()), hatchWaits());
+    if (e->crackStage() > cracked) eventDirty_ = true;   // a crack made is kept over a replug
+    if (!ready && !hatchWaits()) ready = e->tick(out);
+    if (ready) onHatch(*e);
   } else {
     Clutch& k = std::get<Clutch>(live_.occupant);
     if (k.previewed < k.count) {
@@ -461,6 +468,7 @@ void Dish::onHatch(Egg& e) {
   live_.habitat.pantry = born.phenotype().habitat.pantrySize;
   live_.habitat.pantryTick = tick_;
   eventDirty_ = statsUrgent_ = true;
+  hatchedAtMs_ = nowMs_, hatched_ = true;
 }
 
 bool Dish::pick(uint8_t egg) {
@@ -656,6 +664,9 @@ Appearance Dish::appearance() const {
   if (std::holds_alternative<Creature>(live_.occupant)) a.carry = carry_.view(nowMs_);
   if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
   a.clutch = clutchShow_.view(nowMs_, a.eggs, a.eggCount);
+  // A shaken egg jiggles with the hand, and the shell flies off as he hatches.
+  if (a.kind == Appearance::Kind::Egg) a.eggShaken = clamp01(Fx::ratio(detectors_.motion.hardSamples(), 2 * MotionDetector::kVigorSamples));
+  if (hatched_ && nowMs_ - hatchedAtMs_ < Appearance::kHatchBurstMs) a.hatchedMs = uint16_t(nowMs_ - hatchedAtMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
