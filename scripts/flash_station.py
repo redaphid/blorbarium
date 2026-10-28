@@ -177,6 +177,15 @@ def station_one(serial_no, port, ssid, password, verbose):
         home = c.until(6, lambda t: t.startswith("[hw] home rot="))
         if not home or not home.startswith(f"[hw] home rot={0 if flipped else 2} (USB-C {want}, nvs"):
             return False, f"home: {home!r}"
+        # Fed and mended before it goes (the owner, 2026-10-27: no pet starves
+        # before the feeding fix arrives over the air).
+        fed = []
+        for chem in ("hunger", "pain", "injury"):
+            c.send(f"DEBUG chem {chem} 0")
+            got = c.until(4, lambda t: t.startswith(f"[hw] debug chem {chem}"))
+            fed.append(got.split("debug chem ")[1] if got else f"{chem}=?")
+        if any(not f.endswith("=0") for f in fed):
+            return False, f"feed: {' '.join(fed)}"
         c.send(f'DEBUG wifi set "{ssid}" {password}', 'DEBUG wifi set "<ssid>" <password>')
         if not c.until(6, lambda t: t.startswith("[wifi] network ") and "saved" in t):
             return False, "wifi set: no saved line"
@@ -184,16 +193,16 @@ def station_one(serial_no, port, ssid, password, verbose):
         v = c.until(6, lambda t: t.startswith("[wifi] verify"))
         if not v or "password MATCHES" not in v:
             return False, f"wifi verify: {c.mask(v or 'no answer')}"
-        for attempt in range(3):
+        for attempt in range(5):
             c.send("DEBUG ota check")
             got = c.until(120, lambda t: t.startswith("[wifi] manifest ") or "forced: FAILED" in t)
             if got and t_ok(got):
                 c.until(30, lambda t: "window forced closed" in t)
-                return True, f"fw={version} home={want} wifi=ok live={got.split()[3]} up_to_date mac={mac.group(1) if mac else '?'}"
+                return True, f"fw={version} home={want} fed wifi=ok live={got.split()[3]} up_to_date mac={mac.group(1) if mac else '?'}"
             if got and got.startswith("[wifi] manifest "):
                 return False, f"ota check: {c.mask(got)}"
             c.until(30, lambda t: "window forced closed" in t)
-        return False, f"ota check failed 3 times: {c.mask(got or 'no answer')}"
+        return False, f"ota check failed 5 times: {c.mask(got or 'no answer')}"
     finally:
         if verbose:
             print("\n".join("    " + l for l in c.log), flush=True)
