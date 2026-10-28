@@ -172,6 +172,7 @@ Status Eat::step(Body& b, ActionCtx& c) {
   b.pose = pose::eat;
   b.mouth = bite->rotten ? Mouthful::RottenPellet : Mouthful::Pellet;
   c.foodEaten += bite->food;
+  c.ate = true;
   c.out.fire(stim::fed);   // a rotten pellet still fills him, so he stops at one
   if (bite->rotten) c.out.fire(stim::fed_bad);
   c.out.set(locus::eating, Fx::one());

@@ -58,6 +58,7 @@ struct ActionCtx {
   Rng& rng;
   SenseOut& out;          // self-stimuli and loci (asleep, eating, foreseeing), applied by the creature next tick
   Fx foodEaten{};
+  bool ate = false;            // he bit a pellet this tick (a pellet feeds him whatever its food: creature.cpp)
   IdleState* idle = nullptr;   // the creature's: which idle Play runs, and how far in
   bool rotIsFood = true;       // he is starving (creature.h kEatsRotAt): a rotten pellet is food
   Picky* picky = nullptr;      // the creature's: his last turn-down of a rotten pellet

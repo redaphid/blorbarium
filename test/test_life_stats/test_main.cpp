@@ -456,12 +456,14 @@ TEST(Lineage, TheEggCarriesItsParentsAndGrandparentsLives) {
   const Genome founder = shortLived();
   std::optional<Dish> dish;
   dish.emplace(store, 7, kLineage, DishOptions{nullptr, &founder});
-  // A phone told him the time, midnight: with no clock there is no night
-  // (sleep-idle, #20), and the owner tucks him in only at night.
-  constexpr uint32_t kMidnight = 1790035200u;   // 2026-09-21 00:00 UTC
-  dish->phoneTime().set(kMidnight);
+  // A phone told him the time, early evening: with no clock there is no
+  // night (sleep-idle, #20), and the owner tucks him in only at night. He
+  // hatches with hours awake before it, so he gets hungry and is fed:
+  // asleep, his hunger waits for him to wake (creature.cpp restMetabolism).
+  constexpr uint32_t kEvening = 1790035200u - 6 * 3600;   // 2026-09-20 18:00 UTC
+  dish->phoneTime().set(kEvening);
   dish->checkWall();
-  dish->clock().alignToWall(kMidnight, 0);
+  dish->clock().alignToWall(kEvening, 0);
   dish->setZone(0);
   std::optional<LifeTally> gen0;
   uint32_t ms = 0;
