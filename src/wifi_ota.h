@@ -59,7 +59,6 @@ using wifiota::Failure;
 using wifiota::Window;
 
 constexpr uint32_t kScanMs = 10000;            // a scan the driver has not finished by then is stopped
-constexpr uint32_t kJoinMs = 15000;            // the join (with the core's one retry), then one more, then the window closes
 constexpr uint8_t kTriesAfterRollback = 3;      // a version that rolled back this many times here is not tried again
 constexpr uint32_t kConfirmRetryMs = 20000;    // on trial: the next try to reach the site
 constexpr uint32_t kConfirmFirstMs = 10000;    // on trial: the first try, once boot's own allocations have settled
@@ -529,9 +528,13 @@ static void poll(uint32_t now) {
   switch (phase) {
     case Phase::Scanning: return scanned();
     case Phase::Joining:
+      // The join (with the core's one retry) for station.joinBudgetMs(), then
+      // one more, then the window closes. On WPA3 the next try waits until 30 s
+      // after the last began (hw::WifiStation::retryWaitMs).
       if (const hw::WifiStation::Join j = station.joining();
           j != hw::WifiStation::Join::Joined && joinPick && !joinRetried &&
-          (j == hw::WifiStation::Join::Failed || millis() - phaseAt > kJoinMs)) {
+          (j == hw::WifiStation::Join::Failed || millis() - phaseAt > station.joinBudgetMs())) {
+        if (station.retryWaitMs()) return;
         joinRetried = true;
         say("join of network #%u failed (%s, reason %u): one more try", unsigned(*joinPick + 1), station.reasonName(),
             unsigned(station.reason()));
@@ -546,10 +549,11 @@ static void poll(uint32_t now) {
                             unsigned(millis() - phaseAt), station.reasonName(), unsigned(station.reason()),
                             unsigned(station.disconnectsSinceJoin()), station.beginStatus(), int(WiFi.status()));
         case hw::WifiStation::Join::Trying:
-          if (millis() - phaseAt > kJoinMs)
-            return failWindow(Failure::Absent, "could not join in %u s: last disconnect %s (reason %u, %u disconnects, status %d)",
-                              unsigned(kJoinMs / 1000), station.reasonName(), unsigned(station.reason()),
-                              unsigned(station.disconnectsSinceJoin()), int(WiFi.status()));
+          if (millis() - phaseAt > station.joinBudgetMs())
+            return failWindow(Failure::Absent, "could not join in %u s: last disconnect %s (reason %u, %u disconnects, status %d)%s",
+                              unsigned(station.joinBudgetMs() / 1000), station.reasonName(), unsigned(station.reason()),
+                              unsigned(station.disconnectsSinceJoin()), int(WiFi.status()),
+                              hw::WifiStation::associated() ? ": associated, no DHCP answer" : "");
           return;
       }
       return;

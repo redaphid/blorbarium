@@ -15,6 +15,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_coexist.h>
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
 #include <sdkconfig.h>
@@ -91,6 +92,7 @@ class WifiStation {
     if (!up_) return;
     if (!stopping_) stop();
     const uint32_t waited = millis() - stopAt_;
+    holdCoex(false);
     WiFi.scanDelete();
     WiFi.mode(WIFI_OFF);
     up_ = false;
@@ -165,11 +167,38 @@ class WifiStation {
     attempted_ = true;
     reason_ = 0;
     disconnectsAtJoin_ = disconnects_;
-    const wl_status_t r = best ? WiFi.begin(c.ssid, pass, best->channel, best->bssid) : WiFi.begin(c.ssid, pass);
+    wpa3_ = best && (best->auth == WIFI_AUTH_WPA3_PSK || best->auth == WIFI_AUTH_WPA2_WPA3_PSK);
+    attemptAt_ = millis();
+    wl_status_t r;
+    if (!wpa3_) {
+      r = best ? WiFi.begin(c.ssid, pass, best->channel, best->bssid) : WiFi.begin(c.ssid, pass);
+    } else {
+      // WPA3 (SAE): the core's config with SAE's own fields set, then connect.
+      // Disconnecting first and setting the config again drops what the
+      // driver kept from a failed attempt (its PMK). Wi-Fi has the radio over
+      // Bluetooth until the join settles: SAE's commit and confirm frames
+      // must not wait behind it.
+      esp_wifi_disconnect();
+      r = WiFi.begin(c.ssid, pass, best->channel, best->bssid, false);
+      wifi_config_t conf;
+      if (r != WL_CONNECT_FAILED && esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+        conf.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+        conf.sta.pmf_cfg.capable = true;
+        conf.sta.pmf_cfg.required = false;
+        conf.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        if (esp_wifi_set_config(WIFI_IF_STA, &conf) != ESP_OK) r = WL_CONNECT_FAILED;
+      } else {
+        r = WL_CONNECT_FAILED;
+      }
+      if (r != WL_CONNECT_FAILED) {
+        holdCoex(true);
+        if (esp_wifi_connect() != ESP_OK) r = WL_CONNECT_FAILED;
+      }
+    }
     if (best)
-      Serial.printf("[wifi] join: ssid %u B, password %u B, its strongest AP ch=%u rssi=%d auth=%s; begin=%d\n",
+      Serial.printf("[wifi] join: ssid %u B, password %u B, its strongest AP ch=%u rssi=%d auth=%s%s; begin=%d\n",
                     unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), unsigned(best->channel),
-                    best->rssi, authName(best->auth), int(r));
+                    best->rssi, authName(best->auth), wpa3_ ? " (sae both, pmf capable, wifi first)" : "", int(r));
     else
       Serial.printf("[wifi] join: ssid %u B, password %u B, not in the scan: the driver scans for it; begin=%d\n",
                     unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), int(r));
@@ -177,17 +206,35 @@ class WifiStation {
   }
   Join joining() const {
     if (!up_) return Join::Failed;
-    if (beginStatus_ == WL_CONNECT_FAILED) return Join::Failed;   // esp_wifi_connect refused at once
-    if (WiFi.status() == WL_CONNECTED) return joinedOnce_ = true, Join::Joined;
+    if (beginStatus_ == WL_CONNECT_FAILED) return holdCoex(false), Join::Failed;   // esp_wifi_connect refused at once
+    if (WiFi.status() == WL_CONNECTED) return holdCoex(false), joinedOnce_ = true, Join::Joined;
     // A disconnect since the join, other than the core's own one retry's: the reason says why.
     if (disconnects_ != disconnectsAtJoin_ && (reason_ == WIFI_REASON_AUTH_FAIL || reason_ == WIFI_REASON_NO_AP_FOUND ||
                                                reason_ == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
                                                reason_ == WIFI_REASON_HANDSHAKE_TIMEOUT ||
                                                reason_ == WIFI_REASON_ASSOC_FAIL || reason_ == WIFI_REASON_CONNECTION_FAIL)) {
       // The core retries once after the first failure: give the retry its chance.
-      return disconnects_ - disconnectsAtJoin_ >= 2 ? Join::Failed : Join::Trying;
+      if (disconnects_ - disconnectsAtJoin_ < 2) return Join::Trying;
+      holdCoex(false);
+      return Join::Failed;
     }
     return Join::Trying;
+  }
+  // How long one try at the join may take, and the least time from one try's
+  // start to the next. A WPA3 access point counts a station's SAE attempts and
+  // makes one that comes back too soon wait (anti-clogging), and SAE itself
+  // takes longer: so 30 s apart.
+  static constexpr uint32_t kJoinMs = 15000, kJoinWpa3Ms = 30000;
+  uint32_t joinBudgetMs() const { return wpa3_ ? kJoinWpa3Ms : kJoinMs; }
+  uint32_t retryWaitMs() const {
+    const uint32_t since = millis() - attemptAt_;
+    return wpa3_ && since < kJoinWpa3Ms ? kJoinWpa3Ms - since : 0;
+  }
+  bool wpa3() const { return wpa3_; }
+  // In the access point's company (authenticated and keyed) but maybe without an address yet.
+  static bool associated() {
+    wifi_ap_record_t ap;
+    return esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
   }
   bool joined() {
     const bool j = up_ && WiFi.status() == WL_CONNECTED;
@@ -223,6 +270,13 @@ class WifiStation {
     }
   }
 
+  // Wi-Fi first on the shared radio while a WPA3 join runs, then back to the balance.
+  void holdCoex(bool on) const {
+    if (on == coexHeld_) return;
+    coexHeld_ = on;
+    esp_coex_preference_set(on ? ESP_COEX_PREFER_WIFI : ESP_COEX_PREFER_BALANCE);
+  }
+
   // On the core's event task: counts and the last reason, read by the loop.
   static void onEvent(arduino_event_id_t e, arduino_event_info_t info) {
     switch (e) {
@@ -241,7 +295,9 @@ class WifiStation {
   static inline volatile uint8_t reason_ = 0;
 
   bool up_ = false, everUp_ = false, handler_ = false, stopping_ = false, attempted_ = false;
-  mutable bool joinedOnce_ = false;
+  mutable bool joinedOnce_ = false, coexHeld_ = false;
+  bool wpa3_ = false;
+  uint32_t attemptAt_ = 0;
   uint32_t stopAt_ = 0, scansAtStart_ = 0, disconnectsAtStop_ = 0, disconnectsAtJoin_ = 0;
   int beginStatus_ = 0;
   Ap* aps_ = nullptr;
