@@ -83,6 +83,23 @@ def prep(args):
             "(tools/ota_release.py ship) so the badges and the site agree")
 
 
+def laptop_wifi():
+    """(ssid, password) of the Wi-Fi this laptop is connected to, from NetworkManager; None if none.
+    Never printed: the caller masks both."""
+    try:
+        active = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
+                                capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL).stdout
+        con = next((l.rsplit(":", 1)[0] for l in active.splitlines() if l.endswith(":802-11-wireless")), None)
+        if not con:
+            return None
+        get = lambda f, *a: subprocess.run(["nmcli", *a, "-g", f, "connection", "show", con], capture_output=True,
+                                           text=True, timeout=10, stdin=subprocess.DEVNULL).stdout.strip()
+        ssid = get("802-11-wireless.ssid")
+        return (ssid, get("802-11-wireless-security.psk", "-s")) if ssid else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def read_env(path):
     vals = {}
     for raw in path.read_text().splitlines():
@@ -151,7 +168,7 @@ class Console:
         self.s.close()
 
 
-def station_one(serial_no, port, ssid, password, verbose):
+def station_one(serial_no, port, networks, verbose):
     version = (OUT / "version").read_text().strip()
     flipped = serial_no in FLIPPED
     say(f"{serial_no}: {'FLIPPED (USB-C down is up)' if flipped else 'upright'}; writing badge128 {version}")
@@ -167,7 +184,8 @@ def station_one(serial_no, port, ssid, password, verbose):
     if r.returncode != 0 or r.stdout.count("Hash of data verified.") != len(IMAGES):
         return False, "flash failed: " + (r.stdout + r.stderr).strip().splitlines()[-1][:160]
     mac = re.search(r"MAC: ([0-9a-f:]+)", r.stdout)
-    c = Console(port, [(password, "<password>"), (ssid, "<ssid>")])
+    c = Console(port, [m for i, (ssid, password) in enumerate(networks)
+                       for m in ((password, f"<password{i}>"), (ssid, f"<ssid{i}>")) if m[0]])
     try:
         boot = c.until(25, lambda t: " fw=" in t and t.startswith("[hw] blorbarium"))
         if not boot:
@@ -191,13 +209,16 @@ def station_one(serial_no, port, ssid, password, verbose):
             fed = ["egg"]   # an egg or an empty dish: nothing to feed
         elif any(not f.endswith("=0") for f in fed):
             return False, f"feed: {' '.join(fed)}"
-        c.send(f'DEBUG wifi set "{ssid}" {password}', 'DEBUG wifi set "<ssid>" <password>')
-        if not c.until(6, lambda t: t.startswith("[wifi] network ") and "saved" in t):
-            return False, "wifi set: no saved line"
-        c.send(f'DEBUG wifi verify "{ssid}" {password}', 'DEBUG wifi verify "<ssid>" <password>')
-        v = c.until(6, lambda t: t.startswith("[wifi] verify"))
-        if not v or "password MATCHES" not in v:
-            return False, f"wifi verify: {c.mask(v or 'no answer')}"
+        # Every network given, the kids' first: the last one set is the
+        # newest, and a badge remembers up to three (wifiota::kMaxNetworks).
+        for i, (ssid, password) in enumerate(networks):
+            c.send(f'DEBUG wifi set "{ssid}" {password}', f'DEBUG wifi set "<ssid{i}>" <password{i}>')
+            if not c.until(6, lambda t: t.startswith("[wifi] network ") and "saved" in t):
+                return False, f"wifi set <ssid{i}>: no saved line"
+            c.send(f'DEBUG wifi verify "{ssid}" {password}', f'DEBUG wifi verify "<ssid{i}>" <password{i}>')
+            v = c.until(6, lambda t: t.startswith("[wifi] verify"))
+            if not v or "password MATCHES" not in v:
+                return False, f"wifi verify <ssid{i}>: {c.mask(v or 'no answer')}"
         for attempt in range(5):
             c.send("DEBUG ota check")
             got = c.until(120, lambda t: t.startswith("[wifi] manifest ") or "forced: FAILED" in t)
@@ -222,7 +243,12 @@ def run(args):
     if not (OUT / "version").exists():
         sys.exit("run `uv run scripts/flash_station.py prep` first")
     env = Path(args.env).expanduser() if args.env else (ROOT / ".env" if (ROOT / ".env").exists() else MAIN_ENV)
-    ssid, password = read_env(env)
+    networks = [read_env(env)]   # the kids' network
+    if not args.no_laptop_wifi:
+        here = laptop_wifi()
+        if here and here[0] != networks[0][0]:
+            networks.append(here)   # where this laptop is now: the badge can check in from here too
+        say(f"wifi: the kids' network (.env){' and the network this laptop is on' if len(networks) > 1 else ''}")
     version = (OUT / "version").read_text().strip()
     live = live_version()
     say(f"station: badge128 {version} (live site: {live}); plug badges in one at a time")
@@ -244,7 +270,7 @@ def run(args):
             done.add(s)
             time.sleep(1.5)   # let it enumerate
             try:
-                ok, why = station_one(s, now[s], ssid, password, args.verbose)
+                ok, why = station_one(s, now[s], networks, args.verbose)
             except Exception as e:  # noqa: BLE001
                 ok, why = False, f"{type(e).__name__}: {e}"
             line = f"{'PASS' if ok else 'FAIL'} {s} {why}"
@@ -266,6 +292,8 @@ def main():
     ap.add_argument("--once", action="store_true", help="one badge, then exit")
     ap.add_argument("--include-present", action="store_true", help="also do the badges already plugged in at start")
     ap.add_argument("--env", help="the .env with ssid= and password= (default: this checkout's, else ~/Projects/blorbarium/.env)")
+    ap.add_argument("--no-laptop-wifi", action="store_true",
+                    help="only the .env network (default: also the Wi-Fi this laptop is connected to)")
     ap.add_argument("-v", "--verbose", action="store_true", help="print each badge's console, masked")
     args = ap.parse_args()
     prep(args) if args.cmd == "prep" else run(args)
