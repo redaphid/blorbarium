@@ -131,6 +131,8 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.me.ceiling = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
     s.me.confirmed = n == "staking";
     s.stakes = n == "staking" ? Stakes::Scrap : Stakes::Mortal;   // the lower of the two
+    s.aim = blorb::tierAimed(0) == int8_t(s.me.chose) ? 0 : 1;      // tilted at my tier, as a turn aims
+    s.ticksLeft = n == "staking" ? 0 : 64;                          // the ring: spent once locked
   } else if (n == "choosing" || n == "locked") {
     s.aim = int8_t(blorb::Stance::Guard);
     s.lean = int8_t(blorb::Stance::Trick);

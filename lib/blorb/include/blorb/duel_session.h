@@ -45,7 +45,8 @@ class LocalConsent {
 // What the body did this tick, parsed once at the Dish from the raw stimuli,
 // the tilt loci and the button's level. The aim is a rim sector: tilt left =
 // Pounce, right = Guard, toward you = Trick, away = the lobby's fourth friend.
-// In Staking the same sectors are Spar, Scrap and Mortal.
+// In Staking the same tilt picks the stakes (tierAimed): toward you = Spar,
+// where a badge held upright already leans; left = Scrap; right = Mortal.
 struct DuelInput {
   int8_t aim = -1;   // 0..3, or -1 level
   bool knock = false, doubleKnock = false, press = false, hold = false, doublePress = false;
@@ -62,6 +63,14 @@ struct DuelInput {
   static DuelInput from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx tiltY, bool bootDown);
 };
 
+// The stakes picker is the stance picker (owner, 2026-10-27: "It should use
+// tilting like the battles"): the tier under the tilt, -1 for none (level, or
+// away). Spar sits where an upright badge already leans, so a kid who only
+// holds it fights for play; Scrap and Mortal each take a tilt to the side.
+inline constexpr int8_t tierAimed(int8_t aim) {
+  return aim == 2 ? int8_t(Stakes::Spar) : aim == 0 ? int8_t(Stakes::Scrap) : aim == 1 ? int8_t(Stakes::Mortal) : int8_t(-1);
+}
+
 // Which stimuli the duel takes for itself, and which gestures ask for it,
 // are the controls table (controls.h) — one place to rebind them.
 
@@ -69,8 +78,9 @@ enum class DuelPhase : uint8_t {
   Closed,     // radio off: not in fight mode
   Lobby,      // fight mode: beaconing and claiming, until a pair locks, a double press, or 5 min with no fight
   Greeting,   // a pair locked: still drawn as fight mode ("connecting") until the friend's State proves they are in too
-  Staking,    // the fight shows. Each kid's BOOT press steps Spar, Scrap, Mortal; a 3 s hold locks it, and
-              // after kStakeAutoTicks the pick locks itself (an unheld Mortal as Scrap); both pets' skulls show
+  Staking,    // the fight shows. Picked as a stance is: tilt to aim at a tier, knock (or BOOT) to lock it;
+              // Mortal locks only with the 3 s hold. The rim ring runs kStakeAutoTicks, then the aimed tier
+              // locks itself (an unheld Mortal as Scrap; nothing aimed, Spar); both pets' skulls show
   Choosing,   // tilt to aim, knock to lock, BOOT for a special, shake for a prophecy
   Waiting,    // locked (or winding up); the friend has not
   Revealing,  // both known: the stances pop, the bonk plays, hearts fly (3 s)
@@ -113,7 +123,7 @@ struct DuelTimings {
   static constexpr uint16_t kFallenTicks = 50;      // the fallen side keeps sending, so the victor hears the ack
   static constexpr uint16_t kFriendsTicks = 120;
   static constexpr uint16_t kStakingTicks = 200;    // 20 s to agree on stakes, else back to searching
-  static constexpr uint16_t kStakeAutoTicks = 80;   // 8 s of Staking: my pick locks itself
+  static constexpr uint16_t kStakeAutoTicks = 100;  // 10 s of Staking, a first turn's time: my pick locks itself
   static constexpr uint16_t kSilentTicks = 200;     // 20 s with no packet: they wandered off
   static constexpr uint16_t kLobbyForgetTicks = 30; // a friend unheard for 3 s is forgotten (and so is a claim on them)
   static constexpr uint16_t kPinTicks = 100;        // a rematch waits 10 s for its friend, then searches for anyone

@@ -57,8 +57,8 @@ enum class BootAct : uint8_t {
   LayFlower,         // presentation only: a flower on the remains
   OtaYes,            // ota::Session::press (after kMinAskMs): yes, update
   CloseDuel,         // leave: fight mode back to the dish, or the friends screen back to fight mode
-  ConfirmTier,       // step the pick: Spar, Scrap, Mortal (the tilt never picks); unheld, it locks after 8 s
-  ConfirmMortal,     // a 3 s hold locks the pick now; Mortal only ever this way
+  ConfirmTier,       // lock the tier under the tilt, as a knock does (Spar or Scrap; never Mortal)
+  ConfirmMortal,     // a 3 s hold locks the tier under the tilt; Mortal only ever this way
   QueueQuick,        // lock the aimed stance as a quick special's hidden landing (1 turn wind-up)
   QueueHeavy,        // the same, held 1.2 s: a heavy special (2 turns wind-up)
   Spare,             // the winner's mercy

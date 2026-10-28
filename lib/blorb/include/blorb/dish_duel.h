@@ -21,8 +21,8 @@ namespace blorb {
 // The tilts that aim, as one IMU reading held still (milli-g, the device frame
 // the Dish is handed, after the panel's rotation): what DuelInput::from reads
 // as aim 0 Pounce (tilt left), 1 Guard (right), 2 Trick (toward the kid) and
-// 3 the lobby's fourth friend (away). In Staking the first three are Spar,
-// Scrap and Mortal. A bot or a tool holds one of these to aim;
+// 3 the lobby's fourth friend (away). In Staking they are Scrap (left),
+// Mortal (right) and Spar (toward the kid): tierAimed (duel_session.h). A bot or a tool holds one of these to aim;
 // test_two_dishes holds each through the real detectors and checks the aim.
 struct AimTilt { int8_t aim; int16_t ax, ay, az; };
 inline constexpr AimTilt kAimTilt[4] = {

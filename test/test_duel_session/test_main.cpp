@@ -36,7 +36,15 @@ struct Policy {
   Mercy mercy = Mercy::Spare;
   bool hug = false, rematch = false;
   bool lidWhenBehind = false;        // a Scrap or Mortal: put the lid down (and drop it) while losing
+  bool aimOnly = false;              // Staking: tilts to the tier and never knocks or holds
 };
+
+// The tilt that points at a tier (tierAimed's inverse).
+int8_t aimOfTier(Stakes t) {
+  for (int8_t a = 0; a < 4; ++a)
+    if (tierAimed(a) == int8_t(t)) return a;
+  return -1;
+}
 
 Policy randomPolicy(Rng& r) {
   Policy p;
@@ -99,14 +107,16 @@ struct Device {
         in.aim = int8_t(tick % 4);
         break;
       case DuelPhase::Staking: {
-        // BOOT only: a press per step up from Spar, two ticks apart, then a
-        // 3 s hold locks it. The tilt wanders and must pick nothing.
-        in.aim = int8_t(tick % 3);
-        const uint8_t want = std::min(uint8_t(policy.tier), uint8_t(v.ceiling[0]));
+        // Picked as a turn is: tilt toward the tier and knock; Mortal is held
+        // 3 s. Before the kid acts the badge lies level. aimOnly: he tilts to
+        // the tier and never knocks or holds, so the ring runs out on it.
+        const Stakes want = Stakes(std::min(uint8_t(policy.tier), uint8_t(v.ceiling[0])));
         if (!v.confirmed && v.phaseTicks >= policy.confirmAfter) {
           const uint16_t k = uint16_t(v.phaseTicks - policy.confirmAfter);
-          if (k < 2 * want) in.press = k % 2 == 0;
-          else if (k < 2 * want + 32) in.bootDown = true;
+          in.aim = aimOfTier(want);
+          if (policy.aimOnly) break;
+          if (want == Stakes::Mortal) in.bootDown = k < 32;
+          else in.knock = k == 2;
         }
         break;
       }
@@ -401,11 +411,14 @@ TEST(DuelSession, FightModeEndsOnADoublePressOrAfterFiveMinutes) {
   EXPECT_GE(t - 1, 10999u + T::kFightModeTicks) << "the rest held the clock";
 }
 
-// The tilt never picks the stakes: two kids who only tilt fight a Spar; one
-// press each agrees a Scrap; Mortal needs the hold, and unheld locks as Scrap.
-TEST(DuelSession, OnlyBootPicksTheStakes) {
+// The stakes are picked as a stance is: tilt to the tier and knock. The duel
+// runs at the lower pick; Mortal needs the hold. A kid who tilts and lets the
+// ring run out gets the tier he tilted to (an unheld Mortal as Scrap), and a
+// kid who never tilts gets a Spar.
+TEST(DuelSession, TheTiltPicksTheStakes) {
   for (const auto& [ta, tb, want] : {std::tuple{Stakes::Spar, Stakes::Mortal, Stakes::Spar},
                                      std::tuple{Stakes::Scrap, Stakes::Scrap, Stakes::Scrap},
+                                     std::tuple{Stakes::Scrap, Stakes::Mortal, Stakes::Scrap},
                                      std::tuple{Stakes::Mortal, Stakes::Mortal, Stakes::Mortal}}) {
     Ether ether(11, {});
     Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
@@ -415,19 +428,64 @@ TEST(DuelSession, OnlyBootPicksTheStakes) {
     ASSERT_EQ(a.meetings.size(), 1u);
     EXPECT_EQ(a.meetings[0].battle.stakes, want);
   }
-  // Pressed up to Mortal and never held: it locks as Scrap after 8 s.
-  Ether ether(12, {});
+  for (const auto& [tier, aimOnly, want] : {std::tuple{Stakes::Scrap, true, Stakes::Scrap},
+                                            std::tuple{Stakes::Mortal, true, Stakes::Scrap},
+                                            std::tuple{Stakes::Mortal, false, Stakes::Spar}}) {
+    Ether ether(12, {});
+    Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
+    a.policy.tier = b.policy.tier = tier;
+    a.policy.aimOnly = b.policy.aimOnly = aimOnly;
+    if (!aimOnly) a.policy.confirmAfter = b.policy.confirmAfter = 9999;   // never tilts at all
+    ASSERT_TRUE(a.open(0) && b.open(0));
+    uint16_t ring = 0;
+    run(ether, {&a, &b}, 1, 2000, [&](uint32_t t) {
+      const DuelView v = a.s.view(t);
+      if (v.phase == DuelPhase::Staking && !v.confirmed) ring = std::max(ring, v.chooseTicksLeft);
+      return v.phase == DuelPhase::Choosing;
+    });
+    EXPECT_EQ(a.s.view(2000).agreed, want) << "tier " << int(tier) << " aimOnly " << aimOnly;
+    EXPECT_GT(ring, T::kStakeAutoTicks - 5) << "the rim ring runs while the kid picks";
+  }
+}
+
+// A knock or a press under the skull agrees to nothing, and a tier the pair
+// may not enter is never picked however the badge is tilted.
+TEST(DuelSession, OnlyTheHoldAgreesToMortalAndABarredTierIsNeverPicked) {
+  Ether ether(13, {});
   Device a(ether, 1, kGrungo, 1), b(ether, 2, SpeciesId{4}, 2);
-  a.policy.tier = b.policy.tier = Stakes::Mortal;
+  b.setup.ceiling.top = Stakes::Scrap;
   ASSERT_TRUE(a.open(0) && b.open(0));
-  run(ether, {&a, &b}, 1, 2000, [&](uint32_t t) {
-    for (Device* d : {&a, &b}) {
-      const DuelView v = d->s.view(t);
-      if (v.phase == DuelPhase::Staking && !v.confirmed) d->policy.tier = Stakes::Mortal, d->policy.confirmAfter = 9999;
-    }
-    return a.s.view(t).phase == DuelPhase::Choosing;
+  a.policy.confirmAfter = b.policy.confirmAfter = 9999;
+  uint32_t t = run(ether, {&a, &b}, 1, 400, [&](uint32_t t) {
+    return a.s.view(t).phase == DuelPhase::Staking && b.s.view(t).phase == DuelPhase::Staking;
   });
-  EXPECT_EQ(a.s.view(2000).agreed, Stakes::Spar) << "no press: Spar";
+  ASSERT_EQ(a.s.view(t).phase, DuelPhase::Staking);
+  ++t;
+  // From here these inputs are the kids' hands.
+  const auto tickBoth = [&](const DuelInput& ia, const DuelInput& ib) {
+    ether.advance(t), a.s.tick(a.air, ia, t), b.s.tick(b.air, ib, t), ++t;
+  };
+  DuelInput skull;
+  skull.aim = aimOfTier(Stakes::Mortal);
+  tickBoth(skull, skull);
+  EXPECT_EQ(a.s.view(t).chosen, Stakes::Mortal);
+  EXPECT_EQ(b.s.view(t).chosen, Stakes::Spar) << "Mortal is above B's ceiling: not picked";
+  DuelInput knock = skull, press = skull;
+  knock.knock = true, press.press = true;
+  tickBoth(knock, knock);
+  tickBoth(press, press);
+  EXPECT_FALSE(a.s.view(t).confirmed) << "no knock or press agrees to Mortal";
+  EXPECT_FALSE(b.s.view(t).confirmed) << "a knock at a struck-through tier locks nothing";
+  DuelInput scrap;
+  scrap.aim = aimOfTier(Stakes::Scrap), scrap.knock = true;
+  tickBoth(DuelInput{}, scrap);
+  EXPECT_TRUE(b.s.view(t).confirmed);
+  EXPECT_EQ(b.s.view(t).chosen, Stakes::Scrap);
+  DuelInput held = skull;
+  held.bootDown = true;
+  for (uint16_t i = 0; i < kFinishHoldTicks; ++i) tickBoth(held, DuelInput{});
+  EXPECT_TRUE(a.s.view(t).confirmed) << "the 3 s hold under the skull agrees";
+  EXPECT_EQ(a.s.view(t).chosen, Stakes::Mortal);
 }
 
 // One direction of the link lost. Lost from before a pair locks: neither
