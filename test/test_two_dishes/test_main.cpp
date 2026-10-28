@@ -10,7 +10,9 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/duel_wire.h"
 #include "blorb/friend_egg.h"
 #include "blorb/species.h"
 #include "blorb/starter_duel.h"
@@ -221,11 +223,11 @@ struct Device {
     dish.emplace(store, seed, 0xD15400ull + seed, o);
   }
 
-  // Grows him to an adult at pet noon, rested and fed, with no duel in the radio's way.
-  void growUp() {
+  // Grows him to an adult (or `stage`) at pet noon, rested and fed, with no duel in the radio's way.
+  void growUp(const char* stage = "adult") {
     static Device* self;
     self = this;
-    const char* why = debugverbs::growTo(*dish, "adult", [](uint32_t ticks) {
+    const char* why = debugverbs::growTo(*dish, stage, [](uint32_t ticks) {
       for (uint32_t t = 0; t < ticks; ++t) self->dish->tick(self->ms += 100, self->link);
     });
     ASSERT_EQ(why, nullptr) << why;
@@ -773,6 +775,136 @@ TEST(Gestures, TheFirstPressGlowsAndFightModeFindsAFriendByItself) {
   EXPECT_TRUE(connecting) << "a locked pair says so before the fight shows";
   EXPECT_EQ(a.dish->duelView().phase, DuelPhase::Staking) << "paired within " << t << " ticks";
   EXPECT_FALSE(a.dish->appearance().lobby) << "the fight shows";
+}
+
+// ---- pairing: who fight mode pairs, and what it says when it cannot ------------------
+// The owner, 2026-10-28: "'fight mode' no longer seems to pair successfully
+// with other pets". The pair was Midge, a baby a few hours old on 0.7.26, and
+// a mothwick adult in pain on 0.7.12. The 0.7.12 badge spoke the old duel
+// rules (plain rosterHash(), before #58's duelRulesHash() in 0.7.13), so each
+// heard the other and greyed him out, as designed, while both screens said
+// only "LOOKING FOR A FIGHT... HEARD 1" for five minutes.
+
+// Both kids ask (a double press each) and then just hold the badge; true once
+// both show the stakes, the first screen of a fight.
+bool pairs(Ether& e, Device& a, Device& b, uint32_t maxTicks = 300) {
+  for (uint32_t t = 1; t <= maxTicks; ++t) {
+    e.advance(t);
+    a.step(), b.step();
+    if (a.dish->duelView().phase == DuelPhase::Staking && b.dish->duelView().phase == DuelPhase::Staking) return true;
+  }
+  return false;
+}
+
+std::string lobbyLineOf(const Dish& d) {
+  char s[paint::kLobbyTextMax];
+  paint::lobbyText(d.appearance(), s, sizeof s);
+  return s;
+}
+
+// Every badge from 0.7.13 to this one speaks this hash in every beacon and
+// State, so they all pair with each other (0.7.24 with 0.7.26 included). A
+// change to it is a change to the duel's rules: every badge not yet updated
+// greys this one out, so it ships to every badge at once, and the lobby says
+// "ONE OF YOU NEEDS AN UPDATE" on both until it has.
+TEST(Pairing, EveryBadgeFrom0713SpeaksTheSameRules) {
+  EXPECT_EQ(duelRulesHash(), 0xCFD9) << "the duel rules moved: badges on 0.7.13..0.7.26 will not pair with this one";
+  EXPECT_EQ(kWireVersion, 2);
+  EXPECT_EQ(kBeaconWireBytes, 78u);
+  EXPECT_EQ(kStateWireBytes, 111u);
+}
+
+TEST(Pairing, ABabyPairsWithAnAdultAndWithAnotherBaby) {
+  for (const bool bothBabies : {false, true}) {
+    Ether ether(bothBabies ? 5 : 4, {});
+    Device a(ether, 1), b(ether, 2);
+    const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
+    a.boot(ga, 1), b.boot(gb, 2);
+    a.growUp("hatchling"), b.growUp(bothBabies ? "hatchling" : "adult");
+    ASSERT_EQ(a.creature().stage(), Stage::Baby);
+    ASSERT_TRUE(pairs(ether, a, b)) << "a baby fights: a Spar, the tier for babies";
+    EXPECT_EQ(a.dish->duelView().ceiling[0], Stakes::Spar) << "only a Spar for a baby";
+    EXPECT_EQ(a.dish->duelView().why[0][uint8_t(Stakes::Scrap)], Decline::TooYoung) << "the higher tiers say why";
+  }
+}
+
+// Pain and an injury past the wounded mark keep him out of Scrap and Mortal
+// (a bandage on those tiers), never out of a Spar.
+TEST(Pairing, AnAdultInPainAndWoundedStillPairsForASpar) {
+  Ether ether(6, {});
+  Device a(ether, 1), b(ether, 2);
+  const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
+  a.boot(ga, 1), b.boot(gb, 2);
+  a.growUp(), b.growUp();
+  b.creature().inject(driveChem(drive::pain), Fx::one());
+  b.creature().inject(chem::injury, Fx::ratio(6, 10));
+  ASSERT_TRUE(pairs(ether, a, b));
+  EXPECT_EQ(b.dish->duelView().ceiling[0], Stakes::Spar);
+  EXPECT_EQ(b.dish->duelView().why[0][uint8_t(Stakes::Scrap)], Decline::Wounded);
+}
+
+// A badge on the old duel rules (0.7.12 and before) and this one hear each
+// other and can never pair. Each screen says so in words within a few
+// seconds, instead of "LOOKING FOR A FIGHT... HEARD 1" for all five minutes.
+TEST(Pairing, AFriendOnOtherRulesIsToldNeedsAnUpdateNotSearchedForInSilence) {
+  Ether ether(8, {});
+  Device a(ether, 1), old(ether, 2);
+  const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
+  a.boot(ga, 1), old.boot(gb, 2);
+  a.growUp("hatchling"), old.growUp();
+  // The old badge's frames carry plain rosterHash(), as 0.7.12 sends.
+  old.air.translate = [](Datagram& f) {
+    std::optional<Packet> p = decode(f.bytes, f.len);
+    if (!p) return;
+    const auto swap = [](uint16_t& h) { h = h == duelRulesHash() ? rosterHash() : h == rosterHash() ? duelRulesHash() : h; };
+    if (BeaconPacket* b = std::get_if<BeaconPacket>(&*p)) swap(b->roster);
+    else if (StatePacket* s = std::get_if<StatePacket>(&*p)) swap(s->roster);
+    else return;
+    f.len = uint8_t(encode(*p, f.bytes));
+  };
+  ASSERT_FALSE(pairs(ether, a, old, 100)) << "other rules never pair";
+  for (Device* d : {&a, &old}) {
+    ASSERT_TRUE(d->dish->appearance().lobby) << "still in fight mode";
+    EXPECT_EQ(d->dish->duelView().otherRules, 1);
+    const std::string line = lobbyLineOf(*d->dish);
+    EXPECT_NE(line.find("ONE OF YOU NEEDS AN UPDATE"), std::string::npos) << line;
+    EXPECT_EQ(line.find("LOOKING FOR A FIGHT"), std::string::npos) << line;
+  }
+  // A third badge on these rules joins: a fight to be had, so it looks again, and pairs.
+  Device c(ether, 3);
+  const Genome gc = starterGenomeOf(SpeciesId{6}, 33);
+  c.boot(gc, 3);
+  c.growUp();
+  for (uint32_t t = 101; t <= 400 && a.dish->duelView().phase != DuelPhase::Staking; ++t) {
+    ether.advance(t);
+    a.step(), old.step(), c.step();
+    if (a.dish->duelView().phase == DuelPhase::Lobby && a.dish->duelView().heardCount == 2)
+      EXPECT_NE(lobbyLineOf(*a.dish).find("LOOKING FOR A FIGHT"), std::string::npos);
+  }
+  EXPECT_EQ(a.dish->duelView().phase, DuelPhase::Staking) << "the badge on these rules pairs";
+}
+
+// A friend on these rules whose pet is not up for it (asleep, resting...) is
+// said as that, not searched for in silence.
+TEST(Pairing, AFriendWhosePetIsNotReadyIsSaidSo) {
+  Ether ether(9, {});
+  Device a(ether, 1), b(ether, 2);
+  const Genome ga = starterGenomeOf(kGrungo, 11), gb = starterGenomeOf(SpeciesId{4}, 22);
+  a.boot(ga, 1), b.boot(gb, 2);
+  a.growUp(), b.growUp();
+  // His beacons say he is resting after a fight, as a pet two minutes from his last one does.
+  b.air.translate = [](Datagram& f) {
+    std::optional<Packet> p = decode(f.bytes, f.len);
+    BeaconPacket* beacon = p ? std::get_if<BeaconPacket>(&*p) : nullptr;
+    if (!beacon || f.from != addr(2)) return;
+    beacon->decline = Decline::Resting;
+    f.len = uint8_t(encode(*p, f.bytes));
+  };
+  ASSERT_FALSE(pairs(ether, a, b, 60));
+  ASSERT_TRUE(a.dish->appearance().lobby);
+  EXPECT_EQ(a.dish->duelView().notReady, 1);
+  const std::string line = lobbyLineOf(*a.dish);
+  EXPECT_NE(line.find("THEIR PET IS NOT READY"), std::string::npos) << line;
 }
 
 // ---- testing item 5 ------------------------------------------------------------------

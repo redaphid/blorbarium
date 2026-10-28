@@ -176,6 +176,13 @@ struct DuelView {
   Peer peers[kMaxLobbyPeers]{};
   uint8_t peerCount = 0;
   uint8_t heardCount = 0;               // fight mode: every friend heard in the last 3 s (up to kMaxLobbyHeard)
+  // Of those, the ones fight mode can never pair with, and why, so the screen
+  // says so instead of looking for five minutes (the owner, 2026-10-28: a
+  // 0.7.26 badge and a 0.7.12 one heard each other and never paired, and
+  // neither screen said a word). otherRules: on other duel rules (another
+  // firmware: one of the two needs an update). notReady: on these rules, but
+  // his pet declines (asleep, resting, ...), which his own screen says.
+  uint8_t otherRules = 0, notReady = 0;
   Decline myDecline = Decline::None;    // the lobby: this pet only beacons his picture and never matches
   uint16_t fightTicksLeft = 0;          // fight mode: until the radio gives up with no fight
 

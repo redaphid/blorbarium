@@ -168,6 +168,7 @@ struct Appearance {
   // until it gives up.
   bool lobby = false, lobbyConnecting = false;
   uint8_t lobbyFriends = 0;
+  uint8_t lobbyOtherRules = 0, lobbyNotReady = 0;   // of lobbyFriends: DuelView::otherRules, notReady
   uint16_t lobbyTicksLeft = 0;
   Decline lobbyDecline = Decline::None;
   // A hang filling up, 0..1 (the hanging locus): paint draws it as a red

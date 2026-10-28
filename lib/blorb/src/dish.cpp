@@ -657,6 +657,7 @@ Appearance Dish::appearance() const {
     a.lobby = true;
     a.lobbyConnecting = v.phase == DuelPhase::Greeting;
     a.lobbyFriends = v.heardCount;
+    a.lobbyOtherRules = v.otherRules, a.lobbyNotReady = v.notReady;
     a.lobbyTicksLeft = v.fightTicksLeft;
     a.lobbyDecline = v.myDecline;
   }

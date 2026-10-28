@@ -1406,10 +1406,12 @@ static void reportDuel() {
     phase = v.phase;
     if (phase == blorb::DuelPhase::Closed) peers = 0, turn = 0;
   }
-  if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
-    peers = v.peerCount;
-    Serial.printf("[duel] lobby hears %u friend(s)%s species=", unsigned(peers),
-                  peers && v.peers[0].wantsMe ? ", the first wants me" : "");
+  static uint8_t otherRules = 0, notReady = 0;
+  if (v.phase == blorb::DuelPhase::Lobby &&
+      (v.peerCount != peers || v.otherRules != otherRules || v.notReady != notReady)) {
+    peers = v.peerCount, otherRules = v.otherRules, notReady = v.notReady;
+    Serial.printf("[duel] lobby hears %u friend(s)%s other_rules=%u not_ready=%u species=", unsigned(peers),
+                  peers && v.peers[0].wantsMe ? ", the first wants me" : "", unsigned(otherRules), unsigned(notReady));
     for (uint8_t i = 0; i < peers; ++i) Serial.printf("%s%s", i ? "," : "", blorb::speciesInfo(v.peers[i].species).name);
     Serial.printf("\n");
   }

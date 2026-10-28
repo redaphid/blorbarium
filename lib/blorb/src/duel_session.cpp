@@ -876,6 +876,11 @@ DuelView DuelSession::view(uint32_t tick) const {
       v.peers[i] = DuelView::Peer{s.beacon.card.species, s.beacon.card.look, s.beacon.decline, s.beacon.wants == self_,
                                   l->wants == s.addr, s.beacon.roster == duelRulesHash()};
     }
+    for (uint8_t i = 0; i < l->count; ++i) {
+      const BeaconPacket& b = l->seen[i].beacon;
+      if (b.roster != duelRulesHash()) ++v.otherRules;
+      else if (b.decline != Decline::None) ++v.notReady;
+    }
     return v;
   }
   const Farewell* f = std::get_if<Farewell>(&state_);
