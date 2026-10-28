@@ -1371,9 +1371,41 @@ void noFightStrip(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
-// Fight mode keeps the dish, so it has to say what it is doing: a line saying
-// it is looking for a fight (or connecting, or why not yet), the time until it
-// gives up, how to stop, and a sonar ring pulsing out to the rim.
+}  // namespace
+
+// Fight mode's line: looking for a fight (or connecting, or why not yet), the
+// time until it gives up, and how to stop. A friend heard who can never pair
+// is said in words: on other duel rules, one of the two badges needs an
+// update; on these rules but not up for it, his pet is not ready. Only when
+// nobody heard could pair, so a room with one ready friend just looks.
+void lobbyText(const blorb::Appearance& a, char* s, size_t n) {
+  const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
+  const unsigned blocked = unsigned(a.lobbyOtherRules) + a.lobbyNotReady;
+  const bool nobodyPairs = a.lobbyFriends > 0 && blocked >= a.lobbyFriends;
+  if (a.lobbyConnecting)
+    std::snprintf(s, n, "FIGHT FOUND! GET READY...  ");
+  else if (a.lobbyDecline == blorb::Decline::Resting) {
+    const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
+    std::snprintf(s, n, "FIGHT MODE - RESTING %u:%02u  HEARD %u  HOLD ME UPSIDE DOWN TO STOP  ", rest / 60, rest % 60,
+                  unsigned(a.lobbyFriends));
+  } else if (a.lobbyDecline != blorb::Decline::None)
+    std::snprintf(s, n, "FIGHT MODE - %s  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ", notReady(a.lobbyDecline),
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+  else if (nobodyPairs && a.lobbyOtherRules)
+    std::snprintf(s, n, "FIGHT MODE - FOUND A FRIEND, BUT ONE OF YOU NEEDS AN UPDATE TO FIGHT  %u:%02u  "
+                  "HOLD ME UPSIDE DOWN TO STOP  ", secs / 60, secs % 60);
+  else if (nobodyPairs)
+    std::snprintf(s, n, "FIGHT MODE - FOUND A FRIEND, BUT THEIR PET IS NOT READY  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
+                  secs / 60, secs % 60);
+  else
+    std::snprintf(s, n, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+}
+
+namespace {
+
+// Fight mode keeps the dish, so it has to say what it is doing (lobbyText),
+// and a sonar ring pulses out to the rim.
 void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   const uint16_t colour = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
   constexpr uint32_t kPulseMs = 1200;
@@ -1398,20 +1430,8 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   Marquee strip = kMarqueeStrip;
   if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
   dimBand(cv, strip);
-  char s[112];
-  const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
-  if (a.lobbyConnecting)
-    std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
-  else if (a.lobbyDecline == blorb::Decline::Resting) {
-    const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
-    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  HOLD ME UPSIDE DOWN TO STOP  ", rest / 60, rest % 60,
-                  unsigned(a.lobbyFriends));
-  } else if (a.lobbyDecline != blorb::Decline::None)
-    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ", notReady(a.lobbyDecline),
-                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
-  else
-    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
-                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+  char s[kLobbyTextMax];
+  lobbyText(a, s, sizeof s);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 

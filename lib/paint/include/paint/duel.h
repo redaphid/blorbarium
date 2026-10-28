@@ -15,6 +15,7 @@
 // clock as a ring round the glass (docs/notes/duel-hud.md). Every state a kid
 // must read has a shape, not only a colour: a lost heart is an empty track, a
 // locked stance's reticle closes, a forbidden tier is struck through.
+#include <cstddef>
 #include <cstdint>
 #include "blorb/appearance.h"
 #include "blorb/duel.h"
@@ -84,6 +85,12 @@ RimHint rimHint(const blorb::BootHint&);
 
 // The hint at its place on the rim, for any screen (the dish draws it too).
 void drawBootHint(Canvas240&, const RimHint&);
+
+// Fight mode's scrolling line (Appearance::lobby), as the dish draws it:
+// what it is doing, why a friend it hears cannot pair (one of the two needs
+// an update, or his pet is not ready), the time left, and how to stop.
+inline constexpr size_t kLobbyTextMax = 128;
+void lobbyText(const blorb::Appearance&, char* out, size_t n);
 
 // How long until the badge sleeps (docs/power.md): a 1 px arc one pixel in
 // from the rim, clockwise from the top, `permille` of the way round. Full

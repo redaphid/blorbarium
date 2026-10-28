@@ -302,6 +302,8 @@ TEST(Power, TheNapWaitsForWifiTheTrialAPhoneAndTheCable) {
   EXPECT_STREQ(power::napBlocker(p, t, f), "no_imu") << "nothing but BOOT could wake it";
   f = {}, f.held = true;
   EXPECT_STREQ(power::napBlocker(p, t, f), "held");
+  f = {}, f.air = true;
+  EXPECT_STREQ(power::napBlocker(p, t, f), "air") << "fight mode's radio is never slept through";
   Policy awake;
   feed(awake, kFlat, 0, 1000);
   EXPECT_STREQ(power::napBlocker(awake, 1000, {}), "awake");
