@@ -62,13 +62,14 @@ constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 constexpr int kMarqueeFeather = 20;
 constexpr Marquee kMarqueeStrip = {-76, 0, 20, 38, kMarqueeFeather};
 
-// The version tag: FreeSans 9pt (the smallest font there is) at the right
-// rim's middle, its right edge 6 px in from the glass's rim band, its digits
-// on rows 114..126. Nothing else draws there: the cookies are on the left
-// rim, the boot hint at the top, the trophies and care hint at the bottom,
-// lines above and below him. A wide pet (wings) covers it, as he should.
+// The version tag: FreeSans 9pt (the smallest font there is), centred at the
+// bottom of the glass, its digits on rows 217..229: under his shadow at home
+// and every idle prop (they sit at his feet or above), just inside the rim
+// band. At the right rim a moth's wing hid it (0.7.29 on the badge), so it is
+// drawn after him now. The care hint's glyph (rows 205..229) shares the spot:
+// while it shows, the tag does not.
 // A pale teal a little lighter than the dish there, dimmed with the night as the dish is.
-constexpr int kTagRight = 228, kTagMidY = 122;
+constexpr int kTagMidX = 120, kTagMidY = 225;
 constexpr uint8_t kTagColour[3] = {44, 84, 80};
 
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
@@ -1843,7 +1844,7 @@ void versionTag(Canvas240& cv, Fx night) {
   if (!versionTag_ || !*versionTag_) return;
   const int lit = 256 - (blorb::clamp01(night).raw >> 17);   // as background() dims the dish
   const uint16_t ink = to565({kTagColour[0] * lit / 256, kTagColour[1] * lit / 256, kTagColour[2] * lit / 256});
-  drawString(cv, kFreeSans9pt7b, versionTag_, kTagRight - textWidth(kFreeSans9pt7b, versionTag_), kTagMidY, ink,
+  drawString(cv, kFreeSans9pt7b, versionTag_, kTagMidX - textWidth(kFreeSans9pt7b, versionTag_) / 2, kTagMidY, ink,
              Clip{0, 0, kSide, kSide, 0});
 }
 
@@ -1943,7 +1944,6 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   phaseStart();
   spots_ = DishSpots{};
   background(cv, a.night);
-  if (!a.sealed && a.kind != Kind::Clutch) versionTag(cv, a.night);   // first: all else lands on it; not under the clutch's eggs
   phaseEnd(Phase::Background);
   if (a.sealed) {
     amber(cv, kAmberBehind);
@@ -1974,6 +1974,9 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   hungerCookies(cv, a);   // feeding.cpp: how full he is, five cookies up the left rim (like hearts)
   rimTokens(cv, a);
   hint(cv, a);
+  // Over him and his props: nothing covers it. Not with the care hint (the
+  // same spot), not on a clutch to pick from, not in fight mode.
+  if (!a.hasHint && a.kind != Kind::Clutch && !a.dueling && !a.lobby) versionTag(cv, a.night);
   phaseEnd(Phase::Rim);
   // Low when he stands high in the dish, so the line never crosses his face.
   if (a.lobby) lobbyLine(cv, a, nowMs);

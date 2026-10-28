@@ -59,8 +59,8 @@ class SpritePack {
 // then the round mask.
 void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 
-// The firmware version, tiny and dim at the dish's right rim, drawn just
-// after the background so everything else lands on top of it: an adult
+// The firmware version, tiny and dim at the bottom of the glass, drawn over
+// him (never with the care hint, a clutch, fight mode or the amber): an adult
 // looking closely reads it, a kid never notices it. The firmware sets it once
 // from its stamp (src/build_info.cpp); unset (the native suites) draws nothing.
 // The string must outlive every draw.

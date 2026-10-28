@@ -246,35 +246,47 @@ TEST(Draw, EveryKindStaysInsideTheCanvasMemory) {
   }
 }
 
-// The version tag (paint::setVersionTag): small, dim, at the right rim's
-// middle, inside the glass's rim band, and nothing anywhere else; a long
-// version fits there too. Unset, every other test here draws without it.
-TEST(VersionTag, SmallAndDimAtTheRightRimOnly) {
-  for (const char* v : {"0.7.28", "10.12.128", "dev"}) {
-    const Appearance a = adult(-0.6, 0);   // stood well left, so he covers none of it
-    auto bare = render(a, paint::placeholderPack());
-    paint::setVersionTag(v);
-    auto tagged = render(a, paint::placeholderPack());
-    Appearance sealed = a;
+// The version tag (paint::setVersionTag): small and dim, centred at the
+// bottom of the glass inside its whole edge, and nothing anywhere else; a
+// long version fits there too. Drawn over him, so all of it shows wherever he
+// stands; none of it with the care hint, in fight mode or on the amber.
+// Unset, every other test here draws without it.
+int tagPixels(Appearance a, const char* v, bool checkWhere) {
+  auto bare = render(a, paint::placeholderPack());
+  paint::setVersionTag(v);
+  auto tagged = render(a, paint::placeholderPack());
+  paint::setVersionTag(nullptr);
+  int changed = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const uint16_t c = tagged->px[y * kSide + x];
+      if (c == bare->px[y * kSide + x]) continue;
+      ++changed;
+      if (!checkWhere) continue;
+      EXPECT_TRUE(x >= 70 && x < 170 && y >= 214 && y < 236) << v << " at " << x << "," << y;
+      const double dx = x + 0.5 - 120, dy = y + 0.5 - 120;
+      EXPECT_LT(dx * dx + dy * dy, 117.0 * 117.0) << v << ": past the glass's whole edge at " << x << "," << y;
+      EXPECT_LE((c >> 11) << 3, 48) << v;          // dim: no channel past a dark teal
+      EXPECT_LE(((c >> 5) & 63) << 2, 88) << v;
+      EXPECT_LE((c & 31) << 3, 88) << v;
+    }
+  return changed;
+}
+
+TEST(VersionTag, SmallAndDimAtTheBottomOverHimWhereverHeStands) {
+  for (const char* v : {"0.7.29", "10.12.128", "dev"}) {
+    const int home = tagPixels(adult(), v, true);
+    EXPECT_GT(home, 25) << v << " drew";
+    // Stood as low as he goes: the tag is over his feet, every pixel of it.
+    EXPECT_EQ(tagPixels(adult(0, 1.0), v, true), home) << v;
+    Appearance hinted = adult(), lobby = adult(), sealed = adult();
+    hinted.hasHint = true;
+    hinted.hint = blorb::CARES[0].id;
+    lobby.dueling = lobby.lobby = true;
     sealed.sealed = true;
-    auto sealedBare = render(sealed, paint::placeholderPack());
-    paint::setVersionTag(nullptr);
-    auto sealedNone = render(sealed, paint::placeholderPack());
-    EXPECT_EQ(std::memcmp(sealedBare->px, sealedNone->px, sizeof(sealedBare->px)), 0) << "no tag on the amber";
-    int changed = 0;
-    for (int y = 0; y < kSide; ++y)
-      for (int x = 0; x < kSide; ++x) {
-        const uint16_t c = tagged->px[y * kSide + x];
-        if (c == bare->px[y * kSide + x]) continue;
-        ++changed;
-        ASSERT_TRUE(x >= 150 && x < 230 && y >= 110 && y < 130) << v << " at " << x << "," << y;
-        const double dx = x + 0.5 - 120, dy = y + 0.5 - 120;
-        ASSERT_LT(dx * dx + dy * dy, 114.0 * 114.0) << v << ": in the rim band at " << x << "," << y;
-        ASSERT_LE((c >> 11) << 3, 48) << v;          // dim: no channel past a dark teal
-        ASSERT_LE(((c >> 5) & 63) << 2, 88) << v;
-        ASSERT_LE((c & 31) << 3, 88) << v;
-      }
-    EXPECT_GT(changed, 40) << v << " drew";
+    EXPECT_EQ(tagPixels(hinted, v, false), 0) << v << ": the care hint has the spot";
+    EXPECT_EQ(tagPixels(lobby, v, false), 0) << v << ": fight mode";
+    EXPECT_EQ(tagPixels(sealed, v, false), 0) << v << ": the amber";
   }
 }
 
