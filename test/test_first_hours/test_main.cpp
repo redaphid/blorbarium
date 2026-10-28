@@ -454,7 +454,11 @@ TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
       } else {
         EXPECT_GE(r.naps, 1u) << "left alone, he goes to bed: " << at;
         EXPECT_GE(r.firstSleepMin, 45) << "not before it is dim: " << at;
-        EXPECT_GE(r.hungerMax, 0.5) << "hungry by the time anyone looks again: " << at;
+        // Peckish, not at the feed hint: asleep his hunger waits for him to
+        // wake (creature.cpp restMetabolism), so a pet put down is not
+        // starving when he is picked up again.
+        EXPECT_GE(r.hungerMax, 0.25) << "peckish by the time anyone looks again: " << at;
+        EXPECT_LT(r.hungerMax, 0.8) << "and nowhere near starving: " << at;
       }
     }
 }

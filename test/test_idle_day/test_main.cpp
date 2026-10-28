@@ -560,17 +560,19 @@ TEST(Rot, PelletsKnockedInWhileHeSleptNoLongerKillHim) {
     d.run(2 * 60 * kMinuteMs, faceDown());   // two hours: they rot
     d.run(3000);                           // turned back up: morning
     // Every pellet in the dish is rotten now: each bite he takes, he takes starving.
-    uint16_t fed = d.c().stats().fed;
+    // A bite is the tick his mouth fills; the hunger he bit at is the tick
+    // before's (the bite itself feeds him at once: creature.cpp fedByPellet).
+    Mouthful mouth = d.c().body().mouth;
     Fx hunger = d.c().chemistry().drive(drive::hunger);
     int bites = 0;
     for (int t = 0; t < 8 * 3600 * 10; ++t) {
       d.run(kTickMs, (t / 36000) % 2 ? still() : cradled());
       ASSERT_TRUE(std::holds_alternative<Creature>(d.dish->occupant())) << speciesInfo(sp).name << " died at hour " << t / 36000;
-      if (d.c().stats().fed != fed) {
+      if (mouth == Mouthful::Nothing && d.c().body().mouth != Mouthful::Nothing) {
         ++bites;
         EXPECT_GE(hunger, kEatsRotAt - Fx::ratio(2, 100)) << speciesInfo(sp).name << " ate rot not starving, hour " << t / 36000;
-        fed = d.c().stats().fed;
       }
+      mouth = d.c().body().mouth;
       hunger = d.c().chemistry().drive(drive::hunger);
     }
     EXPECT_LE(bites, 3) << speciesInfo(sp).name;

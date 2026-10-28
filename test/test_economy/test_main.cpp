@@ -85,6 +85,9 @@ struct Life {
       ++glances;
       worstHunger = std::max(worstHunger, hunger());
       if (hunger() >= kStarving) ++starvingGlances;
+      if (verbose() && hunger() >= 700)
+        std::printf("  glance at %.1f h: hunger %d energy %d asleep %d\n", ms / double(kHourMs), hunger(),
+                    permille(pet()->chemistry().chem[chem::energy.v]), pet()->body().asleep);
       for (int i = 0; i < 20; ++i) step(false, true);
       for (int i = 0; i < 10; ++i) step();
       const Appearance a = dish->appearance();
@@ -115,6 +118,7 @@ std::vector<SpeciesId> speciesUnderTest() {
   std::vector<SpeciesId> all;
   for (uint8_t s = 0; s < kSpeciesCount; ++s) all.push_back(SpeciesId{s});
   if (std::getenv("ECONOMY_ALL")) return all;
+  if (const char* one = std::getenv("ECONOMY_SPECIES")) return {SpeciesId{uint8_t(std::atoi(one))}};
   // The hungriest (mudge 1.3x, fizz 1.2x), the night owls (grungo, octopus,
   // hushwing), and the least hungry (mossby 0.8x).
   return {SpeciesId{0}, SpeciesId{1}, SpeciesId{5}, SpeciesId{6}, SpeciesId{7}, SpeciesId{9}};
@@ -235,16 +239,20 @@ TEST(Economy, TheStarvingTinkerIsFedByOnePress) {
 }
 
 // The promise: fed whenever he asks, by day, he never starves; the nights
-// are his to sleep, powered (every tick lived) or in deep sleep (one gap,
-// 14 h of it, of which the catch-up lives its cap of 12).
+// are his to sleep, powered (every tick lived) or with a gap after he is
+// asleep (14 h of it, of which the catch-up lives its cap of 12).
 TEST(Economy, AKidWhoFeedsHimWheneverHeIsHungryNeverSeesHimStarve) {
   for (SpeciesId sp : speciesUnderTest()) {
     Life life(sp, 41 + sp.v);
     life.day(12 * kHourMs);   // hatch at 09:00, up until 21:00
     for (int night = 0; night < 3 && !life.remains(); ++night) {
       life.report("bedtime");
-      if (night % 2 == 0) life.alone(10 * kHourMs);
-      else life.gap(14 * kHourMs);
+      if (night % 2 == 0) {
+        life.alone(10 * kHourMs);
+      } else {
+        life.alone(kHourMs);       // put down: dark, and he goes to bed
+        life.gap(14 * kHourMs);    // then the gap, 12 h of it lived
+      }
       life.report("morning");
       life.day(14 * kHourMs);
     }
