@@ -155,12 +155,15 @@ def station_one(serial_no, port, ssid, password, verbose):
     version = (OUT / "version").read_text().strip()
     flipped = serial_no in FLIPPED
     say(f"{serial_no}: {'FLIPPED (USB-C down is up)' if flipped else 'upright'}; writing badge128 {version}")
-    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port, "--baud", "460800",
+    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port, "--baud", "115200",   # the owner: 115200 always (faster failed on some boards)
            "--before", "default_reset", "--after", "hard_reset", "write_flash", "-z",
            "--flash_mode", "keep", "--flash_freq", "keep", "--flash_size", "keep"]
     for off, name in IMAGES:
         cmd += [off, str(OUT / name)]
     r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:   # a tired cable or board: once more
+        say(f"{serial_no}: flash failed; once more")
+        r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or r.stdout.count("Hash of data verified.") != len(IMAGES):
         return False, "flash failed: " + (r.stdout + r.stderr).strip().splitlines()[-1][:160]
     mac = re.search(r"MAC: ([0-9a-f:]+)", r.stdout)
@@ -184,7 +187,9 @@ def station_one(serial_no, port, ssid, password, verbose):
             c.send(f"DEBUG chem {chem} 0")
             got = c.until(4, lambda t: t.startswith(f"[hw] debug chem {chem}"))
             fed.append(got.split("debug chem ")[1] if got else f"{chem}=?")
-        if any(not f.endswith("=0") for f in fed):
+        if all("no creature" in f for f in fed):
+            fed = ["egg"]   # an egg or an empty dish: nothing to feed
+        elif any(not f.endswith("=0") for f in fed):
             return False, f"feed: {' '.join(fed)}"
         c.send(f'DEBUG wifi set "{ssid}" {password}', 'DEBUG wifi set "<ssid>" <password>')
         if not c.until(6, lambda t: t.startswith("[wifi] network ") and "saved" in t):
@@ -198,7 +203,7 @@ def station_one(serial_no, port, ssid, password, verbose):
             got = c.until(120, lambda t: t.startswith("[wifi] manifest ") or "forced: FAILED" in t)
             if got and t_ok(got):
                 c.until(30, lambda t: "window forced closed" in t)
-                return True, f"fw={version} home={want} fed wifi=ok live={got.split()[3]} up_to_date mac={mac.group(1) if mac else '?'}"
+                return True, f"fw={version} home={want} fed={','.join(fed)} wifi=ok live={got.split()[3]} up_to_date mac={mac.group(1) if mac else '?'}"
             if got and got.startswith("[wifi] manifest "):
                 return False, f"ota check: {c.mask(got)}"
             c.until(30, lambda t: "window forced closed" in t)

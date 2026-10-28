@@ -19,7 +19,9 @@ flipped) in NVS, plus a Wi-Fi network it can reach.
 
 For each CH343 badge that appears (the Flipper and anything else are never
 touched) it writes the badge128 image as a normal upload does (the pet and NVS
-stay), checks the boot version, sets the home (`DEBUG home down` on the flipped
+stay) at 115200 baud (the owner: always; faster rates failed on some boards),
+checks the boot version, feeds the pet (`DEBUG chem hunger|pain|injury 0`; an
+egg has nothing to feed), sets the home (`DEBUG home down` on the flipped
 5C94094497, 5C94094999 and 5C94095003, `up` on the rest; the home lives in NVS,
 which releases never touch), gives it the Wi-Fi in `.env` (`ssid=`, `password=`;
 never printed), and runs one OTA check against the live manifest, which must
@@ -27,7 +29,7 @@ say `up_to_date`. So `prep` from the commit that is live: the badges and the
 site then agree, and every later release is an upgrade. `-v` prints each
 badge's console (masked); `--include-present` also does a badge already plugged in.
 
-By hand, the same steps: `./flash.sh --once` (every badge: one image),
+By hand, the same steps: `./flash.sh --once` (every badge: one image, at 115200 baud),
 `DEBUG home down` on the flipped three (expect `home rot=0 (USB-C down, nvs ...)`),
 `uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --check`.
 

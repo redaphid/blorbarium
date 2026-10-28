@@ -51,7 +51,7 @@ while true; do
   for try in 1 2 3 4 5 6; do
     [ -e "$port" ] || { port=$(badge_port); [ -n "$port" ] || break; }
     echo "flashing $port (try $try)"
-    if "$et" --chip esp32s3 --port "$port" -b 460800 write_flash 0x0 "$image"; then ok=1; break; fi
+    if "$et" --chip esp32s3 --port "$port" -b 115200 write_flash 0x0 "$image"; then ok=1; break; fi
     sleep 1
   done
   if [ $ok = 1 ]; then echo "FLASHED. Unplug the badge."; else echo "FAILED. Unplug, hold BOOT, replug."; fi
