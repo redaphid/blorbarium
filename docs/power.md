@@ -56,9 +56,11 @@ SDK needed):
   the crystal at every entry; `test_dish` NapCatchUp), and the policy
   glances at gravity once (`Policy::glance`), so a lift too gentle for the
   IMU's pin still wakes it within a minute.
-- **The IMU's pin or BOOT** wakes it for 2 s of 50 Hz senses, and the policy
-  decides as it does awake: a hand wakes it, a bumped table does not, and it
-  naps again.
+- **The IMU's pin or BOOT** wakes it for 2 s of 50 Hz senses, the IMU back
+  at 250 Hz for them (at 21 Hz a hand's tremor and a knock fell between its
+  samples), and the policy decides as it does awake: a hand wakes it (picked
+  up, tilted, shaken, held: "What is user input" below), a bumped table does
+  not, and it naps again with wake on motion set anew.
 - **The cable** (UART0, 3 edges) wakes it; the bytes that woke it are lost,
   and the nap is held off 3 s after any cable byte. Scripts send a few `\r`
   first, as for `badge128_pm`.
@@ -246,7 +248,23 @@ the panel's turn, so a rotation is no move):
 | A knock knock | the IMU's double tap, or two taps within 1.5 s | one tap alone is a bumped desk or a keyboard being typed on |
 | Moved | gravity, smoothed over about 160 ms, drifts 120 mg (about 7 degrees) from where it last settled | picked up, tilted, turned over. A badge left alone drifts a few mg with temperature; the reference follows every move, so only a real one crosses it |
 | Shaken | two samples within 300 ms each 350 mg off the smoothed gravity | one jolt alone is the table, not a hand |
+| Stirred (`stir`) | the 160 ms average (of the median of three samples) 30 mg off a 1.3 s one, for 10 samples more than not (200 ms) | a hand moving it without a tilt or a jolt: a level lift off the table |
+| Held (`tremor`) | the average change from one 50 Hz sample to the next (each capped at 60 mg) past 15 mg, for 50 samples more than not (a second) | a hand holding it still trembles 16-35 mg a sample; a table is 2-5 mg |
 | A phone | a new Bluetooth connection, or a protocol line on RX | the owner is looking at it |
+
+The last two came in on 2026-10-28: a napping badge picked up level, or
+held still, moved neither gravity nor jolted, so each wake on motion went
+back to sleep and only BOOT lit it. On the real-hands recording
+(`test_controls` NapWake) a hand's pin wakes now light it 899 times in 909
+(was 668 in 769), a pick-up in 0.3-0.4 s and a hand holding it still in
+about a second; the typed-on, bumped desk (T2) and a badge lying for minutes
+never. A vibration as strong as a hand's tremor (a car seat: the badges'
+main use is offline, in the car) looks like a hand, so the tremor only wakes
+it from dark (lit, it keeps nothing lit), and it backs off: a tremor wake
+left untouched until it dims (no press, knock knock, tilt, turn, shake or
+phone) is unanswered, and two in a row stop the tremor waking it for 30 min
+(`tremor_mute_s=` in `DEBUG power`). A stir, BOOT, a knock knock and the
+nap's timer still wake it; any of them but the stir ends the backoff.
 
 The press that wakes a dark badge only lights it: the pet does not feel it,
 so nobody drops a pellet they could not see. The same goes for the knock
@@ -299,7 +317,10 @@ low power, and `cable` in low power while a cable byte holds it off.
 ## Tests
 
 - `test/test_power`: the rules (idle, drift, shake, knock knock, stray taps
-  and bumps ignored, holds, the phone, clock order).
+  and bumps ignored, holds, the phone, clock order; `Wake`: a level lift, a
+  hand holding it still, a knock, a faint hum).
+- `test/test_controls` `NapWake`, `DarkWake`: the nap and dark against the
+  real-hands recording (a hand wakes it, the desk does not).
 - `tools/power_e2e.py <port>`: on a real badge, over the cable and Bluetooth.
   `light` (skipped on a build with `sleep=none`) proves the chip light-sleeps
   with the cable quiet and the pet lives on; `ble` proves it light-sleeps with
