@@ -258,8 +258,13 @@ back to sleep and only BOOT lit it. On the real-hands recording
 (`test_controls` NapWake) a hand's pin wakes now light it 899 times in 909
 (was 668 in 769), a pick-up in 0.3-0.4 s and a hand holding it still in
 about a second; the typed-on, bumped desk (T2) and a badge lying for minutes
-never. What it costs: a vibration as strong as a hand's tremor (a car seat)
-wakes it too, and a badge held in a hand stays lit.
+never. A vibration as strong as a hand's tremor (a car seat: the badges'
+main use is offline, in the car) looks like a hand, so the tremor only wakes
+it from dark (lit, it keeps nothing lit), and it backs off: a tremor wake
+left untouched until it dims (no press, knock knock, tilt, turn, shake or
+phone) is unanswered, and two in a row stop the tremor waking it for 30 min
+(`tremor_mute_s=` in `DEBUG power`). A stir, BOOT, a knock knock and the
+nap's timer still wake it; any of them but the stir ends the backoff.
 
 The press that wakes a dark badge only lights it: the pet does not feel it,
 so nobody drops a pellet they could not see. The same goes for the knock

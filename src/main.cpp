@@ -2234,7 +2234,7 @@ static void note(uint32_t now) {
 static const char* powerLine(char* out, size_t n, uint32_t now) {
   std::snprintf(out, n,
                 "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s sleep=%s slept_ms=%u "
-                "dim=%d nap_after_ms=%u nap_block=%s naps=%u nap_slept_ms=%u nap_awake_ms=%u ble_adv=%s remind_in_s=%u reminders=%u",
+                "dim=%d nap_after_ms=%u nap_block=%s naps=%u nap_slept_ms=%u nap_awake_ms=%u ble_adv=%s remind_in_s=%u reminders=%u tremor_mute_s=%u",
                 powerPolicy.low() ? "low" : "full", power::whyName(powerPolicy.why()), unsigned(powerPolicy.idleMs()),
                 unsigned(powerPolicy.msLeft(now)), unsigned(cpuMaxMhz), unsigned(framesDrawn),
                 unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()),
@@ -2242,7 +2242,8 @@ static const char* powerLine(char* out, size_t n, uint32_t now) {
                 napq::on ? "napping" : napq::blocker, unsigned(napq::naps), unsigned(napq::sleptUs / 1000),
                 unsigned(napq::awakeUs / 1000),
                 ble.advertisingHeld() ? "held" : ble.advertisingSlow() ? "slow" : "fast",
-                unsigned(remind::clock.remainingS(millis())), unsigned(remind::shown));
+                unsigned(remind::clock.remainingS(millis())), unsigned(remind::shown),
+                unsigned(powerPolicy.tremorMutedMs(now) / 1000));
   return out;
 }
 
@@ -2269,7 +2270,7 @@ static void applyPower(uint32_t now) {
     lastFrame = now - kFrameMs;            // drawn this very pass
     lightAfterFrame = true;
   }
-  char line[360];
+  char line[420];
   Serial.printf("[power] %s\n", powerLine(line, sizeof line, now));
   dbgfw::link.writeLine(std::string("! DEBUG ") + line);
 }
@@ -2352,7 +2353,7 @@ static void powerVerb(const char* a, const char* line) {
     return (void)Serial.printf("[power] want: power [status|low|wake|nap|idle <seconds>|idle default|napafter <s>|stats]\n");
   }
   const bool ok = powerAsk(ask, idleMs);
-  char out[360];
+  char out[420];
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
   char w[96];
   napWakesLine(w, sizeof w, napq::wakes);

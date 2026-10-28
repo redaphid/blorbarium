@@ -24,8 +24,9 @@
 //     moved neither of those, so a nap woken by the IMU's pin went back to
 //     sleep and only BOOT woke it): a stir, the badge moving for a fifth of
 //     a second (kStirMg), or a tremor, the jitter of a hand holding it for a
-//     second (kTremorMg). A knock or a typed-on desk does neither (a hum as
-//     strong as a hand's tremor would: a car's seat may wake it);
+//     second (kTremorMg), from dark only. A knock or a typed-on desk does
+//     neither; a car seat's hum looks like a tremor, so two untouched tremor
+//     wakes in a row mute it for half an hour (kTremorUnanswered);
 //   - a phone: a new Bluetooth connection or a protocol line from it.
 //
 // Face down (the screen to the floor) is bedtime: it goes low kFaceDownMs
@@ -89,7 +90,15 @@ constexpr int kTremorMg = 15;
 constexpr int kTremorScore = 50;                  // a second of 50 Hz samples
 constexpr int kTremorClampMg = 60;
 constexpr int kTremorShift = 4;                   // 1/16 per sample: about 320 ms
-constexpr uint32_t kGapMs = 250;                  // samples further apart (the nap's listens) start the counts over
+// The tremor only wakes it from dark; lit, it keeps nothing lit. The owner's
+// badges ride in cars, and a seat's hum can look like a hand: a tremor wake
+// left untouched until it dims (no press, knock knock, tilt, turn, shake,
+// phone) is unanswered, and kTremorUnanswered in a row stop the tremor
+// waking it for kTremorMuteMs. A stir, BOOT, a knock knock and the nap's
+// timer still wake it, and any of those but the stir ends the backoff.
+constexpr uint8_t kTremorUnanswered = 2;
+constexpr uint32_t kTremorMuteMs = 30u * 60 * 1000;
+constexpr uint32_t kGapMs = 250;                 // samples further apart (the nap's listens) start the counts over
 
 enum class Mode : uint8_t { Full, Low };
 
@@ -132,6 +141,11 @@ class Policy {
     lastInput_ = now - (litMs < idleMs_ ? idleMs_ - litMs : 0);
     nudging_ = true;
     return true;
+  }
+  // Tremors wake nothing now (the backoff, update()); how long more, ms.
+  bool tremorMuted(uint32_t now) const { return tremorMutedMs(now) > 0; }
+  uint32_t tremorMutedMs(uint32_t now) const {
+    return tremorMuted_ && int32_t(tremorMutedUntil_ - now) > 0 ? tremorMutedUntil_ - now : 0;
   }
   Why why() const { return why_; }                // the last change's reason
   uint32_t changes() const { return changes_; }   // every sleep and wake since boot
@@ -188,8 +202,8 @@ class Policy {
     Why w;
     if (jolt || drift) w = jolt ? Why::Jolt : Why::Drift;
     else if (stir_ >= kStirScore) w = Why::Stir;
-    else if (tremor_ >= kTremorScore) w = Why::Tremor;
-    else return false;
+    else if (tremor_ >= kTremorScore && low() && !tremorMuted(now)) w = Why::Tremor;
+    else return tremor_ = std::min(tremor_, kTremorScore), false;   // lit, a tremor keeps nothing lit
     // It settles here next: a move counts while it goes on, not after.
     for (int i = 0; i < 3; ++i) {
       if (w != Why::Stir && w != Why::Tremor) ref_[i] = smooth_[i];
@@ -216,6 +230,7 @@ class Policy {
   // for low power: that holds until a hand wakes it, so the page that asked
   // does not undo it with its next line.
   void phone(uint32_t now) {
+    interacted();
     if (int32_t(now - lastInput_) > 0) lastInput_ = now;
     inputWhy_ = Why::Phone;
     ++interactions_, nudging_ = false;
@@ -225,7 +240,15 @@ class Policy {
   // Every loop. `held`: something on the screen needs it awake (a duel, an
   // update, a question). True when the mode changed.
   bool update(uint32_t now, bool held) {
+    // The tremor's backoff: a tremor wake nobody did anything with before
+    // it dimmed is one unanswered; kTremorUnanswered in a row and tremors
+    // wake nothing for kTremorMuteMs (a car seat's hum, not a hand).
+    if (!held && !low() && tremorWake_ && sinceInput(now) >= dimMs()) {
+      tremorWake_ = false;
+      if (++unanswered_ >= kTremorUnanswered) tremorMuted_ = true, tremorMutedUntil_ = now + kTremorMuteMs, unanswered_ = 0;
+    }
     if (held) {
+      interacted();
       if (int32_t(now - lastInput_) > 0) lastInput_ = now;
       ++interactions_, nudging_ = false;
       return low() ? set(Mode::Full, Why::Hold, now) : false;
@@ -257,6 +280,8 @@ class Policy {
     return d < 0 ? 0 : uint32_t(d);
   }
   bool input(Why w, uint32_t now) {
+    if (w == Why::Tremor) tremorWake_ = true;   // only from dark: sample() asks nothing else of it
+    else if (w != Why::Stir) interacted();
     if (int32_t(now - lastInput_) < 0) now = lastInput_;   // never move it back
     lastInput_ = now;
     inputWhy_ = w;
@@ -264,6 +289,8 @@ class Policy {
     if (low()) set(Mode::Full, w, now);
     return true;
   }
+  // A press, a knock knock, a tilt, a shake, a phone, a hold: the tremor's backoff starts over.
+  void interacted() { tremorWake_ = false, unanswered_ = 0, tremorMuted_ = false; }
   static int32_t median(int32_t a, int32_t b, int32_t c) { return std::max(std::min(a, b), std::min(std::max(a, b), c)); }
   // Every average at `a`, and nothing stirring.
   void settle(const int32_t (&a)[3]) {
@@ -294,6 +321,10 @@ class Policy {
   int32_t jitter_[3] = {};                 // the tremor's, << kTremorShift
   int tremor_ = 0;                         // samples trembling, less samples steady
   uint32_t lastMs_ = 0;                    // the last sample's time
+  bool tremorWake_ = false;                // lit by a tremor, and nothing done with it since
+  bool tremorMuted_ = false;               // the tremor wakes nothing until tremorMutedUntil_
+  uint8_t unanswered_ = 0;                 // tremor wakes in a row that dimmed untouched
+  uint32_t tremorMutedUntil_ = 0;
 };
 
 // One nap sleep: to the next scheduled Wi-Fi check, or kNapCapMs, whichever

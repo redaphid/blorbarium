@@ -556,13 +556,81 @@ TEST(Wake, ABadgeHeldStillInAHandWakesInAboutASecond) {
   EXPECT_EQ(p.why(), Why::Tremor);
 }
 
-// Held in a hand, it does not go dark under the kid: the tremor is input.
-TEST(Wake, AHandHoldingItKeepsItLit) {
+// A tremor only wakes it from dark: lit, it keeps nothing lit (a car seat
+// would keep it lit all the way), so a badge held still goes dark on time.
+TEST(Wake, ATremorWakesItButKeepsNothingLit) {
   Policy p;
-  for (uint32_t t = 0, i = 0; t < 5 * kMin; t += 20, ++i) p.sample(trembling(kFlat, i), t), p.update(t, false);
-  EXPECT_FALSE(p.low());
-  feed(p, kFlat, 5 * kMin, 6 * kMin + 1000);   // set down: dark a minute after the hand let go
+  uint32_t dark = 0, t = 0, i = 0;
+  for (; t < 2 * kMin && (!dark || p.low()); t += 20, ++i) {
+    p.sample(trembling(kFlat, i), t), p.update(t, false);
+    if (!dark && p.low()) dark = t;
+  }
+  EXPECT_GE(dark, kMin) << "dark a minute after the last real input";
+  EXPECT_LE(dark, kMin + 40);
+  EXPECT_FALSE(p.low()) << "and a still hand lights it again, from dark";
+  EXPECT_EQ(p.why(), Why::Tremor);
+  EXPECT_LE(t - dark, 1300u);
+}
+
+// The owner's badges ride in cars. A seat's hum, 20-40 mg from one sample
+// to the next for ten minutes: two tremor wakes nobody touches, then quiet
+// for half an hour. A stir still wakes it, and a press ends the backoff.
+TEST(Wake, ACarSeatsHumWakesItTwiceThenIsQuiet) {
+  Policy p = napping();
+  const uint32_t t0 = 5 * kMin;
+  int wakes = 0;
+  bool wasLow = p.low();
+  auto hum = [](uint32_t i) {   // 20-40 mg a sample, every axis
+    const uint32_t h = i * 2654435761u;
+    const int s = i % 2 ? 1 : -1;
+    return mg(s * (10 + int(h >> 8) % 11), -s * (10 + int(h >> 16) % 11), 1000 + s * (10 + int(h >> 24) % 11));
+  };
+  uint32_t t = t0, i = 0;
+  for (; t < t0 + 10 * kMin; t += 20, ++i) {
+    p.sample(hum(i), t);
+    p.update(t, false);
+    if (wasLow && !p.low()) {
+      ++wakes;
+      EXPECT_EQ(p.why(), Why::Tremor) << t - t0;
+    }
+    wasLow = p.low();
+  }
+  EXPECT_LE(wakes, 3);
+  EXPECT_GE(wakes, 1);
   EXPECT_TRUE(p.low());
+  EXPECT_TRUE(p.tremorMuted(t));
+  EXPECT_GT(p.tremorMutedMs(t), 20 * kMin) << "half an hour from the second";
+  // Still humming: a stir (the car lifted it level) still wakes it...
+  for (const uint32_t u = t + 1000; t < u; t += 20, ++i) p.sample(hum(i), t), p.update(t, false);
+  const uint32_t lift = t;
+  for (; t < lift + 1000 && p.low(); t += 20, ++i) {
+    blorb::BodySample s = hum(i);
+    s.az = int16_t(s.az + int(100 * std::sin(2 * M_PI * (t - lift) / 1000.0)));
+    p.sample(s, t), p.update(t, false);
+  }
+  EXPECT_FALSE(p.low());
+  EXPECT_EQ(p.why(), Why::Stir);
+  EXPECT_TRUE(p.tremorMuted(t)) << "a stir is no answer: the car may have done it";
+  // ...and so does BOOT, which ends the backoff.
+  blorb::BodySample press = hum(i);
+  press.buttonDown = true;
+  p.sample(press, t);
+  EXPECT_FALSE(p.tremorMuted(t));
+}
+
+// The backoff wears off: half an hour later the hum may wake it again.
+TEST(Wake, TheBackoffLastsHalfAnHour) {
+  Policy p = napping();
+  uint32_t t = 5 * kMin, i = 0, muted = 0;
+  for (; t < 5 * kMin + 60 * kMin; t += 20, ++i) {
+    p.sample(trembling(kFlat, i), t);
+    p.update(t, false);
+    if (!muted && p.tremorMuted(t)) muted = t;
+    if (muted && t - muted > 31 * kMin && !p.low()) break;
+  }
+  ASSERT_NE(muted, 0u);
+  EXPECT_LT(t, 5 * kMin + 60 * kMin) << "awake again after the half hour";
+  EXPECT_EQ(p.why(), Why::Tremor);
 }
 
 // A knock on the table it lies on: one sample a g and a half through the
