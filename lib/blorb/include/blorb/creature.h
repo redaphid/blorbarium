@@ -108,7 +108,11 @@ class Creature {
   // The unpowered catch-up (DEVIATIONS.md 3): `ticks` of chemistry in one
   // coarse step. Sense loci only, no stimuli, brain or behaviour; stages
   // express as their loci fire and the die locus still ends the life.
-  void tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick);
+  // `resting`: nobody has touched the badge for as long as it takes to go dim
+  // (PetClock::kDimAfterTicks), so ticked he would be in bed by now: his
+  // belly runs at its sleeping pace (creature.cpp restMetabolism).
+  void tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick, bool resting = false);
+  bool resting() const;   // asleep or in the dark: his belly runs at its sleeping pace
 
   bool dead() const;
   DeathCause cause() const;

@@ -127,6 +127,8 @@ TEST(Golden, IdleAdult) {
 
 // stim=8+8 (was 8+9): the press's release settles a sample later (0.7.5
 // debounce), so the button lands one tick later; nothing else moved.
+// face=1 (was 0): the bite feeds him at once (creature.cpp fedByPellet), so
+// the chew shows him happy.
 TEST(Golden, Eating) {
   Rig r;
   r.hatch();
@@ -135,7 +137,7 @@ TEST(Golden, Eating) {
   r.creature().force(action::eat);
   r.runUntil([&] { return r.dish.appearance().mouth != Mouthful::Nothing; }, 60000);
   EXPECT_EQ(dump(r.dish.appearance()),
-            "kind=1 gen=0 stage=0 seed=7acbc8f9 at=-4,-45 facing=-526 scale=55 pose=2/0 face=0<0 349 t16 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=1 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=0/0 0 stim=8+5 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=3");
+            "kind=1 gen=0 stage=0 seed=7acbc8f9 at=-4,-45 facing=-526 scale=55 pose=2/0 face=1<0 499 t1 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=1 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=0/0 0 stim=8+5 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=3");
 }
 
 TEST(Golden, Foresee) {
@@ -295,9 +297,10 @@ TEST(Mouth, WhatHeBitIsWhatHeChews) {
     EXPECT_EQ(held, 15) << "from the bite through the chew";
     EXPECT_EQ(other, 0);
     EXPECT_EQ(c.body().mouth, Mouthful::Nothing) << "and then it is gone";
+    // Fed at the bite, rot or not (creature.cpp fedByPellet): happy, no feed hint.
     if (bitten == Mouthful::RottenPellet)
       EXPECT_EQ(atBite,
-                "kind=1 gen=0 stage=0 seed=499b722b at=0,0 facing=0 scale=55 pose=2/0 face=5<0 717 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=1/0 900 stim=35+1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=0");
+                "kind=1 gen=0 stage=0 seed=499b722b at=0,0 facing=0 scale=55 pose=2/0 face=1<0 499 t0 reflex=0/0 0 0 glow=0 seer=0 asleep=0 dream=0 call=0 mouth=2 injury=0 wobble=0 night=0 egg=0 fade=0 eggs=0@0 hint=0/0 0 stim=35+1 r11,128,128 r0,128,137 r0,128,118 r0,128,128 r0,128,128 r0,140,160 r11,128,128 m0,4,0 pantry=0");
   }
 }
 

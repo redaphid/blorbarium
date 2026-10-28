@@ -840,6 +840,8 @@ void Dish::catchUp(uint32_t ticks) {
   if (sealed()) return;
   const uint64_t cap = uint64_t(kMaxCatchUpSteps) * kCatchUpStride;
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
+  // Nobody there: once the badge would have gone dim, ticked, he would be in bed.
+  uint64_t still = live_.clock.stillRunTicks;
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {
     uint32_t n = std::min(left, kCatchUpStride);
     if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
@@ -848,7 +850,8 @@ void Dish::catchUp(uint32_t ticks) {
       detectors_.day.tick(TickContext{live_.clock, false, tick_}, senses);
       live_.habitat.step(c->phenotype().habitat, kLevel, kLevel, c->body().at, tick_ + n - 1, senses);
       const Stage was = c->stage();
-      c->tickCoarse(senses, n, tick_);
+      c->tickCoarse(senses, n, tick_, still >= PetClock::kDimAfterTicks);
+      still += n;
       if (c->stage() != was) grewTo_ = c->stage();
       stats_.lived(*c, n, false);
       tick_ += n;

@@ -66,7 +66,9 @@ TEST(Aging, AnUnfedPetGrowsUpOnHisFirstDayAndStarvesToDeath) {
   EXPECT_LE(adultAt, 30 * kHourTicks) << "an adult within his first powered day or so";
   ASSERT_NE(diedAt, 0u) << "a pet nobody feeds dies of it";
   EXPECT_GE(ageAtDeath, 36 * kHourTicks) << "time for a hungry pet to be fed";
-  EXPECT_LE(ageAtDeath, 72 * kHourTicks);
+  // Asleep his belly runs slow (creature.cpp restMetabolism), so a fed pet
+  // sleeps a night through; the unfed one starves a day later than he did.
+  EXPECT_LE(ageAtDeath, 96 * kHourTicks);
   int graves = 0;
   dish.lineage().forEach([&](const LineageEntry& e) {
     if (const Death* d = std::get_if<Death>(&e)) {
