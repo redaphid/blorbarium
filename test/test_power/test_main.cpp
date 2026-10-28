@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cmath>
 #include <vector>
 #include "blorb/senses.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/hw/power.h"
@@ -498,6 +499,109 @@ TEST(Power, AnInputStampedAfterTheLoopsNowIsNoTimeAtAll) {
   EXPECT_FALSE(p.low());
   feed(p, kFlat, 25000, 25040);
   EXPECT_TRUE(p.low());
+}
+
+// ---- A hand on a dark or napping badge (2026-10-28) ---------------------------------
+// The owner: a napping badge picked up stayed dark; only BOOT woke it. A level
+// lift moves gravity by nothing and jolts nothing, and a badge held still in
+// a hand neither drifts nor jolts. test_controls NapWake replays the real
+// hands; these are the shapes, one at a time.
+
+// A small hand's tremor about `s`: a 50 Hz sample-to-sample change of about 23 mg.
+blorb::BodySample trembling(blorb::BodySample s, uint32_t i) {
+  const uint32_t h = i * 2654435761u;
+  s.ax = int16_t(s.ax + int(h >> 8) % 71 - 35);
+  s.ay = int16_t(s.ay + int(h >> 16) % 71 - 35);
+  s.az = int16_t(s.az + int(h >> 24) % 71 - 35);
+  return s;
+}
+
+// Dark, and the nap's two minutes past: the policy has not been fed for a while.
+Policy napping() {
+  Policy p;
+  feed(p, kFlat, 0, 4 * kMin);
+  EXPECT_TRUE(p.napDue(4 * kMin));
+  return p;
+}
+
+// Lifted straight up off the table, screen up the whole way: half a second
+// up at a tenth of a g at most, then slowing as long. Gravity never turns and
+// nothing jolts; the move itself wakes it, before the lift is over.
+TEST(Wake, ALevelLiftWakesItBeforeTheLiftIsOver) {
+  Policy p = napping();
+  const uint32_t t0 = 5 * kMin;   // the pin's listen: samples again after a minute of none
+  uint32_t woke = 0;
+  for (uint32_t t = t0; t < t0 + 2000 && !woke; t += 20) {
+    const double ph = (t - t0) / 1000.0;   // 0..1 s: up, then slowing
+    const int lift = ph < 1.0 ? int(100 * std::sin(2 * M_PI * ph)) : 0;
+    p.sample(mg(0, 0, 1000 + lift), t);
+    if (!p.low()) woke = t;
+  }
+  ASSERT_NE(woke, 0u) << "a level lift is a hand";
+  EXPECT_LE(woke - t0, 600u);
+  EXPECT_EQ(p.why(), Why::Stir);
+}
+
+// Picked up while dark and held still, level: only the hand's tremor says so.
+TEST(Wake, ABadgeHeldStillInAHandWakesInAboutASecond) {
+  Policy p = napping();
+  const uint32_t t0 = 5 * kMin;
+  uint32_t woke = 0;
+  for (uint32_t t = t0, i = 0; t < t0 + 2000 && !woke; t += 20, ++i) {
+    p.sample(trembling(kFlat, i), t);
+    if (!p.low()) woke = t;
+  }
+  ASSERT_NE(woke, 0u) << "a hand holding it is a hand";
+  EXPECT_LE(woke - t0, 1300u);
+  EXPECT_EQ(p.why(), Why::Tremor);
+}
+
+// Held in a hand, it does not go dark under the kid: the tremor is input.
+TEST(Wake, AHandHoldingItKeepsItLit) {
+  Policy p;
+  for (uint32_t t = 0, i = 0; t < 5 * kMin; t += 20, ++i) p.sample(trembling(kFlat, i), t), p.update(t, false);
+  EXPECT_FALSE(p.low());
+  feed(p, kFlat, 5 * kMin, 6 * kMin + 1000);   // set down: dark a minute after the hand let go
+  EXPECT_TRUE(p.low());
+}
+
+// A knock on the table it lies on: one sample a g and a half through the
+// face, ringing a little for three more (the recording's table knocks, T3,
+// are one sample). Every 3 s for two minutes (each one alone: two within
+// 1.5 s are a knock knock, which KnockSense hears): never a hand.
+TEST(Wake, AKnockOnItsTableAloneIsNoHand) {
+  Policy p = napping();
+  constexpr int kRing[] = {-900, 100, -50, 20};
+  for (uint32_t t0 = 5 * kMin; t0 < 7 * kMin; t0 += 3000) {
+    for (uint32_t t = t0, k = 0; t < t0 + 2000; t += 20, ++k)   // each knock's 2 s listen
+      p.sample(k < 4 ? mg(k % 2 ? 3 : -2, 1, 1000 + kRing[k]) : mg(int(k % 3) - 1, 0, 1000), t);
+    EXPECT_TRUE(p.low()) << "the knock at " << t0;
+  }
+}
+
+// Lying still, dark: the sensor's own noise (a few mg), a slow creep, and a
+// faint hum (5 mg each way, every sample: the desk's fan, a fridge) wake
+// nothing in an hour. A hum as strong as a hand's tremor would.
+TEST(Wake, StillnessAndAFaintHumNeverWakeIt) {
+  Policy p = napping();
+  for (uint32_t t = 4 * kMin, i = 0; t < 64 * kMin; t += 20, ++i) {
+    const int hum = i % 2 ? 5 : -5, noise = int(i * 2654435761u >> 28) % 7 - 3;
+    p.sample(mg(hum + noise + int((t - 4 * kMin) / kMin), noise, 1000 - hum), t);
+    p.update(t, false);
+  }
+  EXPECT_TRUE(p.low());
+  EXPECT_EQ(p.why(), Why::Idle);
+}
+
+// The nap's listens are seconds apart: what one listen counted toward a
+// stir or a tremor is gone by the next, so two bumps never add up to a hand.
+TEST(Wake, TwoListensNeverAddUpToAHand) {
+  Policy p = napping();
+  for (uint32_t t0 = 5 * kMin; t0 < 6 * kMin; t0 += 10000) {
+    for (uint32_t t = t0, i = 0; t < t0 + 2000; t += 20, ++i)
+      p.sample(i < 35 ? trembling(kFlat, i) : kFlat, t);   // 0.7 s of a tremor: not yet a hand
+    EXPECT_TRUE(p.low()) << t0;
+  }
 }
 
 }  // namespace

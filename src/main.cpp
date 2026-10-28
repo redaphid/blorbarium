@@ -1931,8 +1931,9 @@ static bool powerHeld() {
 // now in one go (petCatchUp: the same 100 ms ticks on the same clock, so he
 // ages exactly as awake) and glances at gravity (power::Policy::glance: a
 // lift too gentle for the IMU's pin). The IMU's pin (anything past womMg) and
-// BOOT wake it for kListenMs of 50 Hz senses, so the policy decides as it
-// does awake: a hand wakes it, a bumped table does not. A cable byte wakes it
+// BOOT wake it for kListenMs of 50 Hz senses, the IMU back at 250 Hz, so the
+// policy decides as it does awake: a hand wakes it (picked up, tilted, shaken,
+// stirred or held: power.h), a bumped table does not. A cable byte wakes it
 // and holds the nap off kCableAwakeMs (the bytes that woke it are lost).
 namespace napq {
 #if defined(BADGE_BOARD_LCD146)
@@ -1950,6 +1951,7 @@ constexpr uint32_t kReportMs = 60000;   // a `[power] napping` line at most this
 constexpr gpio_num_t kButton = gpio_num_t(PIN_BOOT_BUTTON), kImuPin = gpio_num_t(imu::kIntPin);
 enum Wake : uint8_t { Timer, Imu, Button, Cable, Other, kWakes };
 static bool on = false, womOk = false;
+static bool imuListening = false;   // a listen set the IMU back to 250 Hz; wake on motion is set again before sleeping
 static uint32_t since = 0, listenUntil = 0, reportAt = 0, naps = 0, lastSleepMs = 0, catchUpUs = 0, catchUpWorstUs = 0;
 static uint32_t wakes[kWakes] = {}, napWakes[kWakes] = {};   // since boot, and this nap
 static uint64_t sleptUs = 0, awakeUs = 0;                     // in naps since boot: asleep, and the passes between
@@ -2069,7 +2071,7 @@ static void napEnter(uint32_t now) {
 }
 
 static void napLeave(const char* why) {
-  napq::on = false;
+  napq::on = false, napq::imuListening = false;
   sensePause(true, true);   // listening, it may be mid-read
   imu::awake();
   sensePause(false, false);
@@ -2110,6 +2112,12 @@ static void petCatchUp() {
 // One sleep, `ms` long at most.
 static void napSleep(uint32_t ms) {
   using namespace napq;
+  if (imuListening) {   // a listen just ended without a hand: the pin watches again
+    sensePause(true, true);
+    womOk = imu::wakeOnMotion(womMg) || imu::wakeOnMotion(womMg);   // once more before the nap is timer and button only
+    imuListening = false;
+    if (!womOk) Serial.printf("[power] !!! wake on motion not set again: timer and button only this nap\n");
+  }
   lastSleepMs = ms;
   const int imuWas = gpio_get_level(kImuPin);
   esp_sleep_enable_timer_wakeup(uint64_t(ms) * 1000);
@@ -2142,7 +2150,17 @@ static void napSleep(uint32_t ms) {
   ++wakes[w], ++napWakes[w];
   petCatchUp();   // before anything else looks at him: a wake by a hand draws him as he is now
   if (w == Cable) cableByte();   // the bytes that woke it are lost; the line after the preamble is not
-  if (w == Imu || w == Button || w == Other) listenUntil = millis() + kListenMs;   // the 50 Hz senses decide
+  if (w == Imu || w == Button || w == Other) {   // the 50 Hz senses decide
+    listenUntil = millis() + kListenMs;
+    // ...on the IMU's own 250 Hz, as awake: at 21 Hz most of a hand's
+    // tremor and a knock fall between its samples. Wake on motion is set
+    // again before the next sleep (imuListening).
+    if (womOk) {
+      sensePause(true, true);
+      imu::awake();
+      imuListening = true;
+    }
+  }
   if (w == Timer && imuOk) {   // a lift too gentle for the pin (no button: a press is the senses')
     blorb::BodySample g;
     if (imu::read(g)) powerPolicy.glance(g, millis() + warpMs);
