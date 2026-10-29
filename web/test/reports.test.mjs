@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/app.js";
-import { KEEP_REPORTS, MARQUEE_MAX, checkCommand, marqueeText } from "../src/reports.js";
+import { DEBUG_MAX, KEEP_REPORTS, MARQUEE_MAX, checkCommand, debugLine, marqueeText } from "../src/reports.js";
 import { fakeEnv } from "./support/fake_env.mjs";
 
 const MAC = "7cdfa1b2c3d4";
@@ -78,14 +78,14 @@ test("a queued command goes out once, in the reply, and its result closes it", a
   assert.equal(env.DB.raw.prepare("SELECT status FROM actions WHERE id = ?").get(q3.body.id).status, "pending");
 });
 
-test("the allowlist: nothing that could stop updates, forget Wi-Fi or flash anything", async () => {
+test("the allowlist: nothing that could stop updates or flash anything (debug is the badge's to refuse)", async () => {
   const env = fakeEnv();
   await call(env, "/api/badge/report", report(), { raw: true });
   for (const [verb, arg] of [["wifi", "off"], ["forget"], ["ota"], ["erase"], ["auto", 0], ["interval", 29], ["interval", 721], ["interval", "60; reboot"], ["reboot", "now"]]) {
     const r = await call(env, `/api/admin/badges/${MAC}/debug`, { verb, arg }, { admin: true });
     assert.equal(r.status, 400, `${verb} ${arg ?? ""}`);
   }
-  for (const [verb, arg] of [["check"], ["interval", 30], ["interval", 720], ["state"], ["shot"], ["reboot"], ["marquee", "hi"]]) assert.ok(checkCommand(verb, arg).payload, verb);
+  for (const [verb, arg] of [["check"], ["interval", 30], ["interval", 720], ["state"], ["shot"], ["reboot"], ["marquee", "hi"], ["debug", "wifi"]]) assert.ok(checkCommand(verb, arg).payload, verb);
   // A debug row written some other way (the generic actions endpoint) is checked again before it is sent.
   const bad = await call(env, "/api/admin/actions", { macs: [MAC], kind: "debug", payload: { verb: "wifi forget" } }, { admin: true });
   assert.equal(bad.status, 400);
@@ -149,4 +149,21 @@ test("a shot sent alone to /api/debug is linked from its command's result", asyn
   assert.equal(c.status, "done");
   assert.equal(c.result.shot_id, id);
   assert.equal((await call(env, `/api/admin/blob/device/${id}`, undefined, { admin: true })).body.lines, lines);
+});
+
+test("debug carries any cable DEBUG line, one line, untouched, as the badge takes it", async () => {
+  assert.deepEqual(debugLine("DEBUG wifi list"), { line: "wifi list" }, "the cable's prefix comes off");
+  assert.deepEqual(debugLine('  wifi set "Grandma Net" p@ss w0rd  '), { line: 'wifi set "Grandma Net" p@ss w0rd' });
+  assert.ok(debugLine("DEBUG").error);
+  assert.ok(debugLine("").error);
+  assert.ok(debugLine("wifi\n99 reboot").error, "a line cannot start a command of its own");
+  assert.ok(debugLine("caf\u00e9").error, "never changed: a password must arrive as typed");
+  assert.ok(debugLine("x".repeat(DEBUG_MAX)).line);
+  assert.ok(debugLine("x".repeat(DEBUG_MAX + 1)).error);
+  const env = fakeEnv();
+  await call(env, "/api/badge/report", report(), { raw: true });
+  const q = await call(env, `/api/admin/badges/${MAC}/debug`, { verb: "debug", arg: "DEBUG power stats" }, { admin: true });
+  assert.equal(q.status, 200);
+  const r = await call(env, "/api/badge/report", report(), { raw: true });
+  assert.equal(r.body, `blorb-cmds 1\n${q.body.id} debug power stats\n`);
 });

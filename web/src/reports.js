@@ -9,7 +9,11 @@
 //
 // The commands are an allowlist, checked here when they are queued and again
 // on the badge (lib/rdebug): check, interval <30..720 min>, state, shot,
-// reboot, and marquee <text> (a message for the kids, scrolled full screen). None can turn updates off, forget a network or touch the firmware.
+// reboot, marquee <text> (a message for the kids, scrolled full screen), and
+// debug <line>: any of the cable's DEBUG lines (CLAUDE.md: USB, Bluetooth and
+// Wi-Fi are only transports), at most 120 printable characters. None can turn
+// updates off or touch the firmware, and the badge refuses a debug line that
+// would forget its last network or restart outside a quiet moment.
 // The badge takes them only from this site's HTTPS reply, whose certificate
 // it checks against its pinned roots, so only ADMIN_TOKEN can queue them.
 import { storeDeviceDebug } from "./debug.js";
@@ -17,9 +21,21 @@ import { enqueue } from "./admin.js";
 
 export const KEEP_REPORTS = 40;                 // per badge; older ones are deleted as new ones come
 export const MAX_REPORT_BODY = 320 * 1024;      // a report with a screenshot is about 200 KB
-export const VERBS = { check: false, interval: true, state: false, shot: false, reboot: false, marquee: true };   // verb: takes an argument
+export const VERBS = { check: false, interval: true, state: false, shot: false, reboot: false, marquee: true, debug: true };   // verb: takes an argument
 export const INTERVAL_MIN = 30, INTERVAL_MAX = 720;
 export const MARQUEE_MAX = 120;   // rdebug::kMarqueeMax: the badge refuses longer
+export const DEBUG_MAX = 120;     // rdebug::kDebugMax
+
+// A debug line as the badge takes it, or why not: one line of printable ASCII
+// (nothing changed in it: it may hold a password), without the cable's "DEBUG ".
+export function debugLine(t) {
+  let s = String(t ?? "").trim();
+  if (s === "DEBUG" || s.startsWith("DEBUG ")) s = s.slice(5).trim();
+  if (!s) return { error: "debug: a DEBUG line, such as wifi or power stats" };
+  if (s.length > DEBUG_MAX) return { error: `debug: at most ${DEBUG_MAX} characters` };
+  if (/[^\x20-\x7e]/.test(s)) return { error: "debug: printable ASCII only, one line" };
+  return { line: s };
+}
 
 // A marquee's text as the badge can draw it: printable ASCII (accents dropped,
 // anything else a space), one line, at most MARQUEE_MAX characters.
@@ -33,6 +49,10 @@ const COMMAND_TTL_S = 7 * 86400;                // a command its badge has not f
 export function checkCommand(verb, arg) {
   if (!Object.hasOwn(VERBS, verb)) return { error: `verb: one of ${Object.keys(VERBS).join(", ")}` };
   if (!VERBS[verb]) return arg === undefined || arg === null || arg === "" ? { payload: { verb } } : { error: `${verb} takes no argument` };
+  if (verb === "debug") {
+    const d = debugLine(arg);
+    return d.error ? { error: d.error } : { payload: { verb, arg: d.line } };
+  }
   if (verb === "marquee") {
     const text = marqueeText(arg);
     return text ? { payload: { verb, arg: text } } : { error: "marquee: some text to show" };
