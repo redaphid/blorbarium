@@ -52,7 +52,12 @@ class WifiStation {
   // hunt-and-peck instead of both, 4 the BLE controller disabled for the
   // window, 8 Wi-Fi power save off (only with 4: with BLE up it aborts).
   static constexpr uint8_t kModeAwake = 1, kModeHnp = 2, kModeBtOff = 4, kModePsNone = 8;
-  static inline uint8_t testMode = 0;
+  // A BLE-only test badge has no cable to set it: a build may start in a mode
+  // (PLATFORMIO_BUILD_FLAGS=-DBLORB_WIFI_TEST_MODE=13). Released images never set it.
+#ifndef BLORB_WIFI_TEST_MODE
+#define BLORB_WIFI_TEST_MODE 0
+#endif
+  static inline uint8_t testMode = BLORB_WIFI_TEST_MODE;
 
   bool up() {
     if (up_) return true;
