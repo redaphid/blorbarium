@@ -106,8 +106,8 @@ presses the button.
 #1 + HELP look
 #1 + STATUS look
 ...
-#1 + WIPE harm [species]
-#1 OK 17
+#1 + DEBUG look <a cable DEBUG line>
+#1 OK 33
 
 #2 STATUS
 #2 OK unlock=locked scale=1 trial=0 ota=0 sealed=0 phase=creature stage=adult age=1987200 species=grungo look=own time=known dropped=0
@@ -338,6 +338,72 @@ RAM is never saved over the fresh flash. The default `nvs` partition, where
 the OTA trial keeps its records, is not touched. A sealed board refuses
 (`ERR 409 SEALED`): its keepsake is waiting for a person to rescue it.
 
+## One badge, three transports
+
+USB serial, Bluetooth and Wi-Fi are only transports (CLAUDE.md). Every
+affordance below works on all three, each behind its own gate: the cable is a
+hand on the badge; Bluetooth's harm needs the unlock's press; Wi-Fi's remote
+debug takes commands only from the site, which queues them only for the
+owner's `ADMIN_TOKEN` (docs/remote-debug.md). Nothing is cable-only.
+
+### LOG `[lines]` (look)
+
+The last lines of the badge's log (1 to 120, default 40), oldest first: the
+same 8 KB ring the Wi-Fi report sends home (`hw::LogTee`). Masked: every
+remembered SSID reads `<net #N>`, every password `<password>`, the phone's
+network in flight `<the phone's network>` (`rdebug::maskSecrets`); the
+badge's own lines name networks by number anyway. A line longer than 180
+bytes comes in pieces.
+
+```
+#20 LOG 3
+#20 + [wifi] window check opens: dark=1 networks=2 heap=91234
+#20 + [wifi] joining network #2 of 2
+#20 + [wifi] check: FAILED could not join in 20 s: last disconnect AUTH_EXPIRE (reason 2, 3 disconnects, status 6)
+#20 OK lines=3
+```
+
+### WIFI (look)
+
+The cable's `DEBUG wifi`: the window, the schedule, the last outcome, and
+each remembered network by number with its SSID's length, its password's,
+its security and signal in the last scan, whether it waits for its first try
+(untried), and how its last join went. Never an SSID.
+
+### DEBUG `<a cable DEBUG line>` (its own reach)
+
+Any of the cable's `DEBUG` lines, run as the cable runs it; its printed
+lines come back masked as `LOG`'s. A leading `DEBUG ` is taken off. Its
+reach is the line's (`debugble::serialReach`): bare looks (`wifi`, `wifi
+list`, `power`, `fps`, `home`) are look; the screen's settings (`marquee`,
+`trace`, `fps bench`, `lcd 40`) show; `nap`, `wifi due` and `ota check` write;
+everything that moves the pet, poses the body, sets or forgets a network,
+points an update elsewhere or restarts is harm, and so is a verb the table
+does not know. Write and harm wait out a trial, an update and a sealed dish
+as every verb does; harm needs the unlock.
+
+```
+#21 DEBUG wifi list
+#21 + [wifi] network #1: ssid 19 B, password 12 B, wpa2 ch 11 rssi -61 in the last scan; last join: joined (check) rssi=-61 ch=11
+#21 + [wifi] networks 1 of 3; last outcome: up_to_date, nothing to install
+#21 OK reach=look lines=2
+#22 DEBUG wifi set "Grandma Net" her-password
+#22 ERR 423 LOCKED
+```
+
+### Every verb, every transport
+
+| Affordance | Cable | Bluetooth (debug link) | Wi-Fi (remote debug, `/admin`) | Gate past the transport's own |
+|---|---|---|---|---|
+| The recent log | the cable itself | `LOG [n]` | every report's `log` (4 KB) | none: look; masked on both radios |
+| Wi-Fi state, networks by number, last outcome | `DEBUG wifi` | `WIFI` | `state`, or `debug wifi` | look |
+| Remember a network | `DEBUG wifi set <ssid> [pw]` | `DEBUG wifi set ...` | `debug wifi set ...` | harm |
+| Forget one, or all | `DEBUG wifi forget [<n>\|ssid]` | `DEBUG wifi forget ...` | `debug wifi forget <n>` | harm; Wi-Fi refuses the last one and "all" |
+| Check now | `DEBUG ota check [url]` | `DEBUG ota check` | `check`, or `debug ota check` | write; a URL is harm |
+| Any other cable verb | `DEBUG <verb> ...` | `DEBUG <verb> ...` | `debug <verb> ...` | its `serialReach` |
+| Restart | `DEBUG reboot` | `REBOOT [quiet]` | `reboot` (waits for dark and alone) | harm |
+| Screenshot | `DEBUG shot` | `DEBUG shot` | `shot` | look |
+
 ## The device
 
 What the serial cable's `DEBUG` verbs do, over the air. The board runs them
@@ -380,7 +446,10 @@ a fight or keep restarting the badge.
   which feed him. `SCALE` could age him to death if it outlived the phone,
   so it ends with the connection that set it.
 - **Show and look need nothing**: `THINK`, `FORTUNE`, `LOOK`, `POWER`,
-  `HELP`, `STATUS`, `DUEL`. Nothing is saved.
+  `HELP`, `STATUS`, `DUEL`, `LOG`, `WIFI`. Nothing is saved.
+- **`DEBUG` takes its line's reach** (`debugble::serialReach`), so a cable
+  verb is gated over the air as the link's own twin of it is: `DEBUG wifi
+  set` is harm, `DEBUG wifi` is look.
 - **Write and harm wait out a trial** (`ERR 409 TRIAL`). On trial the
   storage writes nothing (`ota::HeldStorage`), so a change would be lost or
   kept only partly, and the trial compares the pet it resumed with the pet

@@ -268,8 +268,8 @@ def parse_wifi_status(lines) -> dict:
     out = {}
     for line in lines:
         out.update(parse_kv(line.split("[wifi]", 1)[-1]))
-    nets = out.get("networks")
-    out["networks"] = re.findall(r'"([^"]*)"', nets) if isinstance(nets, str) else []
+    # Networks by number with their SSID's length, never the SSID (src/wifi_ota.h networkLines).
+    out["networks"] = [int(m.group(1)) for line in lines for m in [re.search(r"\[wifi\] network #\d+: ssid (\d+) B", line)] if m]
     if isinstance(out.get("next_check_in"), str) and out["next_check_in"].rstrip("s").isdigit():
         out["next_check_in"] = int(out["next_check_in"].rstrip("s"))   # "900s"
     return out
@@ -757,13 +757,13 @@ class Run:
     def wifi_status(self):
         m = self.b.mark()
         self.b.send("DEBUG wifi")
-        k, r = self.b.wait([r"\[wifi\] station=", UNKNOWN_VERB], 5, since=m)
+        k, r = self.b.wait([r"\[wifi\] networks \d+ of \d+; last outcome", UNKNOWN_VERB], 5, since=m)
         if k == 1:
             self.missing.add("DEBUG wifi")
             raise MissingVerb("this firmware has no DEBUG wifi")
         if r is None:
             raise Fail("no DEBUG wifi status")
-        lines = [l for l in self.b.since(m) if "[wifi] window=" in l or "[wifi] station=" in l]
+        lines = [l for l in self.b.since(m) if "[wifi] window=" in l or "[wifi] station=" in l or "[wifi] network #" in l]
         return parse_wifi_status(lines), lines
 
     def chem_set(self, name, permille):
@@ -884,13 +884,13 @@ class Run:
         t0 = time.monotonic()
         m = self.b.mark()
         self.b.send(line, shown='DEBUG wifi set "<ssid>" <password>')
-        k, r = self.b.wait([r'\[wifi\] network "(.*)" \((with a|no) password, (saved|SAVE FAILED)', UNKNOWN_VERB], 5, since=m)
+        k, r = self.b.wait([r'\[wifi\] network #1: ssid (\d+) B, password \d+ B \((saved|SAVE FAILED)', UNKNOWN_VERB], 5, since=m)
         if k == 1:
             self.missing.add("DEBUG wifi")
             return self.record(P, "provision", False, "this firmware has no DEBUG wifi (wifi-ota-2 not merged)", t0=t0)
-        saved = bool(r) and r.group(1) == ssid and r.group(3) == "saved"
+        saved = bool(r) and int(r.group(1)) == len(ssid.encode()) and r.group(2) == "saved"
         st, lines = self.wifi_status()
-        listed = ssid in st["networks"]
+        listed = len(ssid.encode()) in st["networks"]   # by its SSID's length: no line names it
         self.record(P, "provision", saved and listed, "saved=%s, DEBUG wifi lists it=%s (%d networks)" % (
             saved, listed, len(st["networks"])), ([r.group(0)] if r else []) + lines, t0)
         if not (saved and listed):
@@ -1041,9 +1041,9 @@ class Run:
         t1 = time.monotonic()
         st0, _ = self.wifi_status()
         self.debug("DEBUG wifi forget", r"\[wifi\] forgot every network")
-        self.debug("DEBUG wifi set %s x" % FAKE_SSID, r'\[wifi\] network "%s"' % FAKE_SSID)
+        self.debug("DEBUG wifi set %s x" % FAKE_SSID, r'\[wifi\] network #1: ssid %d B' % len(FAKE_SSID))
         st, lines = self.wifi_status()
-        ok = st["networks"] == [FAKE_SSID]
+        ok = st["networks"] == [len(FAKE_SSID)]
         self.record(P, "only a network not in range", ok, "networks %d -> %s" % (len(st0["networks"]), st["networks"]),
                     lines, t1)
         if not ok:
@@ -1128,10 +1128,10 @@ class Run:
         ssid, password = self.env.get("ssid", ""), self.env.get("password", "")
         if not ssid:
             return self.record(P, "network given back", False, "no ssid in .env: the badge has none now", status="SKIP")
-        self.debug('DEBUG wifi set "%s" %s' % (ssid, password), r'\[wifi\] network ".*" \(', 5,
+        self.debug('DEBUG wifi set "%s" %s' % (ssid, password), r'\[wifi\] network #1: ssid', 5,
                    shown='DEBUG wifi set "<ssid>" <password>')
         st, lines = self.wifi_status()
-        self.record(P, "network given back", st["networks"] == [ssid], "%d network(s)" % len(st["networks"]), lines, t0)
+        self.record(P, "network given back", st["networks"] == [len(ssid.encode())], "%d network(s)" % len(st["networks"]), lines, t0)
         self.awake()
 
     # -- lifecycle --

@@ -157,7 +157,8 @@ def main():
     b.send("DEBUG wifi list", "DEBUG wifi list")
     names = []
     b.until(5, lambda t: names.append(t) or t.startswith("[wifi] networks "))
-    saved = any(t.startswith("[wifi] network #") and f'"{ssid}"' in t for t in names)
+    # Listed by number and SSID length only (no line names it): verify below says whether it is this one.
+    saved = any(t.startswith("[wifi] network #") and f"ssid {len(ssid.encode())} B" in t for t in names)
     b.say(f"=== the network is {'REMEMBERED' if saved else 'NOT remembered'} (DEBUG wifi list)")
     if saved:   # byte for byte, answered with lengths and yes or no only
         b.send(f'DEBUG wifi verify "{ssid}" {password}', 'DEBUG wifi verify "<ssid>" <password>')

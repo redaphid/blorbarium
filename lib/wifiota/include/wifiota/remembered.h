@@ -46,12 +46,27 @@ class Networks {
   void remember(const improv::Credentials&);
   // False when no network has that SSID.
   bool forget(std::string_view ssid);
-  void clear() { n_ = 0; }
+  // By place, 0 the newest. False when there is none there.
+  bool forgetAt(size_t i);
+  void clear() { n_ = 0, untried_ = 0; }
   std::optional<size_t> find(std::string_view ssid) const;
 
   // Which remembered network to join, from what a scan saw: the strongest
   // in range, the newer on a tie. Nothing when none is in range.
   std::optional<size_t> pick(const Seen* seen, size_t count) const;
+
+  // Untried: a network an Improv provision could not join (a weak signal
+  // while the phone was connected, 2026-10-29) is remembered all the same,
+  // and the next Check, dark and with no phone, tries it before any other,
+  // in range or not (it may be hidden). Kept beside the list as a mask, bit
+  // i for network i (WifiStore's "untried"), never in the list's blob: an
+  // older image rolled back to still reads the list.
+  bool untried(size_t i) const { return i < n_ && (untried_ >> i & 1u); }
+  void setUntried(size_t i, bool on);
+  uint8_t untriedMask() const { return untried_; }
+  void setUntriedMask(uint8_t m) { untried_ = uint8_t(m & ((1u << n_) - 1u)); }
+  // Which network a Check joins: the newest untried one, else pick().
+  std::optional<size_t> next(const Seen* seen, size_t count) const;
 
   // Version 2, a count, then each network as one entry of encodeRemembered
   // without its version byte. 0 when `cap` is too small.
@@ -62,6 +77,7 @@ class Networks {
  private:
   improv::Credentials nets_[kMaxNetworks];
   size_t n_ = 0;
+  uint8_t untried_ = 0;
 };
 
 }  // namespace wifiota

@@ -1716,6 +1716,8 @@ static bool powerHeld();
 static bool remotePress(uint32_t ms, bool twice);
 
 static void wifiVerb(const char* line);   // src/wifi_ota.h
+// The log as it leaves the badge, every Wi-Fi SSID and password masked (src/wifi_ota.h).
+static size_t maskLog(const char* in, size_t n, char* out, size_t cap);
 static void wpa3Verb(const char* line);   // src/wifi_ota.h
 static void otaVerb(const char* line);
 

@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <optional>
 
 #include "wifiota/improv.h"
 #include "wifiota/remembered.h"
@@ -166,6 +167,20 @@ class WifiStation {
   uint32_t scanStatus() const { return scanStatus_; }
   const wifiota::Seen* seen() const { return views_; }
   uint8_t seenCount() const { return seen_; }
+  // A network's strongest access point in the last scan, for `DEBUG wifi`
+  // (never its SSID: the caller names it by number). Nothing: not seen.
+  struct Heard {
+    int rssi;
+    uint8_t channel;
+    const char* security;
+  };
+  std::optional<Heard> heard(const char* ssid) const {
+    const Ap* best = nullptr;
+    for (uint8_t i = 0; i < seen_; ++i)
+      if (!std::strcmp(aps_[i].ssid, ssid) && (!best || aps_[i].rssi > best->rssi)) best = &aps_[i];
+    if (!best) return std::nullopt;
+    return Heard{best->rssi, best->channel, authName(best->auth)};
+  }
   // A scan that has run too long: stopped, so nothing is left running under the join.
   void abandonScan() {
     if (WiFi.getStatusBits() & WIFI_SCANNING_BIT) esp_wifi_scan_stop();

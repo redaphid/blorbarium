@@ -84,6 +84,7 @@ const char* verbName(Verb v) {
     case Verb::Shot: return "shot";
     case Verb::Reboot: return "reboot";
     case Verb::Marquee: return "marquee";
+    case Verb::Debug: return "debug";
     case Verb::Unknown: break;
   }
   return "unknown";
@@ -114,15 +115,17 @@ std::string_view word(std::string_view& s) {
 Command judge(uint32_t id, std::string_view verb, std::string_view arg) {
   Command c;
   c.id = id;
-  for (Verb v : {Verb::Check, Verb::Interval, Verb::State, Verb::Shot, Verb::Reboot, Verb::Marquee})
+  for (Verb v : {Verb::Check, Verb::Interval, Verb::State, Verb::Shot, Verb::Reboot, Verb::Marquee, Verb::Debug})
     if (verb == verbName(v)) c.verb = v;
   if (c.verb == Verb::Unknown) return c.why = "not an allowed command", c;
-  if (c.verb == Verb::Marquee) {   // `arg` is the rest of the line
+  if (c.verb == Verb::Marquee || c.verb == Verb::Debug) {   // `arg` is the rest of the line
+    const bool marquee = c.verb == Verb::Marquee;
     while (!arg.empty() && arg.back() == ' ') arg.remove_suffix(1);
-    if (arg.empty()) return c.why = "marquee wants text", c;
-    if (arg.size() > kMarqueeMax) return c.why = "marquee text too long (120 characters)", c;
+    if (!marquee && (arg == "DEBUG" || (arg.size() >= 6 && arg.substr(0, 6) == "DEBUG "))) arg.remove_prefix(arg.size() > 5 ? 6 : 5);   // as the cable takes it
+    if (arg.empty()) return c.why = marquee ? "marquee wants text" : "debug wants a DEBUG line", c;
+    if (arg.size() > kMarqueeMax) return c.why = marquee ? "marquee text too long (120 characters)" : "debug line too long (120 characters)", c;
     for (char ch : arg)
-      if (ch < 0x20 || ch > 0x7e) return c.why = "marquee text: printable ASCII only", c;
+      if (ch < 0x20 || ch > 0x7e) return c.why = marquee ? "marquee text: printable ASCII only" : "debug line: printable ASCII only", c;
     std::memcpy(c.text, arg.data(), arg.size());
     c.text[arg.size()] = 0;
   } else if (c.verb == Verb::Interval) {
@@ -156,7 +159,7 @@ size_t parseCommands(std::string_view reply, uint32_t lastId, Command* out, size
     const std::string_view verb = word(rest);
     if (verb.empty()) continue;
     std::string_view arg;
-    if (verb == verbName(Verb::Marquee)) {   // the text: the rest of the line, spaces and all
+    if (verb == verbName(Verb::Marquee) || verb == verbName(Verb::Debug)) {   // the text: the rest of the line, spaces and all
       while (!rest.empty() && rest.front() == ' ') rest.remove_prefix(1);
       arg = rest;
     } else {
@@ -168,6 +171,34 @@ size_t parseCommands(std::string_view reply, uint32_t lastId, Command* out, size
     lastId = id;
   }
   return n;
+}
+
+const char* debugRefusal(std::string_view line, size_t networks) {
+  const std::string_view verb = word(line);
+  if (verb == "reboot") return "the reboot command waits for a quiet moment";
+  if (verb != "wifi" || word(line) != "forget") return nullptr;
+  if (word(line).empty() || networks <= 1) return "it would leave no network to come home on";
+  return nullptr;
+}
+
+size_t maskSecrets(std::string_view in, const Secret* secrets, size_t n, char* out, size_t cap) {
+  if (!cap) return 0;
+  size_t w = 0;
+  for (size_t i = 0; i < in.size() && w + 1 < cap;) {
+    const Secret* hit = nullptr;
+    for (size_t k = 0; k < n; ++k) {
+      const std::string_view t = secrets[k].text;
+      if (t.size() >= kSecretMin && in.substr(i, t.size()) == t && (!hit || t.size() > hit->text.size())) hit = &secrets[k];
+    }
+    if (!hit) {
+      out[w++] = in[i++];
+      continue;
+    }
+    for (const char* a = hit->as; *a && w + 1 < cap;) out[w++] = *a++;
+    i += hit->text.size();
+  }
+  out[w] = 0;
+  return w;
 }
 
 bool trustedReplyUrl(const char* url) { return url && std::strncmp(url, kSite, std::strlen(kSite)) == 0; }

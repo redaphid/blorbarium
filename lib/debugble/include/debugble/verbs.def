@@ -36,3 +36,8 @@ DEBUG_VERB(CRADLE,  cradle,  Harm,  "[ms 1..30000]")            // held still in
 DEBUG_VERB(LEAN,    lean,    Harm,  "<aim 0..3> [ms 1..60000]") // tilted toward one rim edge
 DEBUG_VERB(NET,     net,     Harm,  "[clear|rx|tx|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode> [low|high]]")
 DEBUG_VERB(REBOOT,  reboot,  Harm,  "[quiet]")                  // save, then restart; quiet: radio blacked out until NET blackout 0
+// The cable's own (CLAUDE.md: one badge, three transports): its log, its
+// Wi-Fi, and every one of its DEBUG lines, each at its own reach (serialReach).
+DEBUG_VERB(LOG,     log,     Look,  "[lines 1..120]")           // the recent log, masked: networks by number, never an SSID or password
+DEBUG_VERB(WIFI,    wifi,    Look,  "")                         // the remembered networks by number (SSID length, security, last result) and the last outcome
+DEBUG_VERB(DEBUG,   debug,   Look,  "<a cable DEBUG line>")     // run as the cable runs it, at that line's reach: `DEBUG wifi set ...` needs the unlock

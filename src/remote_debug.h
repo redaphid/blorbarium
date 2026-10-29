@@ -43,6 +43,7 @@ struct Mem {
   rdebug::Command pending[kPending], got[kPending];
   uint8_t nPending = 0;
   char log[hw::LogTee::kRingBytes];
+  char logMasked[hw::LogTee::kRingBytes + 2048];   // a mask may be longer than what it hides
   char state[kStateBytes + 1];
   size_t stateLen = 0;
   bool crash = false;
@@ -59,6 +60,7 @@ static rdebug::ShotSlot shotSlot;
 static uint32_t lastId = 0;        // the newest command id seen this boot
 static uint64_t stateMark = 0;
 static uint32_t stateAt = 0, stateId = 0;
+static char stateWhat[24] = "state";   // what asked for the capture: `state`, or `debug <its verb>`
 static uint32_t reports = 0, reportFails = 0;
 static bool noReports = false;      // the last boot restarted inside a report: none this boot
 static esp_reset_reason_t resetWhy = ESP_RST_UNKNOWN;
@@ -230,10 +232,11 @@ static const char* build(size_t& len) {
   o.f("],");
   if (m->stateLen) o.str("state", m->state, m->stateLen);
   // The log's newest bytes, in what is left of kReportMax (the 2 closing bytes kept).
-  const size_t logLen = hw::logTee.tail(m->log, sizeof m->log);
+  // Masked: no Wi-Fi SSID or password leaves the badge (wififw::masked).
+  const size_t logLen = masked(m->log, hw::logTee.tail(m->log, sizeof m->log), m->logMasked, sizeof m->logMasked);
   const size_t used = o.n + std::strlen("\"log\":\"\",}");
   const size_t room = used + 2 < rdebug::kReportMax ? std::min(rdebug::kLogTailMax, rdebug::kReportMax - used - 2) : 0;
-  o.tail("log", m->log, logLen, room);
+  o.tail("log", m->logMasked, logLen, room);
   o.drop();
   o.f("}");
   if (o.full) return nullptr;
@@ -380,8 +383,9 @@ static void shotArrived(bool done, const char* text, size_t len, const char* err
 static void poll(uint32_t now) {
   if (!m) return;
   if (stateId && now - stateAt >= kStateSettleMs) {
-    m->stateLen = hw::logTee.since(stateMark, m->state, kStateBytes);
-    result(stateId, true, "state: %u bytes captured", unsigned(m->stateLen));
+    const size_t n = hw::logTee.since(stateMark, m->log, sizeof m->log);
+    m->stateLen = masked(m->log, n, m->state, sizeof m->state);
+    result(stateId, true, "%s: %u bytes captured", stateWhat, unsigned(m->stateLen));
     stateId = 0;
   }
   if (!m->nPending || window != Window::None || stateId) return;
@@ -402,8 +406,30 @@ static void poll(uint32_t now) {
       stateMark = hw::logTee.mark();
       stateAt = now;
       stateId = c.id;
+      std::snprintf(stateWhat, sizeof stateWhat, "state");
       remoteStateVerbs();
       return statusLine();
+    case rdebug::Verb::Debug: {
+      // Any of the cable's DEBUG lines (CLAUDE.md: one badge, three
+      // transports). The owner's token is this transport's gate; past it the
+      // badge refuses what Bluetooth's DEBUG refuses for a sealed dish, a
+      // trial or an update (debugble::serialReach), a reboot that would not
+      // wait for a quiet moment, and forgetting the last network it could
+      // come home on. What it prints goes in the next report's state, masked.
+      char verb[12] = "";
+      std::sscanf(c.text, "%11s", verb);
+      const debugble::Reach reach = debugble::serialReach(c.text);
+      if (const std::optional<debugble::Refusal> no =
+              debugble::refuseFor(reach, dish->sealed(), trial.onTrial(), updater.active()))
+        return result(c.id, false, "debug %s: refused, %s", verb, no->text);
+      if (const char* no = rdebug::debugRefusal(c.text, mem().networks.size()))
+        return result(c.id, false, "debug %s: refused, %s", verb, no);
+      stateMark = hw::logTee.mark();
+      stateAt = now;
+      stateId = c.id;
+      std::snprintf(stateWhat, sizeof stateWhat, "debug %s", verb);
+      return runDebug(c.text);
+    }
     case rdebug::Verb::Shot:
       return shot(c.id);
     case rdebug::Verb::Reboot:

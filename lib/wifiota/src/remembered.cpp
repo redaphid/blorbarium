@@ -63,6 +63,27 @@ void Networks::remember(const improv::Credentials& c) {
   for (size_t i = n_; i > 0; --i) nets_[i] = nets_[i - 1];
   nets_[0] = c;
   ++n_;
+  untried_ = uint8_t((untried_ << 1) & ((1u << n_) - 1u));   // the new one is tried until said otherwise
+}
+
+void Networks::setUntried(size_t i, bool on) {
+  if (i >= n_) return;
+  untried_ = on ? uint8_t(untried_ | 1u << i) : uint8_t(untried_ & ~(1u << i));
+}
+
+std::optional<size_t> Networks::next(const Seen* seen, size_t count) const {
+  for (size_t i = 0; i < n_; ++i)
+    if (untried(i)) return i;
+  return pick(seen, count);
+}
+
+bool Networks::forgetAt(size_t at) {
+  if (at >= n_) return false;
+  for (size_t i = at; i + 1 < n_; ++i) nets_[i] = nets_[i + 1];
+  --n_;
+  const uint8_t below = uint8_t(untried_ & ((1u << at) - 1u));
+  untried_ = uint8_t(below | ((untried_ >> (at + 1)) << at));
+  return true;
 }
 
 std::optional<size_t> Networks::find(std::string_view ssid) const {
@@ -73,10 +94,7 @@ std::optional<size_t> Networks::find(std::string_view ssid) const {
 
 bool Networks::forget(std::string_view ssid) {
   const std::optional<size_t> at = find(ssid);
-  if (!at) return false;
-  for (size_t i = *at; i + 1 < n_; ++i) nets_[i] = nets_[i + 1];
-  --n_;
-  return true;
+  return at && forgetAt(*at);
 }
 
 std::optional<size_t> Networks::pick(const Seen* seen, size_t count) const {

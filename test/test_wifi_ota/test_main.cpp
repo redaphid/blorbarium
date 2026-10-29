@@ -455,6 +455,51 @@ TEST(Networks, PickTheStrongestRememberedInRangeOrNone) {
   EXPECT_EQ(n.pick(twice, 3), n.find("Home")) << "two access points of one network: its best";
 }
 
+// An Improv provision whose join failed (a weak signal while the phone held
+// the connection, 2026-10-29) keeps the network, untried: the next Check
+// tries it first, in range or not, and once tried it is like any other.
+TEST(Networks, AnUntriedNetworkIsTheNextChecksFirstTryWhereverItIs) {
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  n.remember(net("Grandma"));
+  n.remember(net("Phone's"));
+  n.setUntried(0, true);
+  EXPECT_TRUE(n.untried(0));
+  EXPECT_EQ(n.untriedMask(), 0b001);
+  const wifiota::Seen home[] = {{"Home", -40}, {"Grandma", -70}};
+  EXPECT_EQ(n.next(home, 2), size_t(0)) << "not in the scan (hidden, or weak): tried all the same";
+  EXPECT_EQ(n.pick(home, 2), n.find("Home")) << "pick() alone is still the strongest in range";
+  n.setUntried(0, false);
+  EXPECT_EQ(n.next(home, 2), n.find("Home")) << "tried: the strongest in range again";
+  EXPECT_FALSE(n.next(nullptr, 0));
+}
+
+TEST(Networks, TheUntriedMarkFollowsItsNetworkThroughRememberAndForget) {
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  n.remember(net("Grandma"));
+  n.setUntried(1, true);   // Home
+  n.remember(net("Cafe"));
+  EXPECT_TRUE(n.untried(*n.find("Home"))) << "pushed down a place, still untried";
+  EXPECT_FALSE(n.untried(*n.find("Cafe"))) << "a network the cable or a join gave is tried";
+  EXPECT_TRUE(n.forget("Grandma"));
+  EXPECT_TRUE(n.untried(*n.find("Home")));
+  EXPECT_EQ(n.untriedMask(), 0b010);
+  EXPECT_TRUE(n.forgetAt(1));
+  EXPECT_EQ(n.untriedMask(), 0) << "forgotten with its mark";
+  EXPECT_FALSE(n.forgetAt(5));
+  n.remember(net("Home"));
+  n.remember(net("Grandma"));
+  n.setUntried(2, true);   // the oldest, Cafe
+  n.remember(net("Hotspot"));
+  EXPECT_FALSE(n.find("Cafe"));
+  EXPECT_EQ(n.untriedMask(), 0) << "the oldest pushed out takes its mark with it";
+  n.setUntriedMask(0xFF);
+  EXPECT_EQ(n.untriedMask(), 0b111) << "a stored mask is cut to the list";
+  n.clear();
+  EXPECT_EQ(n.untriedMask(), 0);
+}
+
 TEST(Networks, TheStoredBlobRoundTripsReadsTheOldOneAndRefusesJunk) {
   wifiota::Networks n;
   n.remember(*wifiota::credentials(std::string(32, 's'), std::string(64, 'p')));

@@ -286,6 +286,9 @@ runs fed the same lines give the same hash.
 | `ERR 409 NO_CREATURE` | a creature verb while he is an egg or a clutch |
 | `ERR 416 OUT_OF_RANGE` | a number out of range |
 
-`DEBUG` lines are serial-only. Over Bluetooth one reaches the protocol, which
-answers it with an error and never runs it. Testing over Bluetooth has its
-own characteristic, gated by a press on the dish: `docs/debug-ble.md`.
+`DEBUG` lines are not part of this protocol: sent here, one is answered with
+an error and never run. They run over Bluetooth on the debug link's own
+characteristic (`DEBUG <line>`, `LOG`, `WIFI`), at each line's reach, harm
+gated by a press on the dish, and over Wi-Fi as remote debug's `debug`:
+USB, Bluetooth and Wi-Fi are only transports, and each verb is listed once
+for all three in `docs/debug-ble.md` "Every verb, every transport".

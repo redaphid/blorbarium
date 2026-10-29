@@ -102,8 +102,22 @@ already, so no yes is asked:
     DEBUG ota check                 # tries it now: expect "up_to_date, nothing to install"
 
 Up to three are kept, newest first; the same SSID again replaces its
-password; a fourth pushes out the oldest. `DEBUG wifi forget "Home Network"`
-forgets one, `DEBUG wifi forget` all.
+password; a fourth pushes out the oldest. `DEBUG wifi forget 2` forgets
+network #2 (or `forget "Home Network"`), `DEBUG wifi forget` all. Every line
+names networks by number with the SSID's length, never the SSID, on every
+transport: the same verbs run over Bluetooth (`DEBUG ...`, `WIFI`) and Wi-Fi
+(`debug ...`), docs/debug-ble.md "Every verb, every transport".
+
+**A provision that could not join is kept, untried.** A phone at the badge
+holds the radio's time for Bluetooth, and a weak signal fails the join that
+was made while it was there (2026-10-29: the site said only "couldn't
+connect"). So the phone's network is remembered all the same, as #1, marked
+untried, and the phone still hears it could not join. The next Check, dark,
+no phone connected and advertising held, tries it before any other, in range
+or not (it may be hidden: joined without a channel); joined or failed, that
+try clears the mark, and `DEBUG wifi` (and `WIFI`, `debug wifi`) says how it
+went. The mark is its own NVS key, `untried`, beside `nets`, so an older image
+rolled back to still reads the list.
 
 **Over Bluetooth (Improv).** [Improv Wi-Fi](https://www.improv-wifi.com/ble/)
 is the open standard for handing a device a network over BLE (ESPHome, WLED,
@@ -244,13 +258,16 @@ neither an update nor a pet wipe touches:
 
 ## Serial and DEBUG verbs
 
-Every line starts `[wifi] `; every window, phase and Check-hold change is one line.
+Every line starts `[wifi] `; every window, phase and Check-hold change is one
+line. Each verb runs the same over Bluetooth (`DEBUG <line>`) and Wi-Fi's
+remote debug (`debug <line>`), behind those transports' gates.
 
 | Verb | Does |
 |---|---|
-| `DEBUG wifi` | Window, phase, networks, auto, hold (why no Check), next check, backoff streaks, vbat, station, Improv state, consent, trial, OTA owner, windows and scans since boot, last outcome, heap |
-| `DEBUG wifi set <ssid> [password]` | Remember a network (quote an SSID with spaces) |
-| `DEBUG wifi forget [ssid]` | Forget one, or all |
+| `DEBUG wifi` | Window, phase, networks, auto, hold (why no Check), next check, backoff streaks, vbat, station, Improv state, consent, trial, OTA owner, windows and scans since boot, last outcome, heap; then each network by number: SSID length, password length, security and signal in the last scan, untried, its last join |
+| `DEBUG wifi list` | The networks' lines alone |
+| `DEBUG wifi set <ssid> [password]` | Remember a network (quote an SSID with spaces); the reply gives lengths only |
+| `DEBUG wifi forget [<n>\|ssid]` | Forget one by number or SSID, or all |
 | `DEBUG wifi due` | The next automatic check is due now (still only dark and alone) |
 | `DEBUG ota check [url]` | A check now, whoever is there; the url (http or https) for a test manifest |
 | `DEBUG home [up\|down]` | Which way up is home on this badge (NVS) |

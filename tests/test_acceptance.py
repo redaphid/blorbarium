@@ -94,12 +94,16 @@ class FakeBadge:
         if d.startswith("wifi set"):
             ssid = re.match(r'wifi set "([^"]*)"', d).group(1)
             self.networks = [ssid]
-            self.emit('[wifi] network "%s" (with a password, saved; 1 remembered, newest first); DEBUG ota check tries it now' % ssid)
-        elif d == "wifi":
-            self.emit("[wifi] window=none phase=off networks=[%s] auto=1 hold=not_idle next_check_in=0s absent_streak=0 "
-                      "server_streak=0 vbat=4100 mV (pin 1366 mV)" % nets,
+            self.emit('[wifi] network #1: ssid %d B, password 8 B (saved; 1 remembered, newest first); DEBUG ota check tries it now'
+                      % len(ssid.encode()))
+        elif d == "wifi":   # 0.7.34: networks by number and SSID length, never by name
+            self.emit("[wifi] window=none phase=off networks=%d auto=1 hold=not_idle next_check_in=0s absent_streak=0 "
+                      "server_streak=0 vbat=4100 mV (pin 1366 mV)" % len(self.networks),
                       '[wifi] station=off improv=1/0 consent=none trial=0 confirm_pending=0 ota=idle owner=none windows=0 '
-                      'scans=0 last="" heap=90000 minheap=80000')
+                      'scans=0 last="" heap=90000 minheap=80000',
+                      *["[wifi] network #%d: ssid %d B, password 8 B, no scan yet this boot; last join: none this boot"
+                        % (i + 1, len(n.encode())) for i, n in enumerate(self.networks)],
+                      "[wifi] networks %d of 3; last outcome: none" % len(self.networks))
         elif d == "ota check":
             self.emit("[wifi] ota check asked (https://blorb.hypnodroid.com/fw/lcd128/manifest.json)",
                       "[wifi] window forced opens: dark=0 networks=1 heap=90000",
@@ -321,9 +325,11 @@ class Parsing(unittest.TestCase):
         self.assertEqual(lat["knock"]["seen"], (0.4, 1.1, 1.3))
         self.assertNotIn("detect", lat["knock"])
         self.assertEqual(lat["tilt"]["ack"][1], 35.5)
-        w = acc.parse_wifi_status(['[wifi] window=none phase=off networks=["a b" "c"] auto=1 hold=not_idle '
-                                   'next_check_in=900s absent_streak=1', "[wifi] station=off scans=2 last=\"x\""])
-        self.assertEqual(w["networks"], ["a b", "c"])
+        w = acc.parse_wifi_status(['[wifi] window=none phase=off networks=2 auto=1 hold=not_idle '
+                                   'next_check_in=900s absent_streak=1', "[wifi] station=off scans=2 last=\"x\"",
+                                   "[wifi] network #1: ssid 3 B, password 8 B, not in the last scan; last join: none this boot",
+                                   "[wifi] network #2: ssid 19 B, password 0 B, no scan yet this boot, UNTRIED (the next check tries it first); last join: x"])
+        self.assertEqual(w["networks"], [3, 19])   # by the SSID's length: no line names a network
         self.assertEqual((w["absent_streak"], w["scans"]), (1, 2))
         self.assertEqual(w["next_check_in"], 900)
         m = acc.parse_manifest_line("[wifi] manifest lcd128 0.7.12 size=2407760 fmt=1 auto=1: up_to_date (running 0.7.13 fmt=1)")

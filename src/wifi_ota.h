@@ -93,6 +93,13 @@ struct Mem {
   char lastOutcome[112] = "none";
   char forcedUrl[120] = "";   // `DEBUG ota check <url>`
   std::optional<improv::Credentials> provisionAsked, provisioning;
+  // How each network's last join went, for `DEBUG wifi`: kept by SSID (never
+  // printed), so it follows its network through remember and forget.
+  struct Note {
+    char ssid[33] = "";
+    char result[96] = "";
+  };
+  Note notes[wifiota::kMaxNetworks + 1];
 };
 static Mem* memp = nullptr;
 static Mem& mem() {
@@ -162,6 +169,40 @@ static void outcome(const char* fmt, ...) {
   say("%s: %s", wifiota::windowName(window), mem().lastOutcome);
 }
 
+// The note kept for this SSID: its own, else one no remembered network owns.
+static Mem::Note& noteFor(const char* ssid) {
+  Mem& mm = mem();
+  for (Mem::Note& n : mm.notes)
+    if (!std::strcmp(n.ssid, ssid)) return n;
+  for (Mem::Note& n : mm.notes)
+    if (!n.ssid[0] || !mm.networks.find(n.ssid)) {
+      std::snprintf(n.ssid, sizeof n.ssid, "%s", ssid);
+      n.result[0] = 0;
+      return n;
+    }
+  return mm.notes[0];
+}
+
+// The log as it leaves the badge (Bluetooth's LOG and DEBUG, the report's
+// log and state): every remembered SSID and password, the phone's network
+// in flight and any network forgotten this boot, replaced
+// (rdebug::maskSecrets). The badge's own lines name networks by number.
+static size_t masked(const char* in, size_t n, char* out, size_t cap) {
+  static constexpr const char* kNames[wifiota::kMaxNetworks] = {"<net #1>", "<net #2>", "<net #3>"};
+  rdebug::Secret secrets[2 * wifiota::kMaxNetworks + 4 + wifiota::kMaxNetworks + 1];
+  size_t k = 0;
+  const Mem& mm = mem();
+  for (size_t i = 0; i < mm.networks.size(); ++i) {
+    secrets[k++] = {mm.networks[i].ssid, kNames[i]};
+    secrets[k++] = {mm.networks[i].password, "<password>"};
+  }
+  for (const std::optional<improv::Credentials>* c : {&mm.provisioning, &mm.provisionAsked})
+    if (*c) secrets[k++] = {(*c)->ssid, "<the phone's network>"}, secrets[k++] = {(*c)->password, "<password>"};
+  for (const Mem::Note& note : mm.notes)
+    if (note.ssid[0] && !mm.networks.find(note.ssid)) secrets[k++] = {note.ssid, "<a forgotten network>"};
+  return rdebug::maskSecrets(std::string_view(in, n), secrets, k, out, cap);
+}
+
 static bool lowBattery() { return cellRead && cellMv >= 2500 && cellMv < wifiota::Schedule::kLowBatteryMv; }
 
 static wifiota::Facts facts(uint32_t now) {
@@ -218,6 +259,38 @@ static void closeWindow() {
   setPhase(Phase::Closing);
 }
 
+// How the join of the window's network went, in its note. A Check's (or a
+// cable's) try of an untried network is its try: the mark goes, and the next
+// check picks as ever.
+static void noteJoin(const char* fmt, ...) {
+  const improv::Credentials* c = window == Window::Provision ? (mem().provisioning ? &*mem().provisioning : nullptr)
+                                 : joinPick && *joinPick < mem().networks.size() ? &mem().networks[*joinPick]
+                                                                                 : nullptr;
+  if (!c) return;
+  Mem::Note& n = noteFor(c->ssid);
+  va_list ap;
+  va_start(ap, fmt);
+  std::vsnprintf(n.result, sizeof n.result, fmt, ap);
+  va_end(ap);
+  if (window == Window::Provision || !mem().networks.untried(*joinPick)) return;
+  mem().networks.setUntried(*joinPick, false);
+  say("network #%u had its first try (%s)", unsigned(*joinPick + 1), hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED");
+}
+
+// A provision that did not join (a weak signal while the phone was there, a
+// duel, someone came): the phone's network is remembered all the same, marked
+// untried, and the next Check, dark with no phone and advertising held, tries
+// it before any other (wifiota/remembered.h). The phone hears it could not join.
+static void provisionFailed(const char* why) {
+  improvBle.machine().couldNotJoin();
+  if (!mem().provisioning) return;
+  if (why) std::snprintf(noteFor(mem().provisioning->ssid).result, sizeof Mem::Note::result, "%s", why);
+  mem().networks.remember(*mem().provisioning);
+  mem().networks.setUntried(0, true);
+  say("provision: kept as network #1, untried: the next check, dark and alone, tries it first (%s; %u remembered)",
+      hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
+}
+
 // A Check that failed waits (schedule.h); a Provision tells the phone.
 static void failWindow(Failure why, const char* fmt, ...) {
   va_list ap;
@@ -227,7 +300,8 @@ static void failWindow(Failure why, const char* fmt, ...) {
   if (window == Window::Check) schedule.failed(why, millis());
   say("%s: FAILED %s%s", wifiota::windowName(window), mem().lastOutcome,
       window == Window::Check ? (why == Failure::Absent ? " (no network: next check later)" : " (the site: next check later)") : "");
-  if (window == Window::Provision) improvBle.machine().couldNotJoin();
+  if (phase == Phase::Joining || window == Window::Provision) noteJoin("%s", mem().lastOutcome);
+  if (window == Window::Provision) provisionFailed(nullptr);
   closeWindow();
 }
 
@@ -262,25 +336,27 @@ static void openWindow(Window w) {
   setPhase(Phase::Scanning);
 }
 
-// Networks are named in logs by their place in the list (#1 the newest),
-// never by SSID: only `DEBUG wifi` and the cable's set and forget name them.
+// Networks are named by their place in the list (#1 the newest), never by
+// SSID, in every line on every transport (`DEBUG wifi` gives the SSID's length).
 static void scanned() {
   int n = station.scanned();
   const bool late = n == WIFI_SCAN_RUNNING && millis() - phaseAt > kScanMs;
   if (n == WIFI_SCAN_RUNNING && !late) return;
   if (late) station.abandonScan();
-  if (n < 0) {   // a scan that failed is no proof of absence: try the newest network the driver's own way
-    say("the scan %s after %u ms (driver status %u): joining network #1 without it", late ? "did not finish" : "FAILED",
-        unsigned(millis() - phaseAt), unsigned(station.scanStatus()));
-    joinPick = 0;
-    station.join(mem().networks[0]);
+  if (n < 0) {   // a scan that failed is no proof of absence: try the newest network (an untried one first) the driver's own way
+    joinPick = mem().networks.next(nullptr, 0).value_or(0);
+    say("the scan %s after %u ms (driver status %u): joining network #%u without it", late ? "did not finish" : "FAILED",
+        unsigned(millis() - phaseAt), unsigned(station.scanStatus()), unsigned(*joinPick + 1));
+    station.join(mem().networks[*joinPick]);
     return setPhase(Phase::Joining);
   }
-  const std::optional<size_t> pick = mem().networks.pick(station.seen(), station.seenCount());
+  // An untried network first, in range or not (it may be hidden: joined without a channel), else the strongest.
+  const std::optional<size_t> pick = mem().networks.next(station.seen(), station.seenCount());
   say("scan done in %u ms: %d networks seen, %s", unsigned(millis() - phaseAt), n,
       pick ? "a remembered one among them" : "none of ours");
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(mem().networks.size()), n);
-  say("joining network #%u of %u", unsigned(*pick + 1), unsigned(mem().networks.size()));
+  say("joining network #%u of %u%s", unsigned(*pick + 1), unsigned(mem().networks.size()),
+      mem().networks.untried(*pick) ? " (untried: a provision could not join it; its first try)" : "");
   joinPick = *pick;
   station.join(mem().networks[*pick]);
   setPhase(Phase::Joining);
@@ -321,6 +397,7 @@ static void readShot() {
 static void joined() {
   say("joined in %u ms rssi=%d ch=%u ip=%s heap=%u", unsigned(millis() - phaseAt), int(WiFi.RSSI()), unsigned(WiFi.channel()),
       WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
+  noteJoin("joined (%s) rssi=%d ch=%u", wifiota::windowName(window), int(WiFi.RSSI()), unsigned(WiFi.channel()));
   if (window != Window::Provision) {
     if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
     return;
@@ -522,7 +599,8 @@ static void poll(uint32_t now) {
     if (window == Window::Check) {   // not a failure: due again the next time it is dark and alone
       std::snprintf(mem().lastOutcome, sizeof mem().lastOutcome, "closed early: someone came");
     }
-    if (window == Window::Provision) improvBle.machine().couldNotJoin();
+    if (window == Window::Provision)
+      provisionFailed(f.radioBusy ? "closed early: the radio was wanted for a duel" : "closed early: someone was using the badge");
     return closeWindow();
   }
   switch (phase) {
@@ -572,7 +650,7 @@ static void poll(uint32_t now) {
     mem().provisionAsked.reset();
     if (f.radioBusy) {
       say("provision refused: the radio is in a duel");
-      improvBle.machine().couldNotJoin();
+      provisionFailed("not tried: the radio was in a duel");
       mem().provisioning.reset();
       return;
     }
@@ -604,7 +682,7 @@ static void poll(uint32_t now) {
 static bool yieldRadio() {
   if (window != Window::None && window != Window::Confirm && phase != Phase::Closing) {
     say("%s: closed early: the radio is wanted for a duel", wifiota::windowName(window));
-    if (window == Window::Provision) improvBle.machine().couldNotJoin();
+    if (window == Window::Provision) provisionFailed("closed early: the radio was wanted for a duel");
     closeWindow();
   }
   return station.isUp();
@@ -731,6 +809,27 @@ static void draw(paint::Canvas240& cv) {
 }
 
 // ---- the cable's verbs ---------------------------------------------------------------
+// The cable's, Bluetooth's (DEBUG, WIFI) and Wi-Fi's (`debug`): one badge, three transports.
+
+// Each remembered network by number: its SSID's length (never the SSID), its
+// password's, its security and signal in the last scan, whether it waits
+// for its first try, and how its last join this boot went.
+static void networkLines() {
+  for (size_t i = 0; i < mem().networks.size(); ++i) {
+    const improv::Credentials& c = mem().networks[i];
+    char heard[56] = "no scan yet this boot";
+    if (scans) {
+      const std::optional<hw::WifiStation::Heard> h = station.heard(c.ssid);
+      if (h) std::snprintf(heard, sizeof heard, "%s ch %u rssi %d in the last scan", h->security, unsigned(h->channel), h->rssi);
+      else std::snprintf(heard, sizeof heard, "not in the last scan");
+    }
+    const Mem::Note& n = noteFor(c.ssid);
+    say("network #%u: ssid %u B, password %u B, %s%s; last join: %s", unsigned(i + 1), unsigned(std::strlen(c.ssid)),
+        unsigned(std::strlen(c.password)), heard, mem().networks.untried(i) ? ", UNTRIED (the next check tries it first)" : "",
+        n.result[0] ? n.result : "none this boot");
+  }
+  say("networks %u of %u; last outcome: %s", unsigned(mem().networks.size()), unsigned(wifiota::kMaxNetworks), mem().lastOutcome);
+}
 
 static void statusLine() {
   const uint32_t now = millis();
@@ -745,6 +844,7 @@ static void statusLine() {
       int(trial.onTrial()), int(bool(confirmToken)), updater.active() ? (updater.ready() ? "ready" : "active") : "idle",
       updater.ownedBy(kWifiPeer) ? "wifi" : updater.active() ? "page" : "none", unsigned(windows), unsigned(scans),
       mem().lastOutcome, unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
+  networkLines();
 }
 
 // `"My Net" pass` or `MyNet pass`: the SSID, quoted if it has spaces, then the rest as the password.
@@ -778,12 +878,21 @@ static void wifiVerb(const char* line) {
         unsigned(wifiota::Schedule::kDarkMs / 1000));
     return statusLine();
   }
+  // `DEBUG wifi forget [<n>|<ssid>]`: by its number in `DEBUG wifi`, or its SSID; bare, every network.
   if (!std::strcmp(what, "forget")) {
     const char* rest = std::strstr(line, "forget") + 6;
     while (*rest == ' ') ++rest;
     if (*rest) {
-      const std::optional<improv::Credentials> c = parseSet(rest);   // the SSID, quoted or not
-      if (!c || !mem().networks.forget(c->ssid)) return say("forget: no network \"%s\" (DEBUG wifi lists them)", rest);
+      char* end = nullptr;
+      const unsigned long k = std::strtoul(rest, &end, 10);
+      while (end && *end == ' ') ++end;
+      const bool byNumber = end != rest && !*end && k >= 1 && mem().networks.forgetAt(k - 1);
+      if (!byNumber) {
+        const std::optional<improv::Credentials> c = parseSet(rest);   // the SSID, quoted or not
+        if (!c || !mem().networks.forget(c->ssid))
+          return say("forget: no network #%.3s or with that SSID (%u B sent; DEBUG wifi numbers them)", rest,
+                     unsigned(std::strlen(rest)));
+      }
     } else {
       mem().networks.clear();
     }
@@ -798,8 +907,9 @@ static void wifiVerb(const char* line) {
                  "to 64; got %u bytes after \"set\")",
                  unsigned(std::strlen(std::strstr(line, "set") + 3)));
     mem().networks.remember(*c);
-    say("network \"%s\" (%s password, %s; %u remembered, newest first); DEBUG ota check tries it now", c->ssid,
-        c->password[0] ? "with a" : "no", hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
+    say("network #1: ssid %u B, password %u B (%s; %u remembered, newest first); DEBUG ota check tries it now",
+        unsigned(std::strlen(c->ssid)), unsigned(std::strlen(c->password)),
+        hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
     return;
   }
   // `DEBUG wifi verify <ssid> <password>`, as `set` takes them: whether what
@@ -816,14 +926,8 @@ static void wifiVerb(const char* line) {
         unsigned(std::strlen(n.password)));
     return;
   }
-  // `DEBUG wifi list`: the remembered networks by name, newest first. The only
-  // line that names them (with set's and forget's own replies).
-  if (!std::strcmp(what, "list")) {
-    for (size_t i = 0; i < mem().networks.size(); ++i)
-      say("network #%u \"%s\" (%s password)", unsigned(i + 1), mem().networks[i].ssid,
-          mem().networks[i].password[0] ? "with a" : "no");
-    return say("networks %u of %u", unsigned(mem().networks.size()), unsigned(wifiota::kMaxNetworks));
-  }
+  // `DEBUG wifi list`: the remembered networks by number, newest first (as `DEBUG wifi` ends).
+  if (!std::strcmp(what, "list")) return networkLines();
   // `DEBUG wifi stack <KB>`: the TLS GET task's stack until reset (each GET logs what it never used).
   if (!std::strcmp(what, "stack")) {
     char kb[8] = "";
@@ -835,7 +939,7 @@ static void wifiVerb(const char* line) {
   }
   if (!std::strcmp(what, "on") || !std::strcmp(what, "off"))
     return say("automatic checks are always on: there is no switch (docs/ota.md, the owner's rule)");
-  say("want: wifi [status|due|set <ssid> [password]|list|forget [ssid]|verify <ssid> [password]|stack <KB>]");
+  say("want: wifi [status|due|set <ssid> [password]|list|forget [<n>|ssid]|verify <ssid> [password]|stack <KB>]");
 }
 
 // `DEBUG ota check [url]`: a check now, idle or not; the url (http or https) for a test manifest.
@@ -860,6 +964,7 @@ static void otaVerb(const char* line) {
 }  // namespace wififw
 
 static void wifiVerb(const char* line) { wififw::wifiVerb(line); }
+static size_t maskLog(const char* in, size_t n, char* out, size_t cap) { return wififw::masked(in, n, out, cap); }
 
 // `DEBUG wpa3 [plain|both|hnp|h2e] [cpu] [psnone] [mac=<12 hex>]`: how WPA3 joins are made until reset
 // (hw::Wpa3Cell). psnone turns Bluetooth off for good: `DEBUG reboot` after.

@@ -302,7 +302,7 @@ TEST(Commands, TheAllowlistParses) {
 }
 
 TEST(Commands, AnythingElseIsRefusedAndReported) {
-  // Nothing that could switch updates off, forget a network, erase or flash anything.
+  // A cable verb comes only inside `debug` (DebugCarriesACableLine); a bare word is no command.
   for (const char* verb : {"wifi", "forget", "off", "erase", "ota", "flash", "auto", "DEBUG", "CHECK", "rm"}) {
     const auto c = parse(std::string("blorb-cmds 1\n7 ") + verb + "\n");
     ASSERT_EQ(c.size(), 1u) << verb;
@@ -341,6 +341,60 @@ TEST(Commands, AMarqueeCarriesItsTextWithinTheLimit) {
   ASSERT_EQ(c.size(), 2u);
   EXPECT_STREQ(c[0].text, "one");
   EXPECT_EQ(c[1].verb, Verb::Reboot);
+}
+
+// CLAUDE.md: every cable verb over Wi-Fi too. `debug <line>` carries one, as
+// the cable takes it (a leading "DEBUG " is dropped); the badge runs it.
+TEST(Commands, DebugCarriesACableLine) {
+  auto c = parse("blorb-cmds 1\n11 debug wifi forget 2 \n12 debug DEBUG wifi\n13 reboot\n");
+  ASSERT_EQ(c.size(), 3u);
+  EXPECT_TRUE(c[0].ok);
+  EXPECT_EQ(c[0].verb, Verb::Debug);
+  EXPECT_STREQ(c[0].text, "wifi forget 2");
+  EXPECT_STREQ(c[1].text, "wifi") << "the cable's own prefix is taken off";
+  EXPECT_EQ(c[2].verb, Verb::Reboot) << "a debug line ends at its line";
+  EXPECT_STREQ(rdebug::verbName(Verb::Debug), "debug");
+  EXPECT_TRUE(parse("blorb-cmds 1\n9 debug " + std::string(rdebug::kDebugMax, 'x') + "\n")[0].ok);
+  EXPECT_FALSE(parse("blorb-cmds 1\n9 debug " + std::string(rdebug::kDebugMax + 1, 'x') + "\n")[0].ok);
+  EXPECT_FALSE(parse("blorb-cmds 1\n9 debug\n")[0].ok);
+  EXPECT_FALSE(parse("blorb-cmds 1\n9 debug DEBUG \n")[0].ok);
+  EXPECT_FALSE(parse("blorb-cmds 1\n9 debug wifi\tset\n")[0].ok);
+}
+
+// Past the owner's token, the badge still keeps a way home: a `debug` line
+// never forgets the last network, nor all of them, and never restarts
+// outside the quiet moment the reboot command waits for.
+TEST(Commands, DebugNeverLeavesTheBadgeWithoutAWayHome) {
+  EXPECT_EQ(rdebug::debugRefusal("wifi forget 2", 2), nullptr);
+  EXPECT_EQ(rdebug::debugRefusal("wifi forget \"Grandma Net\"", 3), nullptr);
+  EXPECT_NE(rdebug::debugRefusal("wifi forget 1", 1), nullptr) << "the last one";
+  EXPECT_NE(rdebug::debugRefusal("wifi forget", 3), nullptr) << "bare forgets every one";
+  EXPECT_NE(rdebug::debugRefusal("wifi  forget  ", 3), nullptr);
+  EXPECT_NE(rdebug::debugRefusal("reboot", 2), nullptr);
+  EXPECT_NE(rdebug::debugRefusal("reboot quiet", 2), nullptr);
+  EXPECT_EQ(rdebug::debugRefusal("wifi set Home pw", 0), nullptr) << "adding one is a way home";
+  EXPECT_EQ(rdebug::debugRefusal("wifi", 0), nullptr);
+  EXPECT_EQ(rdebug::debugRefusal("power stats", 0), nullptr);
+}
+
+// ---- the log, masked ----
+
+static std::string masked(const std::string& in, std::initializer_list<rdebug::Secret> s, size_t cap = 256) {
+  std::vector<char> out(cap);
+  const size_t n = rdebug::maskSecrets(in, s.begin(), s.size(), out.data(), cap);
+  EXPECT_EQ(n, std::strlen(out.data()));
+  return std::string(out.data(), n);
+}
+
+TEST(Mask, EveryRememberedSsidAndPasswordIsReplaced) {
+  EXPECT_EQ(masked("[wifi] joined HomeNet with hunter22, HomeNet again",
+                   {{"HomeNet", "<net #1>"}, {"hunter22", "<password>"}}),
+            "[wifi] joined <net #1> with <password>, <net #1> again");
+  EXPECT_EQ(masked("nothing secret here", {{"HomeNet", "<net #1>"}}), "nothing secret here");
+  EXPECT_EQ(masked("x Home5G y", {{"Home", "<net #2>"}, {"Home5G", "<net #1>"}}), "x <net #1> y") << "the longest wins";
+  EXPECT_EQ(masked("a abc b", {{"abc", "<net #1>"}}), "a abc b") << "too short to mask safely";
+  EXPECT_EQ(masked("HomeNet HomeNet", {{"HomeNet", "<net #1>"}}, 12), "<net #1> <n") << "cut at cap, NUL kept";
+  EXPECT_EQ(masked("", {{"HomeNet", "<net #1>"}}), "");
 }
 
 TEST(Commands, EachIdRunsAtMostOnce) {

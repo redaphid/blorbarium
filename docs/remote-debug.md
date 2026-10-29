@@ -59,13 +59,19 @@ has closed, one a loop pass, and the next report carries the results.
 | `state` | STATE, `DEBUG power status`, `power stats`, `fps` and `wifi status` printed, and what they printed (2 KB) captured for the next report |
 | `shot` | the screen's last frame (it is dark: nothing repaints it), halved to 120x120 (each pixel the mean of four), PackBits-coded as the cable's shot lines (`rdebug/shot.h`, about 10 to 42 KB). It goes in the next window, after the report and only if the report went, in its own POST to `/api/debug` (kind `shot`), 1 KB a write, when 24 KB of internal RAM is free with a 9 KB block (else it waits). One try: sent or failed, it is gone, and the result says which (`shot: 120x120 uploaded as #<id>`). `/admin` draws it. The first version put the 240x240 frame (132 KB) in the report: it failed twice on the board with minheap 2.6 KB, and every report after carried it again |
 | `reboot` | restarts once dark and alone, dark after the restart (like an update's trial); its result comes from the next boot |
+| `debug <line>` | any of the cable's `DEBUG` lines (`DEBUG ` may lead), at most 120 printable characters: one badge, three transports (CLAUDE.md; docs/debug-ble.md "Every verb, every transport"). What it prints in 1.5 s is captured, masked, in the next report's `state`. The owner's token is this transport's gate; past it the badge refuses what Bluetooth's `DEBUG` refuses for a sealed dish, a trial or an update (`debugble::serialReach`), `debug reboot` (use `reboot`, which waits for a quiet moment), and `debug wifi forget` that would leave no network to come home on (the last one, or bare "all") |
 | `marquee <text>` | a message for the kids: `showMarquee(text)`, full-screen scrolling text. At most 120 printable ASCII characters (`rdebug::kMarqueeMax`); the site turns accents into plain letters, anything else into spaces, and cuts it to 120. Until the marquee branch lands, main.cpp's stub only logs it |
 
-Nothing else exists: no verb can turn the automatic checks off, forget or
-change a network, erase anything, or install firmware. The interval's bounds
-keep the checks coming at least every 12 h. The allowlist is checked when a
+Nothing else exists: no verb can turn the automatic checks off (there is no
+switch on any transport) or install firmware, and `debug` never forgets the
+last network. The interval's bounds keep the checks coming at least every 12 h. The allowlist is checked when a
 command is queued, again before the site sends it, and again on the badge
 (lib/rdebug, test/test_remote_debug).
+
+Masked: the report's `log` and `state` never hold a Wi-Fi SSID or password.
+Every remembered one is replaced (`<net #N>`, `<password>`,
+`rdebug::maskSecrets`) before the body is built, as Bluetooth's `LOG` and
+`DEBUG` replies are.
 
 ## Security
 
@@ -79,8 +85,9 @@ once (the site hands it over once and marks it delivered; the badge drops ids
 it has seen), and a command not fetched within 7 days expires.
 
 What that leaves: someone holding the admin token, or the Cloudflare account,
-could queue the commands above, at worst a reboot per window or checks every
-30 minutes. They could already replace the pets' lines with that access, and
+could queue the commands above: through `debug`, anything the cable can do
+but forget the last network, install firmware or restart outside a quiet
+moment. They could already replace the pets' lines with that access, and
 still could not install firmware (manifests are signed with the owner's
 offline key). A signed-command scheme would close that gap at the cost of a
 tool on the owner's laptop and a key in the field; with no command able to do

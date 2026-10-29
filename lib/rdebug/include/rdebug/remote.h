@@ -12,8 +12,9 @@
 // site, whose chain the badge checks against its pinned roots and whose name
 // it checks against the certificate (hw/net_job.h, hw/tls_roots.h). So only
 // the site can send them, and the site queues them only for the owner's
-// ADMIN_TOKEN. And none of them can turn updates off, forget a network, or
-// touch the firmware: the allowlist has no such verb.
+// ADMIN_TOKEN. None of them can turn updates off or touch the firmware; a
+// `debug` line runs any cable verb (CLAUDE.md), and the badge refuses one
+// that would forget the last network it could come home on.
 #pragma once
 
 #include <cstddef>
@@ -99,6 +100,12 @@ enum class Verb : uint8_t {
   Shot,       // the screen's last frame, in the next report
   Reboot,     // restart, once dark and alone
   Marquee,    // a message for the kids: full-screen scrolling text (showMarquee), at most kMarqueeMax characters
+  // Any of the cable's `DEBUG` verbs (CLAUDE.md: one badge, three
+  // transports), the line without "DEBUG ", at most kDebugMax characters.
+  // Its output goes in the next report's `state`; the badge refuses what it
+  // refuses on Bluetooth for a trial or an update, and forgetting the last
+  // network it could come home on.
+  Debug,
 };
 const char* verbName(Verb v);
 
@@ -110,12 +117,13 @@ constexpr uint32_t kIntervalMaxMinutes = 12 * 60;
 // The marquee's text: printable ASCII (what the badge's font draws), at most
 // this many characters; web/src/reports.js clamps to the same.
 constexpr size_t kMarqueeMax = 120;
+constexpr size_t kDebugMax = kMarqueeMax;   // a DEBUG line's text shares the marquee's buffer
 
 struct Command {
   uint32_t id = 0;
   Verb verb = Verb::Unknown;
   uint32_t arg = 0;
-  char text[kMarqueeMax + 1] = "";   // Marquee's
+  char text[kMarqueeMax + 1] = "";   // Marquee's and Debug's
   bool ok = false;           // on the list and its argument in bounds
   const char* why = "";      // when not ok: the refusal, for the report
 };
@@ -125,6 +133,7 @@ struct Command {
 //   blorb-cmds 1
 //   <id> <verb> [arg]
 //   <id> marquee <text to the end of the line>
+//   <id> debug <a DEBUG line, to the end of the line>
 //   ...
 //
 // Each line with an id above `lastId` is one command (a repeat or an older
@@ -134,6 +143,31 @@ struct Command {
 // reported. Returns how many were written to `out`; nothing at all unless
 // the first line is the header.
 size_t parseCommands(std::string_view reply, uint32_t lastId, Command* out, size_t max);
+
+// What the badge refuses of a `debug` line over Wi-Fi beyond what Bluetooth
+// refuses (debugble::refuseFor): `reboot`, which the reboot command does at a
+// quiet moment, and a `wifi forget` that would leave no network to come home
+// on (bare, which forgets them all, or with `networks` at most 1). nullptr:
+// it may run.
+const char* debugRefusal(std::string_view line, size_t networks);
+
+// ---- the log, masked ---------------------------------------------------------
+//
+// What the badge reads back over Bluetooth (LOG) and sends home over Wi-Fi
+// (the report's log and state) never holds a Wi-Fi network's SSID or
+// password: every remembered one is replaced by `as` ("<net #1>",
+// "<password>") wherever it appears. Secrets shorter than kSecretMin are
+// left alone (two letters would mangle every line); the badge's own lines
+// never print them anyway: they name networks by number.
+struct Secret {
+  std::string_view text;
+  const char* as;
+};
+constexpr size_t kSecretMin = 4;
+// `in` with every secret replaced, into `out` (always NUL-terminated, cut at
+// `cap`). The longest secret wins where two start at one byte. Returns the
+// length written.
+size_t maskSecrets(std::string_view in, const Secret* secrets, size_t n, char* out, size_t cap);
 
 // Commands are taken only from a reply to this URL's site over HTTPS (a
 // cable's `DEBUG ota check http://...` points the manifest elsewhere; the
