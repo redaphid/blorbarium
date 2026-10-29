@@ -129,7 +129,12 @@
     // `onAsk` runs when the dish is asking, so the page can say what to do.
     // Rejects with code 4 (ERROR.notAuthorized) when nobody said yes in time.
     async authorized(onAsk, ms = ASK_MS) {
+      const again = Boolean(this.chars);
       await this.start();
+      // A second try on the same connection (the last yes lapsed): read the
+      // state again, as start() did the first time. From 0.7.36 the dish asks
+      // on a read of its state, so this is what puts the question back up.
+      if (again) this.state = bytesOf(await this.retry(() => this.chars.state.readValue()))[0];
       const yes = (s) => s === STATE.authorized || s === STATE.provisioned;
       if (yes(this.state)) return;
       onAsk?.();

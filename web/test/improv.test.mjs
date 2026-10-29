@@ -110,6 +110,19 @@ test("nobody says yes: rejected as not authorized, and the network never sent", 
   assert.equal(dish.written.length, 0);
 });
 
+test("a second try after the yes lapsed reads the state again, so the dish asks again", async () => {
+  const dish = fakeDish({ asks: true, says: false });
+  const c = new Client(dish.service);
+  const state = await dish.service.getCharacteristic(CURRENT_STATE);
+  let reads = 0;
+  const read = state.readValue.bind(state);
+  state.readValue = async () => (++reads, read());
+  await assert.rejects(c.authorized(null, 20), { code: ERROR.notAuthorized });
+  assert.equal(reads, 1);
+  await assert.rejects(c.authorized(null, 20), { code: ERROR.notAuthorized });
+  assert.equal(reads, 2, "the retry read the state: a 0.7.36 dish asks on that read");
+});
+
 test("a bad name throws before the dish is asked", async () => {
   const dish = fakeDish({ asks: true });
   const c = new Client(dish.service);
