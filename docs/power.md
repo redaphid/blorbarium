@@ -47,6 +47,14 @@ SDK needed):
   INT1 (GPIO47, `tools/wom_probe`) toggling on anything past 64 mg
   (`DEBUG power wom <mg>` tries others until reset). GPIO47 is not an RTC pin,
   so it wakes light sleep but could not wake deep sleep.
+- **A frozen IMU** is reset. An ESP reset (a flash, a crash) does not reset
+  the QMI8658, and on moth (2026-10-28) one that caught it in wake on motion
+  left it returning one sample, to the digit, through four reboots: the pin
+  still fired at a pick-up, but every listen saw a badge lying still. So
+  `imu::begin` soft-resets the chip (RESET 0xB0) after logging what it found
+  (`[hw] imu at boot, before its soft reset: ... data moving|FROZEN`), and
+  `imu::read` soft-resets it again after 50 identical reads over a second
+  (`[hw] !!! imu frozen`), at most every 10 s.
 - **The timer** wakes it at whichever comes first: the next scheduled Wi-Fi
   check (`power::napSleepMs`: the check opens on that very pass, so a nap
   never delays an update; `test_wifi_ota` NapAndSchedule), the reminder, or a

@@ -1067,6 +1067,13 @@ static void reportBoot() {
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
+  if (imuOk) {
+    const imu::BootState& b = imu::bootState;
+    Serial.printf("[hw] imu at boot, before its soft reset: ctrl1=%02x ctrl2=%02x ctrl7=%02x ctrl8=%02x status0=%02x "
+                  "samples in 30 ms=%u data %s; reset %s\n",
+                  b.ctrl1, b.ctrl2, b.ctrl7, b.ctrl8, b.status0, unsigned(b.tsStep), b.dataMoved ? "moving" : "FROZEN",
+                  b.resetOk ? "ok" : "NOT CONFIRMED");
+  }
   const OccupantSummary o = summarize(dish->occupant());
   if (dish->boot() == blorb::Boot::ReadOnlyNewer)
     Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
@@ -1709,6 +1716,7 @@ static bool powerHeld();
 static bool remotePress(uint32_t ms, bool twice);
 
 static void wifiVerb(const char* line);   // src/wifi_ota.h
+static void wpa3Verb(const char* line);   // src/wifi_ota.h
 static void otaVerb(const char* line);
 
 // `DEBUG home [up|down]`: which way up is home on this badge, kept in NVS
@@ -1770,6 +1778,7 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "duel") == 0) return duelNow();
   if (std::strcmp(verb, "air") == 0) return airVerb(a);
   if (std::strcmp(verb, "wifi") == 0) return wifiVerb(line);
+  if (std::strcmp(verb, "wpa3") == 0) return wpa3Verb(line);
   if (std::strcmp(verb, "ota") == 0) return otaVerb(line);
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);

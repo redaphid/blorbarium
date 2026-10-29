@@ -18,6 +18,10 @@
 #include <esp_coexist.h>
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
+#include <esp_netif.h>
+#include <esp_bt.h>
+#include <lwip/dhcp.h>
+#include <lwip/netif.h>
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <esp_pm.h>
@@ -30,6 +34,20 @@
 #include "wifiota/remembered.h"
 
 namespace hw {
+
+// `DEBUG wpa3 ...` (src/wifi_ota.h): how the WPA3 joins after it are made, to
+// find what a WPA3 network's router wants (docs/ota.md "WPA3"). Until reset;
+// untouched, the join is option B: SAE both, PMF capable, Wi-Fi first.
+struct Wpa3Cell {
+  bool asked = false;    // set by the verb: the join logs its cell, and where DHCP stands every 2 s
+  bool plain = false;    // the core's WiFi.begin as 0.7.24: no SAE fields set
+  uint8_t pwe = WPA3_SAE_PWE_BOTH;
+  bool cpuMax = false;   // 240 MHz from the join on
+  bool psNone = false;   // WIFI_PS_NONE: refused unless Bluetooth's controller is off
+  bool setMac = false;   // join as another badge's MAC (is the router letting only known devices have an address?)
+  uint8_t mac[6] = {};
+};
+inline Wpa3Cell wpa3Cell;
 
 class WifiStation {
  public:
@@ -179,10 +197,20 @@ class WifiStation {
       // Bluetooth until the join settles: SAE's commit and confirm frames
       // must not wait behind it.
       esp_wifi_disconnect();
-      r = WiFi.begin(c.ssid, pass, best->channel, best->bssid, false);
+      const Wpa3Cell& cell = wpa3Cell;
+      if (cell.cpuMax) setCpuFrequencyMhz(240);
+      if (cell.setMac) {
+        const esp_err_t e = esp_wifi_set_mac(WIFI_IF_STA, cell.mac);
+        esp_netif_t* ni = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        const esp_err_t e2 = ni ? esp_netif_set_mac(ni, const_cast<uint8_t*>(cell.mac)) : -1;
+        Serial.printf("[wifi] wpa3 cell: mac set ..:%02x:%02x err=%d netif=%d\n", cell.mac[4], cell.mac[5], int(e), int(e2));
+      }
+      r = WiFi.begin(c.ssid, pass, best->channel, best->bssid, cell.plain);
       wifi_config_t conf;
-      if (r != WL_CONNECT_FAILED && esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
-        conf.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+      if (cell.plain) {
+        // as 0.7.24
+      } else if (r != WL_CONNECT_FAILED && esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
+        conf.sta.sae_pwe_h2e = wifi_sae_pwe_method_t(cell.pwe);
         conf.sta.pmf_cfg.capable = true;
         conf.sta.pmf_cfg.required = false;
         conf.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
@@ -190,9 +218,21 @@ class WifiStation {
       } else {
         r = WL_CONNECT_FAILED;
       }
-      if (r != WL_CONNECT_FAILED) {
+      if (r != WL_CONNECT_FAILED && !cell.plain) {
         holdCoex(true);
         if (esp_wifi_connect() != ESP_OK) r = WL_CONNECT_FAILED;
+      }
+      if (cell.asked) {
+        esp_err_t psErr = ESP_OK;
+        if (cell.psNone)   // the IDF aborts on PS_NONE while Bluetooth's controller is up
+          psErr = esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE ? esp_wifi_set_ps(WIFI_PS_NONE)
+                                                                                 : ESP_ERR_INVALID_STATE;
+        wifi_ps_type_t ps = WIFI_PS_MIN_MODEM;
+        esp_wifi_get_ps(&ps);
+        Serial.printf("[wifi] wpa3 cell: %s pwe=%u cpu=%u MHz ps=%d (ps none err %d) bt=%d\n", cell.plain ? "plain" : "option-b",
+                      unsigned(cell.pwe), unsigned(getCpuFrequencyMhz()), int(ps), int(psErr),
+                      int(esp_bt_controller_get_status()));
+        dhcpAt_ = 0;
       }
     }
     if (best)
@@ -208,6 +248,17 @@ class WifiStation {
     if (!up_) return Join::Failed;
     if (beginStatus_ == WL_CONNECT_FAILED) return holdCoex(false), Join::Failed;   // esp_wifi_connect refused at once
     if (WiFi.status() == WL_CONNECTED) return holdCoex(false), joinedOnce_ = true, Join::Joined;
+    if (wpa3_ && wpa3Cell.asked && millis() - dhcpAt_ >= 2000) {   // where DHCP stands (lwIP: 6 is SELECTING), every 2 s
+      dhcpAt_ = millis();
+      wifi_ap_record_t ap;
+      const bool assoc = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+      esp_netif_t* ni = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      struct netif* n = ni ? netif_get_by_index(esp_netif_get_netif_impl_index(ni)) : nullptr;
+      const struct dhcp* d = n ? netif_dhcp_data(n) : nullptr;
+      Serial.printf("[wifi] wpa3 cell: t=%u assoc=%d rssi=%d lwip_dhcp_state=%d tries=%d cpu=%u\n", unsigned(millis() - attemptAt_),
+                    int(assoc), assoc ? int(ap.rssi) : 0, d ? int(d->state) : -1, d ? int(d->tries) : -1,
+                    unsigned(getCpuFrequencyMhz()));
+    }
     // A disconnect since the join, other than the core's own one retry's: the reason says why.
     if (disconnects_ != disconnectsAtJoin_ && (reason_ == WIFI_REASON_AUTH_FAIL || reason_ == WIFI_REASON_NO_AP_FOUND ||
                                                reason_ == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
@@ -248,6 +299,7 @@ class WifiStation {
   int beginStatus() const { return beginStatus_; }
 
  private:
+  mutable uint32_t dhcpAt_ = 0;   // DEBUG wpa3's DHCP line
   struct Ap {
     char ssid[33] = "";
     int rssi = -127;

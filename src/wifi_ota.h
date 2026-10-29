@@ -860,4 +860,30 @@ static void otaVerb(const char* line) {
 }  // namespace wififw
 
 static void wifiVerb(const char* line) { wififw::wifiVerb(line); }
+
+// `DEBUG wpa3 [plain|both|hnp|h2e] [cpu] [psnone] [mac=<12 hex>]`: how WPA3 joins are made until reset
+// (hw::Wpa3Cell). psnone turns Bluetooth off for good: `DEBUG reboot` after.
+static void wpa3Verb(const char* line) {
+  hw::Wpa3Cell c;
+  c.asked = true;
+  c.plain = std::strstr(line, " plain") != nullptr;
+  if (std::strstr(line, " hnp")) c.pwe = WPA3_SAE_PWE_HUNT_AND_PECK;
+  if (std::strstr(line, " h2e")) c.pwe = WPA3_SAE_PWE_HASH_TO_ELEMENT;
+  c.cpuMax = std::strstr(line, " cpu") != nullptr;
+  c.psNone = std::strstr(line, " psnone") != nullptr;
+  if (const char* m = std::strstr(line, " mac=")) {
+    unsigned v[6];
+    if (std::sscanf(m + 5, "%2x%2x%2x%2x%2x%2x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) == 6) {
+      c.setMac = true;
+      for (int i = 0; i < 6; ++i) c.mac[i] = uint8_t(v[i]);
+    }
+  }
+  if (c.psNone && esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+    NimBLEDevice::deinit(false);   // deinit(true) frees the link's static callbacks and panics
+    Serial.printf("[wifi] wpa3 cell: bluetooth off for ps none: controller=%d\n", int(esp_bt_controller_get_status()));
+  }
+  hw::wpa3Cell = c;
+  Serial.printf("[wifi] wpa3 cell next: %s pwe=%u cpu=%d psnone=%d mac=%s\n", c.plain ? "plain" : "option-b", unsigned(c.pwe),
+                int(c.cpuMax), int(c.psNone), c.setMac ? "set" : "own");
+}
 static void otaVerb(const char* line) { wififw::otaVerb(line); }

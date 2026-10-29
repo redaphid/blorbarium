@@ -254,6 +254,7 @@ Every line starts `[wifi] `; every window, phase and Check-hold change is one li
 | `DEBUG wifi due` | The next automatic check is due now (still only dark and alone) |
 | `DEBUG ota check [url]` | A check now, whoever is there; the url (http or https) for a test manifest |
 | `DEBUG home [up\|down]` | Which way up is home on this badge (NVS) |
+| `DEBUG wpa3 [plain\|both\|hnp\|h2e] [cpu] [psnone] [mac=<12 hex>]` | How WPA3 joins are made until reset: the core's plain join or option B with that SAE PWE, 240 MHz, PS_NONE (turns Bluetooth off for good: `DEBUG reboot` after), another MAC. The join logs its cell and lwIP's DHCP state every 2 s |
 
 ## Hardware test plan
 
