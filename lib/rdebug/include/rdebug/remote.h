@@ -70,6 +70,32 @@ constexpr size_t kLogTailMax = 4096;
 constexpr size_t kStateMax = 2048;     // a `state` capture: it shares the cap with the log
 constexpr size_t kWriteChunk = 1024;
 
+// A light report: a provision's check-in, which the phone's page waits for,
+// and a cable's `DEBUG ota check` (a hand is on the badge, with LOG on its
+// own transport). The log's tail at most kLightLogTailMax, within
+// kLightReportMax; no state capture and no screenshot after it, both kept
+// for the next Check's report. Every KB less the session sends is internal
+// RAM lwIP and the Wi-Fi driver do not hold while it goes: on a board, a
+// provision's 4.8 KB check-in took internal RAM down to 3.9 KB (0.7.35).
+constexpr size_t kLightReportMax = 2048;
+constexpr size_t kLightLogTailMax = 1024;
+
+struct ReportShape {
+  size_t max;       // the log's tail fills what the rest leaves of this
+  size_t logTail;   // and never more than this
+  bool state;       // a state capture goes in it
+  bool shot;        // a screenshot may go after it, in the same window
+};
+constexpr ReportShape reportShape(bool light) {
+  return light ? ReportShape{kLightReportMax, kLightLogTailMax, false, false} : ReportShape{kReportMax, kLogTailMax, true, true};
+}
+// The log's room once `used` bytes are written (its own key and quotes
+// counted) and the 2 closing ones kept: what is left of the shape's max, at
+// most its logTail; 0 when nothing is left.
+constexpr size_t logRoom(size_t used, const ReportShape& s) {
+  return used + 2 < s.max ? (s.max - used - 2 < s.logTail ? s.max - used - 2 : s.logTail) : 0;
+}
+
 // `n` bytes through `write(p, k)` (returns the bytes it took, 0 when it
 // failed), at most `chunk` a call. A call that takes nothing is tried once
 // more after `pause()`; a second failure ends it. Returns the bytes written.

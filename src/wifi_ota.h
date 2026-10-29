@@ -267,8 +267,10 @@ static void radioDown() {
   inWindow = 0;
   inReport = 0;
   crashesInARow = 0;
-  say("window %s closed after %u ms (heap=%u minheap=%u)", wifiota::windowName(window), unsigned(millis() - windowAt),
-      unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
+  const auto low = [](uint32_t v) { return v == UINT32_MAX ? 0u : unsigned(v); };   // 0: no sample
+  say("window %s closed after %u ms (heap=%u minheap=%u; this window's low, sampled: tls=%u io=%u loop=%u)",
+      wifiota::windowName(window), unsigned(millis() - windowAt), unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+      low(hw::netLow.tls), low(hw::netLow.io), low(hw::netLow.loop));
   if (phase != Phase::Off) setPhase(Phase::Off);
   window = Window::None;
   if (ble.pausedForWifi()) ble.pauseForWifi(false);   // the phone may come back (and read how it went)
@@ -379,6 +381,7 @@ static void failWindow(Failure why, const char* fmt, ...) {
 static void openWindow(Window w) {
   window = w;
   windowAt = phaseAt = millis();
+  hw::netLow.reset();
   ++windows;
   // A trial's confirm window is not marked: a restart in one is the trial
   // rolling back (or the new image failing, which rolls it back), and the old
@@ -422,9 +425,11 @@ static void scanned() {
     return setPhase(Phase::Joining);
   }
   // An untried network first, in range or not (it may be hidden: joined without a channel), else the strongest.
+  // The line says which: 0.7.35 said "a remembered one among them" of an untried one the scan never saw.
   const std::optional<size_t> pick = mem().networks.next(station.seen(), station.seenCount());
+  const bool inRange = mem().networks.pick(station.seen(), station.seenCount()).has_value();
   say("scan done in %u ms: %d networks seen, %s", unsigned(millis() - phaseAt), n,
-      pick ? "a remembered one among them" : "none of ours");
+      inRange ? "a remembered one among them" : pick ? "none of ours, but an untried one is tried anyway" : "none of ours");
   if (!pick) return failWindow(Failure::Absent, "none of %u remembered networks in range (%d seen)", unsigned(mem().networks.size()), n);
   say("joining network #%u of %u%s", unsigned(*pick + 1), unsigned(mem().networks.size()),
       mem().networks.untried(*pick) ? " (untried: a provision could not join it; its first try)" : "");
@@ -448,8 +453,10 @@ static void statusLine();
 // The window's last step, once the manifest was read: the remote debug report
 // (src/remote_debug.h), in a Check or a cable's check, then the radio goes.
 static void finishWithReport() {
-  // A provision's report is its check-in: the site's page waits for it (/api/badge/online).
-  if ((window == Window::Check || window == Window::Forced || window == Window::Provision) && rd::start())
+  // A provision's report is its check-in: the site's page waits for it
+  // (/api/badge/online). It and a cable's check send a light one (rdebug::reportShape).
+  if ((window == Window::Check || window == Window::Forced || window == Window::Provision) &&
+      rd::start(window != Window::Check))
     return setPhase(Phase::Report);
   closeWindow();
 }
@@ -476,6 +483,7 @@ static void joined() {
   say("joined in %u ms rssi=%d ch=%u ip=%s heap=%u", unsigned(millis() - phaseAt), int(WiFi.RSSI()), unsigned(WiFi.channel()),
       WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
   noteJoin("joined (%s) rssi=%d ch=%u", wifiota::windowName(window), int(WiFi.RSSI()), unsigned(WiFi.channel()));
+  station.heardJoin(mem().joining.ssid);   // heard, scan or none (a provision joins without one)
   triedJoin(true);
   if (window != Window::Provision) {
     if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
@@ -487,6 +495,7 @@ static void joined() {
   char url[64];
   std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
   improvBle.machine().joined(url);
+  improvBle.provisioned();   // its phone coming back to read how it went is no new provision
   outcome("provisioned: joined the phone's network, #%u (%s; %u remembered); checking in with the site",
           unsigned(at.value_or(0) + 1), saved ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
   showResult(true, "checking in with the site");
@@ -658,6 +667,7 @@ static void heardClock(const hw::NetJob::Clock& c) {
 }
 
 static void poll(uint32_t now) {
+  if (window != Window::None) hw::NetLow::sample(hw::netLow.loop);
   improvBle.poll();
   if (const std::optional<hw::NetJob::Clock> c = job.takeClock(millis())) heardClock(*c);
   // Advertising paused while joining (the test board's joins failed AUTH_EXPIRE
@@ -811,6 +821,7 @@ static bool updateHoldsRadio() { return updater.active() && !(updater.ownedBy(kW
 // bounce of PSRAM records (about 3 KB, its own) and the GET task's stack.
 // tlsInternal counts the blocks that fell back, for the GET's log line.
 static void* tlsCalloc(size_t n, size_t size) {
+  hw::NetLow::sample(hw::netLow.tls);
   if (n && size > SIZE_MAX / n) return nullptr;
   void* p = heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!p && (p = heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT))) ++tlsInternal;
@@ -932,17 +943,18 @@ static void draw(paint::Canvas240& cv) {
 // The cable's, Bluetooth's (DEBUG, WIFI) and Wi-Fi's (`debug`): one badge, three transports.
 
 // Each remembered network by number: its SSID's length (never the SSID), its
-// password's, its security and signal in the last scan, whether it waits
-// for its first try, and how its last join this boot went.
+// password's, its security and signal when it was joined since the last
+// scan, else in the last scan, whether it waits for its first try, and how
+// its last join this boot went.
 static void networkLines() {
   for (size_t i = 0; i < mem().networks.size(); ++i) {
     const improv::Credentials& c = mem().networks[i];
-    char heard[56] = "no scan yet this boot";
-    if (scans) {
-      const std::optional<hw::WifiStation::Heard> h = station.heard(c.ssid);
-      if (h) std::snprintf(heard, sizeof heard, "%s ch %u rssi %d in the last scan", h->security, unsigned(h->channel), h->rssi);
-      else std::snprintf(heard, sizeof heard, "not in the last scan");
-    }
+    char heard[64] = "no scan yet this boot";
+    if (const std::optional<hw::WifiStation::Heard> h = station.heard(c.ssid))
+      std::snprintf(heard, sizeof heard, "%s ch %u rssi %d %s", h->security, unsigned(h->channel), h->rssi,
+                    h->joined ? "when joined" : "in the last scan");
+    else if (scans)
+      std::snprintf(heard, sizeof heard, "not in the last scan");
     const Mem::Note& n = noteFor(c.ssid);
     char beside[64] = "";
     if (const std::optional<improv::Credentials>& b = mem().networks.beside(); b && !std::strcmp(b->ssid, c.ssid))

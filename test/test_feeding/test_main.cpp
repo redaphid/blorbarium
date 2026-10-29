@@ -303,6 +303,44 @@ TEST(Question, AKnockKnockJustAfterTheAnswerFeedsNobody) {
   EXPECT_EQ(b.knock({0, 300}).pellets, 1);
 }
 
+// The owner, 2026-10-29: while "Join Wi-Fi? Tip me on my side!" showed, the
+// pet said his teach_fight line over it. While any question shows he says
+// nothing: the line under way is cut, none starts, the phone's is dropped,
+// and none is kept to burst out once it goes.
+TEST(Question, HeSaysNothingWhileItShowsAndKeepsNothingForAfter) {
+  Badge b(kHomeUp);
+  const auto speaking = [&b] { return b.dish->appearance().thinking; };
+  b.dish->think(thought::teach_fight);
+  ASSERT_TRUE(speaking()) << "a line under way";
+  wifiota::Consent consent;
+  b.asks = [&consent](uint32_t) { return consent.asking(); };
+  consent.ask(b.ms);
+  b.run(100);
+  EXPECT_FALSE(speaking()) << "cut by the question";
+  b.dish->think(thought::teach_fight);
+  EXPECT_FALSE(speaking()) << "nothing starts under it";
+  b.dish->say("HELLO FROM THE PHONE");
+  EXPECT_FALSE(speaking()) << "the phone's line too";
+  EXPECT_FALSE(runUntil(b, speaking, wifiota::Consent::kAskMs - 1000)) << "never, while it asks";
+  consent.end();
+  EXPECT_FALSE(runUntil(b, speaking, 3000)) << "nothing kept for after: no line bursts out when it goes";
+  b.dish->think(thought::teach_fight);
+  EXPECT_TRUE(speaking()) << "his own again once it is gone";
+}
+
+// The update's question too, through the same shell (main.cpp feel()'s
+// `asking`): over minutes in which he would have spoken, not a word.
+TEST(Question, TheUpdatesQuestionHushesHimAsLongAsItShows) {
+  Badge quiet(kHomeUp), control(kHomeUp);
+  const auto speaking = [](Badge& b) { return [&b] { return b.dish->appearance().thinking; }; };
+  constexpr uint32_t kMinutes = 8 * 60 * 1000;
+  ASSERT_TRUE(runUntil(control, [&] { return !speaking(control)(); }, kMinutes)) << "whatever he was saying ends";
+  EXPECT_TRUE(runUntil(control, speaking(control), kMinutes)) << "the same pet with no question speaks in that time";
+  quiet.asking = true;
+  quiet.run(100);   // the question's first samples reach him
+  EXPECT_FALSE(runUntil(quiet, speaking(quiet), kMinutes)) << "with one, never";
+}
+
 // A dark badge (low power) is woken by the knocks, and nobody feeds him
 // unseen: a knock knock whose first knock lit the panel feeds him once lit;
 // none drops a pellet while the panel is dark.

@@ -109,4 +109,32 @@ class Machine {
   size_t have_ = 0;
 };
 
+// What a phone did to the service, and whether that asks for a hand's yes
+// (consent.h). The spec's client reads the Current State, hears
+// "authorization required" and waits for "authorized" (improv-wifi.com; the
+// page's improv.js reads it in start(), then waits in authorized()), so a
+// read of the state is a provision begun, and so is a write. A subscription
+// alone is not: BlueZ subscribes a reconnecting client again by itself (a
+// Linux bleak client that sent only HELLO after a provision got "Join
+// Wi-Fi?" back, 2026-10-29), and NimBLE reports a dropped link's
+// subscriptions ending. Nor is a read of the other characteristics. Every
+// touch still counts as speaking (src/hw/improv_ble.h: no squatter).
+enum class Touch : uint8_t { Subscribe, ReadState, ReadOther, Write };
+
+class Opener {
+ public:
+  // A touch from connection `conn` (NusLink::generation): true when the badge asks.
+  bool touched(Touch t, uint32_t conn) const {
+    if (t == Touch::Write) return true;
+    return t == Touch::ReadState && !(provisioned_ && *provisioned_ == conn);
+  }
+  // A provision sent on connection `conn` joined: that phone reading how it
+  // went is no new provision. The next one is a read of the state on a new
+  // connection, or a write.
+  void provisioned(uint32_t conn) { provisioned_ = conn; }
+
+ private:
+  std::optional<uint32_t> provisioned_;
+};
+
 }  // namespace wifiota::improv

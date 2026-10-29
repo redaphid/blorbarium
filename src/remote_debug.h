@@ -7,9 +7,11 @@
 // /api/badge/report: the firmware, the uptime and why the last boot ended, a
 // crash's backtrace from the core dump, the update checks' state, the heap,
 // the battery, the signal, the pet, the results of the last commands, and the
-// last 8 KB of the serial log (hw/log_tee.h). The reply is the owner's queued
+// newest 4 KB of the serial log (hw/log_tee.h). The reply is the owner's queued
 // commands (lib/rdebug: an allowlist, each id once), run once the window has
-// closed, their results in the next report.
+// closed, their results in the next report. A provision's report and a
+// cable's forced check's are light (rdebug::reportShape): 1 KB of the log, no
+// state capture, no screenshot after; those wait for the next Check.
 //
 // Everything here is PSRAM, made at the first report: the body, the log's
 // copy, the state capture, a screenshot. Internal RAM: these few words, and
@@ -62,6 +64,8 @@ static uint64_t stateMark = 0;
 static uint32_t stateAt = 0, stateId = 0;
 static char stateWhat[24] = "state";   // what asked for the capture: `state`, or `debug <its verb>`
 static uint32_t reports = 0, reportFails = 0;
+static rdebug::ReportShape shape = rdebug::reportShape(false);   // the report under way's
+static bool stateSent = false;   // the report under way carries the state capture
 static bool noReports = false;      // the last boot restarted inside a report: none this boot
 static esp_reset_reason_t resetWhy = ESP_RST_UNKNOWN;
 // A remote reboot's id, kept through the restart (RTC memory): its result goes in the first report after.
@@ -175,7 +179,7 @@ struct Out {
   }
 };
 
-static const char* build(size_t& len) {
+static const char* build(size_t& len) {   // as `shape` says
   const size_t want = rdebug::kReportMax + 64;
   if (bodyCap < want) {
     heap_caps_free(body);
@@ -230,17 +234,16 @@ static const char* build(size_t& len) {
     o.f("%s{\"id\":%u,\"ok\":%s,\"text\":\"%s\"}", i ? "," : "", unsigned(r.id), r.ok ? "true" : "false", m->text);
   }
   o.f("],");
-  if (m->stateLen) o.str("state", m->state, m->stateLen);
-  // The log's newest bytes, in what is left of kReportMax (the 2 closing bytes kept).
+  if (m->stateLen && shape.state) o.str("state", m->state, m->stateLen);   // a light one leaves it for the next
+  // The log's newest bytes, in what is left of the shape's max (the 2 closing bytes kept).
   // Masked: no Wi-Fi SSID or password leaves the badge (wififw::masked).
   const size_t logLen = masked(m->log, hw::logTee.tail(m->log, sizeof m->log), m->logMasked, sizeof m->logMasked);
-  const size_t used = o.n + std::strlen("\"log\":\"\",}");
-  const size_t room = used + 2 < rdebug::kReportMax ? std::min(rdebug::kLogTailMax, rdebug::kReportMax - used - 2) : 0;
-  o.tail("log", m->logMasked, logLen, room);
+  o.tail("log", m->logMasked, logLen, rdebug::logRoom(o.n + std::strlen("\"log\":\"\",}"), shape));
   o.drop();
   o.f("}");
   if (o.full) return nullptr;
   m->sentResults = m->nResults;
+  stateSent = shape.state && m->stateLen;
   len = o.n;
   return body;
 }
@@ -248,7 +251,8 @@ static const char* build(size_t& len) {
 // ---- the window's last step ------------------------------------------------------
 
 // After the manifest (and the pet's lines): the report, then the window closes.
-static bool start() {
+// `light`: a provision's check-in or a cable's check (rdebug::reportShape).
+static bool start(bool light) {
   if (noReports) return false;
   const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
                  big = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -258,13 +262,14 @@ static bool start() {
     return false;
   }
   size_t len = 0;
+  shape = rdebug::reportShape(light);
   const char* b = build(len);
   if (!b) {
     say("remote: no report this time (no PSRAM, or it did not fit)");
     return false;
   }
   job.reset();
-  say("remote: report of %u bytes: heap=%u big=%u before the task", unsigned(len),
+  say("remote: %s report of %u bytes: heap=%u big=%u before the task", light ? "light" : "full", unsigned(len),
       unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   // A restart from here on is the report's: it never counts against the update check.
   inWindow = 0;
@@ -288,7 +293,8 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
   std::memmove(m->results, m->results + m->sentResults, sizeof(Result) * (m->nResults - m->sentResults));
   m->nResults -= m->sentResults;
   m->sentResults = 0;
-  m->stateLen = 0;
+  if (stateSent) m->stateLen = 0;   // a light report left it for the next
+  stateSent = false;
   if (!rdebug::trustedReplyUrl(kReportUrl)) return;   // only the site, over HTTPS with its pinned roots, may ask
   rdebug::Command* got = m->got;   // PSRAM: a Command holds a marquee's text
   const size_t n = rdebug::parseCommands(std::string_view(text, len), lastId, got, kPending - m->nPending);
@@ -333,6 +339,10 @@ static void shot(uint32_t id) {
 // After the report: the shot, in its own POST, when there is RAM for it; one try only.
 static bool startShot(bool reportWent) {
   if (noReports || !reportWent || !shotSlot.waiting()) return false;   // the site did not answer: it waits
+  if (!shape.shot) {   // a light report's window: the next Check sends it
+    say("remote: the shot waits for a Check (this window's report is light)");
+    return false;
+  }
   const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
                  big = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (!shotSlot.go(have, big)) {

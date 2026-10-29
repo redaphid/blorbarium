@@ -45,6 +45,10 @@ struct BodySample {
   // later, so the Dish flashes the rim now (feed_show.h), and the kid sees
   // his knock knock heard the moment he makes it.
   bool knockKnock = false;
+  // A question is on the screen (the update's, Wi-Fi's, the debug unlock's;
+  // the shell's, src/hw/feel.h): the pet says nothing while it shows
+  // (Thinker::hush). Not its answer's tail: only the question itself.
+  bool asked = false;
   // The shell reads the IMU at 250 Hz while awake and hands on every fifth
   // read; the reads between are summed up here as the one farthest from the
   // last sample handed on, so a knock's brief peak is not lost between two

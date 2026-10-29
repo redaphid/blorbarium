@@ -149,6 +149,7 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   watchChoice(nowMs);
   if (s.knockWaiting && !knockWaitWas_) knockAim_ = armedAim();   // the first knock: what it aims at
   knockWaitWas_ = s.knockWaiting;
+  thinker_.hush(s.asked, tick_);   // a question on the screen: he says nothing
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
     if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;

@@ -367,7 +367,9 @@ bytes comes in pieces.
 
 The cable's `DEBUG wifi`: the window, the schedule, the last outcome, and
 each remembered network by number with its SSID's length, its password's,
-its security and signal in the last scan, whether it waits for its first try
+its security, channel and signal (`when joined` for the access point it
+joined since the last scan, a provision's too; else `in the last scan`; kept
+after the window closes, 0.7.36), whether it waits for its first try
 (untried), and how its last join went. Never an SSID.
 
 ### DEBUG `<a cable DEBUG line>` (its own reach)

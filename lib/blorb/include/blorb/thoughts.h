@@ -244,6 +244,13 @@ class Thinker {
   // The phone's line (already in the font, at most kMaxSaidText): it starts
   // now over anything showing, and no thought or prophecy cuts it short.
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
+  // A question on the screen (the update's, Wi-Fi's, the debug unlock's):
+  // he says nothing (owner, 2026-10-29: his teach_fight line came up over
+  // "Join Wi-Fi?"). What he was saying is cut, nothing starts, and nothing
+  // is kept to say after: a line meant for meanwhile (the phone's, a
+  // welcome, a growth) is dropped. Once it goes, the usual quiet gap.
+  void hush(bool on, uint32_t tick);
+  bool hushed() const { return hushed_; }
   // Fills the Appearance's line. While he prophesies he wears the foresee
   // face and glow, and the shake's hop does not show; while he says the
   // phone's line he wears the croak face.
@@ -275,6 +282,7 @@ class Thinker {
   std::optional<Shown> now_;
   std::optional<Trance> trance_;
   uint32_t foretold_ = 0;
+  bool hushed_ = false;
 };
 
 }  // namespace blorb

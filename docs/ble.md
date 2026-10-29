@@ -44,6 +44,13 @@ it is left out: Improv clients that filter on Improv's UUID (improv-wifi.com)
 still find the board, Home Assistant's matcher, which wants both, does not.
 The website opens Improv after it connects by the UART service and needs neither.
 
+On the same connection, Improv's service only asks "Join Wi-Fi?" when a
+client reads its Current State or writes to it (0.7.36). Subscribing alone
+never asks: BlueZ subscribes a reconnecting client again by itself, and on
+0.7.35 a Linux client that sent only HELLO after a provision was asked again.
+Reading or subscribing still counts as speaking, so a page that only
+provisions is never dropped as a squatter (docs/wifi-ota.md, "Over Bluetooth").
+
 Until 0.7.35 the scan response's Improv UUID was left out on every board, so
 improv-wifi.com found none: NimBLE-Arduino's `getScanData()` returns the
 advertisement (already full), not the scan response, and the UUID never fit
@@ -213,7 +220,10 @@ dropped, spaces at either end are trimmed, and the line stops at 56
 characters. An empty line, or one with nothing left (`TWIST say @#$`), is
 `ERR 400 BAD_ARGS`. During an egg or a clutch it is `ERR 409 NOT_NOW`. It
 works before `TIME`. It is never saved or hashed, and a reboot forgets it.
-If he is asleep he stays asleep and says it with his eyes shut.
+If he is asleep he stays asleep and says it with his eyes shut. While a
+question shows (an update's, "Join Wi-Fi?", the debug unlock's) he says
+nothing: the line is answered `OK say` and dropped, never kept for after
+(0.7.36).
 
 ### TWIST teach
 

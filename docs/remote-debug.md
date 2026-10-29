@@ -38,6 +38,14 @@ write tried once more 100 ms later. The ring, the body and everything else are
 PSRAM; the GET task borrows the body (`NetJob::start(..., borrowLen)`). The
 report is skipped when internal RAM is short of 24 KB free or a 9 KB block.
 
+A light report (0.7.36, `rdebug::reportShape`) is sent by a provision's window,
+whose report is the check-in the phone's page waits for, and by a cable's
+`DEBUG ota check` (a hand is on the badge, with `LOG` on its own transport):
+the log's tail at most 1 KB within 2 KB, no `state` capture and no screenshot
+after it; both are kept for the next Check's full report. On 0.7.35 a
+provision's 4.8 KB check-in took internal RAM down to 3.9 KB. The log line says
+which: `remote: light report of N bytes` or `remote: full report of N bytes`.
+
 A failed report is harmless. It comes after the manifest was read and the
 schedule set, so the update check is already done and its schedule untouched;
 it is not retried in the window, and the next window sends a fresh one with the
