@@ -36,7 +36,7 @@ import time
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, os.path.join(ROOT, "tools"))   # power_e2e, debug_ble_e2e, shot
 from power_e2e import NUS_RX, Board, Fail  # noqa: E402
 from debug_ble_e2e import Run, Session  # noqa: E402
 
@@ -173,6 +173,42 @@ class Checks(Run):
                 if not r or (verb == "verify" and "password MATCHES" not in r.group(0)):
                     raise Fail("restore: wifi %s <ssid%d> did not take" % (verb, i))
 
+    async def shoot(self, path):
+        """The screen now, as a PNG (tools/shot.py's decoding of `DEBUG shot`)."""
+        import shot
+        mark = self.b.mark()
+        self.b.send("DEBUG shot")
+        await self.serial(r"\[hw\] shot end bytes=", 30, mark)
+        try:
+            shot.write_png(path, shot.decode([l for _, l in self.b.lines[mark:]]), 2)
+            return path
+        except Exception as e:  # noqa: BLE001
+            self.say("  shot: %s" % e)
+            return None
+
+    async def mac_and_since(self, s):
+        got, lines = await s._send(NUS_RX, "t", "STATE", r" OK", 5)
+        mac = next((m.group(1).replace(":", "").lower() for l in lines
+                    for m in [re.search(r"\bmac=([0-9a-fA-F:]+)", l)] if m), None)
+        base, date = online(mac, 0)
+        offset = 0
+        if date:
+            from email.utils import parsedate_to_datetime
+            offset = parsedate_to_datetime(date).timestamp() * 1000 - time.time() * 1000
+        return mac, base, int(time.time() * 1000 + offset - 1000)
+
+    async def until_online(self, mac, base, since, seconds=120):
+        t = time.monotonic() + seconds
+        while time.monotonic() < t:
+            try:
+                d, _ = online(mac, since)
+                if d.get("joined") and (base.get("at") is None or d.get("at") > base.get("at")):
+                    return d
+            except Exception as e:  # noqa: BLE001
+                self.say("  online ask failed: %s" % e)
+            await asyncio.sleep(3)
+        return None
+
     async def back(self, since, what, timeout=150):
         r = await self.serial(r"\[hw\] ble back after the Wi-Fi join", timeout, since)
         self.say("  %s: ble back %s" % (what, "seen" if r else "NOT seen"))
@@ -229,6 +265,7 @@ class Checks(Run):
         self.item("c", bool(re.search(r"OK reach=look lines=[1-9]", got)), got)
 
         self.say("== (d) DEBUG ota check over Bluetooth")
+        dmac, dbase, dsince = await self.mac_and_since(s)
         mark = b.mark()
         got = await s.dbg("DEBUG ota check", r" OK reach=write", timeout=8)
         pause = await self.serial(r"\[hw\] ble pauses for a Wi-Fi join", 10, mark)
@@ -244,10 +281,13 @@ class Checks(Run):
         for l in wifi:
             self.say("  WIFI: " + l)
         n1 = next((l for l in wifi if re.search(r"network #1:", l)), "")
-        self.item("d", bool(pause and joined and back and picked and picked.group(1) == "1" and "ssid 19 B" in n1),
-                  "paused=%s joined #%s (%s) back=%s; #1 is %s" % (
+        seen = await self.until_online(dmac, dbase, dsince, 30)
+        self.say("  site: %s" % seen)
+        self.item("d", bool(pause and joined and back and picked and picked.group(1) == "1" and "ssid 19 B" in n1
+                            and seen),
+                  "paused=%s joined #%s (%s) back=%s site last_seen moved=%s; #1 is %s" % (
                       bool(pause), picked and picked.group(1), joined and re.search(r"ch=\d+", joined.group(0)).group(0),
-                      back, re.search(r"ssid \d+ B", n1).group(0) if n1 else "?"))
+                      back, bool(seen), re.search(r"ssid \d+ B", n1).group(0) if n1 else "?"))
 
         if a.skip_e:
             await s.close()
@@ -338,13 +378,18 @@ class Checks(Run):
         join = await self.serial(r"\[wifi\] .*joined in \d+ ms rssi=-?\d+ ch=\d+", 1, mark)
         pw_line = b.wait(r"network #\d+: its (new|old) password (joined|failed).*", 0.1, mark)
         back = await self.back(mark, "provision", timeout=120)
+        png = await self.shoot(self.args.log + ".result.png")
+        self.say("  screen after the join: %s" % png)
+        fight = [l for _, l in b.lines[asked_at:] if re.search(r"\[duel\]|fight mode|\bhang\b", l, re.I)]
+        fight += [l for _, l in b.lines[asked_at:mark] if l.startswith("[say]")]   # the pet is quiet while it asks
+        self.say("  fight-mode lines since the question: %d%s" % (len(fight), "".join("\n    " + l[:120] for l in fight[:5])))
         await s.connect()
         wifi = await self.wifi_lines(s)
         for l in wifi:
             self.say("  WIFI: " + l)
         await s.close()
         n1 = next((l for l in wifi if re.search(r"network #1:", l)), "")
-        self.item("e", bool(joined_site and back and not c.is_connected and "ssid 19 B" in n1),
+        self.item("e", bool(joined_site and back and not c.is_connected and "ssid 19 B" in n1 and not fight),
                   "yes %s; dropped in %.1f s; site checked in=%s; join: %s; %s; ble back=%s" % (
                       "by hand" if by_hand else "by the cable's DEBUG side (no hand)", drop_s, bool(joined_site),
                       join and re.search(r"ch=\d+", join.group(0)).group(0), pw_line and pw_line.group(0), back))
