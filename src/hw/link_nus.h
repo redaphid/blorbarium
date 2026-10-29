@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 
+#include "blorb/ble_id.h"
 #include "blorb/notify_queue.h"
 #include "blorb/rx_lines.h"
 #include "blorb/seams.h"
@@ -35,10 +36,11 @@ class NusLink : public blorb::Link {
   static constexpr const char* kOtaData = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";   // update images (docs/ota.md)
 
   // `name` goes in the scan response, which has room for 29 characters; the
-  // advertisement itself carries the flags and the service UUID (21 of its
-  // 31 bytes). `otaData` takes the update's image writes, when the firmware
-  // has updates.
-  const char* begin(const char* name, NimBLECharacteristicCallbacks* otaData = nullptr) {
+  // advertisement itself carries the flags, the service UUID and `mac`, the
+  // badge's durable id (blorb/ble_id.h): all 31 of its bytes. `otaData` takes
+  // the update's image writes, when the firmware has updates.
+  const char* begin(const char* name, const uint8_t mac[blorb::bleid::kMacBytes],
+                    NimBLECharacteristicCallbacks* otaData = nullptr) {
     std::snprintf(name_, sizeof name_, "%s", name);
     NimBLEDevice::init(name_);
     NimBLEDevice::setMTU(247);
@@ -54,6 +56,8 @@ class NusLink : public blorb::Link {
     nus->start();
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(kService);
+    const auto id = blorb::bleid::payload(mac);
+    adv->setManufacturerData(id.data(), id.size());   // the advertisement is now full
     adv->enableScanResponse(true);
     adv->setName(name_);
     if (serve_) serve_(server, adv);   // after the name, so nothing it advertises can push the name out

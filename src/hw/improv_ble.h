@@ -6,13 +6,18 @@
 // page that only provisions is not dropped as a squatter while its keeper
 // types the password.
 //
-// Advertising: the UART service UUID and the flags take 21 of the
-// advertisement's 31 bytes; Improv's service data (state, capabilities and
-// four zeros under 16-bit UUID 0x4677) takes the last 10. Its 128-bit UUID
-// goes in the scan response after the name, only if there is room (a name of
-// up to 11 characters; every species and blorb-xxxx fit), so it can never
-// push the name out. The advertised state is the boot's, Authorization
-// Required: it is not rewritten while the host task may be advertising.
+// Advertising: the flags, the UART service UUID and the badge's durable id
+// (blorb/ble_id.h, for the NFC links) fill the advertisement's 31 bytes, so
+// Improv's service data (state, capabilities and four zeros under 16-bit UUID
+// 0x4677) is left out; it goes in only if a smaller advertisement ever leaves
+// room. Its 128-bit UUID goes in the scan response after the name, only if
+// there is room (a name of up to 11 characters; every species and blorb-xxxx
+// fit), so it can never push the name out. Improv clients that filter on that
+// UUID (improv-wifi.com) still find the badge; Home Assistant's matcher wants
+// the service data too and does not. The website opens Improv after it
+// connects by the UART service, so it needs neither. The service data's
+// state would be the boot's, Authorization Required: it is not rewritten
+// while the host task may be advertising.
 #pragma once
 
 #include <Arduino.h>
@@ -88,7 +93,10 @@ class ImprovBle : public wifiota::improv::Port {
     error_->setValue(&none, 1);
     caps->setValue(&can, 1);
     const uint8_t data[6] = {state, can, 0, 0, 0, 0};
-    const bool inAdv = adv->setServiceData(NimBLEUUID(im::kServiceDataUuid), data, sizeof data);
+    // Only if it fits: the badge's id fills the advertisement (blorb/ble_id.h),
+    // so today it never does, and nothing is logged for a refusal.
+    const bool inAdv = adv->getAdvertisementData().getPayload().size() + 2 + 2 + sizeof data <= 31 &&
+                       adv->setServiceData(NimBLEUUID(im::kServiceDataUuid), data, sizeof data);
     // Straight into the scan response, and only if it fits beside the name
     // (NimBLE's addServiceUUID tries the full advertisement first and logs
     // "Cannot add UUID, data length exceeded!" before it falls back).

@@ -1302,7 +1302,7 @@ void setup() {
   wifiBegin();
   petLinesBoot();
   ble.keepWhile([] { return updater.active(); });
-  const char* name = ble.begin(bleName(mac), &otaData);
+  const char* name = ble.begin(bleName(mac), mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
