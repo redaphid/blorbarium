@@ -121,6 +121,7 @@ static uint32_t phaseAt = 0, windowAt = 0, saidAt = 0, closingSince = 0;
 static std::optional<size_t> joinPick;
 static bool joinRetried = false;
 static bool joinFellBack = false;   // this window's one switch to a network the scan heard
+static bool getRetried = false;     // this window's one second try of the manifest's GET
 
 static bool cutSockets = false;
 static uint32_t imageAt = 0;   // bytes handed to the session
@@ -405,7 +406,7 @@ static void openWindow(Window w) {
     joinNet(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
-  joinRetried = false, joinFellBack = false;
+  joinRetried = false, joinFellBack = false, getRetried = false;
   ++scans;
   if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
   setPhase(Phase::Scanning);
@@ -542,7 +543,18 @@ static void readLines() {
 
 static void readManifest() {
   if (job.busy()) return;   // the GET's task has ended: what it left is all there is
-  if (job.state() != hw::NetJob::State::Done) return failWindow(Failure::Server, "manifest: %s", job.error());
+  if (job.state() != hw::NetJob::State::Done) {
+    // Nothing came back (a connect or a handshake that failed: "connection
+    // refused" in 3 of 8 first tries on 2026-10-29, every second try fine):
+    // once more before the window gives up, with the network already joined.
+    if (!getRetried && !job.textLen()) {
+      getRetried = true;
+      say("manifest: %s: once more", job.error());
+      if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
+      return;
+    }
+    return failWindow(Failure::Server, "manifest: %s", job.error());
+  }
   say("GET manifest: %u bytes, open %u ms, task stack %u B with %u never used; after the handshake heap=%u big=%u; "
       "now heap=%u minheap=%u; mbedtls blocks in internal RAM %u",
       unsigned(job.textLen()), unsigned(job.openMs()), unsigned(job.stackBytes()), unsigned(job.stackFree()),

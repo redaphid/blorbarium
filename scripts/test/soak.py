@@ -32,6 +32,8 @@ p = argparse.ArgumentParser()
 p.add_argument("port")
 p.add_argument("--minutes", type=float, default=120)
 p.add_argument("--mac", default="d40592771cb0")
+p.add_argument("--untried-away", action="store_true",
+               help="first set the .env network by cable: untried, newest and out of reach here, so the Check must fall back")
 p.add_argument("--log", required=True)
 a = p.parse_args()
 m = Masked(open(a.log, "w"), secrets(laptop_network()))
@@ -50,6 +52,20 @@ b.wait(r"\[hw\] ble adv on", 10, since=0)
 time.sleep(3)
 base, _ = online(a.mac, 0)
 start_ms = int(time.time() * 1000)
+if a.untried_away:
+    env = {}
+    for line in open("/home/redaphid/Projects/blorbarium/.env"):
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip().strip("\"'")
+    m.hidden = sorted(set(m.hidden) | {env["ssid"], env["password"]}, key=len, reverse=True)
+    mark = b.mark()
+    b.note('>> DEBUG wifi set "<env ssid>" <env password>')
+    b.p.write(b"\r" * 8)
+    time.sleep(0.06)
+    b.p.write(('DEBUG wifi set "%s" %s\n' % (env["ssid"], env["password"])).encode())
+    r = b.wait(r"\[wifi\] network #1: .*", 6, mark)
+    say("untried away: %s" % (r.group(0) if r else "(no answer)"))
 mark = b.mark()
 b.send("DEBUG wifi due")
 due = b.wait(r"\[wifi\] due: .*", 6, mark)
@@ -88,6 +104,8 @@ for l in windows:
     say("  " + l[:230])
 say("scheduled checks closed: %d; report lines: %d; site last_seen moved: %s (%s)" % (
     len(checks), len(reports), bool(after.get("joined")), after))
+fell = [l for l in lines if "heard in the scan, instead" in l]
+say("fallbacks: %d%s" % (len(fell), "".join("\n  " + l[:200] for l in fell[:3])))
 say("window lows (sampled): min %s" % (min(lows) if lows else "-"))
 say("allocation failures: %d%s" % (len(alloc), "".join("\n  " + l[:160] for l in alloc[:5])))
 say("pick-up woke it: %s" % (woke.group(0)[:160] if woke else "NO"))
@@ -98,6 +116,6 @@ if heaps:
     say("heap trend (heap/minheap/big) over %d samples: %s" % (n, "  ".join("%d/%d/%d" % h for h in pick)))
     say("heap min over the soak: %d" % min(h[0] for h in heaps))
 ok = (dark and (naps or napping) and checks and after.get("joined") and (not lows or min(lows) >= 5000)
-      and not alloc and woke and not boots and not b.crashes)
+      and not alloc and woke and not boots and not b.crashes and (fell or not a.untried_away))
 say("RESULT %s" % ("PASS" if ok else "FAIL"))
 sys.exit(0 if ok else 1)
