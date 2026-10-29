@@ -7,6 +7,7 @@
 // test_feeding_film films a feeding with it.
 #include <cstdio>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <vector>
 #include "blorb/dish.h"
@@ -126,6 +127,10 @@ struct Badge {
   uint32_t frameMs = 40;      // how often the loop takes the queue and ticks (main.cpp loop)
   uint32_t nextFrame = 0;
   bool asking = false;        // a question owns BOOT (the update's, the debug unlock's)
+  // A question of the test's own (wifiota::Consent, a TurnYes): asked each
+  // sample in place of `asking`, and handed each sample's Felt, as main.cpp feel() does.
+  std::function<bool(uint32_t)> asks;
+  std::function<void(const hw::Felt&, uint32_t)> felt;
   bool keepPantryFull = true;
   Count count;
   // The sense task's queue (main.cpp bodyq::ring) and its peak.
@@ -167,7 +172,9 @@ struct Badge {
   // The loop: the queue through the shell into the Dish, then the ticks due.
   void frame() {
     for (; !ring.empty(); ring.pop_front()) {
-      const hw::Felt f = shell.sample(ring.front().first, ring.front().second, asking);
+      const uint32_t at = ring.front().second;
+      const hw::Felt f = shell.sample(ring.front().first, at, asks ? asks(at) : asking);
+      if (felt) felt(f, at);
       dish->sample(f.screen, ring.front().second);
       count.oneMore = count.oneMore || f.screen.knockWaiting;
       if (dish->firedLastSample() >> stim::button.v & 1) ++count.presses;

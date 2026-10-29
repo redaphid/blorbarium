@@ -10,11 +10,16 @@
 //     twin, controls.h): they only light it, so nobody feeds him unseen. A
 //     knock knock decided once the badge is already lit (a hand's first knock
 //     jolts it awake) feeds him as usual: the kid is looking at him by then.
-//   - a knock knock while a question owns BOOT (the update's "Turn me
-//     around!", the debug unlock's): main.cpp gives that question the button,
-//     and its twin goes with it. Before 2026-10-21 it went to the Dish, which
-//     dropped a pellet behind the update's screen, where nobody saw it and it
-//     rotted.
+//   - a knock knock while a question owns BOOT (the update's "Tip me on my
+//     side!", Wi-Fi's, the debug unlock's): main.cpp gives that question the
+//     button, and its twin goes with it. Before 2026-10-21 it went to the
+//     Dish, which dropped a pellet behind the update's screen, where nobody
+//     saw it and it rotted.
+//   - the hang and the side hold while a question shows, for kAnswerTailMs
+//     after it goes, and after that until the badge is let back: the turn
+//     that answers it is the question's (owner, 2026-10-29: the Wi-Fi
+//     question's turn also opened fight mode, a duel took the radio, and the
+//     phone heard only "couldn't connect").
 #pragma once
 
 #include <cstdint>
@@ -31,15 +36,24 @@ struct Felt {
   blorb::BodySample body;     // in the IMU's frame, with the knocks KnockSense found (STATUS, DEBUG trace)
   blorb::BodySample screen;   // what the Dish feels: the screen's frame at home, the poses and the knocks
   uint8_t rot = 0;            // the settled rotation (the update's turn reads it)
+  bool owned = false;         // a question, or the tail of its answer, owns the gestures (and BOOT)
 };
 
 class Feel {
  public:
+  // After a question goes (answered, lapsed or shaken off), its gestures
+  // stay its own this long: the tail of the turn that answered it.
+  static constexpr uint32_t kAnswerTailMs = 2000;
+
   Feel(int r0, uint8_t home, power::Policy& power) : up_(r0), home_(home), power_(power) {}
 
   // One sample, in the IMU's frame. `asking`: a question owns BOOT now.
-  Felt sample(const blorb::BodySample& sensed, uint32_t ms, bool asking) {
+  Felt sample(const blorb::BodySample& sensed, uint32_t ms, bool askingNow) {
+    if (askingNow) tailUntil_ = ms + kAnswerTailMs, tail_ = true;
+    else if (tail_ && int32_t(ms - tailUntil_) >= 0) tail_ = false;
+    const bool asking = askingNow || tail_;
     Felt f;
+    f.owned = asking;
     f.body = sensed;
     f.body.tapCode = knocks_.sample(sensed, ms);
     // In the IMU's own frame: a turn of the panel is no move.
@@ -57,8 +71,11 @@ class Feel {
     f.screen = up_.toFrame(felt, home_);
     // The poses from gravity itself, not the settled rotation's lag (poses.h).
     poses_.sample(f.screen);
-    f.screen.invertedDown = poses_.inverted();   // upside down from home: the hang
-    f.screen.sideDown = poses_.sideways();       // the hold's twin (SideHoldDetector, controls.h)
+    // A pose held through a question is the question's until the badge is let back.
+    const bool posed = poses_.inverted() || poses_.sideways();
+    posedForQuestion_ = posed && (asking || posedForQuestion_);
+    f.screen.invertedDown = !posedForQuestion_ && poses_.inverted();   // upside down from home: the hang
+    f.screen.sideDown = !posedForQuestion_ && poses_.sideways();       // the hold's twin (SideHoldDetector, controls.h)
     f.screen.knocking = knocks_.busy();                  // a knock's bounce is no shake
     f.screen.knockRinging = knocks_.ringing();           // ...nor an aim
     // One knock landed: the rim's "one more"; a second landed: the rim's flash.
@@ -81,6 +98,8 @@ class Feel {
   uint8_t home_;
   power::Policy& power_;
   bool wakePress_ = false;
+  bool tail_ = false, posedForQuestion_ = false;
+  uint32_t tailUntil_ = 0;
 };
 
 }  // namespace hw

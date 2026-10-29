@@ -1,10 +1,14 @@
-// "Turn me around!": while an update asks, a turn of the badge says yes, so a
-// child who cannot press the button can still take an update. The turn is the
-// screen's own settled rotation (orient::Up: a quarter turn held 0.4 s, with
-// jolts ignored), so carrying or bumping it is no yes. As with the button, a
-// turn already under way when the question appears (the first kMinMs) is not
-// a yes: it only moves where the turn is counted from. Pure, so it is tested
-// natively (test/test_power). docs/ota.md, "Confirming".
+// "Tip me on my side!": while a question asks (an update's, Wi-Fi's), a turn
+// of the badge says yes, so a child who cannot press the button can still
+// answer. The turn is the screen's own settled rotation (orient::Up: a
+// quarter turn held 0.6 s on edge, with jolts ignored), so carrying or
+// bumping it is no yes. On its side is the least that answers (upside down
+// does too, being a turn): the words name exactly that (owner, 2026-10-29:
+// "Turn me around!" did not say which turn). As with the button, a turn
+// already under way when the question appears (the first kMinMs) is not a yes:
+// it only moves where the turn is counted from. The turn is the question's:
+// hw::Feel keeps it from the pet (no hang, no fight mode). Pure, so it is
+// tested natively (test/test_power, test/test_feeding). docs/ota.md, "Confirming".
 #pragma once
 
 #include <cstdint>

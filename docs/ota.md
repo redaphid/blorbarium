@@ -36,7 +36,7 @@ By hand, the same steps: `./flash.sh --once` (every badge: one image, at 115200 
 **Another network later, no laptop:** on Android Chrome (or desktop
 Chrome/Edge; not iPhone Safari, which has no Web Bluetooth) open
 https://blorb.hypnodroid.com, connect the badge, open the **Wi-Fi** card and
-type the network. The badge asks "Join Wi-Fi? Turn me around!": turn it or
+type the network. The badge asks "Join Wi-Fi? Tip me on my side!": turn it or
 press its button. Up to three networks are kept, newest first.
 
 After that a badge checks by itself when it has been dark and alone for a
@@ -220,12 +220,19 @@ not on trial and not busy, writes a save, opens the inactive slot and moves to
 `idle last=save_failed`. A `DEBUG press` over the serial cable answers too: the
 cable is a hand on the dish.
 
-**Turn me around.** The children cannot use the button, so the question
-says "Turn me around!" and a turn of the badge answers it exactly as a
+**Tip me on my side.** The children cannot use the button, so the question
+says "Tip me on my side!" and a turn of the badge answers it exactly as a
 press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the cable). The turn
-is the screen's own settled rotation, a quarter turn held 0.4 s with jolts
-ignored, so it only registers while the badge is held up, not lying flat.
-A turn in the first 1.5 s was already under way and is not a yes. The
+is the screen's own settled rotation, a quarter turn held 0.6 s with jolts
+ignored: onto its side is the least that answers (upside down does too), and
+the words name exactly that. It only registers while the badge is held on
+edge, not lying flat. A turn in the first 1.5 s was already under way and is
+not a yes. The turn is the question's: while a question shows, for 2 s after
+it goes, and until the badge is let back after that, neither the hang nor the
+side hold reaches the pet (no fight mode, no tucking in), nor does any press
+(`hw::Feel::kAnswerTailMs`; owner, 2026-10-29: the Wi-Fi question's turn
+opened fight mode, a duel took the radio, and the phone heard only
+"couldn't connect"). The
 debug link's HANG turns it too, but HANG needs the unlock, which needs a
 hand on the badge.
 

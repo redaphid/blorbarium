@@ -108,16 +108,39 @@ names networks by number with the SSID's length, never the SSID, on every
 transport: the same verbs run over Bluetooth (`DEBUG ...`, `WIFI`) and Wi-Fi
 (`debug ...`), docs/debug-ble.md "Every verb, every transport".
 
-**A provision that could not join is kept, untried.** A phone at the badge
-holds the radio's time for Bluetooth, and a weak signal fails the join that
-was made while it was there (2026-10-29: the site said only "couldn't
-connect"). So the phone's network is remembered all the same, as #1, marked
-untried, and the phone still hears it could not join. The next Check, dark,
-no phone connected and advertising held, tries it before any other, in range
-or not (it may be hidden: joined without a channel); joined or failed, that
-try clears the mark, and `DEBUG wifi` (and `WIFI`, `debug wifi`) says how it
-went. The mark is its own NVS key, `untried`, beside `nets`, so an older image
-rolled back to still reads the list.
+**A provision: saved first, then Bluetooth steps aside (0.7.35).** On
+2026-10-29 a provision from the site failed with only "couldn't connect":
+the question's turn had opened fight mode, a duel took the radio, and the
+phone sharing the radio with the join made a weak signal worse. Now:
+
+1. The network the phone sends (Improv, after the hand's yes) is saved at
+   once as #1, marked **untried** (its own NVS key, `untried`, beside `nets`,
+   so an older image rolled back to still reads the list).
+2. The badge says so (`provision: saved as network #1, untried`), Improv
+   says "provisioning", and 0.6 s later Bluetooth pauses: the phone is let go
+   and nothing advertises for the whole join, its DHCP and the check-in
+   (`NusLink::pauseForWifi`: a clean pause, never NimBLE's deinit, which
+   panicked mid-session). A `DEBUG ota check` from any transport pauses it
+   the same way. `WIFI_PS_NONE` is not used: the IDF aborts it while the
+   Bluetooth controller is enabled, and only a deinit would disable it.
+3. Joined, the window's last step is the report, which is the badge's
+   check-in: the site's page polls `/api/badge/online?mac=&since=` for it and
+   says "<pet> is online".
+4. Then Bluetooth comes back. The result shows on the badge's screen for 8 s
+   ("Wi-Fi joined!" / "online", or "Wi-Fi: not joined" with a few words:
+   "wrong password?", "network not found", "weak signal?", "no address from
+   the router", "in a fight: leave fight mode") and stays in `DEBUG wifi`
+   (WIFI over Bluetooth, `debug wifi` over Wi-Fi) and the log. The page's
+   fallback is to reconnect and read WIFI.
+
+If fight mode or a duel has the radio, nothing is tried, and every transport
+says why ("not tried: fight mode or a duel has the radio"). Whatever went
+wrong, the network stays saved and untried: the next Check, dark, no phone
+connected and advertising held, tries it before any other, in range or not
+(it may be hidden: joined without a channel); joined or failed, that try
+clears the mark. A network set by hand (`DEBUG wifi set`) is untried too.
+A phone that sends a wrong password for a network the badge already knows
+replaces the old one, as a right one would.
 
 **Over Bluetooth (Improv).** [Improv Wi-Fi](https://www.improv-wifi.com/ble/)
 is the open standard for handing a device a network over BLE (ESPHome, WLED,
@@ -134,7 +157,7 @@ new yes. The question holds the badge awake and takes the button and the
 knock knock, as the update's does.
 
 The website's **Wi-Fi** card (only for a dish with the Improv service) asks,
-tells the person "Say yes on the dish: turn it around", waits for the yes,
+tells the person "Say yes on the dish: tip it on its side", waits for the yes,
 sends the network, and says whether the dish joined. The card ships with the
 site, so it needs a site deploy; the cable needs nothing.
 
@@ -308,7 +331,7 @@ a test release signed with the owner's key (docs/ota.md "The key"). Flash this b
    manifest: N bytes, open N ms, task stack free N`, `manifest lcd128 0.7.12
    ...: up_to_date`, `radio down`. **Record open ms, heap, minheap, stack
    free.** From the website (once deployed, or `wrangler dev`): the Wi-Fi card
-   shows "Say yes on the dish"; the badge shows "Join Wi-Fi? Turn me around!";
+   shows "Say yes on the dish"; the badge shows "Join Wi-Fi? Tip me on my side!";
    turn it; the page says it joined; `DEBUG wifi` lists it. Let the question
    lapse once: the page says nobody said yes; nothing was joined.
 5. **Automatic check at home.** Leave the badge alone on the table: about 11

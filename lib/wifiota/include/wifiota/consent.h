@@ -3,7 +3,7 @@
 // (docs/wifi-ota.md "Security"; owner, 2026-10-21: strangers in Bluetooth range
 // must not set one). Improv's own way: the badge starts in "authorization
 // required"; when a phone opens its Improv service, the badge asks on its
-// screen ("Join Wi-Fi? Turn me around!"), and a turn of the badge or a press of
+// screen ("Join Wi-Fi? Tip me on my side!"), and a turn of the badge or a press of
 // its button within kAskMs (and after kMinAskMs, so a turn already under way
 // is no yes) authorizes that phone for kGrantMs. Then Improv says
 // "authorized" and the page sends the network. The cable needs none of this:

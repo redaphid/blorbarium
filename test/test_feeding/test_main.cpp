@@ -14,6 +14,11 @@
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/debug_verbs.h"   // here, so the dependency finder links lib/debugble
 #include "feeding_badge.h"
+#include "../../src/hw/turn_yes.h"
+// wifiota::Consent is header only. Named through a macro, so PlatformIO's
+// dependency finder does not link lib/wifiota (and lib/ota, lib/paint with it) into this suite.
+#define BLORB_CONSENT_H "../../lib/wifiota/include/wifiota/consent.h"
+#include BLORB_CONSENT_H
 
 using namespace blorb;
 using namespace feedingtest;
@@ -173,7 +178,7 @@ TEST(KnockKnock, InFightModeAKnockKnockStillFeedsHim) {
   }
 }
 
-// A question owns BOOT (the update's "Turn me around!", the debug unlock's),
+// A question owns BOOT (the update's "Tip me on my side!", the debug unlock's),
 // and the knock knock is BOOT's twin: it answers nothing and feeds nobody.
 // Until 2026-10-21 the shell passed it to the Dish, which dropped a pellet
 // behind the update's screen, where it rotted unseen.
@@ -184,7 +189,103 @@ TEST(KnockKnock, AQuestionOnTheScreenTakesTheKnockKnock) {
   EXPECT_EQ(asked.pellets, 0);
   EXPECT_FALSE(asked.oneMore) << "nor does \"one more\" light under the question";
   b.asking = false;
+  b.run(hw::Feel::kAnswerTailMs);   // the answer's tail is the question's too (Question.*)
   EXPECT_EQ(b.knock({0, 300}).pellets, 1) << "once it is answered, a knock knock feeds him";
+}
+
+// The owner, 2026-10-29: the Wi-Fi question's turn also opened fight mode;
+// the duel took the radio and the provision failed ("provision refused: the
+// radio is in a duel"), and the phone heard only "couldn't connect". Now the
+// turn that answers is the question's: held upside down through the question
+// and past it, then let back, fight mode never opens, and the yes is taken.
+namespace {
+
+struct Asked {
+  wifiota::Consent consent;
+  hw::TurnYes turn;
+  bool answered = false;
+};
+
+// The kid turns the badge upside down (the hang's pose, more than the side
+// tip the words ask for) 2 s into the question, holds it `holdMs`, lets it back.
+void turnToAnswer(Badge& b, Asked& q, uint32_t holdMs) {
+  b.asks = [&q](uint32_t) { return q.consent.asking(); };
+  b.felt = [&q](const hw::Felt& f, uint32_t at) {
+    q.consent.tick(at);
+    if (q.turn.sample(q.consent.asking(), f.rot, at)) q.answered = q.consent.yes(at);
+  };
+  q.consent.ask(b.ms);
+  b.run(2000);
+  b.hand.turnMs = 400;
+  b.hand.pose = Pose::UpsideDown;
+  b.run(holdMs);
+  b.hand.pose = Pose::Held;
+  b.run(4000);
+}
+
+}  // namespace
+
+TEST(Question, TheWifiQuestionsTurnNeverOpensFightModeAndTheProvisionGoesOn) {
+  for (uint8_t home : {kHomeUp, kHomeDown})
+    for (uint32_t hold : {1500u, 3000u, 6000u}) {   // let back at once, inside the tail, long after
+      Badge b(home);
+      b.hungry(Fx::zero());   // up for a fight: a hungry pet is refused one, which would prove nothing
+      Asked q;
+      turnToAnswer(b, q, hold);
+      EXPECT_TRUE(q.answered) << "the turn said yes, home " << int(home) << " hold " << hold;
+      EXPECT_TRUE(q.consent.granted()) << "the phone may send its network";
+      EXPECT_FALSE(b.dish->duelActive()) << "no fight mode: the radio stays Wi-Fi's, home " << int(home) << " hold " << hold;
+      EXPECT_STREQ(b.dish->fightState(), "off") << "home " << int(home) << " hold " << hold;
+      EXPECT_EQ(b.count.fired >> stim::hang.v & 1, 0u) << "the pet never felt the hang";
+    }
+}
+
+// The update's question is answered by the same turn through the same shell.
+TEST(Question, TheUpdatesTurnNeverOpensFightMode) {
+  for (uint8_t home : {kHomeUp, kHomeDown}) {
+    Badge b(home);
+    b.hungry(Fx::zero());
+    bool asking = true, yes = false;
+    hw::TurnYes turn;
+    b.asks = [&](uint32_t) { return asking; };
+    b.felt = [&](const hw::Felt& f, uint32_t at) {
+      if (turn.sample(asking, f.rot, at)) yes = true, asking = false;   // ota::Session::press: the question goes
+    };
+    b.run(2000);
+    b.hand.turnMs = 400;
+    b.hand.pose = Pose::UpsideDown;
+    b.run(5000);
+    b.hand.pose = Pose::Held;
+    b.run(4000);
+    EXPECT_TRUE(yes) << "home " << int(home);
+    EXPECT_FALSE(b.dish->duelActive()) << "home " << int(home);
+  }
+}
+
+// The pet keeps his gestures: once the question is long gone and the badge
+// was let back, a hang opens fight mode as ever.
+TEST(Question, AfterTheQuestionAndTheTailTheHangIsHisAgain) {
+  Badge b(kHomeUp);
+  b.hungry(Fx::zero());
+  Asked q;
+  turnToAnswer(b, q, 3000);
+  ASSERT_FALSE(b.dish->duelActive());
+  b.hand.pose = Pose::UpsideDown;
+  b.run(4500);
+  b.hand.pose = Pose::Held;
+  b.run(2000);
+  EXPECT_TRUE(b.dish->duelActive()) << "a hang after the question is the pet's";
+}
+
+// And the knock knock and the press are the question's for the tail too.
+TEST(Question, AKnockKnockJustAfterTheAnswerFeedsNobody) {
+  Badge b(kHomeUp);
+  b.asking = true;
+  b.run(500);
+  b.asking = false;
+  EXPECT_EQ(b.knock({0, 300}, 600).pellets, 0) << "inside kAnswerTailMs: the question's";
+  b.run(2000);
+  EXPECT_EQ(b.knock({0, 300}).pellets, 1);
 }
 
 // A dark badge (low power) is woken by the knocks, and nobody feeds him

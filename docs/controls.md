@@ -108,7 +108,7 @@ while awake is the way to add one later.
 - **The rotation lagged a turn back** by about 1.5 s (`orient.h`'s settle
   and smoothing): found on badge 1, a 1 s turn held at 2.4 s, after the kid
   had let go. The poses no longer read the rotation (`src/hw/poses.h`), so
-  a turn back lets go within two samples; the update's "Turn me around!"
+  a turn back lets go within two samples; the update's "Tip me on my side!"
   still reads it.
 - **While turned onto a side, the duel's aim is the aim from before the
   turn** (the tilt of 1.5 s before), since turning him tips the tilt: a
@@ -119,7 +119,7 @@ while awake is the way to add one later.
   decided 0.4-0.6 s later, then feeds him on a lit screen
   (`test_feeding` `KnockKnock.ADarkBadgeIsLitAndNeverFedInTheDark`).
 - **A question owns the knock knock as it owns BOOT**: while the update asks
-  "Turn me around!" (or the debug unlock asks), a knock knock answers
+  "Tip me on my side!" (or the debug unlock asks), a knock knock answers
   nothing and feeds nobody (`hw/feel.h`). Until 2026-10-21 it dropped a
   pellet behind the update's screen, where it rotted unseen.
 

@@ -45,7 +45,7 @@ void drawUpdate(paint::Canvas240& cv, const View& v) {
     case View::Phase::Asking:
       ring(cv, float(v.msLeft) / Session::kConfirmMs, kAsk);
       centred(cv, "New version!", 106, kAsk);
-      centred(cv, "Turn me around!", 134, kInk);   // or press the button (src/hw/turn_yes.h)
+      centred(cv, "Tip me on my side!", 134, kInk);   // or press the button (src/hw/turn_yes.h)
       break;
     case View::Phase::Receiving: {
       ring(cv, v.size ? float(v.at) / v.size : 0, kWork);

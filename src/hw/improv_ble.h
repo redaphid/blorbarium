@@ -12,7 +12,8 @@
 // 0x4677) is left out; it goes in only if a smaller advertisement ever leaves
 // room. Its 128-bit UUID goes in the scan response after the name, only if
 // there is room (a name of up to 11 characters; every species and blorb-xxxx
-// fit), so it can never push the name out. Improv clients that filter on that
+// fit), so it can never push the name out; the scan response is built whole
+// here (NimBLE's getScanData() hands back the advertisement instead). Improv clients that filter on that
 // UUID (improv-wifi.com) still find the badge; Home Assistant's matcher wants
 // the service data too and does not. The website opens Improv after it
 // connects by the UART service, so it needs neither. The service data's
@@ -97,17 +98,22 @@ class ImprovBle : public wifiota::improv::Port {
     // so today it never does, and nothing is logged for a refusal.
     const bool inAdv = adv->getAdvertisementData().getPayload().size() + 2 + 2 + sizeof data <= 31 &&
                        adv->setServiceData(NimBLEUUID(im::kServiceDataUuid), data, sizeof data);
-    // Straight into the scan response, and only if it fits beside the name
-    // (NimBLE's addServiceUUID tries the full advertisement first and logs
-    // "Cannot add UUID, data length exceeded!" before it falls back).
-    NimBLEAdvertisementData scan = adv->getScanData();   // the name, set before this
-    bool inScan = false;
-    if (scan.getPayload().size() + 2 + 16 <= 31) {
-      scan.addServiceUUID(NimBLEUUID(im::kService));
-      inScan = adv->setScanResponseData(scan);
-    }
-    Serial.printf("[wifi] improv service up: service data %s, uuid in scan response %s, heap %u -> %u (before the server starts)\n",
-                  inAdv ? "advertised" : "left out (the badge's id fills the advertisement)", inScan ? "yes" : "left out (a long name)", unsigned(heap0), unsigned(ESP.getFreeHeap()));
+    // The scan response, built here whole: the name, then the UUID if it fits
+    // beside it (2 + name + 2 + 16 <= 31: a name of up to 11 characters).
+    // Not from adv->getScanData(): NimBLE-Arduino's returns the
+    // ADVERTISEMENT (m_advData), already full with the badge's id, so the UUID
+    // never fit and every badge to 0.7.33 left it out, and improv-wifi.com
+    // could not find them (owner, 2026-10-29).
+    const char* name = nus_.name();
+    NimBLEAdvertisementData scan;
+    scan.setName(name);
+    const bool fits = scan.getPayload().size() + 2 + 16 <= 31;
+    if (fits) scan.addServiceUUID(NimBLEUUID(im::kService));
+    const bool inScan = adv->setScanResponseData(scan) && fits;
+    Serial.printf("[wifi] improv service up: service data %s; scan response %u B: name %u B, uuid %s; heap %u -> %u (before the server starts)\n",
+                  inAdv ? "advertised" : "left out (the badge's id fills the advertisement)", unsigned(scan.getPayload().size()),
+                  unsigned(std::strlen(name)), inScan ? "yes" : "left out (a name over 11 characters)", unsigned(heap0),
+                  unsigned(ESP.getFreeHeap()));
   }
 
   void set(NimBLECharacteristic* c, uint8_t v) {

@@ -141,6 +141,17 @@ RTC_NOINIT_ATTR static uint32_t crashesInARow;
 
 // What is asked of the next window.
 static bool forced = false;
+// A window a phone or a hand asked for (a provision, a forced check) waits
+// for Bluetooth to pause first (NusLink::pauseForWifi): the phone let go,
+// nothing advertising, for at most kPauseWaitMs.
+constexpr uint32_t kPauseWaitMs = 3000;
+static Window pendingWindow = Window::None;
+static uint32_t pendingAt = 0;
+// A provision's end, on the screen for kResultMs (and in `DEBUG wifi`, the log, the report).
+constexpr uint32_t kResultMs = 8000;
+static uint32_t resultAt = 0;
+static bool resultShowing = false, resultOk = false;
+static char resultWhy[40] = "";
 // On trial after an update over Wi-Fi: the token the old image handed over.
 static std::optional<ota::Token> confirmToken;
 static uint32_t confirmAt = 0;
@@ -203,6 +214,23 @@ static size_t masked(const char* in, size_t n, char* out, size_t cap) {
   return rdebug::maskSecrets(std::string_view(in, n), secrets, k, out, cap);
 }
 
+static void showResult(bool ok, const char* why) {
+  resultShowing = true, resultOk = ok, resultAt = millis();
+  std::snprintf(resultWhy, sizeof resultWhy, "%s", why);
+}
+
+// A failed join's reason in a few words, for the screen (the full reason is in
+// `DEBUG wifi` and the log): from the driver's last disconnect.
+static const char* joinWhy() {
+  switch (station.reason()) {
+    case 15: case 204: return "wrong password?";   // 4WAY_HANDSHAKE_TIMEOUT, HANDSHAKE_TIMEOUT
+    case 201: return "network not found";           // NO_AP_FOUND
+    case 2: case 202: case 203: return "weak signal?";   // AUTH_EXPIRE, AUTH_FAIL, ASSOC_FAIL
+    default: break;
+  }
+  return hw::WifiStation::associated() ? "no address from the router" : "could not connect";
+}
+
 static bool lowBattery() { return cellRead && cellMv >= 2500 && cellMv < wifiota::Schedule::kLowBatteryMv; }
 
 static wifiota::Facts facts(uint32_t now) {
@@ -242,6 +270,7 @@ static void radioDown() {
       unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()));
   if (phase != Phase::Off) setPhase(Phase::Off);
   window = Window::None;
+  if (ble.pausedForWifi()) ble.pauseForWifi(false);   // the phone may come back (and read how it went)
 }
 
 // The window ends: the GET is told to stop, an unfinished download is
@@ -277,18 +306,32 @@ static void noteJoin(const char* fmt, ...) {
   say("network #%u had its first try (%s)", unsigned(*joinPick + 1), hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED");
 }
 
-// A provision that did not join (a weak signal while the phone was there, a
-// duel, someone came): the phone's network is remembered all the same, marked
-// untried, and the next Check, dark with no phone and advertising held, tries
-// it before any other (wifiota/remembered.h). The phone hears it could not join.
-static void provisionFailed(const char* why) {
+// The phone's network is saved the moment it arrives, marked untried, before
+// any join (owner, 2026-10-29): whatever then goes wrong (a weak signal, a
+// duel, someone came), the next Check, dark with no phone and advertising
+// held, tries it before any other (wifiota/remembered.h).
+static void provisionSave() {
+  const improv::Credentials& c = *mem().provisioning;
+  mem().networks.remember(c);
+  mem().networks.setUntried(0, true);
+  std::snprintf(noteFor(c.ssid).result, sizeof Mem::Note::result, "saved from a phone; not tried yet");
+  say("provision: saved as network #1, untried (ssid %u B, password %u B; %s; %u remembered)", unsigned(std::strlen(c.ssid)),
+      unsigned(std::strlen(c.password)), hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED",
+      unsigned(mem().networks.size()));
+}
+
+// A provision that did not join: the phone hears it could not join (Improv
+// has no words for why), and the why goes on the screen, in `DEBUG wifi`
+// (WIFI over Bluetooth, `debug wifi` over Wi-Fi) and the log. The network
+// stays saved, untried.
+static void provisionFailed(const char* why, const char* shortWhy) {
   improvBle.machine().couldNotJoin();
+  showResult(false, shortWhy);
   if (!mem().provisioning) return;
   if (why) std::snprintf(noteFor(mem().provisioning->ssid).result, sizeof Mem::Note::result, "%s", why);
-  mem().networks.remember(*mem().provisioning);
-  mem().networks.setUntried(0, true);
-  say("provision: kept as network #1, untried: the next check, dark and alone, tries it first (%s; %u remembered)",
-      hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
+  const std::optional<size_t> at = mem().networks.find(mem().provisioning->ssid);
+  say("provision: NOT joined (%s); network #%u stays saved, untried: the next check, dark and alone, tries it first", shortWhy,
+      unsigned(at.value_or(0) + 1));
 }
 
 // A Check that failed waits (schedule.h); a Provision tells the phone.
@@ -301,7 +344,8 @@ static void failWindow(Failure why, const char* fmt, ...) {
   say("%s: FAILED %s%s", wifiota::windowName(window), mem().lastOutcome,
       window == Window::Check ? (why == Failure::Absent ? " (no network: next check later)" : " (the site: next check later)") : "");
   if (phase == Phase::Joining || window == Window::Provision) noteJoin("%s", mem().lastOutcome);
-  if (window == Window::Provision) provisionFailed(nullptr);
+  if (window == Window::Provision)
+    provisionFailed(nullptr, phase == Phase::Joining ? joinWhy() : "busy: try again soon");
   closeWindow();
 }
 
@@ -377,13 +421,20 @@ static void statusLine();
 // The window's last step, once the manifest was read: the remote debug report
 // (src/remote_debug.h), in a Check or a cable's check, then the radio goes.
 static void finishWithReport() {
-  if ((window == Window::Check || window == Window::Forced) && rd::start()) return setPhase(Phase::Report);
+  // A provision's report is its check-in: the site's page waits for it (/api/badge/online).
+  if ((window == Window::Check || window == Window::Forced || window == Window::Provision) && rd::start())
+    return setPhase(Phase::Report);
   closeWindow();
 }
 
 static void readReport() {
   if (job.busy()) return;
-  rd::arrived(job.state() == hw::NetJob::State::Done, job.text(), job.textLen(), job.error());
+  const bool home = job.state() == hw::NetJob::State::Done;
+  if (window == Window::Provision) {   // the check-in the phone's page waits for
+    showResult(true, home ? "online" : "joined; the site did not answer");
+    outcome("provisioned: joined, and %s", home ? "checked in with the site" : "the check-in did not reach the site");
+  }
+  rd::arrived(home, job.text(), job.textLen(), job.error());
   if (rd::startShot(job.state() == hw::NetJob::State::Done)) return setPhase(Phase::Shot);   // a screenshot the owner asked for: alone, after
   closeWindow();
 }
@@ -402,15 +453,18 @@ static void joined() {
     if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
     return;
   }
-  mem().networks.remember(*mem().provisioning);
+  // Saved when it came (provisionSave): this was its try.
+  const std::optional<size_t> at = mem().networks.find(mem().provisioning->ssid);
+  if (at) mem().networks.setUntried(*at, false);
   const bool saved = hw::WifiStore::save(mem().networks);
   char url[64];
   std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
   improvBle.machine().joined(url);
-  outcome("provisioned the phone's network as #1 (%s; %u remembered)", saved ? "saved" : "SAVE FAILED",
-          unsigned(mem().networks.size()));
+  outcome("provisioned: joined the phone's network, #%u (%s; %u remembered); checking in with the site",
+          unsigned(at.value_or(0) + 1), saved ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
+  showResult(true, "checking in with the site");
   consent.end();   // the next network needs another yes
-  closeWindow();
+  finishWithReport();
 }
 
 static void startImage(const wifiota::Manifest& m) {
@@ -599,8 +653,10 @@ static void poll(uint32_t now) {
     if (window == Window::Check) {   // not a failure: due again the next time it is dark and alone
       std::snprintf(mem().lastOutcome, sizeof mem().lastOutcome, "closed early: someone came");
     }
-    if (window == Window::Provision)
-      provisionFailed(f.radioBusy ? "closed early: the radio was wanted for a duel" : "closed early: someone was using the badge");
+    if (window == Window::Provision) {
+      outcome("provision: closed early: %s", f.radioBusy ? "fight mode or a duel wanted the radio" : "someone was using the badge");
+      provisionFailed(mem().lastOutcome, f.radioBusy ? "in a fight: leave fight mode" : "busy: try again soon");
+    }
     return closeWindow();
   }
   switch (phase) {
@@ -645,21 +701,43 @@ static void poll(uint32_t now) {
   }
   // Off: the owner's remote commands, one a pass (src/remote_debug.h); then what to open, the person waiting first.
   rd::poll(now);
+  // A window a phone or a hand asked for opens once Bluetooth has paused.
+  if (pendingWindow != Window::None) {
+    if (!ble.quietForWifi() && now - pendingAt < kPauseWaitMs) return;
+    const Window w = pendingWindow;
+    pendingWindow = Window::None;
+    if (f.radioBusy) {   // fight mode opened while Bluetooth paused
+      if (w == Window::Provision) {
+        outcome("provision: not tried: fight mode or a duel has the radio (leave fight mode; the next check tries it)");
+        provisionFailed(mem().lastOutcome, "in a fight: leave fight mode");
+        mem().provisioning.reset();
+      } else {
+        say("ota check: not now: fight mode or a duel has the radio");
+      }
+      return ble.pauseForWifi(false);
+    }
+    return openWindow(w);
+  }
   if (mem().provisionAsked) {
     mem().provisioning = mem().provisionAsked;
     mem().provisionAsked.reset();
+    provisionSave();
     if (f.radioBusy) {
-      say("provision refused: the radio is in a duel");
-      provisionFailed("not tried: the radio was in a duel");
+      outcome("provision: not tried: fight mode or a duel has the radio (leave fight mode; the next check tries it)");
+      provisionFailed(mem().lastOutcome, "in a fight: leave fight mode");
       mem().provisioning.reset();
       return;
     }
-    return openWindow(Window::Provision);
+    say("provision: joining now; Bluetooth pauses for the join and the check-in, then comes back");
+    pendingWindow = Window::Provision, pendingAt = now;
+    return ble.pauseForWifi(true);
   }
   if (forced && !f.radioBusy) {
     forced = false;
     if (mem().networks.empty()) return say("ota check: no network remembered (DEBUG wifi set <ssid> <password>)");
-    return openWindow(Window::Forced);
+    say("ota check: Bluetooth pauses for the join and the check, then comes back");
+    pendingWindow = Window::Forced, pendingAt = now;
+    return ble.pauseForWifi(true);
   }
   if (confirmToken && trial.onTrial() && !mem().networks.empty() && int32_t(now - confirmAt) >= 0) {
     confirmAt = now + kConfirmRetryMs;   // the next try, should this one fail
@@ -682,7 +760,10 @@ static void poll(uint32_t now) {
 static bool yieldRadio() {
   if (window != Window::None && window != Window::Confirm && phase != Phase::Closing) {
     say("%s: closed early: the radio is wanted for a duel", wifiota::windowName(window));
-    if (window == Window::Provision) provisionFailed("closed early: the radio was wanted for a duel");
+    if (window == Window::Provision) {
+      outcome("provision: closed early: a duel wanted the radio");
+      provisionFailed(mem().lastOutcome, "in a fight: leave fight mode");
+    }
     closeWindow();
   }
   return station.isUp();
@@ -769,7 +850,7 @@ static bool quietBoot() {
 
 static bool asks() { return consent.asking(); }
 // No window open: the radio is off, so the chip may nap (main.cpp).
-static bool idle() { return window == Window::None; }
+static bool idle() { return window == Window::None && pendingWindow == Window::None; }
 // Until the next automatic check is due (0: due now), or UINT32_MAX when none
 // can open: the nap sleeps no longer than this (power::napSleepMs).
 static uint32_t checkInMs(uint32_t now) {
@@ -778,7 +859,10 @@ static uint32_t checkInMs(uint32_t now) {
 }
 // The button, or a turn (main.cpp TurnYes): true when the question took it.
 static bool press(uint32_t now) { return consent.yes(now); }
-static bool drawing() { return consent.asking(); }
+static bool drawing() {
+  if (resultShowing && millis() - resultAt >= kResultMs) resultShowing = false;
+  return consent.asking() || resultShowing;
+}
 // A hard shake dismisses what is modal (#35): main.cpp's dismiss list calls
 // this, as it does ota::Session::decline: the question goes as if unanswered,
 // and the phone waiting on it hears "not authorized" when its yes never comes.
@@ -789,10 +873,19 @@ static void dismiss() {
 // Drawn as the update's question and the debug unlock's are: a band over the
 // pet, a rim ring that runs down, amber because it asks.
 static void draw(paint::Canvas240& cv) {
-  if (!consent.asking()) return;
-  const uint32_t left = consent.msLeft(millis());
-  constexpr uint16_t kAsk = 0xFDC6, kInk = 0xFFFF;   // ota/screen.cpp's amber and white
+  constexpr uint16_t kAsk = 0xFDC6, kInk = 0xFFFF, kGood = 0x87F0;   // ota/screen.cpp's amber and white; a green
   constexpr paint::Clip kAll{0, 0, 240, 240, 0};
+  if (!consent.asking()) {   // how a provision went, a few seconds (drawing())
+    if (!drawing()) return;
+    for (int y = 82; y < 158; ++y)
+      for (int x = 0; x < 240; ++x) cv.px[y * 240 + x] = paint::blend(cv.px[y * 240 + x], 0, 200);
+    const char* head = resultOk ? "Wi-Fi joined!" : "Wi-Fi: not joined";
+    for (const auto& [text, y, colour] : {std::tuple{head, 106, resultOk ? kGood : kAsk}, std::tuple{(const char*)resultWhy, 134, kInk}})
+      paint::drawString(cv, paint::kFreeSans9pt7b, text, 120 - paint::textWidth(paint::kFreeSans9pt7b, text) / 2, y,
+                        colour, kAll);
+    return;
+  }
+  const uint32_t left = consent.msLeft(millis());
   for (int y = 82; y < 158; ++y)
     for (int x = 0; x < 240; ++x) cv.px[y * 240 + x] = paint::blend(cv.px[y * 240 + x], 0, 200);
   const int steps = int(1200 * uint64_t(left) / wifiota::Consent::kAskMs);
@@ -803,7 +896,7 @@ static void draw(paint::Canvas240& cv) {
       if (x >= 0 && x < 240 && y >= 0 && y < 240) cv.px[y * 240 + x] = kAsk;
     }
   }
-  for (const auto& [text, y, colour] : {std::tuple{"Join Wi-Fi?", 106, kAsk}, std::tuple{"Turn me around!", 134, kInk}})
+  for (const auto& [text, y, colour] : {std::tuple{"Join Wi-Fi?", 106, kAsk}, std::tuple{"Tip me on my side!", 134, kInk}})
     paint::drawString(cv, paint::kFreeSans9pt7b, text, 120 - paint::textWidth(paint::kFreeSans9pt7b, text) / 2, y,
                       colour, kAll);
 }
@@ -907,7 +1000,9 @@ static void wifiVerb(const char* line) {
                  "to 64; got %u bytes after \"set\")",
                  unsigned(std::strlen(std::strstr(line, "set") + 3)));
     mem().networks.remember(*c);
-    say("network #1: ssid %u B, password %u B (%s; %u remembered, newest first); DEBUG ota check tries it now",
+    mem().networks.setUntried(0, true);   // never joined yet: the next check (or DEBUG ota check) tries it first
+    std::snprintf(noteFor(c->ssid).result, sizeof Mem::Note::result, "set by hand; not tried yet");
+    say("network #1: ssid %u B, password %u B (%s; %u remembered, newest first), untried; DEBUG ota check tries it now",
         unsigned(std::strlen(c->ssid)), unsigned(std::strlen(c->password)),
         hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED", unsigned(mem().networks.size()));
     return;

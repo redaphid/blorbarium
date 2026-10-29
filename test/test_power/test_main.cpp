@@ -674,7 +674,7 @@ TEST(Wake, TwoListensNeverAddUpToAHand) {
 
 }  // namespace
 
-// ---- Turn me around: the update's yes without the button ----------------------------
+// ---- Tip me on my side: the update's yes without the button ----------------------------
 
 TEST(TurnYes, AQuarterTurnAfterTheFirstMomentSaysYesOnce) {
   hw::TurnYes t;

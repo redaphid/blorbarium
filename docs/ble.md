@@ -44,6 +44,12 @@ it is left out: Improv clients that filter on Improv's UUID (improv-wifi.com)
 still find the board, Home Assistant's matcher, which wants both, does not.
 The website opens Improv after it connects by the UART service and needs neither.
 
+Until 0.7.35 the scan response's Improv UUID was left out on every board, so
+improv-wifi.com found none: NimBLE-Arduino's `getScanData()` returns the
+advertisement (already full), not the scan response, and the UUID never fit
+beside it. The scan response is now built whole (`src/hw/improv_ble.h`); the
+boot line says `scan response <n> B: name <n> B, uuid yes`.
+
 A page asks Chrome's chooser for one board with
 `{services: [NUS], manufacturerData: [{companyIdentifier: 0xFFFF, dataPrefix: <the 6 MAC bytes>}]}`.
 That is what an NFC link `?b=<mac>` does (`docs/nfc.md`).

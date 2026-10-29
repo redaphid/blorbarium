@@ -279,7 +279,7 @@ static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 static bool debugAsks();
 static void debugSaysNo();   // a hard shake answers the debug link's unlock question no (#35)
 static bool debugPress(uint32_t ms);
-// Wi-Fi's question, "Join Wi-Fi? Turn me around!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
+// Wi-Fi's question, "Join Wi-Fi? Tip me on my side!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
 static bool wifiAsks();
 static bool wifiIdle();
 static uint32_t wifiCheckInMs(uint32_t now);
@@ -778,27 +778,30 @@ static void traceFor(const char* a) {
 }
 #endif
 
-// While the dish asks about an update, the button answers it, and the pet
-// feels neither that press nor the rest of that hold. A cable's DEBUG press
-// answers too: the cable is a hand on the dish. The debug link's press
-// (`remote`) never answers: the pet feels it only while no question shows.
-static bool petFeels(bool down, bool remote) {
+// While the dish asks (an update, Wi-Fi, the debug unlock), the button
+// answers it, and the pet feels neither that press nor the rest of that hold,
+// nor any press for hw::Feel::kAnswerTailMs after the question goes (`owned`):
+// a double press would open fight mode, and a duel would take the radio from
+// the Wi-Fi it just said yes to. A cable's DEBUG press answers too: the cable
+// is a hand on the dish. The debug link's press (`remote`) never answers: the
+// pet feels it only while nothing owns BOOT.
+static bool petFeels(bool down, bool remote, bool owned) {
 #if !defined(BADGE_BOARD_SIM)
   static bool wasDown = false, otaOwns = false;
   if (remote) {
     wasDown = down;
     otaOwns = false;
-    return down && !updater.asking() && !debugAsks() && !wifiAsks();
+    return down && !owned;
   }
   const bool edge = down && !wasDown;
   if (updater.asking() && edge) updater.press(millis());
   const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
   const bool wifiTook = !updater.asking() && !debugTook && edge && wifiPress(millis());   // Wi-Fi's
-  otaOwns = updater.asking() || debugAsks() || wifiAsks() || debugTook || wifiTook || (otaOwns && down);
+  otaOwns = owned || debugTook || wifiTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
-  (void)remote;
+  (void)remote, (void)owned;
   return down;
 #endif
 }
@@ -894,7 +897,7 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
     boardRepaintAll();   // the rows the panel holds were sent the other way round
   }
 #if !defined(BADGE_BOARD_SIM)
-  // "Turn me around!": a turn answers the update's question as a press does.
+  // "Tip me on my side!": a turn answers the update's question as a press does.
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
@@ -905,11 +908,11 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   }
 #endif
   applyLean(f.screen, ms);
-  f.screen.buttonDown = marqueefw::takesButton(petFeels(f.screen.buttonDown, remote));   // a press takes the marquee down
+  f.screen.buttonDown = marqueefw::takesButton(petFeels(f.screen.buttonDown, remote, f.owned));   // a press takes the marquee down
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
-  // A hard shake is a no to the shell's questions (#35): the update's "Turn
-  // me around!" lapses (not now), the debug link's unlock question goes, and
+  // A hard shake is a no to the shell's questions (#35): the update's "Tip
+  // me on my side!" lapses (not now), the debug link's unlock question goes, and
   // Wi-Fi's "Join Wi-Fi?" goes as if unanswered.
   if (dish->shakeDismisses() && (updater.asking() || debugAsks() || wifiAsks())) {
     if (updater.asking()) updater.decline(millis()), Serial.printf("[ota] shaken: not now\n");

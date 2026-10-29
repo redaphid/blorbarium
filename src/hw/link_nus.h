@@ -173,10 +173,32 @@ class NusLink : public blorb::Link {
   bool advertisingSlow() const { return slow_; }
   bool advertisingHeld() const { return advHeld_; }
 
+  // A Wi-Fi join a phone or a hand asked for (Improv, `DEBUG ota check`):
+  // Bluetooth and Wi-Fi do not share the radio through the join, its DHCP
+  // and its check-in (owner, 2026-10-29). The phone is let go once its reply
+  // has had kPauseReplyMs to leave, and nothing advertises until the window
+  // is over. A clean pause: the stack stays up (NimBLE's deinit panicked
+  // mid-session, and a deinit(true) frees the link's static callbacks).
+  static constexpr uint32_t kPauseReplyMs = 600;
+  void pauseForWifi(bool on) {
+    if (on == paused_) return;
+    paused_ = on;
+    pauseAt_ = millis() + kPauseReplyMs;
+    hold_(kHeldJoin, on);
+    Serial.printf("[hw] ble %s\n", on ? "pauses for a Wi-Fi join: the phone is let go, no advertising until it is over"
+                                      : "back after the Wi-Fi join: advertising");
+  }
+  bool pausedForWifi() const { return paused_; }
+  // Paused, and quiet: no phone, nothing advertising.
+  bool quietForWifi() const {
+    NimBLEServer* server = NimBLEDevice::getServer();
+    return paused_ && (!server || liveConnections(server) == 0) && !NimBLEDevice::getAdvertising()->isAdvertising();
+  }
+
  private:
   // Advertising intervals, in 0.625 ms: Apple's 152.5..211.25 ms pair, and its 1022.5..1285 ms one.
   static constexpr uint16_t kFastMin = 160, kFastMax = 240, kSlowMin = 1636, kSlowMax = 2056;
-  static constexpr uint8_t kHeldWifi = 1, kHeldNap = 2;
+  static constexpr uint8_t kHeldWifi = 1, kHeldNap = 2, kHeldJoin = 4;
   void hold_(uint8_t why, bool hold) {
     const uint8_t was = held_;
     held_ = hold ? uint8_t(held_ | why) : uint8_t(held_ & ~why);
@@ -186,7 +208,8 @@ class NusLink : public blorb::Link {
     lastPoll_ = millis() - 250;   // a release restarts it at once
   }
   uint8_t held_ = 0;
-  bool slow_ = false;
+  bool slow_ = false, paused_ = false;
+  uint32_t pauseAt_ = 0;
 
  public:
 
@@ -213,6 +236,14 @@ class NusLink : public blorb::Link {
       loggedDrop_ = lastDrop_;
       Serial.printf("[hw] ble drop h=%u reason=0x%x\n", unsigned(loggedDrop_ >> 16), unsigned(loggedDrop_ & 0xffff));
     }
+    // Paused for a Wi-Fi join: the phone goes once its reply has left.
+    if (paused_ && int32_t(now - pauseAt_) >= 0 && liveConnections(server) > 0) {
+      Serial.printf("[hw] ble drop h=%u reason=a Wi-Fi join (the phone may come back once it is over)\n", unsigned(conn_));
+      for (uint16_t h : server->getPeerDevices()) server->disconnect(h);
+      pauseAt_ = now + 1000;   // once a second at most
+    }
+    // Held: nothing advertises, even what NimBLE restarts on a disconnect (advertiseOnDisconnect).
+    if (advHeld_ && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
     // Live by the host's own table, not NimBLE-Arduino's peer list: a peer the
     // host dropped without a DISCONNECT event must not keep the dish invisible.
     const bool live = liveConnections(server) > 0;
