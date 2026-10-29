@@ -98,24 +98,79 @@ def laptop_wifi():
         if not ssid:
             return None
         # A badge hears only 2.4 GHz. When this network is 5 GHz only here,
-        # the router's 2.4 GHz twin (the owner's: another name, the same
-        # first part, the same password) is the one with the longest shared
-        # prefix.
-        seen = subprocess.run(["nmcli", "-t", "-f", "ssid,freq", "dev", "wifi", "list"], capture_output=True, text=True,
-                              timeout=20, stdin=subprocess.DEVNULL).stdout
-        low = {l.rsplit(":", 1)[0].replace("\\:", ":") for l in seen.splitlines()
-               if l.rsplit(":", 1)[-1].split()[0].isdigit() and int(l.rsplit(":", 1)[-1].split()[0]) < 3000}
-        if ssid not in low:
-            shared = lambda o: len(os.path.commonprefix([ssid, o]))
-            twin = max(low, key=shared, default="")
-            if shared(twin) < 4:
-                say("wifi: this laptop's network is 5 GHz only and has no 2.4 GHz twin here; the badge cannot use it")
-                return None
-            say(f"wifi: this laptop's network is 5 GHz only; its 2.4 GHz twin (first {shared(twin)} characters the same) instead")
+        # the router's 2.4 GHz twin is the one with the same name but its band
+        # (twin_24ghz).
+        seen = subprocess.run(["nmcli", "-t", "-f", "ssid,freq,security", "dev", "wifi", "list"], capture_output=True,
+                              text=True, timeout=20, stdin=subprocess.DEVNULL).stdout
+        twin = twin_24ghz(ssid, parse_scan(seen))
+        if twin is None:
+            say("wifi: this laptop's network is 5 GHz only and has no 2.4 GHz twin here; the badge cannot use it")
+            return None
+        if twin != ssid:
+            say("wifi: this laptop's network is 5 GHz only; its 2.4 GHz twin (the same name, the band swapped) instead")
             ssid = twin
         return ssid, get("802-11-wireless-security.psk", "-s")
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+# A band in a network's name: "-5G", "_2.4GHz", " 5", "5G" glued on. A bare
+# digit counts only set apart, so "Apt5" keeps its 5.
+BAND = re.compile(r"(?:(?:^|[\s_\-.])(?:5|2\.4|2|24)(?:\.0)?\s*(?:g|ghz)?|(?:5|2\.4|2|24)(?:\.0)?\s*(?:g|ghz))(?=$|[\s_\-.])",
+                  re.I)
+
+
+def band_base(ssid):
+    """The name with its band taken out, lowercased: "Home-5G" and "Home_2.4GHz" are both "home"."""
+    return BAND.sub("", ssid).strip(" _-.").lower()
+
+
+def parse_scan(text):
+    """`nmcli -t -f ssid,freq,security dev wifi list` as [(ssid, mhz, security)]; terse mode escapes ':' as '\\:'."""
+    out = []
+    for line in text.splitlines():
+        parts = [p.replace("\\:", ":").replace("\\\\", "\\") for p in re.split(r"(?<!\\):", line)]
+        if len(parts) < 3 or not parts[0]:
+            continue
+        mhz = parts[1].split()[0] if parts[1].split() else ""
+        if mhz.isdigit():
+            out.append((parts[0], int(mhz), parts[2].strip()))
+    return out
+
+
+def wpa3_only(security):
+    words = security.split()
+    return "WPA3" in words and "WPA2" not in words and "WPA1" not in words
+
+
+def twin_24ghz(ssid, scan):
+    """The 2.4 GHz network a badge should join for this laptop's `ssid`, from `scan` [(ssid, mhz, security)].
+
+    The laptop's own network when it is on 2.4 GHz here. Otherwise its twin: a
+    2.4 GHz network whose name is the laptop's with the band swapped or dropped
+    ("Home-5G" -> "Home-2G", "Home"), the same security first. Never a mere
+    look-alike sharing a prefix (the parents' WPA3-only "<name>..." beside the
+    real WPA2 one, 2026-10-28), and never a WPA3-only network for a laptop
+    that is not on WPA3 only. None when there is no twin.
+    """
+    low = {}
+    for name, mhz, sec in scan:
+        if mhz < 3000:
+            low.setdefault(name, set()).add(sec)
+    if ssid in low:
+        return ssid
+    mine = {sec for name, mhz, sec in scan if name == ssid}
+    base = band_base(ssid)
+    if not base or base == ssid.lower():   # no band in the name: nothing says which 2.4 GHz network is its twin
+        candidates = []
+    else:
+        candidates = [name for name in low if band_base(name) == base]
+    if not any(wpa3_only(s) for s in mine):
+        candidates = [n for n in candidates if not all(wpa3_only(s) for s in low[n])]
+    if not candidates:
+        return None
+    same = [n for n in candidates if low[n] & mine]
+    return sorted(same or candidates)[0]
 
 
 def read_env(path):
