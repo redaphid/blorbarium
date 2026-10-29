@@ -19,9 +19,34 @@ The board advertises the service UUID and puts its name in the scan response.
 The name is its creature's species, as the lowercase slug from
 `species.def` (`mossby`, `hushwing`). It is the same whatever the owner named
 the pet. Each badge in `defs/badges.def` holds a different species, so the name
-also tells the badges apart. The advertisement carries the flags and the
-128-bit UUID (21 of its 31 bytes). The scan response holds the name, and the
-longest slug, 8 characters, takes 10 of its 31 bytes.
+also tells the badges apart. But the name changes with the pet, so from
+0.7.33 the board also advertises an id that never changes: its MAC.
+
+### Advertisement
+
+| Packet | AD structure | Bytes |
+|---|---|---|
+| advertisement | flags | 3 |
+| advertisement | the UART service's 128-bit UUID | 18 |
+| advertisement | manufacturer data: company `0xFFFF` (little-endian `ff ff`), then the 6 MAC bytes in print order | 10 |
+| scan response | the name (longest slug 8 characters: 10; `blorb-xxxx`: 12) | 10-12 |
+| scan response | Improv's 128-bit UUID, only if it fits beside the name (it always does) | 18 |
+
+The advertisement is full (31 of 31). The MAC is the Wi-Fi station MAC, the
+one `defs/badges.def`, `blorb-xxxx` and `/admin` print (the Bluetooth address
+is that plus 2; Web Bluetooth shows neither). `0xFFFF` is the Bluetooth SIG's
+id for testing and internal use. The layout is `lib/blorb/include/blorb/ble_id.h`,
+checked by `test/test_ble_id`.
+
+Before 0.7.33 the advertisement's last 10 bytes held Improv's service data
+(16-bit UUID `0x4677`, its boot state and capabilities). It no longer fits, so
+it is left out: Improv clients that filter on Improv's UUID (improv-wifi.com)
+still find the board, Home Assistant's matcher, which wants both, does not.
+The website opens Improv after it connects by the UART service and needs neither.
+
+A page asks Chrome's chooser for one board with
+`{services: [NUS], manufacturerData: [{companyIdentifier: 0xFFFF, dataPrefix: <the 6 MAC bytes>}]}`.
+That is what an NFC link `?b=<mac>` does (`docs/nfc.md`).
 
 Which species (`advertisedSpecies` in `founding.h`):
 
@@ -41,7 +66,8 @@ Which species (`advertisedSpecies` in `founding.h`):
   keeps the image.
 
 Filter on the service UUID. A `?d=<name>` link must use the current name: after
-the update, `?d=mossby`, not `?d=blorb-1b3c`. There is no pairing and no owner
+the update, `?d=mossby`, not `?d=blorb-1b3c`. A `?b=<mac>` link never goes
+stale (`docs/nfc.md`). There is no pairing and no owner
 token.
 
 ## Framing
