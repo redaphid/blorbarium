@@ -81,8 +81,17 @@ while time.monotonic() < end:
                                              (ups[-1][:110] if ups else "-")))
 lines = [l for _, l in b.lines]
 mark = b.mark()
+# A napping badge wakes on the line's first bytes and loses them: wake it with
+# bare returns (the link ignores them), then the pick-up while it listens.
+b.p.write(b"\r" * 8)
+time.sleep(0.5)
+b.p.write(b"\n")   # ends whatever the wake garbled as a line of its own
+time.sleep(0.5)
+pick_at = b.mark()
 b.send("DEBUG pickup")
-woke = b.wait(r"\[power\] nap out why=.*|\[power\] power=full.*", 30, mark)
+took = b.wait(r"\[hw\] debug pickup.*", 5, pick_at)
+say("pickup: %s" % (took.group(0)[:120] if took else "(the line was lost)"))
+woke = b.wait(r"\[power\] .*power=full.*", 30, pick_at)
 time.sleep(5)
 after, _ = online(a.mac, start_ms)
 
