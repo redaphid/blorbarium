@@ -261,6 +261,22 @@ class NetJob {
     }
   }
 
+  // HTTPClient's "connection refused" is any open that failed: a lookup, a
+  // TCP connect or a TLS handshake. Which one, by asking the resolver again.
+  State failConnect(uint32_t t0) {
+    char host[96] = "";
+    const char* h = std::strstr(m_->url, "://");
+    h = h ? h + 3 : m_->url;
+    size_t n = 0;
+    while (h[n] && h[n] != '/' && h[n] != ':' && n + 1 < sizeof host) host[n] = h[n], ++n;
+    host[n] = 0;
+    const uint32_t failedAfter = millis() - t0;
+    IPAddress ip;
+    if (!WiFi.hostByName(host, ip)) return fail("connection refused after %u ms: dns, %s did not resolve", unsigned(failedAfter), host);
+    return fail("connection refused after %u ms: dns ok now (%s), so the tcp connect or the tls handshake", unsigned(failedAfter),
+                ip.toString().c_str());
+  }
+
   void get() {
     std::unique_ptr<WiFiClient> client;
     if (std::strncmp(m_->url, "https://", 8) == 0) {
@@ -288,6 +304,7 @@ class NetJob {
     bigAfterOpen_ = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (secure && code > 0) heardClock(http);
     if (cancel_) return finish(fail("cancelled"), http);
+    if (code == HTTPC_ERROR_CONNECTION_REFUSED) return finish(failConnect(t0), http);
     if (code != HTTP_CODE_OK)
       return finish(code < 0 ? fail("%s", HTTPClient::errorToString(code).c_str()) : fail("http %d", code), http);
     size_ = http.getSize();

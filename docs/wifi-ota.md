@@ -145,9 +145,13 @@ If that try fails and the window's scan heard another remembered network,
 that one gets the rest of the window (`join of network #2 failed …: network
 #1, heard in the scan, instead`; 0.7.37): an untried network out of reach
 never costs a Check whose usual network is in range.
-Once joined, a manifest GET that gets nothing back (a connect or handshake
-that failed: `manifest: connection refused: once more`) is tried once more in
-the same window (0.7.38).
+Once joined, a manifest GET that gets nothing back (a lookup, connect or
+handshake that failed) is tried again 1.5 s later, up to three tries in the
+same window (`wifiota::GetTries`; 0.7.41): `manifest: connection refused
+after 2810 ms: dns ok now (…), so the tcp connect or the tls handshake (try 1
+of 3): again in 1500 ms`. "Connection refused" is HTTPClient's word for any
+open that failed, so the job asks the resolver again to say which: `dns, <host>
+did not resolve` or `dns ok now`.
 
 A phone that sends a network the badge already knows with another password
 never replaces the one that works: the new password is kept beside it

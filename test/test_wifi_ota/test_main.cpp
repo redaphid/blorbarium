@@ -24,6 +24,7 @@
 #include "wifiota/schedule.h"
 #include "wifiota/consent.h"
 #include "wifiota/sightings.h"
+#include "wifiota/get_tries.h"
 #include "../../src/hw/ota_pubkey.h"
 #include "../../src/hw/power.h"   // the nap's sleep length (power::napSleepMs)
 
@@ -1347,4 +1348,18 @@ TEST(NapAndSchedule, TheSleepIsTheNextCheckOrAMinute) {
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+TEST(GetTries, NothingBackIsTriedThreeTimesInAllAnAnswerOnce) {
+  wifiota::GetTries t;
+  EXPECT_TRUE(t.again(false)) << "the first failed with nothing back: again";
+  EXPECT_TRUE(t.again(false)) << "the second too";
+  EXPECT_FALSE(t.again(false)) << "three in all: the window gives up";
+  t.reset();
+  EXPECT_FALSE(t.again(true)) << "bytes came back: the server answered, no second try";
+  t.reset();
+  EXPECT_TRUE(t.again(false));
+  EXPECT_EQ(t.done(), 1);
+  EXPECT_GE(wifiota::GetTries::kWaitMs, 1000u);
+  EXPECT_LE(wifiota::GetTries::kWaitMs, 2000u);
 }
