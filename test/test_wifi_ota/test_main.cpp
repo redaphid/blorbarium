@@ -23,6 +23,7 @@
 #include "wifiota/power_sense.h"
 #include "wifiota/schedule.h"
 #include "wifiota/consent.h"
+#include "wifiota/sightings.h"
 #include "../../src/hw/ota_pubkey.h"
 #include "../../src/hw/power.h"   // the nap's sleep length (power::napSleepMs)
 
@@ -623,6 +624,79 @@ TEST(Networks, TheStoredBlobRoundTripsReadsTheOldOneAndRefusesJunk) {
   EXPECT_TRUE(wifiota::Networks::decode(blob, emptyLen)->empty());
 }
 
+// ---- what the radio heard --------------------------------------------------------------
+
+wifiota::Ap ap(const char* ssid, int rssi, uint8_t channel = 6, uint8_t auth = 3) {
+  wifiota::Ap a;
+  std::snprintf(a.ssid, sizeof a.ssid, "%s", ssid);
+  a.rssi = rssi, a.channel = channel, a.auth = auth;
+  return a;
+}
+
+// 0.7.35 on a board: a forced check's scan said "4 networks seen, a
+// remembered one among them", joined network #1 on channel 11 at -75, and
+// WIFI then said "network #1: ... not in the last scan": the radio's going
+// down had cleared what it heard. Now it stays until the next scan.
+TEST(Sightings, WhatTheScanHeardStaysUntilTheNextScan) {
+  wifiota::Sightings h;
+  EXPECT_FALSE(h.heard("Home")) << "nothing heard yet";
+  h.beginScan();
+  for (const wifiota::Ap& a : {ap("Neighbour", -50), ap("Home", -80, 1), ap("Home", -75, 11, 4), ap("Cafe", -90)}) h.add(a);
+  ASSERT_EQ(h.count(), 4);
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  EXPECT_EQ(n.pick(h.seen(), h.count()), size_t(0)) << "the scan's line: a remembered one among them";
+  const std::optional<wifiota::Sightings::Heard> seen = h.heard(n[0].ssid);
+  ASSERT_TRUE(seen) << "the network lines match the scan by the same SSID";
+  EXPECT_EQ(seen->rssi, -75) << "its strongest access point";
+  EXPECT_EQ(seen->channel, 11);
+  EXPECT_EQ(seen->auth, 4);
+  EXPECT_FALSE(seen->joined);
+  EXPECT_FALSE(h.heard("Hom")) << "no prefix match";
+  EXPECT_FALSE(h.heard("Home ")) << "no trailing byte";
+  EXPECT_FALSE(h.heard("home")) << "SSIDs are case-sensitive";
+  h.beginScan();
+  EXPECT_FALSE(h.heard("Home")) << "a new scan that did not hear it: not in the last scan";
+}
+
+// A provision joins without a scan: the access point it joined is heard
+// (signal, channel, security), and a scan after it is newer.
+TEST(Sightings, AJoinIsHeardScanOrNone) {
+  wifiota::Sightings h;
+  wifiota::Ap joined = ap("Phone's", -75, 11, 3);
+  h.joined(joined);
+  const std::optional<wifiota::Sightings::Heard> j = h.heard("Phone's");
+  ASSERT_TRUE(j);
+  EXPECT_TRUE(j->joined);
+  EXPECT_EQ(j->rssi, -75);
+  EXPECT_EQ(j->channel, 11);
+  EXPECT_EQ(j->auth, 3);
+  EXPECT_FALSE(h.strongest("Phone's")) << "the next join is never steered by a join, only a scan";
+  h.beginScan();
+  h.add(ap("Phone's", -60, 6));
+  ASSERT_TRUE(h.heard("Phone's"));
+  EXPECT_FALSE(h.heard("Phone's")->joined) << "the scan is newer";
+  EXPECT_EQ(h.heard("Phone's")->rssi, -60);
+  h.joined(ap("Phone's", -58, 6));
+  EXPECT_TRUE(h.heard("Phone's")->joined) << "and a join after it newer still";
+}
+
+TEST(Sightings, PastItsRoomTheWeakestGo) {
+  wifiota::Sightings h;
+  h.beginScan();
+  char name[8];
+  for (int i = 0; i < wifiota::Sightings::kMax; ++i) std::snprintf(name, sizeof name, "n%d", i), h.add(ap(name, -60 - i));
+  h.add(ap("Home", -90));
+  EXPECT_FALSE(h.heard("Home")) << "weaker than all it holds";
+  h.add(ap("Home", -40));
+  ASSERT_TRUE(h.heard("Home"));
+  EXPECT_EQ(h.count(), wifiota::Sightings::kMax);
+  EXPECT_FALSE(h.heard("n23")) << "the weakest went";
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  EXPECT_EQ(n.pick(h.seen(), h.count()), size_t(0)) << "seen() follows the swap";
+}
+
 // ---- a hand says yes before a phone gives it a network ---------------------------------
 
 TEST(Improv, ANetworkBeforeTheYesIsNotAuthorizedAndJoinsNothing) {
@@ -651,6 +725,55 @@ TEST(Improv, ANetworkBeforeTheYesIsNotAuthorizedAndJoinsNothing) {
 }
 
 using wifiota::Consent;
+
+// The spec's flow (improv-wifi.com, and the page's improv.js): the client
+// reads the state, hears "authorization required", and waits for
+// "authorized". A read of the state or a write asks; a subscription alone
+// never does (BlueZ subscribes a reconnecting client again by itself), nor
+// does a read of the other characteristics.
+TEST(Improv, OnlyAReadOfTheStateOrAWriteAsksForTheYes) {
+  improv::Opener o;
+  EXPECT_FALSE(o.touched(improv::Touch::Subscribe, 1)) << "a subscription alone";
+  EXPECT_FALSE(o.touched(improv::Touch::ReadOther, 1)) << "the capabilities, the error, the result";
+  EXPECT_TRUE(o.touched(improv::Touch::ReadState, 1)) << "the spec's first step";
+  EXPECT_TRUE(o.touched(improv::Touch::Write, 1)) << "a network sent before any yes";
+}
+
+// 0.7.35 on a board, 2026-10-29: after a provision, a Linux bleak client
+// came back and sent only HELLO, and the badge asked "Join Wi-Fi?" again
+// (BlueZ wrote its old subscriptions again; NimBLE heard a subscribe).
+// Now nothing asks until a phone begins a provision.
+TEST(Improv, AfterAProvisionAReconnectThatOnlySubscribesIsNotAsked) {
+  FakeImprovPort port;
+  improv::Machine m(port, kInfo);
+  improv::Opener o;
+  Consent c;
+  uint32_t now = 1000, conn = 1;
+  // The page: subscribes, reads the state, waits; a turn says yes; it sends the network.
+  for (improv::Touch t : {improv::Touch::Subscribe, improv::Touch::Subscribe, improv::Touch::Subscribe, improv::Touch::ReadState})
+    if (o.touched(t, conn) && m.state() == improv::State::AuthorizationRequired) c.ask(now);
+  ASSERT_TRUE(c.asking());
+  ASSERT_TRUE(c.yes(now += Consent::kMinAskMs));
+  m.authorize();
+  const Bytes p = wifiSettings("Home", "pw");
+  m.write(p.data(), p.size());
+  ASSERT_EQ(port.joins.size(), 1u);
+  EXPECT_TRUE(o.touched(improv::Touch::Write, conn));
+  m.joined("https://blorb.hypnodroid.com/?d=x");
+  o.provisioned(conn);
+  c.end();   // the next network needs another yes
+  m.requireAuthorization();
+  ASSERT_EQ(m.state(), improv::State::AuthorizationRequired);
+  EXPECT_FALSE(o.touched(improv::Touch::ReadState, conn)) << "the phone that sent it, reading how it went";
+  // Bluetooth comes back; a client reconnects, and BlueZ subscribes it again.
+  ++conn;
+  for (improv::Touch t : {improv::Touch::Subscribe, improv::Touch::Subscribe, improv::Touch::Subscribe, improv::Touch::ReadOther})
+    if (o.touched(t, conn)) c.ask(now);
+  EXPECT_FALSE(c.asking()) << "no question: nobody began a provision";
+  // A phone that does begin one (the page's start(): a read of the state) is asked.
+  EXPECT_TRUE(o.touched(improv::Touch::ReadState, conn));
+  EXPECT_TRUE(o.touched(improv::Touch::Write, conn - 1)) << "a write is a provision begun, on any connection";
+}
 
 TEST(Consent, ATurnAfterTheQuestionShowsGrantsForTwoMinutes) {
   Consent c;

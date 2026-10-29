@@ -125,7 +125,9 @@ phone sharing the radio with the join made a weak signal worse. Now:
    Bluetooth controller is enabled, and only a deinit would disable it.
 3. Joined, the window's last step is the report, which is the badge's
    check-in: the site's page polls `/api/badge/online?mac=&since=` for it and
-   says "<pet> is online".
+   says "<pet> is online". It is a light report (0.7.36): 1 KB of the log,
+   no state capture, no screenshot after it (both wait for the next Check),
+   so the TLS session sends about 1.7 KB, not 4.8 (docs/remote-debug.md).
 4. Then Bluetooth comes back. The result shows on the badge's screen for 8 s
    ("Wi-Fi joined!" / "online", or "Wi-Fi: not joined" with a few words:
    "wrong password?", "network not found", "weak signal?", "no address from
@@ -153,15 +155,29 @@ replaces the old one at once.
 is the open standard for handing a device a network over BLE (ESPHome, WLED,
 Home Assistant). The service `00467768-6228-2272-4663-277478268000` sits on
 the same NimBLE server and connection as the UART service. The badge starts
-in Improv's **authorization required**. When a page opens the service (reads,
-subscribes or writes), the badge asks on its screen, "Join Wi-Fi? Turn me
-around!", as the update's question does: a turn of the badge or a press of
-its button, after 1.5 s and within 30 s, says yes. Improv then says
-**authorized** for 2 minutes, and the page sends the network. Before the yes,
-Wi-Fi settings answer error 4 (not authorized) and join nothing; device info
-needs no yes. After a join, or when the phone goes, the next network needs a
-new yes. The question holds the badge awake and takes the button and the
-knock knock, as the update's does.
+in Improv's **authorization required**. When a page begins a provision, the
+badge asks on its screen, "Join Wi-Fi? Tip me on my side!", as the update's
+question does: a tip onto a side or a press of its button, after 1.5 s and
+within 30 s, says yes. Improv then says **authorized** for 2 minutes, and the
+page sends the network. Before the yes, Wi-Fi settings answer error 4 (not
+authorized) and join nothing; device info needs no yes. After a join, or when
+the phone goes, the next network needs a new yes. The question holds the
+badge awake and takes the button and the knock knock, as the update's does,
+and the pet says nothing while it shows: what he was saying is cut, nothing
+starts, and nothing is kept to say after (`blorb::Thinker::hush`, 0.7.36; on
+0.7.35 his teach_fight line came up over it).
+
+A provision begins with a read of the Current State or a write, as the spec
+has it: the client reads the state, hears "authorization required" and waits
+for "authorized" (the page's `improv.js` reads it in `start()`, then waits in
+`authorized()`). A subscription alone never asks, nor does a read of the
+other characteristics (`wifiota::improv::Opener`, 0.7.36): on 0.7.35 a Linux
+bleak client that came back after a provision and sent only HELLO got "Join
+Wi-Fi?" again, because BlueZ subscribes a reconnecting client again by itself
+and NimBLE heard a subscribe. The phone that sent a provision is not asked
+again when it reads how it went; the next provision is a read of the state on
+a new connection, or a write. Every touch still counts as speaking, so a page
+that only provisions is never dropped as a squatter.
 
 The website's **Wi-Fi** card (only for a dish with the Improv service) asks,
 tells the person "Say yes on the dish: tip it on its side", waits for the yes,
@@ -203,7 +219,13 @@ PSRAM, made at first use; the image ring is a plain one (FreeRTOS's stream
 buffer puts 1.4 KB of code in IRAM); mbedtls blocks of 1 KB or more go to
 PSRAM (`tlsCalloc`). What Wi-Fi still costs internally: lwIP's DNS table
 (1.2 KB), mbedtls's tables (0.9 KB), Improv's GATT service and buffers (about
-2.5 KB), and while a GET runs, its task's 12 KB stack. To leave a duel more
+2.5 KB), and while a GET runs, its task's 7 KB stack. The TLS client's own
+state (the core's `sslclient_context`, 2,176 B, made with `new` and so
+internal under malloc's 4 KB line) is moved to PSRAM when the GET starts
+(`hw::ChunkedTls`, 0.7.36). A provision's and a cable's check's report is
+light (1 KB of log): on 0.7.35 a provision's 4.8 KB check-in took internal RAM
+down to 3.9 KB, a forced check's to 7.0 KB; each `window ... closed` line
+gives the window's own sampled lows. To leave a duel more
 than before Wi-Fi, the cable's DEBUG queue, `FaultAir` and the latency
 recorder (about 10.5 KB, touched only by tasks, no locks or atomics) are made
 in PSRAM too; boot says where they landed (`[hw] psram: faultAir=1 lat=1`).
@@ -211,7 +233,11 @@ Static internal RAM (badge128_flip, a753dec) is 7 KB under controls-latency's
 build and 17 KB under 291260b's, whose boot heap was 59.7 KB against main's
 71.5 KB. Logs: `[wifi] radio up heap A -> B`, `GET manifest:
 N bytes, open N ms, task stack free N`, `window ... closed after N ms (heap=
-minheap=)`.
+minheap=; this window's low, sampled: tls= io= loop=)`. `minheap` is the
+boot's; the window's own lows (0.7.36, `hw::NetLow`) are sampled at every
+mbedtls allocation (the handshake), every write and read of a body (the POST
+going out, the reply coming in) and every loop pass, so they say which part
+of which window dipped (0: no sample).
 
 ## Updating itself
 
@@ -294,7 +320,7 @@ remote debug (`debug <line>`), behind those transports' gates.
 
 | Verb | Does |
 |---|---|
-| `DEBUG wifi` | Window, phase, networks, auto, hold (why no Check), next check, backoff streaks, vbat, station, Improv state, consent, trial, OTA owner, windows and scans since boot, last outcome, heap; then each network by number: SSID length, password length, security and signal in the last scan, untried, its last join |
+| `DEBUG wifi` | Window, phase, networks, auto, hold (why no Check), next check, backoff streaks, vbat, station, Improv state, consent, trial, OTA owner, windows and scans since boot, last outcome, heap; then each network by number: SSID length, password length, security, channel and signal (`when joined` since the last scan, else `in the last scan`; kept after the window closes), untried, its last join |
 | `DEBUG wifi list` | The networks' lines alone |
 | `DEBUG wifi set <ssid> [password]` | Remember a network (quote an SSID with spaces); the reply gives lengths only |
 | `DEBUG wifi forget [<n>\|ssid]` | Forget one by number or SSID, or all |

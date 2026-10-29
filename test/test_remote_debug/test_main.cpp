@@ -125,6 +125,28 @@ TEST(JsonEscapeTail, AWorstCaseLogStaysInItsRoom) {
   EXPECT_LT(rdebug::kReportMax, 5 * 1024u);
 }
 
+// 0.7.35 on a board: a provision's check-in, a 4.8 KB report, took internal
+// RAM down to 3.9 KB. A provision's and a cable's check send a light one: a
+// KB of the log, no state capture, no screenshot after (they wait for a Check).
+TEST(ReportShape, ALightReportCarriesAKilobyteOfLogAndNothingHeavy) {
+  constexpr rdebug::ReportShape light = rdebug::reportShape(true), full = rdebug::reportShape(false);
+  EXPECT_FALSE(light.state);
+  EXPECT_FALSE(light.shot);
+  EXPECT_TRUE(full.state);
+  EXPECT_TRUE(full.shot);
+  EXPECT_EQ(rdebug::logRoom(700, light), rdebug::kLightLogTailMax) << "a usual report's rest is about 700 bytes";
+  EXPECT_EQ(rdebug::logRoom(700, full), rdebug::kLogTailMax);
+  EXPECT_EQ(rdebug::logRoom(1500, light), rdebug::kLightReportMax - 1500 - 2) << "eight results and a crash: less log";
+  EXPECT_EQ(rdebug::logRoom(rdebug::kLightReportMax - 2, light), 0u);
+  EXPECT_EQ(rdebug::logRoom(rdebug::kLightReportMax + 300, light), 0u) << "the results still go; the log does not";
+  EXPECT_EQ(rdebug::logRoom(4000, full), rdebug::kReportMax - 4000 - 2);
+  // A worst-case log escaped into the light room stays in it.
+  const std::string log(8192, '\x01');
+  std::string out(rdebug::logRoom(700, light) + 1, '\0');
+  EXPECT_LE(rdebug::jsonEscapeTail(log.data(), log.size(), out.data(), out.size()), rdebug::kLightLogTailMax);
+  EXPECT_LE(700 + rdebug::kLightLogTailMax + 2, rdebug::kLightReportMax) << "a light report stays under 2 KB";
+}
+
 // ---- the body in small writes (hw/net_job.h ChunkedTls) ----
 
 TEST(WriteChunked, NeverHandsTlsMoreThanAChunk) {

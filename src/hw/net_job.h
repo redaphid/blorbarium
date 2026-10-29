@@ -45,16 +45,53 @@
 
 namespace hw {
 
+// The least internal RAM seen free in a window, sampled: ESP.getMinFreeHeap()
+// is the boot's, so it cannot say which window, or which part of it, dipped.
+// `tls` at every mbedtls allocation (wififw::tlsCalloc: the handshake), `io`
+// at every write and read of a GET's body (the POST going out, the reply
+// coming in), `loop` once a loop pass. src/wifi_ota.h resets them as a
+// window opens and logs them as it closes. A diagnostic: a race between the
+// tasks only loses a sample.
+struct NetLow {
+  volatile uint32_t tls = UINT32_MAX, io = UINT32_MAX, loop = UINT32_MAX;
+  void reset() { tls = io = loop = UINT32_MAX; }
+  static void sample(volatile uint32_t& low) {
+    const uint32_t f = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (f < low) low = f;
+  }
+};
+inline NetLow netLow;
+
 // An HTTPS client whose writes go to TLS at most rdebug::kWriteChunk bytes at
 // a time, each straight from the caller's buffer (PSRAM): HTTPClient hands a
 // POST's whole body to one write(), and an 8.8 KB one failed on the badge at
 // RSSI -77 ("Failed to send chunk!") with internal RAM down to 9.9 KB. A
 // piece that fails is tried once more 100 ms later.
+//
+// Its TLS state in PSRAM too: the core makes its sslclient_context (2,176 B:
+// the SSL context and config, the DRBG, the entropy pool, two certificate
+// holders) with new, and malloc keeps anything under 4 KB in internal RAM,
+// which a provision's check-in took down to 3.9 KB (0.7.35). A plain C
+// struct: the core's delete frees it wherever it is. No PSRAM: the core's stays.
 class ChunkedTls : public WiFiClientSecure {
  public:
+  ChunkedTls() {
+    auto* ps = static_cast<sslclient_context*>(heap_caps_malloc(sizeof(sslclient_context), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!ps) return;
+    ssl_init(ps);
+    ps->socket = sslclient->socket;
+    ps->handshake_timeout = sslclient->handshake_timeout;
+    delete sslclient;
+    sslclient = ps;
+  }
   size_t write(const uint8_t* p, size_t n) override {
     return rdebug::writeChunked(
-        p, n, rdebug::kWriteChunk, [this](const uint8_t* q, size_t k) { return WiFiClientSecure::write(q, k); },
+        p, n, rdebug::kWriteChunk,
+        [this](const uint8_t* q, size_t k) {
+          const size_t took = WiFiClientSecure::write(q, k);
+          NetLow::sample(netLow.io);
+          return took;
+        },
         [] { vTaskDelay(pdMS_TO_TICKS(100)); });
   }
 };
@@ -264,6 +301,7 @@ class NetJob {
       size_t len = 0;
       while (len < want && !cancel_) {
         const int n = s->available() > 0 ? s->read(reinterpret_cast<uint8_t*>(m_->text) + len, want - len) : 0;
+        NetLow::sample(netLow.io);
         if (n > 0) len += size_t(n), heard = millis();
         else if (!s->connected()) break;
         else if (millis() - heard > kStallMs) return finish(fail("the text stalled"), http);
@@ -283,6 +321,7 @@ class NetJob {
       const int avail = s->available();
       if (avail > 0) {
         const int n = s->read(buf, std::min(sizeof m_->chunk, size_t(avail)));
+        NetLow::sample(netLow.io);
         if (n <= 0) continue;
         put(buf, size_t(n));
         got_ = got_ + size_t(n);

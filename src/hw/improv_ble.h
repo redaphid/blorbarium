@@ -4,7 +4,8 @@
 // tagged with NusLink's connection number so a new phone never finishes the
 // last one's half packet. Reading or subscribing counts as speaking, so a
 // page that only provisions is not dropped as a squatter while its keeper
-// types the password.
+// types the password; only a read of the state or a write asks for a hand's
+// yes (wifiota::improv::Opener: a subscription alone never does).
 //
 // Advertising: the flags, the UART service UUID and the badge's durable id
 // (blorb/ble_id.h, for the NFC links) fill the advertisement's 31 bytes, so
@@ -44,13 +45,19 @@ class ImprovBle : public wifiota::improv::Port {
 
   wifiota::improv::Machine& machine() { return machine_; }
 
-  // Once, after a phone read, subscribed to or wrote the service: it wants to
-  // provision, so the badge asks for a hand's yes (wifiota/consent.h).
+  // Once, after a phone read the state or wrote: it wants to provision, so
+  // the badge asks for a hand's yes (wifiota/consent.h).
   bool takeOpened() { return opened_.exchange(false); }
+  // A provision joined: the phone that sent it is not asked again (Opener::provisioned).
+  void provisioned() { opener_.provisioned(nus_.generation()); }
 
-  // Every loop: the RPC bytes written since the last pass.
+  // Every loop: the touches and the RPC bytes since the last pass.
   void poll() {
-    if (heard_.exchange(false)) nus_.spoke(), opened_ = true;
+    if (const uint8_t t = touches_.exchange(0)) {
+      nus_.spoke();
+      for (uint8_t k = 0; k < 4; ++k)
+        if (t >> k & 1 && opener_.touched(wifiota::improv::Touch(k), nus_.generation())) opened_ = true;
+    }
     uint8_t bytes[kRxMax];
     size_t n = 0;
     uint32_t gen = 0;
@@ -126,7 +133,7 @@ class ImprovBle : public wifiota::improv::Port {
     ImprovBle* self;
     explicit Callbacks(ImprovBle* s) : self(s) {}
     void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
-      self->heard_ = true;
+      self->touch(wifiota::improv::Touch::Write);
       const NimBLEAttValue v = c->getValue();
       const uint32_t gen = self->nus_.generation();
       portENTER_CRITICAL(&self->mux_);
@@ -136,15 +143,20 @@ class ImprovBle : public wifiota::improv::Port {
       self->rxLen_ += n;
       portEXIT_CRITICAL(&self->mux_);
     }
-    void onRead(NimBLECharacteristic*, NimBLEConnInfo&) override { self->heard_ = true; }
-    void onSubscribe(NimBLECharacteristic*, NimBLEConnInfo&, uint16_t) override { self->heard_ = true; }
+    void onRead(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+      self->touch(c == self->state_ ? wifiota::improv::Touch::ReadState : wifiota::improv::Touch::ReadOther);
+    }
+    void onSubscribe(NimBLECharacteristic*, NimBLEConnInfo&, uint16_t) override { self->touch(wifiota::improv::Touch::Subscribe); }
   };
+  void touch(wifiota::improv::Touch t) { touches_ |= uint8_t(1u << uint8_t(t)); }   // the Bluetooth task
 
   NusLink& nus_;
   wifiota::improv::Machine machine_;
   Callbacks callbacks_{this};
   NimBLECharacteristic *state_ = nullptr, *error_ = nullptr, *result_ = nullptr;
-  std::atomic<bool> heard_{false}, opened_{false};
+  wifiota::improv::Opener opener_;   // the loop's only
+  std::atomic<uint8_t> touches_{0};   // a bit per Touch
+  std::atomic<bool> opened_{false};
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   uint8_t rx_[kRxMax] = {};
   size_t rxLen_ = 0;

@@ -29,10 +29,12 @@
 
 #include <algorithm>
 #include <cstring>
+#include <new>
 #include <optional>
 
 #include "wifiota/improv.h"
 #include "wifiota/remembered.h"
+#include "wifiota/sightings.h"
 
 namespace hw {
 
@@ -58,7 +60,7 @@ class WifiStation {
   // the radio a scan takes longer than that, and the "failed" scan then went
   // on under the join and refused it.
   static constexpr uint32_t kScanMsPerChannel = 120;
-  static constexpr uint8_t kSeenMax = 24;   // the strongest this many a scan finds are looked at
+  static constexpr uint8_t kSeenMax = wifiota::Sightings::kMax;   // the strongest this many a scan finds are looked at
   static constexpr uint32_t kQuietMinMs = 200, kQuietAfterJoinMs = 1000, kQuietMaxMs = 3000;   // stop() to off()
 
   bool up() {
@@ -76,6 +78,7 @@ class WifiStation {
     stopping_ = false;
     attempted_ = false;
     joinedOnce_ = false;
+    fresh_ = false;   // this window's join looks only at this window's scan
 #if defined(CONFIG_PM_ENABLE)
     // Light sleep between packets would hold a download to the AP's beacons.
     if (!lock_) esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "wifi", &lock_);
@@ -116,7 +119,7 @@ class WifiStation {
     WiFi.mode(WIFI_OFF);
     up_ = false;
     stopping_ = false;
-    seen_ = 0;
+    fresh_ = false;   // what it heard stays, for `DEBUG wifi` after the window (wifiota/sightings.h)
 #if defined(CONFIG_PM_ENABLE)
     if (lock_) esp_pm_lock_release(lock_);
 #endif
@@ -128,12 +131,9 @@ class WifiStation {
 
   // ---- the scan: what is in range ----
   bool scan() {
-    seen_ = 0;
-    if (!aps_) {   // PSRAM, made at the first scan: internal RAM is the scarce kind
-      aps_ = static_cast<Ap*>(heap_caps_calloc(kSeenMax, sizeof(Ap), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-      views_ = static_cast<wifiota::Seen*>(heap_caps_calloc(kSeenMax, sizeof(wifiota::Seen), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-      if (!aps_ || !views_) return false;
-    }
+    fresh_ = false;
+    if (!sightings()) return false;
+    heard_->beginScan();
     scansAtStart_ = scansDone_;
     const int16_t r = WiFi.scanNetworks(true, false, false, kScanMsPerChannel);
     if (r != WIFI_SCAN_RUNNING) Serial.printf("[wifi] the scan would not start (%d)\n", int(r));
@@ -142,44 +142,53 @@ class WifiStation {
   // -1 still scanning, -2 the driver said it failed, else how many networks
   // it found (the strongest kSeenMax of them copied for seen()).
   int scanned() {
-    if (scansDone_ == scansAtStart_ || !aps_) return WIFI_SCAN_RUNNING;
+    if (scansDone_ == scansAtStart_ || !heard_) return WIFI_SCAN_RUNNING;
     if (scanStatus_ != 0) return WIFI_SCAN_FAILED;
     const int16_t n = WiFi.scanComplete();   // the driver's count: the core reset its own clock at SCAN_DONE
     if (n < 0) return n;
-    seen_ = 0;
+    heard_->beginScan();
     for (int16_t i = 0; i < n; ++i) {
-      Ap a;
+      wifiota::Ap a;
       std::snprintf(a.ssid, sizeof a.ssid, "%s", WiFi.SSID(i).c_str());
       a.rssi = int(WiFi.RSSI(i));
       a.channel = uint8_t(WiFi.channel(i));
       a.auth = uint8_t(WiFi.encryptionType(i));
       if (const uint8_t* b = WiFi.BSSID(i)) std::memcpy(a.bssid, b, 6);
-      if (seen_ < kSeenMax) aps_[seen_++] = a;
-      else {   // keep the strongest
-        Ap* weakest = std::min_element(aps_, aps_ + seen_, [](const Ap& x, const Ap& y) { return x.rssi < y.rssi; });
-        if (a.rssi > weakest->rssi) *weakest = a;
-      }
+      heard_->add(a);   // the strongest kSeenMax kept
     }
     WiFi.scanDelete();
-    for (uint8_t i = 0; i < seen_; ++i) views_[i] = wifiota::Seen{aps_[i].ssid, aps_[i].rssi};
+    fresh_ = true;
     return n;
   }
   uint32_t scanStatus() const { return scanStatus_; }
-  const wifiota::Seen* seen() const { return views_; }
-  uint8_t seenCount() const { return seen_; }
-  // A network's strongest access point in the last scan, for `DEBUG wifi`
-  // (never its SSID: the caller names it by number). Nothing: not seen.
+  const wifiota::Seen* seen() const { return heard_ ? heard_->seen() : nullptr; }
+  uint8_t seenCount() const { return heard_ ? heard_->count() : 0; }
+  // A network's access point as last heard, for `DEBUG wifi` (never its
+  // SSID: the caller names it by number): the one its join reached since
+  // the last scan, else the scan's strongest. Nothing: not heard.
   struct Heard {
     int rssi;
     uint8_t channel;
     const char* security;
+    bool joined;
   };
   std::optional<Heard> heard(const char* ssid) const {
-    const Ap* best = nullptr;
-    for (uint8_t i = 0; i < seen_; ++i)
-      if (!std::strcmp(aps_[i].ssid, ssid) && (!best || aps_[i].rssi > best->rssi)) best = &aps_[i];
-    if (!best) return std::nullopt;
-    return Heard{best->rssi, best->channel, authName(best->auth)};
+    if (!heard_) return std::nullopt;
+    const std::optional<wifiota::Sightings::Heard> h = heard_->heard(ssid);
+    if (!h) return std::nullopt;
+    return Heard{h->rssi, h->channel, authName(h->auth), h->joined};
+  }
+  // Joined: the access point it reached is heard, a provision's (no scan) too.
+  void heardJoin(const char* ssid) {
+    wifi_ap_record_t ap;
+    if (!sightings() || esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return;
+    wifiota::Ap a;
+    std::snprintf(a.ssid, sizeof a.ssid, "%s", ssid);
+    a.rssi = ap.rssi;
+    a.channel = ap.primary;
+    a.auth = uint8_t(ap.authmode);
+    std::memcpy(a.bssid, ap.bssid, 6);
+    heard_->joined(a);
   }
   // A scan that has run too long: stopped, so nothing is left running under the join.
   void abandonScan() {
@@ -193,9 +202,7 @@ class WifiStation {
   // the SSID's and password's lengths only.
   void join(const wifiota::improv::Credentials& c) {
     abandonScan();
-    const Ap* best = nullptr;
-    for (uint8_t i = 0; i < seen_; ++i)
-      if (!std::strcmp(aps_[i].ssid, c.ssid) && (!best || aps_[i].rssi > best->rssi)) best = &aps_[i];
+    const wifiota::Ap* best = fresh_ && heard_ ? heard_->strongest(c.ssid) : nullptr;   // this window's scan only
     const char* pass = c.password[0] ? c.password : nullptr;
     attempted_ = true;
     reason_ = 0;
@@ -315,13 +322,14 @@ class WifiStation {
 
  private:
   mutable uint32_t dhcpAt_ = 0;   // DEBUG wpa3's DHCP line
-  struct Ap {
-    char ssid[33] = "";
-    int rssi = -127;
-    uint8_t channel = 0;
-    uint8_t auth = 0;
-    uint8_t bssid[6] = {};
-  };
+
+  // PSRAM, made at the first scan or join: internal RAM is the scarce kind.
+  bool sightings() {
+    if (heard_) return true;
+    void* p = heap_caps_malloc(sizeof(wifiota::Sightings), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (p) heard_ = new (p) wifiota::Sightings;
+    return heard_;
+  }
 
   static const char* authName(uint8_t a) {
     switch (wifi_auth_mode_t(a)) {
@@ -367,9 +375,8 @@ class WifiStation {
   uint32_t attemptAt_ = 0;
   uint32_t stopAt_ = 0, scansAtStart_ = 0, disconnectsAtStop_ = 0, disconnectsAtJoin_ = 0;
   int beginStatus_ = 0;
-  Ap* aps_ = nullptr;
-  wifiota::Seen* views_ = nullptr;
-  uint8_t seen_ = 0;
+  wifiota::Sightings* heard_ = nullptr;
+  bool fresh_ = false;   // heard_ holds this window's scan
 #if defined(CONFIG_PM_ENABLE)
   esp_pm_lock_handle_t lock_ = nullptr;
 #endif
