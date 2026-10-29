@@ -147,14 +147,17 @@ not on trial and not busy, writes a save, opens the inactive slot and moves to
 `idle last=save_failed`. A `DEBUG press` over the serial cable answers too: the
 cable is a hand on the dish.
 
-**Turn me around.** The children cannot use the button, so the question
-says "Turn me around!" and a turn of the badge answers it exactly as a
-press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the cable). The turn
-is the screen's own settled rotation, a quarter turn held 0.4 s with jolts
-ignored, so it only registers while the badge is held up, not lying flat.
-A turn in the first 1.5 s was already under way and is not a yes. The
-debug link's HANG turns it too, but HANG needs the unlock, which needs a
-hand on the badge.
+**Tip me on my side.** The children cannot use the button, so the question
+says "Tip me on my side!" and tipping the badge onto either side answers it
+exactly as a press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the
+cable). The tip is the screen's own settled rotation coming to rest a quarter
+turn from home, held 0.6 s with jolts ignored, so it only registers while the
+badge is held up, not lying flat. Upside down is not a yes: that is the hang,
+fight mode's gesture (0.7.34 and before said "Turn me around!" and took any
+turn). A tip in the first 1.5 s was already under way and is not a yes. While
+a question shows, for 2 s after and until the badge is let back, neither the
+tip nor any press reaches the pet (0.7.35). Wi-Fi's "Join Wi-Fi?" asks the
+same way.
 
 After 30 s with no press, the session ends with `last=no_confirm`.
 
