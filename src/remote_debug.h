@@ -254,6 +254,10 @@ static const char* build(size_t& len) {   // as `shape` says
 // `light`: a provision's check-in or a cable's check (rdebug::reportShape).
 static bool start(bool light) {
   if (noReports) return false;
+  // The last GET's ended task first (NetJob::reset reaps it): its 7 KB stack
+  // is internal RAM, and counted here it left a Check after the manifest and
+  // the pet's lines at 19.9 KB, under kReportHeap, so no Check reported (0.7.38's soak).
+  job.reset();
   const uint32_t have = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
                  big = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   if (have < kReportHeap || big < kReportBig) {
@@ -268,7 +272,6 @@ static bool start(bool light) {
     say("remote: no report this time (no PSRAM, or it did not fit)");
     return false;
   }
-  job.reset();
   say("remote: %s report of %u bytes: heap=%u big=%u before the task", light ? "light" : "full", unsigned(len),
       unsigned(ESP.getFreeHeap()), unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   // A restart from here on is the report's: it never counts against the update check.
