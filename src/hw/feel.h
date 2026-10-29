@@ -20,6 +20,9 @@
 //     that answers it is the question's (owner, 2026-10-29: the Wi-Fi
 //     question's turn also opened fight mode, a duel took the radio, and the
 //     phone heard only "couldn't connect").
+//   - his words while a question shows (Felt::screen.asked): no line of
+//     his comes up over "Join Wi-Fi?" or the update's question (owner,
+//     2026-10-29), and none is kept to say after (blorb::Thinker::hush).
 #pragma once
 
 #include <cstdint>
@@ -81,6 +84,7 @@ class Feel {
     // One knock landed: the rim's "one more"; a second landed: the rim's flash.
     f.screen.knockWaiting = !asking && knocks_.waitingSecond();
     f.screen.knockKnock = !asking && knocks_.knockKnock();
+    f.screen.asked = askingNow;   // he says nothing over it (Thinker::hush)
     return f;
   }
 

@@ -376,7 +376,7 @@ void Thinker::start(const Creature& c, const Lineage& lineage, const FromPhone& 
 void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& clock, const Lineage& lineage,
                    uint32_t tick, bool shook, const FromPhone& phone) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
-  if (c.stats().ageTicks < kWarmUpTicks) return;
+  if (c.stats().ageTicks < kWarmUpTicks || hushed_) return;
   const Observed o{c, habitat, clock, heirlooms_, tick, phone};
   // A foretelling lands when its trance ends. In the trance he is silent:
   // the line he was saying is already cut and no thought starts. The phone's
@@ -450,7 +450,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
 void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, const PetClock& clock,
                     const Lineage& lineage, uint32_t tick, const FromPhone& phone) {
   const ThoughtInfo* info = thoughtInfo(id);
-  if (!info || (startsWith(info->whenName, "taught") && !(phone.taught && phone.taught->count))) return;
+  if (!info || hushed_ || (startsWith(info->whenName, "taught") && !(phone.taught && phone.taught->count))) return;
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   uint16_t num = 0;
   info->when(Observed{c, habitat, clock, heirlooms_, tick, phone}, num);
@@ -460,12 +460,20 @@ void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, con
 }
 
 void Thinker::say(std::string_view line, const Creature& c, const Lineage& lineage, uint32_t tick) {
+  if (hushed_) return;   // dropped, never kept for after
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   const size_t n = std::min(line.size(), kMaxSaidText);
   trance_.reset();
   Shown s{Spoken::said, ThoughtId{}, tick, passTicks(n), {}};
   std::copy(line.begin(), line.begin() + n, s.line);
   now_ = s;
+}
+
+void Thinker::hush(bool on, uint32_t tick) {
+  if (on == hushed_) return;
+  hushed_ = on;
+  if (on) return now_.reset(), trance_.reset();
+  quietUntil_ = tick + kQuietTicks + seededFor(life_, tick).below(kQuietJitterTicks);
 }
 
 void Thinker::show(Appearance& a, uint32_t tick) const {
