@@ -35,4 +35,5 @@ DEBUG_VERB(KNOCK,   knock,   Harm,  "[1|2]")                    // one knock, or
 DEBUG_VERB(CRADLE,  cradle,  Harm,  "[ms 1..30000]")            // held still in a hand: a cuddle
 DEBUG_VERB(LEAN,    lean,    Harm,  "<aim 0..3> [ms 1..60000]") // tilted toward one rim edge
 DEBUG_VERB(NET,     net,     Harm,  "[clear|rx|tx|dup <pct>|delay <ms> [jitter]|blackout <ms>|ghosts <n> <mode> [low|high]]")
+DEBUG_VERB(WIFILOG, wifilog, Look,  "")                         // the last Wi-Fi window's [wifi] lines, and the test mode
 DEBUG_VERB(REBOOT,  reboot,  Harm,  "[quiet]")                  // save, then restart; quiet: radio blacked out until NET blackout 0

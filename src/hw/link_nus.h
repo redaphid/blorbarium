@@ -178,7 +178,9 @@ class NusLink : public blorb::Link {
     held_ = hold ? uint8_t(held_ | why) : uint8_t(held_ & ~why);
     if (held_ == was) return;
     advHeld_ = held_ != 0;
-    if (advHeld_ && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
+    // Not before begin() (a test build may start Bluetooth late): nothing to stop.
+    if (advHeld_ && NimBLEDevice::getServer() && NimBLEDevice::getAdvertising()->isAdvertising())
+      NimBLEDevice::getAdvertising()->stop();
     lastPoll_ = millis() - 250;   // a release restarts it at once
   }
   uint8_t held_ = 0;

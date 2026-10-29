@@ -1,5 +1,6 @@
 #include "debugble/console.h"
 
+#include <cstdlib>
 #include <cstdio>
 #include <variant>
 #include "blorb/registry.h"
@@ -469,6 +470,29 @@ void verb_net(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   char report[160] = "";
   if (!c.board.net(a.rest, report, sizeof report)) return r.err(400, "BAD_ARGS");
   r.ok("%s", report);
+}
+
+void verb_wifilog(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!c.board.hasDevice()) return r.err(501, "NOT_ON_BOARD");
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  // On the heap at the first ask: past the ESP32's 4 KB line, malloc puts it in PSRAM, not the scarce internal RAM.
+  constexpr size_t kCap = 5 * 1024;
+  static char* text = static_cast<char*>(std::malloc(kCap));
+  if (!text) return r.err(507, "NO_MEMORY");
+  const size_t n = c.board.wifiLog(text, kCap);
+  size_t lines = 0;
+  for (size_t at = 0; at < n;) {   // one "+" line per log line, long ones cut in 150-byte pieces
+    size_t end = at;
+    while (end < n && text[end] != '\n' && end - at < 150) ++end;
+    if (end > at) {
+      size_t len = end - at;
+      if (text[end - 1] == '\r') --len;
+      r.line("%.*s", int(len), text + at);
+      ++lines;
+    }
+    at = end < n && text[end] == '\n' ? end + 1 : end;
+  }
+  r.ok("bytes=%u lines=%u", unsigned(n), unsigned(lines));
 }
 
 void verb_reboot(Console::Call& c, blorb::Args& a, blorb::Reply& r) {

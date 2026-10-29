@@ -15,6 +15,8 @@
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 
+#include <cstring>
+
 #include "rdebug/remote.h"
 
 namespace hw {
@@ -48,6 +50,20 @@ class LogTee : public Stream {
     portEXIT_CRITICAL(&lock_);
     return n;
   }
+  // The WPA3 DHCP hunt: the [wifi] and [hw] ble lines since the last window
+  // opened, in a ring of their own (BLE's WIFILOG reads it; no cable needed).
+  static constexpr size_t kWifiRingBytes = 4 * 1024;
+  void wifiClear() {
+    portENTER_CRITICAL(&lock_);
+    if (wifi_.ready()) wifi_.attach(wifiBuf_, kWifiRingBytes);
+    portEXIT_CRITICAL(&lock_);
+  }
+  size_t wifiTail(char* out, size_t cap) {
+    portENTER_CRITICAL(&lock_);
+    const size_t n = wifi_.ready() ? wifi_.tail(out, cap) : 0;
+    portEXIT_CRITICAL(&lock_);
+    return n;
+  }
   uint64_t mark() {
     portENTER_CRITICAL(&lock_);
     const uint64_t t = ring_.total();
@@ -71,14 +87,24 @@ class LogTee : public Stream {
       else
         return;
     }
+    const bool wifi = (n >= 6 && !std::memcmp(p, "[wifi]", 6)) || (n >= 8 && !std::memcmp(p, "[hw] ble", 8));
+    if (wifi && !wifi_.ready() && !wifiTried_) {
+      wifiTried_ = true;
+      if (void* b = heap_caps_malloc(kWifiRingBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))
+        wifiBuf_ = static_cast<char*>(b), wifi_.attach(wifiBuf_, kWifiRingBytes);
+    }
     portENTER_CRITICAL(&lock_);
     ring_.write(p, n);
+    if (wifi && wifi_.ready()) wifi_.write(p, n);
     portEXIT_CRITICAL(&lock_);
   }
 
   HardwareSerial& port_;
   rdebug::LogRing ring_;
   bool tried_ = false;
+  rdebug::LogRing wifi_;
+  char* wifiBuf_ = nullptr;
+  bool wifiTried_ = false;
   portMUX_TYPE lock_ = portMUX_INITIALIZER_UNLOCKED;
 };
 

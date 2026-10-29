@@ -77,6 +77,8 @@ class Board {
   virtual bool net(std::string_view args, char* report, size_t n) { (void)args, (void)report, (void)n; return false; }
   // Once the reply has gone: save, then restart (quiet: the radio stays dark).
   virtual bool reboot(bool quiet) { (void)quiet; return false; }
+  // The last Wi-Fi window's log lines (newest last) into `out`; how many bytes.
+  virtual size_t wifiLog(char* out, size_t cap) { (void)out, (void)cap; return 0; }
 };
 
 class Console {

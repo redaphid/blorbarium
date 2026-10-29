@@ -201,14 +201,11 @@ static void awakeEnter() {
   ble.holdAdvertising(true);   // poll() keeps it held while awakeOn
   wifiAwake(true);             // main.cpp: 240 MHz, no light sleep, CPU_FREQ_MAX held
   if (m & S::kModeBtOff) {
-    if (ble.connected()) {
-      say("test mode %u: a phone is connected, the BLE controller stays up", unsigned(m));
-    } else {
-      delay(30);   // advertising's stop reaches the controller
-      const esp_err_t e = esp_bt_controller_disable();
-      btOff = e == ESP_OK;
-      say("test mode %u: BLE controller disable -> %d (status %d)", unsigned(m), int(e), int(esp_bt_controller_get_status()));
-    }
+    // Not disabled mid-session (NimBLE's deinit panics): a mode-4 build starts
+    // Bluetooth only once its first window has closed (main.cpp bleDeferred).
+    btOff = esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED;
+    say("test mode %u: BLE controller status %d (%s)", unsigned(m), int(esp_bt_controller_get_status()),
+        btOff ? "never started this boot" : "UP: started before this window, ps stays on");
   }
   say("test mode %u: awake window: ble adv held, cpu %u MHz, ble %s", unsigned(m), unsigned(getCpuFrequencyMhz()),
       btOff ? "controller off" : "controller on");
@@ -226,21 +223,19 @@ static void awakeLeave() {
 }
 static void awakeAfterOff() {
   if (!awakeOn) return;
-  if (btOff) {
-    const esp_err_t e = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-    say("test mode: BLE controller enable -> %d (status %d)", int(e), int(esp_bt_controller_get_status()));
-    btOff = false;
-  }
+  btOff = false;
   wifiAwake(false);
   awakeOn = false;   // poll() releases advertising
 }
 
 // The radio goes once the GET's task has ended (hw/net_job.h) and the
 // driver has finished its scan or connection attempt (WifiStation::quiet).
+static uint32_t windowsClosed = 0;   // since boot: a mode-4 test build starts Bluetooth after the first
 static void radioDown() {
   awakeLeave();
   station.off();
   awakeAfterOff();
+  ++windowsClosed;
   job.reset();
   inWindow = 0;
   inReport = 0;
@@ -288,6 +283,7 @@ static void openWindow(Window w) {
   // image it returns to did nothing wrong; marked, it waited 8 h to check again
   // and counted toward turning automatic checks off.
   inWindow = w == Window::Confirm ? 0 : kWindowMagic;
+  hw::logTee.wifiClear();   // BLE's WIFILOG: this window's lines
   say("window %s opens: dark=%d networks=%u heap=%u", wifiota::windowName(w), int(powerPolicy.low()),
       unsigned(mem().networks.size()), unsigned(ESP.getFreeHeap()));
   // Never start the driver short of RAM: a half-made init ("Expected to init 4
@@ -727,6 +723,14 @@ static void begin() {
     }
   say("networks %u, automatic checks always on, heap %u -> %u", unsigned(mem().networks.size()), unsigned(heap0),
       unsigned(ESP.getFreeHeap()));
+  // A test build (BLORB_WIFI_TEST_MODE): a check soon after every boot, once
+  // dark a minute and alone, with no cable to ask for one.
+  if (hw::WifiStation::testMode) {
+    schedule.dueNow();
+    powerPolicy.sleepNow(millis());
+    say("test mode %u built in: dark now, a check is due once dark %u s and alone", unsigned(hw::WifiStation::testMode),
+        unsigned(wifiota::Schedule::kDarkMs / 1000));
+  }
 }
 
 // This boot is an update over Wi-Fi on trial: it came in a quiet moment and
@@ -921,4 +925,12 @@ static void otaVerb(const char* line) {
 }  // namespace wififw
 
 static void wifiVerb(const char* line) { wififw::wifiVerb(line); }
+static size_t wifiLogText(char* out, size_t cap) {
+  const int h = std::snprintf(out, cap, "mode=%u windows=%u closed=%u ble=%s last=\"%s\"\n",
+                              unsigned(hw::WifiStation::testMode), unsigned(wififw::windows),
+                              unsigned(wififw::windowsClosed), esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED ? "up" : "off",
+                              wififw::mem().lastOutcome);
+  const size_t at = h > 0 && size_t(h) < cap ? size_t(h) : 0;
+  return at + hw::logTee.wifiTail(out + at, cap - at);
+}
 static void otaVerb(const char* line) { wififw::otaVerb(line); }

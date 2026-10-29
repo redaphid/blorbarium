@@ -1003,9 +1003,20 @@ bool DishOtaHost::busy() {
 }
 bool DishOtaHost::save() { return dish->flush(); }
 static bool wifiYieldRadio();       // src/wifi_ota.h
+static size_t wifiLogText(char* out, size_t cap);   // src/wifi_ota.h: BLE's WIFILOG
 static bool wifiUpdateHoldsRadio();
 static void wifiBegin();
 static void petLinesBoot();
+// Bluetooth's start, at boot (or, in a mode-4 test build, once the first Wi-Fi window has closed).
+static const char* bleName(const uint8_t mac[6]);
+static bool bleDeferred = false;
+static void bleStart() {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  const char* name = ble.begin(bleName(mac), &otaData);
+  Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
 bool RadioGate::open() {
   // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
   // pins the channel to its access point's, and ESP-NOW needs channel 1.
@@ -1295,9 +1306,14 @@ void setup() {
   wifiBegin();
   petLinesBoot();
   ble.keepWhile([] { return updater.active(); });
-  const char* name = ble.begin(bleName(mac), &otaData);
-  Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
-                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+#if defined(BLORB_WIFI_TEST_MODE) && (BLORB_WIFI_TEST_MODE & 4)
+  // The WPA3 DHCP hunt's mode-4 build: Bluetooth starts only once the first
+  // Wi-Fi window has closed, so that window runs with no BLE controller at all.
+  // On trial it starts now: the page must reach it to confirm the update.
+  bleDeferred = !trial.onTrial();
+  if (bleDeferred) Serial.println("[hw] ble deferred: test mode 4, it starts when the first wifi window closes");
+#endif
+  if (!bleDeferred) bleStart();
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
   heapMark("sense+pm");
@@ -2647,6 +2663,11 @@ void loop() {
     store.releaseHold();
     dishStore.hold(false);
     dish->flush();
+  }
+  if (bleDeferred && (wififw::windowsClosed || millis() > 10u * 60 * 1000)) {
+    bleDeferred = false;
+    Serial.printf("[hw] ble starting now: %s\n", wififw::windowsClosed ? "the first wifi window closed" : "10 min and no window");
+    bleStart();
   }
   adoptBoardSpecies(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())

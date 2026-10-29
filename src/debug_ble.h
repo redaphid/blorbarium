@@ -76,6 +76,7 @@ struct Board : debugble::Board {
     rebootQuiet = quiet;
     return true;
   }
+  size_t wifiLog(char* out, size_t cap) override { return wifiLogText(out, cap); }
   std::optional<uint32_t> rebootAt;
   bool rebootQuiet = false;
 };
