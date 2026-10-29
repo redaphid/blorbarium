@@ -1829,6 +1829,9 @@ static uint32_t seenBleGen = 0, seenAirLines = 0;
 // cable holds light sleep off for kCableAwakeMs, and a script sends a few '\r'
 // (the link ignores them), waits ~60 ms, then its line, which arrives whole.
 static constexpr uint32_t kCableAwakeMs = 3000;
+// A test Wi-Fi window held fully awake (`DEBUG wifi mode`, src/wifi_ota.h):
+// 240 MHz and no light sleep whatever the panel does, until it closes.
+static bool wifiAwakeHeld = false;
 
 // The CPU side of low power. On a framework built with power management
 // (CONFIG_PM_ENABLE: tools/pm_framework.sh, env badge128_pm) the chip
@@ -1878,6 +1881,7 @@ static uint32_t pmSleptMs() {
 static esp_pm_lock_handle_t awakeLock = nullptr;
 static bool awakeHeld = false;
 static void cpuPower(bool low) {
+  if (wifiAwakeHeld) low = false;
   esp_pm_config_esp32s3_t c{};
   c.max_freq_mhz = low ? int(kLowMhz) : int(kFullMhz);
   c.min_freq_mhz = low ? 40 : int(kFullMhz);   // 40: the crystal, while waiting
@@ -1904,11 +1908,17 @@ static uint32_t pmSleptMs() { return 0; }
 static void cablePower(uint32_t) {}
 static constexpr bool kLightSleep = false;
 static void cpuPower(bool low) {
+  if (wifiAwakeHeld) low = false;
   cpuMaxMhz = low ? kLowMhz : kFullMhz;
   setCpuFrequencyMhz(cpuMaxMhz);
 }
 static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 MHz
 #endif
+static void wifiAwake(bool on) {
+  if (on == wifiAwakeHeld) return;
+  wifiAwakeHeld = on;
+  cpuPower(on ? false : panelLow);
+}
 
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.

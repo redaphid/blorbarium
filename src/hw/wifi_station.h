@@ -17,7 +17,11 @@
 #include <WiFi.h>
 #include <esp_coexist.h>
 #include <esp_heap_caps.h>
+#include <esp_netif.h>
+#include <esp_netif_net_stack.h>
 #include <esp_wifi.h>
+#include <lwip/netif.h>
+#include <lwip/pbuf.h>
 #include <sdkconfig.h>
 #if defined(CONFIG_PM_ENABLE)
 #include <esp_pm.h>
@@ -41,6 +45,14 @@ class WifiStation {
   static constexpr uint32_t kScanMsPerChannel = 120;
   static constexpr uint8_t kSeenMax = 24;   // the strongest this many a scan finds are looked at
   static constexpr uint32_t kQuietMinMs = 200, kQuietAfterJoinMs = 1000, kQuietMaxMs = 3000;   // stop() to off()
+
+  // A test switch for the WPA3 DHCP hunt (`DEBUG wifi mode <n>`, RAM only;
+  // 0, the default, is the normal join). Bits: 1 the window fully awake (BLE
+  // advertising held off, 240 MHz, no light sleep: src/wifi_ota.h), 2 SAE by
+  // hunt-and-peck instead of both, 4 the BLE controller disabled for the
+  // window, 8 Wi-Fi power save off (only with 4: with BLE up it aborts).
+  static constexpr uint8_t kModeAwake = 1, kModeHnp = 2, kModeBtOff = 4, kModePsNone = 8;
+  static inline uint8_t testMode = 0;
 
   bool up() {
     if (up_) return true;
@@ -169,6 +181,7 @@ class WifiStation {
     disconnectsAtJoin_ = disconnects_;
     wpa3_ = best && (best->auth == WIFI_AUTH_WPA3_PSK || best->auth == WIFI_AUTH_WPA2_WPA3_PSK);
     attemptAt_ = millis();
+    diagReset();
     wl_status_t r;
     if (!wpa3_) {
       r = best ? WiFi.begin(c.ssid, pass, best->channel, best->bssid) : WiFi.begin(c.ssid, pass);
@@ -182,7 +195,7 @@ class WifiStation {
       r = WiFi.begin(c.ssid, pass, best->channel, best->bssid, false);
       wifi_config_t conf;
       if (r != WL_CONNECT_FAILED && esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK) {
-        conf.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+        conf.sta.sae_pwe_h2e = (testMode & kModeHnp) ? WPA3_SAE_PWE_HUNT_AND_PECK : WPA3_SAE_PWE_BOTH;
         conf.sta.pmf_cfg.capable = true;
         conf.sta.pmf_cfg.required = false;
         conf.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
@@ -198,11 +211,17 @@ class WifiStation {
     if (best)
       Serial.printf("[wifi] join: ssid %u B, password %u B, its strongest AP ch=%u rssi=%d auth=%s%s; begin=%d\n",
                     unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), unsigned(best->channel),
-                    best->rssi, authName(best->auth), wpa3_ ? " (sae both, pmf capable, wifi first)" : "", int(r));
+                    best->rssi, authName(best->auth),
+                    wpa3_ ? ((testMode & kModeHnp) ? " (sae hunt-and-peck, pmf capable, wifi first)"
+                                                   : " (sae both, pmf capable, wifi first)")
+                          : "",
+                    int(r));
     else
       Serial.printf("[wifi] join: ssid %u B, password %u B, not in the scan: the driver scans for it; begin=%d\n",
                     unsigned(std::strlen(c.ssid)), unsigned(std::strlen(c.password)), int(r));
     beginStatus_ = r;
+    Serial.printf("[wifi] diag: test mode %u, ps=%d, cpu %u MHz, rx hook %s\n", unsigned(testMode), psMode(),
+                  unsigned(getCpuFrequencyMhz()), hookRx() ? "on" : "MISSING");
   }
   Join joining() const {
     if (!up_) return Join::Failed;
@@ -247,7 +266,87 @@ class WifiStation {
   uint32_t disconnectsSinceJoin() const { return disconnects_ - disconnectsAtJoin_; }
   int beginStatus() const { return beginStatus_; }
 
+  // ---- diagnostics (every mode): the driver's events, DHCP's state, frames in ----
+  static int psMode() {
+    wifi_ps_type_t t = WIFI_PS_NONE;
+    return esp_wifi_get_ps(&t) == ESP_OK ? int(t) : -1;
+  }
+  // The station's lwIP netif's input wrapped in a counter (lwIP re-adds the
+  // netif at each Wi-Fi start, so it is hooked at each join).
+  static bool hookRx() {
+    esp_netif_t* ni = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!ni) return false;
+    netif* n = static_cast<netif*>(esp_netif_get_netif_impl(ni));
+    if (!n || !n->input) return false;
+    if (n->input != &countInput) {
+      origInput_ = n->input;
+      n->input = &countInput;
+    }
+    return true;
+  }
+  void diagReset() {
+    rxFrames_ = rxDhcp_ = rxArp_ = rxGroup_ = 0;
+    diagAt_ = millis();
+  }
+  // From the loop: the events since last time, and every 2 s while
+  // associated, DHCP's state and what has come in.
+  void diag() {
+    if (!up_ || !attempted_) return;
+    if (evConnected_ != evConnectedSaid_) {
+      evConnectedSaid_ = evConnected_;
+      Serial.printf("[wifi] diag: STA_CONNECTED authmode=%s ch=%u (+%u ms) ps=%d\n", authName(connAuth_),
+                    unsigned(connChannel_), unsigned(millis() - attemptAt_), psMode());
+    }
+    if (evGotIp_ != evGotIpSaid_) {
+      evGotIpSaid_ = evGotIp_;
+      Serial.printf("[wifi] diag: GOT_IP %u.%u.%u.x (+%u ms) rx=%u dhcp_rx=%u\n", unsigned(gotIp_ & 0xff),
+                    unsigned((gotIp_ >> 8) & 0xff), unsigned((gotIp_ >> 16) & 0xff), unsigned(millis() - attemptAt_),
+                    unsigned(rxFrames_), unsigned(rxDhcp_));
+    }
+    const uint32_t now = millis();
+    if (now - diagAt_ < 2000) return;
+    diagAt_ = now;
+    wifi_ap_record_t ap;
+    if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return;
+    esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+    esp_netif_ip_info_t ip{};
+    if (esp_netif_t* ni = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF")) {
+      esp_netif_dhcpc_get_status(ni, &st);
+      esp_netif_get_ip_info(ni, &ip);
+    }
+    const char* dhcp = st == ESP_NETIF_DHCP_INIT      ? "init"
+                       : st == ESP_NETIF_DHCP_STARTED ? "started"
+                       : st == ESP_NETIF_DHCP_STOPPED ? "stopped"
+                                                      : "?";
+    Serial.printf("[wifi] diag: associated rssi=%d ch=%u dhcp=%s ip=%s rx=%u dhcp_rx=%u arp_rx=%u group_rx=%u ps=%d "
+                  "cpu=%u MHz status=%d (+%u ms)\n",
+                  int(ap.rssi), unsigned(ap.primary), dhcp, ip.ip.addr ? "yes" : "none", unsigned(rxFrames_),
+                  unsigned(rxDhcp_), unsigned(rxArp_), unsigned(rxGroup_), psMode(), unsigned(getCpuFrequencyMhz()),
+                  int(WiFi.status()), unsigned(now - attemptAt_));
+  }
+
  private:
+  // On the Wi-Fi task: every frame lwIP is handed, and which are DHCP's
+  // replies (UDP to port 68), ARP, or to a group address.
+  static err_t countInput(pbuf* p, netif* n) {
+    ++rxFrames_;
+    if (p && p->len >= 14) {
+      const uint8_t* d = static_cast<const uint8_t*>(p->payload);
+      if (d[0] & 1) ++rxGroup_;
+      if (d[12] == 0x08 && d[13] == 0x06) ++rxArp_;
+      if (d[12] == 0x08 && d[13] == 0x00 && p->len >= 14 + 20 && d[23] == 17) {
+        const unsigned udp = 14 + (d[14] & 0x0f) * 4;
+        if (p->len >= udp + 4 && d[udp + 2] == 0 && d[udp + 3] == 68) ++rxDhcp_;
+      }
+    }
+    return origInput_ ? origInput_(p, n) : ERR_IF;
+  }
+  static inline netif_input_fn origInput_ = nullptr;
+  static inline volatile uint32_t rxFrames_ = 0, rxDhcp_ = 0, rxArp_ = 0, rxGroup_ = 0;
+  static inline volatile uint32_t evConnected_ = 0, evGotIp_ = 0, gotIp_ = 0;
+  static inline volatile uint8_t connAuth_ = 0, connChannel_ = 0;
+  uint32_t evConnectedSaid_ = 0, evGotIpSaid_ = 0, diagAt_ = 0;
+
   struct Ap {
     char ssid[33] = "";
     int rssi = -127;
@@ -287,6 +386,15 @@ class WifiStation {
       case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         reason_ = info.wifi_sta_disconnected.reason;
         ++disconnects_;
+        break;
+      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+        connAuth_ = uint8_t(info.wifi_sta_connected.authmode);
+        connChannel_ = info.wifi_sta_connected.channel;
+        ++evConnected_;
+        break;
+      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        gotIp_ = info.got_ip.ip_info.ip.addr;
+        ++evGotIp_;
         break;
       default: break;
     }

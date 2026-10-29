@@ -21,6 +21,7 @@
 //                            --none in range---------> closing                      --nothing--> closing
 #pragma once
 
+#include <esp_bt.h>
 #include <esp_core_dump.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
@@ -189,10 +190,57 @@ static void setPhase(Phase p) {
   phaseAt = millis();
 }
 
+// The WPA3 DHCP hunt's test modes (`DEBUG wifi mode <n>`, hw::WifiStation::testMode):
+// the window fully awake from before the radio comes up until it is down.
+static bool awakeOn = false, btOff = false, psNone = false;
+static void awakeEnter() {
+  using S = hw::WifiStation;
+  const uint8_t m = S::testMode;
+  if (awakeOn || !(m & (S::kModeAwake | S::kModeBtOff))) return;
+  awakeOn = true;
+  ble.holdAdvertising(true);   // poll() keeps it held while awakeOn
+  wifiAwake(true);             // main.cpp: 240 MHz, no light sleep, CPU_FREQ_MAX held
+  if (m & S::kModeBtOff) {
+    if (ble.connected()) {
+      say("test mode %u: a phone is connected, the BLE controller stays up", unsigned(m));
+    } else {
+      delay(30);   // advertising's stop reaches the controller
+      const esp_err_t e = esp_bt_controller_disable();
+      btOff = e == ESP_OK;
+      say("test mode %u: BLE controller disable -> %d (status %d)", unsigned(m), int(e), int(esp_bt_controller_get_status()));
+    }
+  }
+  say("test mode %u: awake window: ble adv held, cpu %u MHz, ble %s", unsigned(m), unsigned(getCpuFrequencyMhz()),
+      btOff ? "controller off" : "controller on");
+}
+// Once joining: Wi-Fi's power save off, only with the BLE controller down.
+static void awakePs() {
+  if (!awakeOn || psNone || !btOff || !(hw::WifiStation::testMode & hw::WifiStation::kModePsNone)) return;
+  const esp_err_t e = esp_wifi_set_ps(WIFI_PS_NONE);
+  psNone = e == ESP_OK;
+  say("test mode: esp_wifi_set_ps(NONE) -> %d, ps now %d", int(e), hw::WifiStation::psMode());
+}
+static void awakeLeave() {
+  if (!awakeOn) return;
+  if (psNone) esp_wifi_set_ps(WIFI_PS_MIN_MODEM), psNone = false;   // before Bluetooth is back
+}
+static void awakeAfterOff() {
+  if (!awakeOn) return;
+  if (btOff) {
+    const esp_err_t e = esp_bt_controller_enable(ESP_BT_MODE_BLE);
+    say("test mode: BLE controller enable -> %d (status %d)", int(e), int(esp_bt_controller_get_status()));
+    btOff = false;
+  }
+  wifiAwake(false);
+  awakeOn = false;   // poll() releases advertising
+}
+
 // The radio goes once the GET's task has ended (hw/net_job.h) and the
 // driver has finished its scan or connection attempt (WifiStation::quiet).
 static void radioDown() {
+  awakeLeave();
   station.off();
+  awakeAfterOff();
   job.reset();
   inWindow = 0;
   inReport = 0;
@@ -249,6 +297,7 @@ static void openWindow(Window w) {
   if (have < need)
     return failWindow(Failure::Server, "not enough internal RAM to bring the radio up (%u free, %u wanted%s)",
                       unsigned(have), unsigned(need), station.everUp() ? "" : ", the first time");
+  awakeEnter();
   if (!station.up()) return failWindow(Failure::Server, "the radio would not come up (heap %u)", unsigned(ESP.getFreeHeap()));
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
     say("provision: joining the phone's network without a scan");
@@ -506,11 +555,13 @@ static void poll(uint32_t now) {
   // and TIMEOUT more often than not at RSSI -77 with it on) and while a GET
   // opens (DNS, connect, TLS handshake, headers), so the radio's time is
   // Wi-Fi's: only with no phone.
-  ble.holdAdvertising((phase == Phase::Joining ||
+  station.diag();
+  if (phase == Phase::Joining) awakePs();
+  ble.holdAdvertising(awakeOn || ((phase == Phase::Joining ||
                        ((phase == Phase::Manifest || phase == Phase::Image || phase == Phase::Lines || phase == Phase::Report ||
                          phase == Phase::Shot) &&
                         job.busy() && job.state() == hw::NetJob::State::Opening)) &&
-                      !ble.connected());
+                      !ble.connected()));
   pollConsent(now);
   const bool dark = powerPolicy.low();
   if (dark && !wasDark) darkSince = now;
@@ -832,6 +883,16 @@ static void wifiVerb(const char* line) {
     if (k >= 5 && k <= 20) hw::NetJob::stackTlsBytes = uint32_t(k) * 1024;
     else if (*kb) return say("stack: want 5..20 (KB)");
     return say("TLS GET stack %u B (default %u)", unsigned(hw::NetJob::stackTlsBytes), unsigned(hw::NetJob::kStackTlsDefault));
+  }
+  // `DEBUG wifi mode <n>`: the WPA3 DHCP hunt's test switch, RAM only (0 normal):
+  // bits 1 awake window, 2 SAE hunt-and-peck, 4 BLE controller off, 8 power save off (with 4).
+  if (!std::strcmp(what, "mode")) {
+    unsigned m = 0;
+    if (std::sscanf(line, "%*s %*s %u", &m) == 1 && m < 16) hw::WifiStation::testMode = uint8_t(m);
+    else if (std::sscanf(line, "%*s %*s %u", &m) == 1) return say("mode: want 0..15");
+    const uint8_t t = hw::WifiStation::testMode;
+    return say("test mode %u:%s%s%s%s%s", unsigned(t), t ? "" : " normal", t & 1 ? " awake" : "", t & 2 ? " hunt-and-peck" : "",
+               t & 4 ? " ble-off" : "", t & 8 ? " ps-none" : "");
   }
   if (!std::strcmp(what, "on") || !std::strcmp(what, "off"))
     return say("automatic checks are always on: there is no switch (docs/ota.md, the owner's rule)");
