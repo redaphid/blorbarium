@@ -95,6 +95,11 @@ test("the page's Wi-Fi code reports joins, failures and a new Blorb to the box",
   assert.match(html, /wifiTell\("ok", `The Blorb joined[^\n]*\n\s*BlorbWifi\.joined\(\);/);
   assert.match(html, /\} catch \(err\) \{\n\s*BlorbWifi\.failed\(\);/);
   assert.match(html, /BlorbWifi\.reset\(\);/);
+  // 0.7.35: the site's check-in is the join; no check-in is a failure.
+  assert.match(html, /wifiTell\("ok", `\$\{pet\} is online\.`\);\n\s*BlorbWifi\.joined\(\);/);
+  assert.match(html, /\n\s*BlorbWifi\.failed\(\);\n\s*const lead = /);
+  assert.match(html, /tip it on its side \(or press its button\) while it asks/);
+  assert.doesNotMatch(html, /Say yes on the Blorb: turn it around/);
   assert.match(html, /dispatchEvent\(new CustomEvent\("blorb:pet", \{ detail: \{ pet: p, fromBadge: !!genome \} \}\)\)/);
 });
 

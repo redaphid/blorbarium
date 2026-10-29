@@ -227,6 +227,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Connect to Wi-Fi</button>
     </form>
     <p class="hint" id="wifiHint" role="status">The password goes to the Blorb and nowhere else.</p>
+    <button type="button" id="wifiWhy" class="ghost" hidden>Reconnect and ask why</button>
     </details>
     <script>
     // Once the dish's Wi-Fi works, this box folds away at the bottom of the page:
@@ -728,7 +729,7 @@ class BleTransport {
   async open() {
     const server = await this.device.gatt.connect();
     try {
-      const svc = await server.getPrimaryService(NUS);
+      const svc = this.nus = await server.getPrimaryService(NUS);
       this.rx = await svc.getCharacteristic(RX);
       this.data = await svc.getCharacteristic(OTA_DATA).catch(() => null);
       const tx = await svc.getCharacteristic(TX);
@@ -769,6 +770,13 @@ class BleTransport {
     }
     for (let i = 0; i < bytes.length; i += 20) await put(bytes.slice(i, i + 20));
   }
+  // One request on the debug link (docs/debug-ble.md), such as WIFI. Firmware
+  // without the link has no such characteristic (NotFoundError).
+  async debugAsk(cmd) {
+    const c = await gattRetry(this.device, () => this.nus.getCharacteristic(BlorbImprov.DEBUG_CHAR));
+    return BlorbImprov.askDebug(c, cmd, { retry: (op) => gattRetry(this.device, op) });
+  }
+  get connected() { return !!(this.device && this.device.gatt.connected); }
   get name() { return this.device ? this.device.name : ""; }
   // The same for this dish on this site whatever it advertises: an update renames it.
   get id() { return this.device ? this.device.id : ""; }
@@ -908,6 +916,7 @@ class MockTransport {
   }
   async reopen() { await this.dish.reconnect(); this.epoch++; }
   open() { return this.reopen(); }
+  get connected() { return this.dish.connected; }
   close() { this.dish.drop(); }
 }
 
@@ -997,12 +1006,16 @@ function renderGenome(hash, genes) {
 }
 
 let link = null, transport = null, poll = null;
+// What the dish says of itself: its Wi-Fi MAC (STATE's mac=, as 12 hex; the
+// MAC its check-ins with the site carry) and its firmware (HELLO's fw=).
+let dishMac = null, dishFw = null;
 
 async function refreshState() {
   const r = await link.send("STATE");
   for (const line of r.lines) {
     if (line.startsWith("phase=")) {
       const st = kv(line);
+      if (st.mac) dishMac = (BlorbOta.parseBadge(st.mac) || {}).mac || null;
       renderState(st);
       refreshAdopt(st.phase).catch(() => {});
     }
@@ -1023,6 +1036,7 @@ async function refreshAdopt(phase) {
 
 async function refreshHello() {
   const h = kv((await link.send("HELLO")).ok);
+  dishFw = h.fw || null;
   $("name").textContent = h.name || "grungo";
   $("nameInput").placeholder = h.name || "grungo";
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
@@ -1347,6 +1361,14 @@ function onDrop(from) {
   if (from !== transport) return;   // a dish this page has let go
   clearInterval(poll);
   clearTimeout(trialTimer);
+  // A join in flight ends here: from 0.7.35 the dish drops Bluetooth to join (improv.js).
+  if (from.improv && from.improv.dropped) from.improv.dropped();
+  if (wifiAway === from) {
+    if (link) link.failAll("disconnected");
+    if ($("status").dataset.s !== "connecting") ui.status("lost", `${petName()} is joining Wi-Fi; Bluetooth is back in about a minute`);
+    ui.show("reconnect", false);
+    return;
+  }
   // The updater hears first, so the requests failing next read as a drop and not an error.
   if (updater) updater.dropped();
   if (link) link.failAll("disconnected");
@@ -1432,6 +1454,7 @@ function leave() {
   if (link) link.failAll("left");
   link = null;
   awaitingTrial = null;
+  dishMac = null; dishFw = null; wifiAway = null;
   if (old) old.close();
   for (const el of document.querySelectorAll("main > section")) el.hidden = true;
   $("name").textContent = FRESH.name;
@@ -1440,6 +1463,7 @@ function leave() {
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
   $("wifiPassword").value = "";
+  ui.show("wifiWhy", false);
   BlorbWifi.reset();
   // What the last badge told the page: none of it may show for the next one.
   for (const id of ["genomeHash", "geneCount", "dishHash", "fw"]) $(id).textContent = "…";
@@ -1521,23 +1545,118 @@ $("nameForm").addEventListener("submit", async (e) => {
 
 function wifiTell(tone, text) { $("wifiHint").dataset.tone = tone; $("wifiHint").textContent = text; }
 
+// The dish a network was just sent to, while its drop of Bluetooth is expected.
+let wifiAway = null;
+// How long the site is asked for the check-in (&wifi_wait_ms= shortens it for a test).
+const WIFI_WAIT_MS = Number(params.get("wifi_wait_ms")) || 120000;
+// From 0.7.35 the dish drops Bluetooth for its join and its check-in with the site.
+const dropsBluetooth = () => !!dishFw && !BlorbOta.isNewer("0.7.35", dishFw);
+
+// GET /api/badge/online: has the badge checked in with the site since `since`?
+async function askOnline(mac, since) {
+  const r = await fetch(`/api/badge/online?mac=${mac}&since=${since}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`online ${r.status}`);
+  return Object.assign(await r.json(), { date: r.headers.get("date"), localAt: Date.now() });
+}
+
+// Back to the same dish over Bluetooth once it brings Bluetooth back, with no chooser.
+async function backOnBluetooth(here, ms) {
+  if (here.connected) return true;
+  ui.status("connecting", "Reconnecting…");
+  try { await here.reopen(ms); } catch (e) { return false; }
+  if (transport !== here) return false;
+  link = new Link(here, onEvent);
+  await session({ offer: false });
+  return transport === here;
+}
+
+// Why it did not join, in the dish's own masked words (WIFI on the debug link):
+// its "networks ...; last outcome: ..." and "network #1: ..." lines.
+async function wifiWhy(here, { lead = "", tone = "err", secrets = [] } = {}) {
+  const pet = petName();
+  ui.show("wifiWhy", false);
+  try {
+    if (!(await backOnBluetooth(here, 90000))) throw new Error("not back");
+    if (!here.debugAsk) throw new Error("no debug link");
+    const r = await here.debugAsk("WIFI");
+    if (transport !== here) return;
+    const why = BlorbImprov.wifiReason(r.lines, secrets);
+    wifiTell(tone, `${lead}${why.length ? `${pet} says: ${why.join(" · ")}` : `${pet} gave no reason.`}`);
+  } catch (e) {
+    if (transport !== here) return;
+    debugLog("err", `wifi why: ${e.message}`);
+    wifiTell(tone, `${lead}Couldn't reach ${pet} over Bluetooth to ask why. Bring the phone close and try again.`);
+    ui.show("wifiWhy", true);
+    if (!here.connected) { ui.status("lost", "Lost connection"); ui.show("reconnect", true); }
+  }
+}
+
+// A 0.7.35+ dish has the network and has dropped Bluetooth to join it: the
+// site says when it checks in; if it does not, the dish says why.
+async function wifiAfterDrop(here, { mac, since, before, secrets }) {
+  const pet = petName();
+  wifiAway = here;
+  wifiTell("", `Sent. ${pet} is dropping Bluetooth to join the network; this takes up to a minute.`);
+  ui.status("lost", `${pet} is joining Wi-Fi; Bluetooth is back in about a minute`);
+  ui.show("reconnect", false);
+  try {
+    // No MAC (a badge whose STATE has none): the site can't be asked; the dish can.
+    if (!mac) return await wifiWhy(here, { tone: "", secrets });
+    const r = await BlorbImprov.waitOnline({ check: (s) => askOnline(mac, s), since, before, forMs: WIFI_WAIT_MS, stop: () => transport !== here });
+    if (r.stopped || transport !== here) return;
+    if (r.joined) {
+      wifiTell("ok", `${pet} is online.`);
+      BlorbWifi.joined();
+      if (!(await backOnBluetooth(here, 90000)) && transport === here) { ui.status("lost", "Lost connection"); ui.show("reconnect", true); }
+      return;
+    }
+    BlorbWifi.failed();
+    const lead = r.failed === r.asked ? `Couldn't reach the site to see whether ${pet} checked in. `
+      : `${pet} did not check in with the site in two minutes. `;
+    wifiTell("err", `${lead}Waiting for ${pet}'s Bluetooth to come back to ask why…`);
+    await wifiWhy(here, { lead, secrets });
+  } finally {
+    if (wifiAway === here) wifiAway = null;
+  }
+}
+
+$("wifiWhy").addEventListener("click", () => { if (transport) wifiWhy(transport); });
+
 $("wifiForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
   const improv = transport && transport.improv;
-  if (!improv || !ssid) return;
+  if (!improv || !ssid || wifiAway) return;
+  const here = transport, mac = dishMac;
+  ui.show("wifiWhy", false);
   wifiTell("", `Asking the Blorb…`);
+  // While a hand says yes: the site's clock, and what it already had for this badge.
+  const startedAt = Date.now();
+  const baseline = mac && !params.has("mock") ? askOnline(mac, 0).catch(() => null) : Promise.resolve(null);
   try {
-    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the Blorb: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
+    const r = await improv.join(ssid, password, {
+      onAsk: () => wifiTell("", "Say yes on the Blorb: tip it on its side (or press its button) while it asks \u201cJoin Wi-Fi?\u201d"),
+      onSent: () => {
+        wifiAway = here;
+        if (dropsBluetooth()) wifiTell("", `Sent. ${petName()} is dropping Bluetooth to join the network; this takes up to a minute.`);
+      },
+    });
     $("wifiPassword").value = "";
+    if (r && r.dropped) {
+      const b = await baseline;
+      const since = startedAt + (b ? BlorbImprov.clockOffset(b.date, b.localAt) : 0) - 1000;
+      return await wifiAfterDrop(here, { mac, since, before: b ? b.at : null, secrets: [ssid, password] });
+    }
+    if (wifiAway === here) wifiAway = null;
     wifiTell("ok", `The Blorb joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
     BlorbWifi.joined();
   } catch (err) {
     BlorbWifi.failed();
+    if (wifiAway === here) wifiAway = null;
     debugLog("err", `improv join: ${err.message}`);
     wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
       : err.code === BlorbImprov.ERROR.unableToConnect ? `The Blorb couldn't join "${ssid}". Check the password, and that the Blorb is in reach of the router.`
-      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the Blorb. Try again, and turn the Blorb around when it asks \u201cJoin Wi-Fi?\u201d"
+      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the Blorb. Try again, and tip the Blorb on its side when it asks \u201cJoin Wi-Fi?\u201d"
       : err.code === "TIMEOUT" ? "The Blorb didn't answer. If it is in a fight, try again once it's over."
       : `Something went wrong (${err.message}). Try again.`);
   }

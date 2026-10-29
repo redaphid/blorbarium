@@ -167,3 +167,32 @@ test("debug carries any cable DEBUG line, one line, untouched, as the badge take
   const r = await call(env, "/api/badge/report", report(), { raw: true });
   assert.equal(r.body, `blorb-cmds 1\n${q.body.id} debug power stats\n`);
 });
+
+// GET /api/badge/online: the Wi-Fi card's "did it check in since I sent the network?"
+test("online says only whether the badge reported since, and when", async () => {
+  const env = fakeEnv();
+  const online = (mac, since) => worker.fetch(new Request(`https://blorb.test/api/badge/online?mac=${mac}&since=${since}`), env, { waitUntil() {} });
+  const unknown = await online(MAC, 0);
+  assert.equal(unknown.status, 200);
+  assert.equal(unknown.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await unknown.json(), { joined: false, at: null });
+  const before = Date.now();
+  await call(env, "/api/badge/report", report(), { raw: true });
+  const seen = env.DB.raw.prepare("SELECT last_seen FROM badges WHERE mac = ?").get(MAC).last_seen;
+  assert.deepEqual(await (await online("7C:DF:A1:B2:C3:D4", before)).json(), { joined: true, at: seen }, "a report after since; any MAC spelling");
+  assert.deepEqual(await (await online(MAC, seen + 1)).json(), { joined: false, at: seen }, "a report before since");
+  for (const [mac, since] of [["7cdfa1b2c3", 0], ["zz", 0], [MAC, ""], [MAC, "-5"], [MAC, "soon"]]) {
+    assert.equal((await online(mac, since)).status, 400, `${mac} ${since}`);
+  }
+  assert.equal((await worker.fetch(new Request(`https://blorb.test/api/badge/online?since=0`), env, { waitUntil() {} })).status, 400, "no mac");
+});
+
+test("online is rate-limited per badge, generously, apart from its reports", async () => {
+  const keys = [];
+  const env = fakeEnv({ env: { PET_LINES_LIMITER: { async limit({ key }) { keys.push(key); return { success: !key.startsWith("online:aabbccddeeff") }; } } } });
+  const r = await worker.fetch(new Request(`https://blorb.test/api/badge/online?mac=${MAC}&since=0`), env, { waitUntil() {} });
+  assert.equal(r.status, 200);
+  assert.match(keys[0], new RegExp(`^online:${MAC}:\\d+$`));
+  const no = await worker.fetch(new Request("https://blorb.test/api/badge/online?mac=aabbccddeeff&since=0"), env, { waitUntil() {} });
+  assert.equal(no.status, 429);
+});

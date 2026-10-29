@@ -106,9 +106,9 @@ is the open standard for handing a device a network over BLE (ESPHome, WLED,
 Home Assistant). The service `00467768-6228-2272-4663-277478268000` sits on
 the same NimBLE server and connection as the UART service. The badge starts
 in Improv's **authorization required**. When a page opens the service (reads,
-subscribes or writes), the badge asks on its screen, "Join Wi-Fi? Turn me
-around!", as the update's question does: a turn of the badge or a press of
-its button, after 1.5 s and within 30 s, says yes. Improv then says
+subscribes or writes), the badge asks on its screen, "Join Wi-Fi? Tip me on
+my side!": tipping the badge on its side (a quarter turn, as the update's
+question takes) or a press of its button, after 1.5 s and within 30 s, says yes. Improv then says
 **authorized** for 2 minutes, and the page sends the network. Before the yes,
 Wi-Fi settings answer error 4 (not authorized) and join nothing; device info
 needs no yes. After a join, or when the phone goes, the next network needs a
@@ -116,9 +116,24 @@ new yes. The question holds the badge awake and takes the button and the
 knock knock, as the update's does.
 
 The website's **Wi-Fi** card (only for a dish with the Improv service) asks,
-tells the person "Say yes on the dish: turn it around", waits for the yes,
-sends the network, and says whether the dish joined. The card ships with the
-site, so it needs a site deploy; the cable needs nothing.
+tells the person "Say yes on the Blorb: tip it on its side (or press its
+button)", waits for the yes, sends the network, and says whether the dish
+joined. The card ships with the site, so it needs a site deploy; the cable
+needs nothing.
+
+From 0.7.35 the badge saves the network at once, says **provisioning**, and
+drops Bluetooth (disconnects the phone, stops advertising) for the join, DHCP
+and its check-in with the site (`POST /api/badge/report`), then brings
+Bluetooth back. The card says "Sent. <pet> is dropping Bluetooth to join the
+network; this takes up to a minute.", takes the disconnect as expected, and
+asks the site `GET /api/badge/online?mac=<12 hex>&since=<unix ms>` (public;
+only `{"joined": bool, "at": last_seen ms or null}`) every 3 s for up to
+2 minutes, with the MAC from the badge's `STATE` (`mac=`). Joined: "<pet> is
+online." Not: it reconnects once Bluetooth is back (or offers "Reconnect and
+ask why") and shows the badge's own masked reason, `WIFI` on the debug link
+(`docs/debug-ble.md`): its `networks ...; last outcome: ...` and `network
+#1: ...` lines. A badge that answers **provisioned** with a URL before any
+disconnect (before 0.7.35) is a join as before.
 
 ## Credentials
 
@@ -284,8 +299,8 @@ a test release signed with the owner's key (docs/ota.md "The key"). Flash this b
    manifest: N bytes, open N ms, task stack free N`, `manifest lcd128 0.7.12
    ...: up_to_date`, `radio down`. **Record open ms, heap, minheap, stack
    free.** From the website (once deployed, or `wrangler dev`): the Wi-Fi card
-   shows "Say yes on the dish"; the badge shows "Join Wi-Fi? Turn me around!";
-   turn it; the page says it joined; `DEBUG wifi` lists it. Let the question
+   shows "Say yes on the Blorb"; the badge shows "Join Wi-Fi? Tip me on my
+   side!"; tip it; the page says it joined; `DEBUG wifi` lists it. Let the question
    lapse once: the page says nobody said yes; nothing was joined.
 5. **Automatic check at home.** Leave the badge alone on the table: about 11
    minutes later `window check opens` ... `up_to_date` ... `closed after N

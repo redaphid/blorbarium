@@ -3,6 +3,7 @@
 // site, and the owner's few commands for it, handed over in the reply.
 //
 //   POST /api/badge/report               the badge: its report; the reply is its commands, plain text
+//   GET  /api/badge/online?mac=&since=   public: {joined, at}, has it reported since? (the Wi-Fi card)
 //   GET  /api/admin/health               every badge, with its newest report: healthy and updating?
 //   GET  /api/admin/badges/:mac/reports  a badge's last reports, newest first, logs and all
 //   POST /api/admin/badges/:mac/debug    {verb, arg?}: queue one allowlisted command for it
@@ -131,6 +132,27 @@ export async function postReport(request, env, { fail, normaliseMac }) {
     lines.push(`${a.id} ${ok.payload.verb}${ok.payload.arg !== undefined ? " " + ok.payload.arg : ""}`);
   }
   return new Response(lines.join("\n") + "\n", { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+}
+
+// GET /api/badge/online?mac=&since=: has this badge checked in (its report,
+// above) since then? The Wi-Fi card asks it every 3 s for up to 2 minutes
+// while a badge (0.7.35+) has dropped Bluetooth to join the network it was
+// just given. Public, so it says that and nothing more: no firmware, no logs.
+export const ONLINE_SLOT_MS = 10000;
+export async function getOnline(url, env, { json, fail, normaliseMac }) {
+  const mac = normaliseMac(url.searchParams.get("mac"));
+  if (!mac) return fail(400, "mac: 12 hex digits");
+  const s = url.searchParams.get("since") ?? "";
+  if (!/^\d{1,15}$/.test(s)) return fail(400, "since: unix ms");
+  // The limiter allows a few a minute per key; a key per 10 s slot lets a
+  // page poll every 3 s, and still caps any one badge at about 36 a minute.
+  if (env.PET_LINES_LIMITER) {
+    const { success } = await env.PET_LINES_LIMITER.limit({ key: `online:${mac}:${Math.floor(Date.now() / ONLINE_SLOT_MS)}` });
+    if (!success) return fail(429, "slow down");
+  }
+  const at = await env.DB.prepare("SELECT last_seen FROM badges WHERE mac = ?1").bind(mac).first("last_seen");
+  const seen = at == null ? null : Number(at);
+  return json({ joined: seen !== null && seen >= Number(s), at: seen }, 200, { "cache-control": "no-store" });
 }
 
 // A shot command's frame: carried in this report (older firmware), or, since

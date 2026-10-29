@@ -12,6 +12,7 @@
 //   GET  /api/pet?genome_hash=          the phone's view: bible, sample lines, diary, family (#42)
 //   GET  /api/species?name=             {species, sketch, lines}: a species' built-in lines (catalog.json)
 //   GET  /api/ble-name?mac=             {name, pet}: the name the badge advertises, for an NFC link (docs/nfc.md)
+//   GET  /api/badge/online?mac=&since=  {joined, at}: has the badge checked in since? (the Wi-Fi card, reports.js)
 //   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
@@ -27,7 +28,7 @@ import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
-import { postReport } from "./reports.js";
+import { postReport, getOnline } from "./reports.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
 import { withZone } from "./zone.js";
@@ -553,6 +554,7 @@ export default {
       if (url.pathname === "/api/pet" && request.method === "GET") return await getPet(url, env);
       if (url.pathname === "/api/species" && request.method === "GET") return getSpecies(url);
       if (url.pathname === "/api/ble-name" && request.method === "GET") return await getBleName(url, env);
+      if (url.pathname === "/api/badge/online" && request.method === "GET") return await getOnline(url, env, { json, fail, normaliseMac });
       if (url.pathname === "/api/personality" && request.method === "POST") return await postPersonality(request, env);
       if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);
       if (url.pathname === "/api/creatures" && request.method === "GET") {
