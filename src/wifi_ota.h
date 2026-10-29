@@ -122,6 +122,9 @@ static std::optional<size_t> joinPick;
 static bool joinRetried = false;
 static bool joinFellBack = false;   // this window's one switch to a network the scan heard
 static bool getRetried = false;     // this window's one second try of the manifest's GET
+static std::optional<size_t> switchTo;   // the fallback's network, joined once the last attempt has been left
+static uint32_t switchAt = 0;
+constexpr uint32_t kSwitchMs = 500;
 
 static bool cutSockets = false;
 static uint32_t imageAt = 0;   // bytes handed to the session
@@ -407,6 +410,7 @@ static void openWindow(Window w) {
     return setPhase(Phase::Joining);
   }
   joinRetried = false, joinFellBack = false, getRetried = false;
+  switchTo.reset();
   ++scans;
   if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
   setPhase(Phase::Scanning);
@@ -712,6 +716,14 @@ static void poll(uint32_t now) {
   switch (phase) {
     case Phase::Scanning: return scanned();
     case Phase::Joining:
+      if (switchTo) {   // the fallback: the last attempt left, now the network the scan heard
+        if (millis() - switchAt < kSwitchMs) return;
+        joinPick = *switchTo;
+        switchTo.reset();
+        joinNet(mem().networks.credsFor(*joinPick));
+        phaseAt = millis();
+        return;
+      }
       // The join (with the core's one retry) for station.joinBudgetMs(), then
       // one more, then the window closes. On WPA3 the next try waits until 30 s
       // after the last began (hw::WifiStation::retryWaitMs).
@@ -737,9 +749,8 @@ static void poll(uint32_t now) {
               station.reasonName(), unsigned(station.reason()), unsigned(*alt + 1));
           triedJoin(false);   // its try: no longer untried
           joinFellBack = true, joinRetried = false;
-          joinPick = *alt;
-          joinNet(mem().networks.credsFor(*alt));
-          phaseAt = millis();
+          station.leave();
+          switchTo = *alt, switchAt = millis();
           return;
         }
       }

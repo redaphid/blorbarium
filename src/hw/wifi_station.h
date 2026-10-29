@@ -191,6 +191,13 @@ class WifiStation {
     heard_->joined(a);
   }
   // A scan that has run too long: stopped, so nothing is left running under the join.
+  // Before joining another network in the same window: the driver drops the
+  // last attempt (it may still be scanning for a hidden SSID), so the next
+  // begin starts clean; give its disconnect a moment to land before join()
+  // counts its own (0.7.39: a begin straight over one never started, and
+  // its retry associated with no DHCP).
+  void leave() { esp_wifi_disconnect(); }
+
   void abandonScan() {
     if (WiFi.getStatusBits() & WIFI_SCANNING_BIT) esp_wifi_scan_stop();
   }
