@@ -495,6 +495,10 @@ const STAGES = ["baby", "child", "adult", "elder"];
 const NAME_RE = /^[A-Za-z0-9_-]{1,15}$/;
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
+// ?b=<mac>: an NFC sticker's link to one badge (docs/nfc.md); badgeNames, the
+// names it may advertise without its id, fill in as the page learns them.
+const badge = BlorbOta.parseBadge(params.get("b"));
+const badgeNames = [];
 
 // key=value pairs out of a reply line
 function kv(text) {
@@ -621,7 +625,7 @@ class BleTransport {
   }
   // The only chooser: every later open() is to this same device, whatever it advertises then.
   async pick(wide) {
-    const filters = BlorbOta.chooserFilters(params.get("d"), wide);
+    const filters = BlorbOta.chooserFilters(params.get("d"), wide, badge, badgeNames);
     this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS, BlorbImprov.SERVICE] });
     this.device.addEventListener("gattserverdisconnected", () => this.onDrop(this));
   }
@@ -693,10 +697,12 @@ function mockDish(name = "blorb-7a3f", renamed = null) {
 let mockAds = null, mockChooserOpens = 0;
 function mockRadio() {
   mockAds ||= (params.get("nearby") || "").split(",").filter(Boolean).map((entry) => {
-    const [names, kind = "dish"] = entry.split(":");
+    const [named, kind = "dish"] = entry.split(":");
+    const [names, mac] = named.split("@");   // mossby@d40592771b3c: a dish that advertises its id (docs/ble.md)
     const [name, renamed] = names.split(">");
     const dish = kind === "dish" ? mockDish(name, renamed) : null;
-    return { dish, services: kind === "plain" ? [] : [NUS], get name() { return dish ? dish.name : name; } };
+    const manufacturerData = mac ? { [BlorbOta.COMPANY]: Uint8Array.from(mac.match(/../g), (h) => parseInt(h, 16)) } : {};
+    return { dish, manufacturerData, services: kind === "plain" ? [] : [NUS], get name() { return dish ? dish.name : name; } };
   });
   return mockAds;
 }
@@ -1254,7 +1260,7 @@ async function connect(wide = false) {
       globalThis.BlorbDebug?.attachMock(transport.dish);
     } else if (params.has("mock")) {
       ui.status("connecting", "Choose the Blorb…");
-      const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide));
+      const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide, badge, badgeNames));
       if (!ad.dish) throw new Error("no UART service");
       mine = transport = new MockTransport(onDrop, ad.dish);
       globalThis.BlorbDebug?.attachMock(transport.dish);
@@ -1282,6 +1288,27 @@ async function connect(wide = false) {
 // What the page shows before any dish, so the next one starts from it.
 // Every hint in a section, so one added later resets with the rest.
 const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
+
+// ?b=: say whose Blorb the link finds, and ask the site which name it
+// advertises (for firmware older than its id) now, at load: the chooser must
+// open inside the button press's user activation, so nothing waits then.
+if (badge) {
+  const title = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const looking = (who) => {
+    FRESH.meta = `Looking for ${who ? `${who}'s Blorb` : `your Blorb (blorb-${badge.tail})`}. Bring your phone close and connect.`;
+    if (!transport) $("meta").textContent = FRESH.meta;
+  };
+  const table = badge.mac && BlorbOta.BADGES[badge.mac];
+  if (table) badgeNames.push(table);
+  looking(table && title(table));
+  if (badge.mac && !params.has("mock")) {
+    fetch(`/api/ble-name?mac=${badge.mac}`).then((r) => (r.ok ? r.json() : null)).then((b) => {
+      if (!b) return;
+      if (b.name && !badgeNames.includes(b.name)) badgeNames.push(b.name);
+      if (b.pet || b.name) looking(b.pet ? String(b.pet).replace(/_/g, " ") : title(b.name));
+    }).catch(() => {});
+  }
+}
 
 // Let this dish go and put the page back as it loads. Its drop is ignored.
 function leave() {
