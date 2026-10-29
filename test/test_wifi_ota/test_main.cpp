@@ -459,6 +459,20 @@ TEST(Networks, PickTheStrongestRememberedInRangeOrNone) {
 // An Improv provision whose join failed (a weak signal while the phone held
 // the connection, 2026-10-29) keeps the network, untried: the next Check
 // tries it first, in range or not, and once tried it is like any other.
+TEST(Networks, AnUntriedOneThatFailedFallsBackToOneTheScanHeard) {
+  wifiota::Networks n;
+  n.remember(net("Home"));
+  n.remember(net("Kids"));   // untried, and out of reach here
+  n.setUntried(0, true);
+  const wifiota::Seen here[] = {{"Neighbour", -50}, {"Home", -75}};
+  ASSERT_EQ(n.next(here, 2), n.find("Kids")) << "the untried one first, heard or not";
+  EXPECT_EQ(n.fallback(*n.find("Kids"), here, 2), n.find("Home")) << "it failed: the one the scan heard";
+  EXPECT_FALSE(n.fallback(*n.find("Home"), here, 2)) << "the only one heard failed: nothing else";
+  EXPECT_FALSE(n.fallback(0, nullptr, 0)) << "no scan: nothing to fall back on";
+  const wifiota::Seen both[] = {{"Home", -75}, {"Kids", -60}};
+  EXPECT_EQ(n.fallback(*n.find("Home"), both, 2), n.find("Kids"));
+}
+
 TEST(Networks, AnUntriedNetworkIsTheNextChecksFirstTryWhereverItIs) {
   wifiota::Networks n;
   n.remember(net("Home"));

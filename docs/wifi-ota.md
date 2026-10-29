@@ -141,6 +141,10 @@ wrong, the network stays saved and untried: the next Check, dark, no phone
 connected and advertising held, tries it before any other, in range or not
 (it may be hidden: joined without a channel); joined or failed, that try
 clears the mark. A network set by hand (`DEBUG wifi set`) is untried too.
+If that try fails and the window's scan heard another remembered network,
+that one gets the rest of the window (`join of network #2 failed …: network
+#1, heard in the scan, instead`; 0.7.37): an untried network out of reach
+never costs a Check whose usual network is in range.
 
 A phone that sends a network the badge already knows with another password
 never replaces the one that works: the new password is kept beside it

@@ -69,6 +69,11 @@ class Networks {
   // Which network a Check joins: the newest untried one (or one with an
   // untried new password beside it), else pick().
   std::optional<size_t> next(const Seen* seen, size_t count) const;
+  // After network `failed` had its try in a window and did not join: the
+  // strongest other remembered network the scan heard, else nothing. An
+  // untried one out of reach must not cost a Check whose own network is in
+  // range (0.7.36's soak: an unreachable untried network, one failed window).
+  std::optional<size_t> fallback(size_t failed, const Seen* seen, size_t count) const;
 
   // A new password beside a working one (owner, 2026-10-29: a failed
   // provision must never replace a password that works). A phone that sends

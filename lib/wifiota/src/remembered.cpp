@@ -156,6 +156,17 @@ bool Networks::forget(std::string_view ssid) {
   return at && forgetAt(*at);
 }
 
+std::optional<size_t> Networks::fallback(size_t failed, const Seen* seen, size_t count) const {
+  std::optional<size_t> best;
+  int bestRssi = 0;
+  for (size_t s = 0; s < count; ++s) {
+    const std::optional<size_t> at = find(seen[s].ssid);
+    if (!at || *at == failed) continue;
+    if (!best || seen[s].rssi > bestRssi || (seen[s].rssi == bestRssi && *at < *best)) best = at, bestRssi = seen[s].rssi;
+  }
+  return best;
+}
+
 std::optional<size_t> Networks::pick(const Seen* seen, size_t count) const {
   std::optional<size_t> best;
   int bestRssi = 0;

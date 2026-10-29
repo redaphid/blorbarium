@@ -120,6 +120,7 @@ static uint32_t phaseAt = 0, windowAt = 0, saidAt = 0, closingSince = 0;
 // and takes the next, and a failed Check waits long (Failure::Absent).
 static std::optional<size_t> joinPick;
 static bool joinRetried = false;
+static bool joinFellBack = false;   // this window's one switch to a network the scan heard
 
 static bool cutSockets = false;
 static uint32_t imageAt = 0;   // bytes handed to the session
@@ -404,7 +405,7 @@ static void openWindow(Window w) {
     joinNet(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
-  joinRetried = false;
+  joinRetried = false, joinFellBack = false;
   ++scans;
   if (!station.scan()) return failWindow(Failure::Absent, "the scan would not start");
   setPhase(Phase::Scanning);
@@ -712,6 +713,23 @@ static void poll(uint32_t now) {
         station.join(mem().joining);
         phaseAt = millis();
         return;
+      }
+      // Its try (and retry) failed: a remembered network the scan heard, if
+      // another, gets the rest of the window (Networks::fallback).
+      if (const hw::WifiStation::Join j = station.joining();
+          j != hw::WifiStation::Join::Joined && joinPick && !joinFellBack && window != Window::Provision &&
+          (j == hw::WifiStation::Join::Failed || millis() - phaseAt > station.joinBudgetMs())) {
+        if (const std::optional<size_t> alt = mem().networks.fallback(*joinPick, station.seen(), station.seenCount())) {
+          if (station.retryWaitMs()) return;
+          say("join of network #%u failed (%s, reason %u): network #%u, heard in the scan, instead", unsigned(*joinPick + 1),
+              station.reasonName(), unsigned(station.reason()), unsigned(*alt + 1));
+          triedJoin(false);   // its try: no longer untried
+          joinFellBack = true, joinRetried = false;
+          joinPick = *alt;
+          joinNet(mem().networks.credsFor(*alt));
+          phaseAt = millis();
+          return;
+        }
       }
       switch (station.joining()) {
         case hw::WifiStation::Join::Joined: return joined();
