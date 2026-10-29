@@ -71,6 +71,23 @@ class Up:
         count, want = self.args.networks.split(":")
         return n == int(count) and (not sizes or sorted(sizes, key=int) == sorted(want.split(","), key=int))
 
+    async def ble_name_check(self, when, since):
+        """The badge advertises its pet's name (the boot's `ble name=`), never blorb-xxxx (0.7.43)."""
+        from bleak import BleakScanner
+        said = self.b.wait(r"\[hw\] ble name=(\S+)", 10, since)
+        want, mac, got = said and said.group(1), bytes.fromhex(self.args.mac), {}
+
+        def seen(_, adv):
+            if adv.manufacturer_data.get(0xFFFF, b"")[:6] == mac and adv.local_name:
+                got["name"] = adv.local_name
+        async with BleakScanner(seen):
+            end = time.monotonic() + 15
+            while time.monotonic() < end and "name" not in got:
+                await asyncio.sleep(0.2)
+        name = got.get("name")
+        self.check(bool(name and name == want and not name.startswith("blorb-")),
+                   "ble name %s: advertises %s (its boot said %s)" % (when, name, want))
+
     def check(self, ok, what):
         self.results.append((ok, what))
         self.say(("  PASS " if ok else "  FAIL ") + what)
@@ -192,6 +209,8 @@ class Up:
             return
         t_new = b.mark()
         home = b.wait(r"\[hw\] home rot=.*|stored (up|down)", 5, mark)
+        if a.mac:   # on the trial: the name it advertises, found by its id (company 0xFFFF)
+            await self.ble_name_check("on the trial", t_new)
         kept, trial = None, "?"
         end = time.monotonic() + a.timeout
         while time.monotonic() < end:
@@ -221,6 +240,8 @@ class Up:
             n, ",".join(sizes), new.group(1)))
         h = self.cable("DEBUG home", r"\[hw\] home rot=.*")
         self.check(bool(h and a.home in h.group(0)), "home after: %s" % (h.group(0) if h else "(no answer)"))
+        if a.mac:
+            await self.ble_name_check("kept", t_new)
         if a.check_after:
             mark = b.mark()
             b.send("DEBUG ota check")
@@ -269,6 +290,7 @@ if __name__ == "__main__":
     p.add_argument("--wait-dark", type=int, default=0, help="seconds to leave it alone before the update")
     p.add_argument("--power-low", action="store_true", help="DEBUG power low before the update")
     p.add_argument("--no-ask", action="store_true", help="leave the update to the badge's own check (no DEBUG ota check)")
+    p.add_argument("--mac", help="the badge's MAC (12 hex): check the name it advertises on the trial and once kept")
     p.add_argument("--networks", default="2:10,19", help="what must be there before and after: count:ssid sizes")
     p.add_argument("--log", required=True)
     sys.exit(asyncio.run(amain(p.parse_args())))
