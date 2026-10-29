@@ -107,7 +107,7 @@ class ImprovBle : public wifiota::improv::Port {
       inScan = adv->setScanResponseData(scan);
     }
     Serial.printf("[wifi] improv service up: service data %s, uuid in scan response %s, heap %u -> %u (before the server starts)\n",
-                  inAdv ? "advertised" : "NO ROOM", inScan ? "yes" : "no room", unsigned(heap0), unsigned(ESP.getFreeHeap()));
+                  inAdv ? "advertised" : "left out (the badge's id fills the advertisement)", inScan ? "yes" : "left out (a long name)", unsigned(heap0), unsigned(ESP.getFreeHeap()));
   }
 
   void set(NimBLECharacteristic* c, uint8_t v) {
