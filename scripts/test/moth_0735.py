@@ -62,7 +62,13 @@ def laptop_network():
     # A badge hears only 2.4 GHz: the flash station's twin when the laptop is on 5 GHz.
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
     from flash_station import parse_scan, twin_24ghz
-    twin = twin_24ghz(ssid, parse_scan(nm("-t", "-f", "ssid,freq,security", "dev", "wifi", "list")))
+    twin = None
+    for _ in range(4):   # the laptop's list can miss a 2.4 GHz network until a fresh scan
+        twin = twin_24ghz(ssid, parse_scan(nm("-t", "-f", "ssid,freq,security", "dev", "wifi", "list")))
+        if twin:
+            break
+        nm("dev", "wifi", "rescan")
+        time.sleep(5)
     return (twin, get("802-11-wireless-security.psk", "-s")) if twin else None
 
 
