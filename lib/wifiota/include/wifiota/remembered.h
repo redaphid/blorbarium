@@ -29,6 +29,7 @@ std::optional<improv::Credentials> decodeRemembered(const uint8_t* p, size_t n);
 inline constexpr size_t kMaxNetworks = 3;
 inline constexpr uint8_t kNetworksVersion = 2;
 inline constexpr size_t kNetworksMax = 2 + kMaxNetworks * (1 + 32 + 1 + 64);
+inline constexpr size_t kBesideMax = 1 + kRememberedMax;
 
 // A network a scan saw.
 struct Seen {
@@ -48,7 +49,7 @@ class Networks {
   bool forget(std::string_view ssid);
   // By place, 0 the newest. False when there is none there.
   bool forgetAt(size_t i);
-  void clear() { n_ = 0, untried_ = 0; }
+  void clear() { n_ = 0, untried_ = 0, beside_.reset(); }
   std::optional<size_t> find(std::string_view ssid) const;
 
   // Which remembered network to join, from what a scan saw: the strongest
@@ -65,8 +66,37 @@ class Networks {
   void setUntried(size_t i, bool on);
   uint8_t untriedMask() const { return untried_; }
   void setUntriedMask(uint8_t m) { untried_ = uint8_t(m & ((1u << n_) - 1u)); }
-  // Which network a Check joins: the newest untried one, else pick().
+  // Which network a Check joins: the newest untried one (or one with an
+  // untried new password beside it), else pick().
   std::optional<size_t> next(const Seen* seen, size_t count) const;
+
+  // A new password beside a working one (owner, 2026-10-29: a failed
+  // provision must never replace a password that works). A phone that sends
+  // a network the badge knows with another password: the new one is kept
+  // beside the old, untried, and tried first; neither is lost until one has
+  // joined: then that one stays and the other goes. A failed try keeps both
+  // (the new one no longer first); the old one failing with a wrong-password
+  // reason puts the new one first again. One at a time (a newer one replaces
+  // it). Kept as its own NVS key ("beside", WifiStore), never in the list's
+  // blob, which an older image must still read and which never holds an SSID twice.
+  // Returns the network's place: a new SSID (or the same password) is
+  // remembered as ever, untried, at #1.
+  size_t rememberBeside(const improv::Credentials&);
+  const std::optional<improv::Credentials>& beside() const { return beside_; }
+  bool besideUntried() const { return beside_ && besideUntried_; }
+  // The network i's credentials to try now: the untried new password beside
+  // it, else its own.
+  const improv::Credentials& credsFor(size_t i) const;
+  // A join with `c` (its SSID's network) worked: it stays, the other password
+  // goes, and nothing about it is untried.
+  void joinedWith(const improv::Credentials& c);
+  // A join with `c` failed: it is no longer untried; `wrongPassword` with the
+  // old password puts the new one beside it first again.
+  void failedWith(const improv::Credentials& c, bool wrongPassword);
+  // "beside": a byte (1: untried), then encodeRemembered's form. 0: none.
+  size_t encodeBeside(uint8_t* out, size_t cap) const;
+  // Taken only for a remembered SSID; false for junk.
+  bool decodeBeside(const uint8_t* p, size_t n);
 
   // Version 2, a count, then each network as one entry of encodeRemembered
   // without its version byte. 0 when `cap` is too small.
@@ -78,6 +108,8 @@ class Networks {
   improv::Credentials nets_[kMaxNetworks];
   size_t n_ = 0;
   uint8_t untried_ = 0;
+  std::optional<improv::Credentials> beside_;
+  bool besideUntried_ = false;
 };
 
 }  // namespace wifiota

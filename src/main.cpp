@@ -897,11 +897,11 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
     boardRepaintAll();   // the rows the panel holds were sent the other way round
   }
 #if !defined(BADGE_BOARD_SIM)
-  // "Tip me on my side!": a turn answers the update's question as a press does.
+  // "Tip me on my side!": a tip onto a side answers the update's question (and Wi-Fi's) as a press does.
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
-  if (turnYes.sample(updater.asking() || wifiAsks(), f.rot, millis())) {
+  if (turnYes.sample(updater.asking() || wifiAsks(), f.rot, shell.home(), millis())) {
     Serial.printf("[%s] turned: yes (rot=%u)\n", updater.asking() ? "ota" : "wifi", unsigned(f.rot));
     if (updater.asking()) updater.press(millis());
     else wifiPress(millis());

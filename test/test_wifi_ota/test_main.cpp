@@ -474,6 +474,93 @@ TEST(Networks, AnUntriedNetworkIsTheNextChecksFirstTryWhereverItIs) {
   EXPECT_FALSE(n.next(nullptr, 0));
 }
 
+// The owner, 2026-10-29: a failed provision must never replace a password
+// that works. A known network sent with another password keeps the old one;
+// the new one is tried first, and the one that joins stays.
+static improv::Credentials pw(const char* ssid, const char* password) { return *wifiota::credentials(ssid, password); }
+
+TEST(Beside, ANewPasswordNeverReplacesOneThatWorksUntilItJoins) {
+  wifiota::Networks n;
+  n.remember(pw("Home", "old-works"));
+  n.remember(pw("Grandma", "gran"));
+  EXPECT_EQ(n.rememberBeside(pw("Home", "typo'd")), size_t(1)) << "Home's place";
+  EXPECT_STREQ(n[1].password, "old-works") << "the old one stays";
+  ASSERT_TRUE(n.besideUntried());
+  EXPECT_EQ(n.next(nullptr, 0), size_t(1)) << "tried first, in range or not";
+  EXPECT_STREQ(n.credsFor(1).password, "typo'd");
+  EXPECT_STREQ(n.credsFor(0).password, "gran");
+  n.failedWith(pw("Home", "typo'd"), true);
+  EXPECT_TRUE(n.beside()) << "a failed try keeps both";
+  EXPECT_FALSE(n.besideUntried());
+  EXPECT_STREQ(n.credsFor(1).password, "old-works") << "the old one first now";
+  const wifiota::Seen seen[] = {{"Home", -50}};
+  EXPECT_EQ(n.next(seen, 1), size_t(1));
+  n.joinedWith(pw("Home", "old-works"));
+  EXPECT_FALSE(n.beside()) << "the old one joined: the new one goes";
+  EXPECT_STREQ(n[1].password, "old-works");
+}
+
+TEST(Beside, TheNewPasswordJoinsAndReplacesTheOld) {
+  wifiota::Networks n;
+  n.remember(pw("Home", "old"));
+  n.rememberBeside(pw("Home", "new"));
+  n.joinedWith(n.credsFor(0));
+  EXPECT_FALSE(n.beside());
+  EXPECT_STREQ(n[0].password, "new");
+  EXPECT_EQ(n.size(), 1u) << "the SSID is never held twice";
+}
+
+// The router's password changed: the old one fails as a wrong password, and
+// the new one beside it is put first again.
+TEST(Beside, TheOldOneFailingAsAWrongPasswordPutsTheNewOneFirstAgain) {
+  wifiota::Networks n;
+  n.remember(pw("Home", "old"));
+  n.rememberBeside(pw("Home", "new"));
+  n.failedWith(pw("Home", "new"), false);   // a weak signal, say
+  n.failedWith(pw("Home", "old"), false);
+  EXPECT_FALSE(n.besideUntried()) << "not a wrong password: the old one stays first";
+  n.failedWith(pw("Home", "old"), true);
+  EXPECT_TRUE(n.besideUntried());
+  EXPECT_STREQ(n.credsFor(0).password, "new");
+}
+
+TEST(Beside, ANewNetworkOrTheSamePasswordIsRememberedAsEver) {
+  wifiota::Networks n;
+  n.remember(pw("Home", "same"));
+  EXPECT_EQ(n.rememberBeside(pw("Cafe", "x")), size_t(0));
+  EXPECT_TRUE(n.untried(0));
+  EXPECT_FALSE(n.beside());
+  n.rememberBeside(pw("Home", "same"));
+  EXPECT_FALSE(n.beside()) << "the same password: nothing beside it";
+  EXPECT_STREQ(n[0].ssid, "Home");
+  EXPECT_TRUE(n.untried(0));
+}
+
+TEST(Beside, ItGoesWithItsNetworkAndIsStoredApart) {
+  wifiota::Networks n;
+  n.remember(pw("Home", "old"));
+  n.rememberBeside(pw("Home", "new"));
+  uint8_t list[wifiota::kNetworksMax], beside[wifiota::kBesideMax];
+  const size_t ln = n.encode(list, sizeof list), bn = n.encodeBeside(beside, sizeof beside);
+  ASSERT_GT(ln, 0u);
+  ASSERT_GT(bn, 0u);
+  std::optional<wifiota::Networks> back = wifiota::Networks::decode(list, ln);
+  ASSERT_TRUE(back) << "the list alone still reads, as an older image reads it";
+  EXPECT_STREQ((*back)[0].password, "old") << "and it holds the password that works";
+  ASSERT_TRUE(back->decodeBeside(beside, bn));
+  EXPECT_TRUE(back->besideUntried());
+  EXPECT_STREQ(back->credsFor(0).password, "new");
+  wifiota::Networks other;
+  other.remember(pw("Cafe", "x"));
+  EXPECT_FALSE(other.decodeBeside(beside, bn)) << "only for a remembered SSID";
+  n.remember(pw("Home", "by hand"));
+  EXPECT_FALSE(n.beside()) << "a password set by hand is meant: nothing beside it";
+  n.rememberBeside(pw("Home", "new"));
+  EXPECT_TRUE(n.forget("Home"));
+  EXPECT_FALSE(n.beside()) << "forgotten with its network";
+  EXPECT_EQ(n.encodeBeside(beside, sizeof beside), 0u);
+}
+
 TEST(Networks, TheUntriedMarkFollowsItsNetworkThroughRememberAndForget) {
   wifiota::Networks n;
   n.remember(net("Home"));

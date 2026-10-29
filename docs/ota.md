@@ -223,10 +223,12 @@ cable is a hand on the dish.
 **Tip me on my side.** The children cannot use the button, so the question
 says "Tip me on my side!" and a turn of the badge answers it exactly as a
 press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the cable). The turn
-is the screen's own settled rotation, a quarter turn held 0.6 s with jolts
-ignored: onto its side is the least that answers (upside down does too), and
-the words name exactly that. It only registers while the badge is held on
-edge, not lying flat. A turn in the first 1.5 s was already under way and is
+is the screen's own settled rotation coming to rest a quarter turn from
+home, onto either side, held 0.6 s with jolts ignored: exactly what the words
+say. Upside down is not a yes: that is the hang, fight mode's gesture
+(0.7.34 and before took any turn and said "Turn me around!", and kids turned
+it upside down). It only registers while the badge is held on edge, not
+lying flat. A turn in the first 1.5 s was already under way and is
 not a yes. The turn is the question's: while a question shows, for 2 s after
 it goes, and until the badge is let back after that, neither the hang nor the
 side hold reaches the pet (no fight mode, no tucking in), nor does any press

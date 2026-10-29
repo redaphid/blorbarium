@@ -139,8 +139,15 @@ wrong, the network stays saved and untried: the next Check, dark, no phone
 connected and advertising held, tries it before any other, in range or not
 (it may be hidden: joined without a channel); joined or failed, that try
 clears the mark. A network set by hand (`DEBUG wifi set`) is untried too.
-A phone that sends a wrong password for a network the badge already knows
-replaces the old one, as a right one would.
+
+A phone that sends a network the badge already knows with another password
+never replaces the one that works: the new password is kept beside it
+(its own NVS key, `beside`), untried and tried first. Whichever joins first
+stays and the other goes; a failed try keeps both, the old one first again,
+and the old one failing with a wrong-password reason puts the new one first
+again (`wifiota::Networks::rememberBeside`). `DEBUG wifi` shows it on its
+network's line. A password set by hand (`DEBUG wifi set`) is meant, and
+replaces the old one at once.
 
 **Over Bluetooth (Improv).** [Improv Wi-Fi](https://www.improv-wifi.com/ble/)
 is the open standard for handing a device a network over BLE (ESPHome, WLED,

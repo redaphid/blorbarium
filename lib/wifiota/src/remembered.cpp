@@ -58,7 +58,7 @@ std::optional<improv::Credentials> decodeRemembered(const uint8_t* p, size_t n) 
 }
 
 void Networks::remember(const improv::Credentials& c) {
-  forget(c.ssid);
+  forget(c.ssid);   // and any password beside it: this one is meant
   if (n_ == kMaxNetworks) --n_;   // the oldest goes
   for (size_t i = n_; i > 0; --i) nets_[i] = nets_[i - 1];
   nets_[0] = c;
@@ -73,12 +73,71 @@ void Networks::setUntried(size_t i, bool on) {
 
 std::optional<size_t> Networks::next(const Seen* seen, size_t count) const {
   for (size_t i = 0; i < n_; ++i)
-    if (untried(i)) return i;
+    if (untried(i) || (besideUntried() && beside_->ssid == std::string_view(nets_[i].ssid))) return i;
   return pick(seen, count);
+}
+
+namespace {
+bool same(const improv::Credentials& a, const improv::Credentials& b) {
+  return !std::strcmp(a.ssid, b.ssid) && !std::strcmp(a.password, b.password);
+}
+}  // namespace
+
+size_t Networks::rememberBeside(const improv::Credentials& c) {
+  const std::optional<size_t> at = find(c.ssid);
+  if (at && std::strcmp(nets_[*at].password, c.password) != 0) {
+    beside_ = c, besideUntried_ = true;
+    return *at;
+  }
+  if (at && beside_ && beside_->ssid == std::string_view(c.ssid)) beside_.reset();   // the one that is kept was sent again
+  remember(c);
+  setUntried(0, true);
+  return 0;
+}
+
+const improv::Credentials& Networks::credsFor(size_t i) const {
+  if (besideUntried() && beside_->ssid == std::string_view(nets_[i].ssid)) return *beside_;
+  return nets_[i];
+}
+
+void Networks::joinedWith(const improv::Credentials& c) {
+  const std::optional<size_t> at = find(c.ssid);
+  if (!at) return;
+  if (beside_ && same(*beside_, c)) nets_[*at] = c;   // the new password works: the old goes
+  if (beside_ && beside_->ssid == std::string_view(c.ssid)) beside_.reset();
+  setUntried(*at, false);
+}
+
+void Networks::failedWith(const improv::Credentials& c, bool wrongPassword) {
+  const std::optional<size_t> at = find(c.ssid);
+  if (!at) return;
+  if (beside_ && same(*beside_, c)) {
+    besideUntried_ = false;   // had its try: both kept, the old one first now
+    return;
+  }
+  setUntried(*at, false);
+  if (wrongPassword && beside_ && beside_->ssid == std::string_view(c.ssid)) besideUntried_ = true;
+}
+
+size_t Networks::encodeBeside(uint8_t* out, size_t cap) const {
+  if (!beside_ || cap < 1) return 0;
+  const size_t n = encodeRemembered(*beside_, out + 1, cap - 1);
+  if (!n) return 0;
+  out[0] = besideUntried_ ? 1 : 0;
+  return 1 + n;
+}
+
+bool Networks::decodeBeside(const uint8_t* p, size_t n) {
+  if (n < 1 || p[0] > 1) return false;
+  const std::optional<improv::Credentials> c = decodeRemembered(p + 1, n - 1);
+  if (!c || !find(c->ssid)) return false;
+  beside_ = c, besideUntried_ = p[0] == 1;
+  return true;
 }
 
 bool Networks::forgetAt(size_t at) {
   if (at >= n_) return false;
+  if (beside_ && beside_->ssid == std::string_view(nets_[at].ssid)) beside_.reset();
   for (size_t i = at; i + 1 < n_; ++i) nets_[i] = nets_[i + 1];
   --n_;
   const uint8_t below = uint8_t(untried_ & ((1u << at) - 1u));

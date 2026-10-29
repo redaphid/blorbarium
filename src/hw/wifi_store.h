@@ -34,20 +34,28 @@ class WifiStore {
     }
     uint8_t untried = 0;   // which of them a provision could not join yet (Networks::untried)
     if (out && nvs_get_u8(n, "untried", &untried) == ESP_OK) out->setUntriedMask(untried);
+    uint8_t beside[wifiota::kBesideMax];   // a new password kept beside a working one (Networks::rememberBeside)
+    len = sizeof beside;
+    if (out && nvs_get_blob(n, "beside", beside, &len) == ESP_OK) out->decodeBeside(beside, len);
     nvs_close(n);
     return out;
   }
 
   // Every network at once, newest first; an empty list erases them. The old "net" goes.
-  // The untried mask is its own key, "untried", so an older image rolled back to still reads "nets".
+  // The untried mask ("untried") and a new password beside a working one
+  // ("beside") are keys of their own, so an older image rolled back to still reads "nets".
   static bool save(const wifiota::Networks& nets) {
     uint8_t blob[wifiota::kNetworksMax];
     const size_t len = nets.encode(blob, sizeof blob);
     nvs_handle_t n;
     if (!len || nvs_open(kNamespace, NVS_READWRITE, &n) != ESP_OK) return false;
     const esp_err_t old = nvs_erase_key(n, "net");
+    uint8_t beside[wifiota::kBesideMax];
+    const size_t besideLen = nets.encodeBeside(beside, sizeof beside);
+    const esp_err_t b = besideLen ? nvs_set_blob(n, "beside", beside, besideLen) : nvs_erase_key(n, "beside");
     const bool ok = (old == ESP_OK || old == ESP_ERR_NVS_NOT_FOUND) && nvs_set_blob(n, "nets", blob, len) == ESP_OK &&
-                    nvs_set_u8(n, "untried", nets.untriedMask()) == ESP_OK && nvs_commit(n) == ESP_OK;
+                    nvs_set_u8(n, "untried", nets.untriedMask()) == ESP_OK &&
+                    (b == ESP_OK || (!besideLen && b == ESP_ERR_NVS_NOT_FOUND)) && nvs_commit(n) == ESP_OK;
     nvs_close(n);
     return ok;
   }

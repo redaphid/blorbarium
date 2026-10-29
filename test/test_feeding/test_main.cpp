@@ -206,18 +206,18 @@ struct Asked {
   bool answered = false;
 };
 
-// The kid turns the badge upside down (the hang's pose, more than the side
-// tip the words ask for) 2 s into the question, holds it `holdMs`, lets it back.
-void turnToAnswer(Badge& b, Asked& q, uint32_t holdMs) {
+// The kid tips the badge onto its side (what the words ask: "Tip me on my
+// side!", the side hold's pose) 2 s into the question, holds it `holdMs`, lets it back.
+void turnToAnswer(Badge& b, Asked& q, uint32_t holdMs, Pose pose = Pose::SideLeft) {
   b.asks = [&q](uint32_t) { return q.consent.asking(); };
-  b.felt = [&q](const hw::Felt& f, uint32_t at) {
+  b.felt = [&q, &b](const hw::Felt& f, uint32_t at) {
     q.consent.tick(at);
-    if (q.turn.sample(q.consent.asking(), f.rot, at)) q.answered = q.consent.yes(at);
+    if (q.turn.sample(q.consent.asking(), f.rot, b.shell.home(), at)) q.answered = q.consent.yes(at);
   };
   q.consent.ask(b.ms);
   b.run(2000);
   b.hand.turnMs = 400;
-  b.hand.pose = Pose::UpsideDown;
+  b.hand.pose = pose;
   b.run(holdMs);
   b.hand.pose = Pose::Held;
   b.run(4000);
@@ -237,7 +237,21 @@ TEST(Question, TheWifiQuestionsTurnNeverOpensFightModeAndTheProvisionGoesOn) {
       EXPECT_FALSE(b.dish->duelActive()) << "no fight mode: the radio stays Wi-Fi's, home " << int(home) << " hold " << hold;
       EXPECT_STREQ(b.dish->fightState(), "off") << "home " << int(home) << " hold " << hold;
       EXPECT_EQ(b.count.fired >> stim::hang.v & 1, 0u) << "the pet never felt the hang";
+      EXPECT_FALSE(b.creature().body().asleep) << "nor the side hold, which tucks him in";
     }
+}
+
+// A kid who turns it upside down instead (the old "Turn me around!"): no
+// yes (that is the hang's gesture), and still no fight mode while it asks.
+TEST(Question, UpsideDownNeverAnswersNorOpensFightModeWhileItAsks) {
+  for (uint8_t home : {kHomeUp, kHomeDown}) {
+    Badge b(home);
+    b.hungry(Fx::zero());
+    Asked q;
+    turnToAnswer(b, q, 3000, Pose::UpsideDown);
+    EXPECT_FALSE(q.answered) << "home " << int(home);
+    EXPECT_FALSE(b.dish->duelActive()) << "home " << int(home);
+  }
 }
 
 // The update's question is answered by the same turn through the same shell.
@@ -249,15 +263,16 @@ TEST(Question, TheUpdatesTurnNeverOpensFightMode) {
     hw::TurnYes turn;
     b.asks = [&](uint32_t) { return asking; };
     b.felt = [&](const hw::Felt& f, uint32_t at) {
-      if (turn.sample(asking, f.rot, at)) yes = true, asking = false;   // ota::Session::press: the question goes
+      if (turn.sample(asking, f.rot, b.shell.home(), at)) yes = true, asking = false;   // ota::Session::press: the question goes
     };
     b.run(2000);
     b.hand.turnMs = 400;
-    b.hand.pose = Pose::UpsideDown;
+    b.hand.pose = Pose::SideRight;
     b.run(5000);
     b.hand.pose = Pose::Held;
     b.run(4000);
     EXPECT_TRUE(yes) << "home " << int(home);
+    EXPECT_FALSE(b.creature().body().asleep) << "the side hold never tucked him in, home " << int(home);
     EXPECT_FALSE(b.dish->duelActive()) << "home " << int(home);
   }
 }

@@ -676,35 +676,57 @@ TEST(Wake, TwoListensNeverAddUpToAHand) {
 
 // ---- Tip me on my side: the update's yes without the button ----------------------------
 
-TEST(TurnYes, AQuarterTurnAfterTheFirstMomentSaysYesOnce) {
+// Home 2 (USB-C up): rot 1 and 3 are its sides, 0 is upside down.
+TEST(TurnYes, ATipOntoASideAfterTheFirstMomentSaysYesOnce) {
+  for (uint8_t side : {1, 3}) {
+    hw::TurnYes t;
+    EXPECT_FALSE(t.sample(true, 2, 2, 1000));   // the question appears, held at home
+    EXPECT_FALSE(t.sample(true, 2, 2, 2000));
+    EXPECT_TRUE(t.sample(true, side, 2, 3000));   // tipped onto a side
+    EXPECT_FALSE(t.sample(true, side, 2, 3100));  // once
+  }
+}
+
+// Upside down is the hang, fight mode's gesture: never this question's yes.
+TEST(TurnYes, UpsideDownIsNoYes) {
   hw::TurnYes t;
-  EXPECT_FALSE(t.sample(true, 0, 1000));   // the question appears, held at 0
-  EXPECT_FALSE(t.sample(true, 0, 2000));
-  EXPECT_TRUE(t.sample(true, 1, 3000));    // turned
-  EXPECT_FALSE(t.sample(true, 1, 3100));   // once
+  EXPECT_FALSE(t.sample(true, 2, 2, 1000));
+  EXPECT_FALSE(t.sample(true, 0, 2, 3000));
+  EXPECT_FALSE(t.sample(true, 0, 2, 9000));
+  EXPECT_TRUE(t.sample(true, 1, 2, 9500)) << "then onto a side: yes";
 }
 
 TEST(TurnYes, NoTurnNoYes) {
   hw::TurnYes t;
-  for (uint32_t ms = 0; ms < 30000; ms += 20) EXPECT_FALSE(t.sample(true, 2, ms));
+  for (uint32_t ms = 0; ms < 30000; ms += 20) EXPECT_FALSE(t.sample(true, 2, 2, ms));
 }
 
-TEST(TurnYes, ATurnAlreadyUnderWayIsNotAYesButTheNextOneIs) {
+TEST(TurnYes, ATipAlreadyUnderWayIsNotAYesButTheNextOneIs) {
   hw::TurnYes t;
-  EXPECT_FALSE(t.sample(true, 0, 1000));
-  EXPECT_FALSE(t.sample(true, 1, 1400));   // settled 0.4 s after the question: already turning
-  EXPECT_FALSE(t.sample(true, 1, 3000));
-  EXPECT_TRUE(t.sample(true, 2, 3500));    // a real turn later
+  EXPECT_FALSE(t.sample(true, 2, 2, 1000));
+  EXPECT_FALSE(t.sample(true, 1, 2, 1400));   // settled 0.4 s after the question: already tipping
+  EXPECT_FALSE(t.sample(true, 1, 2, 3000));
+  EXPECT_FALSE(t.sample(true, 2, 2, 3300));   // back home is no yes
+  EXPECT_TRUE(t.sample(true, 3, 2, 3500));    // a real tip later
 }
 
 TEST(TurnYes, OnlyWhileItAsks) {
   hw::TurnYes t;
-  EXPECT_FALSE(t.sample(false, 0, 0));
-  EXPECT_FALSE(t.sample(false, 1, 5000));   // turning with no question is nothing
-  EXPECT_FALSE(t.sample(true, 1, 6000));    // a new question starts from where it is
-  EXPECT_FALSE(t.sample(false, 3, 9000));   // the question went away
-  EXPECT_FALSE(t.sample(true, 3, 9100));
-  EXPECT_TRUE(t.sample(true, 0, 11000));
+  EXPECT_FALSE(t.sample(false, 2, 2, 0));
+  EXPECT_FALSE(t.sample(false, 1, 2, 5000));   // tipping with no question is nothing
+  EXPECT_FALSE(t.sample(true, 1, 2, 6000));    // a new question starts from where it is
+  EXPECT_FALSE(t.sample(false, 3, 2, 9000));   // the question went away
+  EXPECT_FALSE(t.sample(true, 3, 2, 9100));
+  EXPECT_FALSE(t.sample(true, 2, 2, 10500));   // home: no yes
+  EXPECT_TRUE(t.sample(true, 1, 2, 11000));
+}
+
+// Home 0 (USB-C down, the owner's flipped badges): its sides are 1 and 3 too, upside down is 2.
+TEST(TurnYes, AFlippedBadgesSidesAnswer) {
+  hw::TurnYes t;
+  EXPECT_FALSE(t.sample(true, 0, 0, 0));
+  EXPECT_FALSE(t.sample(true, 2, 0, 2000)) << "upside down";
+  EXPECT_TRUE(t.sample(true, 3, 0, 3000));
 }
 
 int main(int argc, char** argv) {

@@ -93,6 +93,7 @@ struct Mem {
   char lastOutcome[112] = "none";
   char forcedUrl[120] = "";   // `DEBUG ota check <url>`
   std::optional<improv::Credentials> provisionAsked, provisioning;
+  improv::Credentials joining;   // what the window's join is trying: a network's own password, or a new one beside it
   // How each network's last join went, for `DEBUG wifi`: kept by SSID (never
   // printed), so it follows its network through remember and forget.
   struct Note {
@@ -200,14 +201,14 @@ static Mem::Note& noteFor(const char* ssid) {
 // (rdebug::maskSecrets). The badge's own lines name networks by number.
 static size_t masked(const char* in, size_t n, char* out, size_t cap) {
   static constexpr const char* kNames[wifiota::kMaxNetworks] = {"<net #1>", "<net #2>", "<net #3>"};
-  rdebug::Secret secrets[2 * wifiota::kMaxNetworks + 4 + wifiota::kMaxNetworks + 1];
+  rdebug::Secret secrets[2 * wifiota::kMaxNetworks + 2 * 3 + wifiota::kMaxNetworks + 1];   // the list, three in flight or beside, the notes
   size_t k = 0;
   const Mem& mm = mem();
   for (size_t i = 0; i < mm.networks.size(); ++i) {
     secrets[k++] = {mm.networks[i].ssid, kNames[i]};
     secrets[k++] = {mm.networks[i].password, "<password>"};
   }
-  for (const std::optional<improv::Credentials>* c : {&mm.provisioning, &mm.provisionAsked})
+  for (const std::optional<improv::Credentials>* c : {&mm.provisioning, &mm.provisionAsked, &mm.networks.beside()})
     if (*c) secrets[k++] = {(*c)->ssid, "<the phone's network>"}, secrets[k++] = {(*c)->password, "<password>"};
   for (const Mem::Note& note : mm.notes)
     if (note.ssid[0] && !mm.networks.find(note.ssid)) secrets[k++] = {note.ssid, "<a forgotten network>"};
@@ -301,21 +302,45 @@ static void noteJoin(const char* fmt, ...) {
   va_start(ap, fmt);
   std::vsnprintf(n.result, sizeof n.result, fmt, ap);
   va_end(ap);
-  if (window == Window::Provision || !mem().networks.untried(*joinPick)) return;
-  mem().networks.setUntried(*joinPick, false);
-  say("network #%u had its first try (%s)", unsigned(*joinPick + 1), hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED");
+}
+
+// A join's end, kept (wifiota::Networks::joinedWith, failedWith): an untried
+// network or new password has had its try; a new password beside an old one
+// replaces it once it joins, and goes once the old one does.
+static bool wrongPassword() { return station.reason() == 15 || station.reason() == 204; }   // the handshake timed out
+static void triedJoin(bool ok) {
+  const bool beside = mem().networks.beside() && !std::strcmp(mem().networks.beside()->ssid, mem().joining.ssid);
+  const bool wasNew = beside && !std::strcmp(mem().networks.beside()->password, mem().joining.password);
+  if (ok) mem().networks.joinedWith(mem().joining);
+  else mem().networks.failedWith(mem().joining, wrongPassword());
+  const std::optional<size_t> at = mem().networks.find(mem().joining.ssid);
+  if (beside)
+    say("network #%u: its %s password %s: %s (%s)", unsigned(at.value_or(0) + 1), wasNew ? "new" : "old", ok ? "joined" : "failed",
+        ok ? (wasNew ? "it replaces the old one" : "the new one beside it goes") : "both kept",
+        hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED");
+  else
+    hw::WifiStore::save(mem().networks);
+}
+
+static void joinNet(const improv::Credentials& c) {
+  mem().joining = c;
+  station.join(c);
 }
 
 // The phone's network is saved the moment it arrives, marked untried, before
 // any join (owner, 2026-10-29): whatever then goes wrong (a weak signal, a
 // duel, someone came), the next Check, dark with no phone and advertising
 // held, tries it before any other (wifiota/remembered.h).
+// A network the badge knows, sent with another password, never replaces the
+// one that works: the new one is kept beside it until one of them joins
+// (wifiota::Networks::rememberBeside).
 static void provisionSave() {
   const improv::Credentials& c = *mem().provisioning;
-  mem().networks.remember(c);
-  mem().networks.setUntried(0, true);
-  std::snprintf(noteFor(c.ssid).result, sizeof Mem::Note::result, "saved from a phone; not tried yet");
-  say("provision: saved as network #1, untried (ssid %u B, password %u B; %s; %u remembered)", unsigned(std::strlen(c.ssid)),
+  const size_t at = mem().networks.rememberBeside(c);
+  const bool beside = mem().networks.besideUntried() && !std::strcmp(mem().networks.beside()->password, c.password);
+  if (!beside) std::snprintf(noteFor(c.ssid).result, sizeof Mem::Note::result, "saved from a phone; not tried yet");
+  say("provision: saved %s network #%u, untried (ssid %u B, password %u B; %s; %u remembered)",
+      beside ? "as a new password beside the one" : "as", unsigned(at + 1), unsigned(std::strlen(c.ssid)),
       unsigned(std::strlen(c.password)), hw::WifiStore::save(mem().networks) ? "saved" : "SAVE FAILED",
       unsigned(mem().networks.size()));
 }
@@ -344,6 +369,8 @@ static void failWindow(Failure why, const char* fmt, ...) {
   say("%s: FAILED %s%s", wifiota::windowName(window), mem().lastOutcome,
       window == Window::Check ? (why == Failure::Absent ? " (no network: next check later)" : " (the site: next check later)") : "");
   if (phase == Phase::Joining || window == Window::Provision) noteJoin("%s", mem().lastOutcome);
+  // A provision's failure keeps what it sent untried (provisionFailed); a check's try is over.
+  if (phase == Phase::Joining && window != Window::Provision) triedJoin(false);
   if (window == Window::Provision)
     provisionFailed(nullptr, phase == Phase::Joining ? joinWhy() : "busy: try again soon");
   closeWindow();
@@ -371,7 +398,7 @@ static void openWindow(Window w) {
   if (w == Window::Provision) {   // the phone's network, straight: it may be hidden
     say("provision: joining the phone's network without a scan");
     joinPick.reset();   // the phone's network is tried once: the page says whether it joined
-    station.join(*mem().provisioning);
+    joinNet(*mem().provisioning);
     return setPhase(Phase::Joining);
   }
   joinRetried = false;
@@ -391,7 +418,7 @@ static void scanned() {
     joinPick = mem().networks.next(nullptr, 0).value_or(0);
     say("the scan %s after %u ms (driver status %u): joining network #%u without it", late ? "did not finish" : "FAILED",
         unsigned(millis() - phaseAt), unsigned(station.scanStatus()), unsigned(*joinPick + 1));
-    station.join(mem().networks[*joinPick]);
+    joinNet(mem().networks.credsFor(*joinPick));
     return setPhase(Phase::Joining);
   }
   // An untried network first, in range or not (it may be hidden: joined without a channel), else the strongest.
@@ -402,7 +429,7 @@ static void scanned() {
   say("joining network #%u of %u%s", unsigned(*pick + 1), unsigned(mem().networks.size()),
       mem().networks.untried(*pick) ? " (untried: a provision could not join it; its first try)" : "");
   joinPick = *pick;
-  station.join(mem().networks[*pick]);
+  joinNet(mem().networks.credsFor(*pick));
   setPhase(Phase::Joining);
 }
 
@@ -449,13 +476,13 @@ static void joined() {
   say("joined in %u ms rssi=%d ch=%u ip=%s heap=%u", unsigned(millis() - phaseAt), int(WiFi.RSSI()), unsigned(WiFi.channel()),
       WiFi.localIP().toString().c_str(), unsigned(ESP.getFreeHeap()));
   noteJoin("joined (%s) rssi=%d ch=%u", wifiota::windowName(window), int(WiFi.RSSI()), unsigned(WiFi.channel()));
+  triedJoin(true);
   if (window != Window::Provision) {
     if (startGet(manifestUrl(), true)) setPhase(Phase::Manifest);
     return;
   }
-  // Saved when it came (provisionSave): this was its try.
+  // Saved when it came (provisionSave); triedJoin kept that it joined.
   const std::optional<size_t> at = mem().networks.find(mem().provisioning->ssid);
-  if (at) mem().networks.setUntried(*at, false);
   const bool saved = hw::WifiStore::save(mem().networks);
   char url[64];
   std::snprintf(url, sizeof url, "%s%s", kSiteUrl, ble.name());
@@ -672,7 +699,7 @@ static void poll(uint32_t now) {
         joinRetried = true;
         say("join of network #%u failed (%s, reason %u): one more try", unsigned(*joinPick + 1), station.reasonName(),
             unsigned(station.reason()));
-        station.join(mem().networks[*joinPick]);
+        station.join(mem().joining);
         phaseAt = millis();
         return;
       }
@@ -917,9 +944,13 @@ static void networkLines() {
       else std::snprintf(heard, sizeof heard, "not in the last scan");
     }
     const Mem::Note& n = noteFor(c.ssid);
-    say("network #%u: ssid %u B, password %u B, %s%s; last join: %s", unsigned(i + 1), unsigned(std::strlen(c.ssid)),
+    char beside[64] = "";
+    if (const std::optional<improv::Credentials>& b = mem().networks.beside(); b && !std::strcmp(b->ssid, c.ssid))
+      std::snprintf(beside, sizeof beside, ", a new password beside it (%u B%s)", unsigned(std::strlen(b->password)),
+                    mem().networks.besideUntried() ? ", UNTRIED: tried first" : ", tried: the old one first");
+    say("network #%u: ssid %u B, password %u B, %s%s%s; last join: %s", unsigned(i + 1), unsigned(std::strlen(c.ssid)),
         unsigned(std::strlen(c.password)), heard, mem().networks.untried(i) ? ", UNTRIED (the next check tries it first)" : "",
-        n.result[0] ? n.result : "none this boot");
+        beside, n.result[0] ? n.result : "none this boot");
   }
   say("networks %u of %u; last outcome: %s", unsigned(mem().networks.size()), unsigned(wifiota::kMaxNetworks), mem().lastOutcome);
 }
