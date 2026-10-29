@@ -10,6 +10,7 @@
 //   POST /api/stats            {mac, genome | genome_hash, stats_version?, stats?, parents?, analytics?, fw?}  (#38, #50)
 //   GET  /api/diary?mac=&genome_hash=   the pet's diary, newest first (#39, for the phone #42)
 //   GET  /api/pet?genome_hash=          the phone's view: bible, sample lines, diary, family (#42)
+//   GET  /api/species?name=             {species, sketch, lines}: a species' built-in lines (catalog.json)
 //   GET  /api/ble-name?mac=             {name, pet}: the name the badge advertises, for an NFC link (docs/nfc.md)
 //   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
@@ -19,6 +20,7 @@
 // triggers, DIARY_CRON, daily) runs any job still queued, each pet's diary
 // entry, and the night's packs.
 import { hexToBytes, rawSheet, genomeHash } from "./genome.js";
+import catalog from "./catalog.json" with { type: "json" };
 import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
@@ -320,6 +322,16 @@ async function getDiary(url, env) {
 // the whole genome to change anything.
 const SAMPLE = ["peckish", "crunch", "heard_you", "warm_hands", "sky_down", "moon", "p_doom", "p_lucky", "rim_walk",
   "brave", "dream_feast", "verdict_yes"];
+// A species' own lines, the ones built into every badge of it (catalog.json):
+// what the phone shows for a pet the server has not met yet. Nothing per badge.
+function getSpecies(url) {
+  const name = String(url.searchParams.get("name") ?? "").toLowerCase();
+  const sp = Object.hasOwn(catalog.species, name) ? catalog.species[name] : null;
+  if (!sp) return fail(404, "no such species");
+  const lines = sp.lines ?? {};
+  return json({ species: name, sketch: sp.sketch ?? null, lines: Object.fromEntries(SAMPLE.filter((k) => lines[k]).map((k) => [k, lines[k]])) },
+    200, { "cache-control": "public, max-age=3600" });
+}
 async function newestByHash(env, hash) {
   return env.DB.prepare("SELECT * FROM creatures WHERE genome_hash = ?1 ORDER BY last_seen DESC LIMIT 1").bind(hash).first();
 }
@@ -539,6 +551,7 @@ export default {
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
       if (url.pathname === "/api/debug" && request.method === "POST") return await postDebug(request, env);
       if (url.pathname === "/api/pet" && request.method === "GET") return await getPet(url, env);
+      if (url.pathname === "/api/species" && request.method === "GET") return getSpecies(url);
       if (url.pathname === "/api/ble-name" && request.method === "GET") return await getBleName(url, env);
       if (url.pathname === "/api/personality" && request.method === "POST") return await postPersonality(request, env);
       if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);

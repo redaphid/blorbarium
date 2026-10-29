@@ -221,7 +221,8 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <summary id="wifiSummary">Wi-Fi</summary>
     <p class="hint">Give the Blorb your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
     <form id="wifiForm" autocomplete="off">
-      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
+      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required
+             autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
       <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
       <button type="submit">Connect to Wi-Fi</button>
     </form>
@@ -247,6 +248,34 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
         el("wifiSummary").textContent = ok ? "Wi-Fi: connected \u2713" : "Wi-Fi";
         box.dataset.connected = ok ? "1" : "";
       }
+      // Nothing may cover the Wi-Fi fields. On the owner's phone a suggestion
+      // menu (the debug panel's lists of his thoughts and stimuli) stayed open
+      // over the network name. While the form is open and one of its fields has
+      // focus, no other input on the page offers a list, so no such menu can
+      // open or stay open; they get their lists back when the form is left.
+      const form = el("wifiForm"), lists = new Map();
+      function clearTheWay() {
+        const a = document.activeElement;
+        if (a && a !== document.body && !form.contains(a) && a.matches("input, select, textarea")) a.blur();
+        for (const input of document.querySelectorAll("input[list]")) {
+          if (form.contains(input)) continue;
+          lists.set(input, input.getAttribute("list"));
+          input.removeAttribute("list");
+        }
+      }
+      function giveBack() {
+        for (const [input, list] of lists) if (input.isConnected) input.setAttribute("list", list);
+        lists.clear();
+      }
+      form.addEventListener("focusin", clearTheWay);
+      form.addEventListener("pointerdown", clearTheWay);
+      form.addEventListener("focusout", (e) => { if (!form.contains(e.relatedTarget)) giveBack(); });
+      // Opening the form closes whatever menu another field had open.
+      el("wifiFold").addEventListener("toggle", () => {
+        const a = document.activeElement;
+        if (el("wifiFold").open && a && a.list && !form.contains(a)) a.blur();
+        if (!el("wifiFold").open) giveBack();
+      });
       addEventListener("blorb:pet", (e) => {
         if (!e.detail.fromBadge) return;   // a ?pet= link or a remembered pet may not be the dish in hand
         st.checkedIn = Date.now() - (Number(e.detail.pet.checked_in_at) || 0) < FRESH_MS;
@@ -423,26 +452,92 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
           : "This is who he is, in words. Connect his Blorb to change it.";
         el("selfBody").hidden = false;
       }
+      // Everything this box shows belongs to one pet. `seq` counts the pets it
+      // has been about: a reply for an earlier one (a slow fetch from the badge
+      // before, a remembered pet) is dropped, never drawn over this one.
+      let seq = 0, who = null;
+      function clear(hint = "Looking him up…") {
+        seq++;
+        el("selfBody").hidden = true;
+        el("diaryTitle").textContent = "His diary";
+        el("journal").replaceChildren();
+        el("says").replaceChildren();
+        el("bible").value = "";
+        el("bible").hidden = false;
+        el("family").textContent = "";
+        el("petLink").href = "./";
+        tell("", hint);
+      }
+      // A badge the server has not met yet (it has not checked in over Wi-Fi):
+      // what the page has from the badge itself, and where the rest will come from.
+      async function renderFromBadge(mine) {
+        const pet = who && who.pet ? who.pet : "his Blorb";
+        const later = `appears after ${pet}'s first Wi-Fi check-in.`;
+        const note = (text) => { const li = document.createElement("li"); const p = document.createElement("p"); p.textContent = text; li.append(p); return li; };
+        el("diaryTitle").textContent = who && who.pet ? `${who.pet}'s diary` : "His diary";
+        el("journal").replaceChildren(note(`His diary ${later}`));
+        el("says").replaceChildren();
+        el("bible").value = "";
+        el("bible").hidden = true;
+        el("saveBible").hidden = true;
+        el("bibleHint").textContent = `Who he is, in words, and the lines written just for him: this ${later}`;
+        el("family").textContent = `Generation ${who && who.gen != null ? who.gen : "?"}, from his Blorb. His family tree ${later}`;
+        el("petLink").href = "./";
+        el("selfBody").hidden = false;
+        tell("", `The site has not met ${pet} yet. Everything his Blorb holds is on this page; the rest ${later}`);
+        // His species' own lines, the ones built into his Blorb.
+        if (!who || !who.species) return;
+        const r = await fetch(`/api/species?name=${encodeURIComponent(who.species)}`).catch(() => null);
+        if (mine !== seq || !r || !r.ok) return;
+        const s = await r.json().catch(() => null);
+        if (mine !== seq || !s || !s.lines) return;
+        el("says").replaceChildren(...Object.values(s.lines).flat().slice(0, 12).map((l) => {
+          const li = document.createElement("li"); li.textContent = l; return li;
+        }));
+      }
       async function look() {
+        const mine = seq;
         const r = await fetch(`/api/pet?genome_hash=${hash}`).catch(() => null);
+        if (mine !== seq) return;
         if (!r) return tell("err", "Offline: his diary shows when the phone is online.");
+        if (r.status === 404 && genome) return renderFromBadge(mine);
         if (r.status === 404) return tell("", "He has not been online yet. The first time he is, the server writes his personality and his own lines.");
         if (!r.ok) return tell("err", `The server said no (${r.status}).`);
         const p = await r.json();
+        if (mine !== seq) return;
         tell("ok", p.version ? `Personality version ${p.personality_version}, lines version ${p.version}.` : "His lines are being written.");
+        el("bible").hidden = false;
         render(p);
         dispatchEvent(new CustomEvent("blorb:pet", { detail: { pet: p, fromBadge: !!genome } }));
       }
       function show(h) {
+        clear();
         hash = h;
         el("selfBox").hidden = false;
         return look().catch((err) => tell("err", err.message));
       }
+      // A badge said hello: this box is now about him, whatever it showed before.
+      addEventListener("blorb:hello", (e) => {
+        who = e.detail;
+        genome = null; hash = null;
+        clear();
+        el("selfBox").hidden = false;
+      });
       addEventListener("blorb:genome", async (e) => {
+        const mine = seq;
         genome = e.detail;
         const h = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", genome)));
+        if (mine !== seq) return;
         remember(h);
         show(h);
+      });
+      // A badge without a genome to look him up by: only what it said.
+      addEventListener("blorb:nogenome", () => renderFromBadge(seq));
+      // The page let the badge go: nothing of his stays.
+      addEventListener("blorb:leave", () => {
+        who = null; genome = null; hash = null;
+        clear();
+        el("selfBox").hidden = true;
       });
       // Before any badge: the pet in the link, else the last one this phone met.
       const linked = String(new URLSearchParams(location.search).get("pet") ?? "").toLowerCase();
@@ -740,14 +835,17 @@ class MockTransport {
     // As Chrome keeps it: the name the dish had when it was chosen.
     this.name = dish.name;
     this.id = `mock:${dish.shipped.name}`;
-    this.petName = "grungo";
-    const genes = [[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
+    // A dish nearby by its species' name is that pet, with its own genome.
+    const own = BlorbOta.SPECIES.includes(dish.name) ? dish.name : null;
+    this.petName = own || "grungo";
+    const genes =[[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
       [0x12,4,0],[0x13,5,0],[0x20,6,0],[0x20,6,2],[0x21,2,0],[0x22,4,2],[0x30,3,0],[0x31,4,2],[0x32,4,0],[0x7f,8,0]];
     const bytes = [];
     genes.forEach(([type, len, stage], i) => {
       bytes.push(type, len, 0, stage, 0, 128, (i + 1) & 255, 0);
       for (let k = 0; k < len; k++) bytes.push((i * 37 + k * 11) & 255);
     });
+    if (own) for (let k = 0; k < own.length; k++) bytes[bytes.length - 1 - k] ^= own.charCodeAt(k);
     this.genome = new Uint8Array(bytes);
     // Improv, pretend: the password "wrong" cannot join.
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -983,7 +1081,14 @@ async function session({ offer = true } = {}) {
   // TIME sets the clock a dish with no battery has lost. An update never needs it,
   // so a refusal, like an unreadable STATE, still leaves the update on offer.
   await link.send(`TIME ${now} ${tz}`).catch((e) => debugLog("err", `TIME: ${e.message}`));
-  await refreshHello();
+  const hello = await refreshHello();
+  if (transport !== here) return;
+  // The personality box is about this badge from now on, whatever it showed before.
+  const species = BlorbOta.SPECIES.includes(transport.name) ? transport.name : null;
+  const said = (hello.name || species || "").replace(/_/g, " ");
+  dispatchEvent(new CustomEvent("blorb:hello", { detail: {
+    pet: said ? said[0].toUpperCase() + said.slice(1) : null,
+    gen: hello.gen ?? null, species } }));
   await refreshState().catch((e) => debugLog("err", `STATE: ${e.message}`));
   ui.status("connected", connectedTo());
   ui.show("connect", false);
@@ -996,7 +1101,9 @@ async function session({ offer = true } = {}) {
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
     debugLog("err", `GENOME failed: ${e.message}`);
-    if (transport === here) genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
+    if (transport !== here) return;
+    genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
+    dispatchEvent(new CustomEvent("blorb:nogenome"));
   });
   if (transport !== here) return;
   link.send("SUB state stage hatched died").catch(() => {});
@@ -1252,6 +1359,9 @@ function onDrop(from) {
 // wide: every device with the UART service, for a dish whose name the filters miss.
 async function connect(wide = false) {
   let mine = null;
+  // A fresh pick (after a failed reconnect, say) may be another badge: let the
+  // last one go first, so nothing of his shows for the next.
+  if (transport) leave();
   ui.show("wider", false);
   try {
     if (params.has("mock") && !globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
@@ -1287,7 +1397,10 @@ async function connect(wide = false) {
 
 // What the page shows before any dish, so the next one starts from it.
 // Every hint in a section, so one added later resets with the rest.
-const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
+const FRESH = { name: $("name").textContent, meta: $("meta").textContent, sayTitle: $("sayTitle").textContent,
+  // Plain-text hints only: one holding a link (the diary page's) keeps its link.
+  namePlaceholder: $("nameInput").placeholder,
+  hints: [...document.querySelectorAll("main section .hint")].filter((el) => !el.children.length).map((el) => [el, el.textContent]) };
 
 // ?b=: say whose Blorb the link finds, and ask the site which name it
 // advertises (for firmware older than its id) now, at load: the chooser must
@@ -1328,6 +1441,16 @@ function leave() {
   $("nameForm").querySelector("button").disabled = false;
   $("wifiPassword").value = "";
   BlorbWifi.reset();
+  // What the last badge told the page: none of it may show for the next one.
+  for (const id of ["genomeHash", "geneCount", "dishHash", "fw"]) $(id).textContent = "…";
+  for (const id of ["genes", "drives"]) $(id).replaceChildren();
+  $("dish").dataset.phase = ""; $("dish").dataset.asleep = "0";
+  $("doing").textContent = "";
+  $("updateFw").textContent = "";
+  $("sayTitle").textContent = FRESH.sayTitle;
+  $("nameInput").placeholder = FRESH.namePlaceholder;
+  for (const id of ["nameInput", "sayInput", "teachInput", "marqueeInput"]) $(id).value = "";
+  dispatchEvent(new CustomEvent("blorb:leave"));
   for (const [el, text] of FRESH.hints) {
     el.textContent = text;
     el.dataset.tone = "";

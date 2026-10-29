@@ -60,3 +60,14 @@ test("the page's personality box script parses, and the service worker leaves /a
   assert.doesNotThrow(() => new Function(script));
   assert.match(readFileSync(new URL("../public/sw.js", import.meta.url), "utf8"), /path\.startsWith\("api\/"\)/);
 });
+
+test("a pet the server has not met: his species' own lines, from the catalog, and nothing per badge", async () => {
+  const env = fakeEnv();
+  const r = await req(env, "/api/species?name=Mothwick");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.species, "mothwick");
+  assert.deepEqual(Object.keys(r.body).sort(), ["lines", "sketch", "species"]);
+  assert.ok(Object.values(r.body.lines).flat().length >= 10);
+  assert.equal((await req(env, "/api/species?name=nobody")).status, 404);
+  assert.equal((await req(env, "/api/species?name=__proto__")).status, 404);
+});

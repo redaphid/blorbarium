@@ -19,6 +19,7 @@ function fakePage() {
       id, open: true, textContent: "", dataset: {},
       before(x) { remove(x); order.splice(order.indexOf(n), 0, x); },
       after(x) { remove(x); order.splice(order.indexOf(n) + 1, 0, x); },
+      addEventListener() {}, contains: () => false,
     };
     return n;
   };
@@ -26,6 +27,7 @@ function fakePage() {
   order.push(...Object.values(els));
   els.wifiFold = node("wifiFold");
   els.wifiSummary = node("wifiSummary");
+  els.wifiForm = node("wifiForm");
   const listeners = {};
   const globals = {
     document: { getElementById: (id) => els[id], createComment: () => node("#home") },
