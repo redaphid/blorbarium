@@ -67,6 +67,10 @@ class Up:
         print(s, flush=True)
         self.b.note(s)
 
+    def kept(self, n, sizes):   # --networks "3:8,19,19": how many, and their SSIDs' sizes
+        count, want = self.args.networks.split(":")
+        return n == int(count) and (not sizes or sorted(sizes, key=int) == sorted(want.split(","), key=int))
+
     def check(self, ok, what):
         self.results.append((ok, what))
         self.say(("  PASS " if ok else "  FAIL ") + what)
@@ -146,7 +150,7 @@ class Up:
                 r = self.secret_cable("set", ssid, pw, i)
                 self.say("set #%d: %s" % (i, r.group(0) if r else "(no answer)"))
         n, sizes, trial = self.networks(self.wifi())
-        self.check(n == 2 and (not sizes or sorted(sizes) == ["10", "19"]), "before: %d networks (ssid sizes %s) on %s" % (
+        self.check(self.kept(n, sizes), "before: %d networks (ssid sizes %s) on %s" % (
             n, ",".join(sizes), boot.group(1)))
 
         if a.power_low:   # an old image on the cable may never go dark by itself
@@ -213,7 +217,7 @@ class Up:
         for l in lines:
             self.say("  " + l)
         n, sizes, trial = self.networks(lines)
-        self.check(n == 2 and (not sizes or sorted(sizes) == ["10", "19"]), "after: %d networks (ssid sizes %s) on %s" % (
+        self.check(self.kept(n, sizes), "after: %d networks (ssid sizes %s) on %s" % (
             n, ",".join(sizes), new.group(1)))
         h = self.cable("DEBUG home", r"\[hw\] home rot=.*")
         self.check(bool(h and a.home in h.group(0)), "home after: %s" % (h.group(0) if h else "(no answer)"))
@@ -265,5 +269,6 @@ if __name__ == "__main__":
     p.add_argument("--wait-dark", type=int, default=0, help="seconds to leave it alone before the update")
     p.add_argument("--power-low", action="store_true", help="DEBUG power low before the update")
     p.add_argument("--no-ask", action="store_true", help="leave the update to the badge's own check (no DEBUG ota check)")
+    p.add_argument("--networks", default="2:10,19", help="what must be there before and after: count:ssid sizes")
     p.add_argument("--log", required=True)
     sys.exit(asyncio.run(amain(p.parse_args())))

@@ -23,6 +23,8 @@
 #include <lwip/dhcp.h>
 #include <lwip/netif.h>
 #include <sdkconfig.h>
+
+#include "wifiota/core_retry.h"
 #if defined(CONFIG_PM_ENABLE)
 #include <esp_pm.h>
 #endif
@@ -288,16 +290,13 @@ class WifiStation {
                     int(assoc), assoc ? int(ap.rssi) : 0, d ? int(d->state) : -1, d ? int(d->tries) : -1,
                     unsigned(getCpuFrequencyMhz()));
     }
-    // A disconnect since the join says why it failed. The core retries by
-    // itself only after the first disconnect since boot (WiFiGeneric.cpp's
-    // static first_connect), so only the join that had that one waits for a
-    // second: every later one failed at its first (0.7.41's soak waited out
-    // the 15 s budget on a NO_AP_FOUND that came at 3.5 s).
+    // A disconnect since the join says why it failed; the core's one retry
+    // per boot gets its chance first (wifiota::coreretry).
     if (disconnects_ != disconnectsAtJoin_ && (reason_ == WIFI_REASON_AUTH_FAIL || reason_ == WIFI_REASON_NO_AP_FOUND ||
                                                reason_ == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
                                                reason_ == WIFI_REASON_HANDSHAKE_TIMEOUT ||
                                                reason_ == WIFI_REASON_ASSOC_FAIL || reason_ == WIFI_REASON_CONNECTION_FAIL)) {
-      if (coreRetryAt_ > disconnectsAtJoin_ && disconnects_ - disconnectsAtJoin_ < 2) return Join::Trying;
+      if (!wifiota::coreretry::failed(disconnects_, disconnectsAtJoin_, coreRetryAt_)) return Join::Trying;
       holdCoex(false);
       return Join::Failed;
     }
@@ -372,7 +371,7 @@ class WifiStation {
       case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         reason_ = info.wifi_sta_disconnected.reason;
         ++disconnects_;
-        if (!coreRetryAt_ && reason_ != WIFI_REASON_ASSOC_LEAVE) coreRetryAt_ = disconnects_;   // its one retry, now
+        coreRetryAt_ = wifiota::coreretry::retryAt(coreRetryAt_, disconnects_, reason_);
         break;
       default: break;
     }

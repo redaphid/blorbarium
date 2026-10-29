@@ -463,8 +463,12 @@ static void statusLine();
 // (src/remote_debug.h), in a Check or a cable's check, then the radio goes.
 static void finishWithReport() {
   // A provision's report is its check-in: the site's page waits for it
-  // (/api/badge/online). It and a cable's check send a light one (rdebug::reportShape).
-  if ((window == Window::Check || window == Window::Forced || window == Window::Provision) &&
+  // (/api/badge/online). A trial's confirm sends one too, or a badge that
+  // updated itself said nothing until the next Check 6 h later and the site
+  // showed the old version (Midge, 2026-10-29). Those, and a cable's check,
+  // send a light one (rdebug::reportShape).
+  if ((window == Window::Check || window == Window::Forced || window == Window::Provision ||
+       window == Window::Confirm) &&
       rd::start(window != Window::Check))
     return setPhase(Phase::Report);
   closeWindow();
@@ -585,7 +589,7 @@ static void readManifest() {
     outcome("trial confirmed over Wi-Fi (%s; the site has %u.%u.%u)", c == ota::Confirm::Confirmed ? "ok" : "not on trial",
             unsigned(v.major), unsigned(v.minor), unsigned(v.patch));
     schedule.checked(millis());
-    return closeWindow();
+    return finishWithReport();   // the trial is settled first: the report cannot undo it
   }
   schedule.checked(millis());
   // A version that rolled back is tried kTriesAfterRollback times in all before

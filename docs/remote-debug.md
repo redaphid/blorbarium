@@ -8,8 +8,11 @@ way to reach them, so remote debug rides on its windows.
 
 Every Check window (and a cable's `DEBUG ota check`) that read the manifest
 ends with one more HTTPS POST, after the pet's lines: `/api/badge/report`
-(src/remote_debug.h). An update being downloaded skips it; the boot after does
-its own check soon. The report is JSON:
+(src/remote_debug.h). An update being downloaded skips it; the new image's
+trial confirm sends one instead (0.7.43), with the new version, the moment the
+site has confirmed it. Before 0.7.43 the confirm sent nothing and set the
+next Check 6 h out, so a badge that updated itself looked silent, on its old
+version, for up to 6 h (Midge, 2026-10-29). The report is JSON:
 
 | field | what |
 |---|---|
@@ -38,7 +41,8 @@ write tried once more 100 ms later. The ring, the body and everything else are
 PSRAM; the GET task borrows the body (`NetJob::start(..., borrowLen)`). The
 report is skipped when internal RAM is short of 24 KB free or a 9 KB block.
 
-A light report (0.7.36, `rdebug::reportShape`) is sent by a provision's window,
+A light report (0.7.36, `rdebug::reportShape`) is sent by a trial's confirm,
+by a provision's window,
 whose report is the check-in the phone's page waits for, and by a cable's
 `DEBUG ota check` (a hand is on the badge, with `LOG` on its own transport):
 the log's tail at most 1 KB within 2 KB, no `state` capture and no screenshot

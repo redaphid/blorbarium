@@ -25,6 +25,7 @@
 #include "wifiota/consent.h"
 #include "wifiota/sightings.h"
 #include "wifiota/get_tries.h"
+#include "wifiota/core_retry.h"
 #include "../../src/hw/ota_pubkey.h"
 #include "../../src/hw/power.h"   // the nap's sleep length (power::napSleepMs)
 
@@ -1362,4 +1363,41 @@ TEST(GetTries, NothingBackIsTriedThreeTimesInAllAnAnswerOnce) {
   EXPECT_EQ(t.done(), 1);
   EXPECT_GE(wifiota::GetTries::kWaitMs, 1000u);
   EXPECT_LE(wifiota::GetTries::kWaitMs, 2000u);
+}
+
+// The core's one retry per boot (WiFiGeneric's first_connect), seen from the
+// event task's counts: the station's ASSOC_LEAVE (8) does not use it up.
+TEST(CoreRetry, TheJoinWithTheCoresRetryWaitsForItsSecondFailure) {
+  namespace cr = wifiota::coreretry;
+  uint32_t disconnects = 0, retryAt = 0;
+  const uint32_t atJoin = disconnects;
+  retryAt = cr::retryAt(retryAt, ++disconnects, 201);   // NO_AP_FOUND: the core retries now
+  EXPECT_EQ(retryAt, 1u);
+  EXPECT_FALSE(cr::failed(disconnects, atJoin, retryAt)) << "the core's retry is still to come";
+  retryAt = cr::retryAt(retryAt, ++disconnects, 201);
+  EXPECT_TRUE(cr::failed(disconnects, atJoin, retryAt)) << "the retry failed too";
+}
+
+TEST(CoreRetry, ALaterJoinFailsAtItsFirstFailure) {
+  namespace cr = wifiota::coreretry;
+  uint32_t disconnects = 0, retryAt = 0;
+  retryAt = cr::retryAt(retryAt, ++disconnects, 201);   // an earlier join used the retry up
+  retryAt = cr::retryAt(retryAt, ++disconnects, 201);
+  const uint32_t atJoin = disconnects;
+  EXPECT_FALSE(cr::failed(disconnects, atJoin, retryAt)) << "no disconnect yet";
+  retryAt = cr::retryAt(retryAt, ++disconnects, 201);
+  EXPECT_EQ(retryAt, 1u) << "once per boot";
+  EXPECT_TRUE(cr::failed(disconnects, atJoin, retryAt)) << "no retry comes: failed at once, not at the 15 s budget";
+}
+
+TEST(CoreRetry, OurOwnLeaveDoesNotUseTheRetryUp) {
+  namespace cr = wifiota::coreretry;
+  uint32_t disconnects = 0, retryAt = 0;
+  retryAt = cr::retryAt(retryAt, ++disconnects, cr::kLeave);   // WiFi.begin's disconnect before a new config
+  EXPECT_EQ(retryAt, 0u);
+  const uint32_t atJoin = disconnects;
+  retryAt = cr::retryAt(retryAt, ++disconnects, 15);   // 4WAY_HANDSHAKE_TIMEOUT: the core retries now
+  EXPECT_FALSE(cr::failed(disconnects, atJoin, retryAt));
+  retryAt = cr::retryAt(retryAt, ++disconnects, 15);
+  EXPECT_TRUE(cr::failed(disconnects, atJoin, retryAt));
 }
