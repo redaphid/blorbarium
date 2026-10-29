@@ -7,12 +7,14 @@
 #include <NimBLEDevice.h>
 
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "blorb/ble_id.h"
+#include "blorb/ble_name.h"
 #include "blorb/notify_queue.h"
 #include "blorb/rx_lines.h"
 #include "blorb/seams.h"
@@ -35,10 +37,11 @@ class NusLink : public blorb::Link {
   static constexpr const char* kTx = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";   // the badge notifies
   static constexpr const char* kOtaData = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";   // update images (docs/ota.md)
 
-  // `name` goes in the scan response, which has room for 29 characters; the
-  // advertisement itself carries the flags, the service UUID and `mac`, the
-  // badge's durable id (blorb/ble_id.h): all 31 of its bytes. `otaData` takes
-  // the update's image writes, when the firmware has updates.
+  // `name` (the pet's, blorb/ble_name.h) is the GAP device name and goes in
+  // the scan response; the advertisement itself carries the flags, the
+  // service UUID and `mac`, the badge's durable id (blorb/ble_id.h): all 31 of
+  // its bytes. `otaData` takes the update's image writes, when the firmware
+  // has updates.
   const char* begin(const char* name, const uint8_t mac[blorb::bleid::kMacBytes],
                     NimBLECharacteristicCallbacks* otaData = nullptr) {
     std::snprintf(name_, sizeof name_, "%s", name);
@@ -59,8 +62,8 @@ class NusLink : public blorb::Link {
     const auto id = blorb::bleid::payload(mac);
     adv->setManufacturerData(id.data(), id.size());   // the advertisement is now full
     adv->enableScanResponse(true);
-    adv->setName(name_);
-    if (serve_) serve_(server, adv);   // after the name, so nothing it advertises can push the name out
+    if (serve_) serve_(server, adv);   // it may add a UUID to the scan response (scanAlso), never ahead of the name
+    applyScan();
     adv->setMinInterval(kFastMin);
     adv->setMaxInterval(kFastMax);
     adv->start();
@@ -68,7 +71,47 @@ class NusLink : public blorb::Link {
   }
 
   bool connected() override { return up_; }
-  const char* name() const { return name_; }   // what begin() advertises
+  const char* name() const { return name_; }   // what the badge advertises now
+
+  // On the loop, whenever the pet's name changes (a rename, an old pet
+  // adopting his board's species): the GAP name and the scan response take
+  // the new one, and advertising restarts so the next scan hears it. False
+  // if nothing changed, or Bluetooth is off.
+  bool rename(const char* name) {
+    if (!NimBLEDevice::isInitialized() || !NimBLEDevice::getServer() || std::strncmp(name, name_, sizeof name_ - 1) == 0)
+      return false;
+    std::snprintf(name_, sizeof name_, "%s", name);
+    NimBLEDevice::setDeviceName(name_);
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    const bool was = adv->isAdvertising();
+    if (was) adv->stop();
+    applyScan();
+    if (was && !advHeld_) adv->start();   // otherwise poll() starts it once nothing holds it
+    return true;
+  }
+
+  // Before begin(), from serve(): a 128-bit service UUID for the scan
+  // response (Improv's), after the name and only if it fits beside it.
+  void scanAlso(const NimBLEUUID& uuid) { scanUuid_ = uuid, scanHasUuid_ = true; }
+  struct ScanShape {
+    size_t bytes, nameChars;
+    bool uuid, set;
+  };
+  // The scan response, built whole: the name, then scanAlso's UUID if it fits
+  // beside it (blorb/ble_name.h: a name of up to 11 characters). Not from
+  // adv->getScanData(): NimBLE-Arduino's returns the ADVERTISEMENT
+  // (m_advData), already full with the badge's id, so the UUID never fit and
+  // every badge to 0.7.33 left it out (owner, 2026-10-29). NimBLE keeps what
+  // is set here and sets it again at every start().
+  ScanShape applyScan() {
+    NimBLEAdvertisementData scan;
+    scan.setName(name_);
+    const size_t len = std::strlen(name_);
+    const bool uuid = scanHasUuid_ && blorb::blename::uuidFits(len);
+    if (uuid) scan.addServiceUUID(scanUuid_);
+    const bool set = NimBLEDevice::getAdvertising()->setScanResponseData(scan);
+    return {scan.getPayload().size(), len, uuid, set};
+  }
   // Before begin(): one more thing to add to the service, given it as it is built.
   void extend(std::function<void(NimBLEService*)> more) { extend_ = std::move(more); }
   // Before begin(): another service on this server, and what it adds to the
@@ -320,7 +363,9 @@ class NusLink : public blorb::Link {
     }
   };
 
-  char name_[16] = "";
+  char name_[blorb::blename::kMax + 1] = "";
+  NimBLEUUID scanUuid_;
+  bool scanHasUuid_ = false;
   NimBLECharacteristic* tx_ = nullptr;
   RxCb rxCb_{this};
   ServerCb serverCb_{this};

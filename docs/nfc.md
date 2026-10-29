@@ -23,7 +23,8 @@ The chooser lists a device that has the UART service and any one of:
    `0xFFFF`, starting with the six MAC bytes (`docs/ble.md`, "Advertisement").
    It never changes, whatever the pet becomes.
 2. **`blorb-xxxx`**: what firmware before 0.7.0 advertised, and what an image
-   on an OTA trial still advertises.
+   on an OTA trial advertised through 0.7.42 (until the badge's next restart).
+   Later firmware always advertises its pet's name (`docs/ble.md`).
 3. **The name it advertises now**, for firmware before 0.7.33: the species of
    the newest pet the site has met on that MAC (`GET /api/ble-name?mac=`, which
    answers `{name, pet}` and nothing else), and the species `defs/badges.def`

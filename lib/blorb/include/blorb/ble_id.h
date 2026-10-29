@@ -1,7 +1,7 @@
 // The badge's durable Bluetooth id (docs/ble.md "Advertisement"): its MAC
 // in manufacturer-specific data, so a page can ask Chrome's chooser for one
 // badge by a link that never changes (an NFC sticker, docs/nfc.md). The name
-// is the pet's species and changes with him; Web Bluetooth never shows a MAC.
+// is the pet's (blorb/ble_name.h) and changes with him; Web Bluetooth never shows a MAC.
 //
 // The MAC is the Wi-Fi station MAC, the one defs/badges.def, blorb-xxxx and
 // /admin's debug uploads all print (the Bluetooth address is that plus 2).

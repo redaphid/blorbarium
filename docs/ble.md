@@ -16,11 +16,12 @@ Nordic UART Service (NUS), from `src/hw/link_nus.h`.
 | TX characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | the board notifies |
 
 The board advertises the service UUID and puts its name in the scan response.
-The name is its creature's species, as the lowercase slug from
-`species.def` (`mossby`, `hushwing`). It is the same whatever the owner named
-the pet. Each badge in `defs/badges.def` holds a different species, so the name
-also tells the badges apart. But the name changes with the pet, so from
-0.7.33 the board also advertises an id that never changes: its MAC.
+The name is always the pet's name, lowercase (`lib/blorb/include/blorb/ble_name.h`).
+A pet nobody renamed is named for his species (`Mossby`), so he advertises
+the slug from `species.def` (`mossby`, `hushwing`), as every badge has since
+0.7.0. A pet the owner renamed (`TWIST rename Zorp_V`) advertises that name
+(`zorp_v`). It is also the GAP device name. The name changes with the pet, so
+from 0.7.33 the board also advertises an id that never changes: its MAC.
 
 ### Advertisement
 
@@ -29,8 +30,8 @@ also tells the badges apart. But the name changes with the pet, so from
 | advertisement | flags | 3 |
 | advertisement | the UART service's 128-bit UUID | 18 |
 | advertisement | manufacturer data: company `0xFFFF` (little-endian `ff ff`), then the 6 MAC bytes in print order | 10 |
-| scan response | the name (longest slug 8 characters: 10; `blorb-xxxx`: 12) | 10-12 |
-| scan response | Improv's 128-bit UUID, only if it fits beside the name (it always does) | 18 |
+| scan response | the name (a species slug, at most 8 characters: 10; a pet's longest name, 15: 17) | 3-17 |
+| scan response | Improv's 128-bit UUID, only if it fits beside the name (a name of up to 11 characters; every species slug) | 18 |
 
 The advertisement is full (31 of 31). The MAC is the Wi-Fi station MAC, the
 one `defs/badges.def`, `blorb-xxxx` and `/admin` print (the Bluetooth address
@@ -54,32 +55,41 @@ provisions is never dropped as a squatter (docs/wifi-ota.md, "Over Bluetooth").
 Until 0.7.35 the scan response's Improv UUID was left out on every board, so
 improv-wifi.com found none: NimBLE-Arduino's `getScanData()` returns the
 advertisement (already full), not the scan response, and the UUID never fit
-beside it. The scan response is now built whole (`src/hw/improv_ble.h`); the
-boot line says `scan response <n> B: name <n> B, uuid yes`.
+beside it. The scan response is now built whole (`NusLink::applyScan` in
+`src/hw/link_nus.h`, at boot and at every rename); the boot line says
+`scan response <n> B: name <n> B, uuid yes`. A renamed pet whose name is 12 to
+15 characters keeps his whole name and leaves the Improv UUID out
+(`uuid left out`): improv-wifi.com then misses the badge, the website does not.
 
 A page asks Chrome's chooser for one board with
 `{services: [NUS], manufacturerData: [{companyIdentifier: 0xFFFF, dataPrefix: <the 6 MAC bytes>}]}`.
 That is what an NFC link `?b=<mac>` does (`docs/nfc.md`).
 
-Which species (`advertisedSpecies` in `founding.h`):
+When (`blorb::advertisedName`, checked by `test/test_adopt_species` and
+`test/test_ble_id`):
 
-- The pet's own species.
-- For a pet from 0.4.0, which has no species yet, the species his board
-  will adopt him as (`Dish::adoptSpecies`): the table's, else one of the
-  regular cast from a hash of the MAC (`badgeSpecies`).
-- For a sealed board, whose pet was not read, the board's species
-  (`badgeSpecies`).
-- An image on an OTA trial still advertises the old `blorb-xxxx` (the last
-  two bytes of its MAC, lower-case hex), so a trial looks the same as the
-  board the page updated. The page from rel-site keys its OTA token by the
-  Web Bluetooth `device.id`, which stays the same whatever the board
-  advertises. An older page keys it by the name, and when that page is
-  reloaded during the trial it must still find its token to send
-  `OTA CONFIRM`. The species name starts at the first boot after the trial
-  keeps the image.
+- From the first advertisement of every boot: an egg, a fresh board and one
+  whose storage was empty all have a name, since a line is named for its
+  founder's species the moment it is founded.
+- On an OTA trial too. Through 0.7.42 an image on trial advertised
+  `blorb-xxxx` (the last two bytes of its MAC), and a trial that keeps its
+  image does not restart, so after every update, over Bluetooth or Wi-Fi, the
+  badge stayed `blorb-xxxx` until its next reboot. Badges that run 0.7.42 or
+  older still do that after an update until they restart. The page keys its
+  OTA token by the Web Bluetooth `device.id`, never the name, so a trial needs
+  no name of its own.
+- Within a second of a change, without a restart: a rename, or a pet from
+  0.4.0 adopting his board's species (`Dish::adoptSpecies` renames him from
+  Grungo). The serial log says `[hw] ble name now <new> (was <old>)`.
+- The one board with no pet name it can read is a sealed one (its pet was
+  not read). It advertises its board's species (`badgeSpecies`), never
+  `blorb-xxxx`.
 
-Filter on the service UUID. A `?d=<name>` link must use the current name: after
-the update, `?d=mossby`, not `?d=blorb-1b3c`. A `?b=<mac>` link never goes
+Filter on the service UUID. The site's chooser, with no link, lists a device
+with the UART service and either the id's company `0xFFFF` (0.7.33 and later,
+whatever the pet is called) or a `blorb-` or species name (older firmware). A
+`?d=<name>` link must use the current name: after the update, `?d=mossby`, not
+`?d=blorb-1b3c`. A `?b=<mac>` link never goes
 stale (`docs/nfc.md`). There is no pairing and no owner
 token.
 
