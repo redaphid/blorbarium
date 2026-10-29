@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include "blorb/founding.h"   // first, so PlatformIO's dependency finder links lib/blorb
+#include "blorb/ble_name.h"
 #include "blorb/dish.h"
 #include "blorb/genes.h"
 #include "founding_040.h"
@@ -487,6 +488,66 @@ TEST(Advertised, EverySpeciesNameFitsTheScanResponse) {
     EXPECT_LE(std::strlen(row.name) + 2, 31u) << row.name;
     for (const char* c = row.name; *c; ++c) EXPECT_TRUE(*c >= 'a' && *c <= 'z') << row.name << ": a lowercase slug";
   }
+}
+
+// ---- the name it advertises: always the pet's (blorb/ble_name.h) ---------------------------------
+
+std::string advertised(Dish& d, const uint8_t mac[6]) {
+  char out[blename::kMax + 1];
+  return advertisedName(d, mac, out);
+}
+
+// A fresh board's egg already has a name, his founder's species: what the
+// badge advertised before, byte for byte.
+TEST(AdvertisedName, AFreshEggIsNamedForHisSpecies) {
+  for (const FieldBadge& f : kBatch) {
+    MemStorage store;
+    const SpeciesId s = tableOf(f);
+    const Genome founder = foundingGenome(s, seedOf(f.mac), paint::bandsFor(s));
+    DishOptions o;
+    o.founder = &founder;
+    Dish d(store, seedOf(f.mac), kLineageId, o);
+    ASSERT_TRUE(std::holds_alternative<Egg>(d.occupant()));
+    EXPECT_EQ(advertised(d, f.mac), f.species);
+  }
+}
+
+// The bug: an image on an OTA trial advertised blorb-xxxx, and a trial that
+// kept its image never restarted, so the badge kept that name until a reboot.
+// On a held store (a trial) the pet's name is read like any other day.
+TEST(AdvertisedName, OnAnOtaTrialItIsStillThePetsName) {
+  Badge b(kBatch[1]);
+  b.liveOn040();
+  b.dish.reset();
+  ota::HeldStorage held(b.flash);
+  held.hold(true);
+  b.boot(held);
+  EXPECT_EQ(advertised(*b.dish, b.field.mac), "grungo") << "his name until the trial keeps the image and he is adopted";
+  held.hold(false);
+  ASSERT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  EXPECT_EQ(advertised(*b.dish, b.field.mac), "puffkin") << "the adoption renames him, and the name follows";
+}
+
+TEST(AdvertisedName, AnOwnersNameIsAdvertisedAndKept) {
+  Badge b(kBatch[4]);
+  b.liveOn040();
+  ASSERT_EQ(b.adopt(), Dish::Adoption::Adopted);
+  b.dish->rename("Zorp_V");
+  EXPECT_EQ(advertised(*b.dish, b.field.mac), "zorp_v");
+  ASSERT_TRUE(b.dish->flush());
+  b.boot();
+  EXPECT_EQ(advertised(*b.dish, b.field.mac), "zorp_v") << "after a restart";
+}
+
+// The one board with no pet name it can read: a sealed one. It advertises
+// the species its board gives, never blorb-xxxx.
+TEST(AdvertisedName, ASealedBoardIsItsBoardsSpecies) {
+  Badge b(kBatch[5]);
+  b.liveOn040();
+  DishOptions o;
+  o.sealed = true;
+  Dish sealed(b.flash, b.seed(), kLineageId, o);
+  EXPECT_EQ(advertised(sealed, b.field.mac), "fizz");
 }
 
 int main(int argc, char** argv) {

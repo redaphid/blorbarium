@@ -42,9 +42,11 @@ A rerun after this tool died resumes its own transfer, and `status` sends
 the CONFIRM a new image on trial waits for (it rolls back after 5 minutes
 without one).
 
-A badge is named by its advertised name (its species, or blorb-xxxx while
-an image is on trial) or by its Bluetooth address, which an update never
-changes. The address is the MAC in badges.def plus one.
+A badge is named by its advertised name (its pet's name, lowercase; through
+0.7.42, blorb-xxxx while an image was on trial) or by its Bluetooth address,
+which an update never changes. The address is the MAC in badges.def plus one.
+A badge is told apart from other devices by the UART service it advertises,
+whatever its name.
 """
 import argparse
 import asyncio
@@ -1050,7 +1052,7 @@ class FakeBadge:
             return
         self.old, self.fw = self.fw, self.image["version"]
         self.state, self.last, self.trial, self.confirmed = "idle", "none", True, None
-        self.name_before, self.name = self.name, "blorb-" + self.address.replace(":", "").lower()[-4:]
+        self.name_before = self.name   # a trial keeps the pet's name (0.7.42 and older said blorb-xxxx)
         self.boot, self.up_at = self.now(), self.now() + 1.0 * self.s
         if self.port:
             self.port.drop()

@@ -13,6 +13,7 @@
 #include <string_view>
 #include <utility>
 
+#include "blorb/ble_name.h"
 #include "blorb/dish.h"
 #include "blorb/founding.h"
 #include "blorb/knocks.h"
@@ -1126,20 +1127,28 @@ static void reportStatus(uint32_t now) {
 }
 
 #if !defined(BADGE_BOARD_SIM)
-// The Bluetooth name is the species (docs/ble.md): the pet's, or the one his
-// board will adopt him as (founding.h advertisedSpecies), whatever the
-// owner named him. An image on trial keeps the old image's blorb-xxxx, so a
-// trial looks to the page exactly as the board it updated: the page served
-// before rel-site keys its OTA token by device name, and a reloaded one must
-// find that token to CONFIRM. The species name comes with the next boot.
+// The Bluetooth name is always the pet's name, lowercase (docs/ble.md,
+// blorb/ble_name.h), on an OTA trial too. Through 0.7.42 a trial advertised
+// blorb-xxxx, and a trial that kept its image did not restart, so every
+// update left the badge called blorb-xxxx until its next reboot, for days.
+// The page keys its OTA token by the device, not the name, so a trial needs
+// no name of its own; the tools find it by its address or the UART service.
 static const char* bleName(const uint8_t mac[6]) {
-  static char name[16];
-  if (trial.onTrial()) {
-    std::snprintf(name, sizeof name, "blorb-%02x%02x", mac[4], mac[5]);
-  } else {
-    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(petGenome(), mac)).name);
-  }
-  return name;
+  static char name[blorb::blename::kMax + 1];
+  return blorb::advertisedName(*dish, mac, name);
+}
+
+// Once a second: a rename or an adoption changes the pet's name, and the
+// Bluetooth name follows it then, not at the next boot.
+static void followPetName(uint32_t now) {
+  static uint32_t askedAt = 0;
+  if (now - askedAt < 1000) return;
+  askedAt = now;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char was[blorb::blename::kMax + 1];
+  std::snprintf(was, sizeof was, "%s", ble.name());
+  if (ble.rename(bleName(mac))) Serial.printf("[hw] ble name now %s (was %s): the pet's name changed\n", ble.name(), was);
 }
 
 // A pet from before species (0.4.0 founded them) becomes his board's species
@@ -1161,7 +1170,7 @@ static void adoptBoardSpecies(uint32_t now) {
   adopted = true;
   if (a == blorb::Dish::Adoption::Adopted) {
     const OccupantSummary o = summarize(dish->occupant());
-    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows within a second)\n",
                   blorb::speciesInfo(species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
   }
 }
@@ -2653,6 +2662,7 @@ void loop() {
     dish->flush();
   }
   adoptBoardSpecies(millis());
+  followPetName(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;
