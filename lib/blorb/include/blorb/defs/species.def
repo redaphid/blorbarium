@@ -32,3 +32,4 @@ BLORB_SPECIES(6, fizz,     Spark,  Pounce, zap,     200, 0, 1200, hoarder)      
 BLORB_SPECIES(7, hushwing, Sprout, Trick,  hush,     60, 1,  900, ominous)        // marsh owl: silent wings
 BLORB_SPECIES(8, tinker,   Spark,  Guard,  gadget,  150, 1, 1000, hoarder)        // raccoon: a scrap-pile gadget
 BLORB_SPECIES(9, octopus, Splash, Trick,  blackbell, 210, 1, 1050, ominous)     // octopus: the abyss rings back
+BLORB_SPECIES(10, puck,   Spark,  Pounce, ambush,  190, 0, 1250, hoarder)        // cyborg tabby: what was that!? (cyber-puck's cat)

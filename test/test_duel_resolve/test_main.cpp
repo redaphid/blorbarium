@@ -360,6 +360,24 @@ TEST(Powers, BlackBellUsesItsTwoTurnHush) {
   EXPECT_EQ(clash.turns[8].hit[0], DuelRules::kClashHearts) << "the Black Bell's hush has worn off";
 }
 
+// Puck's ambush is the dash's rule under his own name: the same turns as a
+// puck card carrying the dash, and it fires.
+TEST(Powers, AmbushPlaysExactlyAsTheDash) {
+  const BattleCard puck = cardOf(sp::puck, 1), puffkin = cardOf(sp::puffkin, 2);
+  BattleCard dasher = puck;
+  dasher.power = power::dash;
+  const Outcome a = play(puck, puffkin, "PPPPPqpPGT", "PPPPPPqpTG"), d = play(dasher, puffkin, "PPPPPqpPGT", "PPPPPPqpTG");
+  bool fired = false;
+  for (size_t t = 0; t < sizeof a.turns / sizeof a.turns[0]; ++t) {
+    EXPECT_EQ(a.turns[t].hit[0], d.turns[t].hit[0]) << "turn " << t;
+    EXPECT_EQ(a.turns[t].hit[1], d.turns[t].hit[1]) << "turn " << t;
+    EXPECT_EQ(a.turns[t].special[0], d.turns[t].special[0]) << "turn " << t;
+    EXPECT_EQ(a.turns[t].special[1], d.turns[t].special[1]) << "turn " << t;
+    fired = fired || a.turns[t].special[0] == TurnReport::Special::Landed;
+  }
+  EXPECT_TRUE(fired) << "the ambush landed";
+}
+
 TEST(Powers, LanternDazzlesTheFriendNextTurn) {
   const BattleCard mothwick = cardOf(sp::mothwick, 1), fizz = cardOf(sp::fizz, 2);
   int landed = 0;
@@ -373,7 +391,8 @@ TEST(Powers, LanternDazzlesTheFriendNextTurn) {
   EXPECT_LT(landed, 600);
 }
 
-TEST(Powers, GadgetDrawsEachOfTheOtherEightAndNeverItself) {
+// Each of the others evenly: 4000 draws over kPowerCount - 1 powers (ten since Puck's ambush).
+TEST(Powers, GadgetDrawsEachOfTheOthersAndNeverItself) {
   const BattleCard tinker = cardOf(sp::tinker, 0x7111);
   int drawn[kPowerCount]{};
   for (uint32_t seed = 0; seed < 4000; ++seed) {
@@ -383,7 +402,7 @@ TEST(Powers, GadgetDrawsEachOfTheOtherEightAndNeverItself) {
   }
   EXPECT_EQ(drawn[power::gadget.v], 0);
   for (const PowerInfo& p : POWERS) {
-    if (p.id != power::gadget) { EXPECT_NEAR(drawn[p.id.v], 500, 100) << p.name; }
+    if (p.id != power::gadget) { EXPECT_NEAR(drawn[p.id.v], 4000 / int(kPowerCount - 1), 100) << p.name; }
   }
 }
 

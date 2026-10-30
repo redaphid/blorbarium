@@ -17,7 +17,7 @@
   // Once chosen, the name never matters again: a reconnect, even after an
   // update renames the dish, is to the same device.
   const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker", "octopus"];
+  const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker", "octopus", "puck"];
   // badge (an NFC sticker's ?b=, parseBadge) lists that one badge; names are
   // the names it may advertise without the id (its species, from badgeName).
   function chooserFilters(want, wide = false, badge = null, names = []) {

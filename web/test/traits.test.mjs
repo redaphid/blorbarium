@@ -12,7 +12,7 @@ const fixtures = JSON.parse(readFileSync(new URL("./fixtures/genomes.json", impo
 const baselines = JSON.parse(readFileSync(new URL("../src/baselines.json", import.meta.url)));
 
 test("the decoder reads every fixture genome as the engine does", () => {
-  assert.equal(fixtures.length, 20);
+  assert.equal(fixtures.length, 2 * Object.keys(baselines).length, "two fixture pets per species");
   for (const f of fixtures) {
     const raw = rawSheet(hexToBytes(f.genome), { stage: f.raw.stage, feats: f.feats });
     assert.deepEqual(raw, f.raw, f.id);

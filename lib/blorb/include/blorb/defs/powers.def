@@ -23,3 +23,4 @@ BLORB_POWER(6, zap,     6, spark)    // fizz: a tickly zap; one more heart on to
 BLORB_POWER(7, hush,    5, feather)  // hushwing: silent wings; next turn a clash she loses costs her nothing, and a special at her whiffs
 BLORB_POWER(8, gadget,  5, gear)     // tinker: a surprise gadget; one of the other eight powers, drawn from his own luck as it lands
 BLORB_POWER(9, blackbell, 5, blackbell) // octopus: a hush over the next two turns
+BLORB_POWER(10, ambush, 3, wave)        // puck: all leg-rubs, then the pounce: always first; next turn a head bonk goes his way

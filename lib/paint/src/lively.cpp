@@ -31,6 +31,7 @@ constexpr Tempo kTempo[] = {
     {3200, 28, 5200, 20, 0, 0, 5600, 1},     // hushwing: an owl's stillness, slow blinks
     {2400, 28, 2800, 22, 0, 0, 3200, 4},     // tinker: fidgets, looks about
     {3000, 32, 4400, 28, 2600, 1, 4800, 1},  // octopus: one long undulation
+    {1800, 28, 2400, 14, 0, 0, 4400, 4},     // puck: wound tight, eyes wide, every sound a glance
 };
 constexpr int kTempoCount = int(sizeof kTempo / sizeof kTempo[0]);
 static_assert(kTempoCount >= blorb::kSpeciesCount, "an idle tempo per species.def row");

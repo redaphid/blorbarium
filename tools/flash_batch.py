@@ -64,7 +64,7 @@ PET_NVS = (0x810000, 0x40000)            # tools/partitions_16mb.csv `pet`
 MIN_ESPTOOL = (4, 7)                     # the first to write a .hex by its segments; older ones write the text itself
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note",
           "species", "pet"]               # pet: the mode, keep or wipe
-# The regular cast, in species.def order: every row but the octopus (id 9), a one-off variant.
+# The regular cast, in species.def order: every row but the one-offs, the octopus (id 9) and Puck (id 10).
 SPECIES = ("grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker")
 BADGES_DEF = ROOT / "lib/blorb/include/blorb/defs/badges.def"
 

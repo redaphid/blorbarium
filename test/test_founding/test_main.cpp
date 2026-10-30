@@ -162,6 +162,25 @@ TEST(Founding, TheOctopusComesOnlyByName) {
   EXPECT_EQ(d.appearance().species, species::octopus);
 }
 
+// Puck, the owner's own cat (cyber-puck's), is a one-off like the octopus:
+// no MAC founds him by chance, and found.pin founds him by name.
+TEST(Founding, PuckComesOnlyByName) {
+  EXPECT_FALSE(inRegularCast(species::puck));
+  for (uint32_t n = 0; n < 4096; ++n) {
+    const uint8_t mac[6] = {0xd4, 0x05, 0x92, uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
+    MemStorage store;
+    EXPECT_NE(foundingSpecies(store, mac), species::puck);
+  }
+  for (uint32_t n = 0; n < 100000; n += 7) EXPECT_NE(castSpecies(n), species::puck);
+  MemStorage store;
+  ASSERT_EQ(debugverbs::found(store, "puck"), nullptr);
+  EXPECT_EQ(foundingSpecies(store, kMossby.mac), species::puck) << "the pin outranks the table";
+  Dish d = boot(store, kMossby);
+  EXPECT_EQ(d.boot(), Boot::Fresh);
+  EXPECT_EQ(d.appearance().species, species::puck);
+  EXPECT_EQ(std::string(d.lineage().currentName()), "Puck");
+}
+
 // Board 237c is an ordinary table row: it founds its grungo as any badge
 // founds its species.
 TEST(Founding, Board237cFoundsItsTableGrungoLikeAnyBadge) {
@@ -244,7 +263,7 @@ TEST(Pin, OffGivesTheTableBackAndDeletesNothing) {
 }
 
 TEST(Pin, ANameOrNumberWithNoRowIsRefusedAndWritesNothing) {
-  for (const char* bad : {"grungus", "10", "255", "-1", ""}) {
+  for (const char* bad : {"grungus", "11", "255", "-1", ""}) {
     MemStorage store;
     EXPECT_NE(debugverbs::found(store, bad), nullptr) << "'" << bad << "'";
     EXPECT_TRUE(store.files.empty()) << "'" << bad << "'";
@@ -254,7 +273,7 @@ TEST(Pin, ANameOrNumberWithNoRowIsRefusedAndWritesNothing) {
 TEST(Pin, AnythingButAWholePinIsNoPin) {
   const std::vector<uint8_t> good{'B', 'F', 'P', 'N', 1, 3};
   std::vector<std::vector<uint8_t>> bad{{}, {'B', 'F', 'P', 'N', 1}, {'B', 'F', 'P', 'X', 1, 3},
-                                        {'B', 'F', 'P', 'N', 2, 3}, {'B', 'F', 'P', 'N', 1, 10},
+                                        {'B', 'F', 'P', 'N', 2, 3}, {'B', 'F', 'P', 'N', 1, 11},
                                         {'B', 'F', 'P', 'N', 1, 3, 0}};
   MemStorage store;
   store.files["found.pin"] = good;

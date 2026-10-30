@@ -6,9 +6,10 @@
 // chooser: a kid is handed the badge's creature, and the same board always
 // founds the same pet.
 //
-// The regular cast is every species.def row but the octopus, a one-off
-// variant: a board gets one only by name (a table row or found.pin), and an
-// egg is one only when a parent was. Nothing picks it by chance.
+// The regular cast is every species.def row but the one-offs, the octopus
+// and Puck (the owner's own cat): a board gets one only by name (a table
+// row or found.pin), and an egg is one only when a parent was. Nothing picks
+// one by chance.
 //
 // First boot only. A keepsake or a lineage, in any state, means no founding
 // ever, so a pet that lives is never founded again. The firmware
@@ -36,8 +37,8 @@ class Creature;   // creature.h
 
 // The table's species for this MAC; nullopt for a board not in it.
 std::optional<SpeciesId> tableSpecies(const uint8_t mac[6]);
-// True for every species but the octopus, the one-off variant.
-constexpr bool inRegularCast(SpeciesId s) { return s != species::octopus; }
+// True for every species but the one-offs: the octopus, and Puck, the owner's own cat.
+constexpr bool inRegularCast(SpeciesId s) { return s != species::octopus && s != species::puck; }
 // The regular cast's species number `n` modulo its size, in species.def order.
 SpeciesId castSpecies(uint32_t n);
 // The board's species: the table's, else castSpecies(fnv1a of the MAC).

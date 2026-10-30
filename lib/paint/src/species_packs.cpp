@@ -9,6 +9,7 @@
 #include "mothwick/mothwick_pack.h"
 #include "mudge/mudge_pack.h"
 #include "octopus/octopus_pack.h"
+#include "puck/puck_pack.h"
 #include "puffkin/puffkin_pack.h"
 #include "tinker/tinker_pack.h"
 

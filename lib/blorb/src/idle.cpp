@@ -23,11 +23,12 @@ constexpr uint8_t kAffinity[][kIdleCount] = {
     {2, 0, 1, 1, 1, 5, 9, 6, 2, 2, 2, 3, 1, 0, 6, 9, 1, 1, 5, 4, 2, 1, 0, 6, 1, 5, 1, 7, 4, 2, 7, 4, 4, 4, 2, 2, 8},   // hushwing: an owl's look about, a stare, the stars, a silent boo
     {4, 3, 3, 7, 8, 3, 5, 4, 2, 3, 7, 7, 3, 3, 4, 4, 8, 1, 8, 6, 5, 2, 4, 2, 3, 5, 3, 3, 5, 5, 4, 5, 4, 3, 4, 5, 5},   // tinker: digs for scrap, finds things, mischief
     {3, 2, 6, 8, 2, 3, 4, 6, 5, 9, 2, 2, 5, 3, 5, 6, 4, 1, 4, 7, 6, 2, 2, 5, 3, 5, 6, 4, 5, 6, 4, 5, 5, 6, 6, 5, 6},   // octopus: eight arms juggle, the duel rehearsed, theatre
+    {7, 6, 2, 4, 3, 5, 8, 8, 2, 8, 6, 1, 2, 6, 2, 4, 9, 2, 7, 8, 7, 2, 9, 5, 7, 7, 6, 3, 5, 9, 2, 3, 2, 3, 6, 6, 2},   // puck: zoomies, ballies, ambushes, begs, never naps
 };
 static_assert(countOf(kAffinity) >= kSpeciesCount, "a row of favourites per species.def row");
 
 // Of 1000: how often a rest or wander he picks becomes play.
-constexpr uint16_t kLively[] = {350, 250, 600, 500, 400, 650, 550, 250, 500, 450};
+constexpr uint16_t kLively[] = {350, 250, 600, 500, 400, 650, 550, 250, 500, 450, 650};
 static_assert(countOf(kLively) >= kSpeciesCount, "a liveliness per species.def row");
 
 uint32_t mix(uint32_t a, uint32_t b) {

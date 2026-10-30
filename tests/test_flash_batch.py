@@ -251,6 +251,7 @@ class MacTable(unittest.TestCase):
             seen.add(s)
         self.assertEqual(seen, set(fb.SPECIES))
         self.assertNotIn("octopus", fb.SPECIES)
+        self.assertNotIn("puck", fb.SPECIES)
 
 
 class Log(unittest.TestCase):

@@ -808,7 +808,9 @@ std::string lobbyLineOf(const Dish& d) {
 // greys this one out, so it ships to every badge at once, and the lobby says
 // "ONE OF YOU NEEDS AN UPDATE" on both until it has.
 TEST(Pairing, EveryBadgeFrom0713SpeaksTheSameRules) {
-  EXPECT_EQ(duelRulesHash(), 0xCFD9) << "the duel rules moved: badges on 0.7.13..0.7.26 will not pair with this one";
+  // 0xCFD9 through 0.7.44; Puck (species 10) and his ambush joined the roster in
+  // 0.7.45, so a badge on 0.7.44 or older greys a 0.7.45 one out until it updates.
+  EXPECT_EQ(duelRulesHash(), 0x8989) << "the duel rules moved: badges on 0.7.13..0.7.44 will not pair with this one";
   EXPECT_EQ(kWireVersion, 2);
   EXPECT_EQ(kBeaconWireBytes, 78u);
   EXPECT_EQ(kStateWireBytes, 111u);

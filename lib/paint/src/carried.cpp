@@ -51,6 +51,7 @@ constexpr Jelly kJelly[] = {
     {50, 7},    // hushwing
     {60, 9},    // tinker
     {35, 16},   // octopus
+    {55, 9},    // puck
 };
 constexpr int kJellyCount = int(sizeof kJelly / sizeof kJelly[0]);
 static_assert(kJellyCount >= int(blorb::kSpeciesCount), "a jelly per species.def row");

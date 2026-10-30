@@ -21,6 +21,7 @@ constexpr Temper kTemper[] = {
     {50, 230, 90},     // hushwing: fears being startled; an owl holds very still
     {170, 90, 130},    // tinker: curious, looks at everything
     {120, 100, 240},   // octopus: dramatic, and all jelly
+    {200, 210, 120},   // puck: jumpy at everything, then charges it anyway
 };
 constexpr uint8_t kTemperCount = uint8_t(sizeof kTemper / sizeof kTemper[0]);
 

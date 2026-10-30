@@ -39,7 +39,8 @@ F=lib/blorb/src/founding.cpp V=src/debug_verbs.h
 H=lib/blorb/include/blorb/founding.h
 mutant "the table is ignored" $F 's/  if (std::optional<SpeciesId> s = tableSpecies(mac)) return \*s;//'   "Table.NineAssignedDevicesKeepTheirSpeciesOnceEach"
 mutant "an unknown board is a grungo" $F 's/  return castSpecies(fnv1a(mac, 6));/  return kGrungo;/'   "Table.AnyOtherBoardTakesARegularSpeciesFromItsMac"
-mutant "the octopus joins the regular cast" $H 's/return s != species::octopus;/return true;/'   "Founding.TheOctopusComesOnlyByName"
+mutant "the octopus joins the regular cast" $H 's/return s != species::octopus && /return /'   "Founding.TheOctopusComesOnlyByName"
+mutant "puck joins the regular cast" $H 's/ && s != species::puck;/;/'   "Founding.PuckComesOnlyByName"
 mutant "a rescued slot is no pet" $F 's/"rescue\/snap.a.0", //' \
   "NeedsFounding.AnyKeepsakeOrLineageMeansAPetLivesHere"
 mutant "the lineage alone is no pet" $F 's/"lineage.log",//' \

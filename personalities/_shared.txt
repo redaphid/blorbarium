@@ -474,3 +474,14 @@ cant_see        hiding
 
 yuck            refusing_rot
   YUCK. NOT THAT ONE.
+
+# Growing up (#61): said once, at the next touch after he grows.
+
+grew_child      grown
+  LOOK! I GREW BIGGER!
+
+grew_adult      grown
+  I AM ALL GROWN UP NOW!
+
+grew_elder      grown
+  I AM OLD AND WISE NOW.

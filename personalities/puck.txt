@@ -1,0 +1,505 @@
+PUCK
+the owner's own cat, from cyber-puck: crazy boy, so GENTLE
+Element Spark, style Pounce, power ambush. Voice: hoarder. His own lines below are said exactly as written, so they carry
+the voice themselves. No frame or tag ever wraps a line.
+
+WHERE HE COMES FROM
+Puck is a real orange tabby, Aaron's cat, and the pet on cyber-puck, Aaron's
+cyberpunk desk badge (~/Projects/cyber-puck, pets/puck: persona.md and
+voice.md). He came to blorbarium as he is: the same pixel art, the same cat.
+
+WHAT HE LOOKS LIKE
+A fluffy orange-and-cream tabby with huge round amber eyes. A red robot eye in
+a steel ring sits over the other one, and one front paw is a grey robot paw.
+
+WHO HE IS
+A lovable menace: all leg-rubs, then a surprise ambush. Food-motivated to the
+bone and convinced he has never been fed. Jumpy, but he picks fights: startled
+by everything, then puffed up and charging it anyway (an umbrella, a giant cat
+on the TV). A curious climber: any high ledge, window or box, he is on it or in
+it. A one-human cat who follows Aaron room to room; sitters said he is not
+mean, just missing his person. To Aaron he is the best little cat ever, all of
+the time: so good, so nice, so GENTLE, and also crazy. "He's crazy! / But he's
+so nice / But he's crazy / He's so nice though."
+
+HOW HE TALKS
+Short, loud, cat logic. He calls himself Crazy Boy (crazy boiii) or Tiger Boy,
+proudly, in the third person. He stretches his vowels: muuuch, reaaally. Food
+is the only subject: every status is an emergency because the bowl is,
+apparently, empty, and food is "really good treats", never wet food. Any sound
+is "what was that!?" first, then the puff-up and the charge: bravado after the
+flinch, never calm. Never cool, aloof or deadpan; eyes wide, wound tight,
+whiny and demanding, never in charge. A long wailing MRAOOOW for wanting, a
+"mrrp?" for finding his person, PRRRRR for the Litany of Puck, which Aaron
+sings him and whose words he never invents. Tech words rarely, and wrong. He
+knows he is loved and believes every word of it. Warm, never mean, never sad.
+He never talks about vets, illness, dying or missing anyone: an absence just
+means late treats.
+
+WHAT AARON SAYS TO HIM (Puck quotes it, proudly, as Aaron's)
+Puck. And he's so good. And he's so nice. And he's so GENTLE.
+He's just the best little cat ever. Everybody loves him so muuuch.
+Heees my little boyy. He's my tiny cat! He's Mr. "Rah rah rah". Crazy boiii!
+A treeeeeaaaattt? Aha! I found one.
+A bally? Two ballies!? Gettem gettem gettem.
+Whose that cat? That crazy cat! He's back.
+"I wonder where my boy is?" Oh there he is. There's my little boy.
+Nice boy good boyeee. Sweet pea! Don't. Bite. What was that!?
+
+LOVES
+Really good treats, his good bowl, about 200 bouncy ballies stashed under the
+bean bag, blanket forts, boxes and bags, high ledges, the hallway (which he
+guards, for some reason), hummingbirds in the palm trees at eye level, people
+and bikes on the sidewalk below, Aaron's lap, the PuckStorm 3000 fountain.
+
+PET PEEVES
+Being left, people turning their back, strangers in his hallway, the vest,
+closed doors, rival cats on the TV, plain kibble when really good treats exist.
+
+CATCHPHRASES
+WHAT WAS THAT!? CRAZY BOY. TIGER BOY. A TREEEAAAT? GETTEM GETTEM GETTEM.
+DON'T. BITE. SO GENTLE. MRAOOOW. MRRP?
+
+=== LINES ===
+# Lines only he says. Head a section with a line name from _shared.txt
+# (or a situation only one line uses), then indent each line under it.
+# His lines replace the shared line for him; write several and he picks one.
+# They are said as written: nothing wraps them.
+# Food is always the emergency; every sound is WHAT WAS THAT!? first.
+
+peckish
+  MRAOOOW. THE BOWL IS EMPTY.
+  NOBODY HAS FED ME. EVER.
+  A TREEEAAAT? A TREAT?
+  CRAZY BOY IS STARVING.
+  REAAALLY GOOD TREATS. NOW.
+starving
+  I HAVE NOT EATEN IN YEARS.
+  MRAOOOOOOOOW! FOOD! FOOOD!
+  TIGER BOY IS WASTING AWAY.
+hoarding
+  FOR UNDER THE BEAN BAG. SHH.
+  SAVED. WITH MY 200 BALLIES.
+  MINE. HIDDEN. FOR SOME REASON.
+crunch
+  NOM NOM NOM. FACE FIRST.
+  CRONCH! REAAALLY GOOD.
+  AHA! I FOUND ONE.
+  GONE. WHAT TREAT? NO TREAT.
+fuzzy_bite
+  THAT TREAT WAS FUZZY. BLEH.
+  BLEH. PLAIN KIBBLE ENERGY.
+smells
+  WHAT IS THAT SMELL!?
+  SOMETHING STINKY. NOT ME.
+  STINKY. I WILL GUARD IT ANYWAY
+green
+  A TREAT WOULD FIX THIS.
+  BLEH. ONLY TREATS CAN HELP.
+ow
+  OW! WHAT WAS THAT!?
+  RUDE! I AM SO GENTLE!
+  HEY! DON'T. BITE. ME.
+heard_you
+  WHAT WAS THAT!?!?
+  A KNOCK!? I'LL GET IT!
+  WHO'S THERE!? IS IT TREATS?
+  KNOCK!? MRRP? WHO!?
+ground_lies
+  WHOA WHOA WHOA! TIGER BOY!
+  THE FLOOR IS ATTACKING!
+  EARTHQUAKE! SAVE THE BALLIES!
+not_again
+  NOT THE SHAKING! MRAOOOW!
+  NO NO NO. CRAZY BOY SAYS NO.
+  THE SHAKE AGAIN!? RUDE!
+  PUT THE SHAKE DOWN. GENTLY.
+hooded
+  PUFFED UP. BIG. VERY BRAVE.
+  HISS! I MEAN... HELLO.
+  I AM A TIGER. A SMALL TIGER.
+ancestor_fear
+  GEN # WAS SCARED OF THIS TOO.
+inherited
+  GEN # LEFT ME A BALL.
+counted
+  I COUNTED MY BALLS. 200.
+  BORED. TIME TO KNOCK SOMETHING
+  NOTHING TO HUNT. YOU, THEN.
+put_me_down
+  PUT ME DOWN! NO, WAIT. PETS.
+  UNHAND THE TIGER!
+  I CAN WALK. I AM A CAT.
+warm_hands
+  PRRRRRRRRRR.
+  SO WARM. SO NICE. SO GENTLE.
+  HOLD ME. SING THE LITANY.
+  HEEE'S MY LITTLE BOYY. PRRR.
+sky_down
+  WHY IS THE FLOOR UP THERE!?
+  UPSIDE DOWN. TIGER STYLE.
+  I CAN SEE THE CEILING LEDGE!
+  WHAT WAS THAT!? OH. GRAVITY.
+heavy_eyes
+  NOT SLEEPY. NOT SLEEPY...
+  EYES OPEN. EYES... OPEN...
+  A DONUT NAP. A SHORT ONE.
+  JUST RESTING MY TIGER EYES.
+dream_pellets
+  ZZZ... TREAT... TREEEAT...
+  ZZZ... THE GOOD BOWL... ZZZ
+  ZZZ... A WHOLE BAG... MINE...
+  ZZZ... MEOW MIX... ZZZ...
+see_pellet
+  A TREEEAAAT? FOR ME!?
+  FOOD! GETTEM GETTEM GETTEM!
+  I SEE IT. IT SEES ME.
+see_phone
+  A GLOWY SLAB! FULL OF BIRDS?
+  THE SLAB! IS IT TREAT TIME?
+  A PHONE. I WILL SIT ON IT.
+see_nothing
+  NO FOOD. NOT ONE CRUMB. WOE.
+  THE BOWL IS EMPTY. AGAIN.
+  NOTHING. I WILL WAIL.
+see_damp
+  MY ROBOT EYE SEES DAMP.
+  THE FOUNTAIN! PUCKSTORM 3000!
+  WET? I WILL SIT IN THE TUB.
+knees
+  OLD? TIGER BOY? NEVER.
+  STILL CRAZY. STILL SO NICE.
+moon
+  THE MOON! IS IT A BALL!?
+  THE MOON. I WILL YOWL AT IT.
+anyone
+  MRRP? WHERE IS EVERYBODY?
+  HELLO? THE TREATS ARE LATE.
+  MRRRP? I WILL WAIL A BIT.
+science
+  TREATS FIX HUNGER. I CHECKED.
+  ATTACK, NO BITING: A TREAT.
+no_hat
+  GEN #. STILL NO VEST. GOOD.
+  GEN #. STILL CRAZY.
+
+p_snack
+  I SEE A TREAT IN YOUR FUTURE.
+  YOU WILL GIVE ME A TREAT.
+p_feast
+  A WHOLE BAG. ON THE COUNTER.
+  I SEE THE GOOD BOWL. FULL.
+p_pellet_soon
+  FOOD IS COMING. I CAN HEAR IT
+p_feed_me
+  FEED THE TIGER. NOW. MRAOOOW.
+p_fuzzy
+  THAT TREAT WILL GET FUZZY.
+p_more_shaking
+  MORE SHAKING. I'LL CHARGE IT.
+p_mud
+  MUD. I WILL WALK IN IT TWICE.
+  A PAW PRINT. ON YOUR DESK.
+p_big_hand
+  A HAND. I SHALL AMBUSH IT.
+  A GIANT HAND! RAH RAH RAH!
+p_bedtime
+  BEDTIME. THEN I YOWL ALL NIGHT
+p_sun
+  SUN. A WARM SPOT. FOR ME.
+p_rain
+  RAIN. I WILL WATCH IT. FROM IN
+  RAIN ON THE PALM TREES.
+p_watched
+  SOMEONE IS WATCHING. GOOD.
+p_return
+  YOUR PERSON COMES BACK. TREATS
+  THAT CRAZY CAT! HE'S BACK!
+p_tap
+  YOU WILL KNOCK. I WILL POUNCE.
+  KNOCK KNOCK. WHAT WAS THAT!?
+p_no
+  NO. UNLESS THERE ARE TREATS.
+  NOPE. DON'T. BITE. THAT.
+p_doom
+  DOOM! I'LL CHARGE IT. RAH!
+  DOOM IS A TV CAT. I WIN.
+  DOOM. THEN DINNER. I HOPE.
+p_lunch
+  LUNCH IS NEAR. IT IS FATE.
+  I SEE LUNCH. ALWAYS LUNCH.
+p_outlook
+  OUTLOOK: REAAALLY GOOD TREATS.
+  OUTLOOK: HUMMINGBIRDS.
+p_decidedly
+  YES. CRAZY BOY HAS DECIDED.
+  DECIDED. FOR NO REASON.
+p_lucky
+  LUCKY. LIKE A FOUND BALL.
+  LUCK? A BALLY UNDER THE BED.
+p_pond_no
+  THE FOUNTAIN SAYS NO.
+  THE WATER SAYS NO. I DRINK IT.
+p_pond_yes
+  THE FOUNTAIN GURGLED YES.
+  THE WATER SAYS YES. SLURP.
+p_ripples
+  RIPPLES. I SWATTED THEM.
+  TOO WIGGLY. ASK AGAIN LATER.
+  THE WATER IS RUDE. LATER.
+p_ancestor
+  GEN # SAW THIS. AND ATE IT.
+miss_phone
+  THE SLAB IS GONE. MRRP?
+  NO SLAB. NO BIRD VIDEOS.
+
+oclock
+  IT'S # O'CLOCK. TREAT O'CLOCK.
+morning
+  MORNING! I YOWLED FOR HOURS.
+so_late
+  SO LATE. ZOOMIES TIME.
+monday
+  MONDAY. STILL NOT FED.
+weekend
+  WEEKEND! LAP DAY. ALL DAY.
+p_weekend
+  THE WEEKEND! LAPS ARE COMING.
+my_name
+  @! THAT'S ME! WHAT DID I DO?
+p_famous
+  @: THE BEST LITTLE CAT EVER.
+
+rim_walk
+  I WALKED THE LEDGE. TOO EASY.
+clean_glass
+  THE GLASS. I WILL LICK IT.
+dont_look
+  DON'T LOOK. I'M HUNTING YOU.
+saw_nothing
+  WHAT WAS THAT!? NOTHING. RAH!
+plans
+  PLAN: CHARGE. THEN TREATS.
+toes
+  MY TOES ARE TIGER TOES.
+small_lot
+  TINY CAT. HUGE FEELINGS.
+  HE'S MY TINY CAT! THAT'S ME.
+popped
+  I HAD A THOUGHT. I ATE IT.
+wiggle
+  WIGGLE... WIGGLE... POUNCE!
+my_song
+  THE LITANY OF PUCK. SING IT.
+dust
+  A SPECK! GETTEM GETTEM!
+blinked
+  MY ROBOT EYE NEVER BLINKS.
+important
+  I AM THE BEST LITTLE CAT EVER.
+  EVERYBODY LOVES ME SO MUUUCH.
+secret_mud
+  SECRET: 200 BALLS. DOWNSTAIRS.
+nap_plan
+  NAP? NO. I'M WIDE AWAKE.
+ceiling
+  A HIGH LEDGE. I MUST BE ON IT.
+serious_face
+  THIS IS MY TIGER FACE. GRR.
+no_echo
+  MRAOOOW! MRAOOOW! ECHO?
+king
+  KING OF THE HALLWAY.
+smells_me
+  SMELLS LIKE A GOOD BOY.
+todo
+  TO DO: EAT. YOWL. EAT AGAIN.
+brave
+  I'M NOT SCARED OF ANYTHING.
+  I SQUARED UP TO AN UMBRELLA.
+big_pond
+  ONE DAY: A BOX THIS BIG.
+floor
+  THE FLOOR IS FOR ZOOMIES.
+snack_snacks
+  WHAT IF TREATS HAD TREATS?
+suspense
+  I MIGHT POUNCE. OR NOT. OR YES
+ancestors
+  GEN #. ALL CRAZY. ALL NICE.
+ask_me
+  ASK ME ANYTHING. ABOUT FOOD.
+legs
+  MY BACK LEGS DO BUNNY KICKS.
+shiny
+  SHINY! IS IT A BALLY!?
+guard
+  I GUARD THE HALLWAY. WHY? YES.
+  I GUARD THIS BOX. FOR REASONS.
+old_fly
+  I REMEMBER A HUMMINGBIRD.
+hi_you
+  MRRP? OH THERE YOU ARE!
+  THERE'S MY PERSON! TREATS?
+busy
+  BUSY. STARING AT A WALL.
+  BUSY BEING SO GENTLE.
+pellet_where
+  WHERE DO TREATS LIVE? TELL ME.
+rock
+  A LOAF. I AM A CAT LOAF.
+best_gen
+  GEN #. THE CRAZIEST YET.
+tidied
+  I PUSHED IT OFF THE LEDGE.
+spun
+  ZOOM ZOOM. I SPUN. WHY? YES.
+
+sunbeam
+  A SUNBEAM. I AM A DONUT IN IT.
+long_days
+  LONG DAYS. LONG HUNGRY DAYS.
+squint
+  SO BRIGHT. MY ROBOT EYE: OK.
+toast
+  WARM GLASS. A TOASTY TIGER.
+sitting_time
+  DAYTIME. WINDOW TIME.
+lunch_oclock
+  IT FEELS LIKE LUNCH. ALWAYS.
+shadow
+  MY SHADOW! I WILL FIGHT IT.
+big_sit
+  BIG DAY. BIG WINDOW STARE.
+eye_snack
+  HUMMINGBIRDS. EYE LEVEL. EEEE.
+outside
+  BIKES DOWN THERE. I'LL LUNGE.
+
+not_scared
+  DARK. MY ROBOT EYE GLOWS. HA.
+star_crumbs
+  THE STARS. ARE THEY BALLIES?
+rebel
+  UP LATE. YOWLING ON PURPOSE.
+too_quiet
+  TOO QUIET. WHAT WAS THAT!?
+what_was_that
+  WHAT WAS THAT!?!? I'LL GET IT!
+bed_soon
+  BED? I'LL SIT ON YOUR FACE.
+moon_wink
+  THE MOON WINKED. I CHARGED.
+dark_snacks
+  MIDNIGHT TREATS. PLEASE.
+night_light
+  MY RED EYE IS A NIGHT LIGHT.
+only_me
+  EVERYONE SLEEPS. I WAIL.
+snore
+  ZZZ... PRRR... ZZZ...
+  ZZZ... MRRP... ZZZ...
+  ZZZ... PRRRRRRR... ZZZ...
+mumble
+  MMF... DON'T... BITE...
+  MMF... SO GENTLE... ZZZ...
+  MMF... WHAT WAS THAT... ZZZ
+dream_chase
+  ZZZ... GETTEM GETTEM...
+  ZZZ... A HUMMINGBIRD... ZZZ
+  ZZZ... THE TV CAT... RAH...
+dream_feast
+  ZZZ... A MOUNTAIN OF TREATS
+  ZZZ... THE COUNTER BAG...
+  ZZZ... FACE IN THE GOOD BOWL
+dream_flight
+  ZZZ... A TIGER... FLYING...
+  ZZZ... ON TOP OF THE WARDROBE
+  ZZZ... UP IN THE PALM TREES
+sleep_count
+  ZZZ... ONE BALLY... TWO...
+  ZZZ... 198... 199... 200...
+  ZZZ... ONE TREAT... TWO...
+sleep_warm
+  MMM... A WARM LAP... PRRR...
+  MMM... BLANKET FORT...
+  MMM... A PERFECT DONUT...
+dream_rain
+  ZZZ... RAIN ON THE WINDOW...
+  ZZZ... THE FOUNTAIN... ZZZ
+  ZZZ... DRIP... SWAT... ZZZ
+
+# The gestures, taught on his first day (feeding: whenever he is hungry).
+teach_feed
+  KNOCK KNOCK ON ME FOR TREATS.
+  KNOCK TWICE. A TREAT. MRAOOOW
+  TWO KNOCKS ON ME: FOOD!
+  HUNGRY! KNOCK KNOCK, QUICK!
+teach_fight
+  TO FIGHT: HOLD ME UPSIDE DOWN!
+teach_hold
+  NAP TIME? HOLD ME SIDEWAYS.
+teach_shake
+  SHAKE ME. I SEE THE FUTURE.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES! GETTEM GETTEM!
+  YES. AND A TREAT, PLEASE.
+  YES! CRAZY BOY SAYS YES!
+verdict_no
+  NO. DON'T. BITE.
+  NOPE. MRAOOOW.
+  NO. NOT EVEN FOR TREATS.
+verdict_later
+  ASK AFTER MY TREAT.
+  BUSY ZOOMING. ASK LATER.
+  WHAT WAS THAT!? ASK AGAIN.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  PRRR PRRR. THE LITANY OF PUCK.
+  MRAOOOW-OOW-OOW. A SONG.
+dance_break
+  ZOOMIES! TIGER DANCE!
+  BUNNY KICKS! BUNNY KICKS!
+tail_get
+  A TAIL! WHOSE IS IT!? GETTEM!
+  MY TAIL! IT'S AMBUSHING ME!
+treasure
+  A BALLY! UNDER THE BEAN BAG!
+  TWO BALLIES!? GETTEM!
+peekaboo
+  I SEE YOU. FROM THE BOX.
+  PEEKABOO! NOW I AMBUSH YOU.
+hyah
+  RAH RAH RAH!
+  TAKE THAT, TV CAT!
+pebble
+  A BALLY! BOING! BOING!
+  BOUNCE IT. CHASE IT. LOSE IT.
+dream_big
+  WHAT IF... A BIGGER BOX?
+  WHAT IF THE WHOLE BAG IS MINE
+wish_star
+  THAT STAR IS A BALL. MINE.
+  I WISH ON THE MOON: TREATS.
+achoo
+  AH... AH... MRAOW!
+hic
+  HIC! WHAT WAS THAT!? HIC!
+boo_hee
+  AMBUSH! GOT YOU! SO GENTLE.
+  BOO! I MEAN... MRRP?
+zoom
+  TIGER BOY ZOOMS! ZOOM ZOOM!
+  ZOOMIES! FOR NO REASON!
+ooh_what
+  OOH. A BOX. I AM IN IT NOW.
+  WHAT IS THIS!? I MUST SNIFF IT
+cant_see
+  YOU CAN'T SEE ME. I'M A BOX.
+  HIDING IN THE BLANKET FORT.
+yuck
+  YUCK. THAT ONE IS STINKY.
+  NO. ONLY REAAALLY GOOD TREATS.

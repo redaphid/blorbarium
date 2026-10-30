@@ -50,7 +50,7 @@ mutant "the verdict read from the loser's log" $R 's/\*log\[o.downed\[0\] ? 1 : 
 mutant "the verdict slot one late" $R 's/if (winner.count() > o.resolved) o.verdict = winner.at(o.resolved).verdict;/if (winner.count() > o.resolved + 1) o.verdict = winner.at(uint8_t(o.resolved + 1)).verdict;/' \
   "Verdict.ReadFromTheSixteenthSlotAfterADowningOnTurnFifteen"
 mutant "gadget can draw itself" $R 's/% (kPowerCount - 1)/% kPowerCount/; s/if (p.id != power::gadget \&\& pick-- == 0)/if (pick-- == 0)/' \
-  "Powers.GadgetDrawsEachOfTheOtherEightAndNeverItself"
+  "Powers.GadgetDrawsEachOfTheOthersAndNeverItself"
 mutant "a dazzle never misses" $R 's/(draw(luck\[w\], Purpose::Dazzle) \& 1) != 0/false/' \
   "Powers.LanternDazzlesTheFriendNextTurn"
 mutant "a zap leaves the strike's mark" $R 's/return Scar::Kind::Bite;/return Scar::Kind::Claw;/' \

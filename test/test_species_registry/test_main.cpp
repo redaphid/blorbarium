@@ -10,7 +10,7 @@ using namespace blorb;
 // names and costs moves it, and that must be a decision, not an accident.
 // tools/species_neg_check.sh checks the ESP32-S3 compiler agrees with the host.
 TEST(RosterHash, IsPinned) {
-  EXPECT_EQ(rosterHash(), 5381u);   // octopus and Black Bell are part of the duel wire contract
+  EXPECT_EQ(rosterHash(), 24017u);   // puck and his ambush joined the duel wire contract (5381 before)
 }
 
 // Written out by hand from roster/roster.json (origin/roster-art d98055e), the
@@ -18,9 +18,9 @@ TEST(RosterHash, IsPinned) {
 // the battle code keys on them, so a renumbered or swapped row shows up here.
 TEST(Roster, RowsAreRosterJsonInIdOrder) {
   const char* const slugs[] = {"grungo", "mossby", "puffkin", "gilly", "mothwick",
-                               "mudge", "fizz", "hushwing", "tinker", "octopus"};
+                               "mudge", "fizz", "hushwing", "tinker", "octopus", "puck"};
   const char* const powers[] = {"foresee", "shell", "spores", "mend", "lantern",
-                                "dash", "zap", "hush", "gadget", "blackbell"};
+                                "dash", "zap", "hush", "gadget", "blackbell", "ambush"};
   ASSERT_EQ(kSpeciesCount, countOf(slugs));
   ASSERT_EQ(kPowerCount, countOf(powers));
   for (size_t i = 0; i < kSpeciesCount; ++i) {
@@ -30,7 +30,7 @@ TEST(Roster, RowsAreRosterJsonInIdOrder) {
 }
 
 TEST(Roster, AnUnnamedByteReadsAsGrungo) {
-  EXPECT_STREQ(speciesInfo(SpeciesId{10}).name, "grungo");
+  EXPECT_STREQ(speciesInfo(SpeciesId{11}).name, "grungo");
   EXPECT_STREQ(speciesInfo(SpeciesId{255}).name, "grungo");
   EXPECT_STREQ(powerInfo(PowerId{200}).name, "foresee");
 }

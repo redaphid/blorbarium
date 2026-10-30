@@ -40,7 +40,7 @@ constexpr BattleCard cardOf(SpeciesId s, uint64_t lineage, uint8_t prowess = 128
 
 namespace sp {
 inline constexpr SpeciesId grungo{0}, mossby{1}, puffkin{2}, gilly{3}, mothwick{4}, mudge{5}, fizz{6}, hushwing{7},
-    tinker{8}, octopus{9};
+    tinker{8}, octopus{9}, puck{10};
 }
 
 struct Golden {

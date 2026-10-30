@@ -57,6 +57,7 @@ pet that never meets a phone never says them; he still says everything else.
 | daydreaming | He is awake and daydreaming, a thought bubble over him (the daydream idle). |
 | stargazing | He is gazing up at the stars in the dark (the stargaze idle). |
 | refusing_rot | He has just sniffed a rotten pellet and turned it down (he eats rot only when starving). |
+| grown | He has just grown a stage (child, adult or elder): said once, at the next touch after it. |
 | sneezing | He is sneezing (the sneeze idle): a puffball sneezes sparkles. |
 | booing | He has sneaked up to the glass and popped up at the kid (the boo idle). |
 | hiccuping | He has the hiccups (the hiccup idle): a hop with each one. |

@@ -64,6 +64,9 @@ constexpr void power_hush(PowerPhase ph, PowerCtx& c) {
 
 constexpr void power_blackbell(PowerPhase ph, PowerCtx& c) { power_hush(ph, c); }
 
+// Puck's ambush is the dash's rule with his own name: the pounce lands first.
+constexpr void power_ambush(PowerPhase ph, PowerCtx& c) { power_dash(ph, c); }
+
 // Never called: the core swaps gadget for the power it draws before any phase.
 constexpr void power_gadget(PowerPhase, PowerCtx&) {}
 
