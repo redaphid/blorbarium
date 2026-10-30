@@ -42,6 +42,7 @@ textarea { min-height: 7rem; } .row { display: flex; flex-wrap: wrap; gap: 8px; 
 #toast { position: fixed; right: 16px; bottom: 16px; background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; }
 svg text { fill: var(--muted); font-size: 11px; } svg .line { fill: none; stroke: var(--accent); stroke-width: 2; } svg .grid { stroke: var(--rule); }
 details summary { cursor: pointer; color: var(--accent); }
+.chip.ok { color: var(--good); } .chip.warn { color: var(--warn); } .chip.bad, .bad { color: var(--bad); }
 </style></head>
 <body>
 <header><b>Blorbarium admin</b><nav id="nav"></nav><span class="muted" id="who"></span></header>
@@ -61,7 +62,7 @@ async function api(path, body) {
   if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 }
-const VIEWS = [["overview", "Badges"], ["ota", "OTA"], ["analytics", "Analytics"]];
+const VIEWS = [["overview", "Badges"], ["health", "Health"], ["ota", "OTA"], ["analytics", "Analytics"]];
 function nav(on) { $("#nav").innerHTML = VIEWS.map(([k, n]) => '<a href="#' + k + '" class="' + (on === k ? "on" : "") + '">' + n + "</a>").join(""); }
 
 function login() {
@@ -115,6 +116,7 @@ async function badge(mac) {
   for (const c of d.creatures) (byLineage[c.lineage_id || "(no lineage id)"] ||= []).push(c);
   $("#main").innerHTML = '<section class="panel"><div class="row"><h2 style="flex:1">' + esc(b.label || "Badge") + ' <span class="mono muted">' + esc(b.mac) + '</span></h2><input id="label" value="' + esc(b.label || "") + '" placeholder="Label"><button id="save-label">Save label</button></div>' +
     '<dl class="kv"><dt>firmware</dt><dd>' + esc(b.fw || "–") + "</dd><dt>first seen</dt><dd>" + when(b.first_seen) + "</dd><dt>last seen</dt><dd>" + when(b.last_seen) + "</dd><dt>settings</dt><dd class=\"mono\">" + esc(b.settings ? JSON.stringify(b.settings) : "–") + "</dd></dl></section>" +
+    '<section class="panel" id="remote"><h2>Remote debug</h2><p class="muted">Loading…</p></section>' +
     '<section class="panel"><h2>Creatures, by lineage</h2>' + Object.entries(byLineage).map(([l, cs]) => "<h3>" + esc(l) + '</h3><div class="scroll"><table><thead><tr><th>pet</th><th>gen</th><th>stage</th><th>status</th><th>pack</th><th>first seen</th></tr></thead><tbody>' +
       cs.map((c) => '<tr class="link" data-c="' + c.id + '"><td>' + esc(c.name || "") + " " + esc(c.species) + "</td><td>" + esc(c.generation ?? "?") + "</td><td>" + esc(c.stage || "") + "</td><td>" + chip(c.status) + "</td><td>" + (c.pack_version ? "v" + c.pack_version : "–") + "</td><td>" + when(c.first_seen) + "</td></tr>").join("") + "</tbody></table></div>").join("") + "</section>" +
     '<section class="panel"><h2>Actions</h2>' + actionsTable(d.actions) + "</section>" + pushPanel("one", mac) +
@@ -132,6 +134,93 @@ async function badge(mac) {
   loadDebug().catch(() => {});
   $("#save-label").onclick = async () => { await api("/badges/" + mac, { label: $("#label").value }); toast("Saved."); };
   wireCancel(); wirePush("one", mac);
+  remotePanel(mac).catch((e) => ($("#remote").innerHTML = "<h2>Remote debug</h2><p>" + esc(e.message) + "</p>"));
+}
+
+// ---- remote debug (reports.js) ----
+const ago = (t, now) => { if (!t) return "never"; const s = Math.round(((now || Date.now()) - t) / 1000); return s < 90 ? s + " s ago" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
+const dur = (s) => (s == null ? "–" : s < 5400 ? Math.round(s / 60) + " min" : s < 172800 ? Math.round(s / 3600) + " h" : Math.round(s / 86400) + " d");
+const tag = (text, cls) => '<span class="chip ' + cls + '">' + esc(text) + "</span>";
+// A badge at a glance: red when updates are off or it crashed, amber when silent or short of RAM.
+function verdict(b, now) {
+  if (!b.received_at) return tag("no report yet", "warn");
+  if (b.auto_on === 0) return tag("no Wi-Fi network", "bad");
+  if (b.crashed) return tag("crashed (" + b.reset + ")", "bad");
+  if (now - b.received_at > 36 * 3600e3) return tag("silent " + ago(b.received_at, now), "warn");
+  if (b.minheap != null && b.minheap < 4096) return tag("minheap " + b.minheap, "warn");
+  return tag("healthy", "ok");
+}
+function otaCell(o, b) {
+  if (!o) return "–";
+  return (o.auto ? "" : '<b class="bad">no network</b> · ') + "next " + dur(b.next_check_s) + " · every " + dur((o.every_min || 0) * 60) +
+    (o.absent_streak || o.server_streak ? " · streaks " + o.absent_streak + "/" + o.server_streak : "") + (o.on_trial ? " · on trial" : "") + (o.rolled_back ? ' · <b class="bad">rolled back ' + esc(o.rolled_back) + "</b>" : "") +
+    '<br><span class="muted">' + esc(b.ota_last || o.last || "") + "</span>";
+}
+function petCell(p) { return p ? esc(p.kind) + (p.stage ? " · " + esc(p.stage) : "") + (p.age_min != null ? " · " + dur(p.age_min * 60) : "") + (p.hunger_pct != null ? " · hunger " + p.hunger_pct + "%" : "") : "–"; }
+
+async function health() {
+  const h = await api("/health");
+  const now = h.now;
+  $("#main").innerHTML = '<section class="panel"><h2>Badge health</h2><p class="muted">Each badge reports at the end of every Wi-Fi window that reaches the site (a few times a day, when it is dark and nobody is using it). Click a badge for its log, crashes and remote commands.</p><div class="scroll"><table><thead><tr><th>badge</th><th>verdict</th><th>last report</th><th>firmware</th><th>up</th><th>last reset</th><th>updates</th><th>heap / min</th><th>battery</th><th>signal</th><th>pet</th><th>cmds</th></tr></thead><tbody>' +
+    h.badges.map((b) => '<tr class="link" data-mac="' + esc(b.mac) + '"><td><b>' + esc(b.label || "") + '</b> <span class="mono">' + esc(b.mac) + "</span></td><td>" + verdict(b, now) + "</td><td>" + ago(b.received_at, now) + "</td><td>" + esc(b.fw || b.badge_fw || "–") + "</td><td>" + dur(b.uptime_s) + "</td><td>" + esc(b.reset || "–") + (b.crashes ? ' <span class="bad">(' + b.crashes + " crash" + (b.crashes === 1 ? "" : "es") + " kept)</span>" : "") + "</td><td>" + otaCell(b.ota, b) + "</td><td>" + (b.heap != null ? Math.round(b.heap / 1024) + " KB / " + b.minheap + " B" : "–") + "</td><td>" + (b.vbat_mv ? (b.vbat_mv / 1000).toFixed(2) + " V" : "–") + "</td><td>" + (b.rssi != null ? b.rssi + " dBm" : "–") + "</td><td>" + petCell(b.pet) + "</td><td>" + (b.open_commands || "") + "</td></tr>").join("") +
+    "</tbody></table></div></section>";
+  for (const tr of document.querySelectorAll("tr[data-mac]")) tr.onclick = () => (location.hash = "badge/" + tr.dataset.mac);
+}
+
+// The cable's shot lines (paint/shot.h: PackBits over little-endian RGB565, base64 a line) onto a canvas.
+function drawShot(canvas, text) {
+  const lines = text.split("\n").filter((l) => l.startsWith("[hw] shot "));
+  const begin = /w=(\d+) h=(\d+)/.exec(lines[0] || "");
+  if (!begin) throw new Error("not a shot");
+  const W = Number(begin[1]), H = Number(begin[2]);
+  const bytes = [];
+  for (const l of lines.slice(1)) { const c = l.slice(10); if (c.startsWith("end")) break; const b = atob(c); for (let i = 0; i < b.length; i++) bytes.push(b.charCodeAt(i)); }
+  const px = [];
+  for (let i = 0; i < bytes.length;) {
+    const h = bytes[i++];
+    if (h < 128) { const p = bytes[i] | (bytes[i + 1] << 8); i += 2; for (let k = 0; k <= h; k++) px.push(p); }
+    else for (let k = 0; k < h - 127; k++, i += 2) px.push(bytes[i] | (bytes[i + 1] << 8));
+  }
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d"), img = ctx.createImageData(W, H);
+  for (let i = 0; i < W * H && i < px.length; i++) {
+    const p = px[i], r = (p >> 11) & 31, g = (p >> 5) & 63, b = p & 31;
+    img.data.set([(r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2), 255], i * 4);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+async function remotePanel(mac) {
+  const d = await api("/badges/" + mac + "/reports");
+  const el = $("#remote");
+  const cmd = (c) => esc(c.payload?.verb || "") + (c.payload?.arg != null ? " " + esc(c.payload.arg) : "");
+  el.innerHTML = '<h2>Remote debug</h2><p class="muted">Commands go out in the reply to the badge\'s next report and run once its Wi-Fi window closes; their results come back in the report after. Updates can be checked sooner or less often, never switched off.</p>' +
+    '<div class="row"><button data-cmd="check">Check for updates</button><input id="every" type="number" min="30" max="720" step="30" placeholder="Check every … min (30–720)" style="flex:0 1 220px"><button data-cmd="interval">Set interval</button><button data-cmd="state">Capture state</button><button data-cmd="shot">Screenshot</button><button class="danger" data-cmd="reboot">Reboot</button></div>' +
+    '<div class="row"><input id="marquee" maxlength="120" placeholder="A message for the kids: it scrolls across the screen (120 characters, plain letters)"><button class="primary" data-cmd="marquee">Send message</button></div>' +
+    '<div class="row"><input id="debugLine" maxlength="120" class="mono" placeholder="Any cable DEBUG line: wifi, wifi list, power stats, ota check… (its output comes back in the next report\'s state)"><button data-cmd="debug">Run</button></div>' +
+    (d.commands.length ? '<div class="scroll"><table><thead><tr><th>#</th><th>command</th><th>status</th><th>queued</th><th>sent</th><th>result</th></tr></thead><tbody>' + d.commands.map((c) => "<tr><td>" + c.id + '</td><td class="mono">' + cmd(c) + "</td><td>" + chip(c.status) + "</td><td>" + when(c.created_at) + "</td><td>" + (c.delivered_at ? when(c.delivered_at) : "–") + '</td><td class="mono">' + esc(c.result?.text || "") + (c.result?.shot_id ? ' <button data-shot="' + c.result.shot_id + '">View</button>' : "") + "</td></tr>").join("") + "</tbody></table></div>" : "") +
+    "<h3>Reports</h3>" + (d.reports.length ? '<div class="scroll"><table><thead><tr><th>when</th><th>firmware</th><th>up</th><th>reset</th><th>heap / min / big</th><th>battery</th><th>signal</th><th>window ended</th><th></th></tr></thead><tbody>' +
+      d.reports.map((r, i) => "<tr><td>" + when(r.received_at) + "</td><td>" + esc(r.fw || "") + "</td><td>" + dur(r.uptime_s) + "</td><td>" + (r.crashed ? '<b class="bad">' + esc(r.reset) + "</b>" : esc(r.reset || "")) + "</td><td>" + (r.heap ?? "–") + " / " + (r.minheap ?? "–") + " / " + (r.big ?? "–") + "</td><td>" + (r.vbat_mv ? (r.vbat_mv / 1000).toFixed(2) + " V" : "–") + "</td><td>" + (r.rssi ?? "–") + '</td><td class="mono">' + esc(r.ota_last || "") + '</td><td><button data-rep="' + i + '">Show</button></td></tr>').join("") + "</tbody></table></div>" : '<p class="muted">No report yet: one comes at the end of the badge\'s next Wi-Fi window.</p>') +
+    '<div id="repOne"></div>';
+  for (const b of el.querySelectorAll("[data-cmd]")) b.onclick = async () => {
+    const verb = b.dataset.cmd, body = { verb };
+    if (verb === "interval") body.arg = Number($("#every").value);
+    if (verb === "marquee") body.arg = $("#marquee").value.slice(0, 120);
+    if (verb === "debug") body.arg = $("#debugLine").value.trim();
+    if (verb === "reboot" && !confirm("Reboot this badge at its next quiet moment?")) return;
+    try { await api("/badges/" + mac + "/debug", body); toast("Queued: " + verb + ". It goes out at the badge's next Wi-Fi window."); remotePanel(mac); } catch (e) { toast(e.message); }
+  };
+  const showShot = async (id, into) => { into.innerHTML = '<canvas style="width:240px;height:240px;border-radius:50%;background:#000;image-rendering:pixelated"></canvas>'; try { drawShot($("canvas", into), (await api("/blob/device/" + id)).lines); } catch (e) { into.textContent = e.message; } };
+  for (const b of el.querySelectorAll("[data-shot]")) b.onclick = () => showShot(b.dataset.shot, $("#repOne"));
+  for (const b of el.querySelectorAll("[data-rep]")) b.onclick = () => {
+    const r = d.reports[Number(b.dataset.rep)];
+    const pre = (title, text) => (text ? "<h3>" + title + '</h3><pre class="mono" style="white-space:pre-wrap;max-height:28rem;overflow:auto;margin:0">' + esc(text) + "</pre>" : "");
+    $("#repOne").innerHTML = "<h3>Report of " + when(r.received_at) + "</h3>" + (r.shot_id ? '<div id="repShot"></div>' : "") +
+      pre("Crash (core dump of the boot before)", r.crash ? JSON.stringify(r.crash, null, 1) : "") + pre("Command results", r.results && r.results.length ? r.results.map((x) => "#" + x.id + " " + (x.ok ? "ok " : "REFUSED ") + x.text).join("\n") : "") +
+      pre("Updates", JSON.stringify(r.ota, null, 1)) + pre("Pet", JSON.stringify(r.pet)) + pre("State capture", r.state_text) + pre("Serial log, last 8 KB", r.log_text);
+    if (r.shot_id) showShot(r.shot_id, $("#repShot"));
+    $("#repOne").scrollIntoView({ block: "nearest" });
+  };
 }
 
 function wireRaw() {
@@ -208,6 +297,7 @@ async function route() {
   try {
     if (view === "badge") await badge(arg);
     else if (view === "creature") await creature(arg);
+    else if (view === "health") await health();
     else if (view === "ota") await ota();
     else if (view === "analytics") await analytics(arg);
     else await overview();

@@ -10,7 +10,9 @@
 //   POST /api/stats            {mac, genome | genome_hash, stats_version?, stats?, parents?, analytics?, fw?}  (#38, #50)
 //   GET  /api/diary?mac=&genome_hash=   the pet's diary, newest first (#39, for the phone #42)
 //   GET  /api/pet?genome_hash=          the phone's view: bible, sample lines, diary, family (#42)
+//   GET  /api/species?name=             {species, sketch, lines}: a species' built-in lines (catalog.json)
 //   GET  /api/ble-name?mac=             {name, pet}: the name the badge advertises, for an NFC link (docs/nfc.md)
+//   GET  /api/badge/online?mac=&since=  {joined, at}: has the badge checked in since? (the Wi-Fi card, reports.js)
 //   POST /api/personality      {genome, bible}: lines rewritten from the owner's edited text (#43)
 //   GET  /api/creatures[?mac=] everything the server holds (Authorization: Bearer ADMIN_TOKEN)
 //
@@ -19,12 +21,14 @@
 // triggers, DIARY_CRON, daily) runs any job still queued, each pet's diary
 // entry, and the night's packs.
 import { hexToBytes, rawSheet, genomeHash } from "./genome.js";
+import catalog from "./catalog.json" with { type: "json" };
 import { traitSheet } from "./traits.js";
 import { generatePack, DEFAULT_MODEL, DEFAULT_PROMPT } from "./pipeline.js";
 import { packText, signPack } from "./pack.js";
 import * as store from "./store.js";
 import { storeUpload, runDiaries, diaryFor, statsDelta } from "./diary.js";
 import { handleAdmin, handleBadge, enqueue } from "./admin.js";
+import { postReport, getOnline } from "./reports.js";
 import { ADMIN_HTML } from "./admin_page.js";
 import { firmware } from "./firmware.js";
 import { withZone } from "./zone.js";
@@ -150,6 +154,17 @@ async function postPetLines(request, env) {
     parentHash: /^[0-9a-f]{64}$/.test(String(body.parent_genome_hash ?? "")) ? body.parent_genome_hash : null,
   });
   const creature = await store.findCreature(env.DB, mac, hash);
+  // His life stats, riding along in the same Wi-Fi window (#38/#39): stored as
+  // POST /api/stats stores them, so the nightly diary has something to tell.
+  // Optional; a bad one never costs him his lines.
+  if (body.stats && typeof body.stats === "object" && !Array.isArray(body.stats)) {
+    try {
+      await storeUpload(env.DB, { mac, creatureId: creature.id, statsVersion: Number(body.stats_version) || 1,
+        stats: body.stats, parents: body.parents });
+    } catch (e) {
+      console.error(JSON.stringify({ msg: "pet-lines stats not stored", mac, error: String(e?.message ?? e) }));
+    }
+  }
 
   const have = await store.latestPack(env.DB, creature.id);
   if (have) return packOr(body, packReply(have, creature, { cached: true }));
@@ -308,6 +323,16 @@ async function getDiary(url, env) {
 // the whole genome to change anything.
 const SAMPLE = ["peckish", "crunch", "heard_you", "warm_hands", "sky_down", "moon", "p_doom", "p_lucky", "rim_walk",
   "brave", "dream_feast", "verdict_yes"];
+// A species' own lines, the ones built into every badge of it (catalog.json):
+// what the phone shows for a pet the server has not met yet. Nothing per badge.
+function getSpecies(url) {
+  const name = String(url.searchParams.get("name") ?? "").toLowerCase();
+  const sp = Object.hasOwn(catalog.species, name) ? catalog.species[name] : null;
+  if (!sp) return fail(404, "no such species");
+  const lines = sp.lines ?? {};
+  return json({ species: name, sketch: sp.sketch ?? null, lines: Object.fromEntries(SAMPLE.filter((k) => lines[k]).map((k) => [k, lines[k]])) },
+    200, { "cache-control": "public, max-age=3600" });
+}
 async function newestByHash(env, hash) {
   return env.DB.prepare("SELECT * FROM creatures WHERE genome_hash = ?1 ORDER BY last_seen DESC LIMIT 1").bind(hash).first();
 }
@@ -325,6 +350,8 @@ async function getPet(url, env) {
      FROM creatures c WHERE c.id = ?1`).bind(c.parent_id).first() : null;
   return json({
     species: c.species, name: c.name, generation: c.generation, stage: c.stage, status: c.status,
+    // When his badge last checked in over Wi-Fi (only its pet-lines POST sets it): the page folds its Wi-Fi box away.
+    checked_in_at: c.last_seen ?? null,
     bible: pack?.bible ?? null, catchphrases: pack ? JSON.parse(pack.catchphrases_json ?? "[]") : [],
     version: pack?.version ?? null, personality_version: pack?.personality_version ?? null,
     lines: Object.fromEntries(SAMPLE.filter((k) => lines[k]).map((k) => [k, lines[k]])),
@@ -525,7 +552,9 @@ export default {
       if (url.pathname === "/api/stats" && request.method === "POST") return await postStats(request, env);
       if (url.pathname === "/api/debug" && request.method === "POST") return await postDebug(request, env);
       if (url.pathname === "/api/pet" && request.method === "GET") return await getPet(url, env);
+      if (url.pathname === "/api/species" && request.method === "GET") return getSpecies(url);
       if (url.pathname === "/api/ble-name" && request.method === "GET") return await getBleName(url, env);
+      if (url.pathname === "/api/badge/online" && request.method === "GET") return await getOnline(url, env, { json, fail, normaliseMac });
       if (url.pathname === "/api/personality" && request.method === "POST") return await postPersonality(request, env);
       if (url.pathname === "/api/diary" && request.method === "GET") return await getDiary(url, env);
       if (url.pathname === "/api/creatures" && request.method === "GET") {
@@ -542,6 +571,8 @@ export default {
         if (!(await isAdmin(request, env))) return fail(401, "admin token");
         return await handleAdmin(request, url, env, helpers);
       }
+      // Remote debug (reports.js): the report each Wi-Fi window ends with; the reply is its commands.
+      if (url.pathname === "/api/badge/report" && request.method === "POST") return await postReport(request, env, helpers);
       if (url.pathname.startsWith("/api/badge/")) return await handleBadge(request, url, env, helpers);
       if (url.pathname.startsWith("/api/")) return fail(404, "no such endpoint");
       if (url.pathname.startsWith("/fw/")) return withZone(request, await firmware(request, env, decodeURIComponent(url.pathname.slice(4))));

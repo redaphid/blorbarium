@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blorbarium</title>
-<meta name="description" content="Talk to grungo's dish over Bluetooth.">
+<meta name="description" content="Talk to grungo's Blorb over Bluetooth.">
 <meta name="theme-color" content="#2f3a1c">
 <link rel="icon" href="grungo.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -115,6 +115,9 @@ h2 { margin: 0; font: 500 0.8rem/1 var(--font-display); text-transform: uppercas
 .kv dd { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; overflow-wrap: anywhere; }
 .hash { color: var(--teal); }
 details summary { cursor: pointer; color: var(--teal); font-weight: 700; }
+#wifiFold > summary { font: 500 0.8rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+#wifiFold > :not(summary) { margin: 12px 0 0; }
+#wifiBox[data-connected="1"] #wifiFold > summary { color: var(--teal); }
 .genes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; max-height: 18rem; overflow-y: auto; }
 .genes li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 0.9rem; }
 .genes li:nth-child(odd) { background: var(--bg); }
@@ -126,7 +129,10 @@ form { display: flex; gap: 10px; flex-wrap: wrap; }
 #bible { width: 100%; font: 0.98rem/1.45 var(--font-body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; }
 .says { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .says li { font: 0.8rem var(--font-mono); background: var(--fg); color: var(--bg); padding: 3px 10px; border-radius: 999px; }
-.journal { margin: 0; padding-left: 1.2rem; display: grid; gap: 8px; font-size: 0.95rem; }
+.journal { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.journal li { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.journal time { display: block; font: 500 0.78rem var(--font-mono); color: var(--muted); }
+.journal p { margin: 4px 0 0; font-size: 1.02rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 input {
   flex: 1 1 10rem; min-width: 0; font: 1rem var(--font-body); padding: 11px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--bg); color: var(--fg);
@@ -156,6 +162,7 @@ button.big { width: 100%; font-size: 1.2rem; padding: 18px 22px; }
 .steps li[data-s="err"]::before { content: "!"; border-color: var(--warn); color: var(--warn); }
 #updateBar > i { background: var(--teal); }
 #sayInput { text-transform: uppercase; }
+#marqueeInput { text-transform: uppercase; }
 .debug { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
 .debug ol { list-style: none; margin: 10px 0 0; padding: 0; font: 0.72rem/1.45 var(--font-mono); max-height: 60vh; overflow: auto; }
 .debug li { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -180,44 +187,108 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   <div class="dish-wrap">
     <div class="dish" id="dish"><img src="grungo.png" alt="grungo, a green frog in a brown hood" width="384" height="384"></div>
     <h1 id="name">grungo</h1>
-    <p class="meta" id="meta">Bring your phone close to the dish and connect.</p>
+    <p class="meta" id="meta">Bring your phone close to the Blorb and connect.</p>
     <p class="doing" id="doing" hidden></p>
     <div class="actions">
-      <button id="connect" type="button">Connect to a dish</button>
+      <button id="connect" type="button">Connect to a Blorb</button>
       <button id="reconnect" type="button" class="ghost" hidden>Reconnect</button>
-      <button id="another" type="button" class="ghost" hidden>Connect another dish</button>
+      <button id="another" type="button" class="ghost" hidden>Connect another Blorb</button>
       <button id="wider" type="button" class="ghost" hidden>Can't find it? Search wider</button>
     </div>
   </div>
 
   <section id="mockChooser" hidden>
-    <h2>Choose a dish (pretend)</h2>
+    <h2>Choose a Blorb (pretend)</h2>
     <div class="actions" id="mockChoices"></div>
   </section>
 
   <section id="updateBox" hidden>
     <h2>Update</h2>
     <p class="hint" id="updateFw"></p>
-    <ol class="steps" id="updateSteps" hidden><li>Get ready</li><li>Turn the badge</li><li>Send</li><li>Restart</li><li>Check</li></ol>
+    <ol class="steps" id="updateSteps" hidden><li>Get ready</li><li>Turn the Blorb</li><li>Send</li><li>Restart</li><li>Check</li></ol>
     <p class="update-text" id="updateText" role="status" aria-live="polite">Checking for updates…</p>
     <div class="bar" id="updateBar" role="progressbar" aria-label="Update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i style="width: 0%"></i></div>
     <div class="actions">
       <button id="updateGo" type="button" class="big" hidden>Update</button>
-      <button id="mockPress" type="button" class="ghost" hidden>Press the dish's button (pretend)</button>
+      <button id="mockPress" type="button" class="ghost" hidden>Press the Blorb's button (pretend)</button>
     </div>
   </section>
 
   <!-- Wi-Fi: Improv over the same connection (improv.js, docs/wifi-ota.md).
        Shown only for a dish that has the Improv service. -->
   <section id="wifiBox" hidden>
-    <h2>Wi-Fi</h2>
-    <p class="hint">Give the dish your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
+    <details id="wifiFold" open>
+    <summary id="wifiSummary">Wi-Fi</summary>
+    <p class="hint">Give the Blorb your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
     <form id="wifiForm" autocomplete="off">
-      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
+      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required
+             autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
       <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
       <button type="submit">Connect to Wi-Fi</button>
     </form>
-    <p class="hint" id="wifiHint" role="status">The password goes to the dish and nowhere else.</p>
+    <p class="hint" id="wifiHint" role="status">The password goes to the Blorb and nowhere else.</p>
+    <button type="button" id="wifiWhy" class="ghost" hidden>Reconnect and ask why</button>
+    </details>
+    <script>
+    // Once the dish's Wi-Fi works, this box folds away at the bottom of the page:
+    // it joined from this page, or its badge checked in with the site over Wi-Fi
+    // (the pet-lines check, which only the badge makes) in the last week. Not set
+    // up, or the last try failed: it stays open where it is, so setup stays easy.
+    window.BlorbWifi = (() => {
+      const el = (id) => document.getElementById(id);
+      const FRESH_MS = 7 * 24 * 3600 * 1000;
+      const home = document.createComment("the Wi-Fi box's place");
+      el("wifiBox").before(home);
+      const st = { joined: false, failed: false, checkedIn: false };
+      function place() {
+        const ok = !st.failed && (st.joined || st.checkedIn);
+        const box = el("wifiBox");
+        if (ok) el("debugBox").before(box);
+        else home.after(box);
+        el("wifiFold").open = !ok;
+        el("wifiSummary").textContent = ok ? "Wi-Fi: connected \u2713" : "Wi-Fi";
+        box.dataset.connected = ok ? "1" : "";
+      }
+      // Nothing may cover the Wi-Fi fields. On the owner's phone a suggestion
+      // menu (the debug panel's lists of his thoughts and stimuli) stayed open
+      // over the network name. While the form is open and one of its fields has
+      // focus, no other input on the page offers a list, so no such menu can
+      // open or stay open; they get their lists back when the form is left.
+      const form = el("wifiForm"), lists = new Map();
+      function clearTheWay() {
+        const a = document.activeElement;
+        if (a && a !== document.body && !form.contains(a) && a.matches("input, select, textarea")) a.blur();
+        for (const input of document.querySelectorAll("input[list]")) {
+          if (form.contains(input)) continue;
+          lists.set(input, input.getAttribute("list"));
+          input.removeAttribute("list");
+        }
+      }
+      function giveBack() {
+        for (const [input, list] of lists) if (input.isConnected) input.setAttribute("list", list);
+        lists.clear();
+      }
+      form.addEventListener("focusin", clearTheWay);
+      form.addEventListener("pointerdown", clearTheWay);
+      form.addEventListener("focusout", (e) => { if (!form.contains(e.relatedTarget)) giveBack(); });
+      // Opening the form closes whatever menu another field had open.
+      el("wifiFold").addEventListener("toggle", () => {
+        const a = document.activeElement;
+        if (el("wifiFold").open && a && a.list && !form.contains(a)) a.blur();
+        if (!el("wifiFold").open) giveBack();
+      });
+      addEventListener("blorb:pet", (e) => {
+        if (!e.detail.fromBadge) return;   // a ?pet= link or a remembered pet may not be the dish in hand
+        st.checkedIn = Date.now() - (Number(e.detail.pet.checked_in_at) || 0) < FRESH_MS;
+        place();
+      });
+      return {
+        joined() { Object.assign(st, { joined: true, failed: false }); place(); },
+        failed() { st.failed = true; place(); },
+        reset() { Object.assign(st, { joined: false, failed: false, checkedIn: false }); place(); },
+      };
+    })();
+    </script>
   </section>
 
   <section id="drivesBox" hidden>
@@ -230,7 +301,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     <dl class="kv">
       <dt>Genome hash</dt><dd class="hash" id="genomeHash">…</dd>
       <dt>Genes</dt><dd id="geneCount">…</dd>
-      <dt>Dish hash</dt><dd id="dishHash">…</dd>
+      <dt>Blorb hash</dt><dd id="dishHash">…</dd>
       <dt>Firmware</dt><dd id="fw">…</dd>
     </dl>
     <details>
@@ -253,6 +324,15 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       <button type="submit">Rename</button>
     </form>
     <p class="hint" id="nameHint">Up to 15 letters, numbers, - or _.</p>
+  </section>
+
+  <section id="marqueeBox" hidden>
+    <h2>Marquee</h2>
+    <form id="marqueeForm" autocomplete="off">
+      <input id="marqueeInput" name="marquee" maxlength="120" placeholder="HAPPY BIRTHDAY" aria-label="Words for the whole screen" required>
+      <button type="submit">Show it</button>
+    </form>
+    <p class="hint" id="marqueeHint">Up to 120 characters, in giant letters across the whole Blorb screen. A press of the button ends it.</p>
   </section>
 
   <section id="sayBox" hidden>
@@ -279,7 +359,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
       const tell = (tone, text) => { el("teachHint").dataset.tone = tone; el("teachHint").textContent = text; };
       const refused = (err) => err.code === 404 ? "This needs the next firmware."
         : err.code === 409 && /TRIAL/.test(err.message) ? "The new version is still checking itself. Try again in a few minutes."
-        : `The dish said no (${err.message}).`;
+        : `The Blorb said no (${err.message}).`;
       el("teachInput").addEventListener("input", (e) => {
         const at = e.target.selectionStart;
         e.target.value = e.target.value.toUpperCase();
@@ -309,54 +389,161 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
   </section>
 
   <section id="selfBox" hidden>
-    <!-- His personality and journal (#42), and the owner's own words for him
-         (#43). The server knows him by his genome, read from the badge above;
-         Web Bluetooth never shows the badge's address. -->
-    <h2>Who he is</h2>
+    <!-- His diary, his lines, his personality (#42) and the owner's own words
+         for him (#43). The server knows him by his genome hash, read from the
+         badge above (Web Bluetooth never shows the badge's address), or from
+         this page's own link, ?pet=<genome hash>, so the diary reads without
+         the badge. The text is shown exactly as the server wrote it. -->
+    <h2 id="diaryTitle">His diary</h2>
     <p class="hint" id="selfHint">Looking him up…</p>
     <div id="selfBody" hidden>
-      <textarea id="bible" rows="7" aria-label="His personality, in words"></textarea>
-      <p class="hint">This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online.</p>
-      <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
-      <ul class="says" id="says"></ul>
-      <h2>His journal</h2>
       <ol class="journal" id="journal"></ol>
+      <h2>Things he says</h2>
+      <ul class="says" id="says"></ul>
+      <h2>Who he is</h2>
+      <textarea id="bible" rows="7" aria-label="His personality, in words"></textarea>
+      <p class="hint" id="bibleHint">This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online.</p>
+      <div class="actions"><button id="saveBible" type="button">Save and rewrite his lines</button></div>
       <h2>His family</h2>
       <p class="hint" id="family"></p>
+      <p class="hint">His diary has its own page, no Blorb needed: <a id="petLink" href="./">open it</a>.</p>
     </div>
     <script>
     (() => {
       const el = (id) => document.getElementById(id);
-      let genome = null;
+      const HASH_RE = /^[0-9a-f]{64}$/;
+      let genome = null, hash = null;
       const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
       const tell = (tone, text) => { el("selfHint").dataset.tone = tone; el("selfHint").textContent = text; };
+      const remember = (h) => { try { localStorage.setItem("blorb.pet", h); } catch {} };
+      const remembered = () => { try { return localStorage.getItem("blorb.pet"); } catch { return null; } };
+      // "2026-10-27" -> "Tuesday, October 27" (plus the year when it is not this one).
+      function niceDay(day) {
+        const d = new Date(`${day}T12:00:00Z`);
+        if (Number.isNaN(d.getTime())) return day;
+        const o = { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" };
+        if (d.getUTCFullYear() !== new Date().getUTCFullYear()) o.year = "numeric";
+        return d.toLocaleDateString(undefined, o);
+      }
       function render(p) {
-        el("bible").value = p.bible || "";
+        el("diaryTitle").textContent = p.name || p.species ? `${p.name || p.species}'s diary` : "His diary";
+        el("journal").replaceChildren(...(p.diary.length ? p.diary : [{ day: "", entry: "No entries yet. He writes one each night after he has been online." }]).map((d) => {
+          const li = document.createElement("li");
+          const t = document.createElement("time");
+          if (d.day) { t.dateTime = d.day; t.textContent = niceDay(d.day); }
+          const text = document.createElement("p");
+          text.textContent = d.entry;
+          li.append(t, text);
+          return li;
+        }));
         el("says").replaceChildren(...Object.values(p.lines).flat().slice(0, 12).map((l) => {
           const li = document.createElement("li"); li.textContent = l; return li;
         }));
-        el("journal").replaceChildren(...(p.diary.length ? p.diary : [{ day: "", entry: "No entries yet. He writes one each night after he has been online." }]).map((d) => {
-          const li = document.createElement("li");
-          const b = document.createElement("b"); b.textContent = d.day ? d.day + " " : "";
-          li.append(b, d.entry); return li;
-        }));
+        el("bible").value = p.bible || "";
         const f = p.family, bits = [];
         if (f.parent) bits.push(`Child of ${f.parent.name || "a"} ${f.parent.species}, generation ${f.parent.generation ?? "?"}${f.parent.status === "dead" ? ", now gone" : ""}.`);
         if (f.children.length) bits.push(`Parent of ${f.children.map((c) => `${c.name || "a"} ${c.species} (generation ${c.generation ?? "?"})`).join(", ")}.`);
         el("family").textContent = bits.join(" ") || `Generation ${p.generation ?? "?"}. The first of his line the server has met.`;
+        el("petLink").href = `./?pet=${hash}`;
+        // Changing who he is needs his whole genome, which only the badge has.
+        el("bible").readOnly = !genome;
+        el("saveBible").hidden = !genome;
+        el("bibleHint").textContent = genome
+          ? "This is who he is, in words. Change it and save: his lines are rewritten to match (a minute or two), and he picks them up the next time he is online."
+          : "This is who he is, in words. Connect his Blorb to change it.";
         el("selfBody").hidden = false;
       }
+      // Everything this box shows belongs to one pet. `seq` counts the pets it
+      // has been about: a reply for an earlier one (a slow fetch from the badge
+      // before, a remembered pet) is dropped, never drawn over this one.
+      let seq = 0, who = null;
+      function clear(hint = "Looking him up…") {
+        seq++;
+        el("selfBody").hidden = true;
+        el("diaryTitle").textContent = "His diary";
+        el("journal").replaceChildren();
+        el("says").replaceChildren();
+        el("bible").value = "";
+        el("bible").hidden = false;
+        el("family").textContent = "";
+        el("petLink").href = "./";
+        tell("", hint);
+      }
+      // A badge the server has not met yet (it has not checked in over Wi-Fi):
+      // what the page has from the badge itself, and where the rest will come from.
+      async function renderFromBadge(mine) {
+        const pet = who && who.pet ? who.pet : "his Blorb";
+        const later = `appears after ${pet}'s first Wi-Fi check-in.`;
+        const note = (text) => { const li = document.createElement("li"); const p = document.createElement("p"); p.textContent = text; li.append(p); return li; };
+        el("diaryTitle").textContent = who && who.pet ? `${who.pet}'s diary` : "His diary";
+        el("journal").replaceChildren(note(`His diary ${later}`));
+        el("says").replaceChildren();
+        el("bible").value = "";
+        el("bible").hidden = true;
+        el("saveBible").hidden = true;
+        el("bibleHint").textContent = `Who he is, in words, and the lines written just for him: this ${later}`;
+        el("family").textContent = `Generation ${who && who.gen != null ? who.gen : "?"}, from his Blorb. His family tree ${later}`;
+        el("petLink").href = "./";
+        el("selfBody").hidden = false;
+        tell("", `The site has not met ${pet} yet. Everything his Blorb holds is on this page; the rest ${later}`);
+        // His species' own lines, the ones built into his Blorb.
+        if (!who || !who.species) return;
+        const r = await fetch(`/api/species?name=${encodeURIComponent(who.species)}`).catch(() => null);
+        if (mine !== seq || !r || !r.ok) return;
+        const s = await r.json().catch(() => null);
+        if (mine !== seq || !s || !s.lines) return;
+        el("says").replaceChildren(...Object.values(s.lines).flat().slice(0, 12).map((l) => {
+          const li = document.createElement("li"); li.textContent = l; return li;
+        }));
+      }
       async function look() {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", genome));
-        const r = await fetch(`/api/pet?genome_hash=${hex(digest)}`).catch(() => null);
-        if (!r) return tell("err", "Offline: his personality shows when the phone is online.");
+        const mine = seq;
+        const r = await fetch(`/api/pet?genome_hash=${hash}`).catch(() => null);
+        if (mine !== seq) return;
+        if (!r) return tell("err", "Offline: his diary shows when the phone is online.");
+        if (r.status === 404 && genome) return renderFromBadge(mine);
         if (r.status === 404) return tell("", "He has not been online yet. The first time he is, the server writes his personality and his own lines.");
         if (!r.ok) return tell("err", `The server said no (${r.status}).`);
         const p = await r.json();
+        if (mine !== seq) return;
         tell("ok", p.version ? `Personality version ${p.personality_version}, lines version ${p.version}.` : "His lines are being written.");
+        el("bible").hidden = false;
         render(p);
+        dispatchEvent(new CustomEvent("blorb:pet", { detail: { pet: p, fromBadge: !!genome } }));
       }
-      addEventListener("blorb:genome", (e) => { genome = e.detail; el("selfBox").hidden = false; look().catch((err) => tell("err", err.message)); });
+      function show(h) {
+        clear();
+        hash = h;
+        el("selfBox").hidden = false;
+        return look().catch((err) => tell("err", err.message));
+      }
+      // A badge said hello: this box is now about him, whatever it showed before.
+      addEventListener("blorb:hello", (e) => {
+        who = e.detail;
+        genome = null; hash = null;
+        clear();
+        el("selfBox").hidden = false;
+      });
+      addEventListener("blorb:genome", async (e) => {
+        const mine = seq;
+        genome = e.detail;
+        const h = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", genome)));
+        if (mine !== seq) return;
+        remember(h);
+        show(h);
+      });
+      // A badge without a genome to look him up by: only what it said.
+      addEventListener("blorb:nogenome", () => renderFromBadge(seq));
+      // The page let the badge go: nothing of his stays.
+      addEventListener("blorb:leave", () => {
+        who = null; genome = null; hash = null;
+        clear();
+        el("selfBox").hidden = true;
+      });
+      // Before any badge: the pet in the link, else the last one this phone met.
+      const linked = String(new URLSearchParams(location.search).get("pet") ?? "").toLowerCase();
+      const first = HASH_RE.test(linked) ? linked : remembered();
+      if (HASH_RE.test(first ?? "")) show(first);
       el("saveBible").addEventListener("click", async () => {
         const bible = el("bible").value.trim();
         if (!genome || bible.length < 20) return tell("err", "Write at least a sentence about him.");
@@ -542,7 +729,7 @@ class BleTransport {
   async open() {
     const server = await this.device.gatt.connect();
     try {
-      const svc = await server.getPrimaryService(NUS);
+      const svc = this.nus = await server.getPrimaryService(NUS);
       this.rx = await svc.getCharacteristic(RX);
       this.data = await svc.getCharacteristic(OTA_DATA).catch(() => null);
       const tx = await svc.getCharacteristic(TX);
@@ -583,6 +770,13 @@ class BleTransport {
     }
     for (let i = 0; i < bytes.length; i += 20) await put(bytes.slice(i, i + 20));
   }
+  // One request on the debug link (docs/debug-ble.md), such as WIFI. Firmware
+  // without the link has no such characteristic (NotFoundError).
+  async debugAsk(cmd) {
+    const c = await gattRetry(this.device, () => this.nus.getCharacteristic(BlorbImprov.DEBUG_CHAR));
+    return BlorbImprov.askDebug(c, cmd, { retry: (op) => gattRetry(this.device, op) });
+  }
+  get connected() { return !!(this.device && this.device.gatt.connected); }
   get name() { return this.device ? this.device.name : ""; }
   // The same for this dish on this site whatever it advertises: an update renames it.
   get id() { return this.device ? this.device.id : ""; }
@@ -649,14 +843,17 @@ class MockTransport {
     // As Chrome keeps it: the name the dish had when it was chosen.
     this.name = dish.name;
     this.id = `mock:${dish.shipped.name}`;
-    this.petName = "grungo";
-    const genes = [[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
+    // A dish nearby by its species' name is that pet, with its own genome.
+    const own = BlorbOta.SPECIES.includes(dish.name) ? dish.name : null;
+    this.petName = own || "grungo";
+    const genes =[[0x01,4,0],[0x01,4,0],[0x02,6,0],[0x03,5,1],[0x04,5,1],[0x10,3,0],[0x11,6,0],[0x11,6,1],
       [0x12,4,0],[0x13,5,0],[0x20,6,0],[0x20,6,2],[0x21,2,0],[0x22,4,2],[0x30,3,0],[0x31,4,2],[0x32,4,0],[0x7f,8,0]];
     const bytes = [];
     genes.forEach(([type, len, stage], i) => {
       bytes.push(type, len, 0, stage, 0, 128, (i + 1) & 255, 0);
       for (let k = 0; k < len; k++) bytes.push((i * 37 + k * 11) & 255);
     });
+    if (own) for (let k = 0; k < own.length; k++) bytes[bytes.length - 1 - k] ^= own.charCodeAt(k);
     this.genome = new Uint8Array(bytes);
     // Improv, pretend: the password "wrong" cannot join.
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -695,6 +892,7 @@ class MockTransport {
     else if (verb === "TWIST" && this.dish.twist(args)) lines.push(this.dish.twist(args));
     else if (verb === "TWIST" && args.startsWith("rename ")) { this.petName = args.slice(7); lines.push("OK rename"); }
     else if (verb === "TWIST" && args.startsWith("say ")) lines.push("OK say");
+    else if (verb === "MARQUEE") lines.push(args.trim() ? `OK shown=1 len=${Math.min(args.trim().length, 120)}` : "ERR 400 BAD_ARGS");
     else if (verb === "OTA") lines.push(this.dish.command(args));
     else lines.push("ERR 404 UNKNOWN_VERB");
     this.deliver(lines.map((l) => `#${id} ${l}`));
@@ -718,6 +916,7 @@ class MockTransport {
   }
   async reopen() { await this.dish.reconnect(); this.epoch++; }
   open() { return this.reopen(); }
+  get connected() { return this.dish.connected; }
   close() { this.dish.drop(); }
 }
 
@@ -807,12 +1006,16 @@ function renderGenome(hash, genes) {
 }
 
 let link = null, transport = null, poll = null;
+// What the dish says of itself: its Wi-Fi MAC (STATE's mac=, as 12 hex; the
+// MAC its check-ins with the site carry) and its firmware (HELLO's fw=).
+let dishMac = null, dishFw = null;
 
 async function refreshState() {
   const r = await link.send("STATE");
   for (const line of r.lines) {
     if (line.startsWith("phase=")) {
       const st = kv(line);
+      if (st.mac) dishMac = (BlorbOta.parseBadge(st.mac) || {}).mac || null;
       renderState(st);
       refreshAdopt(st.phase).catch(() => {});
     }
@@ -833,11 +1036,12 @@ async function refreshAdopt(phase) {
 
 async function refreshHello() {
   const h = kv((await link.send("HELLO")).ok);
+  dishFw = h.fw || null;
   $("name").textContent = h.name || "grungo";
   $("nameInput").placeholder = h.name || "grungo";
   $("sayTitle").textContent = `${h.name || "grungo"} speaks!`;
-  $("fw").textContent = `${h.fw || "?"} on ${transport.name || "badge"}`;
-  $("updateFw").textContent = `${transport.name || "This dish"} runs version ${h.fw || "?"}.`;
+  $("fw").textContent = `${h.fw || "?"} on ${transport.name || "Blorb"}`;
+  $("updateFw").textContent = `${transport.name || "This Blorb"} runs version ${h.fw || "?"}.`;
   return h;
 }
 
@@ -891,7 +1095,14 @@ async function session({ offer = true } = {}) {
   // TIME sets the clock a dish with no battery has lost. An update never needs it,
   // so a refusal, like an unreadable STATE, still leaves the update on offer.
   await link.send(`TIME ${now} ${tz}`).catch((e) => debugLog("err", `TIME: ${e.message}`));
-  await refreshHello();
+  const hello = await refreshHello();
+  if (transport !== here) return;
+  // The personality box is about this badge from now on, whatever it showed before.
+  const species = BlorbOta.SPECIES.includes(transport.name) ? transport.name : null;
+  const said = (hello.name || species || "").replace(/_/g, " ");
+  dispatchEvent(new CustomEvent("blorb:hello", { detail: {
+    pet: said ? said[0].toUpperCase() + said.slice(1) : null,
+    gen: hello.gen ?? null, species } }));
   await refreshState().catch((e) => debugLog("err", `STATE: ${e.message}`));
   ui.status("connected", connectedTo());
   ui.show("connect", false);
@@ -899,11 +1110,14 @@ async function session({ offer = true } = {}) {
   ui.show("another", true);
   ui.show("nameBox", true);
   ui.show("sayBox", true);
+  ui.show("marqueeBox", true);
   ui.show("wifiBox", !!transport.improv);
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
     debugLog("err", `GENOME failed: ${e.message}`);
-    if (transport === here) genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
+    if (transport !== here) return;
+    genomeUnavailable(e.code === 404 ? "not on this firmware" : `couldn't read (${e.message})`);
+    dispatchEvent(new CustomEvent("blorb:nogenome"));
   });
   if (transport !== here) return;
   link.send("SUB state stage hatched died").catch(() => {});
@@ -920,7 +1134,7 @@ let trialTimer = null, awaitingTrial = null;
 const TRIAL_POLL_MS = 2000;
 
 const petName = () => { const n = $("name").textContent || "grungo"; return n[0].toUpperCase() + n.slice(1); };
-const connectedTo = () => `Connected to ${transport.name || "the dish"}`;
+const connectedTo = () => `Connected to ${transport.name || "the Blorb"}`;
 
 // This page's update tokens, one store per dish for as long as the page is open.
 // Keyed by the device, not its name: the update that needs the token renames the dish.
@@ -933,13 +1147,13 @@ function pageTokens() {
 
 const UPDATE_STEP = {
   checking: "Getting the update ready…",
-  begin: "Asking the dish…",
-  confirm: "Turn the badge around to say yes (or press its button).",
+  begin: "Asking the Blorb…",
+  confirm: "Tip the Blorb onto its side to say yes (or press its button).",
   sending: "Sending the update…",
   resuming: "Moved out of reach, keep the phone close.",
-  finishing: "Restarting the dish…",
-  rebooting: "Restarting the dish…",
-  verifying: "Saying hello to the dish…",
+  finishing: "Restarting the Blorb…",
+  rebooting: "Restarting the Blorb…",
+  verifying: "Saying hello to the Blorb…",
   trial: "Checking that the new version works…",
 };
 
@@ -956,14 +1170,14 @@ function showSteps(at, failed = false) {
 
 // Why an update stopped, by the dish's last= or ERR text. Nothing here changes the pet.
 const UPDATE_FAILED = {
-  no_confirm: "Nobody pressed the button on the dish, so nothing changed.",
+  no_confirm: "Nobody pressed the button on the Blorb, so nothing changed.",
   download: "Couldn't download the update, so nothing changed.",
-  unreachable: "Couldn't reach the dish again. Bring the phone close and connect.",
+  unreachable: "Couldn't reach the Blorb again. Bring the phone close and connect.",
   BUSY: () => `${petName()} is busy right now, so nothing changed. Try again in a minute.`,
-  BAD_SIGNATURE: "The dish didn't trust this update, so nothing changed.",
-  WRONG_BOARD: "This update is for a different dish, so nothing changed.",
-  TRIAL: "The dish is still checking its last update. Try again in a few minutes.",
-  NOT_YOURS: "Another phone is updating this dish right now, so nothing changed.",
+  BAD_SIGNATURE: "The Blorb didn't trust this update, so nothing changed.",
+  WRONG_BOARD: "This update is for a different Blorb, so nothing changed.",
+  TRIAL: "The Blorb is still checking its last update. Try again in a few minutes.",
+  NOT_YOURS: "Another phone is updating this Blorb right now, so nothing changed.",
 };
 
 function updateSay(text, tone = "") {
@@ -1048,8 +1262,8 @@ async function offerUpdate() {
   let st, confirm;
   try { ({ status: st, confirm } = await readOtaStatus()); } catch (e) {
     if (transport !== here) return;
-    if (e.code === 404) return updateSay("This dish needs one update over a cable first. After that it can update by Bluetooth.");
-    return checkAgain("Couldn't ask the dish about updates.");
+    if (e.code === 404) return updateSay("This Blorb needs one update over a cable first. After that it can update by Bluetooth.");
+    return checkAgain("Couldn't ask the Blorb about updates.");
   }
   if (transport !== here) return;
   if (st.trial === "1") return sayOnTrial(st, confirm);
@@ -1071,8 +1285,8 @@ async function offerUpdate() {
   // A version that went back is offered by name, so it is never retried in a silent loop.
   const failedBefore = !halfway && st.rolledback === v;
   updateSay(halfway ? `An update to ${v} stopped partway. It can carry on.`
-    : failedBefore ? `Last time, ${v} didn't work on this dish, so it went back to ${st.fw}. ${petName()} is fine.`
-    : `Version ${v} is ready for the dish.`);
+    : failedBefore ? `Last time, ${v} didn't work on this Blorb, so it went back to ${st.fw}. ${petName()} is fine.`
+    : `Version ${v} is ready for the Blorb.`);
   $("updateGo").textContent = halfway ? `Finish updating to ${v}` : failedBefore ? "Try again" : `Update to ${v}`;
   ui.show("updateGo", true);
   showSteps(-1);
@@ -1105,8 +1319,8 @@ function showUpdateOutcome(o) {
   nextDishFirst(o.ok && o.kind !== "unconfirmed" && o.kind !== "rolled_back");
   if (o.ok && o.kind === "updated") return updateSay(`Updated to ${o.fw}. ${fine}`, "ok");
   if (o.ok && o.kind === "unconfirmed") return updateSay(`The new version ${o.fw} is still checking itself. ${fine} Keep this page open, or come back within five minutes.`);
-  if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the dish went back to ${o.fw}. ${fine}`, "err");
-  if (o.ok) return updateSay(`The dish is already up to date. ${fine}`, "ok");
+  if (o.ok && o.kind === "rolled_back") return updateSay(`The update didn't take, so the Blorb went back to ${o.fw}. ${fine}`, "err");
+  if (o.ok) return updateSay(`The Blorb is already up to date. ${fine}`, "ok");
   const why = UPDATE_FAILED[o.reason] || "The update didn't finish, so nothing changed.";
   updateSay(`${typeof why === "function" ? why() : why} ${fine}`, "err");
 }
@@ -1147,6 +1361,14 @@ function onDrop(from) {
   if (from !== transport) return;   // a dish this page has let go
   clearInterval(poll);
   clearTimeout(trialTimer);
+  // A join in flight ends here: from 0.7.35 the dish drops Bluetooth to join (improv.js).
+  if (from.improv && from.improv.dropped) from.improv.dropped();
+  if (wifiAway === from) {
+    if (link) link.failAll("disconnected");
+    if ($("status").dataset.s !== "connecting") ui.status("lost", `${petName()} is joining Wi-Fi; Bluetooth is back in about a minute`);
+    ui.show("reconnect", false);
+    return;
+  }
   // The updater hears first, so the requests failing next read as a drop and not an error.
   if (updater) updater.dropped();
   if (link) link.failAll("disconnected");
@@ -1159,6 +1381,9 @@ function onDrop(from) {
 // wide: every device with the UART service, for a dish whose name the filters miss.
 async function connect(wide = false) {
   let mine = null;
+  // A fresh pick (after a failed reconnect, say) may be another badge: let the
+  // last one go first, so nothing of his shows for the next.
+  if (transport) leave();
   ui.show("wider", false);
   try {
     if (params.has("mock") && !globalThis.BlorbOtaMock) await loadScript("ota-mock.js");
@@ -1166,7 +1391,7 @@ async function connect(wide = false) {
       mine = transport = new MockTransport(onDrop);
       globalThis.BlorbDebug?.attachMock(transport.dish);
     } else if (params.has("mock")) {
-      ui.status("connecting", "Choose the dish…");
+      ui.status("connecting", "Choose the Blorb…");
       const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide, badge, badgeNames));
       if (!ad.dish) throw new Error("no UART service");
       mine = transport = new MockTransport(onDrop, ad.dish);
@@ -1175,7 +1400,7 @@ async function connect(wide = false) {
       await transport.open();
     } else {
       mine = transport = new BleTransport(onDrop);
-      ui.status("connecting", "Choose the dish…");
+      ui.status("connecting", "Choose the Blorb…");
       await transport.pick(wide);
       ui.status("connecting", "Connecting…");
       await transport.open();
@@ -1186,7 +1411,7 @@ async function connect(wide = false) {
     console.error(e);
     if (mine && mine !== transport) return;
     if (e.name === "NotFoundError") {
-      ui.status("idle", "No dish chosen");
+      ui.status("idle", "No Blorb chosen");
       ui.show("wider", !wide && !params.get("d"));
     } else { ui.status("lost", "Couldn't connect"); ui.show("reconnect", !!(transport && (transport.device || transport.dish))); }
   }
@@ -1194,7 +1419,10 @@ async function connect(wide = false) {
 
 // What the page shows before any dish, so the next one starts from it.
 // Every hint in a section, so one added later resets with the rest.
-const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
+const FRESH = { name: $("name").textContent, meta: $("meta").textContent, sayTitle: $("sayTitle").textContent,
+  // Plain-text hints only: one holding a link (the diary page's) keeps its link.
+  namePlaceholder: $("nameInput").placeholder,
+  hints: [...document.querySelectorAll("main section .hint")].filter((el) => !el.children.length).map((el) => [el, el.textContent]) };
 
 // ?b=: say whose Blorb the link finds, and ask the site which name it
 // advertises (for firmware older than its id) now, at load: the chooser must
@@ -1226,6 +1454,7 @@ function leave() {
   if (link) link.failAll("left");
   link = null;
   awaitingTrial = null;
+  dishMac = null; dishFw = null; wifiAway = null;
   if (old) old.close();
   for (const el of document.querySelectorAll("main > section")) el.hidden = true;
   $("name").textContent = FRESH.name;
@@ -1234,6 +1463,18 @@ function leave() {
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
   $("wifiPassword").value = "";
+  ui.show("wifiWhy", false);
+  BlorbWifi.reset();
+  // What the last badge told the page: none of it may show for the next one.
+  for (const id of ["genomeHash", "geneCount", "dishHash", "fw"]) $(id).textContent = "…";
+  for (const id of ["genes", "drives"]) $(id).replaceChildren();
+  $("dish").dataset.phase = ""; $("dish").dataset.asleep = "0";
+  $("doing").textContent = "";
+  $("updateFw").textContent = "";
+  $("sayTitle").textContent = FRESH.sayTitle;
+  $("nameInput").placeholder = FRESH.namePlaceholder;
+  for (const id of ["nameInput", "sayInput", "teachInput", "marqueeInput"]) $(id).value = "";
+  dispatchEvent(new CustomEvent("blorb:leave"));
   for (const [el, text] of FRESH.hints) {
     el.textContent = text;
     el.dataset.tone = "";
@@ -1258,7 +1499,7 @@ async function reconnect() {
     if (transport !== here) return;
     // Say what failed, and offer the chooser too: a fresh pick never reuses a stale link.
     const why = e && e.message ? ` (${e.message})` : "";
-    ui.status("lost", `Couldn't reconnect${why}. Try again, or tap Connect to choose the dish afresh.`);
+    ui.status("lost", `Couldn't reconnect${why}. Try again, or tap Connect to choose the Blorb afresh.`);
     ui.show("connect", true);
   }
 }
@@ -1274,7 +1515,7 @@ $("adopt").addEventListener("click", async () => {
     await refreshState();
   } catch (err) {
     hint.dataset.tone = "err";
-    hint.textContent = err.code === 409 ? "Not now: the dish is busy updating. Try again in a few minutes." : `The dish said no (${err.message}).`;
+    hint.textContent = err.code === 409 ? "Not now: the Blorb is busy updating. Try again in a few minutes." : `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1288,7 +1529,7 @@ $("nameForm").addEventListener("submit", async (e) => {
     await link.send(`TWIST rename ${name}`);
     const h = await refreshHello();
     hint.dataset.tone = "ok";
-    hint.textContent = h.name === name ? `He answers to ${name} now.` : `The dish replied with ${h.name}.`;
+    hint.textContent = h.name === name ? `He answers to ${name} now.` : `The Blorb replied with ${h.name}.`;
     $("nameInput").value = "";
   } catch (err) {
     if (err.code === 409 && /TRIAL/.test(err.message)) {
@@ -1296,7 +1537,7 @@ $("nameForm").addEventListener("submit", async (e) => {
       return readOtaStatus().catch(() => {});
     }
     hint.dataset.tone = "err";
-    hint.textContent = `The dish said no (${err.message}).`;
+    hint.textContent = `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1304,22 +1545,119 @@ $("nameForm").addEventListener("submit", async (e) => {
 
 function wifiTell(tone, text) { $("wifiHint").dataset.tone = tone; $("wifiHint").textContent = text; }
 
+// The dish a network was just sent to, while its drop of Bluetooth is expected.
+let wifiAway = null;
+// How long the site is asked for the check-in (&wifi_wait_ms= shortens it for a test).
+const WIFI_WAIT_MS = Number(params.get("wifi_wait_ms")) || 120000;
+// From 0.7.35 the dish drops Bluetooth for its join and its check-in with the site.
+const dropsBluetooth = () => !!dishFw && !BlorbOta.isNewer("0.7.35", dishFw);
+
+// GET /api/badge/online: has the badge checked in with the site since `since`?
+async function askOnline(mac, since) {
+  const r = await fetch(`/api/badge/online?mac=${mac}&since=${since}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`online ${r.status}`);
+  return Object.assign(await r.json(), { date: r.headers.get("date"), localAt: Date.now() });
+}
+
+// Back to the same dish over Bluetooth once it brings Bluetooth back, with no chooser.
+async function backOnBluetooth(here, ms) {
+  if (here.connected) return true;
+  ui.status("connecting", "Reconnecting…");
+  try { await here.reopen(ms); } catch (e) { return false; }
+  if (transport !== here) return false;
+  link = new Link(here, onEvent);
+  await session({ offer: false });
+  return transport === here;
+}
+
+// Why it did not join, in the dish's own masked words (WIFI on the debug link):
+// its "networks ...; last outcome: ..." and "network #1: ..." lines.
+async function wifiWhy(here, { lead = "", tone = "err", secrets = [] } = {}) {
+  const pet = petName();
+  ui.show("wifiWhy", false);
+  try {
+    if (!(await backOnBluetooth(here, 90000))) throw new Error("not back");
+    if (!here.debugAsk) throw new Error("no debug link");
+    const r = await here.debugAsk("WIFI");
+    if (transport !== here) return;
+    const why = BlorbImprov.wifiReason(r.lines, secrets);
+    wifiTell(tone, `${lead}${why.length ? `${pet} says: ${why.join(" · ")}` : `${pet} gave no reason.`}`);
+  } catch (e) {
+    if (transport !== here) return;
+    debugLog("err", `wifi why: ${e.message}`);
+    wifiTell(tone, `${lead}Couldn't reach ${pet} over Bluetooth to ask why. Bring the phone close and try again.`);
+    ui.show("wifiWhy", true);
+    if (!here.connected) { ui.status("lost", "Lost connection"); ui.show("reconnect", true); }
+  }
+}
+
+// A 0.7.35+ dish has the network and has dropped Bluetooth to join it: the
+// site says when it checks in; if it does not, the dish says why.
+async function wifiAfterDrop(here, { mac, since, before, secrets }) {
+  const pet = petName();
+  wifiAway = here;
+  wifiTell("", `Sent. ${pet} is dropping Bluetooth to join the network; this takes up to a minute.`);
+  ui.status("lost", `${pet} is joining Wi-Fi; Bluetooth is back in about a minute`);
+  ui.show("reconnect", false);
+  try {
+    // No MAC (a badge whose STATE has none): the site can't be asked; the dish can.
+    if (!mac) return await wifiWhy(here, { tone: "", secrets });
+    const r = await BlorbImprov.waitOnline({ check: (s) => askOnline(mac, s), since, before, forMs: WIFI_WAIT_MS, stop: () => transport !== here });
+    if (r.stopped || transport !== here) return;
+    if (r.joined) {
+      wifiTell("ok", `${pet} is online.`);
+      BlorbWifi.joined();
+      if (!(await backOnBluetooth(here, 90000)) && transport === here) { ui.status("lost", "Lost connection"); ui.show("reconnect", true); }
+      return;
+    }
+    BlorbWifi.failed();
+    const lead = r.failed === r.asked ? `Couldn't reach the site to see whether ${pet} checked in. `
+      : `${pet} did not check in with the site in two minutes. `;
+    wifiTell("err", `${lead}Waiting for ${pet}'s Bluetooth to come back to ask why…`);
+    await wifiWhy(here, { lead, secrets });
+  } finally {
+    if (wifiAway === here) wifiAway = null;
+  }
+}
+
+$("wifiWhy").addEventListener("click", () => { if (transport) wifiWhy(transport); });
+
 $("wifiForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
   const improv = transport && transport.improv;
-  if (!improv || !ssid) return;
-  wifiTell("", `Asking the dish…`);
+  if (!improv || !ssid || wifiAway) return;
+  const here = transport, mac = dishMac;
+  ui.show("wifiWhy", false);
+  wifiTell("", `Asking the Blorb…`);
+  // While a hand says yes: the site's clock, and what it already had for this badge.
+  const startedAt = Date.now();
+  const baseline = mac && !params.has("mock") ? askOnline(mac, 0).catch(() => null) : Promise.resolve(null);
   try {
-    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the dish: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
+    const r = await improv.join(ssid, password, {
+      onAsk: () => wifiTell("", "Say yes on the Blorb: tip it on its side (or press its button) while it asks \u201cJoin Wi-Fi?\u201d"),
+      onSent: () => {
+        wifiAway = here;
+        if (dropsBluetooth()) wifiTell("", `Sent. ${petName()} is dropping Bluetooth to join the network; this takes up to a minute.`);
+      },
+    });
     $("wifiPassword").value = "";
-    wifiTell("ok", `The dish joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
+    if (r && r.dropped) {
+      const b = await baseline;
+      const since = startedAt + (b ? BlorbImprov.clockOffset(b.date, b.localAt) : 0) - 1000;
+      return await wifiAfterDrop(here, { mac, since, before: b ? b.at : null, secrets: [ssid, password] });
+    }
+    if (wifiAway === here) wifiAway = null;
+    wifiTell("ok", `The Blorb joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
+    BlorbWifi.joined();
   } catch (err) {
+    BlorbWifi.failed();
+    if (wifiAway === here) wifiAway = null;
     debugLog("err", `improv join: ${err.message}`);
     wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
-      : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`
-      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the dish. Try again, and turn the dish around when it asks \u201cJoin Wi-Fi?\u201d"
-      : err.code === "TIMEOUT" ? "The dish didn't answer. If it is in a fight, try again once it's over."
+      : err.code === BlorbImprov.ERROR.unableToConnect ? `The Blorb couldn't join "${ssid}". Check the password, and that the Blorb is in reach of the router.`
+      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the Blorb. Try again, and tip the Blorb on its side when it asks \u201cJoin Wi-Fi?\u201d"
+      : err.code === "TIMEOUT" ? "The Blorb didn't answer. If it is in a fight, try again once it's over."
       : `Something went wrong (${err.message}). Try again.`);
   }
 });
@@ -1339,10 +1677,35 @@ $("sayForm").addEventListener("submit", async (e) => {
   try {
     const r = await link.send(`TWIST say ${text}`);
     hint.dataset.tone = "ok";
-    hint.textContent = `He said "${text}" (dish replied OK ${r.ok}).`;
+    hint.textContent = `He said "${text}" (Blorb replied OK ${r.ok}).`;
   } catch (err) {
     hint.dataset.tone = "err";
-    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The dish said no (${err.message}).`;
+    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The Blorb said no (${err.message}).`;
+  }
+});
+
+// MARQUEE (docs/ble.md): the whole screen says it, then the pet comes back.
+$("marqueeInput").addEventListener("input", (e) => {
+  const el = e.target, at = el.selectionStart;
+  el.value = el.value.toUpperCase();
+  el.setSelectionRange(at, at);
+});
+
+$("marqueeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("marqueeInput").value.toUpperCase().replace(/\s+/g, " ").trim().slice(0, 120);
+  const hint = $("marqueeHint");
+  if (!text) return;
+  hint.dataset.tone = ""; hint.textContent = "Sending…";
+  try {
+    const r = await link.send(`MARQUEE ${text}`);
+    hint.dataset.tone = "ok";
+    hint.textContent = kv(r.ok).queued === "1"
+      ? `"${text}" will show once the fight is over.`
+      : `"${text}" is on the Blorb's screen.`;
+  } catch (err) {
+    hint.dataset.tone = "err";
+    hint.textContent = err.code === 404 ? "This needs the next firmware." : `The Blorb said no (${err.message}).`;
   }
 });
 
@@ -1360,7 +1723,7 @@ $("updateGo").addEventListener("click", () => $("updateGo").dataset.check ? offe
 $("mockPress").addEventListener("click", () => transport.dish.press());
 
 if (params.has("mock")) {
-  $("footer").textContent = "Mock mode: a pretend dish, nothing is sent over Bluetooth.";
+  $("footer").textContent = "Mock mode: a pretend Blorb, nothing is sent over Bluetooth.";
   if (!params.has("nearby")) connect();
 } else if (!navigator.bluetooth) {
   ui.show("unsupported", true);

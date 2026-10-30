@@ -56,7 +56,7 @@ def main():
         # Without ?b= nothing changes: no lookup, the old meta line, the old filters.
         asked.clear()
         page.goto(f"{base}/index.html?d=mossby")
-        assert page.text_content("#meta").startswith("Bring your phone close to the"), page.text_content("#meta")
+        assert page.text_content("#meta") == "Bring your phone close to the Blorb and connect."
         page.click("#connect")
         page.wait_for_function("window.__filters !== null")
         assert page.evaluate("window.__filters") == [{"name": "mossby"}]

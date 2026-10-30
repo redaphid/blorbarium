@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 PUBLIC = pathlib.Path(__file__).resolve().parent.parent / "public"
 FAKE_BT = pathlib.Path(__file__).resolve().parent / "fake_bluetooth.js"
 NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-PRESS = "Press the button on the dish to say yes."
+PRESS = "Press the button on the Blorb to say yes."
 TOKEN = "Tq3vX9bLk2mWc8RfY1sJpA"
 FINE = "Grungo is fine."
 CHECKING = f"The new version 0.4.0 is still checking itself. {FINE} Keep this page open, or come back within five minutes."
@@ -103,7 +103,7 @@ def drop_gaps_lost_ack(browser, base):
     assert s["confirms"] == 1, f"CONFIRMs {s['confirms']}"
     assert s["flashed"] == s["sha"], "the dish hashed what it wrote to the release's SHA-256"
     assert s["fw"] == "0.4.0"
-    for text in ("Press the button on the dish to say yes.", "Moved out of reach, keep the phone close.", "Restarting the dish…",
+    for text in ("Press the button on the Blorb to say yes.", "Moved out of reach, keep the phone close.", "Restarting the Blorb…",
                  "Checking that the new version works…"):
         assert text in seen, f"never said {text!r}"
     assert any(t.startswith("Sending the update… ") and t.endswith("%") for t in seen), "no progress shown"
@@ -126,11 +126,11 @@ def nothing_written(query, press, want, last):
 def rolls_back(browser, base):
     page = open_page(browser, base, "mock=1&faults=rollback")
     update(page, press=True)
-    wait_text(page, f"The update didn't take, so the dish went back to 0.3.0. {FINE}")
+    wait_text(page, f"The update didn't take, so the Blorb went back to 0.3.0. {FINE}")
     s = page.evaluate(STATS)
     assert s["reboots"] == 2 and s["flashed"] == s["sha"], "into the new image, then back"
     reconnect(page)
-    wait_text(page, f"Last time, 0.4.0 didn't work on this dish, so it went back to 0.3.0. {FINE}")
+    wait_text(page, f"Last time, 0.4.0 didn't work on this Blorb, so it went back to 0.3.0. {FINE}")
     go = page.locator("#updateGo")
     assert go.is_visible() and go.text_content() == "Try again", go.text_content()
     return page, s
@@ -151,13 +151,13 @@ def reload_on_own_trial(browser, base):
 
 def anothers_trial(browser, base):
     page = open_page(browser, base, f"mock=1&faults=none&fw=0.4.0&trial_from=0.3.0&trial_token={TOKEN}&trial_ms=3000")
-    wait_text(page, f"The dish is still checking its last update. Try again in a few minutes.", timeout=15000)
+    wait_text(page, f"The Blorb is still checking its last update. Try again in a few minutes.", timeout=15000)
     rename_locked(page)
     page.locator("#reconnect").wait_for(state="visible", timeout=20000)
     s = page.evaluate(STATS)
     assert s["confirms"] == 0 and s["refusedConfirms"] >= 1, s
     page.locator("#reconnect").click()
-    wait_text(page, f"Last time, 0.4.0 didn't work on this dish, so it went back to 0.3.0. {FINE}", timeout=20000)
+    wait_text(page, f"Last time, 0.4.0 didn't work on this Blorb, so it went back to 0.3.0. {FINE}", timeout=20000)
     assert page.text_content("#updateGo") == "Try again"
     assert page.locator("#nameInput").is_enabled(), "rename unlocked after the trial"
     return page, page.evaluate(STATS)
@@ -283,7 +283,7 @@ def old_name_to_species(browser, base):
     assert s["drops"] == 1 and s["reboots"] == 1 and s["confirms"] >= 1, s
     assert s["fw"] == "0.7.0" and not s["trial"], s
     assert s["timeKnown"], "the restart lost the clock and the page set it again"
-    for text in (PRESS, "Moved out of reach, keep the phone close.", "Restarting the dish…", "Checking that the new version works…"):
+    for text in (PRESS, "Moved out of reach, keep the phone close.", "Restarting the Blorb…", "Checking that the new version works…"):
         assert text in seen, f"never said {text!r}"
     assert page.evaluate("[...$('updateSteps').children].map((li) => li.dataset.s)") == ["done"] * 5
     assert "ghost" not in page.get_attribute("#another", "class"), "the next dish is not the button to press"

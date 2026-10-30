@@ -14,12 +14,17 @@
 //   GET  /api/admin/ota
 //   GET  /api/admin/analytics?metric=&days=      metric names, or one metric per day and per badge
 //   POST /api/admin/badges/:mac                  {label?, settings?}
+//   GET  /api/admin/health                       remote debug: every badge with its newest report (reports.js)
+//   GET  /api/admin/badges/:mac/reports          remote debug: its last reports and commands
+//   POST /api/admin/badges/:mac/debug            remote debug: {verb, arg?}, one allowlisted command
 //
 //   GET  /api/badge/actions?mac=&via=wifi|phone  pending actions for this badge, marked delivered
 //   POST /api/badge/actions/:id                  {mac, ok, result}: what applying it did
 import { readBody as readDebugBody } from "./debug.js";
+import { health, reports, queueCommand, checkCommand } from "./reports.js";
 
-const KINDS = new Set(["line_pack", "ota", "settings", "command"]);
+// debug: remote debug's commands (reports.js), handed over only in the reply to a Wi-Fi report.
+const KINDS = new Set(["line_pack", "ota", "settings", "command", "debug"]);
 const now = () => Date.now();
 const J = (v) => JSON.stringify(v ?? null);
 const parseRow = (row) => row && Object.fromEntries(Object.entries(row).map(([k, v]) =>
@@ -134,6 +139,20 @@ export async function handleAdmin(request, url, env, { json, fail, readBody, gen
   const body = async () => { try { return await readBody(request); } catch { return null; } };
   let r;
   if (request.method === "GET" && path === "/overview") return json(await overview(db));
+  if (request.method === "GET" && path === "/health") return json(await health(db));
+  if (request.method === "GET" && (r = m(/^\/badges\/([0-9a-f:]+)\/reports$/))) {
+    const mac = normaliseMac(r[1]);
+    return mac ? json(await reports(db, mac)) : fail(400, "mac");
+  }
+  if (request.method === "POST" && (r = m(/^\/badges\/([0-9a-f:]+)\/debug$/))) {
+    const mac = normaliseMac(r[1]);
+    const b = await body();
+    if (!mac || !b) return fail(400, "bad request");
+    const q = await queueCommand(db, mac, b);
+    if (q.error) return fail(400, q.error);
+    await audit(db, who, "debug", { mac, ...q.payload });
+    return json(q);
+  }
   if (request.method === "GET" && (r = m(/^\/badges\/([0-9a-f:]+)$/))) {
     const d = await badgeDetail(db, normaliseMac(r[1]));
     return d ? json(d) : fail(404, "unknown badge");
@@ -175,6 +194,7 @@ export async function handleAdmin(request, url, env, { json, fail, readBody, gen
     const b = await body();
     if (!b || !KINDS.has(b.kind) || typeof b.payload !== "object") return fail(400, `kind: ${[...KINDS].join(", ")}; payload: an object`);
     if (b.kind === "line_pack" && !b.payload.pack_id) return fail(400, "a line_pack action names a pack_id");
+    if (b.kind === "debug" && checkCommand(String(b.payload.verb ?? ""), b.payload.arg).error) return fail(400, checkCommand(String(b.payload.verb ?? ""), b.payload.arg).error);
     const macs = await macsFor(db, b.macs);
     if (!macs.length) return fail(400, "macs: 'all' or a list of MACs");
     const q = await enqueue(db, { macs, kind: b.kind, payload: b.payload, createdBy: who, expiresInS: Number(b.expires_in_s) || null });
@@ -253,7 +273,7 @@ export async function handleBadge(request, url, env, { json, fail, readBody, nor
     const rows = (await db.prepare(
       `SELECT a.* FROM actions a LEFT JOIN ota_rollouts r ON a.kind = 'ota' AND r.id = json_extract(a.payload_json, '$.rollout_id')
        WHERE a.mac = ?1 AND a.status IN ('pending', 'delivered') AND (a.not_before IS NULL OR a.not_before <= ?2)
-         AND (a.kind != 'ota' OR r.state = 'active') ORDER BY a.id LIMIT 20`).bind(mac, t).all()).results;
+         AND (a.kind != 'ota' OR r.state = 'active') AND a.kind != 'debug' ORDER BY a.id LIMIT 20`).bind(mac, t).all()).results;
     for (const a of rows) {
       if (a.status === "pending") {
         await db.prepare("UPDATE actions SET status = 'delivered', delivered_at = ?2, delivered_via = ?3 WHERE id = ?1").bind(a.id, t, via).run();
