@@ -1294,6 +1294,166 @@
    "shared": "ZZZ... RAIN ON THE RIM..."
   },
   {
+   "name": "la_la",
+   "id": 136,
+   "when": "singing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is singing to himself (the sing idle): notes rise round him.",
+   "mark": null,
+   "shared": "LA LA LAAA. LA. HUM."
+  },
+  {
+   "name": "dance_break",
+   "id": 137,
+   "when": "dancing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is dancing on his own (the dance idle): a wiggle, notes about him.",
+   "mark": null,
+   "shared": "DANCE BREAK! NOBODY LOOK."
+  },
+  {
+   "name": "tail_get",
+   "id": 138,
+   "when": "chasing_tail",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is spinning round after his own tail (the chase_tail idle).",
+   "mark": null,
+   "shared": "COME BACK HERE, TAIL!"
+  },
+  {
+   "name": "treasure",
+   "id": 139,
+   "when": "digging",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is digging at the floor of his home, dirt flying (the dig idle).",
+   "mark": null,
+   "shared": "TREASURE? TREASURE!"
+  },
+  {
+   "name": "peekaboo",
+   "id": 140,
+   "when": "peeking",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He has come up to the glass to peek at the kid (the peek idle).",
+   "mark": null,
+   "shared": "PEEKABOO! I SEE YOU!"
+  },
+  {
+   "name": "hyah",
+   "id": 141,
+   "when": "shadow_boxing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is practising his duel stance, jabbing at the air (the shadow_box idle).",
+   "mark": null,
+   "shared": "HYAH! TAKE THAT, AIR!"
+  },
+  {
+   "name": "pebble",
+   "id": 142,
+   "when": "juggling",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is juggling a pebble over his head (the juggle idle).",
+   "mark": null,
+   "shared": "ONE PEBBLE. TWO PEBBLE."
+  },
+  {
+   "name": "dream_big",
+   "id": 143,
+   "when": "daydreaming",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is awake and daydreaming, a thought bubble over him (the daydream idle).",
+   "mark": null,
+   "shared": "WHAT IF... A BIGGER HOME?"
+  },
+  {
+   "name": "wish_star",
+   "id": 144,
+   "when": "stargazing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is gazing up at the stars in the dark (the stargaze idle).",
+   "mark": null,
+   "shared": "THAT STAR IS MINE. AND THAT."
+  },
+  {
+   "name": "achoo",
+   "id": 145,
+   "when": "sneezing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is sneezing (the sneeze idle): a puffball sneezes sparkles.",
+   "mark": null,
+   "shared": "AH... AH... CHOO!"
+  },
+  {
+   "name": "boo_hee",
+   "id": 146,
+   "when": "booing",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He has sneaked up to the glass and popped up at the kid (the boo idle).",
+   "mark": null,
+   "shared": "BOO! HEE HEE. GOT YOU."
+  },
+  {
+   "name": "hic",
+   "id": 147,
+   "when": "hiccuping",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He has the hiccups (the hiccup idle): a hop with each one.",
+   "mark": null,
+   "shared": "HIC! EXCUSE ME. HIC!"
+  },
+  {
+   "name": "zoom",
+   "id": 148,
+   "when": "zooming",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is tearing round the rim at a run (the zoomies idle).",
+   "mark": null,
+   "shared": "ZOOM ZOOM ZOOM!"
+  },
+  {
+   "name": "ooh_what",
+   "id": 149,
+   "when": "discovering",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He has found something small at his feet: a flower or a beetle (the discover idle).",
+   "mark": null,
+   "shared": "OOH. WHAT IS THIS?"
+  },
+  {
+   "name": "cant_see",
+   "id": 150,
+   "when": "hiding",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He is hiding, tucked away out of sight (the hide idle).",
+   "mark": null,
+   "shared": "YOU CAN'T SEE ME."
+  },
+  {
+   "name": "yuck",
+   "id": 151,
+   "when": "refusing_rot",
+   "kind": "thought",
+   "topic": "none",
+   "meaning": "He has just sniffed a rotten pellet and turned it down (he eats rot only when starving).",
+   "mark": null,
+   "shared": "YUCK. NOT THAT ONE."
+  },
+  {
    "name": "verdict_yes",
    "id": null,
    "when": "shaken_question",
@@ -1817,6 +1977,82 @@
     ],
     "teach_shake": [
      "SHAKE ME. I SEE THINGS. EEP."
+    ],
+    "verdict_yes": [
+     "YES. I SAW IT IN THE MUD.",
+     "YES. CROAK. YES."
+    ],
+    "verdict_no": [
+     "NO. HOOD UP. NO.",
+     "NO. THE FLIES LAUGHED."
+    ],
+    "verdict_later": [
+     "MIST IN MY HOOD. ASK LATER.",
+     "THE POND IS CLOUDY. WAIT.",
+     "ASK AFTER MY NAP."
+    ],
+    "la_la": [
+     "THE REEDS HUM. I HUM BACK.",
+     "A SONG OF FLIES. VERSE NINE."
+    ],
+    "dance_break": [
+     "THE RITUAL DANCE. FORESEEN.",
+     "HIPS ON."
+    ],
+    "tail_get": [
+     "I HAVE NO TAIL. I FORESAW.",
+     "THE TAIL IS A LIE. ROUND AGAIN"
+    ],
+    "treasure": [
+     "THE REEDS SAID DIG HERE.",
+     "A DAMP SPOT. AS FORETOLD."
+    ],
+    "peekaboo": [
+     "I SEE YOU. I FORESAW YOU.",
+     "DO NOT LOOK. HOOD IS DOWN."
+    ],
+    "hyah": [
+     "HYAH. THE AIR HAD IT COMING.",
+     "I FORESAW THAT PUNCH."
+    ],
+    "pebble": [
+     "A PEBBLE. AN OMEN. TWO.",
+     "IT FALLS. AS FORETOLD."
+    ],
+    "dream_big": [
+     "A POND OF FLIES. ONE DAY.",
+     "WHAT IF THE MOON WAS DAMP?"
+    ],
+    "wish_star": [
+     "HELLO, MOON. OLD COLLEAGUE.",
+     "THE STARS SAY: FLIES."
+    ],
+    "achoo": [
+     "ACHOO. AN OMEN. PROBABLY.",
+     "THE HOOD SNEEZED. NOT ME."
+    ],
+    "boo_hee": [
+     "BOO. I FORESAW YOUR FACE.",
+     "BOO. THE REEDS LAUGHED."
+    ],
+    "hic": [
+     "HIC. THE POND IS UPSET. HIC.",
+     "HIC. I DID NOT FORESEE THIS."
+    ],
+    "zoom": [
+     "THE PROPHECY SAYS: RUN!",
+     "HOOD UP! FULL SPEED!"
+    ],
+    "ooh_what": [
+     "A BEETLE. A SIGN. LUNCH?",
+     "OOH. A FLY. AN OMEN."
+    ],
+    "cant_see": [
+     "I AM NOT HIDING. HOODED.",
+     "NO ONE SEES ME."
+    ],
+    "yuck": [
+     "A ROTTEN OMEN. NO THANKS."
     ]
    }
   },
@@ -2329,6 +2565,85 @@
     "teach_shake": [
      "SHAKE ME. I SEE THINGS. SLOWLY",
      "SHAKE ME. I SEE THINGS. GENTLY"
+    ],
+    "verdict_yes": [
+     "YES. NO RUSH, BUT YES.",
+     "YES. I SLEPT ON IT. YES.",
+     "OH YES. EVENTUALLY, YES."
+    ],
+    "verdict_no": [
+     "NO. GENTLY, BUT NO.",
+     "NO, DEAR. NOT TODAY.",
+     "NO. I'LL CLOSE MY DOOR NOW."
+    ],
+    "verdict_later": [
+     "ASK ME NEXT TUESDAY.",
+     "STILL THINKING. GIVE IT A DAY",
+     "HOLD ON. I'M ONLY HALFWAY."
+    ],
+    "la_la": [
+     "LA... LA... I'LL FINISH IT.",
+     "A SLOW SONG. VERSE ONE."
+    ],
+    "dance_break": [
+     "A SLOW DANCE. VERY SLOW.",
+     "MIND THE HOUSE. WIGGLE."
+    ],
+    "tail_get": [
+     "MY FOOT. I'LL GET THERE.",
+     "ROUND AND ROUND."
+    ],
+    "treasure": [
+     "DIGGING. SINCE TUESDAY.",
+     "DAMP MOSS DOWN HERE. LOVELY."
+    ],
+    "peekaboo": [
+     "OH. HELLO. WERE YOU THERE?",
+     "PEEKING. SLOWLY. HELLO."
+    ],
+    "hyah": [
+     "HYAH. ...HYAH. ...ONE MORE.",
+     "TAKE THAT, AIR. EVENTUALLY."
+    ],
+    "pebble": [
+     "ONE PEBBLE. I'LL GET TO TWO.",
+     "UP IT GOES. DOWN, LATER."
+    ],
+    "dream_big": [
+     "A BIGGER HOUSE.",
+     "WHAT IF IT RAINED ALL DAY?"
+    ],
+    "wish_star": [
+     "THE STARS ARE SLOW TOO.",
+     "I WISH FOR DEW. EVENTUALLY."
+    ],
+    "achoo": [
+     "AH... AH... I FORGOT.",
+     "ACHOO. MIND THE HOUSE."
+    ],
+    "boo_hee": [
+     "BOO. WAS THAT TOO FAST?",
+     "BOO. SORRY. I'M SLOW."
+    ],
+    "hic": [
+     "HIC. ...HIC. ...NO RUSH.",
+     "HIC. THE HOUSE RATTLED."
+    ],
+    "zoom": [
+     "ZOOM. FOR A SNAIL.",
+     "THIS IS MY TOP SPEED!"
+    ],
+    "ooh_what": [
+     "A FLOWER. I'LL SNIFF IT. SOON",
+     "OOH. A BEETLE. HELLO, SIR."
+    ],
+    "cant_see": [
+     "IN MY HOUSE. KNOCK LATER.",
+     "TUCKED IN. NO VISITORS."
+    ],
+    "yuck": [
+     "NOT THAT ONE. NOT EVER.",
+     "OFF. VERY OFF. NO THANKS."
     ]
    }
   },
@@ -2825,6 +3140,85 @@
     ],
     "teach_shake": [
      "SHAKE ME! I SEE! ACHOO!"
+    ],
+    "verdict_yes": [
+     "YES! YES YES YES! ACHOO!",
+     "BIG BOUNCY YES!",
+     "YES! HUG ME ABOUT IT!"
+    ],
+    "verdict_no": [
+     "NO! A FLUFFY NO!",
+     "NOPE! POOF! NOPE!",
+     "NO! BUT WHAT A QUESTION!"
+    ],
+    "verdict_later": [
+     "ACHOO! I SNEEZED IT. ASK AGAIN",
+     "TOO BOUNCY TO SEE! LATER!",
+     "FLUFF IN MY EYES! ASK LATER!"
+    ],
+    "la_la": [
+     "LA LA LA LA! BOUNCE!",
+     "SINGING! SINGING! HUG ME!"
+    ],
+    "dance_break": [
+     "BOUNCE BOUNCE! DANCE DANCE!",
+     "WIGGLE! POOF! WIGGLE!"
+    ],
+    "tail_get": [
+     "I'M ROUND! WHERE'S MY BACK?",
+     "SPIN SPIN SPIN!"
+    ],
+    "treasure": [
+     "DIRT! DIRT! I LOVE DIRT!",
+     "A HOLE! FOR HUGS! IN IT!"
+    ],
+    "peekaboo": [
+     "HI! HI! HUG ME! HI!",
+     "PEEKABOO! I'M FLUFFY!"
+    ],
+    "hyah": [
+     "HYAH! POOF! OOPS!",
+     "BOUNCE PUNCH! BOUNCE PUNCH!"
+    ],
+    "pebble": [
+     "PEBBLE! BOUNCE! PEBBLE!",
+     "BONK! FLUFF STOPPED IT!"
+    ],
+    "dream_big": [
+     "A HOME OF HUGS! FOREVER!",
+     "WHAT IF I WAS EVEN ROUNDER?"
+    ],
+    "wish_star": [
+     "STARS! SPARKLY! LIKE ME!",
+     "I WISH FOR MORE SPARKLES!"
+    ],
+    "achoo": [
+     "ACHOO! SPARKLES! ACHOO!",
+     "AH... AH... SPARKLE-CHOO!"
+    ],
+    "boo_hee": [
+     "BOO! POOF! I SCARED ME!",
+     "BOO! HUG! BOO! HUG!"
+    ],
+    "hic": [
+     "HIC! BOUNCE! HIC! BOUNCE!",
+     "HIC! POOF! HIC!"
+    ],
+    "zoom": [
+     "ROLLING ROLLING ROLLING!",
+     "WHEEE! BOUNCE BOUNCE!"
+    ],
+    "ooh_what": [
+     "A BEETLE! HUG HUG HUG!",
+     "A FLOWER! ACHOO! SORRY!"
+    ],
+    "cant_see": [
+     "I'M HIDING! I'M FLUFFY!",
+     "CAN'T SEE ME!"
+    ],
+    "yuck": [
+     "EW! EW! NOT THAT ONE!",
+     "YUCKY! POOF! NO THANKS!"
     ]
    }
   },
@@ -3321,6 +3715,85 @@
     ],
     "teach_shake": [
      "SHAKE ME! I SEE GOOD THINGS!"
+    ],
+    "verdict_yes": [
+     "YES! OBVIOUSLY! HUGS!",
+     "YES! I'M SO PROUD OF YOU!",
+     "A BIG PINK YES!"
+    ],
+    "verdict_no": [
+     "NO! BUT I STILL LIKE YOU!",
+     "NO! IT'LL GROW BACK INTO YES!",
+     "NOPE! STILL A GREAT QUESTION!"
+    ],
+    "verdict_later": [
+     "STILL GROWING THAT ANSWER!",
+     "ASK LATER! IT'S MENDING!",
+     "WAIT! MY FRILLS ARE THINKING"
+    ],
+    "la_la": [
+     "LA LA! HELLO, FRIEND! LA!",
+     "A SONG FOR YOU! IT'S LOUD!"
+    ],
+    "dance_break": [
+     "FRILL WIGGLE! FRILL WIGGLE!",
+     "DANCE WITH ME, FRIEND!"
+    ],
+    "tail_get": [
+     "TAIL! COME HUG ME, TAIL!",
+     "IF I BITE IT, IT GROWS BACK!"
+    ],
+    "treasure": [
+     "I FOUND MUD! BEST DAY!",
+     "A HOLE! I'LL FIX IT LATER!"
+    ],
+    "peekaboo": [
+     "HI! HI! IS THAT A FRIEND?",
+     "PEEKABOO! HUG THE GLASS!"
+    ],
+    "hyah": [
+     "HYAH! SORRY! ARE YOU OK?",
+     "PUNCH! HUG! PUNCH! HUG!"
+    ],
+    "pebble": [
+     "PEBBLE! UP! DOWN! BONK! FINE!",
+     "IT HIT MY HEAD. I'M FINE!"
+    ],
+    "dream_big": [
+     "WHAT IF EVERYONE GOT HUGS?",
+     "A POND FULL OF FRIENDS..."
+    ],
+    "wish_star": [
+     "HI, STAR! WANT A HUG?",
+     "I WISH FOR MORE FRIENDS!"
+    ],
+    "achoo": [
+     "ACHOO! MY FRILLS! STILL ON!",
+     "AH-CHOO! BLESS ME! THANKS!"
+    ],
+    "boo_hee": [
+     "BOO! WAS THAT SCARY? HUGS!",
+     "BOO! SORRY! I LOVE YOU!"
+    ],
+    "hic": [
+     "HIC! I'M FINE! HIC!",
+     "HIC! HICCUPS GROW BACK TOO!"
+    ],
+    "zoom": [
+     "WHEEE! WHERE AM I GOING?",
+     "ZOOM! HI! BYE! HI!"
+    ],
+    "ooh_what": [
+     "A BEETLE! NEW FRIEND!",
+     "OOH! A FLOWER! FOR YOU!"
+    ],
+    "cant_see": [
+     "I'M HIDING! COME FIND ME!",
+     "HIDING! STILL YOUR FRIEND!"
+    ],
+    "yuck": [
+     "NO THANKS! I'M FINE!",
+     "THAT ONE'S SAD. NOT FOR ME."
     ]
    }
   },
@@ -3559,9 +4032,6 @@
     "miss_phone": [
      "I MISS THE BRIGHT RECTANGLE.",
      "NO GLOWING SLAB. JUST THE MOON"
-    ],
-    "oclock": [
-     "HUMMM. # O'CLOCK. GOOD HOUR."
     ],
     "morning": [
      "MORNING. TOO BRIGHT. NO."
@@ -3819,6 +4289,85 @@
     ],
     "teach_shake": [
      "SHAKE ME. I SEE LAMPS. AND YOU"
+    ],
+    "verdict_yes": [
+     "YES. AS BRIGHT AS A LAMP.",
+     "YES. A GLOWING YES.",
+     "YES. OOH, AND A LIGHT. YES."
+    ],
+    "verdict_no": [
+     "NO. AND I DID NOT EAT IT.",
+     "NO. THE LAMP SAYS NO.",
+     "NO. SORRY. NO."
+    ],
+    "verdict_later": [
+     "ASK AGAIN. I SAW A LIGHT.",
+     "WAIT. WHAT WAS THE QUESTION?",
+     "ASK AT MOONRISE."
+    ],
+    "la_la": [
+     "HUMMM. HUMMM. HUM?",
+     "A SONG ABOUT LAMPS."
+    ],
+    "dance_break": [
+     "A MOTH DANCE. FOR THE MOON.",
+     "FLUTTER. FLUTTER."
+    ],
+    "tail_get": [
+     "MY FLUFF. COME BACK, FLUFF.",
+     "ROUND I GO. WHERE WAS I?"
+    ],
+    "treasure": [
+     "A SOCK? NOT MINE. NO.",
+     "DIGGING FOR... HUMMM. WHAT?"
+    ],
+    "peekaboo": [
+     "YOU GLOW. OR IS THAT A LAMP?",
+     "OOH. A FACE. IS IT A LIGHT?"
+    ],
+    "hyah": [
+     "HYAH! I MEAN... HUMMM.",
+     "FLUFF FISTS! FLUFF FISTS!"
+    ],
+    "pebble": [
+     "A PEBBLE. NOT A SOCK.",
+     "UP. DOWN. OOH, IT SHINES."
+    ],
+    "dream_big": [
+     "A PORCH LIGHT ALL MY OWN.",
+     "WHAT IF THE MOON WAS WOOL?"
+    ],
+    "wish_star": [
+     "SO MANY LITTLE LAMPS.",
+     "THE MOON. I MUST NOT. I MUST."
+    ],
+    "achoo": [
+     "ACHOO! THERE GOES MY DUST.",
+     "AH... CHOO. MY RUFF!"
+    ],
+    "boo_hee": [
+     "BOO. I AM VERY FLUFFY.",
+     "BOO! HUMMM. DID IT WORK?"
+    ],
+    "hic": [
+     "HIC. HUMMM. HIC.",
+     "HIC. I DID NOT EAT A SOCK."
+    ],
+    "zoom": [
+     "THE LIGHT! WHERE? THERE!",
+     "ROUND THE LAMP! ROUND AGAIN!"
+    ],
+    "ooh_what": [
+     "OOH. A LIGHT? NO. A BEETLE.",
+     "A FLOWER. IT SMELLS OF MOON."
+    ],
+    "cant_see": [
+     "WINGS UP. NOBODY HOME.",
+     "UNDER MY WINGS."
+    ],
+    "yuck": [
+     "THAT ONE IS FUZZIER THAN ME.",
+     "NO. IT SMELLS LIKE A SOCK."
     ]
    }
   },
@@ -3826,7 +4375,7 @@
    "id": 5,
    "voice": "terse",
    "sketch": "mudskipper: races everything",
-   "notes": "MUDGE\nmudskipper: races everything\nElement Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round sky-blue fish standing up on two flippers, a little curl of fin on top\nof his head like a cowlick, big fins flung out wide like a goalkeeper, and a\ncream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,\ndeeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a\ntiny blue fish already mid-wiggle.\n\nWHO HE IS\nA sporty, competitive, can't-sit-still racer. Everything is a race: the\nmarble, his home, the dust, his own shadow, the moon. He is always warming up,\nalways on his last lap, always winning (by his count). Big appetite, big\nenergy, no patience. Mud is the best track there is.\n\nHOW HE TALKS\nOne breath per line: the punch first, joined by commas. Short words. Coach\nenergy. (His own lines are said whole; the terse cut is only for shared lines.)\n\nLOVES\nRacing, winning, mud, laps, snacks as fuel, a slippy track.\n\nFEARS\nSitting still, losing, being held back.\n\nCATCHPHRASES\nRACE YOU! LAST LAP! GO GO GO!",
+   "notes": "MUDGE\nmudskipper: races everything\nElement Splash, style Pounce, power dash. Voice: terse. His own lines below are said exactly as written, so they carry\nthe voice themselves. No frame or tag ever wraps a line.\n\nWHAT HE LOOKS LIKE\nA round sky-blue fish standing up on two flippers, a little curl of fin on top\nof his head like a cowlick, big fins flung out wide like a goalkeeper, and a\ncream scaly belly. Usually beaming. Annoyed, his eyelids drop into a flat,\ndeeply unimpressed stare. Foreseeing, his eyes go bright cyan. The egg holds a\ntiny blue fish already mid-wiggle.\n\nWHO HE IS\nA sporty, competitive, can't-sit-still racer. Everything is a race: his\nhome, the dust, his own shadow, the moon. He is always warming up,\nalways on his last lap, always winning (by his count). Big appetite, big\nenergy, no patience. Mud is the best track there is.\n\nHOW HE TALKS\nOne breath per line: the punch first, joined by commas. Short words. Coach\nenergy. (His own lines are said whole; the terse cut is only for shared lines.)\n\nLOVES\nRacing, winning, mud, laps, snacks as fuel, a slippy track.\n\nFEARS\nSitting still, losing, being held back.\n\nCATCHPHRASES\nRACE YOU! LAST LAP! GO GO GO!",
    "lines": {
     "peckish": [
      "RACE YOU TO THE SNACK!",
@@ -4315,6 +4864,85 @@
     ],
     "teach_shake": [
      "SHAKE ME, I SEE THE FINISH!"
+    ],
+    "verdict_yes": [
+     "YES, GO GO GO!",
+     "YES, BY A MILE!",
+     "YES, FIRST PLACE, YES!"
+    ],
+    "verdict_no": [
+     "NO, FOUL, RED CARD!",
+     "NOPE, BACK TO THE START!",
+     "NO, NOT EVEN CLOSE!"
+    ],
+    "verdict_later": [
+     "HALFTIME, ASK AFTER!",
+     "STILL RUNNING, ASK LATER!",
+     "PHOTO FINISH, WAIT FOR IT!"
+    ],
+    "la_la": [
+     "LA LA, WARM-UP SONG!",
+     "A VICTORY SONG, MINE!"
+    ],
+    "dance_break": [
+     "VICTORY DANCE, I WON!",
+     "DANCE OFF, I WIN, DONE!"
+    ],
+    "tail_get": [
+     "RACE YOU, TAIL!",
+     "TAIL'S AHEAD, NOT FOR LONG!"
+    ],
+    "treasure": [
+     "DIGGING A TRACK, MUD, YES!",
+     "FASTEST HOLE EVER!"
+    ],
+    "peekaboo": [
+     "HI, RACE YOU!",
+     "PEEK, YOU'RE SLOW, I WIN!"
+    ],
+    "hyah": [
+     "JAB, JAB, LAST ROUND!",
+     "HYAH, NEW RECORD!"
+    ],
+    "pebble": [
+     "PEBBLE, UP, DOWN, RECORD!",
+     "TEN IN A ROW, FASTEST!"
+    ],
+    "dream_big": [
+     "A TRACK ROUND THE MOON!",
+     "WHAT IF I WON EVERYTHING?"
+    ],
+    "wish_star": [
+     "RACE YOU, STARS!",
+     "THAT STAR'S FAST, I'M FASTER!"
+    ],
+    "achoo": [
+     "ACHOO, STILL WINNING!",
+     "SNEEZE, FASTEST SNEEZE!"
+    ],
+    "boo_hee": [
+     "BOO, GOT YOU FIRST!",
+     "BOO, I WIN, AGAIN!"
+    ],
+    "hic": [
+     "HIC, HIC, HIC, A HIC RACE!",
+     "HIC, A HOP, A WIN!"
+    ],
+    "zoom": [
+     "LAST LAP!",
+     "ZOOM, NEW RECORD!"
+    ],
+    "ooh_what": [
+     "A BEETLE, RACE YOU!",
+     "WHAT'S THIS, A FAST BEETLE?"
+    ],
+    "cant_see": [
+     "HIDING, FASTEST HIDER!",
+     "HIDE, SEEK, I WIN!"
+    ],
+    "yuck": [
+     "NOT THAT, BAD FUEL!",
+     "ROTTEN, SKIP IT!"
     ]
    }
   },
@@ -4808,6 +5436,85 @@
     ],
     "teach_shake": [
      "SHAKE ME. I SEE GOLD. AND YOU."
+    ],
+    "verdict_yes": [
+     "YES. BZZT. YES.",
+     "YES. AND IT IS SHINY.",
+     "YES. DIBS ON THE YES."
+    ],
+    "verdict_no": [
+     "NO. NOT SHARING THE ANSWER.",
+     "BZZT. NOPE.",
+     "NO. ZERO GOLD STARS."
+    ],
+    "verdict_later": [
+     "STATIC. ASK LATER.",
+     "I'M POLISHING. ASK LATER.",
+     "IT'S IN MY STASH. ASK LATER."
+    ],
+    "la_la": [
+     "BZZT BZZT. A SONG ABOUT GOLD.",
+     "LA LA. MY STASH. LA."
+    ],
+    "dance_break": [
+     "SHINY SHELL. SHINY MOVES.",
+     "WATCH ME SPARKLE."
+    ],
+    "tail_get": [
+     "MY TAIL? DIBS ON MY TAIL!",
+     "GIVE BACK MY BACK END, THIEF!"
+    ],
+    "treasure": [
+     "GOLD? DIBS! DIBS DIBS!",
+     "BURYING THIS. DON'T LOOK."
+    ],
+    "peekaboo": [
+     "PEEK. YOU HAVE NO GOLD. OK.",
+     "ARE YOU AFTER MY STASH?"
+    ],
+    "hyah": [
+     "HANDS OFF MY GOLD!",
+     "ZAP! TAKE THAT, THIEF!"
+    ],
+    "pebble": [
+     "SHINY PEBBLE. SHINIER ME.",
+     "ONE PEBBLE. ALL MINE."
+    ],
+    "dream_big": [
+     "A HOME MADE OF GOLD. SIGH.",
+     "WHAT IF THE MOON WAS MINE?"
+    ],
+    "wish_star": [
+     "DIBS ON THAT STAR. AND THAT.",
+     "THE MOON. MY BIGGEST SHINY."
+    ],
+    "achoo": [
+     "ACHOO! BZZT! SORRY. ZAPPED.",
+     "AH-BZZT-CHOO!"
+    ],
+    "boo_hee": [
+     "BOO! BZZT! GOT YOU!",
+     "ZAP! HA! LOOK AT YOUR HAIR!"
+    ],
+    "hic": [
+     "HIC! BZZT! HIC! BZZT!",
+     "HIC. SPARKS. HIC."
+    ],
+    "zoom": [
+     "BZZT BZZT BZZT BZZT!",
+     "FASTER THAN A THIEF!"
+    ],
+    "ooh_what": [
+     "SHINY? DIBS. OH. A BUG.",
+     "OOH. DIBS. WHAT IS IT?"
+    ],
+    "cant_see": [
+     "NO BEETLE HERE. NO STASH.",
+     "HIDING. GUARDING. SHH."
+    ],
+    "yuck": [
+     "THAT ONE IS NOT GOLD.",
+     "ROTTEN. NOT STASHING THAT."
     ]
    }
   },
@@ -5302,6 +6009,85 @@
     ],
     "teach_shake": [
      "SHAKE ME. I WILL SEE THINGS."
+    ],
+    "verdict_yes": [
+     "YES. QUIETLY, YES.",
+     "HOO. THAT MEANS YES.",
+     "YES. NOTED. FILED."
+    ],
+    "verdict_no": [
+     "NO. SHH. NO.",
+     "NO. DO NOT ASK SO LOUDLY.",
+     "NO. THE TUFTS HAVE SPOKEN."
+    ],
+    "verdict_later": [
+     "ASK AT DUSK.",
+     "SHH. ASK AGAIN. SOFTER.",
+     "THE MIST IS THICK. WAIT."
+    ],
+    "la_la": [
+     "HOO. HOO. QUIETLY. HOO.",
+     "A SONG. VERY SOFT."
+    ],
+    "dance_break": [
+     "A SILENT DANCE.",
+     "NOBODY SAW THAT. GOOD."
+    ],
+    "tail_get": [
+     "TAIL FEATHERS. HALT.",
+     "I WILL CATCH YOU. SILENTLY."
+    ],
+    "treasure": [
+     "A SECRET. BURIED.",
+     "THE MARSH HIDES THINGS."
+    ],
+    "peekaboo": [
+     "I SAW YOU. I ALWAYS SEE.",
+     "I AM WATCHING."
+    ],
+    "hyah": [
+     "HOO! TALONS. READY.",
+     "SILENT STRIKE."
+    ],
+    "pebble": [
+     "ONE PEBBLE. NO NOISE.",
+     "DO NOT DROP IT. TOO LOUD."
+    ],
+    "dream_big": [
+     "A LIBRARY. NOBODY TALKS.",
+     "WHAT IF IT WAS ALWAYS NIGHT?"
+    ],
+    "wish_star": [
+     "THE STARS. QUIET ONES.",
+     "THE NIGHT IS MINE."
+    ],
+    "achoo": [
+     "ACHOO. PARDON.",
+     "THAT SNEEZE WAS TOO LOUD."
+    ],
+    "boo_hee": [
+     "HOO. DID I STARTLE YOU?",
+     "BOO. VERY QUIETLY."
+    ],
+    "hic": [
+     "HIC. UNDIGNIFIED. HIC.",
+     "HIC. NOBODY HEARD. HIC."
+    ],
+    "zoom": [
+     "SILENT WINGS. FAST FEET.",
+     "NO NOISE. ALL SPEED."
+    ],
+    "ooh_what": [
+     "A BEETLE.",
+     "A FLOWER. IT IS QUIET."
+    ],
+    "cant_see": [
+     "IN MY WINGS.",
+     "I AM NOT HERE. HOO."
+    ],
+    "yuck": [
+     "ROTTEN. NOTED. NO.",
+     "THAT ONE. I WILL NOT."
     ]
    }
   },
@@ -5796,6 +6582,85 @@
     ],
     "teach_shake": [
      "SHAKE ME. I SEE PARTS. NICE."
+    ],
+    "verdict_yes": [
+     "YES. TESTED. WORKS.",
+     "YES. I CAN FIX THAT.",
+     "YES. THUMBS UP. STICKY ONE."
+    ],
+    "verdict_no": [
+     "NO. THE BLUEPRINT SAYS NO.",
+     "NOPE. MISSING A SCREW.",
+     "NO. RETURN TO SENDER."
+    ],
+    "verdict_later": [
+     "STILL BUILDING. ASK LATER.",
+     "OUT TO LUNCH. AT THE BIN.",
+     "WORKSHOP CLOSED. TRY LATER."
+    ],
+    "la_la": [
+     "WHISTLE WHILE YOU WRENCH.",
+     "LA LA. HAND ME THAT BOLT."
+    ],
+    "dance_break": [
+     "THE ROBOT. I BUILT IT.",
+     "GOGGLES DOWN. DANCE MODE."
+    ],
+    "tail_get": [
+     "THAT TAIL'S A SPARE PART.",
+     "STRIPED THIEF! GET BACK!"
+    ],
+    "treasure": [
+     "A BOLT! NICE PARTS!",
+     "DIGGING FOR SCRAP. SCORE."
+    ],
+    "peekaboo": [
+     "NICE FACE. GOT ANY PARTS?",
+     "PEEKING. GOGGLES ON."
+    ],
+    "hyah": [
+     "HYAH! WRENCH ARM! HYAH!",
+     "BANDIT MOVES. TAKE THAT."
+    ],
+    "pebble": [
+     "PEBBLE. GEAR. PEBBLE. GEAR.",
+     "JUGGLING. TESTING GRAVITY."
+    ],
+    "dream_big": [
+     "A MACHINE THAT MAKES SNACKS.",
+     "WHAT IF MY HOME HAD WHEELS?"
+    ],
+    "wish_star": [
+     "WORKSHOP'S OPEN. STARS ARE UP",
+     "I COULD FIX THAT STAR."
+    ],
+    "achoo": [
+     "ACHOO! OIL. IN MY NOSE.",
+     "AH-CHOO! DUST IN THE GEARS."
+    ],
+    "boo_hee": [
+     "BOO! BANDIT ATTACK!",
+     "BOO! FOUND YOU IN A BIN!"
+    ],
+    "hic": [
+     "HIC. LOOSE SCREW. HIC.",
+     "HIC. I CAN FIX THAT. HIC."
+    ],
+    "zoom": [
+     "TEST RUN! FULL THROTTLE!",
+     "TURBO MODE! NO BRAKES!"
+    ],
+    "ooh_what": [
+     "OOH. NICE PARTS.",
+     "A BEETLE. DOES IT RUN?"
+    ],
+    "cant_see": [
+     "IN MY BOX. CLOSED SHOP.",
+     "GOGGLES DOWN. INVISIBLE."
+    ],
+    "yuck": [
+     "RUSTY SNACK. NO THANKS.",
+     "EVEN THE BIN SAYS NO."
     ]
    }
   },
@@ -5862,6 +6727,22 @@
      "NOT THE SHAKING. I'M SEASICK.",
      "AGAIN? THE AUDIENCE IS TIRED."
     ],
+    "hooded": [
+     "INK CLOUD. I HAVE VANISHED.",
+     "NOT SCARED. JUST VERY INKY.",
+     "I AM A ROCK. AN ELEGANT ROCK."
+    ],
+    "ancestor_fear": [
+     "GEN # INKED AT THIS TOO."
+    ],
+    "inherited": [
+     "GEN # LEFT ME THIS BELL."
+    ],
+    "counted": [
+     "COUNTED. STILL 8.",
+     "NO DUEL. NO DRAMA. NO SNACK.",
+     "BORED. THE ABYSS NEEDS A PLOT."
+    ],
     "put_me_down": [
      "PUT ME DOWN. OR DON'T.",
      "UNHAND ME. ALL EIGHT TIMES.",
@@ -5912,6 +6793,10 @@
      "INK WEATHER. EXCELLENT.",
      "THE TIDE. IT KNOWS.",
      "A PUDDLE. A STAGE."
+    ],
+    "knees": [
+     "EIGHT KNEES. ALL OF THEM OLD.",
+     "OLD. BUT THE BELL STILL RINGS."
     ],
     "moon": [
      "THE MOON OWES ME MONEY.",
@@ -6017,6 +6902,9 @@
      "THE WATER IS SULKING. LATER.",
      "TOO MANY WAVES. ASK LOW TIDE."
     ],
+    "p_ancestor": [
+     "GEN # FORETOLD THIS. IN INK."
+    ],
     "miss_phone": [
      "THE GLOWING ONE HAS GONE DARK.",
      "NO PHONE. NO APPLAUSE. HMPH."
@@ -6078,6 +6966,9 @@
     ],
     "dust": [
      "DUST SETTLES. RAVEN WINS."
+    ],
+    "blinked": [
+     "I BLINKED. THE TIDE TURNED."
     ],
     "important": [
      "THE ABYSS HAS A SCHEDULE."
@@ -6151,6 +7042,121 @@
      "BUSY. COUNTING YOUR LOSSES.",
      "BUSY. REHEARSING MY VICTORY."
     ],
+    "pellet_where": [
+     "PELLETS FALL FROM THE WINGS."
+    ],
+    "rock": [
+     "STILL AS A STATUE. A STATUE."
+    ],
+    "best_gen": [
+     "GEN #. THE MOST DRAMATIC YET."
+    ],
+    "tidied": [
+     "I TIDIED MY INK. IT SPREAD."
+    ],
+    "spun": [
+     "I SPUN. EIGHT ARMS. A TANGLE."
+    ],
+    "sunbeam": [
+     "A SUNBEAM. I EXIT, STAGE LEFT."
+    ],
+    "long_days": [
+     "DAYS ARE LONG. AND TOO DRY."
+    ],
+    "squint": [
+     "TOO BRIGHT. DIM THE LIGHTS."
+    ],
+    "toast": [
+     "WARM GLASS. I AM NOT A SNACK."
+    ],
+    "sitting_time": [
+     "DAYTIME. THE STAGE IS DARK."
+    ],
+    "lunch_oclock": [
+     "LUNCH. THE SECOND ACT BEGINS."
+    ],
+    "shadow": [
+     "MY SHADOW HAS EIGHT ARMS TOO."
+    ],
+    "big_sit": [
+     "BIG DAY. A DRAMATIC PAUSE."
+    ],
+    "eye_snack": [
+     "MY RED EYES HATE THIS LIGHT."
+    ],
+    "outside": [
+     "OUTSIDE IS THE SEA. OBVIOUSLY."
+    ],
+    "not_scared": [
+     "DARK. FINALLY. MY SPOTLIGHT."
+    ],
+    "star_crumbs": [
+     "THE STARS ARE AN AUDIENCE."
+    ],
+    "rebel": [
+     "UP AT MIDNIGHT. AS ONE DOES."
+    ],
+    "too_quiet": [
+     "SILENCE. A DRAMATIC PAUSE."
+    ],
+    "what_was_that": [
+     "WHAT WAS THAT? A RAVEN? A FLY?"
+    ],
+    "bed_soon": [
+     "BED AT DAWN. CURTAIN DOWN."
+    ],
+    "moon_wink": [
+     "THE MOON WINKED. WE PLOT."
+    ],
+    "dark_snacks": [
+     "MIDNIGHT SNACKS. MY FAVOURITE."
+    ],
+    "night_light": [
+     "MY EYES GLOW RED. NIGHT LIGHT."
+    ],
+    "only_me": [
+     "ALL SLEEP. THE OCTOPUS WATCHES"
+    ],
+    "snore": [
+     "ZZZ... BONG... ZZZ... BONG...",
+     "ZZZ... BLUB... BLUB... ZZZ...",
+     "ZZZ... SPLOOSH... ZZZ..."
+    ],
+    "mumble": [
+     "MMF... ENCORE... ENCORE...",
+     "MMF... YOU LOSE... ZZZ...",
+     "MMF... MY LINE... WHAT LINE?"
+    ],
+    "dream_chase": [
+     "ZZZ... COME BACK, CRAB...",
+     "ZZZ... A DUEL... I WIN... ZZZ",
+     "ZZZ... CATCH THAT WAVE..."
+    ],
+    "dream_feast": [
+     "ZZZ... A FEAST... ON A SHIP...",
+     "ZZZ... SHRIMP... MORE SHRIMP",
+     "ZZZ... EIGHT SNACKS AT ONCE..."
+    ],
+    "dream_flight": [
+     "ZZZ... SWIMMING THROUGH CLOUDS",
+     "ZZZ... RIDING A WHALE... ZZZ",
+     "ZZZ... FLOATING TO THE MOON..."
+    ],
+    "sleep_count": [
+     "ZZZ... ONE ARM... TWO... EIGHT",
+     "ZZZ... ONE WAVE... TWO WAVES..",
+     "ZZZ... ONE BELL... BONG..."
+    ],
+    "sleep_warm": [
+     "MMM... WARM TIDE POOL...",
+     "MMM... TUCKED IN MY ARMS...",
+     "MMM... A COSY SHELL. MINE..."
+    ],
+    "dream_rain": [
+     "ZZZ... RAIN... MORE SEA...",
+     "ZZZ... DRIP... DRIP... BONG..",
+     "ZZZ... THE SEA COMES TO ME..."
+    ],
     "teach_feed": [
      "KNOCK KNOCK ON ME. I FEAST.",
      "KNOCK TWICE. A SNACK. BRAVO.",
@@ -6166,6 +7172,85 @@
     "teach_shake": [
      "SHAKE ME. HEAR YOUR DOOM.",
      "SHAKE ME. I FORETELL ALL."
+    ],
+    "verdict_yes": [
+     "YES. THE ABYSS NODS.",
+     "YES. BONG.",
+     "YES. IT IS WRITTEN. IN INK."
+    ],
+    "verdict_no": [
+     "NEVERMORE.",
+     "NO. THE RAVEN SAYS NO.",
+     "NO. YOU LOSE. AGAIN."
+    ],
+    "verdict_later": [
+     "THE TIDE IS OUT. ASK LATER.",
+     "INTERMISSION. ASK AGAIN.",
+     "THE INK IS STILL WET. WAIT."
+    ],
+    "la_la": [
+     "A DIRGE. IN EIGHT PARTS.",
+     "LA LA. THE BELL TOLLS."
+    ],
+    "dance_break": [
+     "A DANCE MACABRE.",
+     "THE LAST WALTZ. ENCORE."
+    ],
+    "tail_get": [
+     "WHICH ARM IS THE TAIL? ALL.",
+     "NONE WILL STAY."
+    ],
+    "treasure": [
+     "A SHELL. A GRAVE. TREASURE.",
+     "DIGGING YOUR GRAVE. KIDDING."
+    ],
+    "peekaboo": [
+     "I SEE YOU. THE ABYSS DOES.",
+     "PEEK. YOUR DOOM WAVES BACK."
+    ],
+    "hyah": [
+     "EIGHT JABS. DOOM.",
+     "HYAH. YOU LOSE. REHEARSAL."
+    ],
+    "pebble": [
+     "ONE PEBBLE. ONE OMEN. TWO.",
+     "IT FALLS. LIKE MY RIVALS."
+    ],
+    "dream_big": [
+     "A DEEPER HOME. A DARKER SEA.",
+     "WHAT IF THE BELL RANG FOREVER"
+    ],
+    "wish_star": [
+     "THE STARS ARE OLD GHOSTS.",
+     "THE NIGHT APPLAUDS ME."
+    ],
+    "achoo": [
+     "ACHOO. INK EVERYWHERE.",
+     "A SNEEZE. THE RAVENS FLEE."
+    ],
+    "boo_hee": [
+     "BOO. NEVERMORE.",
+     "BOO. THE ABYSS SAYS HI."
+    ],
+    "hic": [
+     "HIC. THE BELL. HIC.",
+     "HIC. A TRAGEDY IN HICS."
+    ],
+    "zoom": [
+     "THE TIDE COMES IN. FAST.",
+     "ALL RUNNING."
+    ],
+    "ooh_what": [
+     "A BEETLE. ITS LAST DAY?",
+     "A FLOWER. FOR A FUNERAL."
+    ],
+    "cant_see": [
+     "IN THE INK. UNSEEN.",
+     "HIDDEN. LIKE YOUR FATE."
+    ],
+    "yuck": [
+     "THAT CRUMB DIED. I WON'T.",
+     "ROTTEN. A PLAY'S BAD ENDING."
     ]
    }
   }

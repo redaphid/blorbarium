@@ -62,7 +62,7 @@ pet that never meets a phone never says them; he still says everything else.
 | hiccuping | He has the hiccups (the hiccup idle): a hop with each one. |
 | zooming | He is tearing round the rim at a run (the zoomies idle). |
 | discovering | He has found something small at his feet: a flower or a beetle (the discover idle). |
-| hiding | He is hiding in his hood, shell or wings (the hide idle). |
+| hiding | He is hiding, tucked away out of sight (the hide idle). |
 | foreseeing | He is in his oracle trance. |
 | sees_pellet | He is in the trance and there is a pellet in his home. |
 | sees_phone | He is in the trance and a phone is near. |
