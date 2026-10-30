@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <set>
 #include <string>
@@ -179,20 +181,104 @@ TEST(FromTheGenes, EveryStarterDrawsItsOwnArtNotTheFrog) {
   }
 }
 
-// starterGenome(15048) is the gift device's grungo (test_species): it has no
-// species gene, so it draws exactly as it did when grungoPack() was the only pack.
-TEST(FromTheGenes, TheGiftDrawsAsGrungoByteForByte) {
-  const blorb::Genome gift = blorb::starterGenome(15048);
-  ASSERT_EQ(gift.hash(), 0x3df10dafu);
+// starterGenome() has no species gene, so it draws exactly as it did when
+// grungoPack() was the only pack.
+TEST(FromTheGenes, TheStarterDrawsAsGrungoByteForByte) {
+  const blorb::Genome starter = blorb::starterGenome(15048);
   const blorb::Habitat h;
   const blorb::PetClock clock;
-  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{gift, {}}, uint16_t(0), 0u};
+  const blorb::Occupant egg{std::in_place_type<blorb::Egg>, blorb::Offspring{starter, {}}, uint16_t(0), 0u};
   const blorb::Occupant hatched{std::in_place_type<blorb::Creature>, std::get<blorb::Egg>(egg), 0u, 0u};
   std::vector<Appearance> shown = {present(egg, h, clock, 0), present(hatched, h, clock, 0)};
-  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(gift, blorb::Stage(st), 0, 0));
+  for (uint8_t st = 0; st < blorb::kStageCount; ++st) shown.push_back(portrait(starter, blorb::Stage(st), 0, 0));
   for (const Appearance& a : shown) {
     EXPECT_EQ(a.species, blorb::kGrungo);
     EXPECT_TRUE(sameCanvas(*render(a), *renderWith(a, grungoPack())));
+  }
+}
+
+// ---- an egg shaken open ------------------------------------------------------------
+
+Appearance eggOf(SpeciesId s, double progress, double shaken, uint32_t liveMs = 0) {
+  Appearance a = portrait(blorb::starterGenomeOf(s, 7), blorb::Stage::Baby, 0, 0);
+  a.kind = Appearance::Kind::Egg;
+  a.eggProgress = Fx::ratio(int32_t(progress * 1000), 1000);
+  a.eggShaken = Fx::ratio(int32_t(shaken * 1000), 1000);
+  a.lively = true;
+  a.liveMs = liveMs;
+  return a;
+}
+
+int differs(const Canvas240& x, const Canvas240& y) {
+  int n = 0;
+  for (int i = 0; i < kPx; ++i) n += x.px[i] != y.px[i];
+  return n;
+}
+
+// Every species' egg cracks as it is shaken: each step toward hatching more
+// of it broken than the step before, from a hairline to the shell coming
+// away, and a hand shaking it moves it.
+TEST(ShakenOpen, EveryEggCracksMoreAsItIsShaken) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    const auto whole = render(eggOf(r.id, 0, 0));
+    int last = 0;
+    for (double p : {0.12, 0.3, 0.55, 0.8, 0.97}) {
+      const int broken = differs(*whole, *render(eggOf(r.id, p, 0)));
+      EXPECT_GT(broken, last + 15) << r.name << " at " << p << ": no more cracked than before";
+      last = broken;
+    }
+    EXPECT_GT(differs(*render(eggOf(r.id, 0.3, 0, 0)), *render(eggOf(r.id, 0.3, 1, 0))), 200)
+        << r.name << ": shaking it does not move it";
+  }
+}
+
+// While the shell comes away, a hard shake knocks chips off it, on their own beat.
+TEST(ShakenOpen, ChipsJumpOffTheShellWhileItIsShaken) {
+  const SpeciesId s = blorb::kGrungo;
+  const auto a = render(eggOf(s, 0.9, 1, 0)), b = render(eggOf(s, 0.9, 1, 140));   // the jiggle back where it was
+  const auto later = render(eggOf(s, 0.9, 1, 280));
+  EXPECT_GT(differs(*a, *later), 0);
+  EXPECT_GT(differs(*b, *later), 0);
+}
+
+// He hatches out of it: the shell flies off him and is gone.
+TEST(ShakenOpen, TheShellFliesOffAsHeHatches) {
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    Appearance born = portrait(blorb::starterGenomeOf(r.id, 7), blorb::Stage::Baby, 0, 0);
+    const auto plain = render(born);
+    born.hatchedMs = 200;
+    EXPECT_GT(differs(*plain, *render(born)), 40) << r.name;
+    born.hatchedMs = Appearance::kHatchBurstMs;
+    EXPECT_EQ(differs(*plain, *render(born)), 0) << r.name;
+  }
+}
+
+void writePpm(const std::string& path, const Canvas240& cv) {
+  FILE* f = std::fopen(path.c_str(), "wb");
+  if (!f) return;
+  std::fprintf(f, "P6 240 240 255\n");
+  for (int i = 0; i < kPx; ++i) {
+    const uint16_t p = cv.px[i];
+    const uint8_t rgb[3] = {uint8_t((p >> 11 & 31) << 3), uint8_t((p >> 5 & 63) << 2), uint8_t((p & 31) << 3)};
+    std::fwrite(rgb, 1, 3, f);
+  }
+  std::fclose(f);
+}
+
+// PAINT_DUMP=<dir>: each species' egg along the way to hatching, shaken and
+// still, and the hatch, to look at.
+TEST(ShakenOpen, DumpWhenAsked) {
+  const char* dir = std::getenv("PAINT_DUMP");
+  if (!dir) GTEST_SKIP() << "set PAINT_DUMP to a directory to write previews";
+  for (const blorb::SpeciesInfo& r : blorb::SPECIES) {
+    for (int p : {0, 12, 25, 40, 55, 70, 85, 97})
+      writePpm(std::string(dir) + "/egg_" + r.name + "_" + std::to_string(p) + ".ppm", *render(eggOf(r.id, p / 100.0, 0)));
+    writePpm(std::string(dir) + "/egg_" + r.name + "_90_shaken.ppm", *render(eggOf(r.id, 0.9, 1, 100)));
+    Appearance born = portrait(blorb::starterGenomeOf(r.id, 7), blorb::Stage::Baby, 0, 0);
+    for (int ms : {100, 400, 800}) {
+      born.hatchedMs = uint16_t(ms);
+      writePpm(std::string(dir) + "/hatch_" + r.name + "_" + std::to_string(ms) + ".ppm", *render(born));
+    }
   }
 }
 

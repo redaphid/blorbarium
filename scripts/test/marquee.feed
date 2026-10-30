@@ -1,0 +1,10 @@
+# The full-screen marquee in the sim, from the cable and from a phone, then a press.
+#   .pio/build/sim/program --headless --clock fixed --script scripts/test/marquee.feed \
+#     --shot outputs/frames/marquee_4.bmp --after 10600   (the pet back, after the press; then it quits)
+#   (then: for f in outputs/frames/marquee_*.bmp; do convert "$f" "${f%.bmp}.png"; done)
+@3000 DEBUG marquee Hello, blorb!
+@3600 !shot outputs/frames/marquee_1.bmp
+@5200 !shot outputs/frames/marquee_2.bmp
+@7000 #1 MARQUEE i <3 grungo
+@9500 !shot outputs/frames/marquee_3.bmp
+@10000 !button 120

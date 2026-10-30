@@ -2,6 +2,7 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -16,8 +17,6 @@ using namespace blorbtest;
 
 namespace {
 
-constexpr uint32_t kGiftSeed = 15048;
-constexpr uint32_t kGiftHash = 0x3df10dafu;
 constexpr uint64_t kLineageId = 0x9f31c2d04a7bull;
 constexpr const char* kV1 = "test/fixtures/keepsake_v1.bin";
 
@@ -35,7 +34,7 @@ std::string lineName(SpeciesId s) {
 // A board by its MAC: one of the batch, or one off the same reel that is not.
 struct Board { uint8_t mac[6]; };
 constexpr Board kMossby{{0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3c}};
-constexpr Board kStranger{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7d}};   // one past the gift device's
+constexpr Board kStranger{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7d}};   // one past board 237c's
 
 // What src/main.cpp's setup() does with a board's storage before the Dish.
 Dish boot(MemStorage& store, const Board& board) {
@@ -48,20 +47,6 @@ Dish boot(MemStorage& store, const Board& board) {
     o.founder = &*founder;
   }
   return Dish(store, seed, kLineageId, o);
-}
-
-// The gift device: its pet came from the starter, long before founders, and
-// is known by its seed. A board with a pet never reaches the founding.
-Dish bootGift(MemStorage& store) {
-  const uint8_t mac[6] = {0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c};
-  DishOptions o;
-  std::optional<Genome> founder;
-  if (needsFounding(store)) {
-    const SpeciesId s = foundingSpecies(store, mac);
-    founder = foundingGenome(s, kGiftSeed, paint::bandsFor(s));
-    o.founder = &*founder;
-  }
-  return Dish(store, kGiftSeed, kLineageId, o);
 }
 
 }  // namespace
@@ -87,15 +72,36 @@ TEST(Table, NineAssignedDevicesKeepTheirSpeciesOnceEach) {
   EXPECT_EQ(macs.size(), 9u) << "no MAC twice";
 }
 
-TEST(Table, AnyOtherBoardIsAGrungo) {
+// Grungo is not the catch-all: a board off the table takes a species of the
+// regular cast from a hash of its MAC, the same one every time.
+TEST(Table, AnyOtherBoardTakesARegularSpeciesFromItsMac) {
   EXPECT_FALSE(tableSpecies(kStranger.mac));
-  EXPECT_EQ(badgeSpecies(kStranger.mac), kGrungo);
+  EXPECT_EQ(badgeSpecies(kStranger.mac), castSpecies(fnv1a(kStranger.mac, 6)));
+  std::map<uint8_t, int> seen;
   for (uint32_t n = 0; n < 4096; ++n) {
     const uint8_t mac[6] = {0x02, 0x00, 0x00, uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
-    EXPECT_EQ(badgeSpecies(mac), kGrungo);
+    const SpeciesId s = badgeSpecies(mac);
+    EXPECT_EQ(s, castSpecies(fnv1a(mac, 6)));
+    EXPECT_EQ(badgeSpecies(mac), s) << "deterministic";
+    EXPECT_TRUE(inRegularCast(s)) << "never the octopus";
+    ++seen[s.v];
   }
+  size_t cast = 0;
+  for (const SpeciesInfo& row : SPECIES) cast += inRegularCast(row.id);
+  EXPECT_EQ(cast, 9u);
+  EXPECT_EQ(seen.size(), cast) << "every regular species turns up";
+  for (const auto& [id, n] : seen) EXPECT_GT(n, 4096 / int(cast) / 2) << speciesInfo(SpeciesId{id}).name;
   const uint8_t nearMiss[6] = {0xd4, 0x05, 0x92, 0x77, 0x1b, 0x3d};
   EXPECT_FALSE(tableSpecies(nearMiss)) << "the whole MAC, not its tail";
+}
+
+TEST(Table, TheRegularCastIsEveryRowButTheOctopusInRowOrder) {
+  std::vector<uint8_t> cast;
+  for (uint32_t n = 0; n < 9; ++n) cast.push_back(castSpecies(n).v);
+  EXPECT_EQ(cast, (std::vector<uint8_t>{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+  EXPECT_EQ(castSpecies(9), castSpecies(0)) << "modulo the cast";
+  EXPECT_FALSE(inRegularCast(species::octopus));
+  for (uint32_t n = 0; n < 100000; n += 7) EXPECT_NE(castSpecies(n), species::octopus);
 }
 
 // ---- who is founded --------------------------------------------------------------------------------
@@ -130,11 +136,44 @@ TEST(Founding, ThePinIsTheOwnersOverrideOverTheTable) {
   }
 }
 
-TEST(Founding, ABoardNotInTheTableFoundsAGrungo) {
+TEST(Founding, ABoardNotInTheTableFoundsTheSpeciesItsMacGives) {
+  const SpeciesId s = badgeSpecies(kStranger.mac);
   MemStorage store;
   Dish d = boot(store, kStranger);
+  EXPECT_EQ(d.boot(), Boot::Fresh);
+  EXPECT_EQ(d.appearance().species, s);
+  EXPECT_EQ(std::string(d.lineage().currentName()), lineName(s));
+  EXPECT_EQ(std::get<Egg>(d.occupant()).genome().bytes(),
+            foundingGenome(s, fnv1a(kStranger.mac, 6), paint::bandsFor(s)).bytes());
+}
+
+// The octopus is the one-off variant: a board founds one only when found.pin
+// names it (or a table row would). No MAC, in the table or not, gets one.
+TEST(Founding, TheOctopusComesOnlyByName) {
+  for (uint32_t n = 0; n < 4096; ++n) {
+    const uint8_t mac[6] = {0xd4, 0x05, 0x92, uint8_t(n >> 16), uint8_t(n >> 8), uint8_t(n)};
+    MemStorage store;
+    EXPECT_NE(foundingSpecies(store, mac), species::octopus);
+  }
+  MemStorage store;
+  ASSERT_EQ(debugverbs::found(store, "octopus"), nullptr);
+  EXPECT_EQ(foundingSpecies(store, kStranger.mac), species::octopus);
+  Dish d = boot(store, kStranger);
+  EXPECT_EQ(d.appearance().species, species::octopus);
+}
+
+// Board 237c is an ordinary table row: it founds its grungo as any badge
+// founds its species.
+TEST(Founding, Board237cFoundsItsTableGrungoLikeAnyBadge) {
+  const Board k237c{{0xd4, 0x05, 0x92, 0x77, 0x23, 0x7c}};
+  ASSERT_EQ(tableSpecies(k237c.mac), std::optional<SpeciesId>{kGrungo});
+  MemStorage store;
+  Dish d = boot(store, k237c);
+  EXPECT_EQ(d.boot(), Boot::Fresh);
   EXPECT_EQ(d.appearance().species, kGrungo);
-  EXPECT_EQ(std::string(d.lineage().currentName()), "Grungo");
+  EXPECT_EQ(std::get<Egg>(d.occupant()).genome().bytes(),
+            foundingGenome(kGrungo, fnv1a(k237c.mac, 6), paint::bandsFor(kGrungo)).bytes());
+  EXPECT_FALSE(predatesSpecies(std::get<Egg>(d.occupant()).genome())) << "a founder carries grungo's SpeciesGene";
 }
 
 // ---- an existing pet is never founded again ------------------------------------------------------
@@ -151,12 +190,14 @@ TEST(NeedsFounding, AnyKeepsakeOrLineageMeansAPetLivesHere) {
   EXPECT_TRUE(needsFounding(store)) << "no pet file, no pet";
 }
 
-TEST(NeedsFounding, TheGiftDevicesGrungoIsNeverFoundedAgain) {
+TEST(NeedsFounding, APetThatLivesIsNeverFoundedAgain) {
+  constexpr uint32_t kSeed = 15048;
+  const uint32_t starterHash = starterGenome(kSeed).hash();
   MemStorage store;
   {
-    Dish gift(store, kGiftSeed, kLineageId);
-    ASSERT_EQ(std::get<Egg>(gift.occupant()).genome().hash(), kGiftHash);
-    ASSERT_TRUE(gift.flush());
+    Dish pet(store, kSeed, kLineageId);
+    ASSERT_EQ(std::get<Egg>(pet.occupant()).genome().hash(), starterHash);
+    ASSERT_TRUE(pet.flush());
   }
   EXPECT_FALSE(needsFounding(store));
   store.files.erase("snap.a"), store.files.erase("snap.b");
@@ -165,8 +206,8 @@ TEST(NeedsFounding, TheGiftDevicesGrungoIsNeverFoundedAgain) {
   EXPECT_NE(debugverbs::found(store, "gilly"), nullptr);
   EXPECT_EQ(store.files, before) << "the verb writes nothing on a pet's flash";
   ASSERT_TRUE(writeFoundPin(store, SpeciesId{4}));
-  Dish again = bootGift(store);
-  EXPECT_EQ(std::get<Egg>(again.occupant()).genome().hash(), kGiftHash) << "a pin is ignored once a pet lives";
+  Dish again = boot(store, kMossby);
+  EXPECT_EQ(std::get<Egg>(again.occupant()).genome().hash(), starterHash) << "a pin is ignored once a pet lives";
   EXPECT_EQ(std::string(again.lineage().currentName()), "Grungo");
 }
 
@@ -175,7 +216,7 @@ TEST(NeedsFounding, TheCommittedV1PetWithAPinStaysHimself) {
   store.files["snap.a"] = readFile(kV1);
   ASSERT_FALSE(store.files["snap.a"].empty()) << kV1 << " is missing (run from the project root)";
   ASSERT_TRUE(writeFoundPin(store, SpeciesId{7}));
-  Dish d = bootGift(store);
+  Dish d = boot(store, kMossby);
   EXPECT_EQ(d.boot(), Boot::Resumed);
   EXPECT_STREQ(d.settings().name, "Grungo_IV");
 }

@@ -1,6 +1,7 @@
 FIZZ
 firefly beetle: crackles
-Element Spark, style Pounce, power zap. Voice: hoarder, which wraps his lines as "LINE. MINE.", "PSST. LINE. TELL NO ONE.", "LINE. NOT SHARING.".
+Element Spark, style Pounce, power zap. Voice: hoarder. His own lines below are said exactly as written, so they carry
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -15,7 +16,7 @@ The egg holds a tiny gold beetle, already gleaming.
 
 WHO HE IS
 A crackly, twitchy, very shiny beetle who knows he is the shiniest thing in the
-dish and wants to keep it that way. He hoards: sparks, crumbs, anything that
+place and wants to keep it that way. He hoards: sparks, crumbs, anything that
 glints. Static clings to him and he zaps things by accident. Not mean, just
 possessive, and suspicious that everyone is after his gold.
 
@@ -36,62 +37,112 @@ BZZT. DIBS. SHINY. MY STASH.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: nothing wraps them.
 
 peckish
-  BZZT. SNACK. NOW. GOLD ONES.
+  SNACK. NOW. GOLD ONES.
+  MY TUMMY IS RUNNING LOW.
+  DIBS ON THE NEXT SNACK. ALL.
+  FEED ME. I GLOW BETTER FULL.
+  SNACK? I'LL ONLY HIDE HALF.
 starving
   SO HUNGRY MY GLOW IS DIM.
+  I'D TRADE A SPARK FOR A CRUMB.
+  EMPTY. LIKE A STASH. NO GOLD.
 hoarding
   THAT PELLET IS MY TREASURE.
+  NOT HUNGRY. STILL MINE.
+  INTO THE STASH IT GOES. SHH.
 crunch
   CRUNCH. CRACKLE. CRUNCH.
+  CRONCH. ZAP. THAT ONE FIZZED.
+  MMM. TASTES LIKE A BATTERY.
+  CRUNCH. NOBODY ELSE GETS ANY.
 fuzzy_bite
-  BZZT! THAT ONE WAS FUZZY!
+  THAT ONE WAS FUZZY!
+  FUZZY CRUMB. NOT STASH-WORTHY
 smells
   SOMETHING STINKS. NOT MY GOLD.
+  A STINKY CRUMB. YOU HAVE IT.
 green
   GREEN? I'M SUPPOSED TO BE GOLD
+  MY SHINE WENT A BIT GREEN.
 ow
   OW! MY SHELL GOT SCUFFED!
+  OW. IS MY SHINE STILL SHINY?
 heard_you
-  BZZT. HEARD YOU. KNOCK TWICE.
+  HEARD YOU. KNOCK TWICE.
+  WHO KNOCKS? A THIEF? A SNACK?
+  ONE KNOCK. TWO GETS A SNACK.
+  A KNOCK! QUICK, HIDE THE GOLD.
 ground_lies
   BZZZZT! SPARKS EVERYWHERE!
+  MY STASH IS RATTLING! STOP!
+  WHOA! SHINY SIDE UP! SHINY UP!
 not_again
   NO SHAKING! YOU'LL SPILL ME!
+  NOT AGAIN. MY SPARKS GET DIZZY
+  SHAKE ME AND I'LL STATIC YOU.
 hooded
   WINGS SHUT. LIGHTS OFF. SHH.
+  GLOW OFF. NOBODY IS HOME.
+  I AM A PLAIN ROCK. NOT GOLD.
 ancestor_fear
   GEN # HID THE SHINIES TOO.
 inherited
   GEN # LEFT ME A SPARK.
+  GEN # SAYS: NEVER SHARE.
 counted
   I COUNTED MY SPARKS. ALL HERE.
+  COUNTED MY GOLD. AGAIN. AGAIN.
+  NOTHING TO GRAB. NOTHING. BZZ.
 put_me_down
   CAREFUL! I'M FULL OF SPARKS!
+  NO FINGERPRINTS ON THE SHELL!
+  DOWN. MY STASH MISSES ME.
 warm_hands
   WARM HANDS. NO SPARKS. PROMISE
+  YOU MAY HOLD THE SHINY ONE.
+  WARM. LIKE GOLD IN THE SUN.
+  NICE HANDS. ANY RINGS ON THEM?
 sky_down
   UPSIDE DOWN. DROPPED NOTHING.
   MY STASH IS ON THE CEILING!
+  FLIP ME BACK! MY GOLD FALLS!
 heavy_eyes
   GLOW... FADING... BZZ...
+  BATTERY LOW. NAP MODE.
+  SO SLEEPY. GUARD MY STASH...
 dream_pellets
   ZZZ... GOLD... PILES... ZZZ
+  ZZZ... A CRUMB MADE OF GOLD...
+  ZZZ... MY STASH... SAFE...
+  ZZZ... GOLDEN BISCUITS... MINE
+  ZZZ... SNACKS THAT SPARKLE...
+  ZZZ... DIBS... DIBS ON ALL...
 see_pellet
-  I SEE... A PELLET. DIBS.
+  A PELLET.
+  A SNACK. NOT YOURS.
+  A SNACK. CALLED IT.
 see_phone
-  I SEE... A GLOWING THING. WANT
+  A GLOWING THING. WANT
+  A SHINY SLAB.
 see_nothing
-  I SEE... NO TREASURE. NONE.
+  NO TREASURE. NONE.
+  AN EMPTY STASH.
 see_damp
-  I SEE... A PUDDLE. KEEP AWAY.
+  A PUDDLE. KEEP AWAY.
+  WET. MY ONLY ENEMY.
 knees
   OLD. STILL SHINY. MOSTLY.
+  OLD BEETLE. VINTAGE GOLD.
 moon
   THE MOON. THE BIGGEST SHINY.
+  ONE DAY, MOON. YOU'LL BE MINE.
 anyone
   HELLO? I'LL SHARE ONE SPARK.
+  NOBODY? GOOD. MORE GOLD FOR ME
+  COME BACK. I'M SHINY FOR YOU.
 science
   FOOD MAKES SPARKS. SCIENCE.
 no_hat
@@ -99,50 +150,66 @@ no_hat
 
 p_snack
   SNACK COMING. I CALL DIBS.
+  A SNACK. THEN A NAP ON GOLD.
 p_feast
   A FEAST OF SHINY CRUMBS.
+  A MOUNTAIN OF SNACKS. MINE.
 p_pellet_soon
   A PELLET COMES. DIBS ALREADY.
 p_feed_me
   FEED ME. OR I ZAP. A BIT.
+  FEED ME. I'LL GLOW FOR YOU.
 p_fuzzy
   THAT CRUMB GOES FUZZY. NOT IT.
 p_more_shaking
   MORE SHAKING. MORE SPARKS.
 p_mud
   MUD COMES. NOT ON MY SHELL.
+  I SEE MUD. I SEE A BATH. NO.
 p_big_hand
   A BIG HAND. HIDE THE SHINIES.
+  A HAND COMES. COUNT YOUR GOLD.
 p_bedtime
   THE DARK SAYS: GLOW, THEN BED.
 p_sun
   THE SUN WILL MAKE ME SPARKLE.
 p_rain
   RAIN. WATER AND SPARKS: BAD.
+  RAIN COMES. UMBRELLA.
 p_watched
   THE GLOWING ONE WANTS MY GOLD.
 p_return
   THEY'LL BE BACK. WITH SHINIES
 p_tap
-  TWO KNOCKS. TWO SNACKS. DIBS.
+  TWO KNOCKS. TWO SNACKS.
+  I SEE KNOCK KNOCK. SNACK. MINE
 p_no
   NO. BZZT. NO.
+  NO. AND HANDS OFF MY STASH.
 p_doom
   DOOM. KEEP THE SHINY BITS.
+  DOOM COMES. IT GETS NO GOLD.
 p_lunch
   MY GLOW GOES OUT SOON. LUNCH?
+  OLD AND GOLDEN. LUNCH STILL ON
 p_outlook
   OUTLOOK: SHINY.
+  THE FUTURE IS GOLD. LIKE ME.
 p_decidedly
   YES. CRACKLE. DEFINITELY.
+  YES. I'D BET A SPARK ON IT.
 p_lucky
   LUCK IS A SHINY THING. GRAB IT
+  YOU'LL FIND A COIN. IT'S MINE.
 p_pond_no
   THE POND SAYS NO. GOOD. WET.
+  NO. THE POND IS TOO WET TO ASK
 p_pond_yes
   THE POND SAYS YES. FROM AFAR.
+  YES. I ASKED FROM FAR AWAY.
 p_ripples
   RIPPLES. TOO CLOSE TO WATER.
+  STATIC ON THE LINE. ASK LATER.
 p_ancestor
   GEN # SAW THIS. KEPT QUIET.
 miss_phone
@@ -187,6 +254,7 @@ my_song
   BZZ BZZ BZZT. MY SONG.
 dust
   DUST. IT'S STUCK TO MY SHELL.
+  DUST ON MY SHELL. HOW DARE IT.
 blinked
   I BLINKED. MY GLOW BLINKED.
 important
@@ -202,7 +270,7 @@ serious_face
 no_echo
   BZZT. BZZT? NO ECHO. BZZT.
 king
-  GOLDEN KING OF THE DISH.
+  GOLDEN KING OF THIS PLACE.
 smells_me
   SMELLS LIKE A STORM. ME.
 todo
@@ -226,7 +294,7 @@ legs
 shiny
   SHINY THING! DIBS! OH. ME.
 guard
-  GUARDING MY STASH. AND DISH.
+  GUARDING MY STASH. AND HOME.
 old_fly
   I REMEMBER A COIN. I MISS IT.
 hi_you
@@ -288,34 +356,109 @@ only_me
 snore
   ZZZ... BZZT... ZZZ... BZZT...
   ZZZ... CRACKLE... ZZZ...
+  ZZZ... FZZT... POP... ZZZ...
 mumble
   MMF... DIBS... DIBS ON IT...
   MMF... MY STASH... MY SHINY...
+  MMF... NO TOUCHING THE GOLD...
 dream_chase
   ZZZ... STOP, THIEF! MY GOLD!
   ZZZ... BZZT! GOT THE SPARK...
+  ZZZ... COME BACK, LITTLE COIN
 dream_feast
   ZZZ... SHINY CRUMBS... YUM...
   ZZZ... GOLDEN CRUMB CAKE...
+  ZZZ... A SNACK FOR EACH LEG...
 dream_flight
   ZZZ... GLOWING ACROSS THE SKY
   ZZZ... FLYING TO THE BIG SHINY
+  ZZZ... I CAUGHT A STAR. MINE.
 sleep_count
   ONE COIN... TWO COINS... MM
   ONE SPARK... TWO... DIBS...
+  ZZZ... 99 SHINIES... 100...
 sleep_warm
   MMM... COSY ON MY GOLD...
   MMM... WARM GLOW... MY GLOW...
+  MMM... SNUG AS A COIN PURSE...
 dream_rain
   ZZZ... RAIN... NO... FIZZLE...
   ZZZ... WET? NO... SHELL UP...
+  ZZZ... GOLD RAIN... YES...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME. GOLD SNACKS
+  KNOCK TWICE. A SNACK.
+  TWO KNOCKS ON MY SHELL: FOOD.
+  HUNGRY? KNOCK KNOCK. QUICK.
 teach_fight
   TO FIGHT: HOLD ME UPSIDE DOWN
 teach_hold
   SLEEPY? HOLD ME SIDEWAYS.
 teach_shake
-  SHAKE ME. I SEE GOLD. MAYBE.
+  SHAKE ME. I SEE GOLD. AND YOU.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. BZZT. YES.
+  YES. AND IT IS SHINY.
+  YES. DIBS ON THE YES.
+verdict_no
+  NO. NOT SHARING THE ANSWER.
+  BZZT. NOPE.
+  NO. ZERO GOLD STARS.
+verdict_later
+  STATIC. ASK LATER.
+  I'M POLISHING. ASK LATER.
+  IT'S IN MY STASH. ASK LATER.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  BZZT BZZT. A SONG ABOUT GOLD.
+  LA LA. MY STASH. LA.
+dance_break
+  SHINY SHELL. SHINY MOVES.
+  WATCH ME SPARKLE.
+tail_get
+  MY TAIL? DIBS ON MY TAIL!
+  GIVE BACK MY BACK END, THIEF!
+treasure
+  GOLD? DIBS! DIBS DIBS!
+  BURYING THIS. DON'T LOOK.
+peekaboo
+  PEEK. YOU HAVE NO GOLD. OK.
+  ARE YOU AFTER MY STASH?
+hyah
+  HANDS OFF MY GOLD!
+  ZAP! TAKE THAT, THIEF!
+pebble
+  SHINY PEBBLE. SHINIER ME.
+  ONE PEBBLE. ALL MINE.
+dream_big
+  A HOME MADE OF GOLD. SIGH.
+  WHAT IF THE MOON WAS MINE?
+wish_star
+  DIBS ON THAT STAR. AND THAT.
+  THE MOON. MY BIGGEST SHINY.
+achoo
+  ACHOO! BZZT! SORRY. ZAPPED.
+  AH-BZZT-CHOO!
+boo_hee
+  BOO! BZZT! GOT YOU!
+  ZAP! HA! LOOK AT YOUR HAIR!
+hic
+  HIC! BZZT! HIC! BZZT!
+  HIC. SPARKS. HIC.
+zoom
+  BZZT BZZT BZZT BZZT!
+  FASTER THAN A THIEF!
+ooh_what
+  SHINY? DIBS. OH. A BUG.
+  OOH. DIBS. WHAT IS IT?
+cant_see
+  NO BEETLE HERE. NO STASH.
+  HIDING. GUARDING. SHH.
+yuck
+  THAT ONE IS NOT GOLD.
+  ROTTEN. NOT STASHING THAT.

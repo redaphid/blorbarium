@@ -266,7 +266,7 @@ class Run:
         self.awake_with_idle(IDLE_S)
         self.wait_low("idle", IDLE_S + 4)
         self.b.send("DEBUG hang 1500")
-        self.wait_full({"drift", "jolt"})
+        self.wait_full({"drift", "jolt", "stir", "tremor"})
         self.lit()
         self.leave_fight()   # held upside down is also the hang: fight mode opened
 
@@ -275,7 +275,7 @@ class Run:
         self.awake_with_idle(IDLE_S)
         self.wait_low("idle", IDLE_S + 4)
         self.b.send("DEBUG cradle 3000")
-        self.wait_full({"drift", "jolt"})
+        self.wait_full({"drift", "jolt", "stir", "tremor"})
 
     def sc_still_stays_dark(self):
         """Left where it is, nothing wakes it: 25 s of the real sensor's noise and drift."""
@@ -290,7 +290,7 @@ class Run:
         self.b.ask("DEBUG power low", r"\[power\] now power=low why=asked")
         self.dark_and_living()
         self.b.send("DEBUG hang 1500")
-        self.wait_full({"drift", "jolt"})
+        self.wait_full({"drift", "jolt", "stir", "tremor"})
         self.leave_fight()
 
     def leave_fight(self):
@@ -357,7 +357,7 @@ class Run:
         self.awake_with_idle(IDLE_S)
         self.wait_low("idle", IDLE_S + 4)
         print("\n  >>> The badge is dark. Pick it up (do not press anything) within 60 s.\n", flush=True)
-        self.wait_full({"drift", "jolt", "tap"}, timeout=60)
+        self.wait_full({"drift", "jolt", "stir", "tremor", "tap"}, timeout=60)
         print("  >>> Now put it down and leave it.\n", flush=True)
         time.sleep(3)
         self.awake_with_idle(IDLE_S)

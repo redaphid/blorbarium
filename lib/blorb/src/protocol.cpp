@@ -3,9 +3,11 @@
 #include <cstdarg>
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <iterator>
 #include <type_traits>
 #include "blorb/dish.h"
+#include "blorb/founding.h"
 #include "blorb/genes.h"
 #include "blorb/seams.h"
 
@@ -115,8 +117,11 @@ void stateLine(Line& l, const Dish& dish) {
   const Occupant& o = dish.occupant();
   l.add("phase=%s gen=%u", kPhases[o.index()], unsigned(generationOf(o)));
   if (const Creature* c = std::get_if<Creature>(&o)) {
+    // action= is what he is doing: an idle he plays (idles.def) by its own name.
     l.add(" stage=%s age=%u action=%s face=%s asleep=%d", stageName(c->stage()), unsigned(c->stats().ageTicks),
-          nameOf(ACTIONS, c->action()), nameOf(EXPRESSIONS, c->face().current), int(c->body().asleep));
+          c->doing(), nameOf(EXPRESSIONS, c->face().current), int(c->body().asleep));
+    // day= is the part of his day (#61): what he leans to doing now.
+    l.add(" day=%s", dayPartName(c->dayPart()));
   } else if (const Egg* e = std::get_if<Egg>(&o)) {
     l.add(" progress=%d", permille(e->progress()));
   } else {
@@ -332,6 +337,15 @@ void cmd_schema(Dish&, const Request&, Reply& r) {
 void cmd_state(Dish& dish, const Request&, Reply& r) {
   Line state;
   stateLine(state, dish);
+  // Appended after the occupant's (STATE only, not the ! STATE event):
+  // species= what the pet is (as the boot line says it; none while sealed,
+  // when the occupant is a placeholder), and mac= the board's own.
+  state.add(" species=%s", dish.sealed() ? "none" : speciesInfo(speciesOf(genomeOf(dish.occupant()))).name);
+  if (const uint64_t m = dish.mac())
+    state.add(" mac=%02x:%02x:%02x:%02x:%02x:%02x", unsigned(m >> 40 & 0xFF), unsigned(m >> 32 & 0xFF),
+              unsigned(m >> 24 & 0xFF), unsigned(m >> 16 & 0xFF), unsigned(m >> 8 & 0xFF), unsigned(m & 0xFF));
+  else
+    state.add(" mac=none");
   r.line("%s", state.b);
   if (const Creature* c = std::get_if<Creature>(&dish.occupant())) {
     Line drives;
@@ -344,8 +358,12 @@ void cmd_state(Dish& dish, const Request&, Reply& r) {
   }
   unsigned pellets = 0;
   for (const Pellet& p : dish.habitat().pellets) pellets += p.present;
-  r.line("dish pantry=%u pellets=%u night=%d time=%s", unsigned(dish.habitat().pantry), pellets,
-         int(dish.clock().night()), dish.timeKnown() ? "known" : "unknown");
+  // night: the wall's (a phone set the pet hours); dark: what he lives by
+  // (night, lidded, or untouched `still` minutes past PetClock::kDimAfterTicks).
+  const PetClock& clock = dish.clock();
+  r.line("dish pantry=%u pellets=%u night=%d time=%s dark=%d still=%u", unsigned(dish.habitat().pantry), pellets,
+         int(clock.night()), dish.timeKnown() ? "known" : "unknown", int(clock.dark()),
+         unsigned(clock.stillRunTicks / kTicksPerMinute));
   r.ok();
 }
 
@@ -555,6 +573,57 @@ void cmd_sub(Dish& dish, const Request& req, Reply& r) {
 
 void cmd_hash(Dish& dish, const Request&, Reply& r) {
   r.ok("hash=%08x tick=%u", unsigned(dish.hash()), unsigned(dish.tickCount()));
+}
+
+// One life's counters as k=v lines, each led by whose life it is, packed to the line cap.
+void statsLines(Reply& r, const char* whose, const LifeCounters& c) {
+  Line l;
+  l.add("%s", whose);
+  for (const StatInfo& st : LIFE_STATS) {
+    char kv[48];
+    const uint32_t v = c[st.slot];
+    if (st.unit == StatUnit::Ticks) std::snprintf(kv, sizeof kv, " %s_s=%u", st.name, unsigned(v / 10));
+    else if (st.unit == StatUnit::Code) std::snprintf(kv, sizeof kv, " %s=%s", st.name, v ? lifeStatCauseName(v) : "none");
+    else std::snprintf(kv, sizeof kv, " %s=%u", st.name, unsigned(v));
+    if (l.n + std::strlen(kv) > kMaxLine - 16) {   // "#<id> + " and the rest of the frame
+      r.line("%s", l.b);
+      l = Line{};
+      l.add("%s", whose);
+    }
+    l.add("%s", kv);
+  }
+  r.line("%s", l.b);
+}
+
+void cmd_stats(Dish& dish, const Request& req, Reply& r) {
+  Args a{req.args};
+  const std::optional<std::string_view> w = a.word();
+  if (w && *w == "ack") {   // STATS ack <seq>: the server has the closed analytics buckets up to seq
+    const std::optional<uint32_t> seq = a.number(UINT32_MAX);
+    if (!seq || !a.done()) return r.err(400, "BAD_ARGS");
+    if (dish.sealed()) return r.err(409, "SEALED");
+    const bool dropped = dish.ackStats(*seq);
+    return r.ok("dropped=%d kept=%u", int(dropped), unsigned(dish.stats().analytics.closedCount()));
+  }
+  if (!a.done() || (w && *w != "json")) return r.err(400, "BAD_ARGS");
+  if (dish.sealed()) return r.err(409, "SEALED");   // nothing was read: the pet is on the flash
+  if (w) {
+    const BigString json = lifeStatsJson(dish);   // in the big heap (PSRAM), never internal RAM
+    return r.chunks(reinterpret_cast<const uint8_t*>(json.data()), json.size());
+  }
+  const LifeTally& t = dish.tally();
+  r.line("life lineage=%012llx gen=%u seq=%u", (unsigned long long)(t.lineageId & 0xFFFFFFFFFFFFull),
+         unsigned(t.generation), unsigned(dish.stats().seq));
+  statsLines(r, "life", t.life);
+  const char* const kKin[] = {"parent", "grandparent"};
+  for (size_t i = 0; i < t.ancestors.size() && i < 2; ++i) {
+    r.line("%s gen=%u", kKin[i], unsigned(t.ancestors[i].generation));
+    statsLines(r, kKin[i], t.ancestors[i].life);
+  }
+  const Analytics& an = dish.stats().analytics;
+  r.line("analytics powered_s=%u buckets=%u open=%u", unsigned(an.poweredSeconds()), unsigned(an.closedCount() + 1),
+         unsigned(an.open().first));
+  r.ok("lives=%u", unsigned(1 + std::min<size_t>(t.ancestors.size(), 2)));
 }
 
 }  // namespace blorb

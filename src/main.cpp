@@ -5,11 +5,15 @@
 #include <esp_mac.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
+#include "blorb/ble_name.h"
 #include "blorb/dish.h"
 #include "blorb/founding.h"
 #include "blorb/knocks.h"
@@ -26,8 +30,10 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #elif defined(BADGE_BOARD_LCD146)
 #error "the 1.46's panel comes after build unit 20, which brings up the 1.28"
 #else
+#include "hw/log_tee.h"   // from here on `Serial` also keeps the log's last 8 KB, for remote debug
 #include <esp_heap_caps.h>
 #include <soc/soc_memory_layout.h>
+#include "build_info.h"
 #include "hw/board_lcd128.h"
 #include "hw/paint_core0.h"
 #include "hw/storage_nvs_fs.h"
@@ -37,20 +43,29 @@ using PetStorage = blorbtest::MemStorage;   // every run founds the same pet: th
 #include "hw/link_nus.h"
 #include "hw/ota_esp.h"
 #include "hw/ota_pubkey.h"
+#include "hw/home_store.h"
+#include <mbedtls/sha256.h>
+#include <nvs.h>
+#include "blorb/pack_lines.h"
+#include "hw/net_job.h"
 #include "ota/held_storage.h"
 #include "ota/screen.h"
 #include "ota/trial_guard.h"
 #include "debugble/console.h"
 #include <sdkconfig.h>
-#if defined(CONFIG_PM_ENABLE)
+#include <driver/gpio.h>
 #include <driver/uart.h>
-#include <esp_pm.h>
 #include <esp_sleep.h>
+#include <esp_timer.h>
+#if defined(CONFIG_PM_ENABLE)
+#include <esp_pm.h>
 #endif
 using PetStorage = hw::NvsFsStorage;
 #endif
 
+#include "hw/carry_ride.h"
 #include "hw/feel.h"
+#include "hw/home.h"
 #include "hw/imu_qmi8658.h"
 #include "hw/orient.h"
 #include "hw/poses.h"
@@ -64,28 +79,53 @@ static uint32_t cableHeardAt = 0;
 static inline void cableByte() { cableHeardAt = millis(); }
 
 // The protocol over the serial line. A cable has no connect event, so the
-// owner counts as near once a line has arrived. A `DEBUG ` line is held back
-// from the protocol for the loop to run after the tick (src/debug_verbs.h).
+// owner counts as near once a protocol line has arrived. A `DEBUG ` line is
+// held back from the protocol for the loop to run after the tick
+// (src/debug_verbs.h), and it is not the owner: a developer's `DEBUG ota
+// check` once made him see the glowing slab with no phone anywhere
+// (owner_near drives sees_phone, thoughts.cpp). Nor is an empty line.
 class SerialLink : public blorb::Link {
   char line_[256];   // past the protocol's 200, so an overlong line still reads as overlong
   size_t len_ = 0;
   bool heard_ = false;
   // A few DEBUG lines queue, so a script's back-to-back lines are all run, in order
-  // (one slot dropped all but the last). Lines are short: 64 bytes each is ample.
+  // (one slot dropped all but the last). 128 bytes holds the longest, `DEBUG wifi
+  // set "<32-byte SSID>" <64-byte password>` (src/wifi_ota.h). The queue is
+  // made in PSRAM at the first DEBUG line: internal RAM is the scarce kind
+  // (a duel's radio takes about 37 KB of it), and a cable is rare.
   static constexpr uint8_t kDebugQueue = 8;
-  static constexpr size_t kDebugLine = 64;
-  char debug_[kDebugQueue][kDebugLine] = {};
+  static constexpr size_t kDebugLine = 136;   // and `DEBUG marquee` with its 120 characters
+  struct Queue {
+    char lines[kDebugQueue][kDebugLine];
+    char taken[kDebugLine];
+  };
+  Queue* q_ = nullptr;
   uint8_t debugHead_ = 0, debugTail_ = 0;
-  char taken_[kDebugLine] = "";
+  const char* injected_ = nullptr;
+
+  bool queue() {
+#if !defined(BADGE_BOARD_SIM)
+    if (!q_) q_ = static_cast<Queue*>(heap_caps_calloc(1, sizeof(Queue), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+    if (!q_) q_ = static_cast<Queue*>(std::calloc(1, sizeof(Queue)));
+    return q_ != nullptr;
+  }
 
  public:
   bool connected() override { return heard_; }
+  // Remote debug's `state` (src/remote_debug.h): a protocol line as if the
+  // cable had sent it (a literal), read once; it does not count as hearing a host.
+  void inject(const char* line) { injected_ = line; }
   const char* takeDebug() {
-    if (debugHead_ == debugTail_) return nullptr;
-    std::memcpy(taken_, debug_[debugTail_++ % kDebugQueue], sizeof(taken_));
-    return taken_;
+    if (debugHead_ == debugTail_ || !q_) return nullptr;
+    std::memcpy(q_->taken, q_->lines[debugTail_++ % kDebugQueue], sizeof(q_->taken));
+    return q_->taken;
   }
   std::optional<std::string_view> readLine() override {
+    if (const char* l = injected_) {
+      injected_ = nullptr;
+      return std::string_view(l);
+    }
     while (Serial.available() > 0) {
       const int c = Serial.read();
       cableByte();
@@ -94,17 +134,18 @@ class SerialLink : public blorb::Link {
         if (len_ < sizeof(line_)) line_[len_++] = char(c);
         continue;
       }
-      heard_ = true;
       const size_t n = len_;
       len_ = 0;
       if (n > 6 && std::memcmp(line_, "DEBUG ", 6) == 0) {
+        if (!queue()) continue;
         if (uint8_t(debugHead_ - debugTail_) >= kDebugQueue) ++debugTail_;   // full: the oldest goes
-        char* d = debug_[debugHead_++ % kDebugQueue];
+        char* d = q_->lines[debugHead_++ % kDebugQueue];
         const size_t k = std::min(n - 6, kDebugLine - 1);
         std::memcpy(d, line_ + 6, k);
         d[k] = 0;
         continue;
       }
+      heard_ = heard_ || n > 0;
       return std::string_view(line_, n);
     }
     return std::nullopt;
@@ -157,6 +198,9 @@ static hw::PacketRing otaPackets;
 static hw::OtaData otaData(otaPackets, ble);
 static ota::Session updater(otaSlot, otaHost, ble,
                             ota::Config{BOARD_NAME, *ota::parseVersion(blorb::kFirmwareVersion), hw::kOtaPublicKey});
+// The unattended update's data comes from here (src/wifi_ota.h): never a
+// Bluetooth connection's number, which counts up from 1.
+static constexpr ota::Peer kWifiPeer = 0xffffffffu;
 static hw::OtaLink otaLink(ble, updater);
 static ota::Trial trial;
 static hw::EspTrialPort trialPort;
@@ -234,7 +278,15 @@ RTC_NOINIT_ATTR static uint32_t quietBoot;
 static ota::TrialGuard host(links, [] { return trial.onTrial(); });
 // The debug link's unlock question (src/debug_ble.h) holds the button as the update's does.
 static bool debugAsks();
+static void debugSaysNo();   // a hard shake answers the debug link's unlock question no (#35)
 static bool debugPress(uint32_t ms);
+// Wi-Fi's question, "Join Wi-Fi? Tip me on my side!" (src/wifi_ota.h): a hand's yes before a phone gives it a network.
+static bool wifiAsks();
+static bool wifiIdle();
+static uint32_t wifiCheckInMs(uint32_t now);
+static bool wifiPress(uint32_t ms);
+static void wifiSaysNo();   // a hard shake answers Wi-Fi's question no (#35)
+static bool wifiQuietBoot();
 #endif
 static std::optional<blorb::Dish> dish;    // built in setup(), once storage is up
 // The duel radio the Dish is handed (DishOptions::air): ESP-NOW behind
@@ -246,8 +298,14 @@ static paint::Canvas240 canvas;
 static bool imuOk = false, tapReady = false;
 static uint32_t lastSample = 0, lastFrame = 0;
 static blorb::BodySample lastBody;
-// Low power after BLORB_IDLE_SECONDS (600) with no user input (src/hw/power.h, docs/power.md).
+// Dim at half of BLORB_IDLE_SECONDS (60), dark at all of it, the nap BLORB_NAP_SECONDS (120)
+// after that, with no user input (src/hw/power.h, docs/power.md).
 static power::Policy powerPolicy;
+#include "marquee.h"   // the full-screen marquee: showMarquee() (src/marquee.h)
+// Which way up is home on this badge: the build's ORIENT_HOME until setup()
+// reads the badge's own from NVS (src/hw/home.h), and `DEBUG home` sets it.
+static volatile uint8_t homeRot = ORIENT_HOME;
+static const char* homeWhy = "built";
 static uint32_t framesDrawn = 0;
 #if !defined(BADGE_BOARD_SIM)
 static uint32_t cpuMaxMhz = 240;   // what the clock is set to run at (with DFS it dips below)
@@ -276,7 +334,10 @@ static blorb::Appearance shown();                          // below
 static void drawFrame(const blorb::Appearance& a, uint32_t now);
 namespace fps {
 static uint32_t since = 0, frames = 0, worstUs = 0, rows0 = 0, px0 = 0, send0 = 0, sames = 0;
-static void same() { ++sames; }
+static void same() {
+  ++sames;
+  dish->analytics().add(blorb::anx::frames_same);
+}
 static uint64_t lookUs = 0, memoUs = 0, drawUs = 0, pushUs = 0;
 static uint32_t now() { return uint32_t(micros()); }
 // look: the Dish's Appearance (the engine's), memo: the overlays and whether
@@ -285,6 +346,8 @@ static void note(uint32_t look, uint32_t memo, uint32_t draw, uint32_t push) {
   look += memo;   // draw_ms and worst count both, as before
   ++frames, lookUs += look, memoUs += memo, drawUs += draw, pushUs += push;
   if (look + draw + push > worstUs) worstUs = look + draw + push;
+  dish->analytics().add(blorb::anx::frames);   // #50: an increment and a bin, nothing more
+  dish->analytics().hist(blorb::hist::frame_ms, (look + draw + push) / 1000);
 }
 // "a.b": tenths of a ms from a total of us over n.
 static void ms(char* out, size_t cap, uint64_t us, uint32_t n) {
@@ -408,13 +471,34 @@ static void lcdVerb(const char* a) {
 // `DEBUG species <slug|id|off>` and the sim's --species pin the species drawn, to look at
 // every pack on one board. RAM only: the pet and its save never see it.
 static std::optional<blorb::SpeciesId> pinnedSpecies;
+#if defined(BADGE_BOARD_SIM)
+// The sim's `DEBUG idle <name>` draws him playing that idle from then on (paint
+// only: the brain never sees it), to look at one idle's props on any species.
+static blorb::IdleId simIdle = blorb::idles::none;
+static uint32_t simIdleFrom = 0;
+#endif
+
+#if !defined(BADGE_BOARD_SIM)
+static uint32_t shellDismissedAt = 0;   // a hard shake answered the shell's question no (#35): the whoosh
+#endif
 
 static blorb::Appearance shown() {
   blorb::Appearance a = dish->appearance();
+#if !defined(BADGE_BOARD_SIM)
+  if (shellDismissedAt && millis() - shellDismissedAt < 1000)
+    a.dismissedMs = uint16_t(std::min<uint32_t>(a.dismissedMs, millis() - shellDismissedAt));
+#endif
   if (pinnedSpecies) a.species = *pinnedSpecies;
+#if defined(BADGE_BOARD_SIM)
+  if (simIdle != blorb::idles::none && !a.asleep) {
+    const uint32_t q = (millis() - simIdleFrom) * 256 / blorb::kTickMs;
+    a.idle = simIdle, a.idleLength = 600, a.idlePace = 100;
+    a.idleTicks = uint16_t(q / 256 % 600), a.idleSub = uint16_t(q % 256);
+  }
+#endif
 #if !defined(BADGE_BOARD_SIM)
   // The update's question owns the button (readBody), so it owns the hint too.
-  if (updater.asking() || debugAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
+  if (updater.asking() || debugAsks() || wifiAsks()) a.boot = blorb::bootHint(blorb::BootContext::OtaQuestion, nullptr);
 #endif
   return a;
 }
@@ -520,7 +604,22 @@ static volatile uint8_t knockCode = 0;
 static volatile uint32_t shakeAt = 0;
 static volatile bool shaking = false;
 static volatile uint32_t knockAt = 0;
+// `DEBUG ride <kind> [ms]`: a motion from hw/carry_ride.h in place of the
+// IMU's reading, through the real sense path (the carried reactions'
+// detectors, the knocks, the poses), from rideAt for rideMs.
+static volatile uint32_t rideAt = 0, rideMs = 0;
+static volatile uint8_t rideKind = 0;
+// `DEBUG pickup`: lying still, lifted toward home and carried, set down
+// (debugverbs::pickupPose), so HeldDetector itself fires picked_up.
+static volatile uint32_t pickupAt = 0;
+static volatile uint8_t pickupHome = ORIENT_HOME;   // the shell's home when asked
+static volatile bool pickingUp = false;
 static bool posed(uint32_t ms, blorb::BodySample& s) {
+  if (rideMs && int32_t(ms - rideAt) >= 0 && ms - rideAt < rideMs) {
+    const blorb::BodySample r = hw::ride::toRaw(hw::ride::at(hw::ride::Kind(rideKind), ms - rideAt), ORIENT_HOME, ORIENT_R0);
+    s.ax = r.ax, s.ay = r.ay, s.az = r.az;
+    return true;
+  }
   if (knockCode && int32_t(ms - knockAt) >= 0) {
     const uint32_t since = ms - knockAt;
     for (uint8_t i = 0; i < knockCode; ++i) {
@@ -539,8 +638,12 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   // `DEBUG cradle`: in a hand, tipped back a little and still (HeldDetector, then a Cradle at 3 s).
   if (cradleMs && ms - cradleAt < cradleMs) {
     const uint32_t r = esp_random();
-    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((ORIENT_HOME == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
+    s.ax = int16_t(int32_t(r % 31) - 15), s.ay = int16_t((homeRot == 2 ? 450 : -450) + int32_t((r >> 8) % 31) - 15), s.az = 890;
     return true;
+  }
+  if (pickingUp && int32_t(ms - pickupAt) >= 0) {
+    if (debugverbs::pickupPose(ms - pickupAt, pickupHome, esp_random(), s)) return true;
+    pickingUp = false;
   }
   if (!hangMs && !rightMs) return false;
   const uint32_t since = ms - hangAt;
@@ -548,7 +651,7 @@ static bool posed(uint32_t ms, blorb::BodySample& s) {
   const bool down = since < hangMs;
   // Gravity along +y in the IMU's frame settles rotation 2, along -y rotation 0
   // (orient.h with ORIENT_R0 = 1): home is USB-C up (ORIENT_HOME), the hang its opposite.
-  const int16_t homeY = ORIENT_HOME == 2 ? 1000 : -1000;
+  const int16_t homeY = homeRot == 2 ? 1000 : -1000;
   s.ax = 0, s.ay = int16_t(down ? -homeY : homeY), s.az = 0;
   if (down && hangSide) s.ax = int16_t(hangSide * 1000), s.ay = 0;
   if (hangWobble) {
@@ -601,6 +704,9 @@ namespace bodyq {
 // most of one on a badge lying on a table fell between samples. In low power,
 // one read per sample, as before, so the chip can light-sleep.
 static volatile bool fastSense = true;   // the loop: !powerPolicy.low()
+// The nap (main.cpp, "The nap") owns the IMU: no reads at all. pausedAck says
+// the task saw it and is between reads, so the IMU may be set up anew.
+static volatile bool paused = false, pausedAck = false;
 constexpr uint32_t kSubMs = 4;
 static void sense(void*) {
   TickType_t wake = xTaskGetTickCount();
@@ -611,6 +717,13 @@ static void sense(void*) {
   uint32_t pkUs = 0;
   uint8_t sub = 0;
   for (;;) {
+    if (paused) {
+      pausedAck = true;
+      vTaskDelay(pdMS_TO_TICKS(50));
+      wake = xTaskGetTickCount();   // no burst of make-up reads after it
+      continue;
+    }
+    pausedAck = false;
     const bool fast = fastSense;
     vTaskDelayUntil(&wake, pdMS_TO_TICKS(fast ? kSubMs : blorb::kSampleMs));
     const uint32_t ms = millis(), us = micros();
@@ -666,33 +779,37 @@ static void traceFor(const char* a) {
 }
 #endif
 
-// While the dish asks about an update, the button answers it, and the pet
-// feels neither that press nor the rest of that hold. A cable's DEBUG press
-// answers too: the cable is a hand on the dish. The debug link's press
-// (`remote`) never answers: the pet feels it only while no question shows.
-static bool petFeels(bool down, bool remote) {
+// While the dish asks (an update, Wi-Fi, the debug unlock), the button
+// answers it, and the pet feels neither that press nor the rest of that hold,
+// nor any press for hw::Feel::kAnswerTailMs after the question goes (`owned`):
+// a double press would open fight mode, and a duel would take the radio from
+// the Wi-Fi it just said yes to. A cable's DEBUG press answers too: the cable
+// is a hand on the dish. The debug link's press (`remote`) never answers: the
+// pet feels it only while nothing owns BOOT.
+static bool petFeels(bool down, bool remote, bool owned) {
 #if !defined(BADGE_BOARD_SIM)
   static bool wasDown = false, otaOwns = false;
   if (remote) {
     wasDown = down;
     otaOwns = false;
-    return down && !updater.asking() && !debugAsks();
+    return down && !owned;
   }
   const bool edge = down && !wasDown;
   if (updater.asking() && edge) updater.press(millis());
   const bool debugTook = !updater.asking() && edge && debugPress(millis());   // the debug unlock's question
-  otaOwns = updater.asking() || debugAsks() || debugTook || (otaOwns && down);
+  const bool wifiTook = !updater.asking() && !debugTook && edge && wifiPress(millis());   // Wi-Fi's
+  otaOwns = owned || debugTook || wifiTook || (otaOwns && down);
   wasDown = down;
   return down && !otaOwns;
 #else
-  (void)remote;
+  (void)remote, (void)owned;
   return down;
 #endif
 }
 
 // The knocks, the power policy's input, the poses and the turn into the
 // screen's frame, for every sample (hw/feel.h, pure so test_feeding replays it).
-static hw::Feel shell{ORIENT_R0, ORIENT_HOME, powerPolicy};
+static hw::Feel shell{ORIENT_R0, homeRot, powerPolicy};
 
 #if !defined(BADGE_BOARD_SIM)
 // How long each control takes to show, stage by stage (src/latency.h):
@@ -763,7 +880,7 @@ static void verb(const char* a) {
 #endif
 static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = false) {
 #if !defined(BADGE_BOARD_SIM)
-  const bool asking = updater.asking() || debugAsks();   // a question owns BOOT, and its twin with it
+  const bool asking = updater.asking() || debugAsks() || wifiAsks();   // a question owns BOOT, and its twin with it
 #else
   constexpr bool asking = false;
 #endif
@@ -775,25 +892,35 @@ static void feel(const blorb::BodySample& sensed, uint32_t ms, bool remote = fal
   // panel stays at home (USB-C up) and the engine feels the badge in that one
   // frame: left is left, always. The settled rotation is still read, for the
   // poses (side hold, hang) and the update's turn.
-  if (display.getRotation() != ORIENT_HOME) {
+  if (display.getRotation() != homeRot) {
     boardPanelIdle();
-    display.setRotation(ORIENT_HOME);
+    display.setRotation(homeRot);
     boardRepaintAll();   // the rows the panel holds were sent the other way round
   }
 #if !defined(BADGE_BOARD_SIM)
-  // "Turn me around!": a turn answers the update's question as a press does.
+  // "Tip me on my side!": a tip onto a side answers the update's question (and Wi-Fi's) as a press does.
   // The debug link's HANG turns it too, but HANG is Harm: it needed a hand's
   // press to unlock, so no phone says yes for itself.
   static hw::TurnYes turnYes;
-  if (turnYes.sample(updater.asking(), f.rot, millis())) {
-    Serial.printf("[ota] turned: yes (rot=%u)\n", unsigned(f.rot));
-    updater.press(millis());
+  if (turnYes.sample(updater.asking() || wifiAsks(), f.rot, shell.home(), millis())) {
+    Serial.printf("[%s] turned: yes (rot=%u)\n", updater.asking() ? "ota" : "wifi", unsigned(f.rot));
+    if (updater.asking()) updater.press(millis());
+    else wifiPress(millis());
   }
 #endif
   applyLean(f.screen, ms);
-  f.screen.buttonDown = petFeels(f.screen.buttonDown, remote);
+  f.screen.buttonDown = marqueefw::takesButton(petFeels(f.screen.buttonDown, remote, f.owned));   // a press takes the marquee down
   dish->sample(f.screen, ms);
 #if !defined(BADGE_BOARD_SIM)
+  // A hard shake is a no to the shell's questions (#35): the update's "Tip
+  // me on my side!" lapses (not now), the debug link's unlock question goes, and
+  // Wi-Fi's "Join Wi-Fi?" goes as if unanswered.
+  if (dish->shakeDismisses() && (updater.asking() || debugAsks() || wifiAsks())) {
+    if (updater.asking()) updater.decline(millis()), Serial.printf("[ota] shaken: not now\n");
+    if (debugAsks()) debugSaysNo();
+    if (wifiAsks()) wifiSaysNo();
+    shellDismissedAt = millis() | 1;
+  }
   traceSample(f.body, f.screen, f.rot, ms);
   lat::felt(f, sensed.buttonDown, wasLow && !powerPolicy.low());
 #else
@@ -817,7 +944,7 @@ static void step(uint32_t now) {
   }
 #endif
   [[maybe_unused]] const uint32_t ticks = dish->tickCount();
-  dish->tick(now, host);
+  dish->tick(now, marqueefw::link());
 #if !defined(BADGE_BOARD_SIM)
   if (dish->tickCount() != ticks) lat::rec->ticked(micros());   // what spoke is taken
 #endif
@@ -879,8 +1006,15 @@ bool DishOtaHost::busy() {
   return false;
 }
 bool DishOtaHost::save() { return dish->flush(); }
+static bool wifiYieldRadio();       // src/wifi_ota.h
+static bool wifiUpdateHoldsRadio();
+static void wifiBegin();
+static void petLinesBoot();
 bool RadioGate::open() {
-  why = updater.active() ? "ota_active" : trial.onTrial() ? "trial" : nullptr;
+  // Wi-Fi gives the radio up first (docs/wifi-ota.md "Duels"): a station
+  // pins the channel to its access point's, and ESP-NOW needs channel 1.
+  const bool wifiUp = wifiYieldRadio();
+  why = wifiUpdateHoldsRadio() ? "ota_active" : trial.onTrial() ? "trial" : wifiUp ? "wifi_up" : nullptr;
   const bool ok = !why && inner->open();
   if (!why && !ok) why = inner->refusal();
   if (ok) radioDiag.say("radio open=1"), logged = "";
@@ -911,33 +1045,16 @@ static void restartIntoUpdate() {
   ESP.restart();
 }
 
-// What tools/ota_release.py reads back out of firmware.bin, so a release can
-// only be signed as the version, board and save format the image really is.
-// reportBoot() prints from it, which keeps the linker from dropping it.
-template <size_t N>
-constexpr std::array<char, N> stampField(const char* s) {
-  std::array<char, N> a{};
-  for (size_t i = 0; i + 1 < N && s[i]; ++i) a[i] = s[i];
-  return a;
-}
-struct ReleaseStamp {
-  std::array<char, 12> magic;
-  std::array<char, 16> fw, board;
-  uint16_t fmt;
-  std::array<char, 24> commit;   // git describe --always --dirty, as fw_stamp.py saw it
-};
-extern const ReleaseStamp kReleaseStamp = {stampField<12>("blorbstamp1"), stampField<16>(blorb::kFirmwareVersion),
-                                           stampField<16>(BOARD_NAME), blorb::kFormatVersion,
-                                           stampField<24>(BLORB_FW)};
-
 static void reportBoot() {
-  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", BLORB_FW, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
+  Serial.printf("[hw] blorbarium %s fw=%s fmt=%u %s\n", kBuildFw, kReleaseStamp.fw.data(), unsigned(kReleaseStamp.fmt),
                 kReleaseStamp.board.data());
-  Serial.printf("[hw] home rot=%u (USB-C %s)\n", unsigned(ORIENT_HOME), ORIENT_HOME == 2 ? "up" : "down");
+  Serial.printf("[hw] home rot=%u (USB-C %s, %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot), homeWhy,
+                hw::home::name(ORIENT_HOME));
   Serial.printf("[hw] psram size=%u free=%u\n", unsigned(ESP.getPsramSize()), unsigned(ESP.getFreePsram()));
-  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d (1: in PSRAM)\n", int(esp_ptr_external_ram(faultAir.get())),
-                int(esp_ptr_external_ram(lat::rec.get())), int(esp_ptr_external_ram(boardRowHashes())),
-                int(esp_ptr_external_ram(boardShadow())));
+  Serial.printf("[hw] psram: faultAir=%d lat=%d rowhash=%d shadow=%d stats=%d (1: in PSRAM)\n",
+                int(esp_ptr_external_ram(faultAir.get())), int(esp_ptr_external_ram(lat::rec.get())),
+                int(esp_ptr_external_ram(boardRowHashes())), int(esp_ptr_external_ram(boardShadow())),
+                int(esp_ptr_external_ram(&dish->stats())));
   Serial.printf("[hw] flash chip=%u\n", unsigned(ESP.getFlashChipSize()));
   Serial.printf("[hw] storage pet: %s\n", blorb::describe(storageState.slots));
   Serial.printf("[hw] storage petfs: %s\n", blorb::describe(storageState.files));
@@ -954,6 +1071,13 @@ static void reportBoot() {
   if (std::optional<uint32_t> t = systemClock.unixSeconds()) Serial.printf("[hw] clock=%u\n", unsigned(*t));
   else Serial.println("[hw] clock=unset");
   Serial.printf("[hw] imu %s tap=%s\n", imuOk ? "ok" : "missing", tapReady ? "ok" : "off");
+  if (imuOk) {
+    const imu::BootState& b = imu::bootState;
+    Serial.printf("[hw] imu at boot, before its soft reset: ctrl1=%02x ctrl2=%02x ctrl7=%02x ctrl8=%02x status0=%02x "
+                  "samples in 30 ms=%u data %s; reset %s\n",
+                  b.ctrl1, b.ctrl2, b.ctrl7, b.ctrl8, b.status0, unsigned(b.tsStep), b.dataMoved ? "moving" : "FROZEN",
+                  b.resetOk ? "ok" : "NOT CONFIRMED");
+  }
   const OccupantSummary o = summarize(dish->occupant());
   if (dish->boot() == blorb::Boot::ReadOnlyNewer)
     Serial.println("[hw] !!! SEALED: the pet was saved by newer firmware; nothing reads or writes it. "
@@ -987,7 +1111,7 @@ static void reportStatus(uint32_t now) {
 
 // A device that has never had a pet waits a moment on its first boot for
 // `DEBUG found <species>`: tools/flash_fleet.sh --species sends it, so each
-// gift hatches the creature chosen for its kid. The pin must land before the
+// badge hatches the creature chosen for its kid. The pin must land before the
 // founding below, and storage is blank until this boot formats it, so there
 // is no earlier moment to write it. A device with a pet never waits.
 [[maybe_unused]] static void awaitFoundPin() {
@@ -1003,55 +1127,62 @@ static void reportStatus(uint32_t now) {
 }
 
 #if !defined(BADGE_BOARD_SIM)
-// The Bluetooth name is the species (docs/ble.md): the pet's, or the one the
-// badge table will adopt him as (founding.h advertisedSpecies), whatever the
-// owner named him. An image on trial keeps the old image's blorb-xxxx, so a
-// trial looks to the page exactly as the board it updated: the page served
-// before rel-site keys its OTA token by device name, and a reloaded one must
-// find that token to CONFIRM. The species name comes with the next boot.
+// The Bluetooth name is always the pet's name, lowercase (docs/ble.md,
+// blorb/ble_name.h), on an OTA trial too. Through 0.7.42 a trial advertised
+// blorb-xxxx, and a trial that kept its image did not restart, so every
+// update left the badge called blorb-xxxx until its next reboot, for days.
+// The page keys its OTA token by the device, not the name, so a trial needs
+// no name of its own; the tools find it by its address or the UART service.
 static const char* bleName(const uint8_t mac[6]) {
-  static char name[16];
-  if (trial.onTrial()) {
-    std::snprintf(name, sizeof name, "blorb-%02x%02x", mac[4], mac[5]);
-  } else {
-    std::snprintf(name, sizeof name, "%s", blorb::speciesInfo(blorb::advertisedSpecies(petGenome(), mac)).name);
-  }
-  return name;
+  static char name[blorb::blename::kMax + 1];
+  return blorb::advertisedName(*dish, mac, name);
 }
 
-// A pet 0.4.0 founded becomes his badge's species (founding.h), once the
-// flash can be written: on an OTA trial, only after the trial keeps the
-// image, so the trial's pet check and a rollback both meet the pet the old
-// image saved. Then, under the same rule, a pet 0.7.0 adopted with the Gift
-// recipe's sleep takes FirstHours' (founding.h retuneFirstHours). Asked once
-// a second until the Dish says each is done. A board not in the table, and
-// the gift grungo (row 0), are neither adopted nor retuned.
-static void adoptTableSpecies(uint32_t now) {
-  static bool adopted = false, retuned = false;
+// Once a second: a rename or an adoption changes the pet's name, and the
+// Bluetooth name follows it then, not at the next boot.
+static void followPetName(uint32_t now) {
   static uint32_t askedAt = 0;
-  if ((adopted && retuned) || trial.onTrial() || now - askedAt < 1000) return;
+  if (now - askedAt < 1000) return;
   askedAt = now;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  const std::optional<blorb::SpeciesId> species = blorb::tableSpecies(mac);
-  if (!adopted) {
-    const blorb::Dish::Adoption a =
-        species ? dish->adoptSpecies(*species, paint::bandsFor(*species)) : blorb::Dish::Adoption::NotNeeded;
-    if (a == blorb::Dish::Adoption::NotYet) return;
-    adopted = true;
-    if (a == blorb::Dish::Adoption::Adopted) {
-      const OccupantSummary o = summarize(dish->occupant());
-      Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows at the next boot)\n",
-                    blorb::speciesInfo(*species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
-    }
+  char was[blorb::blename::kMax + 1];
+  std::snprintf(was, sizeof was, "%s", ble.name());
+  if (ble.rename(bleName(mac))) Serial.printf("[hw] ble name now %s (was %s): the pet's name changed\n", ble.name(), was);
+}
+
+// A pet from before species (0.4.0 founded them) becomes his board's species
+// (founding.h badgeSpecies: the table's, else one of the regular cast from
+// the MAC), once the flash can be written: on an OTA trial, only after the
+// trial keeps the image, so the trial's pet check and a rollback both meet
+// the pet the old image saved. Asked once a second until the Dish says it is
+// done. Every board is treated alike, grungo's included.
+static void adoptBoardSpecies(uint32_t now) {
+  static bool adopted = false;
+  static uint32_t askedAt = 0;
+  if (adopted || trial.onTrial() || now - askedAt < 1000) return;
+  askedAt = now;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  const blorb::SpeciesId species = blorb::badgeSpecies(mac);
+  const blorb::Dish::Adoption a = dish->adoptSpecies(species, paint::bandsFor(species));
+  if (a == blorb::Dish::Adoption::NotYet) return;
+  adopted = true;
+  if (a == blorb::Dish::Adoption::Adopted) {
+    const OccupantSummary o = summarize(dish->occupant());
+    Serial.printf("[hw] adopted species=%s gen=%u genome=%08x name=%s (the Bluetooth name follows within a second)\n",
+                  blorb::speciesInfo(species).name, unsigned(o.gen), unsigned(o.genome), dish->lineage().currentName());
   }
-  const uint32_t was = summarize(dish->occupant()).genome;
-  const blorb::Dish::Adoption r = species ? dish->retuneFirstHours(*species) : blorb::Dish::Adoption::NotNeeded;
-  if (r == blorb::Dish::Adoption::NotYet) return;
-  retuned = true;
-  if (r == blorb::Dish::Adoption::Adopted)
-    Serial.printf("[hw] retuned first-hours sleep species=%s genome=%08x->%08x\n", blorb::speciesInfo(*species).name,
-                  unsigned(was), unsigned(summarize(dish->occupant()).genome));
+}
+#endif
+
+#if !defined(BADGE_BOARD_SIM)
+#include "analytics_fw.h"
+// Internal heap at each step of boot (#27: an image built on badge128_pm had
+// about 25 KB less on trial than badge128, too little for Wi-Fi's driver).
+static void heapMark(const char* step) {
+  Serial.printf("[hw] heap %s: free=%u big=%u\n", step, unsigned(ESP.getFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
 }
 #endif
 
@@ -1066,7 +1197,16 @@ void setup() {
   Serial.setTxBufferSize(BLORB_SERIAL_TX);
 #endif
   Serial.begin(115200);
+  // The version, tiny and dim in the dish (paint::setVersionTag), as the stamp
+  // says it: build_info.cpp, the one file the stamp reaches. The simulator has
+  // no stamp and says "dev", so the frame goldens hold across releases.
+#if defined(BADGE_BOARD_SIM)
+  paint::setVersionTag("dev");
+#else
+  paint::setVersionTag(kReleaseStamp.fw.data());
+#endif
 #if !defined(BADGE_BOARD_SIM)
+  heapMark("start");
   // In PSRAM (InPsram above), before anything uses them.
   if (BLORB_HEAP_BALLAST) {   // #53's A/B: never freed, never touched
     static void* ballast = heap_caps_malloc(BLORB_HEAP_BALLAST, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -1075,6 +1215,13 @@ void setup() {
   faultAir.make(espNow, [] { return uint32_t(millis()); }, [] { return uint32_t(esp_random()); });
   radioGate.inner = faultAir.get();
   lat::rec.make();
+  // The life stats and analytics (#38, #50) take everything they hold from
+  // PSRAM, before the Dish that owns them is built: internal RAM is the radio's (#53).
+  blorb::bigHeap = {[](size_t n) -> void* {
+                      void* p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                      return p ? p : malloc(n);
+                    },
+                    [](void* p) { heap_caps_free(p); }};
 #endif
   boardButtonBegin();
 #if !defined(BADGE_BOARD_SIM)
@@ -1085,25 +1232,28 @@ void setup() {
   uint64_t lineage = 0;
   for (uint8_t b : mac) lineage = lineage << 8 | b;
   blorb::DishOptions options;
+  options.mac = lineage;   // STATE's mac=: the board's own, whatever lineage the keepsake carries
 #if !defined(BADGE_BOARD_SIM)
   // An image on trial opens the pet read-only and formats nothing: until it
   // keeps itself, the flash is the old image's (docs/ota.md "The trial").
   const bool onTrial = trialPort.pending();
   storageState = store.begin(onTrial);
   dishStore.hold(onTrial);
+  heapMark("storage");
   options.rtc = &systemClock;
   options.sealed = blorb::leftAlone(storageState);
   // No battery: no wall time is coming, so a fresh pet hatches into his
   // morning, not into seven hours of pet night (docs/notes/first-hours.md).
   options.foundingHour = blorb::kUnaskedFoundingHour;
-  // An egg waits for a phone's TIME; the debug link's FREEHATCH lifts it.
+  // An egg's clock waits for the page's ADOPT (the debug link's FREEHATCH
+  // lifts it); a few seconds of shaking hatch it with no phone at all.
   options.hatchNeedsPhone = true;
 #else
   options.sealed = simSealed;
 #endif
   // A fresh board founds its own species: found.pin's, else the badge
-  // table's, else grungo (founding.h). The sim founds the starter, as
-  // it always has, so its goldens hold.
+  // table's, else one of the regular cast from its MAC (founding.h). The
+  // sim founds the starter, as it always has.
   const uint32_t speciesSeed = blorb::fnv1a(mac, sizeof(mac));
   std::optional<blorb::Genome> founder;
 #if !defined(BADGE_BOARD_SIM)
@@ -1124,10 +1274,27 @@ void setup() {
 #endif
   options.air = duelAir;   // a sealed board never steps a duel: the Dish runs no life
   dish.emplace(dishStore, speciesSeed, lineage, options);
+#if !defined(BADGE_BOARD_SIM)
+  heapMark("dish");
+#endif
+#if !defined(BADGE_BOARD_SIM)
+  // This badge's own home, before the first frame or sample (src/hw/home.h).
+  {
+    const hw::home::AtBoot h = hw::home::atBoot(hw::HomeStore::load(), ORIENT_HOME);
+    homeRot = h.rot;
+    homeWhy = h.write ? (hw::HomeStore::save(h.rot) ? "migrated: written" : "migrated: WRITE FAILED") : h.why;
+    shell.setHome(h.rot);
+  }
+#endif
   [[maybe_unused]] bool panelUp = display.init();
   boardPresentBegin(display);   // the panel's send task, on core 0
 #if !defined(BADGE_BOARD_SIM)
-  display.setBrightness(dish->settings().brightness);
+  heapMark("panel");
+#endif
+#if !defined(BADGE_BOARD_SIM)
+  // An update over Wi-Fi restarts into its trial dark, in the night or on a
+  // shelf: the backlight stays off until someone wakes him (src/wifi_ota.h).
+  display.setBrightness(wifiQuietBoot() ? 0 : dish->settings().brightness);
   reportBoot();
 #if defined(BLORB_OTA_FAIL_TRIAL)
   // For the hardware proof only (docs/ota.md): an image that reports its panel
@@ -1135,6 +1302,7 @@ void setup() {
   panelUp = false;
 #endif
   const bool resumed = dish->boot() == blorb::Boot::Resumed;
+  anxfw::boot(imuOk, !trialPort.pending() && trialPort.handover().has_value());   // as trial.begin judges a rollback
   trial.begin(trialPort, panelUp, resumed, petMark());
   if (trial.onTrial()) {
     const std::optional<ota::Handover> h = trialPort.handover();
@@ -1143,14 +1311,18 @@ void setup() {
     trialWatchdog.start();
   }
   otaPackets.begin();
+  wifiBegin();
+  petLinesBoot();
   ble.keepWhile([] { return updater.active(); });
-  const char* name = ble.begin(bleName(mac), &otaData);
+  const char* name = ble.begin(bleName(mac), mac, &otaData);
   Serial.printf("[hw] ble name=%s heap=%u big=%u\n", name, unsigned(ESP.getFreeHeap()),
                 unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
   xTaskCreate(bodyq::sense, "sense", 4096, nullptr, 2, nullptr);
   pmBegin();
+  heapMark("sense+pm");
   paint::phaseClock.now = fps::now;   // DEBUG fps's phases
   paintcore0::begin();                // the renderer's second half on core 0
+  heapMark("paint core0");
 #if defined(CONFIG_PM_ENABLE)
   Serial.println("[hw] pm: light sleep in low power, ble modem sleep");
 #else
@@ -1166,7 +1338,7 @@ static uint32_t warpMs = 0;
 static void warp(uint32_t ticks) {
   for (uint32_t done = 0; done < ticks; done += 10) {
     warpMs += 10 * blorb::kTickMs;
-    dish->tick(millis() + warpMs, host);    // at most 10 ticks a call
+    dish->tick(millis() + warpMs, marqueefw::link());    // at most 10 ticks a call
     if (done % 2000 == 0) delay(1);          // let the idle task run
   }
 }
@@ -1261,10 +1433,12 @@ static void reportDuel() {
     phase = v.phase;
     if (phase == blorb::DuelPhase::Closed) peers = 0, turn = 0;
   }
-  if (v.phase == blorb::DuelPhase::Lobby && v.peerCount != peers) {
-    peers = v.peerCount;
-    Serial.printf("[duel] lobby hears %u friend(s)%s species=", unsigned(peers),
-                  peers && v.peers[0].wantsMe ? ", the first wants me" : "");
+  static uint8_t otherRules = 0, notReady = 0;
+  if (v.phase == blorb::DuelPhase::Lobby &&
+      (v.peerCount != peers || v.otherRules != otherRules || v.notReady != notReady)) {
+    peers = v.peerCount, otherRules = v.otherRules, notReady = v.notReady;
+    Serial.printf("[duel] lobby hears %u friend(s)%s other_rules=%u not_ready=%u species=", unsigned(peers),
+                  peers && v.peers[0].wantsMe ? ", the first wants me" : "", unsigned(otherRules), unsigned(notReady));
     for (uint8_t i = 0; i < peers; ++i) Serial.printf("%s%s", i ? "," : "", blorb::speciesInfo(v.peers[i].species).name);
     Serial.printf("\n");
   }
@@ -1372,10 +1546,69 @@ static void shake() {
   Serial.printf("[hw] debug shake\n");
 }
 
+// `DEBUG pickup`: he lies still 2 s, is lifted and carried 2.8 s, and is set
+// down: through the raw sample, the shell and the real HeldDetector, at this
+// badge's home, so picked_up fires as for a hand (and put_down after).
+static void pickup() {
+  bodyq::pickupHome = shell.home();
+  bodyq::pickupAt = millis() + 40;   // on a read to come
+  bodyq::pickingUp = true;
+  Serial.printf("[hw] debug pickup: still %u ms, then lifted toward home rot=%u and carried, set down, over in %u ms\n",
+                unsigned(debugverbs::kPickupStillMs), unsigned(bodyq::pickupHome), unsigned(debugverbs::kPickupMs));
+}
+
+// `DEBUG chem <name> <permille>`: as the debug link's CHEM, on the cable.
+static void chemVerb(const char* line) {
+  char name[24] = "", permille[12] = "";
+  std::sscanf(line, "%*s %23s %11s", name, permille);
+  int level = 0;
+  const char* why = debugverbs::chem(*dish, name, permille, level);
+  if (why) return (void)Serial.printf("[hw] debug chem %s %s: %s\n", name, permille, why);
+  Serial.printf("[hw] debug chem %s=%d\n", name, level);
+}
+
 static void cradle(const char* a) {
   const long ms = *a ? std::strtol(a, nullptr, 10) : 5000;
   if (ms <= 0 || ms > 30000) return (void)Serial.printf("[hw] debug cradle: want [ms 1..30000]\n");
   cradleFor(uint32_t(ms));
+}
+
+// `DEBUG ride <bumpy|turn|spin|swing|walk|jolt|shake|settle|still> [ms]`:
+// that motion (hw/carry_ride.h) through the real IMU path for its own
+// length, or ms; `DEBUG ride` alone lists them. The carried reactions
+// (blorb/carry_show.h) are chances, not certainties: see `DEBUG carry`.
+static void rideVerb(const char* line) {
+  char kind[16] = "";
+  long ms = 0;
+  std::sscanf(line, "%*s %15s %ld", kind, &ms);
+  const hw::ride::Info* r = *kind ? hw::ride::find(kind) : nullptr;
+  if (!r || ms < 0 || ms > 60000) {
+    for (const hw::ride::Info& k : hw::ride::kRides) Serial.printf("[hw] ride %s (%u ms): %s\n", k.name, unsigned(k.ms), k.what);
+    return (void)Serial.printf("[hw] debug ride: want <kind> [ms 1..60000]\n");
+  }
+  bodyq::rideMs = 0;
+  bodyq::rideKind = uint8_t(r->kind);
+  bodyq::rideAt = millis() + 40;   // on a read to come
+  bodyq::rideMs = ms ? uint32_t(ms) : r->ms;
+  Serial.printf("[hw] debug ride %s %u ms\n", r->name, unsigned(bodyq::rideMs));
+}
+
+// `DEBUG carry [kind|none]`: that carried reaction now (cling, dizzy, jelly,
+// whee, glance, settle), whatever the motion: a preview of how it looks. With
+// none named, what the carry show measures and how many of each have played.
+static void carryVerb(const char* a) {
+  blorb::Carry k = blorb::Carry::None;
+  if (*a && (std::strcmp(a, "none") == 0 || blorb::carryFromName(a, k))) {
+    dish->forceCarry(k);
+    return (void)Serial.printf("[hw] debug carry %s\n", blorb::carryName(k));
+  }
+  const blorb::CarryShow& c = dish->carry();
+  const blorb::CarryShow::Signals& g = c.signals();
+  Serial.printf("[hw] carry playing=%s jerk=%d pull=%d off=%d push=%d ride_ms=%u still_ms=%u steps=%u swings=%u spin=%d",
+                blorb::carryName(c.playing(millis())), g.jerk, g.pull, g.off, g.push, unsigned(g.rideMs), unsigned(g.stillMs),
+                unsigned(g.steps), unsigned(g.swings), g.spinDeg);
+  for (uint8_t i = 1; i < blorb::kCarryKinds; ++i) Serial.printf(" %s=%u", blorb::carryName(blorb::Carry(i)), unsigned(c.started(blorb::Carry(i))));
+  Serial.printf("\n");
 }
 
 // `DEBUG nap`: he falls asleep now, as at bedtime (to prove the hang wakes him for a fight).
@@ -1450,6 +1683,23 @@ static bool net(const char* line) {
   return true;
 }
 
+// `DEBUG air [open|close]`: the duel's radio by hand, through RadioGate as
+// fight mode opens it (an open Wi-Fi window gives the radio up first; a trial
+// or an update refuses), to show the air still fits after a Wi-Fi window.
+// EspNowAir logs its own `[hw] air open ch=1 heap A -> B ... big=`.
+static void airVerb(const char* a) {
+  if (!std::strcmp(a, "open")) {
+    const bool ok = radioGate.open();
+    return (void)Serial.printf("[hw] debug air open: %s heap=%u minheap=%u big=%u\n", ok ? "ok" : radioGate.refusal(),
+                               unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                               unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+  }
+  if (!std::strcmp(a, "close")) radioGate.close();
+  Serial.printf("[hw] debug air %s: open=%d heap=%u minheap=%u big=%u\n", *a ? a : "status", int(radioGate.isOpen()),
+                unsigned(ESP.getFreeHeap()), unsigned(ESP.getMinFreeHeap()),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+}
+
 // `DEBUG duel`: where the duel stands right now, in one line.
 static void duelNow() {
   constexpr const char* kPhase[] = {"closed",  "lobby",     "greeting", "staking", "choosing", "waiting",
@@ -1477,9 +1727,35 @@ static const char* powerLine(char* out, size_t n, uint32_t now);
 static bool powerHeld();
 static bool remotePress(uint32_t ms, bool twice);
 
+static void wifiVerb(const char* line);   // src/wifi_ota.h
+// The log as it leaves the badge, every Wi-Fi SSID and password masked (src/wifi_ota.h).
+static size_t maskLog(const char* in, size_t n, char* out, size_t cap);
+static void wpa3Verb(const char* line);   // src/wifi_ota.h
+static void otaVerb(const char* line);
+
+// `DEBUG home [up|down]`: which way up is home on this badge, kept in NVS
+// through updates and pet wipes (src/hw/home.h). Bare: what it is now.
+static void homeVerb(const char* a) {
+  if (*a) {
+    const std::optional<uint8_t> h = hw::home::parse(a);
+    if (!h) return (void)Serial.printf("[hw] debug home: want up|down (USB-C up or USB-C down is the right way up)\n");
+    const bool saved = hw::HomeStore::save(*h);
+    homeRot = *h;
+    homeWhy = saved ? "nvs" : "set, SAVE FAILED";
+    shell.setHome(*h);
+  }
+  const std::optional<uint8_t> stored = hw::HomeStore::load();
+  Serial.printf("[hw] home rot=%u (USB-C %s, %s; stored %s; built %s)\n", unsigned(homeRot), hw::home::name(homeRot),
+                homeWhy, stored ? hw::home::name(*stored) : "none", hw::home::name(ORIENT_HOME));
+}
+
 static void runDebug(const char* line) {
   char verb[16] = "", a[32] = "";
   std::sscanf(line, "%15s %31s", verb, a);
+  if (std::strcmp(verb, "home") == 0) return homeVerb(a);
+  if (std::strcmp(verb, "marquee") == 0) {   // `DEBUG marquee <text>`: the whole screen says it (src/marquee.h)
+    return showMarquee(line + std::strlen("marquee"));
+  }
   if (std::strcmp(verb, "hang") == 0) return hang(line);
   if (std::strcmp(verb, "side") == 0) return side(line);
   if (std::strcmp(verb, "knock") == 0) return knock(a);
@@ -1487,6 +1763,10 @@ static void runDebug(const char* line) {
   if (std::strcmp(verb, "nap") == 0) return nap();
   if (std::strcmp(verb, "cradle") == 0) return cradle(a);
   if (std::strcmp(verb, "shake") == 0) return shake();
+  if (std::strcmp(verb, "ride") == 0) return rideVerb(line);
+  if (std::strcmp(verb, "carry") == 0) return carryVerb(a);
+  if (std::strcmp(verb, "pickup") == 0) return pickup();
+  if (std::strcmp(verb, "chem") == 0) return chemVerb(line);
   if (std::strcmp(verb, "sleepiness") == 0) return setSleepiness(a);
   if (std::strcmp(verb, "tidy") == 0) return tidy();
   if (std::strcmp(verb, "net") == 0) return (void)net(line);
@@ -1510,6 +1790,10 @@ static void runDebug(const char* line) {
     return (void)Serial.printf("[hw] smooth=%s speed=%u/256\n", smoothFrames ? "on" : "off", unsigned(paint::kScreenSpeedQ8));
   }
   if (std::strcmp(verb, "duel") == 0) return duelNow();
+  if (std::strcmp(verb, "air") == 0) return airVerb(a);
+  if (std::strcmp(verb, "wifi") == 0) return wifiVerb(line);
+  if (std::strcmp(verb, "wpa3") == 0) return wpa3Verb(line);
+  if (std::strcmp(verb, "ota") == 0) return otaVerb(line);
   if (std::strcmp(verb, "reboot") == 0) rebootNow(std::strcmp(a, "quiet") == 0);
   if (std::strcmp(verb, "bletest") == 0) return bleTest(a);
   if (std::strcmp(verb, "shot") == 0) return (void)shot.emplace(canvas);
@@ -1526,10 +1810,15 @@ static void runDebug(const char* line) {
     return (void)Serial.printf("[hw] debug hatch: %s occupant=%s genome=%08x\n", ok ? "ok" : "no egg", o.kind,
                                unsigned(o.genome));
   }
+  if (std::strcmp(verb, "die") == 0) {   // he dies now, as the debug link's DIE: the vigil run out to the eggs, or `die remains`
+    const bool ok = debugble::die(*dish, std::strcmp(a, "remains") != 0, warp) == debugble::Jump::Done;
+    const OccupantSummary o = summarize(dish->occupant());
+    return (void)Serial.printf("[hw] debug die: %s occupant=%s\n", ok ? "ok" : "no creature", o.kind);
+  }
   if (std::strcmp(verb, "stage") != 0) {
-    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, species gilly, found gilly, shot, "
+    Serial.printf("[hw] debug: unknown verb '%s' (try: stage adult, hatch, die [remains], species gilly, found gilly, shot, "
                   "press [ms], double, knock [1|2], side [ms] [l|r], lean <aim> [ms], hang, shake, cradle, nap, net, duel, latency [last|clear], warp <min>, tidy, "
-                  "power [low|wake|idle <s>], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>)\n", verb);
+                  "power [low|wake|nap|idle <s>|napafter <s>|wom <mg>|remind [<s>]|stats], fps [bench], lcd [MHz|sync|async], cores [1|2], reboot, bletest <bytes>, air [open|close], home [up|down], wifi [status|set|forget|on|off], ota check [url], marquee <text>)\n", verb);
     return;
   }
   const uint32_t t0 = millis();
@@ -1544,6 +1833,8 @@ static void runDebug(const char* line) {
 
 #include "debug_ble.h"
 
+static void debugSaysNo() { dbgfw::console.unlock().cancelQuestion(); }
+
 // ---- Low power (src/hw/power.h, docs/power.md) ---------------------------------------
 // Asleep: the backlight is off and the panel in SLPIN, no frame is drawn, the
 // CPU runs at 80 MHz and the loop rests between passes. The pet still ticks,
@@ -1555,6 +1846,12 @@ static constexpr uint32_t kFullMhz = 240, kLowMhz = 80;
 static constexpr uint32_t kLowRestMs = 20;   // the loop's rest a pass in low power
 static bool panelLow = false, lightAfterFrame = false;
 static uint32_t seenBleGen = 0, seenAirLines = 0;
+// The cable is UART0 through the CH343, and a UART hears nothing while the
+// chip light-sleeps (badge128_pm's, or the nap's): a byte wakes it (uart
+// wakeup, 3 edges) but that byte and the next few are lost. So any byte on the
+// cable holds light sleep off for kCableAwakeMs, and a script sends a few '\r'
+// (the link ignores them), waits ~60 ms, then its line, which arrives whole.
+static constexpr uint32_t kCableAwakeMs = 3000;
 
 // The CPU side of low power. On a framework built with power management
 // (CONFIG_PM_ENABLE: tools/pm_framework.sh, env badge128_pm) the chip
@@ -1566,13 +1863,8 @@ static uint32_t seenBleGen = 0, seenAirLines = 0;
 // clock just drops to 80 MHz.
 #if defined(CONFIG_PM_ENABLE)
 static constexpr bool kLightSleep = true;
-// The cable is UART0 through the CH343, and a UART hears nothing while the
-// chip light-sleeps: a byte wakes it (uart wakeup, 3 edges) but that byte and
-// the next few are lost. So any byte on the cable holds light sleep off for
-// kCableAwakeMs, and a script sends a few '\r' (the link ignores them), waits
-// ~60 ms, then its line, which arrives whole. A quiet cable lets the chip
-// sleep, so a badge on its cable still proves light sleep (slept_ms).
-static constexpr uint32_t kCableAwakeMs = 3000;
+// A quiet cable lets the chip sleep, so a badge on its cable still proves
+// light sleep (slept_ms).
 static esp_pm_lock_handle_t cableLock = nullptr;
 static bool cableHeld = false;
 static void cablePower(uint32_t) {
@@ -1582,10 +1874,10 @@ static void cablePower(uint32_t) {
   if (hold) esp_pm_lock_acquire(cableLock);
   else esp_pm_lock_release(cableLock);
 }
-static const char* sleepState() { return !powerPolicy.low() ? "off" : cableHeld ? "cable" : "light"; }
+static const char* pmSleepState() { return !powerPolicy.low() ? "off" : cableHeld ? "cable" : "light"; }
 // Light-sleep time since boot, from the PM profiling's mode table (the SLEEP
 // row, which it only prints while light sleep is on: awake, the last one seen).
-static uint32_t sleptMs() {
+static uint32_t pmSleptMs() {
   static uint32_t last = 0;
 #if defined(CONFIG_PM_PROFILING)
   static char buf[1536];
@@ -1630,8 +1922,8 @@ static void pmBegin() {
   cpuPower(false);
 }
 #else
-static const char* sleepState() { return "none"; }
-static uint32_t sleptMs() { return 0; }
+static const char* pmSleepState() { return "none"; }
+static uint32_t pmSleptMs() { return 0; }
 static void cablePower(uint32_t) {}
 static constexpr bool kLightSleep = false;
 static void cpuPower(bool low) {
@@ -1644,16 +1936,337 @@ static void pmBegin() { cpuPower(false); }   // set, not assumed: awake is 240 M
 // What needs the screen awake: a fight (searching, waiting or on), an update
 // or its question, the debug unlock's question, a DEBUG shot going out.
 static bool powerHeld() {
-  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || updater.active() || debugAsks() ||
-         bool(shot);
+  return dish->duelActive() || std::strcmp(dish->fightState(), "off") != 0 || marqueefw::holds() ||
+         (updater.active() && !updater.ownedBy(kWifiPeer)) || debugAsks() || wifiAsks() || bool(shot) ||
+         dish->hangCharging();   // a hang under way: a kid holding it still on its edge
 }
 
+// ---- The nap (docs/power.md "The nap") ---------------------------------------------
+// Dark for napMs (power.h) with nothing that needs the radio or the cable, the
+// chip light-sleeps: both cores, every task, the radio and the panel's clocks
+// stop, and esp_timer (so millis()) is moved on by the time slept, measured on
+// the RTC clock that light sleep calibrates against the crystal each time it
+// goes down. Bluetooth stops advertising first (a controller with nothing to
+// do sleeps with the chip), and the IMU watches for motion on its own pin.
+// The timer wakes it at the next scheduled Wi-Fi check or after a minute
+// (power::napSleepMs), whichever is first: the check opens on that pass, so a
+// nap never delays an update. Each timer wake catches the pet's ticks up to
+// now in one go (petCatchUp: the same 100 ms ticks on the same clock, so he
+// ages exactly as awake) and glances at gravity (power::Policy::glance: a
+// lift too gentle for the IMU's pin). The IMU's pin (anything past womMg) and
+// BOOT wake it for kListenMs of 50 Hz senses, the IMU back at 250 Hz, so the
+// policy decides as it does awake: a hand wakes it (picked up, tilted, shaken,
+// stirred or held: power.h), a bumped table does not. A cable byte wakes it
+// and holds the nap off kCableAwakeMs (the bytes that woke it are lost).
+namespace napq {
+#if defined(BADGE_BOARD_LCD146)
+constexpr bool kBoard = false;   // its IMU's pin is not known
+#else
+constexpr bool kBoard = true;
+#endif
+constexpr uint32_t kListenMs = 2000;
+// Wake on motion, mg. The probe (tools/wom_probe): 2 mg is noise, 150 mg a
+// still desk never crossed; a gentle lift is a few tens of mg a sample at
+// 21 Hz, so 64. `DEBUG power wom <mg>` tries others until reset.
+constexpr uint8_t kWomMg = 64;
+static uint8_t womMg = kWomMg;
+constexpr uint32_t kReportMs = 60000;   // a `[power] napping` line at most this often, for the cable's proof
+constexpr gpio_num_t kButton = gpio_num_t(PIN_BOOT_BUTTON), kImuPin = gpio_num_t(imu::kIntPin);
+enum Wake : uint8_t { Timer, Imu, Button, Cable, Other, kWakes };
+static bool on = false, womOk = false;
+static bool imuListening = false;   // a listen set the IMU back to 250 Hz; wake on motion is set again before sleeping
+static uint32_t since = 0, listenUntil = 0, reportAt = 0, naps = 0, lastSleepMs = 0, catchUpUs = 0, catchUpWorstUs = 0;
+static uint32_t wakes[kWakes] = {}, napWakes[kWakes] = {};   // since boot, and this nap
+static uint64_t sleptUs = 0, awakeUs = 0;                     // in naps since boot: asleep, and the passes between
+static uint64_t napSleptUs = 0, napAwakeUs = 0, wokeAt = 0;   // this nap
+static const char* blocker = "awake";                         // what keeps it from napping now
+static bool listening() { return on && int32_t(listenUntil - millis()) > 0; }
+}  // namespace napq
+
+// The reminder (power.h): 3 to 5 days after the last real interaction the
+// screen lights for 8 s and he says hello, at any hour. Its countdown is kept
+// in NVS ("power"/"remind_s") at each nap and each reminder, so restarts and
+// naps neither reset nor lose it.
+namespace remind {
+static power::Reminder clock;
+static uint32_t seenInteractions = 0, shown = 0, startedAt = 0, step = 0;
+static void save() {
+  nvs_handle_t h;
+  if (nvs_open("power", NVS_READWRITE, &h) != ESP_OK) return;
+  nvs_set_u32(h, "remind_s", clock.remainingS(millis()));
+  nvs_commit(h);
+  nvs_close(h);
+}
+static void begin() {
+  nvs_handle_t h = 0;
+  uint32_t s = 0;
+  bool kept = false;
+  if (nvs_open("power", NVS_READONLY, &h) == ESP_OK) kept = nvs_get_u32(h, "remind_s", &s) == ESP_OK, nvs_close(h);
+  if (kept) clock.resume(millis(), s);
+  else clock.restart(millis(), esp_random());
+  seenInteractions = powerPolicy.interactions();
+  Serial.printf("[power] reminder in %u h %u min (%s)\n", unsigned(clock.remainingS(millis()) / 3600),
+                unsigned(clock.remainingS(millis()) / 60 % 60), kept ? "kept" : "new: 3 to 5 days");
+}
+// Every pass, before applyPower: a real interaction starts the countdown
+// over; dark and due, the screen lights (the panel follows in applyPower).
+static void poll(uint32_t now) {
+  if (const uint32_t n = powerPolicy.interactions(); n != seenInteractions)
+    seenInteractions = n, clock.restart(millis(), esp_random());
+  if (!clock.due(millis()) || !powerPolicy.low() || powerHeld()) return;
+  powerPolicy.nudge(now, power::kReminderLitMs);
+  clock.restart(millis(), esp_random());
+  ++shown;
+  save();
+  startedAt = millis(), step = 0;
+  Serial.printf("[power] reminder: lit %u s at full brightness, he waves and calls out; next in %u h\n",
+                unsigned(power::kReminderLitMs / 1000), unsigned(clock.remainingS(millis()) / 3600));
+}
+
+// While it is lit: something new every kStepMs, so he never stands still. The
+// carry shows (a whee, a jelly wobble, a glance about) are the moves a hand
+// gives him; a plain line every third step. A hand or a phone ends it
+// (Policy::nudging), and from there it is an ordinary wake.
+constexpr uint32_t kStepMs = 5000;
+constexpr blorb::Carry kMoves[] = {blorb::Carry::Whee, blorb::Carry::Jelly, blorb::Carry::Glance, blorb::Carry::Whee,
+                                   blorb::Carry::Dizzy, blorb::Carry::Jelly};
+constexpr const char* kLines[] = {"HELLO!", "HI! OVER HERE!", "PLAY WITH ME?", "I MISSED YOU!"};
+static void animate() {
+  if (!powerPolicy.nudging()) return;
+  const uint32_t due = (millis() - startedAt) / kStepMs;
+  if (step > due) return;
+  if (std::holds_alternative<blorb::Creature>(dish->occupant())) {
+    dish->forceCarry(kMoves[step % (sizeof kMoves / sizeof kMoves[0])]);
+    if (step % 3 == 0) dish->say(kLines[step / 3 % (sizeof kLines / sizeof kLines[0])]);
+  }
+  ++step;
+}
+// The rim's glow, 0..255, breathing about once every 1.6 s.
+static uint8_t rimLevel() {
+  const uint32_t t = (millis() - startedAt) % 1600;
+  return uint8_t(60 + (t < 800 ? t : 1600 - t) * 195 / 800);
+}
+}  // namespace remind
+
+// Why it may not nap now; null when it may.
+static const char* napBlocker(uint32_t now) {
+  if (!powerPolicy.low() || !powerPolicy.napDue(now)) return power::napBlocker(powerPolicy, now, {});
+  power::NapFacts f;
+  f.board = napq::kBoard;
+  f.imu = imuOk;   // only BOOT could wake it, and the kids do not use BOOT
+  f.held = powerHeld();
+  f.phone = ble.connected();
+  f.wifi = !wifiIdle();
+  f.air = espNow.isOpen();
+  f.trial = trial.onTrial();
+  f.update = updater.active();
+  f.cable = millis() - cableHeardAt < kCableAwakeMs;
+  return power::napBlocker(powerPolicy, now, f);
+}
+
+// The sense task stops reading; with `wait`, until it is between reads, so the IMU may be set up anew.
+static void sensePause(bool pause, bool wait) {
+  if (pause && wait) bodyq::pausedAck = false;
+  bodyq::paused = pause;
+  for (const uint32_t t0 = millis(); pause && wait && !bodyq::pausedAck && millis() - t0 < 200;) delay(2);
+}
+
+static void napWakesLine(char* out, size_t n, const uint32_t (&w)[napq::kWakes]) {
+  std::snprintf(out, n, "timer=%u imu=%u button=%u cable=%u other=%u", unsigned(w[0]), unsigned(w[1]), unsigned(w[2]),
+                unsigned(w[3]), unsigned(w[4]));
+}
+
+static void napEnter(uint32_t now) {
+  sensePause(true, true);
+  napq::womOk = imu::wakeOnMotion(napq::womMg);
+  pinMode(napq::kImuPin, INPUT);
+  ble.napAdvertising(true);
+  remind::save();   // the countdown as it stands, should the battery or a restart come before the next
+  napq::on = true, napq::since = millis(), ++napq::naps;
+  napq::napSleptUs = napq::napAwakeUs = 0, napq::wokeAt = uint64_t(esp_timer_get_time());
+  napq::listenUntil = millis(), napq::reportAt = millis() + napq::kReportMs;
+  std::memset(napq::napWakes, 0, sizeof napq::napWakes);
+  Serial.printf("[power] nap in: dark %u s, ble adv off, imu wake-on-motion %u mg on gpio%d (%s), timer up to %u ms "
+                "(next wifi check in %u s), pet tick=%u\n",
+                unsigned((now - powerPolicy.lowSince()) / 1000), unsigned(napq::womMg), imu::kIntPin,
+                napq::womOk ? "ok" : "NOT SET: timer and button only", unsigned(power::kNapCapMs),
+                unsigned(std::min<uint32_t>(wifiCheckInMs(millis()), 99999999u) / 1000), unsigned(dish->tickCount()));
+}
+
+static void napLeave(const char* why) {
+  napq::on = false, napq::imuListening = false;
+  sensePause(true, true);   // listening, it may be mid-read
+  imu::awake();
+  sensePause(false, false);
+  ble.napAdvertising(false);
+  const uint32_t ms = millis() - napq::since;
+  const uint64_t slept = napq::napSleptUs / 1000, awake = napq::napAwakeUs / 1000;
+  char w[96];
+  napWakesLine(w, sizeof w, napq::napWakes);
+  Serial.printf("[power] nap out why=%s nap_ms=%u slept_ms=%u awake_ms=%u asleep_pct=%u wakes %s pet tick=%u\n", why,
+                unsigned(ms), unsigned(slept), unsigned(awake), unsigned(ms ? slept * 100 / ms : 0), w,
+                unsigned(dish->tickCount()));
+}
+
+// Every loop pass, after applyPower: in or out of the nap, and whether the sense task reads.
+static void napPoll(uint32_t now) {
+  napq::blocker = napBlocker(now);
+  if (napq::on && napq::blocker)
+    napLeave(std::strcmp(napq::blocker, "awake") ? napq::blocker : power::whyName(powerPolicy.why()));
+  else if (!napq::on && !napq::blocker)
+    napEnter(now);
+  if (napq::on) bodyq::paused = !napq::listening();   // between seconds the task does not read, and the chip sleeps
+}
+
+// The pet's ticks up to now, in one go after a sleep: Dish::tick runs at most
+// ten a call, so a minute asleep is sixty calls of the same 100 ms ticks on
+// the same clock as awake (test_dish NapCatchUp). The only catch-up the nap
+// has; the aging branch's bulk catch-up (deep sleep, power off) is another path.
+static void petCatchUp() {
+  const uint32_t t0 = micros();
+  for (uint32_t calls = 0, now = millis() + warpMs; now - dish->lastTickMs() >= blorb::kTickMs && calls < 100000; ++calls) {
+    dish->tick(now, host);
+    if (calls % 100 == 99) delay(1);   // let the idle task run
+  }
+  const uint32_t us = micros() - t0;
+  napq::catchUpUs = us, napq::catchUpWorstUs = std::max(napq::catchUpWorstUs, us);
+}
+
+// One sleep, `ms` long at most.
+static void napSleep(uint32_t ms) {
+  using namespace napq;
+  if (imuListening) {   // a listen just ended without a hand: the pin watches again
+    sensePause(true, true);
+    womOk = imu::wakeOnMotion(womMg) || imu::wakeOnMotion(womMg);   // once more before the nap is timer and button only
+    imuListening = false;
+    if (!womOk) Serial.printf("[power] !!! wake on motion not set again: timer and button only this nap\n");
+  }
+  lastSleepMs = ms;
+  const int imuWas = gpio_get_level(kImuPin);
+  esp_sleep_enable_timer_wakeup(uint64_t(ms) * 1000);
+  gpio_wakeup_enable(kButton, GPIO_INTR_LOW_LEVEL);
+  if (womOk) gpio_wakeup_enable(kImuPin, imuWas ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);   // it toggles: the other level
+  esp_sleep_enable_gpio_wakeup();
+  uart_set_wakeup_threshold(UART_NUM_0, 3);
+  esp_sleep_enable_uart_wakeup(0);
+  Serial.flush();   // what is still in the driver's buffer would wait for the next wake
+  const uint64_t t0 = uint64_t(esp_timer_get_time());
+  napAwakeUs += t0 - wokeAt, awakeUs += t0 - wokeAt;
+  const esp_err_t slept = esp_light_sleep_start();
+  if (slept != ESP_OK) {   // refused: say so once, and rest as dark does
+    static bool told = false;
+    if (!told) told = true, Serial.printf("[power] !!! light sleep refused err=%d: the nap only rests\n", int(slept));
+    delay(kLowRestMs);
+  }
+  const uint64_t t1 = uint64_t(esp_timer_get_time());
+  wokeAt = t1;
+  if (slept == ESP_OK) napSleptUs += t1 - t0, sleptUs += t1 - t0;
+  else napAwakeUs += t1 - t0, awakeUs += t1 - t0;
+  const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  gpio_wakeup_disable(kButton);
+  if (womOk) gpio_wakeup_disable(kImuPin);
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  Wake w = Other;
+  if (cause == ESP_SLEEP_WAKEUP_TIMER) w = Timer;
+  else if (cause == ESP_SLEEP_WAKEUP_UART) w = Cable;
+  else if (cause == ESP_SLEEP_WAKEUP_GPIO) w = gpio_get_level(kButton) == 0 ? Button : Imu;
+  ++wakes[w], ++napWakes[w];
+  petCatchUp();   // before anything else looks at him: a wake by a hand draws him as he is now
+  if (w == Cable) cableByte();   // the bytes that woke it are lost; the line after the preamble is not
+  if (w == Imu || w == Button || w == Other) {   // the 50 Hz senses decide
+    listenUntil = millis() + kListenMs;
+    // ...on the IMU's own 250 Hz, as awake: at 21 Hz most of a hand's
+    // tremor and a knock fall between its samples. Wake on motion is set
+    // again before the next sleep (imuListening).
+    if (womOk) {
+      sensePause(true, true);
+      imu::awake();
+      imuListening = true;
+    }
+  }
+  if (w == Timer && imuOk) {   // a lift too gentle for the pin (no button: a press is the senses')
+    blorb::BodySample g;
+    if (imu::read(g)) powerPolicy.glance(g, millis() + warpMs);
+  }
+}
+
+// The end of every loop pass: dark, it rests; napping, it sleeps to the next
+// Wi-Fi check or a minute.
+static void napRest(uint32_t now) {
+  if (!napq::on || napq::listening()) {
+    if (panelLow) delay(kLowRestMs);
+    return;
+  }
+  // Asked again at the end of the pass: the Wi-Fi schedule (wififw::poll) may
+  // have opened its window, or a trial or an update begun, since napPoll. Never
+  // sleep through one: the next pass leaves the nap for it.
+  if (napBlocker(now)) return delay(kLowRestMs);
+  if (now - dish->lastTickMs() >= 2 * blorb::kTickMs) return petCatchUp();
+  if (int32_t(millis() - napq::reportAt) >= 0) {
+    napq::reportAt = millis() + napq::kReportMs;
+    const uint32_t ms = millis() - napq::since;
+    const uint64_t slept = napq::napSleptUs / 1000;
+    char w[96];
+    napWakesLine(w, sizeof w, napq::napWakes);
+    Serial.printf("[power] napping %u s: slept_ms=%u awake_ms=%u asleep_pct=%u wakes %s last_sleep_ms=%u "
+                  "catchup_ms=%u worst=%u pet tick=%u age=%u\n",
+                  unsigned(ms / 1000), unsigned(slept), unsigned(napq::napAwakeUs / 1000),
+                  unsigned(ms ? slept * 100 / ms : 0), w, unsigned(napq::lastSleepMs), unsigned(napq::catchUpUs / 1000),
+                  unsigned(napq::catchUpWorstUs / 1000), unsigned(dish->tickCount()),
+                  unsigned(summarize(dish->occupant()).age));
+  }
+  // To the next Wi-Fi check, the reminder, or a minute: whichever is first (never 0: it is due on this pass).
+  napSleep(std::max<uint32_t>(1, std::min(power::napSleepMs(wifiCheckInMs(millis())), remind::clock.dueIn(millis()))));
+}
+
+static const char* sleepState() { return napq::listening() ? "listen" : napq::on ? "nap" : pmSleepState(); }
+static uint32_t sleptMs() { return pmSleptMs() + uint32_t(napq::sleptUs / 1000); }
+
+// Dim (power.h): a quarter of his brightness, never under kDimFloor, and
+// straight back at any input. Also how a brightness the phone set reaches a
+// lit panel.
+static constexpr uint8_t kDimFloor = 12;
+static int litLevel = -1;   // what the backlight was last set to while lit
+static void applyDim(uint32_t now) {
+  if (panelLow || lightAfterFrame) {
+    litLevel = -1;
+    return;
+  }
+  const uint8_t full = dish->settings().brightness;
+  const bool dim = powerPolicy.dim(now) && full > kDimFloor;
+  const uint8_t want = powerPolicy.nudging() ? 255 : dim ? std::max<uint8_t>(kDimFloor, full / 4) : full;
+  if (want == litLevel) return;
+  const bool logIt = litLevel >= 0;   // not the first lighting after a wake: that is the wake's own line
+  litLevel = want;
+  display.setBrightness(want);
+  if (logIt) Serial.printf("[power] %s brightness=%u of %u, dark in %u ms\n", dim ? "dim" : "bright", unsigned(want),
+                           unsigned(full), unsigned(powerPolicy.msLeft(now)));
+}
+
+// Time in each state since boot: lit, dim, dark (awake, not napping), and the nap.
+namespace powerclock {
+static uint64_t litMs = 0, dimMs = 0, darkMs = 0, napMs = 0;
+static uint32_t at = 0;
+static void note(uint32_t now) {
+  const uint32_t ms = millis(), d = at ? ms - at : 0;
+  at = ms;
+  (napq::on ? napMs : panelLow ? darkMs : powerPolicy.dim(now) ? dimMs : litMs) += d;
+}
+}  // namespace powerclock
+
 static const char* powerLine(char* out, size_t n, uint32_t now) {
-  std::snprintf(out, n, "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s sleep=%s slept_ms=%u",
+  std::snprintf(out, n,
+                "power=%s why=%s idle_ms=%u left_ms=%u cpu=%u frames=%u changes=%u held=%d input=%s sleep=%s slept_ms=%u "
+                "dim=%d nap_after_ms=%u nap_block=%s naps=%u nap_slept_ms=%u nap_awake_ms=%u ble_adv=%s remind_in_s=%u reminders=%u tremor_mute_s=%u",
                 powerPolicy.low() ? "low" : "full", power::whyName(powerPolicy.why()), unsigned(powerPolicy.idleMs()),
                 unsigned(powerPolicy.msLeft(now)), unsigned(cpuMaxMhz), unsigned(framesDrawn),
                 unsigned(powerPolicy.changes()), int(powerHeld()), power::whyName(powerPolicy.lastInputWhy()),
-                sleepState(), unsigned(sleptMs()));
+                sleepState(), unsigned(sleptMs()), int(powerPolicy.dim(now)), unsigned(powerPolicy.napMs()),
+                napq::on ? "napping" : napq::blocker, unsigned(napq::naps), unsigned(napq::sleptUs / 1000),
+                unsigned(napq::awakeUs / 1000),
+                ble.advertisingHeld() ? "held" : ble.advertisingSlow() ? "slow" : "fast",
+                unsigned(remind::clock.remainingS(millis())), unsigned(remind::shown),
+                unsigned(powerPolicy.tremorMutedMs(now) / 1000));
   return out;
 }
 
@@ -1666,6 +2279,7 @@ static void applyPower(uint32_t now) {
   bodyq::fastSense = !powerPolicy.low();   // 250 Hz reads awake, 50 Hz in low power
   if (powerPolicy.low() == panelLow) return;
   panelLow = powerPolicy.low();
+  ble.slowAdvertising(panelLow);
   if (panelLow) {
     lightAfterFrame = false;
     boardPanelIdle();
@@ -1679,7 +2293,7 @@ static void applyPower(uint32_t now) {
     lastFrame = now - kFrameMs;            // drawn this very pass
     lightAfterFrame = true;
   }
-  char line[200];
+  char line[420];
   Serial.printf("[power] %s\n", powerLine(line, sizeof line, now));
   dbgfw::link.writeLine(std::string("! DEBUG ") + line);
 }
@@ -1689,7 +2303,7 @@ static bool powerAsk(debugble::Board::PowerAsk ask, uint32_t idleMs) {
   const uint32_t now = millis() + warpMs;
   using A = debugble::Board::PowerAsk;
   if (ask == A::Low && powerHeld()) return false;
-  if (ask == A::Low) powerPolicy.sleepNow();
+  if (ask == A::Low) powerPolicy.sleepNow(now);
   if (ask == A::Wake) powerPolicy.wakeNow(now);
   if (ask == A::Idle) powerPolicy.setIdleMs(idleMs ? idleMs : power::kIdleMs);
   if (ask != A::Status) applyPower(now);
@@ -1715,6 +2329,38 @@ static void powerStats() {
 static void powerVerb(const char* a, const char* line) {
   using A = debugble::Board::PowerAsk;
   if (!std::strcmp(a, "stats")) return powerStats();
+  if (!std::strcmp(a, "nap")) {   // dark, and the nap due now (it starts once nothing blocks it)
+    const uint32_t now = millis() + warpMs;
+    if (powerHeld()) return (void)Serial.printf("[power] refused held_awake\n");
+    powerPolicy.sleepNow(now, true);
+    applyPower(now);
+    return (void)Serial.printf("[power] nap asked: it naps once nothing blocks it (cable: %u s quiet)\n",
+                               unsigned(kCableAwakeMs / 1000));
+  }
+  if (!std::strcmp(a, "remind")) {   // the reminder in <s> (default: now, once dark)
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    remind::clock.resume(millis(), uint32_t(std::strtoul(what, nullptr, 10)));
+    remind::save();
+    return (void)Serial.printf("[power] reminder in %u s (once dark)\n", unsigned(remind::clock.remainingS(millis())));
+  }
+  if (!std::strcmp(a, "wom")) {   // the nap's wake-on-motion threshold, from the next nap
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    const long mg = std::strtol(what, nullptr, 10);
+    if (mg < 1 || mg > 255) return (void)Serial.printf("[power] want: power wom <mg 1..255> (now %u)\n", unsigned(napq::womMg));
+    napq::womMg = uint8_t(mg);
+    return (void)Serial.printf("[power] wom_mg=%u from the next nap\n", unsigned(napq::womMg));
+  }
+  if (!std::strcmp(a, "napafter")) {
+    char what[16] = "";
+    std::sscanf(line, "%*s %*s %15s", what);
+    const long sec = std::strtol(what, nullptr, 10);
+    if (std::strcmp(what, "default") && (sec < 0 || sec > 86400 || !*what))
+      return (void)Serial.printf("[power] want: power napafter <seconds 0..86400>|default\n");
+    powerPolicy.setNapMs(std::strcmp(what, "default") ? uint32_t(sec) * 1000 : power::kNapMs);
+    return (void)Serial.printf("[power] nap_after_ms=%u\n", unsigned(powerPolicy.napMs()));
+  }
   A ask = A::Status;
   uint32_t idleMs = 0;
   if (!std::strcmp(a, "low")) ask = A::Low;
@@ -1727,16 +2373,179 @@ static void powerVerb(const char* a, const char* line) {
       return (void)Serial.printf("[power] want: power idle <seconds 1..3600>|default\n");
     ask = A::Idle, idleMs = std::strcmp(what, "default") ? uint32_t(sec) * 1000 : 0;
   } else if (*a && std::strcmp(a, "status")) {
-    return (void)Serial.printf("[power] want: power [status|low|wake|idle <seconds>|idle default|stats]\n");
+    return (void)Serial.printf("[power] want: power [status|low|wake|nap|idle <seconds>|idle default|napafter <s>|stats]\n");
   }
   const bool ok = powerAsk(ask, idleMs);
-  char out[200];
+  char out[420];
   Serial.printf("[power] %s %s\n", ok ? "now" : "refused held_awake", powerLine(out, sizeof out, millis() + warpMs));
+  char w[96];
+  napWakesLine(w, sizeof w, napq::wakes);
+  const uint64_t total = powerclock::litMs + powerclock::dimMs + powerclock::darkMs + powerclock::napMs;
+  Serial.printf("[power] since boot: lit_ms=%llu dim_ms=%llu dark_ms=%llu nap_ms=%llu (asleep %llu, passes %llu) "
+                "nap_pct=%u nap_wakes %s\n",
+                (unsigned long long)powerclock::litMs, (unsigned long long)powerclock::dimMs,
+                (unsigned long long)powerclock::darkMs, (unsigned long long)powerclock::napMs,
+                (unsigned long long)(napq::sleptUs / 1000), (unsigned long long)(napq::awakeUs / 1000),
+                unsigned(total ? powerclock::napMs * 100 / total : 0), w);
 }
+
+// ---- the site's lines for this pet (#59) ------------------------------------
+// A Wi-Fi check that installs nothing then POSTs the pet to /api/pet-lines
+// (wifi_ota.h startLines) and gets back his newest pack as text. It is kept in
+// the pet partition (namespace "lines") and said from (blorb::PackLines) while
+// it is his: a pack for another genome (a new generation, an egg) is set aside
+// until a check brings the new pet's own.
+namespace petlines {
+constexpr size_t kEntries = 1024;
+struct Mem {
+  char text[hw::NetJob::kTextMax + 1];
+  char body[2 * blorb::kMaxGenomeBytes + 256];
+  blorb::PackLines::Entry entries[kEntries];
+  blorb::PackLines pack;
+  uint32_t forGenome = 0;   // Genome::hash() of the pet the active pack was checked against
+};
+static Mem* mem = nullptr;   // PSRAM, made at the first use
+static uint32_t checkedAt = 0;
+
+static bool ready() {
+  if (mem) return true;
+  void* p = heap_caps_malloc(sizeof(Mem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (p) mem = new (p) Mem;
+  return mem != nullptr;
+}
+static const blorb::Creature* creature() { return dish ? std::get_if<blorb::Creature>(&dish->occupant()) : nullptr; }
+// The site's genome_hash: SHA-256 over the genome's bytes, as hex.
+static void sha256Hex(const blorb::Genome& g, char* out, size_t digits) {
+  uint8_t d[32];
+  mbedtls_sha256(g.bytes().data(), g.bytes().size(), d, 0);
+  for (size_t i = 0; i * 2 < digits && i < sizeof d; ++i) std::snprintf(out + i * 2, 3, "%02x", d[i]);
+}
+// Says from mem->text (len bytes) when it is a pack for the pet there is now.
+static bool use(size_t len, const char* from) {
+  blorb::setPackLines(nullptr);
+  const blorb::Creature* c = creature();
+  if (!c || !mem->pack.parse(mem->text, len, mem->entries, kEntries)) {
+    Serial.printf("[lines] %s: %s\n", from, c ? "not a pack" : "no pet to say it");
+    return false;
+  }
+  char mine[17] = "";
+  sha256Hex(c->genome(), mine, 16);
+  if (std::strcmp(mine, mem->pack.genome())) {
+    Serial.printf("[lines] %s: pack v%u is for genome %s, he is %s: built-in lines\n", from,
+                  unsigned(mem->pack.version()), mem->pack.genome(), mine);
+    return false;
+  }
+  mem->forGenome = c->genome().hash();
+  blorb::setPackLines(&mem->pack);
+  Serial.printf("[lines] %s: pack v%u, %u lines he can say, said from now on\n", from, unsigned(mem->pack.version()),
+                unsigned(mem->pack.size()));
+  return true;
+}
+static nvs_handle_t open(nvs_open_mode_t mode) {
+  nvs_handle_t h = 0;
+  return nvs_open_from_partition("pet", "lines", mode, &h) == ESP_OK ? h : 0;
+}
+}  // namespace petlines
+
+// wifi_ota.h: the body to POST, or nullptr (no pet, no PSRAM).
+static const char* petLinesBody() {
+  const blorb::Creature* c = petlines::creature();
+  if (!c || !petlines::ready()) return nullptr;
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char* b = petlines::mem->body;
+  int n = std::snprintf(b, 64, "{\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"genome\":\"", mac[0], mac[1], mac[2], mac[3], mac[4],
+                        mac[5]);
+  for (uint8_t x : c->genome().bytes()) n += std::snprintf(b + n, 3, "%02x", x);
+  std::snprintf(b + n, sizeof petlines::mem->body - size_t(n),
+                "\",\"stage\":%u,\"generation\":%u,\"fw\":\"%s\",\"wait\":false,\"format\":\"pack\"}",
+                unsigned(c->stage()), unsigned(c->generation()), blorb::kFirmwareVersion);
+  return b;
+}
+
+// wifi_ota.h: what came back; kept when it is a pack for him.
+static void petLinesArrived(const char* text, size_t len) {
+  if (!petlines::ready() || len > hw::NetJob::kTextMax) return;
+  std::memcpy(petlines::mem->text, text, len);
+  petlines::mem->text[len] = 0;
+  if (!petlines::use(len, "from the site")) return;
+  if (nvs_handle_t h = petlines::open(NVS_READWRITE)) {   // `text` is still whole: parse() cut the copy
+    const bool ok = nvs_set_blob(h, "pack", text, len) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    Serial.printf("[lines] %s\n", ok ? "kept in flash" : "!!! could not keep it in flash");
+  }
+}
+
+// Boot: the kept pack, when it is still his.
+static void petLinesBoot() {
+  nvs_handle_t h = petlines::open(NVS_READONLY);
+  if (!h) return;
+  size_t len = 0;
+  if (nvs_get_blob(h, "pack", nullptr, &len) == ESP_OK && len && len <= hw::NetJob::kTextMax && petlines::ready() &&
+      nvs_get_blob(h, "pack", petlines::mem->text, &len) == ESP_OK) {
+    petlines::mem->text[len] = 0;
+    petlines::use(len, "at boot");
+  }
+  nvs_close(h);
+}
+
+// The loop: a pack stops being said the moment the pet is another (a hatch, a new generation).
+static void petLinesTick(uint32_t now) {
+  if (!blorb::packLines() || now - petlines::checkedAt < 5000) return;
+  petlines::checkedAt = now;
+  const blorb::Creature* c = petlines::creature();
+  if (!c || c->genome().hash() != petlines::mem->forGenome) {
+    blorb::setPackLines(nullptr);
+    Serial.printf("[lines] the pet changed: built-in lines until a check brings his own\n");
+  }
+}
+
+// Remote debug (src/remote_debug.h): the pet, as a JSON value, into `out`.
+static size_t petReport(char* out, size_t cap) {
+  const int n = [&] {
+    if (!dish) return std::snprintf(out, cap, "null");
+    const OccupantSummary o = summarize(dish->occupant());
+    const blorb::Creature* c = petlines::creature();
+    constexpr const char* kStage[] = {"hatchling", "child", "adult", "elder"};
+    if (!c)
+      return std::snprintf(out, cap, "{\"kind\":\"%s\",\"gen\":%u,\"genome\":\"%08x\",\"boot_ctx\":%u}", o.kind,
+                           unsigned(o.gen), unsigned(o.genome), unsigned(dish->bootContext()));
+    return std::snprintf(out, cap,
+                         "{\"kind\":\"%s\",\"gen\":%u,\"genome\":\"%08x\",\"stage\":\"%s\",\"age_min\":%u,"
+                         "\"hunger_pct\":%d,\"boot_ctx\":%u}",
+                         o.kind, unsigned(o.gen), unsigned(o.genome),
+                         size_t(c->stage()) < 4 ? kStage[size_t(c->stage())] : "?",
+                         unsigned(o.age / blorb::kTicksPerMinute),
+                         int((int64_t(c->chemistry().drive(blorb::drive::hunger).raw) * 100) >> blorb::Fx::kFrac),
+                         unsigned(dish->bootContext()));
+  }();
+  return n > 0 && size_t(n) < cap ? size_t(n) : 0;
+}
+
+// Remote debug's `state`: what the cable's STATE and status verbs print, into
+// the log, whence the next report takes it. STATE is the protocol's, answered
+// on its next pass.
+static void remoteStateVerbs() {
+  phone.inject("STATE");
+  runDebug("power status");
+  runDebug("power stats");
+  runDebug("fps");
+}
+
+#include "wifi_ota.h"
+static bool wifiYieldRadio() { return wififw::yieldRadio(); }
+static bool wifiUpdateHoldsRadio() { return wififw::updateHoldsRadio(); }
+static void wifiBegin() { wififw::begin(); }
+static bool wifiAsks() { return wififw::asks(); }
+static bool wifiIdle() { return wififw::idle(); }
+static uint32_t wifiCheckInMs(uint32_t now) { return wififw::checkInMs(now); }
+static void wifiSaysNo() { wififw::dismiss(); }
+static bool wifiQuietBoot() { return wififw::quietBoot(); }
+static bool wifiPress(uint32_t ms) { return wififw::press(ms); }
 
 // The debug link's PRESS and DOUBLE: never while a question owns the button.
 static bool remotePress(uint32_t ms, bool twice) {
-  if (updater.asking() || debugAsks()) return false;
+  if (updater.asking() || debugAsks() || wifiAsks()) return false;
   const uint32_t t = millis();
   bodyq::remote[0].ms = bodyq::remote[1].ms = 0;
   bodyq::remote[0].at = t;
@@ -1759,11 +2568,17 @@ void loop() {
   constexpr bool holdFrame = false;
 #endif
   step(now);
+  marqueefw::tick(now);   // before the power policy, so one put up wakes the screen this pass
 #if !defined(BADGE_BOARD_SIM)
   dbgfw::poll();
 #endif
 #if !defined(BADGE_BOARD_SIM)
+  remind::poll(now);
+  remind::animate();
   applyPower(now);
+  napPoll(now);
+  applyDim(now);
+  powerclock::note(now);
   const bool dark = panelLow;
 #else
   constexpr bool dark = false;
@@ -1778,7 +2593,7 @@ void loop() {
     // How long until it sleeps: full at any input, gone as it goes dark (docs/power.md).
     const uint16_t idleBar = uint16_t(uint64_t(powerPolicy.msLeft(now)) * 1000 / powerPolicy.idleMs());
     const std::optional<ota::View> update = updater.view(millis());
-    const bool overlay = update || dbgfw::drawing();
+    const bool overlay = update || dbgfw::drawing() || wififw::drawing() || powerPolicy.nudging() || marqueefw::on();   // the reminder's rim moves every frame
     const bool still = framememo::same(look, idleBar, overlay);   // the panel already shows this frame
     if (still) fps::same();
 #else
@@ -1788,11 +2603,17 @@ void loop() {
 #if !defined(BADGE_BOARD_SIM)
       const uint32_t drawAt = micros();
 #endif
-      drawFrame(look, now);
+      if (marqueefw::on()) {
+        marqueefw::draw(canvas, now);   // the whole glass, over the pet
+      } else {
+        drawFrame(look, now);
+        paint::drawDismissed(canvas, look.dismissedMs);   // a hard shake dismissed something (#35)
+      }
 #if !defined(BADGE_BOARD_SIM)
       if (update) ota::drawUpdate(canvas, *update);
-      else dbgfw::draw(canvas);
-      paint::drawIdleBar(canvas, idleBar);
+      else dbgfw::draw(canvas), wififw::draw(canvas);
+      if (!marqueefw::on()) paint::drawIdleBar(canvas, idleBar);
+      if (powerPolicy.nudging()) paint::drawRimPulse(canvas, remind::rimLevel());
       framememo::drew(look, idleBar, overlay);
       const uint32_t pushAt = micros(), seqBefore = boardFrameSeq();
 #endif
@@ -1829,22 +2650,28 @@ void loop() {
   }
   otaPackets.drain([](const uint8_t* p, size_t n, ota::Peer peer) { updater.data(p, n, millis(), peer); });
   updater.tick(millis());
-  if (updater.rebootDue(millis())) restartIntoUpdate();
+  wififw::poll(millis());
+  petLinesTick(millis());
+  if (updater.rebootDue(millis()) && wififw::mayRestart()) restartIntoUpdate();
   trialWatchdog.beat(millis());
-  if (trial.poll(millis()) != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
+  if (const ota::Trial::Poll polled = trial.poll(millis()); polled != ota::Trial::Poll::Running) {   // kept, or a rollback that could not happen
+    if (polled == ota::Trial::Poll::Kept) dish->analytics().add(blorb::anx::ota_kept);
     trialWatchdog.stop();
     store.releaseHold();
     dishStore.hold(false);
     dish->flush();
   }
-  adoptTableSpecies(millis());
+  adoptBoardSpecies(millis());
+  followPetName(millis());
   if (std::optional<hw::NusLink::Drained> d = ble.takeDrained())
     if (d->bytes > 512 || bleTestPending) {
       bleTestPending = false;
       Serial.printf("[hw] ble tx chunks=%u retries=%u bytes=%u\n", unsigned(d->chunks), unsigned(d->retries),
                     unsigned(d->bytes));
     }
-  // Asleep, the loop rests: the sense task's 50 Hz and the radio's tasks go on.
-  if (panelLow) delay(kLowRestMs);
+  anxfw::loop(now, panelLow, sleptMs());
+  // Dark, the loop rests: the sense task's 50 Hz and the radio's tasks go on.
+  // Napping, the chip light-sleeps to the next second (napRest).
+  napRest(now);
 #endif
 }

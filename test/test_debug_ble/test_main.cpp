@@ -744,6 +744,115 @@ TEST(Device, NapPutsHimToSleepAndDuelSaysWhereFightModeStands) {
   EXPECT_EQ(r.send("#4 DUEL").substr(0, 35), "#4 OK fight=off active=0 phase=clos");
 }
 
+// ---- the cable's own, over the link (CLAUDE.md: one badge, three transports) -------------
+
+// A board with a cable: its log, and its DEBUG lines run as the cable runs them.
+struct Cable : Rig {
+  std::string logText;
+  std::vector<std::string> ran;
+  std::optional<std::string_view> log() override { return std::string_view(logText); }
+  std::optional<std::string_view> serial(std::string_view line) override {
+    ran.emplace_back(line);
+    out_ = "[wifi] ran: " + std::string(line) + "\n[wifi] second line\n";
+    return std::string_view(out_);
+  }
+  std::string out_;
+};
+
+TEST(Cable, ABoardWithoutOneSaysSo) {
+  Rig r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 LOG"), "#1 ERR 501 NOT_ON_BOARD");
+  EXPECT_EQ(r.send("#2 WIFI"), "#2 ERR 501 NOT_ON_BOARD");
+  EXPECT_EQ(r.send("#3 DEBUG fps"), "#3 ERR 501 NOT_ON_BOARD");
+}
+
+TEST(Cable, LogReadsTheLastLinesWithNoPressAndLongOnesInPieces) {
+  Cable r;
+  r.boot();
+  for (int i = 1; i <= 50; ++i) r.logText += "[hw] line " + std::to_string(i) + "\n";
+  std::vector<std::string> lines = r.sendAll("#1 LOG");
+  ASSERT_EQ(lines.size(), 41u) << "40 by default";
+  EXPECT_EQ(lines[0], "#1 + [hw] line 11");
+  EXPECT_EQ(lines[39], "#1 + [hw] line 50");
+  EXPECT_EQ(lines.back(), "#1 OK lines=40");
+  lines = r.sendAll("#2 LOG 3");
+  ASSERT_EQ(lines.size(), 4u);
+  EXPECT_EQ(lines[0], "#2 + [hw] line 48");
+  EXPECT_EQ(r.send("#3 LOG 0"), "#3 ERR 400 BAD_ARGS");
+  EXPECT_EQ(r.send("#4 LOG 121"), "#4 ERR 400 BAD_ARGS");
+  r.logText = std::string(400, 'x') + "\n";
+  lines = r.sendAll("#5 LOG");
+  ASSERT_EQ(lines.size(), 4u) << "a 400-byte line goes in three pieces";
+  for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_LE(lines[i].size(), 200u);
+  r.trial = true;   // a look: on trial and during an update too
+  r.ota = true;
+  EXPECT_EQ(r.send("#6 LOG 1"), "#6 OK lines=1");
+}
+
+TEST(Cable, WifiIsTheCablesOwnWifiLook) {
+  Cable r;
+  r.boot();
+  const std::vector<std::string> lines = r.sendAll("#1 WIFI");
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[0], "#1 + [wifi] ran: wifi");
+  EXPECT_EQ(lines.back(), "#1 OK lines=2");
+  EXPECT_EQ(r.send("#2 WIFI now"), "#2 ERR 400 BAD_ARGS");
+}
+
+TEST(Cable, DebugRunsAnyCableLineAtThatLinesReach) {
+  Cable r;
+  r.boot();
+  EXPECT_EQ(r.send("#1 DEBUG wifi"), "#1 OK reach=look lines=2");
+  EXPECT_EQ(r.send("#2 DEBUG DEBUG wifi list"), "#2 OK reach=look lines=2") << "the cable's prefix is taken off";
+  EXPECT_EQ(r.ran.back(), "wifi list");
+  EXPECT_EQ(r.send("#3 DEBUG marquee hi"), "#3 OK reach=show lines=2");
+  EXPECT_EQ(r.send("#4 DEBUG wifi due"), "#4 OK reach=write lines=2");
+  // Setting, forgetting and checking a network elsewhere need the press, as Improv's yes.
+  const size_t before = r.ran.size();
+  EXPECT_EQ(r.send("#5 DEBUG wifi set \"Home Net\" hunter22"), "#5 ERR 423 LOCKED");
+  EXPECT_EQ(r.send("#6 DEBUG wifi forget 2"), "#6 ERR 423 LOCKED");
+  EXPECT_EQ(r.send("#7 DEBUG ota check http://example.com/m.json"), "#7 ERR 423 LOCKED");
+  EXPECT_EQ(r.send("#8 DEBUG some-new-verb"), "#8 ERR 423 LOCKED") << "a verb the table does not know is Harm";
+  EXPECT_EQ(r.ran.size(), before) << "nothing refused ran";
+  EXPECT_EQ(r.send("#9 DEBUG"), "#9 ERR 400 BAD_ARGS");
+  r.unlock();
+  EXPECT_EQ(r.send("#a DEBUG wifi forget 2"), "#a OK reach=harm lines=2");
+  EXPECT_EQ(r.ran.back(), "wifi forget 2");
+  // On trial, as every Write: refused whatever the unlock.
+  r.trial = true;
+  EXPECT_EQ(r.send("#b DEBUG wifi due"), "#b ERR 409 TRIAL");
+  EXPECT_EQ(r.send("#c DEBUG wifi"), "#c OK reach=look lines=2");
+}
+
+TEST(Cable, TheSerialReachOfEachKindOfLine) {
+  using debugble::Reach;
+  using debugble::serialReach;
+  EXPECT_EQ(serialReach("wifi"), Reach::Look);
+  EXPECT_EQ(serialReach("wifi status"), Reach::Look);
+  EXPECT_EQ(serialReach("wifi list"), Reach::Look);
+  EXPECT_EQ(serialReach("wifi due"), Reach::Write);
+  EXPECT_EQ(serialReach("wifi set Home pw"), Reach::Harm);
+  EXPECT_EQ(serialReach("wifi forget"), Reach::Harm);
+  EXPECT_EQ(serialReach("wifi verify Home pw"), Reach::Harm);
+  EXPECT_EQ(serialReach("ota check"), Reach::Write);
+  EXPECT_EQ(serialReach("ota check https://x/m.json"), Reach::Harm);
+  EXPECT_EQ(serialReach("power"), Reach::Look);
+  EXPECT_EQ(serialReach("power stats"), Reach::Look);
+  EXPECT_EQ(serialReach("power low"), Reach::Show);
+  EXPECT_EQ(serialReach("power nap"), Reach::Write);
+  EXPECT_EQ(serialReach("home"), Reach::Look);
+  EXPECT_EQ(serialReach("home down"), Reach::Harm);
+  EXPECT_EQ(serialReach("fps"), Reach::Look);
+  EXPECT_EQ(serialReach("fps bench"), Reach::Show);
+  EXPECT_EQ(serialReach("shot"), Reach::Look);
+  EXPECT_EQ(serialReach("nap"), Reach::Write);
+  for (const char* harm : {"hatch", "die", "stage adult", "warp 5", "chem hunger 0", "reboot", "press", "species mothwick",
+                           "wpa3 hnp", "air open", "net rx 30", "found off", "duel"})
+    EXPECT_EQ(serialReach(harm), Reach::Harm) << harm;
+  EXPECT_EQ(serialReach("  wifi  "), Reach::Look) << "spaces around it";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <vector>
 #include "blorb/air.h"
@@ -60,19 +61,22 @@ class FakeAir : public blorb::Air {
   void broadcast(const uint8_t* p, size_t n) override {
     if (!open_) return;
     ++framesSent;
+    const blorb::Datagram d = outgoing(p, n);
     for (FakeAir* a : ether_.airs_)
-      if (a != this) ether_.post(*this, a, p, n);
+      if (a != this) ether_.post(*this, a, d.bytes, d.len);
   }
   void send(const blorb::PeerAddr& to, const uint8_t* p, size_t n) override {
     if (!open_ || unicastLost) return;
     ++framesSent;
+    const blorb::Datagram d = outgoing(p, n);
     for (FakeAir* a : ether_.airs_)
-      if (a != this && a->self_ == to) ether_.post(*this, a, p, n);
+      if (a != this && a->self_ == to) ether_.post(*this, a, d.bytes, d.len);
   }
   std::optional<blorb::Datagram> receive() override {   // nothing while closed: the consent test reads this
     if (!open_ || inbox_.empty()) return std::nullopt;
     blorb::Datagram d = inbox_.front();
     inbox_.pop_front();
+    if (translate) translate(d);
     return d;
   }
 
@@ -82,6 +86,10 @@ class FakeAir : public blorb::Air {
   }
 
   bool refuseOpen = false;
+  // Rewrites every frame this air sends, and every frame it hears, in place:
+  // a test makes a badge on other firmware out of this one (test_duel_session's
+  // old-rules badge). Empty: frames pass through untouched.
+  std::function<void(blorb::Datagram&)> translate;
   uint16_t muted = 0;         // permille of my frames lost on top of the weather: one direction of a link
   bool deaf = false;          // I hear nobody, but everyone hears me: the other direction, from every badge at once
   bool unicastLost = false;   // my beacons arrive, my battle frames never do: a phantom who claims and never greets
@@ -90,6 +98,14 @@ class FakeAir : public blorb::Air {
 
  private:
   friend class Ether;
+  blorb::Datagram outgoing(const uint8_t* p, size_t n) const {
+    blorb::Datagram d{};
+    d.from = self_;
+    d.len = uint8_t(n);
+    std::memcpy(d.bytes, p, n);
+    if (translate) translate(d);
+    return d;
+  }
   Ether& ether_;
   blorb::PeerAddr self_;
   std::deque<blorb::Datagram> inbox_;

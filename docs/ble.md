@@ -16,31 +16,81 @@ Nordic UART Service (NUS), from `src/hw/link_nus.h`.
 | TX characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | the board notifies |
 
 The board advertises the service UUID and puts its name in the scan response.
-The name is its creature's species, as the lowercase slug from
-`species.def` (`mossby`, `hushwing`). It is the same whatever the owner named
-the pet. Each badge in `defs/badges.def` holds a different species, so the name
-also tells the badges apart. The advertisement carries the flags and the
-128-bit UUID (21 of its 31 bytes). The scan response holds the name, and the
-longest slug, 8 characters, takes 10 of its 31 bytes.
+The name is always the pet's name, lowercase (`lib/blorb/include/blorb/ble_name.h`).
+A pet nobody renamed is named for his species (`Mossby`), so he advertises
+the slug from `species.def` (`mossby`, `hushwing`), as every badge has since
+0.7.0. A pet the owner renamed (`TWIST rename Zorp_V`) advertises that name
+(`zorp_v`). It is also the GAP device name. The name changes with the pet, so
+from 0.7.33 the board also advertises an id that never changes: its MAC.
 
-Which species (`advertisedSpecies` in `founding.h`):
+### Advertisement
 
-- The pet's own species.
-- For a pet from 0.4.0, which has no species yet, the species the badge table
-  will adopt him as (`Dish::adoptSpecies`).
-- For a sealed board, whose pet was not read, the badge's table species, else
-  grungo.
-- An image on an OTA trial still advertises the old `blorb-xxxx` (the last
-  two bytes of its MAC, lower-case hex), so a trial looks the same as the
-  board the page updated. The page from rel-site keys its OTA token by the
-  Web Bluetooth `device.id`, which stays the same whatever the board
-  advertises. An older page keys it by the name, and when that page is
-  reloaded during the trial it must still find its token to send
-  `OTA CONFIRM`. The species name starts at the first boot after the trial
-  keeps the image.
+| Packet | AD structure | Bytes |
+|---|---|---|
+| advertisement | flags | 3 |
+| advertisement | the UART service's 128-bit UUID | 18 |
+| advertisement | manufacturer data: company `0xFFFF` (little-endian `ff ff`), then the 6 MAC bytes in print order | 10 |
+| scan response | the name (a species slug, at most 8 characters: 10; a pet's longest name, 15: 17) | 3-17 |
+| scan response | Improv's 128-bit UUID, only if it fits beside the name (a name of up to 11 characters; every species slug) | 18 |
 
-Filter on the service UUID. A `?d=<name>` link must use the current name: after
-the update, `?d=mossby`, not `?d=blorb-1b3c`. There is no pairing and no owner
+The advertisement is full (31 of 31). The MAC is the Wi-Fi station MAC, the
+one `defs/badges.def`, `blorb-xxxx` and `/admin` print (the Bluetooth address
+is that plus 2; Web Bluetooth shows neither). `0xFFFF` is the Bluetooth SIG's
+id for testing and internal use. The layout is `lib/blorb/include/blorb/ble_id.h`,
+checked by `test/test_ble_id`.
+
+Before 0.7.33 the advertisement's last 10 bytes held Improv's service data
+(16-bit UUID `0x4677`, its boot state and capabilities). It no longer fits, so
+it is left out: Improv clients that filter on Improv's UUID (improv-wifi.com)
+still find the board, Home Assistant's matcher, which wants both, does not.
+The website opens Improv after it connects by the UART service and needs neither.
+
+On the same connection, Improv's service only asks "Join Wi-Fi?" when a
+client reads its Current State or writes to it (0.7.36). Subscribing alone
+never asks: BlueZ subscribes a reconnecting client again by itself, and on
+0.7.35 a Linux client that sent only HELLO after a provision was asked again.
+Reading or subscribing still counts as speaking, so a page that only
+provisions is never dropped as a squatter (docs/wifi-ota.md, "Over Bluetooth").
+
+Until 0.7.35 the scan response's Improv UUID was left out on every board, so
+improv-wifi.com found none: NimBLE-Arduino's `getScanData()` returns the
+advertisement (already full), not the scan response, and the UUID never fit
+beside it. The scan response is now built whole (`NusLink::applyScan` in
+`src/hw/link_nus.h`, at boot and at every rename); the boot line says
+`scan response <n> B: name <n> B, uuid yes`. A renamed pet whose name is 12 to
+15 characters keeps his whole name and leaves the Improv UUID out
+(`uuid left out`): improv-wifi.com then misses the badge, the website does not.
+
+A page asks Chrome's chooser for one board with
+`{services: [NUS], manufacturerData: [{companyIdentifier: 0xFFFF, dataPrefix: <the 6 MAC bytes>}]}`.
+That is what an NFC link `?b=<mac>` does (`docs/nfc.md`).
+
+When (`blorb::advertisedName`, checked by `test/test_adopt_species` and
+`test/test_ble_id`):
+
+- From the first advertisement of every boot: an egg, a fresh board and one
+  whose storage was empty all have a name, since a line is named for its
+  founder's species the moment it is founded.
+- On an OTA trial too. Through 0.7.42 an image on trial advertised
+  `blorb-xxxx` (the last two bytes of its MAC), and a trial that keeps its
+  image does not restart, so after every update, over Bluetooth or Wi-Fi, the
+  badge stayed `blorb-xxxx` until its next reboot. Badges that run 0.7.42 or
+  older still do that after an update until they restart. The page keys its
+  OTA token by the Web Bluetooth `device.id`, never the name, so a trial needs
+  no name of its own.
+- Within a second of a change, without a restart: a rename, or a pet from
+  0.4.0 adopting his board's species (`Dish::adoptSpecies` renames him from
+  Grungo). The serial log says `[hw] ble name now <new> (was <old>)`.
+- The one board with no pet name it can read is a sealed one (its pet was
+  not read). It advertises its board's species (`badgeSpecies`), never
+  `blorb-xxxx`.
+
+Filter on the service UUID. The site's chooser, with no link, lists a device
+with the UART service and either the id's company `0xFFFF` (0.7.33 and later,
+whatever the pet is called) or a `blorb-` or species name (older firmware). A
+`?d=<name>` link must use the current name: after the update, `?d=mossby`, not
+`?d=blorb-1b3c`. A `?b=<mac>` link never goes
+stale (`docs/nfc.md`). There is no pairing and no owner
 token.
 
 ## Framing
@@ -78,15 +128,30 @@ the link its request came from, so serial traffic never reaches the phone.
 
 ```
 #2b STATE
-#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0
+#2b + phase=creature gen=0 stage=baby age=309 action=hop_circles face=neutral asleep=0 species=grungo mac=3c:0f:02:6f:2a:ec
 #2b + drives hunger=301 sleepiness=0 boredom=2 loneliness=1 fear=8 pain=1 discomfort=3 need_touch=1
 #2b + body life=1000 injury=0 glow=436 dreaming=0
-#2b + dish pantry=4 pellets=0 night=1 time=unknown
+#2b + dish pantry=4 pellets=0 night=0 time=unknown dark=0 still=0
 #2b OK
 ```
 
 Levels are thousandths (1000 is full). `time=unknown` turns `known` once a
 `TIME` has been accepted this boot.
+
+The first line ends with `species=`, what the pet is (as the boot line's
+`species=`; `none` while sealed), and `mac=`, the board's own MAC (`none`
+in the sim and the host tests). They are on `STATE`'s reply only, not on the
+`! STATE` event.
+
+`action` is what he is doing: an action's name, or while he plays on his own
+the idle's (`lib/blorb/include/blorb/defs/idles.def`: `dance`, `juggle`,
+`dig`, `sing`, `peek`, `stargaze` and the rest).
+
+`night` is the wall's night: 1 only once a phone's `TIME` has set his pet
+hours and wall time is known this boot. A board with no clock never has a
+night of its own. `dark` is what he lives by (no light, so melatonin and
+sleep): the wall's night, lying face down (lidded), or nobody having moved the
+badge for `still` minutes past 45 (`PetClock::kDimAfterTicks`).
 
 A board whose keepsake would not open at boot (see HANDOFF, issue #2) ends the
 first line with ` sealed=1`. Its occupant is then a placeholder egg that never
@@ -104,8 +169,10 @@ by newer firmware (an update rolled back) is sealed the same way and says
 #9 OK adopted=1 waiting=0
 ```
 
-A board that ships with `hatchNeedsPhone` holds its egg still, with no
-incubation and no hatch, until the owner adopts it. Connecting, `TIME` and
+A board that ships with `hatchNeedsPhone` holds its egg's clock still, with
+no incubation by time, until the owner adopts it. A phone is never needed to
+hatch it: a few seconds of hard shaking crack it open and hatch it, adopted
+or not (`Egg::shaken`, test/test_shake_hatch). Connecting, `TIME` and
 flashing do not count; only `ADOPT` does (the page's Adopt button). It is
 kept in its own file (`adopted.flag`) beside the keepsake, so a replug does
 not ask again, and a wipe clears it. `ADOPT status` only reports. `ERR 409
@@ -163,7 +230,10 @@ dropped, spaces at either end are trimmed, and the line stops at 56
 characters. An empty line, or one with nothing left (`TWIST say @#$`), is
 `ERR 400 BAD_ARGS`. During an egg or a clutch it is `ERR 409 NOT_NOW`. It
 works before `TIME`. It is never saved or hashed, and a reboot forgets it.
-If he is asleep he stays asleep and says it with his eyes shut.
+If he is asleep he stays asleep and says it with his eyes shut. While a
+question shows (an update's, "Join Wi-Fi?", the debug unlock's) he says
+nothing: the line is answered `OK say` and dropped, never kept for after
+(0.7.36).
 
 ### TWIST teach
 
@@ -195,6 +265,28 @@ he knows changes.
 He forgets every taught line. It takes no arguments (`TWIST unteach now` is
 `ERR 400 BAD_ARGS`) and fails like `teach` when the board cannot write.
 
+### MARQUEE
+
+```
+#80 MARQUEE Happy birthday!
+#80 OK shown=1 len=15
+```
+
+The whole screen says the rest of the line: a crimson ground and enormous
+black letters (FreeSans Bold 24pt at 2.5, three on the glass) marching right
+to left at 110 px a second, as cyber-puck's banner does. It goes round twice
+(more for a short word, at least 8 s; once, for a line too wide for two in a
+minute), then the pet comes back. A press of the button takes it down
+early, and the pet never feels that press. It
+wakes a dark screen and keeps it lit while it runs. The text is uppercased
+and kept to printable ASCII (the font has all of it), runs of spaces become
+one, and the line stops at 120 characters, remote debug's limit.
+Nothing showable is `ERR 400 BAD_ARGS`. During a duel, or while fight mode
+looks for one, it is `OK queued=1` and goes up when the duel is over; one
+running when a duel starts gives way and comes back after it. Only the
+newest line waits. It is never saved. The cable's `DEBUG marquee <text>`
+does the same (src/marquee.h).
+
 ### HASH
 
 ```
@@ -220,6 +312,9 @@ runs fed the same lines give the same hash.
 | `ERR 409 NO_CREATURE` | a creature verb while he is an egg or a clutch |
 | `ERR 416 OUT_OF_RANGE` | a number out of range |
 
-`DEBUG` lines are serial-only. Over Bluetooth one reaches the protocol, which
-answers it with an error and never runs it. Testing over Bluetooth has its
-own characteristic, gated by a press on the dish: `docs/debug-ble.md`.
+`DEBUG` lines are not part of this protocol: sent here, one is answered with
+an error and never run. They run over Bluetooth on the debug link's own
+characteristic (`DEBUG <line>`, `LOG`, `WIFI`), at each line's reach, harm
+gated by a press on the dish, and over Wi-Fi as remote debug's `debug`:
+USB, Bluetooth and Wi-Fi are only transports, and each verb is listed once
+for all three in `docs/debug-ble.md` "Every verb, every transport".

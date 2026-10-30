@@ -7,19 +7,23 @@
 #include <optional>
 #include <vector>
 #include "blorb/air.h"
+#include "blorb/carry_show.h"
 #include "blorb/appearance.h"
+#include "blorb/clutch_show.h"
 #include "blorb/creature.h"
 #include "blorb/dish_duel.h"
 #include "blorb/feed_show.h"
 #include "blorb/gesture_cues.h"
 #include "blorb/habitat.h"
 #include "blorb/keepsake.h"
+#include "blorb/life_tally.h"
 #include "blorb/lineage.h"
 #include "blorb/protocol.h"
 #include "blorb/seams.h"
 #include "blorb/senses.h"
 #include "blorb/taught.h"
 #include "blorb/thoughts.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 
@@ -69,10 +73,15 @@ struct DishOptions {
   // press only shakes his head. The firmware passes ESP-NOW behind OTA's
   // interlock, the sim its SerialAir, tests a FakeAir.
   Air* air = nullptr;
-  // An egg holds still, neither incubating nor hatching, until the owner
+  // An egg's clock holds still, time never incubating it, until the owner
   // adopts it from the page (ADOPT), or the debug link's FREEHATCH lifts it.
-  // The firmware sets it; the sim and tests keep eggs on their own clock.
+  // A hand shaking it hatches it either way (Egg::shaken): no phone is ever
+  // needed. The firmware sets it; the sim and tests keep eggs on their own clock.
   bool hatchNeedsPhone = false;
+  // The board's own MAC (the firmware's esp_read_mac, its six bytes high to
+  // low), for STATE's mac=: the board, not the lineage a keepsake carries.
+  // 0: none (tests, the sim).
+  uint64_t mac = 0;
 };
 
 // The morning a no-phone board founds into (DishOptions::foundingHour): a
@@ -93,7 +102,12 @@ class Dish {
 
   // As often as you like. Runs zero or more 100 ms ticks to catch nowMs up
   // (at most 10 per call, so a frame is never starved), handles inbound
-  // lines, pumps events, and saves when SavePolicy says so.
+  // lines, pumps events, and saves when SavePolicy says so. A shorter gap (a
+  // minute's nap) is ticked in full by calling again until caught up; one of
+  // kNapLiveMs or more (a long nap, a long stall) is lived first, in one call,
+  // at the unpowered catch-up's stride (and its cap), so he wakes as old and
+  // as hungry as if he had stayed up, without thousands of ticks at a wake.
+  static constexpr uint32_t kNapLiveMs = 5 * 60 * 1000;
   void tick(uint32_t nowMs, Link&);
 
   Appearance appearance() const;
@@ -107,6 +121,7 @@ class Dish {
   Lineage& lineage() { return lineage_; }
   Protocol& protocol() { return proto_; }
   const Settings& settings() const { return live_.settings; }
+  uint64_t mac() const { return mac_; }   // DishOptions::mac: the board's own, 0 when none
   PetClock& clock() { return live_.clock; }
   const PetClock& clock() const { return live_.clock; }
   uint32_t tickCount() const { return tick_; }
@@ -127,6 +142,20 @@ class Dish {
   bool teach(std::string_view line);
   bool unteach();                  // TWIST unteach: he forgets every taught line; false as teach
   const Taught& taught() const { return taught_; }
+  // What his life did and how the badge is doing (life_tally.h, analytics.h):
+  // bookkeeping only, never read back by the engine, so no decision, save or
+  // hash moves with it.
+  const LifeTally& tally() const { return stats_.life; }
+  const Stats& stats() const { return stats_; }
+  // The firmware's half of the analytics: one increment or bin at a time.
+  Analytics& analytics() { return stats_.analytics; }
+  // life.stats written now, not waiting for the next keepsake save: the
+  // firmware asks as the badge goes dark, so a crash in low power loses
+  // nothing counted. False when it did not land (a trial, a sealed pet).
+  bool saveStats();
+  // STATS ack <seq>: the server has the closed analytics buckets up to seq.
+  // They go, and the file is written at the next save. False: none to drop.
+  bool ackStats(uint32_t seq);
   // One body byte of the creature's genome, recorded in the lineage. False
   // when there is no creature, the uid is missing or the offset is past the body.
   bool editGene(GeneUid, uint8_t offset, uint8_t value);
@@ -136,15 +165,11 @@ class Dish {
   // for grungo takes the species' name, and an owner's name stays. NotYet
   // while nothing could be written (an OTA trial's held storage), a duel is
   // open, or the pet is an egg or a clutch, so the caller asks again.
-  // NotNeeded once he has a species, when `species` is grungo (he already is
-  // one), and on a sealed board. Running it again after a power cut finds
-  // the saved pet adopted, or adopts the unsaved one the same way.
+  // NotNeeded once he has a species, and on a sealed board. Grungo is adopted
+  // like any species. Running it again after a power cut finds the saved pet
+  // adopted, or adopts the unsaved one the same way.
   enum class Adoption : uint8_t { Adopted, NotNeeded, NotYet };
   Adoption adoptSpecies(SpeciesId, const LookBands&);
-  // The one-time step after adoption (founding.h retuneFirstHours), recorded
-  // and saved the same way. NotYet as adoptSpecies; NotNeeded once he sleeps
-  // by FirstHours or when he is not the Gift recipe's `species`.
-  Adoption retuneFirstHours(SpeciesId);
   const Snapshot& live() const { return live_; }   // what a save and SNAPSHOT see
 
   // Duels (dish_duel.h). The view is plain data for the duel scene and the
@@ -158,7 +183,16 @@ class Dish {
   // above 0, and the aim the tilt reads as of the last sample, not the last
   // tick (-1 level). Reads only.
   bool hangCharging() const { return detectors_.hang.charge() > Fx::zero(); }
+  // The last sample fired a shake hard enough to dismiss what is on the
+  // screen (#35): the shell's questions (the update's, the debug unlock's)
+  // take it for a no. The Dish's own (fight mode before a duel, a refusal's
+  // words) it dismisses at the next tick.
+  bool shakeDismisses() const { return (lastFired_ >> stim::shake.v & 1) && detectors_.motion.vigorous(); }
   int8_t aimNow() const { return detectors_.aim.aim(); }
+  // Carried about, as the eyes see it (carry_show.h): presentation only. The
+  // cable's `DEBUG carry <kind>` plays one now; tests count what started.
+  const CarryShow& carry() const { return carry_; }
+  void forceCarry(Carry k);
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out) || duel_.takeDiag(out); }
   // Fight mode for STATUS: searching, paired, waiting (on an update) or off; and the last gate.
   const char* fightState() const;
@@ -178,10 +212,18 @@ class Dish {
   // unaccounted gap it fast-forwards it, re-anchors and saves at once.
   PhoneTime& phoneTime() { return phone_; }
   void checkWall();
+  // A network's clock: a Wi-Fi window's HTTPS Date (src/wifi_ota.h), and the
+  // zone the site read from where the request came from, when it sent one.
+  // Read after the RTC and the phone, then as TIME does: any unlived gap is
+  // lived and the pet hours snap to the wall. The zone a phone gave this boot
+  // outranks the network's. It is not a phone: no welcome, and the time since
+  // a phone last spoke (miss_phone) keeps counting.
+  void netTime(uint32_t unixSeconds, std::optional<int16_t> tzMinutes);
   bool timeKnown() const { return wallKnown_; }      // a source has given wall time this boot
   std::optional<uint32_t> wallNow() const;           // the anchor plus powered time since
-  // TIME's zone. From then on this boot his wall-clock lines read the owner's
-  // local time; before it (or after a reboot) they stay silent.
+  // TIME's zone (or a network's, netTime). From then on this boot his
+  // wall-clock lines read the owner's local time; before it (or after a
+  // reboot) they stay silent.
   void setZone(int16_t tzMinutes) { zone_ = tzMinutes; }
   std::optional<uint32_t> localNow() const;          // wallNow() in that zone
   const CatchUp& lastCatchUp() const { return lastCatchUp_; }
@@ -189,9 +231,10 @@ class Dish {
   // saved anchor, as a board that never met a phone. The next reading anchors
   // afresh and lives no gap. A time source still set will be read again.
   void forgetWall();
-  // True while an egg is held back until the owner adopts it from the page
-  // (ADOPT; DishOptions::hatchNeedsPhone). Adoption is kept in its own file,
-  // so a replug does not ask again. A phone merely connecting does not count.
+  // True while an egg's clock is held back until the owner adopts it from
+  // the page (ADOPT; DishOptions::hatchNeedsPhone); shaking hatches it all
+  // the same. Adoption is kept in its own file, so a replug does not ask
+  // again. A phone merely connecting does not count.
   bool hatchWaits() const { return hatchNeedsPhone_ && !hatchFree_ && !adopted_; }
   bool adopted() const { return adopted_; }
   bool adopt();                    // false when the flag cannot be written (a trial, a sealed pet)
@@ -202,10 +245,12 @@ class Dish {
  private:
   void runOneTick(Link&);
   // Powered ticks since a phone last gave the time. Across a replug the saved
-  // anchor stands in: with no battery only a phone can have set it.
+  // anchor stands in (a network's clock may have set it too: then the pet
+  // misses the phone half a day after that, not after the phone).
   uint32_t phoneAwayTicks() const;
   FromPhone fromPhone() const;     // what his lines may use beyond his own clock
   void welcomePhone();
+  void showGrowth(Creature&);     // a stage he reached, shown once a hand is on him (#aging)
   void onDeath(Creature&);         // record death, lay the clutch, save
   bool onPicked(Clutch&, uint8_t); // record birth, the egg replaces the clutch, save; false: not now
   void routeBoot(BootContext, SenseOut&);
@@ -214,6 +259,9 @@ class Dish {
   void catchUp(uint32_t ticks);
   void advanceClock(uint32_t ticks);
   bool save();
+  void resumeStats(bool fresh);
+  void saveStatsDue();
+  void countDuel();
 
   Storage& store_;
   Keepsake keep_;
@@ -236,6 +284,13 @@ class Dish {
   // or hashed. nowMs_ is the newest time the shell has handed in, a sample's
   // or a tick call's: the frame drawn next is about then.
   FeedShow feed_;
+  // Carried about (carry_show.h): presentation only, never saved or hashed.
+  CarryShow carry_;
+  CarryContext carryContext(const BodySample&) const;
+  // Choosing an egg as the eyes see it (clutch_show.h): presentation only,
+  // never saved or hashed. The tilt at each sample, not each tick, so the
+  // picker follows the hand with nothing added to the tilt's own smoothing.
+  ClutchShow clutchShow_;
   uint32_t nowMs_ = 0;
   uint64_t lastFired_ = 0;
   // The duel's aim while turned onto a side is the aim from before the turn
@@ -248,23 +303,55 @@ class Dish {
   // The aim a knock is made at: the aim on the first knock's sample, which
   // the lock takes when the knock is decided ~0.6 s later (a hand drifts).
   int8_t knockAim_ = -1;
+  // When a hard shake last dismissed something (#35), for the whoosh.
+  uint32_t dismissedAtMs_ = 0;
+  bool dismissed_ = false;
+  // The hands hatching an egg (senses.h), and when one last hatched, for the
+  // shell flying off. Presentation and the hand only: never saved or hashed.
+  ShakeHatch shakeHatch_;
+  uint32_t hatchedAtMs_ = 0;
+  bool hatched_ = false;
   bool knockWaitWas_ = false;
   int8_t liveAim() const;
+  // The aim counts only once a hand has moved the badge on this choice
+  // screen (tilt_aim.h AimArming): unarmed, every reader sees level.
+  AimArming arming_;
+  bool choosing_ = false, armed_ = false;
+  int16_t turnSeen_ = -1;      // the duel turn being chosen (-1 none), and when it began: a move since arms its timeout (#24)
+  uint32_t turnFromMs_ = 0;
+  int8_t armedAim() const { return armed_ ? detectors_.aim.aim() : int8_t(-1); }
+  void watchChoice(uint32_t ms);
   DiagLines diag_;
   // The last press that is only for the eyes (an egg peeked at, a flower laid).
   BootAct echo_ = BootAct::Nothing;
   uint32_t echoTick_ = 0;
   PhoneTime phone_;
+  PhoneTime net_;                  // the same one-reading source, from netTime: no phone involved
   TimeSource* rtc_ = nullptr;
   CatchUp lastCatchUp_;
   std::optional<uint32_t> lastPhoneTick_;
+  // Where the phone's absence counts from once a source other than the phone
+  // re-anchored the wall (this boot only): a network's catch-up is no visit.
+  std::optional<uint32_t> phoneSince_;
   std::optional<int16_t> zone_;
   Taught taught_;                  // its own file, read once at boot; never saved with him or hashed
+  // life.stats, as taught_: counted here, written with the keepsake at most
+  // every Stats::kSaveEveryTicks, at once after a life event or a flush.
+  // The whole record lives in the big heap (big_heap.h: PSRAM on the badge,
+  // never the internal RAM a duel's radio needs, #53); the Dish holds a pointer.
+  BigPtr<Stats> statsBox_ = makeBig<Stats>();
+  Stats& stats_ = *statsBox_;
+  uint32_t statsSavedTick_ = 0, battleStart_ = 0, refusedTick_ = UINT32_MAX;
+  bool statsUrgent_ = false, duelWas_ = false;
+  uint8_t secondTicks_ = 0, seenTurn_ = 0xFF, seenEnd_ = 0;
   Fx tiltX_ = Fx::ratio(1, 2), tiltY_ = Fx::ratio(1, 2);
   Boot boot_ = Boot::Fresh;
   uint32_t tick_ = 0, lastTickMs_ = 0, lastSaveTick_ = 0, lastWallCheckTick_ = 0;
+  bool ticking_ = false;   // a tick() has run this boot: a gap after it is a nap, not the boot
+  std::optional<Stage> grewTo_;   // a stage reached and not yet shown (a nap's, or behind a duel)
   bool eventDirty_ = false, readOnly_ = false, wallKnown_ = false, wasConnected_ = false;
   bool hatchNeedsPhone_ = false, hatchFree_ = false, adopted_ = false;
+  uint64_t mac_ = 0;
 };
 
 }  // namespace blorb

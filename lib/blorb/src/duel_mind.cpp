@@ -53,9 +53,9 @@ uint8_t duelContext(const Outcome& o, Side me, const BattleCard& theirs) {
 }
 
 Lean petChoice(const DuelSkill& skill, const Outcome& o, Side me, const BattleCard& mine, const BattleCard& theirs,
-               uint8_t assistHearts, uint32_t seed) {
+               uint8_t assistSteps, uint32_t seed) {
   const uint8_t i = uint8_t(me);
-  const int32_t bright = 32 * assistHearts;
+  const int32_t bright = 32 * assistSteps;
   // Their special is public from its commit; only its landing stance is not.
   const SideState& them = o.side[1 - i];
   if (them.queued != Windup::None && o.resolved < them.landsOn)

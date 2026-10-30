@@ -1,13 +1,13 @@
 #!/bin/bash
-# Flashes the gift devices one at a time and proves each one's first boot:
+# Flashes the badges one at a time and proves each one's first boot:
 #   tools/flash_fleet.sh --species gilly .pio/build/badge128/merged.hex [fleet-dir]
-# Plug in ONE gift board, run this, unplug it, repeat. It finds the single
+# Plug in ONE badge, run this, unplug it, repeat. It finds the single
 # CH343 board on a cable that is not a test board, flashes it through
 # flash_board.sh (so the serial and MAC are checked before writing), then
 # reboots it and waits for the first boot to provision. A board passes only
 # if its log shows both storage partitions ok or formatted and a boot= line:
 # board 3 (2026-10-14) flashed cleanly and then hung with nothing on serial,
-# and a flash that "succeeded" is not a gift that works. Each board's boot
+# and a flash that "succeeded" is not a badge that works. Each board's boot
 # log and a row in fleet.csv (serial, MAC, BLE name, genome, verdict) land in
 # the fleet dir, default D:/projects/bak/blorbarium/fleet. --species
 # (a slug from species.def: grungo, mossby, puffkin, gilly, mothwick, mudge,
@@ -28,13 +28,13 @@ die() { echo "flash_fleet: $*" >&2; exit 1; }
 mkdir -p "$dir"
 
 mapfile -t boards < <("$pio" device list | awk '/^COM|^\/dev/ { port=$1 } /SER=/ && /1A86:55D3/ { match($0, /SER=[0-9A-Za-z]+/); print port, substr($0, RSTART+4, RLENGTH-4) }')
-gifts=()
+targets=()
 for b in "${boards[@]}"; do
   set -- $b
-  case " $test_serials " in *" $2 "*) echo "flash_fleet: skipping test board $1 ($2)";; *) gifts+=("$b");; esac
+  case " $test_serials " in *" $2 "*) echo "flash_fleet: skipping test board $1 ($2)";; *) targets+=("$b");; esac
 done
-[ ${#gifts[@]} -eq 1 ] || die "want exactly one gift board on a cable, found ${#gifts[@]}: ${gifts[*]:-none}"
-set -- ${gifts[0]}; port=$1 serial=$2
+[ ${#targets[@]} -eq 1 ] || die "want exactly one badge on a cable, found ${#targets[@]}: ${targets[*]:-none}"
+set -- ${targets[0]}; port=$1 serial=$2
 mac=$("$py" ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 --port "$port" read_mac | awk '/^MAC:/ { print $2; exit }')
 [ -n "$mac" ] || die "$port did not answer with a MAC"
 log="$dir/$serial-$(date +%Y%m%d-%H%M%S).log"

@@ -10,15 +10,56 @@
 
   // The chooser's filters (docs/ble.md). Every dish advertises the UART service
   // in its advertising packet and its name in the scan response: blorb-xxxx up
-  // to 0.6.x, its species from 0.7.0. Once chosen, the name never matters again:
-  // a reconnect, even after an update renames the dish, is to the same device.
+  // to 0.6.x, its species from 0.7.0 (blorb-xxxx again while an OTA trial ran,
+  // through 0.7.42), its pet's name, lowercase, after that. From 0.7.33 it also
+  // advertises its id under company 0xFFFF (COMPANY), whatever its name, so the
+  // default filters take any dish with that id, and old ones by their names.
+  // Once chosen, the name never matters again: a reconnect, even after an
+  // update renames the dish, is to the same device.
   const NUS = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
   const SPECIES = ["grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker", "octopus"];
-  function chooserFilters(want, wide = false) {
+  // badge (an NFC sticker's ?b=, parseBadge) lists that one badge; names are
+  // the names it may advertise without the id (its species, from badgeName).
+  function chooserFilters(want, wide = false, badge = null, names = []) {
+    if (badge && !wide) return [...badgeFilters(badge, names), ...(want ? [{ name: want }] : [])];
     if (want) return [{ name: want }];
     if (wide) return [{ services: [NUS] }];
-    return ["blorb-", ...SPECIES].map((namePrefix) => ({ services: [NUS], namePrefix }));
+    return [{ services: [NUS], manufacturerData: [{ companyIdentifier: COMPANY }] },
+      ...["blorb-", ...SPECIES].map((namePrefix) => ({ services: [NUS], namePrefix }))];
   }
+
+  // An NFC sticker's link, ?b= (docs/nfc.md): the badge's Wi-Fi MAC, 12 hex
+  // digits in any case, colons or dashes between the bytes optional; or
+  // blorb-xxxx, its last two bytes. null for anything else.
+  function parseBadge(text) {
+    const s = String(text ?? "").trim().toLowerCase();
+    const tail = /^blorb-([0-9a-f]{4})$/.exec(s);
+    if (tail) return { mac: null, tail: tail[1] };
+    if (!/^[0-9a-f]{2}(?:[:-]?[0-9a-f]{2}){5}$/.test(s)) return null;
+    const mac = s.replace(/[:-]/g, "");
+    return { mac, tail: mac.slice(8) };
+  }
+
+  // From 0.7.33 a badge advertises its MAC as manufacturer data under company
+  // 0xFFFF (docs/ble.md "Advertisement", firmware blorb/ble_id.h): that never
+  // changes. An older one is found by name: blorb-xxxx (before 0.7.0, and on an
+  // OTA trial through 0.7.42) or the species it advertises now.
+  const COMPANY = 0xffff;
+  const bytes = (hex) => Uint8Array.from(hex.match(/../g), (h) => parseInt(h, 16));
+  function badgeFilters(badge, names = []) {
+    const id = badge.mac
+      ? { companyIdentifier: COMPANY, dataPrefix: bytes(badge.mac) }
+      : { companyIdentifier: COMPANY, dataPrefix: bytes(`00000000${badge.tail}`), mask: bytes("00000000ffff") };
+    const named = new Set([`blorb-${badge.tail}`, ...names.filter((n) => typeof n === "string" && /^[a-z0-9_-]{1,29}$/.test(n))]);
+    return [{ services: [NUS], manufacturerData: [id] }, ...[...named].map((name) => ({ services: [NUS], name }))];
+  }
+
+  // The badges and the species each was flashed as (lib/blorb/include/blorb/defs/badges.def;
+  // web/test/chooser.test.mjs keeps them the same): the name to try when the site cannot be asked.
+  const BADGES = {
+    d4059277237c: "grungo", d40592771b3c: "mossby", d40592771b44: "puffkin", d40592771b34: "gilly", d40592771cb0: "mothwick",
+    d40592771b30: "mudge", d40592771b40: "fizz", d40592772258: "hushwing", d40592772240: "tinker",
+  };
 
   function kv(text) {
     const out = {};
@@ -360,7 +401,7 @@
     }
   }
 
-  const api = { Updater, fetchRelease, tokenStore, checkTrial, isNewer, sha256, imageId, chooserFilters, NUS, SPECIES };
+  const api = { Updater, fetchRelease, tokenStore, checkTrial, isNewer, sha256, imageId, chooserFilters, parseBadge, badgeFilters, BADGES, COMPANY, NUS, SPECIES };
   globalThis.BlorbOta = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

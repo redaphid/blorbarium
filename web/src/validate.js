@@ -30,6 +30,11 @@ export function builtInLines(species) {
   return set;
 }
 
+// The voice frames the firmware used to wrap lines in, which the owner removed
+// (2026-10-27): a line that starts or ends with one is thrown away.
+export const FRAMES = [/^THE REEDS SAY\b/i, /\bSO IT IS\b/i, /^HEED:/i, /^OOH, WAIT\./i, /^GOOD NEWS:/i, /^PSST\./i,
+  /\.\.\. SOON\.$/i, /\. TELL NO ONE\.$/i];
+
 // One line against one situation. Returns null if it passes, else why not.
 export function lineProblem(text, situation) {
   if (typeof text !== "string") return "not a string";
@@ -43,6 +48,9 @@ export function lineProblem(text, situation) {
     return `the screen cannot draw ${bad.map((c) => JSON.stringify(c)).join(" ")}`;
   }
   if (mark && text.split(mark).length > 2) return `more than one ${mark}`;
+  if (/\bDISH\b/i.test(text)) return "says DISH, a word the kids do not know";
+  const framed = FRAMES.find((f) => f.test(text));
+  if (framed) return "is wrapped in a voice frame (a lead-in or tag the owner removed)";
   return null;
 }
 

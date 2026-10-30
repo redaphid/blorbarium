@@ -14,6 +14,7 @@
 #include "blorb/founding.h"
 #include "debugble/console.h"
 #include "hw/debug_char.h"
+#include "hw/log_tee.h"
 #include "hw/system_clock.h"
 #include "paint/text.h"
 
@@ -76,6 +77,32 @@ struct Board : debugble::Board {
     rebootQuiet = quiet;
     return true;
   }
+  // The cable's own: its log and its DEBUG lines (CLAUDE.md: one badge,
+  // three transports), masked as the report's are (maskLog).
+  std::optional<std::string_view> log() override {
+    if (!buffers()) return std::nullopt;
+    const size_t n = hw::logTee.tail(raw, hw::LogTee::kRingBytes);
+    return std::string_view(out, maskLog(raw, n, out, kOutBytes));
+  }
+  std::optional<std::string_view> serial(std::string_view line) override {
+    if (!buffers()) return std::nullopt;
+    char cmd[128];
+    std::snprintf(cmd, sizeof cmd, "%.*s", int(std::min(line.size(), sizeof cmd - 1)), line.data());
+    const uint64_t mark = hw::logTee.mark();
+    runDebug(cmd);
+    const size_t n = hw::logTee.since(mark, raw, hw::LogTee::kRingBytes);
+    return std::string_view(out, maskLog(raw, n, out, kOutBytes));
+  }
+  // PSRAM, made at the first LOG or DEBUG: the ring's copy and its masked form (a mask may be longer).
+  static constexpr size_t kOutBytes = hw::LogTee::kRingBytes + 2048;
+  char* raw = nullptr;
+  char* out = nullptr;
+  bool buffers() {
+    if (!raw) raw = static_cast<char*>(heap_caps_malloc(hw::LogTee::kRingBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!out) out = static_cast<char*>(heap_caps_malloc(kOutBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    return raw && out;
+  }
+
   std::optional<uint32_t> rebootAt;
   bool rebootQuiet = false;
 };
@@ -119,7 +146,16 @@ static void poll() {
   while (std::optional<blorb::RxLines<hw::DebugChar::kRxMax>::Line> line = link.take()) {
     if (line->connection != live) continue;   // its phone is gone: nobody to answer
     ble.spoke();   // a debug session is a page talking: never evict it as a squatter
-    Serial.printf("[hw] debug ble: %.60s\n", std::string(line->text).c_str());
+    // A Wi-Fi line may carry an SSID or a password: only its verb is logged.
+    const std::string text(line->text);
+    const bool secret = text.find(" wifi set") != std::string::npos || text.find(" wifi verify") != std::string::npos ||
+                        text.find(" wifi forget") != std::string::npos;
+    if (secret) {
+      const size_t verb = text.find(' ', text.find(" wifi") + 6);   // through "wifi <its verb>"
+      Serial.printf("[hw] debug ble: %.*s (a Wi-Fi line: the rest not logged)\n",
+                    int(std::min<size_t>(verb == std::string::npos ? text.size() : verb, 60)), text.c_str());
+    }
+    else Serial.printf("[hw] debug ble: %.60s\n", text.c_str());
     console.handle(line->text, line->connection, millis(), *dish, link);
   }
   runScaled();

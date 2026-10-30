@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <variant>
@@ -13,6 +14,7 @@
 #include "../../src/hw/orient.h"
 #include "links.h"
 #include "mem_storage.h"
+#include "scripted_owner.h"
 #include "traces.h"
 
 using namespace blorb;
@@ -73,6 +75,13 @@ struct Rig {
       }
       observe();
     }
+  }
+  // A knock on the glass through the IMU: a kid's hand.
+  void knock() {
+    BodySample k = still();
+    k.tapCode = 1;
+    dish.sample(k, ms);
+    run(500);
   }
   int prophecies() const {
     int n = 0;
@@ -179,10 +188,14 @@ TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
     for (const Line& l : r.said) n += l.id == thought::miss_phone;
     return n;
   };
+  // Fed, and knocked on now and then (a kid's hand), so he is never left
+  // alone in the dim for hours: left alone, he sleeps it out (sleep-idle),
+  // and a sleeper misses nothing.
   auto play = [&r](uint32_t forMs) {
     for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
       r.dish.fire(stim::button);
-      r.run(20 * kMinute);
+      r.knock();
+      r.run(20 * kMinute - 500);
     }
   };
   play(11 * 60 * kMinute);
@@ -204,6 +217,73 @@ TEST(Thoughts, HalfADayWithoutAPhoneHeMissesItAndAVisitQuietsHim) {
   r.dish.checkWall();
   r.run(500);
   EXPECT_NE(r.said.back().text, "THE GLOWING ONE RETURNS!") << "only a phone he missed is welcomed";
+}
+
+// ---- a Wi-Fi window's clock (Dish::netTime) ----------------------------------------
+
+TEST(Thoughts, AWifiClockGivesTheWallAndTheZoneWithNoPhone) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.run(kSecond);
+  ASSERT_FALSE(r.dish.timeKnown());
+  ASSERT_FALSE(r.dish.localNow());
+  r.dish.netTime(1790000000, int16_t(-420));
+  EXPECT_TRUE(r.dish.timeKnown());
+  ASSERT_TRUE(r.dish.localNow());
+  EXPECT_EQ(*r.dish.localNow(), 1790000000u - 420u * 60u) << "his wall-clock lines read the zone the site sent";
+  EXPECT_TRUE(r.dish.clock().aligned) << "the pet hours snap to the wall, as TIME does";
+  r.run(500);
+  EXPECT_TRUE(r.dish.clock().trusted) << "and are believed: his day and night run without a phone";
+  for (const Line& l : r.said) EXPECT_NE(l.text, "THE GLOWING ONE RETURNS!") << "a network is no visit";
+}
+
+TEST(Thoughts, AWifiClockWithNoZoneKnowsTheWallButGuessesNoHour) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.dish.netTime(1790000000, std::nullopt);
+  EXPECT_TRUE(r.dish.timeKnown());
+  EXPECT_FALSE(r.dish.localNow()) << "no zone, no o'clock: a wall-clock line never guesses";
+  EXPECT_FALSE(r.dish.clock().aligned);
+}
+
+TEST(Thoughts, APhonesZoneOutranksTheNetworks) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  r.dish.phoneTime().set(1790000000);
+  r.dish.checkWall();
+  r.dish.setZone(60);
+  r.dish.netTime(1790000010, int16_t(-420));
+  ASSERT_TRUE(r.dish.localNow());
+  EXPECT_EQ(*r.dish.localNow(), 1790000000u + 60u * 60u) << "the owner's own phone knows better than a guess from the address";
+}
+
+TEST(Thoughts, AWifiClockIsNoVisitHeStillMissesThePhone) {
+  Rig r(quickEgg(), /*knowTime=*/false);
+  auto missed = [&r] {
+    int n = 0;
+    for (const Line& l : r.said) n += l.id == thought::miss_phone;
+    return n;
+  };
+  auto play = [&r](uint32_t forMs) {   // fed and knocked on, as HalfADayWithoutAPhone...
+    for (uint32_t t = 0; t < forMs; t += 20 * kMinute) {
+      r.dish.fire(stim::button);
+      r.knock();
+      r.run(20 * kMinute - 500);
+    }
+  };
+  constexpr uint32_t kWall = 1790000000;
+  play(6 * 60 * kMinute);
+  r.dish.netTime(kWall, int16_t(0));   // the first window: the wall anchors here
+  const uint32_t anchoredMs = r.ms;
+  play(5 * 60 * kMinute);
+  // The next window finds an hour he never lived (a power cut): it is lived, the wall re-anchors.
+  r.dish.netTime(kWall + (r.ms - anchoredMs) / 1000 + 3600, int16_t(0));
+  EXPECT_GT(r.dish.lastCatchUp().awaySeconds, 0u);
+  EXPECT_EQ(missed(), 0);
+  play(2 * 60 * kMinute);
+  ASSERT_GT(missed(), 0) << "fourteen hours with no phone: two Wi-Fi windows are not one";
+  r.dish.phoneTime().set(*r.dish.wallNow());
+  r.dish.checkWall();
+  r.run(500);
+  ASSERT_FALSE(r.said.empty());
+  EXPECT_EQ(r.said.back().text, "THE GLOWING ONE RETURNS!") << "the phone he missed is still welcomed";
 }
 
 TEST(Thoughts, TheSameSeedAndRoutineSayTheSameLinesAtTheSameTicks) {
@@ -367,6 +447,8 @@ TEST(Prophecy, TheDaysFirstForetellingIsAFortuneAndLaterOnesMayBeVerdicts) {
   auto isVerdict = [](const std::string& text) {
     for (const char* v : kVerdictTexts)
       if (text == v) return true;
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)   // the frog's own answers stand in for the ball's
+      if (v.species == kGrungo && text == v.text) return true;
     return false;
   };
   Rig r;
@@ -394,14 +476,15 @@ TEST(Prophecy, OneLongShakeIsOneProphecy) {
   EXPECT_EQ(r.prophecies(), 1);
 }
 
-TEST(Prophecy, TheVoiceChangesHowTheSameLineIsSaid) {
-  char mystic[kThoughtLineCap], hoarder[kThoughtLineCap], terse[kThoughtLineCap];
-  thoughtLine(thought::p_mud, 0, voice::mystic, 0, mystic);
-  thoughtLine(thought::p_mud, 0, voice::hoarder, 0, hoarder);
-  thoughtLine(thought::p_mud, 0, voice::terse, 0, terse);
-  EXPECT_STRNE(mystic, hoarder);
-  EXPECT_STRNE(mystic, terse);
-  EXPECT_NE(std::string(hoarder).find("MUD"), std::string::npos) << "the voice frames the line; it keeps its meaning";
+TEST(Prophecy, ASharedLineIsSaidPlainInEveryVoice) {
+  const std::string bare = thoughtInfo(thought::p_mud)->text;
+  char out[kThoughtLineCap];
+  for (const VoiceInfo& v : VOICES)
+    for (uint32_t pick = 0; pick < 256; ++pick) {
+      thoughtLine(thought::p_mud, 0, v.id, uint8_t(pick), out);
+      if (v.firstOnly) EXPECT_EQ(bare.rfind(out, 0), 0u) << v.name << ": a terse voice only cuts it short: " << out;
+      else EXPECT_EQ(out, bare) << v.name << " wrapped the shared line";
+    }
 }
 
 TEST(Heirloom, TheLineageNamesTheGenerationThatLearnedAFear) {
@@ -445,17 +528,22 @@ TEST(Voice, ATerseVoiceStopsAtTheFirstSentenceAndAnEllipsisIsNotOne) {
   thoughtLine(thought::peckish, 0, voice::terse, 0, out);
   EXPECT_STREQ(out, "SNACK?");
   thoughtLine(thought::see_pellet, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "I SEE... A MORSEL.");
+  EXPECT_STREQ(out, "A MORSEL.");
   thoughtLine(thought::no_hat, 12, voice::terse, 0, out);
   EXPECT_STREQ(out, "GEN 12.");
 }
 
-TEST(Voice, AVoicesOwnLineReplacesTheFrame) {
+// A voice has no version of a shared line of its own (they were a voice's
+// stock tags stuck on the shared line: "... AS FORETOLD.", "NO SHARING.").
+TEST(Voice, AVoiceSaysTheSharedLineNotItsOwnVersion) {
   char out[kThoughtLineCap];
-  thoughtLine(thought::p_pond_no, 0, voice::terse, 0, out);
-  EXPECT_STREQ(out, "NO.");
-  thoughtLine(thought::no_hat, 4, voice::ominous, 0, out);
-  EXPECT_STREQ(out, "GEN 4. HATLESS. AS FORETOLD.");
+  for (const VoiceInfo& v : VOICES) {
+    if (v.firstOnly) continue;
+    thoughtLine(thought::p_pond_no, 0, v.id, 0, out);
+    EXPECT_STREQ(out, thoughtInfo(thought::p_pond_no)->text) << v.name;
+    thoughtLine(thought::no_hat, 4, v.id, 0, out);
+    EXPECT_STREQ(out, "GEN 4. STILL NO HAT.") << v.name;
+  }
 }
 
 TEST(Personality, PreviewSaysWhatTheDeviceSays) {
@@ -467,7 +555,7 @@ TEST(Personality, PreviewSaysWhatTheDeviceSays) {
   char out[kThoughtLineCap];
   for (const Case& k : kCases) {
     thoughtLine(ThoughtId{k.thought}, k.num, VoiceId{k.voice}, k.pick, out, SpeciesId{k.species}, kParityWords);
-    ASSERT_STREQ(out, k.text) << "tools/personality.py frames thought " << int(k.thought) << " differently; port the change";
+    ASSERT_STREQ(out, k.text) << "tools/personality.py says thought " << int(k.thought) << " differently; port the change";
   }
 }
 
@@ -485,12 +573,144 @@ TEST(Personality, ASpeciesLineIsHisAlone) {
   auto says = [](const std::vector<std::string>& lines, const char* what) {
     return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.find(what) != std::string::npos; });
   };
-  EXPECT_TRUE(says(heard(kGrungo), "I FORESEE FLIES. IN MY MOUTH."));
+  auto firstOwn = [](SpeciesId s) {
+    for (const SpeciesLine& l : SPECIES_LINES)
+      if (l.species == s && l.thought == thought::peckish) return std::string(l.text);
+    return std::string("(none)");
+  };
+  const std::string frog = firstOwn(kGrungo), snail = firstOwn(mossby);
+  EXPECT_TRUE(says(heard(kGrungo), frog.c_str()));
   EXPECT_FALSE(says(heard(kGrungo), "THE GOOD BITS")) << "his own line replaces the shared one";
-  EXPECT_FALSE(says(heard(mossby), "FORESEE FLIES"));
-  EXPECT_TRUE(says(heard(mossby), "A SNACK WOULD BE NICE. LATER."));
+  EXPECT_FALSE(says(heard(mossby), frog.c_str()));
+  EXPECT_TRUE(says(heard(mossby), snail.c_str()));
   EXPECT_FALSE(says(heard(mossby), "THE GOOD BITS"));
   EXPECT_TRUE(says(heard(kSharedOnly), "SNACK? SNACK. THE GOOD BITS!")) << "no species: the shared line";
+}
+
+// The owner's complaint (#34): every line came wrapped in a voice frame, so
+// half the pets said "..., OR SOMETHING" and "SO, UM, ...". A species' own line
+// is his voice already: said exactly as written, whatever the voice or draw.
+TEST(Personality, HisOwnLineIsSaidAsWrittenNeverFramedOrCut) {
+  char out[kThoughtLineCap];
+  for (const SpeciesLine& l : SPECIES_LINES) {
+    if (l.species.v == 0xFF || std::strpbrk(l.text, "#@*")) continue;
+    uint8_t lines = 0;
+    for (const SpeciesLine& m : SPECIES_LINES) lines += m.species == l.species && m.thought == l.thought;
+    for (const VoiceInfo& v : VOICES)
+      for (uint32_t pick = 0; pick < 8u * lines; ++pick) {
+        thoughtLine(l.thought, 0, v.id, uint8_t(pick), out, l.species);
+        bool known = false;
+        for (const SpeciesLine& m : SPECIES_LINES)
+          known = known || (m.species == l.species && m.thought == l.thought && std::strcmp(out, m.text) == 0);
+        ASSERT_TRUE(known) << v.name << " said \"" << out << "\", not one of his own lines as written";
+      }
+  }
+}
+
+// The owner (2026-10-27) saw "THE REEDS SAY: YUM." and "SO IT IS... CRUNCH."
+// on a badge with no pack: the voice frames came back. No line wears one, for
+// any thought, species, voice or draw: each is one of the row's lines as
+// written (a terse voice may only cut a shared line short), and none starts or
+// ends with a frame the firmware used to add.
+TEST(Voice, NoSaidLineWearsAFrame) {
+  static constexpr const char* kLeads[] = {"THE REEDS SAY", "SO IT IS", "HEED:", "OOH, WAIT.", "GOOD NEWS:", "PSST."};
+  static constexpr const char* kTags[] = {"SO IT IS.", "... SOON.", ". HOORAY!", ". TELL NO ONE."};
+  std::vector<SpeciesId> who{kSharedOnly};
+  for (const SpeciesInfo& sp : SPECIES) who.push_back(sp.id);
+  char out[kThoughtLineCap];
+  for (SpeciesId s : who)
+    for (const VoiceInfo& v : VOICES)
+      for (const ThoughtInfo& t : THOUGHTS) {
+        // What the row may say, as written: his own lines, else the voice's, else the shared one.
+        std::vector<std::string> written;
+        for (const SpeciesLine& l : SPECIES_LINES) if (l.species == s && l.thought == t.id) written.emplace_back(l.text);
+        const bool own = !written.empty();
+        const bool shared = written.empty();
+        if (shared) written.emplace_back(t.text);
+        const bool marked = std::any_of(written.begin(), written.end(), [](const std::string& w) {
+          return w.find_first_of("#@*") != std::string::npos;
+        });
+        for (uint32_t pick = 0; pick < 32; ++pick) {
+          thoughtLine(t.id, 7, v.id, uint8_t(pick), out, s);
+          const std::string said(out);
+          for (const char* lead : kLeads) ASSERT_NE(said.rfind(lead, 0), 0u) << v.name << " " << t.name << ": " << said;
+          for (const char* tag : kTags) {
+            const size_t n = std::strlen(tag);
+            ASSERT_FALSE(said.size() >= n && said.compare(said.size() - n, n, tag) == 0) << v.name << " " << t.name << ": " << said;
+          }
+          if (marked) continue;
+          const bool asWritten = std::any_of(written.begin(), written.end(), [&](const std::string& w) {
+            return said == w || (shared && v.firstOnly && w.rfind(said, 0) == 0);
+          });
+          ASSERT_TRUE(asWritten) << v.name << " " << t.name << " said \"" << said << "\", not a line as written";
+        }
+      }
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+    for (const char* lead : kLeads) EXPECT_NE(std::string(v.text).rfind(lead, 0), 0u) << v.text;
+}
+
+// The owner: "make sure those stock lines wrapping are removed for all the
+// different pets." A stock opener or closer is a phrase stuck on many of one
+// pet's lines ("I SEE... X", "X. SHH.", "X. NOTED.", "X, GO!"). For each
+// species, across everything he can say (his own lines, the shared ones he
+// falls back on, every draw, his verdicts), no opening pair of words and no
+// last word is on more than a tenth of his lines.
+TEST(Voice, NoPetHasAStockOpenerOrCloser) {
+  auto wordsOf = [](const std::string& line) {
+    std::vector<std::string> w;
+    std::string cur;
+    for (char c : line + " ") {
+      if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '\'' || c == '#' || c == '@' || c == '*') cur += c;
+      else if (!cur.empty()) { w.push_back(cur); cur.clear(); }
+    }
+    return w;
+  };
+  char out[kThoughtLineCap];
+  for (const SpeciesInfo& sp : SPECIES) {
+    std::vector<std::string> said;
+    for (const ThoughtInfo& t : THOUGHTS)
+      for (uint32_t pick = 0; pick < 32; ++pick) {
+        thoughtLine(t.id, 7, sp.starter.voice, uint8_t(pick), out, sp.id);
+        if (std::find(said.begin(), said.end(), out) == said.end()) said.emplace_back(out);
+      }
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS) if (v.species == sp.id) said.emplace_back(v.text);
+    std::map<std::string, int> openers, closers;
+    for (const std::string& l : said) {
+      const auto w = wordsOf(l);
+      if (w.size() >= 2) ++openers[w[0] + " " + w[1]];
+      if (!w.empty()) ++closers[w.back()];
+    }
+    const int cap = int(said.size()) / 10;
+    for (const auto& [o, n] : openers) EXPECT_LE(n, cap) << sp.name << " opens " << n << " of " << said.size() << " lines with \"" << o << "\"";
+    for (const auto& [c, n] : closers) EXPECT_LE(n, cap) << sp.name << " ends " << n << " of " << said.size() << " lines with \"" << c << "\"";
+  }
+}
+
+// The kids do not know "dish" (the code's name for the habitat): no line says it.
+TEST(Voice, NoLineSaysDish) {
+  auto clean = [](const char* text) { return std::string(text).find("DISH") == std::string::npos; };
+  for (const ThoughtInfo& t : THOUGHTS) EXPECT_TRUE(clean(t.text)) << t.name << ": " << t.text;
+  for (const SpeciesLine& l : SPECIES_LINES) EXPECT_TRUE(clean(l.text)) << l.text;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) EXPECT_TRUE(clean(v.text)) << v.text;
+}
+
+// Half of later shakes are the ball's bare answer: in the species' own words
+// when his file gives them, the ball's plain ones otherwise.
+TEST(Prophecy, AVerdictIsInHisOwnWordsWhenHeHasThem) {
+  for (const SpeciesInfo& sp : SPECIES) {
+    uint8_t kinds = 0;   // a bit per kind he has his own words for
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+      if (v.species == sp.id) kinds |= uint8_t(1u << v.kind);
+    Rng rng = Rng::seeded(sp.id.v + 1);
+    for (int i = 0; i < 200; ++i) {
+      const char* said = drawVerdict(rng, sp.id);
+      ASSERT_NE(said, nullptr);
+      bool his = false;
+      for (const SpeciesVerdict& v : SPECIES_VERDICTS) his = his || (v.species == sp.id && v.text == said);
+      if (kinds == 0b111) ASSERT_TRUE(his) << sp.name << " said the ball's plain " << said;
+      if (kinds == 0) ASSERT_FALSE(his);
+    }
+  }
 }
 
 // ---- what a phone adds -------------------------------------------------------------
@@ -802,8 +1022,61 @@ TEST(Thoughts, TheSkyIsDownOnlyWhenHeIsUpsideDownFromHome) {
     EXPECT_EQ(countOf(r.said, thought::sky_down), 0) << "the right way up, or face down, he is not upside down";
     EXPECT_FALSE(r.said.empty()) << "he talked meanwhile";
 
-    holdPose(r, sh, edgeUp(home + 2), 10 * kSecond);   // the hang: half round from home
+    // The hang: half round from home. Held long enough for a line he had just
+    // started as he was picked up (PUT ME DOWN, up to 30 characters: 19 s) to
+    // run out first; a line in progress is never cut.
+    holdPose(r, sh, edgeUp(home + 2), 25 * kSecond);
     EXPECT_EQ(countOf(r.said, thought::sky_down), 1) << "upside down from home, he notices";
+  }
+}
+
+// ---- what a kid actually sees: hours of each species -------------------------------
+//
+// Not a check but a measurement, run on demand: BLORB_LINE_SIM=<hours> lives
+// each species that long with a body-only caretaker (ScriptedOwner: feeds,
+// cradles, tucks him in at dusk) who also shakes him every 17 minutes and
+// knocks every 23, and prints the lines that crossed the screen, most
+// frequent first (BLORB_LINE_SIM_TOP of them, default 15).
+//   BLORB_LINE_SIM=6 pio test -e native -f test_thoughts
+TEST(LineSim, WhatEachSpeciesSaysOverHours) {
+  const char* env = std::getenv("BLORB_LINE_SIM");
+  if (!env) GTEST_SKIP() << "set BLORB_LINE_SIM=<hours> to run";
+  const uint32_t hours = uint32_t(std::max(1, std::atoi(env)));
+  const char* topEnv = std::getenv("BLORB_LINE_SIM_TOP");
+  const int top = topEnv ? std::atoi(topEnv) : 15;
+  for (const SpeciesInfo& sp : SPECIES) {
+    MemStorage store;
+    NullLink link;
+    ScriptedOwner owner;
+    const Genome founder = edited(starterGenomeOf(sp.id, 7), GeneKindOf<EggGene>::value, 255, 0, 1);
+    Dish dish(store, 7, 1, DishOptions{nullptr, &founder});
+    std::map<std::string, int> times;
+    int total = 0, prophecies = 0;
+    bool wasThinking = false;
+    Fx lastPhase{};
+    for (uint32_t ms = 0; ms < hours * 3600 * kSecond; ms += kSampleMs) {
+      dish.sample(owner.next(ms, dish), ms);
+      dish.tick(ms, link);
+      if (ms && ms % (17 * kMinute) == 0) dish.fire(stim::shake);
+      if (ms && ms % (23 * kMinute) == 0) dish.fire(stim::knock);
+      if (ms % kTickMs) continue;
+      const Appearance a = dish.appearance();
+      if (a.thinking && (!wasThinking || a.thoughtPhase < lastPhase)) {
+        ++times[a.line];
+        ++total;
+        prophecies += a.prophecy;
+      }
+      wasThinking = a.thinking;
+      lastPhase = a.thoughtPhase;
+    }
+    std::vector<std::pair<int, std::string>> ranked;
+    for (const auto& [line, n] : times) ranked.emplace_back(n, line);
+    std::sort(ranked.begin(), ranked.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first || (a.first == b.first && a.second < b.second); });
+    std::cout << "[linesim] " << sp.name << ": " << total << " lines (" << prophecies << " foretold), " << times.size()
+              << " distinct in " << hours << " h\n";
+    for (int i = 0; i < int(ranked.size()) && i < top; ++i)
+      std::cout << "[linesim]   " << ranked[i].first << "x  " << ranked[i].second << "\n";
   }
 }
 

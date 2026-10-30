@@ -6,6 +6,7 @@ namespace blorb {
 namespace {
 
 constexpr uint8_t kHatchlingScalePct = 55;
+constexpr uint8_t kChildScalePct = 75;   // between the hatchling and the adult, so growing up shows
 constexpr int kSizeLocusPct = 10;        // the size locus at 1 adds this much
 constexpr int kHueShiftSteps = 64;       // the hue_shift locus at 1 turns every region a quarter
 constexpr int kBoundValSteps = 127;      // a fully bound chemical nearly doubles its region's value
@@ -16,12 +17,12 @@ int scaled(Fx level, int steps) { return int((int64_t(clamp01(level).raw) * step
 
 uint8_t clampByte(int v) { return uint8_t(std::clamp(v, 0, 255)); }
 
-// Hatchlings draw small; an adult is the art's size moved by its size gene
+// A baby draws small and a child bigger; an adult is the art's size moved by its size gene
 // (base 128 = x1, each step 1/256) and the size locus; the elder is the art.
 uint8_t scaleFor(Stage stage, const Phenotype& p, Fx sizeLocus) {
   switch (stage) {
-    case Stage::Baby:
-    case Stage::Child: return kHatchlingScalePct;
+    case Stage::Baby: return kHatchlingScalePct;
+    case Stage::Child: return kChildScalePct;
     case Stage::Elder: return 100;
     case Stage::Adult: break;
   }
@@ -90,6 +91,32 @@ void dishItems(const Habitat& h, const HabitatRules* rules, uint32_t tick, Appea
   a.pantry = h.pantry;
 }
 
+// His moods for his posture (Appearance::Moods): each 0 at its mark and full
+// 0.15 past it; content is all of them well short of 0.3.
+Moods moodsOf(const Chemistry& chem) {
+  auto past = [](Fx level, Fx mark) {
+    const int64_t over = int64_t(level.raw) - mark.raw, span = Fx::ratio(15, 100).raw;
+    return uint8_t(over <= 0 ? 0 : over >= span ? 255 : over * 255 / span);
+  };
+  auto d = [&](DriveId id) { return chem.drive(id); };
+  Moods m;
+  m.hurting = std::max(past(d(drive::pain), Fx::ratio(4, 10)), past(chem.chem[chem::injury.v], Fx::ratio(3, 10)));
+  m.hungry = past(d(drive::hunger), Fx::ratio(6, 10));
+  m.sleepy = past(d(drive::sleepiness), Fx::ratio(4, 10));
+  m.lonely = std::max(past(d(drive::loneliness), Fx::ratio(55, 100)), past(d(drive::need_touch), Fx::ratio(55, 100)));
+  m.bored = past(d(drive::boredom), Fx::ratio(55, 100));
+  Fx most{};
+  for (const DriveInfo& row : DRIVES) most = fxMax(most, d(row.id));
+  m.content = uint8_t(255 - past(most, Fx::ratio(15, 100)));
+  return m;
+}
+
+// His size gene as his motion shows it (#61): 0 in a gene means as ever.
+void bodyGenes(const Phenotype& p, Appearance& a) {
+  a.bulk = p.size.base ? p.size.base : 128;
+  a.squash = p.size.squash ? p.size.squash : 128;
+}
+
 void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   const Chemistry& chem = c.chemistry();
   const Body& body = c.body();
@@ -113,6 +140,7 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
     a.reflexStrength = body.reflex->strength;
   }
   look(c.phenotype(), &chem, a);
+  bodyGenes(c.phenotype(), a);
   a.foreseeing = c.action() == action::foresee;
   a.glow = clamp01(chem.locus[locus::glow.v]);
   a.hangCharge = clamp01(chem.locus[locus::hanging.v]);
@@ -120,6 +148,13 @@ void presentCreature(const Creature& c, uint32_t tick, Appearance& a) {
   a.asleep = body.asleep;
   a.dreaming = body.dreaming;
   a.calling = c.action() == action::call;
+  a.moods = moodsOf(chem);
+  if (c.playing()) {
+    a.idle = c.idle().now;
+    a.idleTicks = c.idle().ticks;
+    a.idleLength = c.idle().length;
+    a.idlePace = c.idle().pace;
+  }
   a.mouth = body.mouth;
   a.injury = chem.chem[chem::injury.v];
   a.wobble = chem.locus[locus::wobble.v];
@@ -167,8 +202,10 @@ void presentClutch(const Clutch& k, Appearance& a) {
 
 Appearance present(const Occupant& occ, const Habitat& habitat, const PetClock& clock, uint32_t tick) {
   Appearance a;
+  // The sky follows the pet hours only while they are the wall's (PetClock):
+  // a board with no clock shows his day.
   Fx fromNoon = clock.dayFraction() + clock.dayFraction() - Fx::one();   // -1 at midnight, 0 at noon, 1 at midnight
-  a.night = fromNoon >= Fx::zero() ? fromNoon : -fromNoon;
+  a.night = !clock.trusted ? Fx::zero() : fromNoon >= Fx::zero() ? fromNoon : -fromNoon;
   const HabitatRules* rules = nullptr;
   if (const Creature* c = std::get_if<Creature>(&occ)) {
     presentCreature(*c, tick, a);
@@ -195,6 +232,7 @@ Appearance portrait(const Genome& g, Stage stage, uint16_t generation, uint32_t 
   a.expression = a.previous = expr::neutral;
   a.lastStim = stim::none;
   look(p, nullptr, a);
+  bodyGenes(p, a);
   return a;
 }
 

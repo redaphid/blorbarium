@@ -4,7 +4,7 @@
 # and has it load:
 #   * the scars and friend-egg fixtures: each loads as the same pet as the
 #     fixture with its trailing bytes cut off, and re-encodes to those bytes;
-#   * the committed v1 fixture and the gift genome's egg, creature and clutch
+#   * the committed v1 fixture and the starter genome's egg, creature and clutch
 #     as this checkout writes them: each re-encodes to its own bytes, so an
 #     ordinary pet's save carries nothing an older firmware cannot write.
 #   MSYS_NO_PATHCONV=1 wsl -d survivor --exec bash /mnt/d/<this checkout>/tools/old_reader/old_reader.sh [ref]
@@ -32,5 +32,5 @@ echo "== the engine at $ref reads:"
 cd "$src"
 "$work/old_reader" cut body test/fixtures/keepsake_v1_scars.bin
 "$work/old_reader" cut clutch test/fixtures/keepsake_v1_friend_egg.bin
-"$work/old_reader" same test/fixtures/keepsake_v1.bin "$work/plain/gift_creature.bin" \
-  "$work/plain/gift_clutch.bin" "$work/plain/gift_egg.bin"
+"$work/old_reader" same test/fixtures/keepsake_v1.bin "$work/plain/starter_creature.bin" \
+  "$work/plain/starter_clutch.bin" "$work/plain/starter_egg.bin"

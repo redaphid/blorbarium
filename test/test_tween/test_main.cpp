@@ -89,7 +89,7 @@ TEST(Tween, TheScreenRunsAFifthFasterThanHisLife) {
 // the clocks run on to where the next tick starts them, and what is eased
 // behind arrives at the tick it was eased toward.
 TEST(Tween, EachTickPicksUpWhereTheFramesBeforeItLeftOff) {
-  const std::vector<Appearance> t = ticksOfHim(40);
+  const std::vector<Appearance> t = ticksOfHim(80);   // 80: a waking hatchling yawns and stretches (#61), whose faces move mid-act, so fewer ticks hold one face
   int compared = 0, turned = 0;
   for (size_t i = 1; i + 1 < t.size(); ++i) {
     if (t[i + 1].pose != t[i].pose || t[i].reflexActive || t[i + 1].reflexActive || t[i].thinking) continue;
@@ -110,6 +110,16 @@ TEST(Tween, EachTickPicksUpWhereTheFramesBeforeItLeftOff) {
     if (walked && !straight) {
       const Spot a = spotOf(end), b = spotOf(start);
       EXPECT_LE(std::abs(a.x - b.x) + std::abs(a.y - b.y), 1.5) << "a jump at tick " << i;
+      ++turned;
+      continue;
+    }
+    // Straight on toward home or away (a rest's walk home after an idle out
+    // at the rim, sleep-idle), his size eases with his distance from home, a
+    // curve, while the step ahead guesses it on a line: the frames differ by a
+    // few edge pixels, his middle by under a tenth of a pixel.
+    if (walked && t[i].at.x * t[i].at.x + t[i].at.y * t[i].at.y != t[i + 1].at.x * t[i + 1].at.x + t[i + 1].at.y * t[i + 1].at.y) {
+      const Spot a = spotOf(end), b = spotOf(start);
+      EXPECT_LE(std::abs(a.x - b.x) + std::abs(a.y - b.y), 0.1) << "a jump at tick " << i;
       ++turned;
       continue;
     }

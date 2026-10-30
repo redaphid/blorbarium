@@ -1,5 +1,6 @@
 #include "lively.h"
 
+#include "blorb/idle.h"
 #include "blorb/species.h"
 
 namespace paint {
@@ -75,6 +76,264 @@ uint32_t phaseOf(uint32_t ms, uint32_t period, uint32_t seed) {
 // 0 -> 1 -> 0 over the cycle, Q12: a breath in and out, a bob up and down.
 int swell(uint32_t phase) { return (4096 - cosQ12(phase)) / 2; }
 
+// ---- the idles (blorb/idles.def) ----------------------------------------------------
+// Each idle's motion, on its own clock (Appearance::idleTicks, at the screen's
+// speed, so it runs smooth between ticks) and how far through it he is.
+
+constexpr int kSquashMax = 110;   // of 1024: the most an idle stretches or squashes him
+
+struct IdleClock {
+  uint32_t ms;   // since it began
+  int pc;        // 0..1024 through it
+  int osc(uint32_t period) const { return sinQ12(uint32_t(ms % period * 65536u / period)); }   // -4096..4096
+  int hump(uint32_t period) const { return swell(uint32_t(ms % period * 65536u / period)); }   // 0..4096
+  // 0..4096 across [from, to) of the act, eased in.
+  int ramp(int from, int to) const {
+    if (pc <= from) return 0;
+    if (pc >= to) return 4096;
+    return swell(uint32_t((pc - from) * 32768 / (to - from)));
+  }
+};
+
+void idleMotion(const Appearance& a, Lively& l) {
+  namespace idles = blorb::idles;
+  const uint32_t tq = uint32_t(a.idleTicks) * 256 + a.idleSub;
+  const uint32_t through = a.idleLength ? tq * 4 / a.idleLength : 1024;
+  // At his pace (#61): brisk when young, small or happy; slow when old, big,
+  // sleepy, hurt or sick. Fixed for the act, so its motion never jumps.
+  const uint32_t pace = a.idlePace ? a.idlePace : 100;
+  const IdleClock c{tq * blorb::kTickMs / 256 * pace / 100, int(through > 1024 ? 1024 : through)};
+  const bool walking = a.pose == pose::walk;
+  switch (a.idle.v) {
+    case idles::explore.v:   // round the rim, looking out one way then the other
+      l.gazeX = (c.ms / 1500) & 1 ? 1 : -1;
+      break;
+    case idles::chase_tail.v:   // whirling: a lean round with each lap, a hop off each foot
+      l.swayQ4 = 44 * c.osc(560) / 4096;
+      l.lift = 3 * absi(c.osc(560)) / 4096;
+      l.gazeX = c.osc(560) > 0 ? 1 : -1;
+      break;
+    case idles::dance.v:   // a wiggle from the feet, a bounce on the beat, squash and stretch
+      l.swayQ4 = 48 * c.osc(900) / 4096;
+      l.lift = 3 * c.hump(450) / 4096;
+      l.wide = 40 * c.osc(450) / 4096, l.tall = -l.wide;
+      l.gazeX = c.osc(900) > 0 ? 1 : -1;
+      break;
+    case idles::juggle.v:   // a bat up with each throw, eyes on the pebble
+      l.lift = 2 * c.hump(720) / 4096;
+      l.tall = 30 * c.hump(720) / 4096;
+      l.gazeY = -1;
+      break;
+    case idles::dig.v:   // down at the floor and up, quick
+      l.tall = -60 * c.hump(400) / 4096, l.wide = 40 * c.hump(400) / 4096;
+      l.swayQ4 = 12 * c.osc(400) / 4096;
+      l.lift = 0, l.gazeY = 1;
+      break;
+    case idles::stretch.v: {   // up as tall as he goes, held, and down into the yawn
+      const int up = c.ramp(0, 450) - c.ramp(600, 1000);
+      l.tall = kSquashMax * up / 4096, l.wide = -40 * up / 4096;
+      l.lift = up / 4096;
+      l.gazeY = up > 2048 ? -1 : 0;
+      l.swayQ4 = 0;
+      break;
+    }
+    case idles::look_around.v:   // this way, that way, what was that, and again
+      l.gazeX = c.pc < 300 ? -1 : c.pc < 450 ? 1 : c.pc < 600 ? 0 : c.pc < 800 ? -1 : 1;
+      l.swayQ4 = 16 * l.gazeX;
+      if (c.pc >= 450 && c.pc < 600) l.lift = 2;
+      break;
+    case idles::peek.v:   // up close to the glass, leaning in
+      if (walking) break;
+      l.wide = l.tall = 50 + 20 * c.osc(1600) / 4096;
+      l.gazeX = 0, l.swayQ4 = 0;
+      break;
+    case idles::sing.v:   // head up, a slow sway, a swell on each note
+      l.swayQ4 = 24 * c.osc(1400) / 4096;
+      l.tall = 30 * c.hump(700) / 4096;
+      l.gazeY = -1;
+      break;
+    case idles::shadow_box.v: {   // jab, jab, a bounce on his toes
+      const int side = (c.ms / 500) & 1 ? 1 : -1;
+      const bool jab = c.ms % 500 < 170;
+      l.swayQ4 = side * (jab ? 56 : 8);
+      l.wide = jab ? 30 : 0;
+      l.lift = int((c.ms / 250) & 1);
+      l.gazeX = side;
+      break;
+    }
+    case idles::sniff.v:   // nose to the floor between steps
+      if (walking) break;
+      l.tall = -40 * c.hump(500) / 4096, l.wide = 20 * c.hump(500) / 4096;
+      l.gazeY = 1, l.gazeX = (c.ms / 700) & 1 ? 1 : -1;
+      break;
+    case idles::tidy.v:   // brisk sweeps between steps
+      if (walking) break;
+      l.swayQ4 = 30 * c.osc(600) / 4096;
+      l.gazeY = 1;
+      break;
+    case idles::wave.v:   // all of him in the wave
+      if (walking) break;
+      l.swayQ4 = 36 * c.osc(700) / 4096;
+      l.lift = 1, l.gazeX = 0;
+      break;
+    case idles::roll_over.v: {   // over to one side, flat on his back, up the other side
+      const int s = sinQ12(uint32_t(c.pc) * 64);      // a whole turn of sin across the act
+      const int back = sinQ12(uint32_t(c.pc) * 32);   // half a turn: 0 -> 1 -> 0
+      l.swayQ4 = 90 * s / 4096;
+      l.tall = -2 * kSquashMax * (back > 0 ? back : 0) / 4096;
+      l.wide = 60 * (back > 0 ? back : 0) / 4096;
+      l.lift = 0, l.gazeX = s > 0 ? 1 : -1;
+      break;
+    }
+    case idles::daydream.v:   // eyes up and away
+      l.gazeY = -1, l.gazeX = 1;
+      l.swayQ4 = 10 * c.osc(3000) / 4096;
+      l.lift = 0;
+      break;
+    case idles::stargaze.v:   // up at the sky, from one star to the next
+      l.gazeY = -1, l.gazeX = (c.ms / 2500) & 1 ? 1 : -1;
+      l.tall = 20;
+      l.lift = 0;
+      break;
+    case idles::sneeze.v:   // ah... ah... CHOO, and a shake of the head
+      if (c.pc < 450) l.tall = 80 * c.pc / 450, l.gazeY = -1;
+      else if (c.pc < 560) l.tall = -100, l.wide = 80, l.lift = 0, l.swayQ4 = 20 * c.osc(160) / 4096;
+      break;
+    case idles::discover.v:   // eyes down at what he found, leaning to it; a bounce of delight
+      l.gazeY = 1, l.swayQ4 = 18;
+      if (c.pc >= 450) l.lift = 2 * c.hump(500) / 4096, l.tall = 30;
+      break;
+    case idles::boo.v:   // low as he sneaks up, then up big: BOO
+      if (c.pc < 550) l.tall = -70, l.wide = 30, l.gazeX = 0;
+      else if (c.pc < 750) l.tall = 90, l.wide = 70, l.lift = 3;
+      else l.swayQ4 = 20 * c.osc(500) / 4096;   // giggling
+      break;
+    case idles::hide.v:   // scrunched up small, peeking out once, then out
+      if (c.pc < 700) l.tall = -2 * kSquashMax * c.ramp(0, 150) / 4096, l.wide = 40 * c.ramp(0, 150) / 4096,
+                      l.swayQ4 = 0, l.gazeX = (c.ms / 1200) & 1 ? 1 : 0;
+      else l.tall = 60 * (1024 - c.pc) / 324, l.lift = 2;
+      break;
+    case idles::hiccup.v:   // hic: up off the floor, three times
+      if (c.pc % 348 < 120) l.lift = 3, l.tall = 40;
+      break;
+    case idles::zoomies.v:   // leaning into the bend, flat out
+      l.swayQ4 = 30;
+      l.lift = int((c.ms / 120) & 1);
+      break;
+    // ---- #61: his day, how he feels, his age ----
+    case idles::wash.v:   // a paw round and round his face, a scrub at each pass
+      l.swayQ4 = 14 * c.osc(520) / 4096;
+      l.wide = 12 * c.hump(520) / 4096, l.tall = -15;
+      l.lift = 0, l.gazeX = 0;
+      break;
+    case idles::sunbathe.v: {   // back he lies, belly to the sun, and up again at the end
+      const int back = c.ramp(0, 160) - c.ramp(880, 1024);
+      l.tall = -90 * back / 4096, l.wide = 50 * back / 4096;
+      l.swayQ4 = 0, l.lift = 0, l.gazeY = back > 2048 ? -1 : 0, l.gazeX = 0;
+      break;
+    }
+    case idles::fireflies.v:   // a swipe up at one, between his steps
+      if (walking) { l.gazeY = -1; break; }
+      l.lift = 3 * c.hump(700) / 4096;
+      l.tall = 40 * c.hump(700) / 4096;
+      l.gazeY = -1, l.gazeX = (c.ms / 1400) & 1 ? 1 : -1;
+      break;
+    case idles::exercise.v: {   // squats: down low, up tall, counted
+      const int squat = c.hump(900);
+      l.tall = 40 - 110 * squat / 4096, l.wide = 50 * squat / 4096;
+      l.lift = squat < 600 ? 2 : 0;
+      l.swayQ4 = 0, l.gazeX = 0;
+      break;
+    }
+    case idles::yawn.v: {   // up and up into the yawn, and down
+      const int up = c.ramp(150, 450) - c.ramp(700, 1000);
+      l.tall = 80 * up / 4096, l.wide = -20 * up / 4096;
+      l.gazeY = up > 2048 ? -1 : 0, l.lift = 0, l.swayQ4 = 0;
+      break;
+    }
+    case idles::tummy.v:   // hunched over his tummy, a rumble through him now and then
+      l.tall = -30, l.gazeY = 1, l.lift = 0;
+      l.swayQ4 = (c.ms % 1600 < 500) ? 10 * c.osc(110) / 4096 : 0;
+      break;
+    case idles::beg.v:   // up to the glass, leaning in, bowl held up
+      if (walking) break;
+      l.wide = l.tall = 40 + 15 * c.osc(1200) / 4096;
+      l.lift = c.hump(1200) / 4096, l.gazeX = 0, l.swayQ4 = 0;
+      break;
+    case idles::nod_off.v: {   // his head droops lower and lower, then up with a start
+      const int ph = c.pc % 338;
+      if (ph < 268) l.tall = -70 * ph / 268, l.gazeY = 1, l.swayQ4 = 0, l.lift = 0;
+      else l.tall = 20, l.lift = 2, l.gazeY = 0;
+      break;
+    }
+    case idles::nurse.v:   // hunched, rocking slowly, rubbing the sore spot
+      l.tall = -40, l.gazeY = 1, l.lift = 0;
+      l.swayQ4 = 20 * c.osc(1800) / 4096;
+      l.gazeX = c.osc(1800) > 0 ? 1 : -1;
+      break;
+    case idles::queasy.v:   // a slow, green wobble
+      l.swayQ4 = 40 * c.osc(1400) / 4096;
+      l.wide = 30 * c.osc(700) / 4096, l.tall = -20;
+      l.lift = 0;
+      break;
+    case idles::mope.v: {   // low, still, eyes down, and a sigh
+      const int sigh = c.hump(3000);
+      l.tall = -50 - 30 * sigh / 4096, l.wide = 10 * sigh / 4096;
+      l.swayQ4 = 6 * c.osc(4000) / 4096, l.gazeY = 1, l.lift = 0;
+      break;
+    }
+    case idles::beam.v:   // a happy bounce
+      l.lift = 3 * c.hump(600) / 4096;
+      l.wide = 30 * c.osc(600) / 4096, l.tall = -l.wide;
+      l.gazeX = 0;
+      break;
+    case idles::tumble.v:   // a wobble, whoops, over he goes, and up
+      if (c.pc < 300) l.swayQ4 = 30 * c.osc(400) / 4096;
+      else if (c.pc < 800) {
+        const int over = c.ramp(300, 450);
+        l.swayQ4 = 100 * over / 4096, l.tall = -80 * over / 4096, l.wide = 40 * over / 4096, l.lift = 0;
+        l.gazeX = 1;
+      } else {
+        l.lift = 2 * c.hump(400) / 4096, l.tall = 20;
+      }
+      break;
+    case idles::reminisce.v:   // a slow sway, eyes up and back
+      l.swayQ4 = 10 * c.osc(3500) / 4096;
+      l.gazeY = -1, l.gazeX = -1, l.tall = 10, l.lift = 0;
+      break;
+    default: break;   // the toy: a walk, his waddle; the ball is the prop's
+  }
+}
+
+// His posture shows how he feels (Appearance::moods), each mood in
+// proportion: perky with a hop now and then when content, slumped and eyes to
+// the floor when bored, drooping and watching the glass when lonely, heavy
+// when sleepy, fidgety when hungry, hunched and still when hurting.
+void posture(const Appearance& a, Lively& l, uint32_t ms, uint32_t seed) {
+  const blorb::Moods& m = a.moods;
+  auto of = [](int amount, uint8_t level) { return amount * int(level) / 255; };
+  l.tall += of(12, m.content) - of(30, m.bored) - of(18, m.lonely) - of(40, m.sleepy) - of(10, m.hungry) - of(50, m.hurting);
+  const int calm = 255 - (m.bored / 2 > m.lonely / 2 ? m.bored / 2 : m.lonely / 2);
+  l.swayQ4 = l.swayQ4 * calm / 255 * (255 - m.hurting) / 255 * (255 - m.sleepy * 2 / 3) / 255;
+  l.swayQ4 += of(10, m.hungry) * sinQ12(phaseOf(ms, 700, seed)) / 4096;
+  l.lift = l.lift * (255 - (m.sleepy > m.hurting ? m.sleepy : m.hurting)) / 255;
+  const uint32_t beat = 5200 + mix32(seed, 9) % 2400, t = (ms + seed % beat) % beat;
+  if (t < 360) l.lift += of(2 * swell(t * 65536u / 360), m.content) / 4096;   // a little hop of good cheer
+  if (m.lonely > 128) l.gazeX = 0;                                          // watching the glass for someone
+  else if (m.bored > 128 && ((ms + seed % 4000) / 4000) & 1) l.gazeY = 1;     // sighing at the floor
+}
+
+// How much an idle's motion shows over his own: in over its first quarter
+// second, out over its last eighth, so its first frame and its last are his
+// own and an idle never starts or stops with a jump. 0..4096.
+int idleEnvelope(const Appearance& a) {
+  const uint32_t tq = uint32_t(a.idleTicks) * 256 + a.idleSub;
+  const uint32_t ms = tq * blorb::kTickMs / 256, through = a.idleLength ? tq * 4 / a.idleLength : 1024;
+  const int up = ms >= 250 ? 4096 : int(ms * 4096 / 250);
+  const int down = through >= 1024 ? 0 : through <= 896 ? 4096 : int((1024 - through) * 4096 / 128);
+  return up < down ? up : down;
+}
+
 bool blinkAt(uint32_t ms, uint32_t cycle, uint32_t seed) {
   const uint32_t t = ms + seed % cycle, n = t / cycle, within = t % cycle;
   const uint32_t h = mix32(seed ^ 0xB11Cu, n);
@@ -91,8 +350,12 @@ Lively livelyOf(const Appearance& a, int maxLift) {
   const Tempo& t = kTempo[a.species.v < kTempoCount ? a.species.v : 0];
   const uint32_t ms = a.liveMs, seed = a.lifeSeed;
   const bool asleep = a.asleep || a.pose == pose::sleep;
+  // His size gene (#61): a big one breathes and sways slower, a small one
+  // quicker; it is his for life, so the rhythm never jumps.
+  const int bulk = int(a.bulk) - 128;
+  auto slower = [bulk](uint32_t period) { return uint32_t(int(period) * (512 + bulk) / 512); };
 
-  uint32_t breathMs = t.breathMs;
+  uint32_t breathMs = slower(t.breathMs);
   int breath = t.breathQ4;
   if (a.intensity >= Fx::ratio(3, 4)) breath += breath / 4;   // stirred, he breathes deeper
   if (asleep) breathMs = breathMs * 7 / 4, breath = breath * 4 / 3;
@@ -100,8 +363,8 @@ Lively livelyOf(const Appearance& a, int maxLift) {
   l.breathQ4 = breath * swell(phaseOf(ms, breathMs, seed)) / 4096;
   if (asleep) return l;   // only his breath: eyes shut, still
 
-  l.swayQ4 = t.swayQ4 * sinQ12(phaseOf(ms, t.swayMs, mix32(seed, 1))) / 4096;
-  if (t.bobPx) l.lift = (t.bobPx * swell(phaseOf(ms, t.bobMs, mix32(seed, 2))) + 2048) / 4096;
+  l.swayQ4 = t.swayQ4 * sinQ12(phaseOf(ms, slower(t.swayMs), mix32(seed, 1))) / 4096;
+  if (t.bobPx) l.lift = (t.bobPx * swell(phaseOf(ms, slower(t.bobMs), mix32(seed, 2))) + 2048) / 4096;
 
   if (a.pose == pose::walk || a.pose == pose::flee) {
     // A waddle: his weight from foot to foot, a little up off each.
@@ -120,14 +383,34 @@ Lively livelyOf(const Appearance& a, int maxLift) {
   } else if (a.pose == pose::curl) {
     l.swayQ4 = 0, l.lift = 0;
   }
-  if (l.lift > maxLift) l.lift = maxLift > 0 ? maxLift : 0;
-
   // His eyes, now and then off to a side for a while; ahead, walking (a gaze
   // after his heading flipped with each tick's wander and read as a twitch).
   if (t.gaze && a.pose != pose::curl && a.pose != pose::walk && a.pose != pose::flee) {
     const uint32_t h = mix32(seed ^ 0x6A2Eu, (ms + seed % kGlanceMs) / kGlanceMs);
     if ((h & 7) < t.gaze) l.gazeX = (h & 8) ? 1 : -1;
   }
+  if (a.pose == pose::idle || a.idle != blorb::idles::none) posture(a, l, ms, seed);
+  if (a.idle != blorb::idles::none) {
+    // The idle's motion, blended over his own by its envelope.
+    Lively his = l;
+    idleMotion(a, l);
+    // How big he plays it (#61): his squash gene stretches and squashes him the
+    // more or the less; at a brisk pace he sways and bounces the more.
+    const int squash = 128 + int(a.squash ? a.squash : 128), pace = a.idlePace ? a.idlePace : 100;
+    l.wide = l.wide * squash / 256, l.tall = l.tall * squash / 256;
+    l.swayQ4 = l.swayQ4 * (50 + pace / 2) / 100, l.lift = l.lift * (50 + pace / 2) / 100;
+    const int e = idleEnvelope(a);
+    auto mixed = [e](int own, int idle) { return own + (idle - own) * e / 4096; };
+    l.breathQ4 = mixed(his.breathQ4, l.breathQ4), l.lift = mixed(his.lift, l.lift), l.swayQ4 = mixed(his.swayQ4, l.swayQ4);
+    l.wide = mixed(his.wide, l.wide), l.tall = mixed(his.tall, l.tall);
+    if (e < 2048) l.gazeX = his.gazeX, l.gazeY = his.gazeY;
+  }
+  // Taller only as far as the room over his head: the stand point keeps a few
+  // px clear above him, and a stretch at the rim must stay on the glass.
+  if (l.tall > 0) l.tall = l.tall * (maxLift < 8 ? (maxLift > 0 ? maxLift : 0) : 8) / 8;
+  if (l.tall > kSquashMax) l.tall = kSquashMax;
+  if (l.wide > kSquashMax) l.wide = kSquashMax;
+  if (l.lift > maxLift) l.lift = maxLift > 0 ? maxLift : 0;
   l.blink = blinkAt(ms, t.blinkMs, mix32(seed, 7));
   return l;
 }

@@ -15,13 +15,14 @@ using namespace blorb;
 
 namespace {
 
-// starterGenome(15048) is byte for byte the genome of the gift device's
-// grungo (HANDOFF.md): the device's seed is fnv1a of its MAC, and this seed
-// rolls the same four Look nudges. The two prints were taken on the engine
-// before species genes existed (battles-d2 0a64811).
-constexpr uint32_t kGiftSeed = 15048;
-constexpr uint32_t kGiftHash = 0x3df10dafu;   // re-pinned 2026-10-17: the starter retired the marble genes (uids 63, 77)
-constexpr uint32_t kGiftLifePrint = 0xc6f5005bu, kGiftLifePrintAllFeats = 0x69356d6eu;
+// The starter, pinned at one seed: its hash and its two life prints. Re-pinned
+// 2026-10-21 (#36): one recipe for every pet, so starterGenome() is the recipe
+// every board founds from (sleep as pressure, a 15-minute egg).
+constexpr uint32_t kStarterSeed = 15048;
+constexpr uint32_t kStarterHash = 0x7c0029dau;
+// The two life prints moved again with sleep-idle (#20: melatonin at its genes' rate,
+// the sleep cut): were 0xd266da47 / 0x340dc47a on the one recipe alone. Hash unchanged.
+constexpr uint32_t kStarterLifePrint = 0x857229e8u, kStarterLifePrintAllFeats = 0xba73ca59u;
 
 Phenotype lifeOf(const Genome& g, uint32_t feats = 0) {
   Phenotype p{};
@@ -59,13 +60,12 @@ constexpr uint8_t kSpecies = GeneKindOf<SpeciesGene>::value, kPower = GeneKindOf
 
 // ---- grungo, and every pet alive today ------------------------------------------------
 
-TEST(Gift, TheGiftGenomeHashesAndExpressesExactlyAsBefore) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
-  Genome gift = starterGenome(kGiftSeed);
-  ASSERT_EQ(gift.hash(), kGiftHash);
-  EXPECT_EQ(lifePrint(gift, 0), kGiftLifePrint);
-  EXPECT_EQ(lifePrint(gift, 0xFFFFFFFFu), kGiftLifePrintAllFeats);
-  Phenotype p = lifeOf(gift);
+TEST(Starter, TheStarterHashesAndExpressesAsPinned) {
+  Genome starter = starterGenome(kStarterSeed);
+  ASSERT_EQ(starter.hash(), kStarterHash);
+  EXPECT_EQ(lifePrint(starter, 0), kStarterLifePrint);
+  EXPECT_EQ(lifePrint(starter, 0xFFFFFFFFu), kStarterLifePrintAllFeats);
+  Phenotype p = lifeOf(starter);
   EXPECT_EQ(p.species.body, kGrungo);
   EXPECT_EQ(p.species.power, power::foresee);
   EXPECT_FALSE(p.species.hybrid());
@@ -73,36 +73,27 @@ TEST(Gift, TheGiftGenomeHashesAndExpressesExactlyAsBefore) {
   EXPECT_EQ(p.oracle.voice, voice::mystic);
 }
 
-TEST(Gift, NoSpeciesGeneIsAPureBredGrungoWhoForesees) {
+TEST(Starter, NoSpeciesGeneIsAPureBredGrungoWhoForesees) {
   Phenotype empty = lifeOf(Genome{});
   EXPECT_EQ(empty.species.body, kGrungo);
   EXPECT_EQ(empty.species.power, power::foresee);
-  for (uint32_t seed : {0u, 7u, 99u, kGiftSeed}) {
+  for (uint32_t seed : {0u, 7u, 99u, kStarterSeed}) {
     Genome g = starterGenome(seed);
     EXPECT_EQ(countOfKind(g, kSpecies) + countOfKind(g, kPower) + countOfKind(g, kKnack), 0u);
     EXPECT_EQ(lifeOf(g).species.body, kGrungo);
   }
 }
 
-// A fresh grungo is founded on the FirstHours recipe (genes.h): the old
-// starter's genes under the same uids, so a friend egg's cross still pairs
-// them, with five of them retuned, plus the species genes.
-TEST(Gift, GrungosStarterIsTheOldStarterRetunedPlusTheSpeciesGenes) {
-  for (uint32_t seed : {0u, 7u, kGiftSeed}) {
-    const Genome of = without(starterGenomeOf(kGrungo, seed), kSpeciesGeneUid.v), old = starterGenome(seed);
-    GenomeBuilder gift;
-    authorStarter(gift, speciesInfo(kGrungo).starter, seed, kNeglectCanKill, Recipe::Gift);
-    EXPECT_EQ(gift.build()->bytes(), old.bytes()) << "seed " << seed << ": the Gift recipe is starterGenome";
-    ASSERT_EQ(of.geneCount(), old.geneCount()) << "seed " << seed;
-    size_t retuned = 0;
-    old.forEach([&](const GeneView& v) {
-      const std::optional<GeneView> same = of.find(v.header.uid);
-      ASSERT_TRUE(same) << "uid " << v.header.uid.v;
-      ASSERT_EQ(same->header.type, v.header.type) << "uid " << v.header.uid.v;
-      ASSERT_EQ(same->header.len, v.header.len) << "uid " << v.header.uid.v;
-      retuned += !std::equal(v.body, v.body + v.header.len, same->body);
-    });
-    EXPECT_EQ(retuned, 5u) << "seed " << seed << ": sleepiness, its emitter, energy, the happy face and the egg";
+// One recipe for every pet: grungo's founder is starterGenome() byte for byte
+// plus the species genes, under the same uids, so a friend egg's cross pairs
+// every recipe gene with any other badge's.
+TEST(Starter, GrungosStarterIsTheStarterPlusOnlyTheSpeciesGenes) {
+  for (uint32_t seed : {0u, 7u, kStarterSeed}) {
+    const Genome of = without(starterGenomeOf(kGrungo, seed), kSpeciesGeneUid.v), starter = starterGenome(seed);
+    GenomeBuilder recipe;
+    authorStarter(recipe, speciesInfo(kGrungo).starter, seed);
+    EXPECT_EQ(recipe.build()->bytes(), starter.bytes()) << "seed " << seed << ": grungo's row writes starterGenome";
+    EXPECT_EQ(of.bytes(), starter.bytes()) << "seed " << seed;
   }
 }
 
@@ -373,11 +364,10 @@ TEST(NoImmortals, ALifeThatNeverDecaysIsNotViable) {
                         "life's half-life byte 0: never decays");
 }
 
-TEST(NoImmortals, TheGiftAndEveryStarterStayViable) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
-  EXPECT_TRUE(viability(starterGenome(kGiftSeed)).ok);
-  EXPECT_EQ(lifePrint(starterGenome(kGiftSeed), 0), kGiftLifePrint);
-  for (const SpeciesInfo& row : SPECIES) EXPECT_TRUE(viability(starterGenomeOf(row.id, kGiftSeed)).ok) << row.name;
+TEST(NoImmortals, TheStarterAndEveryFounderStayViable) {
+  EXPECT_TRUE(viability(starterGenome(kStarterSeed)).ok);
+  EXPECT_EQ(lifePrint(starterGenome(kStarterSeed), 0), kStarterLifePrint);
+  for (const SpeciesInfo& row : SPECIES) EXPECT_TRUE(viability(starterGenomeOf(row.id, kStarterSeed)).ok) << row.name;
 }
 
 int main(int argc, char** argv) {

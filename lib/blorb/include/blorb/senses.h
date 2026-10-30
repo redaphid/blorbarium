@@ -45,6 +45,10 @@ struct BodySample {
   // later, so the Dish flashes the rim now (feed_show.h), and the kid sees
   // his knock knock heard the moment he makes it.
   bool knockKnock = false;
+  // A question is on the screen (the update's, Wi-Fi's, the debug unlock's;
+  // the shell's, src/hw/feel.h): the pet says nothing while it shows
+  // (Thinker::hush). Not its answer's tail: only the question itself.
+  bool asked = false;
   // The shell reads the IMU at 250 Hz while awake and hands on every fifth
   // read; the reads between are summed up here as the one farthest from the
   // last sample handed on, so a knock's brief peak is not lost between two
@@ -55,21 +59,36 @@ struct BodySample {
 };
 
 // Pet time. There is no RTC and no battery, so the pet lives in powered
-// ticks and its day is (petTicks + phaseOffset) mod 24 pet-hours. Night always
-// exists, phone or not. Two things move the phase: the phone's TIME snaps it
-// to the real day, and with no phone the owner entrains it (a long dark
-// stretch, lidded face down during pet day, pulls the phase toward night by at
-// most an hour a day, like daylight setting a body clock). Unpowered time is
-// stasis: the pet sleeps in its box.
+// ticks and its day is (petTicks + phaseOffset) mod 24 pet-hours. Two things
+// move the phase: the phone's TIME snaps it to the real day, and with no phone
+// the owner entrains it (a long dark stretch, lidded face down during pet day,
+// pulls the phase toward night by at most an hour a day, like daylight
+// setting a body clock). Unpowered time is stasis: the pet sleeps in its box.
+//
+// Night is believed only on evidence (owner, 2026-10-21: "They all also sleep
+// constantly!"). The pet hours say night only while they are the wall's: a
+// phone's TIME set them (`aligned`) and wall time is known this boot, so no
+// unpowered gap since has gone unlived (`trusted`, the Dish's, each tick). A
+// board that never met a phone has no night of its own any more; it gets dark
+// for him when he is lidded (face down and still) or left untouched for a
+// long stretch (`stillRunTicks`; the panel went dark long before).
 struct PetClock {
   static constexpr uint32_t kDayTicks = 24 * kTicksPerHour;
+  // Untouched this long, it is dim for him: nobody is there, and most likely it is night.
+  static constexpr uint32_t kDimAfterTicks = 45 * kTicksPerMinute;
   uint32_t petTicks = 0;
   int32_t phaseOffsetTicks = 0;
   uint32_t darkRunTicks = 0;                               // consecutive lidded ticks; > 0 means lidded now
   uint32_t entrainedTicks = 0;                             // phase moved by entrainment since pet midnight
+  uint32_t stillRunTicks = 0;                              // consecutive ticks nobody moved or touched the badge
+  bool aligned = false;                                    // a wall clock set the phase (TIME); saved
+  bool trusted = false;                                    // aligned, and wall time known this boot; not saved
   Fx dayFraction() const;                                  // 0 = pet midnight, 0.5 = pet noon
-  bool night() const;
-  void advance(bool lidded);                               // +1 tick and entrainment
+  bool nightHours() const;                                 // 21:00 to 07:00 of pet time, believed or not
+  bool night() const { return trusted && nightHours(); }   // the wall's night
+  bool dim() const { return stillRunTicks >= kDimAfterTicks; }
+  bool dark() const { return night() || darkRunTicks > 0 || dim(); }   // the light locus is 0
+  void advance(bool lidded, bool handled = true);          // +1 tick, entrainment and the still run
   void alignToWall(uint32_t unixSeconds, int16_t tzMinutes);
 };
 
@@ -136,12 +155,50 @@ struct Gravity {
 
 struct MotionDetector : DetectorBase {    // | |a|-1g | -> motion; Shake = 5 jolts >= 0.8 g off gravity, each the other way, in 1 s; free fall 200 ms then impact -> Dropped
   void sample(const BodySample&, uint32_t ms, SenseOut&);
+  // The last second has been a hard shake, not a jolt or two: kVigorSamples
+  // of its 50 samples 0.8 g or more off gravity. A shake dismisses what is on
+  // the screen (#35) only when it is this; the recordings' pick-up from face
+  // down that fires a Shake has 9, a shake in a hand 28-31.
+  static constexpr uint8_t kVigorSamples = 15;
+  bool vigorous() const { return __builtin_popcountll(hard_) >= kVigorSamples; }
+  // Of the last second's 50 samples, how many were that far off gravity.
+  uint8_t hardSamples() const { return uint8_t(__builtin_popcountll(hard_)); }
+  // A hand shaking it back and forth now, kept up: in the last second, at
+  // least kSwingReversals jolts 0.8 g or more off gravity, each the other way
+  // from the one before (a knock's bounce never counts). Being turned over or
+  // carried leaves gravity behind, which vigorous() reads as hard, but it is
+  // off the one way; only a shake keeps turning back.
+  static constexpr uint8_t kSwingReversals = 4;
+  bool swinging() const { return __builtin_popcountll(swings_) >= kSwingReversals; }
  private:
+  uint64_t hard_ = 0;
+  uint64_t swings_ = 0;   // the last 50 samples, one bit each: a swing turned back
+  int32_t swingX_ = 0, swingY_ = 0, swingZ_ = 0;   // the way the last swing went
+  uint32_t swungAt_ = 0;   // the last 50 samples, one bit each: this far off gravity
   enum class Fall : uint8_t { None, Falling, Free, Landing };
   Gravity grav_;
   uint32_t jolts_[5]{}; uint8_t joltCount_ = 0; uint32_t quietSince_ = 0; Fx energy_;
   int32_t lastX_ = 0, lastY_ = 0, lastZ_ = 0;   // the last jolt's d
   bool rattled_ = false; Fall fall_ = Fall::None; uint32_t fallSince_ = 0;
+};
+// The hands that hatch an egg (Egg::shaken), at the body tick. A hard shake
+// opens it (a Shake while vigorous(): the one that dismisses, #35, never the
+// pick-up from face down or a knock's bounce), and from then every tick the
+// hand keeps swinging it (MotionDetector::swinging) is a tick of shaking,
+// until kLapseTicks pass with none. So a kid's shake counts from its first
+// second, kept up or in bursts, and a bump, a knock, a bag's jolt or being
+// carried about never opens it or keeps it going.
+struct ShakeHatch {
+  static constexpr uint8_t kLapseTicks = 10;   // a second
+  bool step(bool hardShake, bool swinging) {
+    if (hardShake) open_ = kLapseTicks;
+    if (!open_) return false;
+    if (swinging) return open_ = kLapseTicks, true;
+    --open_;
+    return false;
+  }
+ private:
+  uint8_t open_ = 0;
 };
 struct HeldDetector : DetectorBase {      // in-plane > 0.30 g for 400 ms -> held; PickedUp/PutDown; Cradle when still 3 s
   void sample(const BodySample&, uint32_t ms, SenseOut&);

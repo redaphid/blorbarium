@@ -174,7 +174,7 @@ bool DishDuel::open(Occupant& o, Lineage& lineage, Air& air, uint64_t lineageId,
 }
 
 DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
-                           uint64_t lineageId, uint16_t petDay, uint32_t tick) {
+                           uint64_t lineageId, uint16_t petDay, uint32_t tick, bool aimMoved) {
   DuelStepped out;
   Creature* c = std::get_if<Creature>(&o);
   // He dozed off in the lobby: fight mode is an awake pet's state, so it
@@ -261,7 +261,8 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
       heldPress_.reset();
     }
   }
-  const DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
+  DuelInput in = DuelInput::from(raw, raw.remote, tiltX, tiltY, bootDown);
+  in.aimMoved = aimMoved;
   DuelEffects fx = session_.tick(*air, in, tick);
   drop(raw, fx.captured);
   for (uint8_t i = 0; i < fx.stimCount; ++i) raw.fire(fx.stimuli[i]);
@@ -294,6 +295,7 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
     const uint16_t gen = c ? c->generation() : lineage.currentGeneration();
     book_.record(*fx.met, gen, tick, petDay);
     lastMet_ = fx.met;
+    out.met = true;
     fell_ = fell_ || fx.met->iFell || fx.met->iSlew;
     out.save = true;
   }
@@ -329,6 +331,29 @@ DuelStepped DishDuel::step(Occupant& o, Lineage& lineage, Air* air, SenseOut& ra
   }
   if (!session_.active()) fell_ = false;
   return out;
+}
+
+}  // namespace blorb
+
+namespace blorb {
+
+bool DishDuel::dismiss(Air* air, uint32_t tick, bool refusalShown) {
+  bool any = false;
+  if (session_.active() && air) {
+    const DuelPhase p = session_.view(tick).phase;
+    if (p == DuelPhase::Lobby || p == DuelPhase::Greeting || p == DuelPhase::Staking) {
+      session_.close(*air, EndReason::Left);
+      diag_.say("fight shake=1 phase=%s result=left", p == DuelPhase::Lobby ? "lobby" : p == DuelPhase::Greeting ? "greeting" : "staking");
+      any = true;
+    }
+  }
+  if (pendingSince_) {
+    pendingSince_.reset();
+    diag_.say("fight shake=1 result=cancelled");
+    any = true;
+  }
+  if (refusal_.any && (refusalShown || any)) refusal_ = Refusal{}, any = true;
+  return any;
 }
 
 }  // namespace blorb

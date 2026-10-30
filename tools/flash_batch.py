@@ -29,9 +29,10 @@ fails the badge. --wipe-pet resets instead: flash_board.sh --wipe-pet erases
 pet and petfs after the backup, and the board must boot Fresh, founding its
 pet from its own MAC.
 
-The firmware gives the 8 badges and the gift device one species each from a
-fixed MAC table (lib/blorb/include/blorb/defs/badges.def, BADGE_SPECIES
-below); any other board is a grungo. It
+The firmware gives the 9 boards in a fixed MAC table one species each
+(lib/blorb/include/blorb/defs/badges.def, BADGE_SPECIES below); any other
+board takes a species of the regular cast (every species but the octopus, a
+one-off variant) from fnv1a of its MAC (board_species below). It
 advertises the species as its BLE name. The log refuses to stay quiet about a
 species or BLE name that another MAC in it already has, or a known badge that
 comes up as another species than the table's.
@@ -63,9 +64,9 @@ PET_NVS = (0x810000, 0x40000)            # tools/partitions_16mb.csv `pet`
 MIN_ESPTOOL = (4, 7)                     # the first to write a .hex by its segments; older ones write the text itself
 FIELDS = ["time", "badge", "port", "usb_serial", "mac", "ble_name", "boot", "genome", "fw", "result", "note",
           "species", "pet"]               # pet: the mode, keep or wipe
+# The regular cast, in species.def order: every row but the octopus (id 9), a one-off variant.
 SPECIES = ("grungo", "mossby", "puffkin", "gilly", "mothwick", "mudge", "fizz", "hushwing", "tinker")
 BADGES_DEF = ROOT / "lib/blorb/include/blorb/defs/badges.def"
-OTHER_SPECIES = "grungo"                 # founding.h badgeSpecies: a MAC not in the table
 
 
 def read_badges(path=BADGES_DEF):
@@ -75,7 +76,7 @@ def read_badges(path=BADGES_DEF):
     return {":".join(b.strip()[2:].lower() for b in macs.split(",")[:6]): species for macs, species in rows}
 
 
-BADGE_SPECIES = read_badges()            # each species once: the 8 badges and the gift device (row 0)
+BADGE_SPECIES = read_badges()            # each species of the regular cast once
 PERMISSION_FIX = """this user may not open %s. Either join the serial group, then log out and back in:
       sudo usermod -aG dialout $USER        (on Arch: uucp instead of dialout)
   or let anyone open the badge's USB id with a udev rule, then unplug and replug it:
@@ -204,6 +205,14 @@ def fnv1a(data, h=0x811C9DC5):
     for b in data:
         h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
     return h
+
+
+def board_species(mac):
+    """founding.h badgeSpecies: the table's species, else castSpecies(fnv1a(MAC)) over SPECIES, the
+    regular cast in species.def order (the octopus is never in it)."""
+    if mac in BADGE_SPECIES:
+        return BADGE_SPECIES[mac]
+    return SPECIES[fnv1a(bytes.fromhex(mac.replace(":", ""))) % len(SPECIES)]
 
 
 def esptool_version(text):
@@ -384,7 +393,7 @@ class DryBench:
         self.attached = {}
         self.rng = random.SystemRandom()
         self.n = 0
-        self.known = sorted(BADGE_SPECIES, key=lambda m: BADGE_SPECIES[m] == OTHER_SPECIES)   # badges 1-8, then the gift
+        self.known = list(BADGE_SPECIES)   # in badges.def order
 
     def badges(self):
         return dict(self.attached)
@@ -412,14 +421,14 @@ class DryBench:
         """0.7.0's first boot: a fresh egg, or a 0.4.0 pet that resumes and adopts his badge's species.
         The genome stands in as its MAC seed (the real one is the board's)."""
         raw = bytes.fromhex(self.last.replace(":", ""))
-        species = BADGE_SPECIES.get(self.last, OTHER_SPECIES)
+        species = board_species(self.last)
         how = ("formatted: it was blank", "Fresh", "egg", 0) if self.wipe else ("ok", "Resumed", "creature", 86400)
         lines = ["[hw] blorbarium dry-run fw=0.7.0 fmt=1 badge128",
                  "[hw] storage pet: %s" % how[0],
                  "[hw] boot=%s occupant=%s gen=0 genome=%08x age=%d species=%s"
                  % (how[1], how[2], fnv1a(raw), how[3], species if self.wipe else "grungo"),
                  "[hw] ble name=%s heap=0 big=0" % species]
-        if not self.wipe and species != "grungo":
+        if not self.wipe:   # a 0.4.0 pet adopts his board's species, grungo included
             lines.append("[hw] adopted species=%s gen=0 genome=%08x name=Pip (the Bluetooth name follows at the next boot)"
                          % (species, fnv1a(raw[::-1])))
         return lines
@@ -473,7 +482,7 @@ def one_badge(bench, n, port, rows, wipe=False):
     mac = bench.mac(port)
     want = BADGE_SPECIES.get(mac)
     print("  %s  usb %s  mac %s  (%s)" % (port, serial, mac, "the table's %s" % want if want else
-                                          "not in the MAC table, so a %s" % OTHER_SPECIES))
+                                          "not in the MAC table, so a %s from its MAC" % board_species(mac)))
     print("  pet backed up to %s" % bench.backup(port, mac))
     bench.flash(port, serial, mac, wipe)
     print("  booting it with the log open ...")

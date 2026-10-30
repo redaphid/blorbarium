@@ -1,6 +1,7 @@
 TINKER
 raccoon: a scrap-pile gadget
-Element Spark, style Guard, power gadget. Voice: hoarder, which wraps his lines as "LINE. MINE.", "PSST. LINE. TELL NO ONE.", "LINE. NOT SHARING.".
+Element Spark, style Guard, power gadget. Voice: hoarder. His own lines below are said exactly as written, so they carry
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -38,63 +39,112 @@ I CAN FIX THAT. NICE PARTS. FOUND IT IN A BIN.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: nothing wraps them.
 
 peckish
   SNACK? I'LL BUILD A SNACK.
+  RUNNING ON FUMES. NEED FUEL.
+  MY TUMMY IS MAKING A NOISE.
+  THAT RUMBLE? NOT MY ENGINE.
+  SNACK BREAK. UNION RULES.
 starving
   SO HUNGRY I'D EAT A BOLT.
+  TANK EMPTY. WARNING LIGHT ON.
+  I'M CHEWING MY OWN WRENCH.
 hoarding
   THAT PELLET IS SPARE PARTS.
+  SAVED FOR LATER. IN A POCKET.
+  FULL. FILED UNDER SNACKS.
 crunch
   CRUNCH. NEEDS MORE GREASE.
+  CRUNCH. TOP QUALITY PARTS.
+  NOM. TESTED AND APPROVED.
+  CRUNCH. CHEF'S KISS. AND TAPE.
 fuzzy_bite
   THAT ONE WAS FUZZY. FIXABLE?
+  BLEH. EXPIRED PARTS.
 smells
   IT SMELLS LIKE A BIN. LOVELY.
+  A STINKY CRUMB. I'LL KEEP IT.
 green
   I FEEL GREEN. NEED A WRENCH.
+  RUNNING ROUGH. NEED A TUNE-UP.
 ow
   OW. NEED A NEW PART.
+  OW. TAPE. WHERE IS MY TAPE?
 heard_you
   I HEARD. I'M WORKING HERE.
   ONE KNOCK? THE LOCK TAKES TWO.
+  WHO'S THERE? DELIVERY?
+  KNOCK AGAIN. BELL'S BROKEN.
 ground_lies
   WHOA! MY BOLTS! MY SCREWS!
+  EARTHQUAKE! SAVE THE GADGETS!
+  EVERYTHING IS RATTLING. ME TOO
 not_again
   NOT THE SHAKING! I'LL RATTLE!
+  NO SHAKING. LOOSE SCREWS.
+  NOT AGAIN. I JUST SORTED BOLTS
 hooded
   GOGGLES DOWN. CAN'T SEE ME.
+  HIDING IN A BOX. A GOOD BOX.
+  MASK ON. TOTALLY INVISIBLE.
 ancestor_fear
   GEN # BOLTED FROM THIS. HA.
 inherited
   GEN # LEFT ME A SCREWDRIVER.
+  GEN # LEFT ME A BLUEPRINT.
 counted
   I COUNTED MY BOLTS. ONE SHORT.
+  NOTHING TO FIX. DREADFUL.
+  BORED. I'LL TAKE APART A NAP.
 put_me_down
   HEY! MIND THE GADGETS!
+  PUT ME DOWN. I'M MID-PROJECT.
+  CAREFUL. MY POCKETS ARE FULL.
 warm_hands
   WARM HANDS. GOOD FOR TINKERING
+  NICE GRIP. YOU'RE HIRED.
+  WARM HANDS. NO STICKY TAPE.
+  OOH, THUMBS. HANDY THINGS.
 sky_down
   UPSIDE DOWN. MY POCKETS! NO!
   UPSIDE DOWN. BOLTS EVERYWHERE.
+  WHO FLIPPED THE WORKSHOP?
 heavy_eyes
   TOOLS... DOWN... ZZZ...
+  SHIFT OVER. NEED A BOX.
+  GOGGLES FOGGY. NAP TIME.
 dream_pellets
   ZZZ... SPROCKETS... ZZZ...
+  ZZZ... A BIN FULL OF SNACKS...
+  ZZZ... A SANDWICH. WITH BOLTS
+  ZZZ... OIL... NO, GRAVY...
+  ZZZ... A SNACK MACHINE. BEEP
+  ZZZ... MORE TAPE... MORE PIE
 see_pellet
-  I SEE... A PELLET. GRABBING.
+  A PELLET. GRABBING.
+  A SNACK. NICE PART.
+  LUNCH. AND A SPRING.
 see_phone
-  I SEE... A PHONE. NICE PARTS.
+  A PHONE. NICE PARTS.
+  A PHONE. SCREWDRIVER?
 see_nothing
-  I SEE... NO SCRAPS. NOT ONE.
+  NO SCRAPS. NOT ONE.
+  AN EMPTY BIN. TRAGIC.
 see_damp
-  I SEE... RUST. OH NO.
+  RUST. OH NO.
+  A LEAK. GET THE TAPE.
 knees
   MY KNEES SQUEAK. NEED OIL.
+  OLD MODEL. STILL RUNS GREAT.
 moon
   THE MOON IS A BIG SHINY BOLT.
+  THE MOON: MY WORK LAMP.
 anyone
   HELLO? ANYONE GOT A WRENCH?
+  WORKSHOP'S OPEN. NO CUSTOMERS.
+  ANYBODY? I FIXED A THING.
 science
   FOOD FIXES HUNGER. I TESTED IT
 no_hat
@@ -102,50 +152,66 @@ no_hat
 
 p_snack
   A SNACK. FROM A BIN. SOON.
+  A SNACK, THEN A BIG PROJECT.
 p_feast
   A FEAST. A WHOLE BIN OF IT.
+  I SEE A BUFFET. AND A TOOLBOX.
 p_pellet_soon
   A PELLET COMES. I'LL CATCH IT.
 p_feed_me
   FEED ME. OR I BUILD A FEEDER.
 p_fuzzy
-  THAT CRUMB WILL RUST. KIND OF.
+  THAT CRUMB WILL GROW A BEARD.
 p_more_shaking
   MORE SHAKING. TIGHTEN BOLTS.
 p_mud
   MUD IN THE GEARS. SOON.
+  MUD AHEAD. WIPE YOUR GOGGLES.
 p_big_hand
   A BIG HAND. WILL IT TIDY? NO!
+  A HAND COMES. HIDE THE PARTS.
 p_bedtime
   DARK SOON. WORKSHOP OPENS.
 p_sun
   THE SUN COMES. GOGGLES ON.
 p_rain
   RAIN. COVER THE GADGETS!
+  RAIN. I SEE A TARP. GOOD.
 p_watched
   THE PHONE IS WATCHING. HI.
 p_return
   THEY RETURN. I BUILT A BELL.
 p_tap
   A KNOCK. CHECK THE WIRING.
+  KNOCK KNOCK SOON. SNACK BELL.
 p_no
   NO. BROKEN. CAN'T FIX THAT.
+  NO. NOT EVEN WITH TAPE.
 p_doom
   DOOM. GOOD THING I HAVE TAPE.
+  DOOM? I'LL PATCH IT.
 p_lunch
   MY END NEARS. KEEP MY TOOLS.
+  OLD TOOLS. STILL SHARP. LUNCH?
 p_outlook
   OUTLOOK: NEEDS ADJUSTING.
+  OUTLOOK: SUNNY. BRING GOGGLES.
 p_decidedly
   YES. IT WORKS. I THINK.
+  YES. IT WORKS. I TESTED IT.
+  YES. SIGNED, THE ENGINEER.
 p_lucky
   LUCK IS A SCREW IN THE BIN.
+  A COIN IS COMING. TO MY BIN.
 p_pond_no
   THE POND SAYS NO. IT'S WET.
+  NO. THE POND IS OUT OF ORDER.
 p_pond_yes
   THE POND SAYS YES. SHINY COIN?
+  YES. THE POND WORKS TODAY.
 p_ripples
   RIPPLES. MY READER IS BROKEN.
+  BAD SIGNAL. ASK AFTER REPAIRS.
 p_ancestor
   GEN # BUILT THIS PROPHECY.
 miss_phone
@@ -178,6 +244,7 @@ saw_nothing
   NOTHING HAPPENED. I FIXED IT.
 plans
   I HAVE PLANS. BLUEPRINTS.
+  PLAN: A ROCKET. FROM A SPOON.
 toes
   FIVE FINGERS. ALL STICKY.
 small_lot
@@ -205,7 +272,7 @@ serious_face
 no_echo
   HELLO? NO ECHO. I'LL BUILD ONE
 king
-  CHIEF ENGINEER OF THE DISH.
+  CHIEF ENGINEER OF MY HOME.
 smells_me
   SMELLS LIKE OIL. PERFECT.
 todo
@@ -220,6 +287,7 @@ snack_snacks
   WHAT IF GADGETS HAD GADGETS?
 suspense
   I MIGHT BUILD IT. OR NOT.
+  ONE MORE BOLT AND... NOPE.
 ancestors
   GEN #. ALL OF US HAD POCKETS.
 ask_me
@@ -291,34 +359,109 @@ only_me
 snore
   ZZZ... CLANK... ZZZ... CLANK
   ZZZ... WHIRR... ZZZ... WHIRR
+  ZZZ... BEEP... BOOP... ZZZ...
 mumble
   MMF... PASS THE WRENCH...
   MMF... DON'T TIDY MY PILE...
+  MMF... MORE TAPE... MORE...
 dream_chase
   ZZZ... COME BACK, SCREW...
   ZZZ... THAT WAS MY BOLT! HEY!
+  ZZZ... CATCH THAT SPRING...
 dream_feast
   ZZZ... THE BIGGEST BIN EVER...
   ZZZ... SNACKS ON A CONVEYOR...
+  ZZZ... A SANDWICH MACHINE...
 dream_flight
   ZZZ... MY ROCKET WORKS!
   ZZZ... GOGGLES ON... LIFTOFF!
+  ZZZ... A HELICOPTER HAT...
 sleep_count
   ONE BOLT, TWO BOLT, NUT...
   ONE SCREW... TWO... MISSING?
+  ZZZ... COUNTING SPROCKETS...
 sleep_warm
   MMM... GOOD BOX. COSY BOX...
   MMM... WARM OIL... SNUG CAP...
+  MMM... TAIL BLANKET. NICE...
 dream_rain
   ZZZ... RAIN... NO... RUST...
   ZZZ... TARP OVER THE PILE...
+  ZZZ... I BUILT AN UMBRELLA...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME. SNACKS OUT.
+  KNOCK TWICE. THE SNACK HATCH.
+  TWO KNOCKS: FOOD. I WIRED IT.
+  HUNGRY? KNOCK KNOCK ON ME.
 teach_fight
   TO FIGHT, HOLD ME UPSIDE DOWN.
 teach_hold
   HOLD ME SIDEWAYS. NAP IN A BOX
 teach_shake
   SHAKE ME. I SEE PARTS. NICE.
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. TESTED. WORKS.
+  YES. I CAN FIX THAT.
+  YES. THUMBS UP. STICKY ONE.
+verdict_no
+  NO. THE BLUEPRINT SAYS NO.
+  NOPE. MISSING A SCREW.
+  NO. RETURN TO SENDER.
+verdict_later
+  STILL BUILDING. ASK LATER.
+  OUT TO LUNCH. AT THE BIN.
+  WORKSHOP CLOSED. TRY LATER.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  WHISTLE WHILE YOU WRENCH.
+  LA LA. HAND ME THAT BOLT.
+dance_break
+  THE ROBOT. I BUILT IT.
+  GOGGLES DOWN. DANCE MODE.
+tail_get
+  THAT TAIL'S A SPARE PART.
+  STRIPED THIEF! GET BACK!
+treasure
+  A BOLT! NICE PARTS!
+  DIGGING FOR SCRAP. SCORE.
+peekaboo
+  NICE FACE. GOT ANY PARTS?
+  PEEKING. GOGGLES ON.
+hyah
+  HYAH! WRENCH ARM! HYAH!
+  BANDIT MOVES. TAKE THAT.
+pebble
+  PEBBLE. GEAR. PEBBLE. GEAR.
+  JUGGLING. TESTING GRAVITY.
+dream_big
+  A MACHINE THAT MAKES SNACKS.
+  WHAT IF MY HOME HAD WHEELS?
+wish_star
+  WORKSHOP'S OPEN. STARS ARE UP
+  I COULD FIX THAT STAR.
+achoo
+  ACHOO! OIL. IN MY NOSE.
+  AH-CHOO! DUST IN THE GEARS.
+boo_hee
+  BOO! BANDIT ATTACK!
+  BOO! FOUND YOU IN A BIN!
+hic
+  HIC. LOOSE SCREW. HIC.
+  HIC. I CAN FIX THAT. HIC.
+zoom
+  TEST RUN! FULL THROTTLE!
+  TURBO MODE! NO BRAKES!
+ooh_what
+  OOH. NICE PARTS.
+  A BEETLE. DOES IT RUN?
+cant_see
+  IN MY BOX. CLOSED SHOP.
+  GOGGLES DOWN. INVISIBLE.
+yuck
+  RUSTY SNACK. NO THANKS.
+  EVEN THE BIN SAYS NO.

@@ -1,0 +1,220 @@
+// Remote debug (docs/remote-debug.md): what a badge far from the owner sends
+// home in each Wi-Fi window, and the few things the owner may ask of it.
+// Pure, so it is tested natively (test/test_remote_debug); src/remote_debug.h
+// is the badge's side.
+//
+//   LogRing      the serial log's last bytes, mirrored as they are printed
+//   jsonEscape   a byte run as the inside of a JSON string
+//   parseCommands  the site's reply: only the allowlist, only new ids
+//   trustedReplyUrl  commands are taken only from the site, over HTTPS
+//
+// Commands are authenticated by TLS: the reply comes from an HTTPS POST to the
+// site, whose chain the badge checks against its pinned roots and whose name
+// it checks against the certificate (hw/net_job.h, hw/tls_roots.h). So only
+// the site can send them, and the site queues them only for the owner's
+// ADMIN_TOKEN. None of them can turn updates off or touch the firmware; a
+// `debug` line runs any cable verb (CLAUDE.md), and the badge refuses one
+// that would forget the last network it could come home on.
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+
+namespace rdebug {
+
+// A byte ring over a buffer the caller owns (PSRAM on the badge). It keeps the
+// last cap() bytes written; total() counts every byte ever written, so a
+// mark taken before something prints finds exactly what it printed.
+class LogRing {
+ public:
+  void attach(char* buf, size_t cap) { buf_ = buf, cap_ = cap, total_ = 0; }
+  bool ready() const { return buf_ && cap_; }
+  size_t cap() const { return cap_; }
+  uint64_t total() const { return total_; }
+  size_t held() const { return total_ < cap_ ? size_t(total_) : cap_; }
+
+  void write(const char* p, size_t n);
+  // The last min(cap, held()) bytes, oldest first. Returns how many.
+  size_t tail(char* out, size_t cap) const;
+  // The bytes written since `mark` (a total() from before) that are still
+  // held, oldest first, at most `cap` of them (the first ones). Returns how many.
+  size_t since(uint64_t mark, char* out, size_t cap) const;
+
+ private:
+  size_t copyFrom(uint64_t from, size_t n, char* out) const;
+  char* buf_ = nullptr;
+  size_t cap_ = 0;
+  uint64_t total_ = 0;
+};
+
+// `in` (n bytes) as the inside of a JSON string, into `out` (cap bytes, always
+// NUL-terminated). Quotes, backslashes and control characters are escaped,
+// \n kept as \n, other bytes go as they are; an escape is never cut. A UTF-8
+// sequence cut at the start (a ring's oldest byte) is skipped. Returns the
+// length written (without the NUL).
+size_t jsonEscape(const char* in, size_t n, char* out, size_t cap);
+// The same, but of the newest bytes: the longest end of `in` whose escaped
+// form fits `cap` (with its NUL). For a log's tail, whose newest lines matter.
+size_t jsonEscapeTail(const char* in, size_t n, char* out, size_t cap);
+
+// ---- the report's size and how it goes out --------------------------------------
+//
+// On the badge at RSSI -77 a 8.8 KB report failed ("Failed to send chunk!",
+// send payload failed) and took internal RAM down to 9.9 KB: it went to TLS
+// as one write, so one record and its buffers. Now the report stays under
+// kReportMax (the log's tail gets what the rest leaves, at most kLogTailMax),
+// and every HTTPS body goes out kWriteChunk bytes a write (hw/net_job.h).
+constexpr size_t kReportMax = 5000;
+constexpr size_t kLogTailMax = 4096;
+constexpr size_t kStateMax = 2048;     // a `state` capture: it shares the cap with the log
+constexpr size_t kWriteChunk = 1024;
+
+// A light report: a provision's check-in, which the phone's page waits for,
+// and a cable's `DEBUG ota check` (a hand is on the badge, with LOG on its
+// own transport). The log's tail at most kLightLogTailMax, within
+// kLightReportMax; no state capture and no screenshot after it, both kept
+// for the next Check's report. Every KB less the session sends is internal
+// RAM lwIP and the Wi-Fi driver do not hold while it goes: on a board, a
+// provision's 4.8 KB check-in took internal RAM down to 3.9 KB (0.7.35).
+constexpr size_t kLightReportMax = 2048;
+constexpr size_t kLightLogTailMax = 1024;
+
+struct ReportShape {
+  size_t max;       // the log's tail fills what the rest leaves of this
+  size_t logTail;   // and never more than this
+  bool state;       // a state capture goes in it
+  bool shot;        // a screenshot may go after it, in the same window
+};
+constexpr ReportShape reportShape(bool light) {
+  return light ? ReportShape{kLightReportMax, kLightLogTailMax, false, false} : ReportShape{kReportMax, kLogTailMax, true, true};
+}
+// The log's room once `used` bytes are written (its own key and quotes
+// counted) and the 2 closing ones kept: what is left of the shape's max, at
+// most its logTail; 0 when nothing is left.
+constexpr size_t logRoom(size_t used, const ReportShape& s) {
+  return used + 2 < s.max ? (s.max - used - 2 < s.logTail ? s.max - used - 2 : s.logTail) : 0;
+}
+
+// `n` bytes through `write(p, k)` (returns the bytes it took, 0 when it
+// failed), at most `chunk` a call. A call that takes nothing is tried once
+// more after `pause()`; a second failure ends it. Returns the bytes written.
+template <class Write, class Pause>
+size_t writeChunked(const uint8_t* p, size_t n, size_t chunk, Write&& write, Pause&& pause) {
+  size_t done = 0;
+  while (done < n) {
+    const size_t k = n - done < chunk ? n - done : chunk;
+    size_t got = write(p + done, k);
+    if (!got) {
+      pause();
+      got = write(p + done, k);
+      if (!got) break;
+    }
+    done += got < k ? got : k;
+  }
+  return done;
+}
+
+// Before each piece of a body: what is still in flight (lwIP's unacked TCP
+// segments, the Wi-Fi driver's TX copies) is internal RAM, and a whole 4.7 KB
+// report handed over at once took it to 6.7 KB on Midge (0.7.43's soak), where
+// the AES engine's DMA buffer for the next record failed ("esp-aes: Failed to
+// allocate memory") and the report did not go. So each piece waits, `step` ms
+// at a time, until free() is back to kPaceFloor, at most kPaceMaxMs: a slow
+// link is slowed, never stopped. Returns the ms waited.
+constexpr uint32_t kPaceFloor = 14 * 1024, kPaceMaxMs = 2000, kPaceStepMs = 20;
+template <class Free, class Sleep>
+uint32_t pace(Free&& free, Sleep&& sleep, uint32_t floor = kPaceFloor, uint32_t maxMs = kPaceMaxMs,
+              uint32_t step = kPaceStepMs) {
+  uint32_t waited = 0;
+  while (free() < floor && waited < maxMs) sleep(step), waited += step;
+  return waited;
+}
+
+// ---- commands ----------------------------------------------------------------
+
+// The allowlist. Nothing else is ever run.
+enum class Verb : uint8_t {
+  Unknown,    // not on the list: refused, and the refusal reported
+  Check,      // the next update check is due now (it still waits to be dark and alone)
+  Interval,   // the time between update checks, in minutes, within kIntervalMin..kIntervalMax, until a restart
+  State,      // what the cable's STATE and DEBUG status verbs print, in the next report
+  Shot,       // the screen's last frame, in the next report
+  Reboot,     // restart, once dark and alone
+  Marquee,    // a message for the kids: full-screen scrolling text (showMarquee), at most kMarqueeMax characters
+  // Any of the cable's `DEBUG` verbs (CLAUDE.md: one badge, three
+  // transports), the line without "DEBUG ", at most kDebugMax characters.
+  // Its output goes in the next report's `state`; the badge refuses what it
+  // refuses on Bluetooth for a trial or an update, and forgetting the last
+  // network it could come home on.
+  Debug,
+};
+const char* verbName(Verb v);
+
+// The interval's bounds: never so short it drains the battery, never so long
+// that updates as good as stop (owner: automatic updates never switch off).
+constexpr uint32_t kIntervalMinMinutes = 30;
+constexpr uint32_t kIntervalMaxMinutes = 12 * 60;
+
+// The marquee's text: printable ASCII (what the badge's font draws), at most
+// this many characters; web/src/reports.js clamps to the same.
+constexpr size_t kMarqueeMax = 120;
+constexpr size_t kDebugMax = kMarqueeMax;   // a DEBUG line's text shares the marquee's buffer
+
+struct Command {
+  uint32_t id = 0;
+  Verb verb = Verb::Unknown;
+  uint32_t arg = 0;
+  char text[kMarqueeMax + 1] = "";   // Marquee's and Debug's
+  bool ok = false;           // on the list and its argument in bounds
+  const char* why = "";      // when not ok: the refusal, for the report
+};
+
+// The site's reply to a report, plain text:
+//
+//   blorb-cmds 1
+//   <id> <verb> [arg]
+//   <id> marquee <text to the end of the line>
+//   <id> debug <a DEBUG line, to the end of the line>
+//   ...
+//
+// Each line with an id above `lastId` is one command (a repeat or an older
+// id is dropped: each runs at most once), in order, at most `max`. A line
+// that is not "<id> <word>" is skipped. A verb off the list, or an argument
+// out of bounds, comes back as a Command with ok false, so its refusal is
+// reported. Returns how many were written to `out`; nothing at all unless
+// the first line is the header.
+size_t parseCommands(std::string_view reply, uint32_t lastId, Command* out, size_t max);
+
+// What the badge refuses of a `debug` line over Wi-Fi beyond what Bluetooth
+// refuses (debugble::refuseFor): `reboot`, which the reboot command does at a
+// quiet moment, and a `wifi forget` that would leave no network to come home
+// on (bare, which forgets them all, or with `networks` at most 1). nullptr:
+// it may run.
+const char* debugRefusal(std::string_view line, size_t networks);
+
+// ---- the log, masked ---------------------------------------------------------
+//
+// What the badge reads back over Bluetooth (LOG) and sends home over Wi-Fi
+// (the report's log and state) never holds a Wi-Fi network's SSID or
+// password: every remembered one is replaced by `as` ("<net #1>",
+// "<password>") wherever it appears. Secrets shorter than kSecretMin are
+// left alone (two letters would mangle every line); the badge's own lines
+// never print them anyway: they name networks by number.
+struct Secret {
+  std::string_view text;
+  const char* as;
+};
+constexpr size_t kSecretMin = 4;
+// `in` with every secret replaced, into `out` (always NUL-terminated, cut at
+// `cap`). The longest secret wins where two start at one byte. Returns the
+// length written.
+size_t maskSecrets(std::string_view in, const Secret* secrets, size_t n, char* out, size_t cap);
+
+// Commands are taken only from a reply to this URL's site over HTTPS (a
+// cable's `DEBUG ota check http://...` points the manifest elsewhere; the
+// report never goes there).
+constexpr const char* kSite = "https://blorb.hypnodroid.com/";
+bool trustedReplyUrl(const char* url);
+
+}  // namespace rdebug

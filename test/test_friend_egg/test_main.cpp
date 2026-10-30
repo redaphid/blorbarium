@@ -14,7 +14,7 @@ using namespace blorbtest;
 
 namespace {
 
-constexpr uint32_t kGiftSeed = 15048;
+constexpr uint32_t kStarterSeed = 15048;
 constexpr const char* kV1 = "test/fixtures/keepsake_v1.bin";
 constexpr const char* kScarsFixture = "test/fixtures/keepsake_v1_scars.bin";
 constexpr const char* kFriendFixture = "test/fixtures/keepsake_v1_friend_egg.bin";
@@ -297,18 +297,16 @@ TEST(Clutch, AFriendEggJoinsWithinThreeAndAFullClutchGivesUpItsLastSlot) {
 }
 
 namespace {
-std::optional<uint8_t> runClutch(Clutch& k, uint8_t knocks, bool hold) {
+// The vigil, then a tilt toward egg `aim` (the duel's sectors: the egg there,
+// creature.h eggAt); then a knock while still tilted, or nothing until the timeout.
+std::optional<uint8_t> runClutch(Clutch& k, int8_t aim, bool knock) {
   SenseOut none;
   for (uint32_t t = 0; t < Clutch::kVigilTicks; ++t) if (auto i = k.tick(none)) return i;
-  for (uint8_t i = 0; i < knocks; ++i) {
+  if (auto i = k.tick(none, aim)) return i;
+  if (knock) {
     SenseOut s;
     s.fire(stim::knock);
-    if (auto picked = k.tick(s)) return picked;
-  }
-  if (hold) {
-    SenseOut s;
-    s.fire(stim::button_hold);
-    return k.tick(s);
+    return k.tick(s, aim);
   }
   for (uint32_t t = 0; t <= Clutch::kPickTimeoutTicks; ++t) if (auto i = k.tick(none)) return i;
   return std::nullopt;
@@ -324,7 +322,7 @@ TEST(Clutch, TheTimeoutNeverPicksTheFriendEggButAKidMay) {
   Clutch a = withFriend(), b = withFriend(), c = withFriend(), plain = clutchOf(starterGenome(7), 3, 1);
   EXPECT_EQ(runClutch(a, 2, false), uint8_t(0)) << "the cursor left on the friend egg";
   EXPECT_EQ(runClutch(b, 1, false), uint8_t(1)) << "his own second egg";
-  EXPECT_EQ(runClutch(c, 2, true), uint8_t(2)) << "a kid's hold picks the friend egg";
+  EXPECT_EQ(runClutch(c, 2, true), uint8_t(2)) << "a kid's knock keeps the friend egg";
   EXPECT_EQ(runClutch(plain, 2, false), uint8_t(2)) << "with no friend egg the timeout takes the cursor";
 }
 
@@ -490,14 +488,14 @@ TEST(Accept, RefusesDamageAWrongHashAndAStranger) {
 // ---- the keepsake's trailing bytes ----------------------------------------------------------
 
 // Nothing new is written for a pet with no scars and no friend egg: the
-// committed fixture and the gift genome's egg, creature and clutch.
+// committed fixture and the starter's egg, creature and clutch.
 TEST(Keepsake, AnOrdinaryPetWritesNoTrailingBytes) {
   const std::vector<uint8_t> v1 = readFile(kV1);
   ASSERT_FALSE(v1.empty()) << kV1 << " is missing (run from the project root)";
   EXPECT_EQ(Keepsake::encode(decoded(v1)), v1) << "the v1 fixture re-encodes to its own bytes";
   EXPECT_EQ(findChunk(chunksOf(v1), Chunk::Body)->n, kBodyFixedLen) << "the fixture holds no bite";
 
-  Creature c(Egg(Offspring{starterGenome(kGiftSeed), {}}, 1, 0), 0, 0);
+  Creature c(Egg(Offspring{starterGenome(kStarterSeed), {}}, 1, 0), 0, 0);
   Habitat h;
   Behaviours bh;
   for (uint32_t t = 0; t < 300; ++t) c.tick(SenseOut{}, h, bh, t);
@@ -516,9 +514,9 @@ TEST(Keepsake, AnOrdinaryPetWritesNoTrailingBytes) {
   for (const std::vector<uint8_t>* blob : {&creature, &clutch, &egg})
     EXPECT_EQ(Keepsake::encode(decoded(*blob)), *blob);
   if (const char* dir = std::getenv("BLORB_D7_PLAIN_DIR")) {   // tools/old_reader.sh hands these to 0.4.0
-    writeFile(std::string(dir) + "/gift_creature.bin", creature);
-    writeFile(std::string(dir) + "/gift_clutch.bin", clutch);
-    writeFile(std::string(dir) + "/gift_egg.bin", egg);
+    writeFile(std::string(dir) + "/starter_creature.bin", creature);
+    writeFile(std::string(dir) + "/starter_clutch.bin", clutch);
+    writeFile(std::string(dir) + "/starter_egg.bin", egg);
   }
 }
 

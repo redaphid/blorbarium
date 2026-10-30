@@ -95,7 +95,7 @@ constexpr int kTiltR = 92;
 constexpr P kLeft = {kSide / 2 - kTiltR, kSide / 2}, kRight = {kSide / 2 + kTiltR, kSide / 2},
             kNear = {kSide / 2, kSide / 2 + kTiltR};
 constexpr P kStanceAt[3] = {kLeft, kRight, kNear};   // Pounce, Guard, Trick
-constexpr P kTierAt[3] = {kLeft, kNear, kRight};     // Spar, Scrap, Mortal
+constexpr P kTierAt[3] = {kNear, kLeft, kRight};     // Spar, Scrap, Mortal: where blorb::tierAimed points
 
 constexpr int kGlyphPct = 125, kAimedPct = 170;
 // The stance under the tilt: twice the 24 px art, its 48 px twin drawn 1:1, so
@@ -115,7 +115,7 @@ struct Body { int top, h, w; int fx0, fy0, fx1, fy1; };
 Body bodyOf(const Fighter& f, const SpritePack& pack, int scalePct) {
   const FrameRef b = pack.body(blorb::pose::idle, f.look.stage, 0);
   const FrameRef face = pack.face(expr::neutral, f.look.stage);
-  const bool small = f.look.stage == blorb::Stage::Baby || f.look.stage == blorb::Stage::Child;
+  const bool small = f.look.stage == blorb::Stage::Baby;   // squat as draw.cpp draws a hatchling
   const int k = f.look.scalePct * scalePct / 100;   // percent
   const int ky = small ? k * 90 / 100 : k, kx = small ? k * 116 / 100 : k;
   return {b.originY * ky / 100, b.h * ky / 100, b.w * kx / 100,
@@ -282,19 +282,31 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
   const int t = sc.ticks;
   const Tq q = clockOf(sc);
   const Fighter* f[2] = {&sc.me, &sc.them};
-  // The rim: the three tiers, mine big, a struck bar over any above my ceiling.
+  // The stakes are picked as a stance is (choosing, below): the rim ring is
+  // the clock, the tier under the tilt is drawn big in a reticle that closes
+  // when it locks, and my pet leans toward it. A tier above my ceiling is
+  // struck through; tilted at, it grows a little, struck, and is not picked.
+  add(s, prop(PropKind::Timer, 0, {120, 120}, 100, 255,
+              sc.turnTicks ? sc.ticksLeft * kTimerFillOf / sc.turnTicks : 0));
+  const int pointed = blorb::tierAimed(sc.aim);
   for (int tier = 0; tier < 3; ++tier) {
     const bool aimed = tier == int(sc.me.chose);
     const bool barred = tier > int(sc.me.ceiling);
-    const int scale = aimed ? kAimedPct : kGlyphPct;
-    const P at = {kTierAt[tier].x + (aimed ? (kSide / 2 - kTierAt[tier].x) / 8 : 0),
-                  kTierAt[tier].y + (aimed ? (kSide / 2 - kTierAt[tier].y) / 8 : 0)};
+    const bool refused = barred && tier == pointed;
+    const int scale = aimed ? kAimedStancePct : refused ? kAimedPct : kGlyphPct;
+    const P at = {kTierAt[tier].x + (aimed ? (kSide / 2 - kTierAt[tier].x) / 6 : 0),
+                  kTierAt[tier].y + (aimed ? (kSide / 2 - kTierAt[tier].y) / 6 : 0)};
+    // The Mortal confirm fills the skull and the reticle round it.
     const int fill = tier == int(Stakes::Mortal) && aimed ? sc.me.hold : 255;
-    add(s, prop(PropKind::Tier, tier, at, scale, barred ? 110 : 255, fill));
+    add(s, prop(PropKind::Tier, tier, at, scale, barred ? 110 : aimed ? 255 : 150, fill));
     if (barred) add(s, prop(PropKind::Strike, 0, at, scale));
-    // The reticle on the tier under the tilt: closed once confirmed, a ring
-    // filling while the Mortal confirm is held.
     if (aimed) add(s, prop(PropKind::Reticle, sc.me.confirmed ? 1 : 0, at, scale, 255, sc.me.confirmed ? 255 : fill));
+  }
+  // My pet leans toward the tier he is staking, his kid's hand in his body.
+  {
+    const P to = kTierAt[int(sc.me.chose) % 3];
+    s.fig[kMe].x = int16_t(s.fig[kMe].x + (to.x - 120) / 12);
+    s.fig[kMe].leanPct = int8_t(clampi(s.fig[kMe].leanPct + (to.x - 120) / 6, -24, 24));
   }
   // Each pet wears the risk of the tier his kid aims at: a feather (play), a
   // plaster on his head (wounds), or a skull over him filled to his forecast.
@@ -315,7 +327,8 @@ void staking(const DuelScene& sc, DuelStaging& s, const Body* b) {
         face(s.fig[side], expr::alarmed);
         break;
     }
-    if (side == kThem && x.confirmed) add(s, prop(PropKind::Lock, 3, {head.x + 26, head.y + 12}));
+    // Over the friend, as in a turn: a spinner while he picks, the ring closed once he has locked.
+    if (side == kThem) add(s, prop(PropKind::Lock, x.confirmed ? 3 : (t / 4) % 3, {head.x + 26, head.y + 12}));
   }
   // Both confirmed: the agreed tier, the lower of the two, in the middle.
   if (sc.me.confirmed && sc.them.confirmed)
@@ -648,7 +661,7 @@ DuelScene sceneOf(const blorb::DuelView& v, const blorb::Appearance& mine) {
   sc.me.locked = v.locked;
   sc.them.locked = v.theyLocked;
   sc.ticksLeft = v.chooseTicksLeft;
-  sc.turnTicks = blorb::DuelTimings::kChooseTicks;
+  sc.turnTicks = v.chooseTicks;   // shorter each turn (DuelTimings::chooseTicks)
   if (v.hasLast && sc.act == DuelAct::Clash) turnOnto(sc, v.last, 0);   // the view mirrors it: index 0 is me
   // Mercy and the end: the downed side lost; in Mercy the hold is the winner's Finish.
   if (sc.act != DuelAct::Clash) sc.won = v.draw ? Side::Neither : (v.iWon ? Side::Me : Side::Them);
@@ -1163,6 +1176,8 @@ constexpr Rgb kDoubleGlow{255, 205, 60};
 constexpr int kHintPct = 125;
 
 }  // namespace
+
+void drawPickerProp(Canvas240& cv, const Prop& p) { paintProp(cv, p, 0); }
 
 RimHint rimHint(const blorb::BootHint& b) {
   RimHint r;

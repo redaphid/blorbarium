@@ -25,6 +25,8 @@
 //   !shake [ms]  !knock  !dtap  !tilt <x> <y>  !flip  !lid [ms]  !hold [ms]  !button [ms]  !shot <path>
 //   DEBUG warp <ticks>  DEBUG inject <chem> <level>  DEBUG force <action>  DEBUG die  DEBUG time <unix> [tzMinutes]
 //   DEBUG stage <hatchling|child|adult|elder>  DEBUG species <slug|id|off>
+//   DEBUG idle <name|off>               draw him playing that idle (paint only, the brain never sees it)
+//   DEBUG marquee <text>                the whole screen says it (src/marquee.h)
 //   @0 DEBUG found <slug|id>            found the pet as that species (before boot; later, refused)
 // Anything else is a protocol line, as a phone would send it.
 #include "../src/main.cpp"
@@ -177,6 +179,13 @@ static void debug(const char* verb, const char* a, const char* b) {
     else fprintf(stderr, "sim: DEBUG species: %s is not a species.def name or 0..255\n", a);
     return;
   }
+  if (!strcmp(verb, "idle")) {
+    simIdle = blorb::idles::none;
+    for (const auto& row : blorb::IDLES)
+      if (!strcmp(row.name, a)) simIdle = row.id, simIdleFrom = millis();
+    if (simIdle == blorb::idles::none && strcmp(a, "off")) fprintf(stderr, "sim: DEBUG idle: no idle named %s\n", a);
+    return;
+  }
   if (!strcmp(verb, "stage")) {
     if (const char* why = debugverbs::growTo(*dish, a, warp)) fprintf(stderr, "sim: DEBUG stage %s: %s\n", a, why);
     return;
@@ -213,6 +222,8 @@ static void simLine(const std::string& line) {
   if (line[0] == '!') {
     sscanf(line.c_str() + 1, "%31s %479s %63s", word, a, b);
     hand(word, a, b);
+  } else if (line.rfind("DEBUG marquee", 0) == 0) {
+    showMarquee(line.c_str() + 13);
   } else {
     sscanf(line.c_str() + 6, "%31s %479s %63s", word, a, b);
     debug(word, a, b);

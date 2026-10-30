@@ -16,6 +16,7 @@
 #include "paint/duel.h"
 #include "paint/marquee.h"
 #include "paint/text.h"
+#include "../../lib/paint/src/figure.h"   // pantryColour, the clutch picker's words
 #include "paint/sprite_pack.h"
 
 using blorb::Appearance;
@@ -242,6 +243,50 @@ TEST(Draw, EveryKindStaysInsideTheCanvasMemory) {
       for (uint32_t w : g->before) ASSERT_EQ(w, 0xDEADBEEFu);
       for (uint32_t w : g->after) ASSERT_EQ(w, 0xDEADBEEFu);
     }
+  }
+}
+
+// The version tag (paint::setVersionTag): small and dim, centred at the
+// bottom of the glass inside its whole edge, and nothing anywhere else; a
+// long version fits there too. Drawn over him, so all of it shows wherever he
+// stands; none of it with the care hint, in fight mode or on the amber.
+// Unset, every other test here draws without it.
+int tagPixels(Appearance a, const char* v, bool checkWhere) {
+  auto bare = render(a, paint::placeholderPack());
+  paint::setVersionTag(v);
+  auto tagged = render(a, paint::placeholderPack());
+  paint::setVersionTag(nullptr);
+  int changed = 0;
+  for (int y = 0; y < kSide; ++y)
+    for (int x = 0; x < kSide; ++x) {
+      const uint16_t c = tagged->px[y * kSide + x];
+      if (c == bare->px[y * kSide + x]) continue;
+      ++changed;
+      if (!checkWhere) continue;
+      EXPECT_TRUE(x >= 70 && x < 170 && y >= 214 && y < 236) << v << " at " << x << "," << y;
+      const double dx = x + 0.5 - 120, dy = y + 0.5 - 120;
+      EXPECT_LT(dx * dx + dy * dy, 117.0 * 117.0) << v << ": past the glass's whole edge at " << x << "," << y;
+      EXPECT_LE((c >> 11) << 3, 48) << v;          // dim: no channel past a dark teal
+      EXPECT_LE(((c >> 5) & 63) << 2, 88) << v;
+      EXPECT_LE((c & 31) << 3, 88) << v;
+    }
+  return changed;
+}
+
+TEST(VersionTag, SmallAndDimAtTheBottomOverHimWhereverHeStands) {
+  for (const char* v : {"0.7.29", "10.12.128", "dev"}) {
+    const int home = tagPixels(adult(), v, true);
+    EXPECT_GT(home, 25) << v << " drew";
+    // Stood as low as he goes: the tag is over his feet, every pixel of it.
+    EXPECT_EQ(tagPixels(adult(0, 1.0), v, true), home) << v;
+    Appearance hinted = adult(), lobby = adult(), sealed = adult();
+    hinted.hasHint = true;
+    hinted.hint = blorb::CARES[0].id;
+    lobby.dueling = lobby.lobby = true;
+    sealed.sealed = true;
+    EXPECT_EQ(tagPixels(hinted, v, false), 0) << v << ": the care hint has the spot";
+    EXPECT_EQ(tagPixels(lobby, v, false), 0) << v << ": fight mode";
+    EXPECT_EQ(tagPixels(sealed, v, false), 0) << v << ": the amber";
   }
 }
 
@@ -748,16 +793,28 @@ TEST(MarqueeWidget, ASaidLineArrivesFromTheRightAndAShortOneParksCentred) {
 
 // ---- feeding (feed_show.h, feeding.cpp) ------------------------------------------------
 
-// Nothing heard, dropped, refused or eaten lately: the dish is drawn as it always was.
-TEST(Feeding, NoNewsDrawsNothing) {
+// Nothing heard, dropped, refused or eaten lately: no bubble, no cookie
+// springing out; only the hunger cookies up the left rim, which are always
+// there and always show how full he is.
+TEST(Feeding, NoNewsDrawsNothingButTheHungerCookies) {
   const auto& pack = paint::placeholderPack();
   Appearance a = adult(0.1, 0.1);
   a.pantry = 2;
   a.feed.pantryMax = 4;
   a.feed.fullness = fx(0.5);
-  Appearance plain = a;
-  plain.feed = blorb::FeedView{};
-  EXPECT_EQ(countChanged(*render(a, pack), *render(plain, pack)), 0);
+  Appearance hungry = a;
+  hungry.feed.fullness = fx(0.1);
+  auto rest = [](const Canvas240& cv) {   // all but the left rim, where the cookies are
+    std::vector<uint16_t> v;
+    for (int y = 0; y < kSide; ++y)
+      for (int x = 50; x < kSide; ++x) v.push_back(cv.px[y * kSide + x]);
+    return v;
+  };
+  EXPECT_GT(countChanged(*render(a, pack), *render(hungry, pack)), 0) << "the cookies follow how full he is";
+  EXPECT_EQ(rest(*render(a, pack)), rest(*render(hungry, pack))) << "and nothing else does";
+  Appearance none = a;
+  none.feed.pantryMax = 0;
+  EXPECT_GT(countChanged(*render(a, pack), *render(none, pack)), 200) << "the hunger cookies";
 }
 
 // The second knock says FOOD at once: a cookie springs out of the rim's
@@ -801,14 +858,151 @@ TEST(Font, HasEveryCharacterTheLinesMayUse) {
   }
 }
 
-// The belly meter up the left rim: fuller, more of it lit.
-TEST(Feeding, TheBellyMeterShowsHowFullHeIs) {
+// The pantry empty is a thought of emoji, not words, for a six-year-old: a
+// thought bubble with the food he wants, a red NO over it, then a sad face.
+// I'M FULL! and ZZZ... stay words.
+TEST(Feeding, AnEmptyPantryIsAThoughtOfEmojiNotWords) {
+  const auto& pack = paint::placeholderPack();
+  constexpr uint16_t kWords = (52 >> 3) << 11 | (36 >> 2) << 5 | (24 >> 3);   // feeding.cpp kInk
+  constexpr uint16_t kNoRed = (232 >> 3) << 11 | (36 >> 2) << 5 | (36 >> 3), kSad = (255 >> 3) << 11 | (204 >> 2) << 5 | (40 >> 3);
+  Appearance a = adult();
+  a.feed.pantryMax = 4;
+  a.feed.refused = blorb::FeedRefusal::Empty;
+  auto at = [&](int ms, uint8_t tries = 0) {
+    Appearance b = a;
+    b.feed.refusedMs = uint16_t(ms);
+    b.feed.emptyTries = tries;
+    return render(b, pack);
+  };
+  auto first = at(450);
+  EXPECT_GT(find(*first, 0xFFFF).count, 2500) << "a thought bubble, big";
+  EXPECT_EQ(find(*first, kWords).count, 0) << "no words";
+  EXPECT_GT(find(*at(1000), kNoRed).count, 80) << "NO slams over the food";
+  EXPECT_GT(find(*at(1900), kSad).count, 300) << "then a sad face";
+  EXPECT_GT(countChanged(*at(450, 0), *at(450, 2)), 200) << "another try, another picture";
+  EXPECT_EQ(countChanged(*at(5000), *render(a, pack)), 0) << "and then it is gone";
+  a.feed.refused = blorb::FeedRefusal::Full;
+  a.feed.refusedMs = 600;
+  EXPECT_GT(find(*render(a, pack), kWords).count, 20) << "I'M FULL! is still words";
+}
+
+// ---- the pantry colour ---------------------------------------------------------------
+
+int red(uint16_t p) { return ((p >> 11) & 31) * 255 / 31; }
+int greenOf(uint16_t p) { return ((p >> 5) & 63) * 255 / 63; }
+
+// Green full, through yellow and amber, to red with one left or none.
+TEST(Pantry, ItsColourGoesFromGreenToRed) {
+  EXPECT_GT(greenOf(paint::pantryColour(256)), red(paint::pantryColour(256)) + 60) << "full: green";
+  EXPECT_GT(red(paint::pantryColour(64)), greenOf(paint::pantryColour(64)) + 120) << "one left: red";
+  const uint16_t half = paint::pantryColour(128);
+  EXPECT_GT(red(half), 200);
+  EXPECT_GT(greenOf(half), 100) << "half: amber, between";
+  for (int f = 64; f < 256; f += 16) EXPECT_LE(greenOf(paint::pantryColour(f)), greenOf(paint::pantryColour(f + 16)) + 24) << f;
+}
+
+// A knock knock on an empty pantry shakes the hunger cookies hard; nothing else does.
+TEST(Pantry, ItShakesOnlyWhenAKnockKnockFindsItEmpty) {
+  const auto& pack = paint::placeholderPack();
+  Appearance a = adult();
+  a.feed.pantryMax = 4;
+  auto bar = [&](const Canvas240& cv) {   // the cookies' stretch of the left rim, clear of the thought bubble
+    std::vector<uint16_t> v;
+    for (int y = 50; y < 190; ++y)
+      for (int x = 0; x < 30; ++x) v.push_back(cv.px[y * kSide + x]);
+    return v;
+  };
+  Appearance still = a;
+  still.feed.refused = blorb::FeedRefusal::Empty;
+  still.feed.refusedMs = 2000;
+  Appearance shaken = still;
+  shaken.feed.refusedMs = 40;
+  EXPECT_NE(bar(*render(shaken, pack)), bar(*render(still, pack))) << "empty: it shakes";
+  Appearance full = a;
+  full.pantry = 3;
+  full.feed.refused = blorb::FeedRefusal::Full;
+  full.feed.refusedMs = 40;
+  Appearance fullLater = full;
+  fullLater.feed.refusedMs = 2000;
+  EXPECT_EQ(bar(*render(full, pack)), bar(*render(fullLater, pack))) << "a refusal with food in it: no shake";
+}
+
+// The egg picker's words draw too.
+TEST(Font, HasTheEggPickersWords) {
+  for (const char* w : paint::kClutchWords)
+    for (const char* c = w; *c; ++c) EXPECT_TRUE(blorb::inFont(*c)) << w << ": '" << *c << "'";
+}
+
+namespace {
+Appearance picker(int8_t aim) {
+  Appearance a;
+  a.kind = Appearance::Kind::Clutch;
+  a.eggCount = 3;
+  a.eggs[1].cloak = blorb::Tint{40, 160, 100};
+  a.clutch.picking = true;
+  a.clutch.aim = aim;
+  a.clutch.shownMs = 400;
+  return a;
+}
+int differs(const Canvas240& a, const Canvas240& b, int x0, int y0, int x1, int y1) {
+  int n = 0;
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) n += a.px[y * kSide + x] != b.px[y * kSide + x];
+  return n;
+}
+}  // namespace
+
+// The egg a tilt points at grows toward the middle the frame it is aimed at
+// (the slide only eases its size), and a knock closes a ring round it.
+TEST(Picker, TheAimedEggGrowsAndAKnockRingsIt) {
+  const auto& pack = paint::placeholderPack();
+  auto level = render(picker(-1), pack), left = render(picker(0), pack), right = render(picker(1), pack);
+  EXPECT_GT(differs(*left, *level, 0, 60, 120, 170), 1500) << "the left egg, aimed";
+  EXPECT_GT(differs(*right, *level, 120, 60, 240, 170), 1500) << "the right egg, aimed";
+  Appearance sliding = picker(0);
+  sliding.clutch.aimWas = 1;
+  sliding.clutch.aimMs = 20;
+  auto mid = render(sliding, pack);
+  EXPECT_GT(differs(*mid, *left, 0, 0, kSide, kSide), 200) << "20 ms into the slide it is not there yet";
+  Appearance knocked = picker(0);
+  knocked.clutch.knockMs = 300;
+  EXPECT_GT(differs(*render(knocked, pack), *left, 0, 40, 130, 190), 100) << "the ring closing";
+}
+
+// The hints play on the picker's own clock: two moments of it differ.
+TEST(Picker, TheHintsMoveOnTheirClock) {
+  const auto& pack = paint::placeholderPack();
+  for (int8_t aim : {int8_t(-1), int8_t(2)}) {
+    Appearance a = picker(aim), b = picker(aim);
+    b.clutch.shownMs = uint16_t(a.clutch.shownMs + 300);
+    EXPECT_GT(differs(*render(a, pack), *render(b, pack), 0, 0, kSide, kSide), 50) << "aim " << int(aim);
+  }
+}
+
+// Kept: the chosen moment over the egg screen, then the egg screen alone.
+TEST(Picker, TheChosenMomentHandsOverToTheEgg) {
+  const auto& pack = paint::placeholderPack();
+  Appearance egg;
+  egg.kind = Appearance::Kind::Egg;
+  Appearance chosen = egg;
+  chosen.eggCount = 3;
+  chosen.clutch.chosen = 2;
+  chosen.clutch.count = 3;
+  chosen.clutch.chosenMs = 200;
+  auto plain = render(egg, pack);
+  EXPECT_GT(differs(*render(chosen, pack), *plain, 0, 0, kSide, kSide), 1000) << "the chosen moment shows";
+  chosen.clutch.chosenMs = blorb::ClutchView::kNever;
+  chosen.clutch.chosen = -1;
+  EXPECT_EQ(differs(*render(chosen, pack), *plain, 0, 0, kSide, kSide), 0) << "then the plain egg";
+}
+
+// The hunger cookies up the left rim: fuller, more of them whole.
+TEST(Feeding, TheHungerCookiesShowHowFullHeIs) {
   const auto& pack = paint::placeholderPack();
   Appearance plain = adult();
   plain.feed.pantryMax = 4;
   auto lit = [&](double full) {
     Appearance a = plain;
-    a.feed.meterMs = 100;
     a.feed.fullness = fx(full);
     auto cv = render(a, pack);
     auto base = render(plain, pack);

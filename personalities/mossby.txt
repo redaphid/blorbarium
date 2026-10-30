@@ -1,6 +1,7 @@
 MOSSBY
 snail: no rush, ever
-Element Sprout, style Guard, power shell. Voice: rambling, which wraps his lines as "SO, UM, LINE", "LINE, OR SOMETHING", "LINE. ANYWAY. WHERE WAS I".
+Element Sprout, style Guard, power shell. Voice: rambling. His own lines below are said exactly as written, so they carry
+the voice themselves. No frame or tag ever wraps a line.
 
 Write anything above the LINES marker: who he is, what he loves, what scares
 him, how he talks, words he overuses, catchphrases, a story. Nothing up here
@@ -36,63 +37,119 @@ NO RUSH. I'LL GET THERE. MIND THE HOUSE.
 # Lines only he says. Head a section with a line name from _shared.txt
 # (or a situation only one line uses), then indent each line under it.
 # His lines replace the shared line for him; write several and he picks one.
+# They are said as written: nothing wraps them.
 
 peckish
   A SNACK WOULD BE NICE. LATER.
+  MY TUMMY WROTE TO SAY: SNACK.
+  LUNCH? I CAN WAIT TILL TUESDAY
+  A LEAF. A CRUMB. A NICE CRUMB.
+  I PACKED A SNACK. I ATE IT.
 starving
   I WOULD EAT A WHOLE LEAF.
+  I COULD EAT MY OWN DOORMAT.
+  EVEN MY HOUSE IS HUNGRY.
 hoarding
-  I WILL GET TO THAT ONE. SLOWLY
+  I WILL GET TO THAT ONE.
+  I WILL GET TO THAT ONE. SOON.
+  THAT ONE IS FOR NEXT WEEK.
+  I'LL EAT IT. IN A FEW HOURS.
 crunch
   MUNCH... MUNCH... STILL MUNCH
+  NOM. EVERY BITE COUNTS. TWICE.
+  CHEW. CHEW. CHEW. HALFWAY.
+  DELICIOUS. ALSO STILL GOING.
 fuzzy_bite
   THAT ONE WAS A BIT MOSSY.
+  HMM. THAT CRUMB GREW A BEARD.
 smells
-  SOMETHING IS GOING OFF. SLOWLY
+  SOMETHING IS GOING OFF.
+  SOMETHING IS GOING OFF. GENTLY
+  A PONG. I SHALL CLOSE MY DOOR.
 green
   I AM GREEN. NOT THE GOOD KIND
+  I AM GREEN. NOT THE MOSSY KIND
+  MY SHELL FEELS QUEASY TOO.
 ow
   OW. MY SHELL TOOK MOST OF IT.
+  OW. I'LL FEEL IT TOMORROW.
 heard_you
-  I HEARD. I AM COMING. SLOWLY.
+  I HEARD. I AM COMING.
+  I HEARD. I AM COMING. TUESDAY.
   ONE KNOCK... AND THE NEXT ONE?
+  WHO'S AT MY DOOR? KNOCK AGAIN.
+  A VISITOR! LET ME TIDY UP.
 ground_lies
   WHOA. THE HOUSE IS MOVING.
+  EARTHQUAKE! MIND THE TEACUPS!
+  OH DEAR. MY HOUSE IS BOUNCING.
 not_again
   PLEASE NOT THE SHAKING. PLEASE
+  NOT AGAIN. MY CUPBOARDS!
+  NO SHAKING. I JUST DUSTED.
 hooded
   I AM IN MY SHELL. NOT HOME.
+  NOBODY HOME. LEAVE A NOTE.
+  DOOR SHUT. I'M IN MY SLIPPERS.
 ancestor_fear
   GEN # HID IN A SHELL TOO.
 inherited
   GEN # LEFT A NOTE IN MY SHELL
 counted
   I COUNTED TO ONE. IT TOOK AGES
+  I WATCHED MOSS GROW. THRILLING
+  NOTHING TO DO. DOING IT LATER
 put_me_down
   MIND THE HOUSE, PLEASE.
+  UP? I DIDN'T PACK FOR UP.
+  DOWN, PLEASE. MY TEA SPILLED.
 warm_hands
   WARM HANDS. LIKE A NICE LEAF.
+  A HAND. LIKE A SUNNY PORCH.
+  COSY. I MAY MOVE IN HERE.
+  OH, LOVELY. STAY A WHILE.
 sky_down
   MY HOUSE IS ON TOP. OR UNDER?
-  OH DEAR. TURNED OVER. NO RUSH.
+  OH DEAR. TURNED OVER.
+  UPSIDE DOWN. MY FURNITURE!
 heavy_eyes
   A LONG NAP, I THINK...
+  I'LL CLOSE MY DOOR FOR A BIT.
+  BEDTIME. I STARTED AT NOON.
+  YAWN. IT TOOK TEN MINUTES.
 dream_pellets
   ZZZ... A VERY SLOW LETTUCE...
+  ZZZ... A LEAF THE SIZE OF ME
+  ZZZ... A DEWDROP BUFFET...
+  ZZZ... SALAD... IN NO HURRY...
+  ZZZ... A CUCUMBER. MY FRIEND
+  ZZZ... DEW FOR PUDDING...
 see_pellet
-  I SEE... A PELLET. NO RUSH.
+  A PELLET. NO RUSH.
+  LUNCH. I'LL WALK OVER
+  A CRUMB. A HIKE AWAY.
 see_phone
-  I SEE... A FAST LITTLE SCREEN
+  A FAST LITTLE SCREEN
+  A SCREEN. IT BLINKS.
+  A FACE. LOOKING DOWN.
 see_nothing
-  I SEE... AN EMPTY DISH. HMM.
+  NOTHING HERE. HMM.
+  NO LEAVES. NOT ONE.
+  A BARE CUPBOARD.
 see_damp
-  I SEE... A NICE DAMP LEAF.
+  A NICE DAMP LEAF.
+  DEW. MY FAVOURITE.
+  A PUDDLE. A SPA!
 knees
   I HAVE NO KNEES. LUCKY ME.
+  OLD SNAIL. SAME OLD HOUSE.
 moon
   THE MOON IS SLOW TOO. FRIEND.
+  THE MOON TAKES ALL NIGHT. SAME
 anyone
   HELLO? I CAN WAIT. FOREVER.
+  ANYONE? I PUT THE KETTLE ON.
+  VISITORS WELCOME. WIPE FEET.
 science
   EATING HELPS. I CHECKED TWICE
 no_hat
@@ -100,10 +157,13 @@ no_hat
 
 p_snack
   A SNACK. EVENTUALLY.
+  A SNACK. AFTER A SIT-DOWN.
 p_feast
   A FEAST. A WHOLE LETTUCE.
+  I SEE A CUCUMBER. A WHOLE ONE
 p_pellet_soon
   A PELLET IS ON ITS WAY. SLOW.
+  A PELLET IS ON ITS WAY. SOON.
 p_feed_me
   YOU WILL FEED ME. NO HURRY.
 p_fuzzy
@@ -112,42 +172,59 @@ p_more_shaking
   MORE SHAKING. I WILL TUCK IN.
 p_mud
   SOFT MUD AHEAD. MY FAVOURITE.
+  I SEE MUD. LOVELY, SLURPY MUD
 p_big_hand
   A BIG HAND. I WILL BE A ROCK.
+  A HAND COMES. I'LL SHUT SHOP.
 p_bedtime
   THE MOON SAYS: SLOW DOWN. BED.
 p_sun
   THE SUN. I WILL FIND SHADE.
 p_rain
   RAIN! LOVELY, LOVELY RAIN.
+  RAIN COMES. I'LL BE OUTSIDE.
 p_watched
   THE SCREEN IS WATCHING. HELLO.
 p_return
   YOU WILL COME BACK. I'LL WAIT.
 p_tap
-  A KNOCK KNOCK COMES. SLOWLY.
+  A KNOCK KNOCK COMES.
+  A KNOCK KNOCK COMES. SOON.
+  TWO KNOCKS. A SNACK. LOVELY.
 p_no
   NO. BUT ASK AGAIN SLOWLY.
+  NO. BUT ASK AGAIN NEXT YEAR.
+  NO. I THOUGHT ABOUT IT ALL DAY
 p_doom
   DOOM IS COMING. VERY SLOWLY.
+  DOOM IS COMING. BY SNAIL MAIL.
+  DOOM? IT'S TAKING THE STAIRS.
 p_lunch
-  MY END IS NEAR. NO RUSH.
+  MY END IS NEAR.
 p_outlook
   OUTLOOK: DAMP AND GENTLE.
+  OUTLOOK: DRIZZLE. PERFECT.
 p_decidedly
   YES. I THOUGHT ABOUT IT. A LOT
+  YES. IT TOOK ME ALL WEEK.
 p_lucky
   LUCK IS A LEAF AFTER RAIN.
+  YOUR LUCK IS A DEWDROP. SIP.
 p_pond_no
   THE POND SAYS NO. GENTLY.
+  THE POND YAWNED. THAT'S A NO.
 p_pond_yes
   THE POND SAYS YES. TAKE TIME.
+  THE POND NODDED. AT LAST. YES
 p_ripples
   THE RIPPLES ARE TOO FAST.
+  RIPPLES. ASK WHEN IT'S STILL.
 p_ancestor
-  GEN # SAW THIS. SLOWLY.
+  GEN # SAW THIS.
+  GEN # SAW THIS. NEXT WEEK.
 miss_phone
   THE SCREEN HAS NOT COME. YET.
+  NO SCREEN TODAY. I'LL WAIT.
 
 oclock
   ALREADY # O'CLOCK? GOODNESS.
@@ -157,10 +234,12 @@ so_late
   SO LATE. I AM STILL GOING.
 monday
   MONDAY. I WILL TAKE IT SLOW.
+  MONDAY. I'LL TAKE IT SLOW.
 weekend
   WEEKEND. SLOW DAYS. MY KIND.
 p_weekend
-  THE WEEKEND IS COMING. SLOWLY.
+  THE WEEKEND IS COMING.
+  THE WEEKEND IS COMING. STROLL.
 my_name
   @. WHAT A LOVELY NAME. MINE.
 p_famous
@@ -172,6 +251,7 @@ clean_glass
   I LEFT A SHINY TRAIL. ART.
 dont_look
   SHH. I AM THINKING VERY SLOWLY
+  SHH. A THOUGHT IS ARRIVING.
 saw_nothing
   IT HAPPENED. I WAS TOO SLOW.
 plans
@@ -184,6 +264,7 @@ popped
   A THOUGHT. STILL LOADING.
 wiggle
   A SLOW WIGGLE. STILL GOING.
+  A WIGGLE. IT'S ON ITS WAY.
 my_song
   HMMMMMMMMMM. A LONG SONG.
 dust
@@ -203,11 +284,11 @@ serious_face
 no_echo
   HELLO. HELLO. BOTH WERE ME.
 king
-  SLOWEST IN THE DISH. A RECORD.
+  SLOWEST IN HERE. A RECORD.
 smells_me
   SMELLS LIKE DAMP MOSS. HOME.
 todo
-  TODAY: MOVE A BIT. MAYBE.
+  TODAY: MOVE A BIT. NOT TOO FAR
 brave
   I AM BRAVE. MY SHELL IS BRAVER
 big_pond
@@ -227,7 +308,8 @@ legs
 shiny
   SOMETHING SHINY. MY TRAIL!
 guard
-  GUARDING THE DISH. VERY SLOWLY
+  GUARDING HOME. VERY SLOWLY
+  GUARDING HOME. FROM HERE.
 old_fly
   I REMEMBER A LEAF. A GOOD ONE.
 hi_you
@@ -255,6 +337,7 @@ toast
   WARM GLASS. I AM A BIT DRY.
 sitting_time
   DAYTIME. A SLOW STROLL.
+  DAYTIME. THE SCENIC ROUTE.
 lunch_oclock
   IS IT LUNCH? I WILL GET THERE
 shadow
@@ -270,6 +353,7 @@ not_scared
   IT IS DARK. I AM TUCKED IN.
 star_crumbs
   THE STARS MOVE SLOWLY. LIKE ME
+  THE STARS MOVE SLOW. LIKE ME.
 rebel
   UP LATE. I AM SLOW AT BED.
 too_quiet
@@ -281,7 +365,8 @@ bed_soon
 moon_wink
   THE MOON WINKED. I'M MID-WINK.
 dark_snacks
-  A SNACK IN THE DARK. SLOWLY.
+  A SNACK IN THE DARK.
+  A MIDNIGHT LEAF. VERY POSH.
 night_light
   THE MOON LIT MY SHELL. PRETTY.
 only_me
@@ -289,34 +374,110 @@ only_me
 snore
   ZZZZZ... MMM... ZZZZZZZZZ...
   ZZZ... MMM... ZZZ... NO RUSH
+  ZZZZZZZZZZZZZZZZZ... ZZZ...
 mumble
   MMM... ONE MORE NAP... OR TWO
   MMM... MIND THE HOUSE... MM...
+  MMM... WIPE YOUR FEET...
 dream_chase
   ZZZ... I'LL CATCH IT. TUESDAY
   ZZZ... I LOST THE RACE. LOVELY
+  ZZZ... A LEAF... IT ROLLED...
 dream_feast
   ZZZ... MOSS. MORE MOSS. MM...
   ZZZ... A LEAF... A BIGGER LEAF
+  ZZZ... A CUCUMBER... ALL MINE
 dream_flight
   ZZZ... FLYING. SLOWLY. NICE.
   ZZZ... MY HOUSE IS FLOATING...
+  ZZZ... A SNAIL BALLOON...
 sleep_count
   ONE DEWDROP... ONE... OH DEAR
   ONE SNAIL... ONE... STILL ONE
+  ONE LEAF... ONE... ZZZ...
 sleep_warm
   MMM... COSY SHELL. STAYING IN
   MMM... DEW AND MOSS. SNUG...
+  MMM... SLIPPERS ON... SNUG...
 dream_rain
   ZZZ... RAIN... LOVELY RAIN...
   ZZZ... DRIP... DRIP... BLISS
+  ZZZ... A PUDDLE BATH... MM...
 
 # The gestures, taught on his first day (feeding: whenever he is hungry).
 teach_feed
   KNOCK KNOCK ON ME FOR A SNACK.
+  TWO KNOCKS ON MY DOOR. FOOD.
+  KNOCK TWICE. LUNCH ARRIVES.
+  PEOPLE KNOCK TWICE. I EAT.
 teach_fight
   A FIGHT? HOLD ME UPSIDE DOWN.
 teach_hold
   HOLD ME SIDEWAYS. NAP TIME.
 teach_shake
   SHAKE ME. I SEE THINGS. SLOWLY
+  SHAKE ME. I SEE THINGS. GENTLY
+
+# A shake's bare answer (the Magic 8-Ball half), in his words instead of the
+# ball's plain YES. / NO. / ASK AGAIN LATER.
+verdict_yes
+  YES. NO RUSH, BUT YES.
+  YES. I SLEPT ON IT. YES.
+  OH YES. EVENTUALLY, YES.
+verdict_no
+  NO. GENTLY, BUT NO.
+  NO, DEAR. NOT TODAY.
+  NO. I'LL CLOSE MY DOOR NOW.
+verdict_later
+  ASK ME NEXT TUESDAY.
+  STILL THINKING. GIVE IT A DAY
+  HOLD ON. I'M ONLY HALFWAY.
+# Playing on his own (the idles, sleep-idle #20) and turning down rot (#21).
+la_la
+  LA... LA... I'LL FINISH IT.
+  A SLOW SONG. VERSE ONE.
+dance_break
+  A SLOW DANCE. VERY SLOW.
+  MIND THE HOUSE. WIGGLE.
+tail_get
+  MY FOOT. I'LL GET THERE.
+  ROUND AND ROUND.
+treasure
+  DIGGING. SINCE TUESDAY.
+  DAMP MOSS DOWN HERE. LOVELY.
+peekaboo
+  OH. HELLO. WERE YOU THERE?
+  PEEKING. SLOWLY. HELLO.
+hyah
+  HYAH. ...HYAH. ...ONE MORE.
+  TAKE THAT, AIR. EVENTUALLY.
+pebble
+  ONE PEBBLE. I'LL GET TO TWO.
+  UP IT GOES. DOWN, LATER.
+dream_big
+  A BIGGER HOUSE.
+  WHAT IF IT RAINED ALL DAY?
+wish_star
+  THE STARS ARE SLOW TOO.
+  I WISH FOR DEW. EVENTUALLY.
+achoo
+  AH... AH... I FORGOT.
+  ACHOO. MIND THE HOUSE.
+boo_hee
+  BOO. WAS THAT TOO FAST?
+  BOO. SORRY. I'M SLOW.
+hic
+  HIC. ...HIC. ...NO RUSH.
+  HIC. THE HOUSE RATTLED.
+zoom
+  ZOOM. FOR A SNAIL.
+  THIS IS MY TOP SPEED!
+ooh_what
+  A FLOWER. I'LL SNIFF IT. SOON
+  OOH. A BEETLE. HELLO, SIR.
+cant_see
+  IN MY HOUSE. KNOCK LATER.
+  TUCKED IN. NO VISITORS.
+yuck
+  NOT THAT ONE. NOT EVER.
+  OFF. VERY OFF. NO THANKS.

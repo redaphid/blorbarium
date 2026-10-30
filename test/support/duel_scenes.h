@@ -2,9 +2,11 @@
 // One canonical DuelScene for each moment of a duel, for any two species: what
 // the struct goldens, the PNG goldens, tools/duel_sheet.py and the demo film
 // all draw, so they agree on what "the mercy screen" is.
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include "blorb/appearance.h"
+#include "blorb/duel.h"
 #include "blorb/species.h"
 #include "paint/duel.h"
 
@@ -54,8 +56,8 @@ inline const HintRow kHintRows[] = {
     {"fallen", {glyph::Candle, 0, false, 0, false, 0, false}},
     {"outcome", {glyph::Rematch, 0, false, 0, true, 0, true}},
     {"lobby", {glyph::Friend, 0, false, 0, false, 0, true}},
-    {"nest", {glyph::Arrow, 0, false, 0, true, 0, false}},
-    {"clutch", {glyph::Arrow, 0, false, 0, true, 200, false}},
+    {"nest", {glyph::Check, 0, false, 0, false, 0, false}},
+    {"clutch", {glyph::Check, 0, false, 0, false, 0, false}},
     {"vigil", {glyph::Flower, 0, false, 0, false, 0, false}},
     {"egg", {glyph::Peek, 0, false, 0, false, 0, false}},
     {"asleep", {glyph::Pellet, 0, true, 0, true, 0, false}},
@@ -95,10 +97,16 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
   s.me.look.scars = veteran();
   s.them.look = duelLook(theirs, 0x5EED0002u, 20);
   const std::string n = m->name;
-  s.me.hearts = 4;
-  s.them.hearts = 3;
-  s.me.maxHearts = 6;   // my kid has been losing: one assist heart, drawn with the pet's cheer
-  s.me.assist = 1;
+  // Each has lost one clash, at duel.h's numbers, so the gauges read as a
+  // real duel does. My kid has been losing: one step of assist hearts, drawn
+  // with the pet's cheer.
+  using blorb::DuelRules;
+  using blorb::SpecialRules;
+  s.me.assist = DuelRules::kAssistStepHearts;
+  s.me.maxHearts = uint8_t(DuelRules::kHearts + s.me.assist);
+  s.me.hearts = uint8_t(s.me.maxHearts - DuelRules::kClashHearts);
+  s.them.maxHearts = DuelRules::kHearts;
+  s.them.hearts = uint8_t(DuelRules::kHearts - DuelRules::kClashHearts);
   s.me.sparks = 4;
   s.them.sparks = 2;
   const uint8_t power = uint8_t(blorb::powerInfo(blorb::speciesInfo(mine).power).glyph);
@@ -123,6 +131,8 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.me.ceiling = n == "staking" ? Stakes::Scrap : Stakes::Mortal;
     s.me.confirmed = n == "staking";
     s.stakes = n == "staking" ? Stakes::Scrap : Stakes::Mortal;   // the lower of the two
+    s.aim = blorb::tierAimed(0) == int8_t(s.me.chose) ? 0 : 1;      // tilted at my tier, as a turn aims
+    s.ticksLeft = n == "staking" ? 0 : 64;                          // the ring: spent once locked
   } else if (n == "choosing" || n == "locked") {
     s.aim = int8_t(blorb::Stance::Guard);
     s.lean = int8_t(blorb::Stance::Trick);
@@ -134,7 +144,7 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
     s.won = n == "bonk" ? Side::Neither : Side::Me;
     s.me.stance = int8_t(n == "bonk" ? blorb::Stance::Pounce : blorb::Stance::Guard);
     s.them.stance = int8_t(blorb::Stance::Pounce);
-    s.them.hit = n == "bonk" ? 0 : 1;
+    s.them.hit = n == "bonk" ? 0 : DuelRules::kClashHearts;
     s.me.fired = n == "clash";
     s.super = n == "hit";
   } else if (n == "mercy") {
@@ -168,21 +178,22 @@ inline paint::DuelScene duelScene(const char* moment, blorb::SpeciesId mine, blo
       s.me.special = Sp::Landed;
       s.me.fired = true;
       s.won = Side::Me;
-      s.them.hit = 3;
+      s.them.hit = std::min(SpecialRules::hearts(blorb::Windup::Heavy), s.them.hearts);   // it downs him
       s.them.hearts = 0;
     } else if (n == "riposte") {
       s.me.special = Sp::Riposted;
+      s.me.windup = blorb::Windup::Quick;   // a heavy riposted would down him: this one he survives
       s.me.stance = int8_t(blorb::Stance::Trick);
       s.them.stance = int8_t(blorb::Stance::Pounce);
       s.won = Side::Them;
-      s.me.hit = 2;
-      s.me.hearts = 2;
+      s.me.hit = SpecialRules::hearts(blorb::Windup::Quick);
+      s.me.hearts = uint8_t(s.me.hearts - s.me.hit);
     } else if (n == "stagger") {
       s.me.special = Sp::Staggered;
       s.me.landsIn = 1;
       s.them.stance = int8_t(blorb::Stance::Trick);
       s.won = Side::Them;
-      s.me.hit = 1;
+      s.me.hit = DuelRules::kClashHearts;
     } else {
       s.me.special = Sp::Whiffed;
       s.them.stance = int8_t(blorb::Stance::Guard);

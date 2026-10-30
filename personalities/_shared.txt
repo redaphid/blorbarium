@@ -1,7 +1,8 @@
 Lines EVERY pet can say, one per line name.
 
-Each pet says these in his own voice: the voice wraps the line, for example
-mystic turns SNACK? into THE REEDS SAY: SNACK?
+A shared line is the fallback: a pet says it only when his own file has no
+line for that name. Nothing wraps a line: no frame, no tag. His own lines are
+said exactly as written.
 
 A line name is followed by its situation (when he might say it). The meaning of
 every situation: .claude/skills/pet-personality/references/situations.md
@@ -22,7 +23,7 @@ peckish         hungry
   SNACK? SNACK. THE GOOD BITS!
 
 starving        starving
-  I WOULD EAT THE DISH
+  I WOULD EAT THE WHOLE PLACE
 
 hoarding        hoarding
   THAT ONE IS FOR LATER.
@@ -61,7 +62,7 @@ inherited       heirloom
   GEN # SAYS HI. FROM IN HERE.
 
 counted         bored
-  I HAVE COUNTED THE DISH: ONE
+  I HAVE COUNTED EVERYTHING: ONE
 
 put_me_down     held
   PUT ME DOWN. NO, WAIT.
@@ -79,16 +80,16 @@ dream_pellets   dreaming
   ZZZ... LUNCH... ZZZ
 
 see_pellet      sees_pellet
-  I SEE... A MORSEL. MINE.
+  A MORSEL. MINE.
 
 see_phone       sees_phone
-  I SEE... A GLOWING RECTANGLE
+  A GLOWING RECTANGLE
 
 see_nothing     sees_famine
-  I SEE... NO CRUMBS. NONE.
+  NO CRUMBS. NONE.
 
 see_damp        foreseeing
-  BRRRUP. I SEE... DAMP.
+  BRRRUP. DAMP.
 
 knees           elder
   MY KNEES ARE MOSTLY RUMOUR
@@ -112,7 +113,7 @@ p_feast         prophecy: food, anytime
   FAT FLIES. IT IS WRITTEN.
 
 p_pellet_soon   prophecy: food, hungry
-  A BISCUIT APPROACHES. MAYBE.
+  A BISCUIT APPROACHES. BE COOL.
 
 p_feed_me       prophecy: food, starving
   YOU WILL FEED ME. NOW.
@@ -160,7 +161,7 @@ p_outlook       prophecy: luck, anytime
   OUTLOOK GOOD. FOR ME.
 
 p_decidedly     prophecy: luck, anytime
-  IT IS DECIDEDLY SO. ISH.
+  IT IS DECIDEDLY SO. FOR ONCE.
 
 p_lucky         prophecy: luck, anytime
   LUCK IS A CRACKER IN THE DARK
@@ -268,7 +269,7 @@ no_echo         always
   HELLO. HELLO. ECHO? NO ECHO.
 
 king            always
-  KING OF THE DISH. ONLY ONE.
+  KING OF THIS PLACE. ONLY ONE.
 
 smells_me       always
   IT SMELLS LIKE ME. GOOD.
@@ -304,7 +305,7 @@ shiny           always
   SOMETHING SHINY. OH. ME.
 
 guard           always
-  GUARDING THE DISH. FROM WHAT?
+  GUARDING HOME. FROM WHAT?
 
 old_fly         always
   I REMEMBER A FLY. GOOD TIMES.
@@ -425,3 +426,51 @@ teach_feed      hungry
 
 teach_hold      young
   BEDTIME? HOLD ME SIDEWAYS.
+
+la_la           singing
+  LA LA LAAA. LA. HUM.
+
+dance_break     dancing
+  DANCE BREAK! NOBODY LOOK.
+
+tail_get        chasing_tail
+  COME BACK HERE, TAIL!
+
+treasure        digging
+  TREASURE? TREASURE!
+
+peekaboo        peeking
+  PEEKABOO! I SEE YOU!
+
+hyah            shadow_boxing
+  HYAH! TAKE THAT, AIR!
+
+pebble          juggling
+  ONE PEBBLE. TWO PEBBLE.
+
+dream_big       daydreaming
+  WHAT IF... A BIGGER HOME?
+
+wish_star       stargazing
+  THAT STAR IS MINE. AND THAT.
+
+achoo           sneezing
+  AH... AH... CHOO!
+
+boo_hee         booing
+  BOO! HEE HEE. GOT YOU.
+
+hic             hiccuping
+  HIC! EXCUSE ME. HIC!
+
+zoom            zooming
+  ZOOM ZOOM ZOOM!
+
+ooh_what        discovering
+  OOH. WHAT IS THIS?
+
+cant_see        hiding
+  YOU CAN'T SEE ME.
+
+yuck            refusing_rot
+  YUCK. NOT THAT ONE.

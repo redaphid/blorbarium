@@ -96,6 +96,31 @@ void drawFigure(const blorb::Appearance&, const SpritePack&, Canvas240&, const F
 // `fillRows` < 255 draws only that share of its rows, from the bottom up: the skull filling.
 void drawArt(Canvas240&, const FrameRef&, int x, int y, int scalePct, int alpha, int fillRows = 255);
 
+// One egg of a clutch (blorb::EggPreview) in its species' art and colours,
+// its middle at (cx, cy), heightPx tall, rocked by `shear` (Q12).
+void drawEggPreview(Canvas240&, const blorb::EggPreview&, int cx, int cy, int heightPx, int shear, int alpha = 256);
+// The height of a species' whole egg frame, px: the egg screen draws it 1:1.
+int eggArtHeight(blorb::SpeciesId);
+
+// ---- duel_scene.cpp -----------------------------------------------------------------
+
+// One of the duel's props alone, as the duel draws it: the tilt picker's
+// reticle and lean glow, and the knock a kid's knuckle gives, for the clutch.
+void drawPickerProp(Canvas240&, const Prop&);
+
+// ---- clutch.cpp ---------------------------------------------------------------------
+
+// The picker's words: TILT TO PICK, KNOCK TO KEEP (test_paint checks them
+// against the font).
+extern const char* const kClutchWords[2];
+// The eggs to choose from, laid out as the duel's tilt picker (blorb/clutch_show.h).
+void drawClutchPicker(const blorb::Appearance&, Canvas240&);
+// The moment after an egg is kept, over the egg screen: false once it has
+// handed over to the plain egg (the caller draws that).
+bool drawChosen(const blorb::Appearance&, Canvas240&);
+// The vigil: the eggs on their way, coming clearer as it ends.
+void drawVigilEggs(const blorb::Appearance&, Canvas240&);
+
 // ---- feeding.cpp --------------------------------------------------------------------
 
 // Where draw.cpp put him and the newest pellet this frame, for what
@@ -104,6 +129,8 @@ struct DishSpots {
   bool him = false;
   int x = 0, y = 0;                         // his stand point, between his feet
   int top = 0;                              // the top of his body frame, standing
+  int left = 0, right = 0, crown = 0;       // his resting body as drawn: its edges and the top of his head
+  int mid = 0;                              // his middle, under his eyes (a tail or an arm can make it no box's middle)
   bool mouth = false;
   int mouthX = 0, mouthY = 0;               // the pellet in his mouth, while he chews
   bool landing = false;
@@ -133,5 +160,20 @@ void drawFood(Canvas240&, int cx, int cy, int r, const Food&, int alpha = 256);
 // Feeding over the dish (blorb/feed_show.h): the rim's flash, the landing,
 // a refusal, the chomp and the belly meter. Before the round mask.
 void drawFeeding(Canvas240&, const blorb::Appearance&, const DishSpots&);
+
+// ---- idle_props.cpp -----------------------------------------------------------------
+
+// What he plays with while he plays an idle (blorb/idle.h): the notes of a
+// song or a dance, the pebble he juggles, the dirt he digs, the ball he
+// pushes, a daydream's bubble, the stars he gazes at. Drawn in code, over him,
+// on the idle's clock (Appearance::idleTicks), so it moves between ticks.
+void drawIdleProps(Canvas240&, const blorb::Appearance&, const DishSpots&);
+
+// Hunger, like hearts: five cookies up the left rim, each a fifth of how full
+// he is, whole, bitten, or a faint grey one gone; an empty pantry shakes them
+// red. Over the dish, before the round mask. pantryColour (`full` 0..256) is
+// the green-to-red ramp, kept for anything that shows the pantry.
+void hungerCookies(Canvas240&, const blorb::Appearance&);
+uint16_t pantryColour(int full);
 
 }  // namespace paint

@@ -30,10 +30,30 @@
 
 namespace blorb {
 
+// The duel's tuning, in one place (issue #58). Every number resolve() plays
+// by is here or in powers.def's cost column; tools/duel_balance.cpp measures
+// them, and BATTLES.md ("Shorter duels") has the before and after.
+//
+// Both devices must play by the same numbers, so they are part of the wire
+// contract: duelRulesHash() folds every one of them, kRulesVersion and the
+// roster into the `roster` field every beacon and State carries, and a badge
+// that hears a different hash greys that friend out and never matches him
+// (duel_session.cpp). Bump kRulesVersion whenever resolve() itself changes
+// how a turn plays without a number here moving.
 struct DuelRules {
-  static constexpr uint8_t kHearts = 5;             // everyone starts here, plus any assist hearts
-  static constexpr uint8_t kMaxAssistHearts = 2;
+  // 2 (#58): shorter duels that hurt more. Three lost clashes down a pet
+  // (was five), every hit costs two hearts, and the meter fills twice as fast
+  // so the specials still come round. 1 was the 0.7 rules: five hearts, one a
+  // lost clash, one pip a turn, assist one heart a step, the extras 1 and 2,
+  // and every power one heart.
+  static constexpr uint8_t kRulesVersion = 2;
+  static constexpr uint8_t kHearts = 6;             // everyone starts here, plus any assist hearts
+  static constexpr uint8_t kClashHearts = 2;        // what a lost clash costs (a stagger included)
+  static constexpr uint8_t kMaxAssistSteps = 2;     // the weaker kid's help comes in at most this many steps (Assist)
+  static constexpr uint8_t kAssistStepHearts = 2;   // extra hearts per step: a lost clash's worth
   static constexpr uint8_t kElementHeadStart = 1;   // the side whose element wins starts with a pip lit
+  static constexpr uint8_t kSparkPerTurn = 2;       // pips each side not dozing gains every turn
+  static constexpr uint8_t kRallySpark = 1;         // and one more for a side hurt while the other was not
   static constexpr uint8_t kMaxTurns = 15;          // then whoever has more hearts wins; equal is a draw
   static constexpr uint8_t kLogSlots = kMaxTurns + 1;   // one more for the winner's verdict on a downed pet
   static constexpr uint8_t kMaxLevel = 12;          // display only: level never changes a number in resolve()
@@ -53,11 +73,21 @@ constexpr Side other(Side s) { return s == Side::A ? Side::B : Side::A; }
 // exchange, and the landing stance is unreadable until that turn resolves.
 enum class Windup : uint8_t { None = 0, Quick = 1, Heavy = 2 };
 
-// The special's numbers, from sketch/tools/special_probe.py (measured 2026-10-13).
+// The special's numbers, from sketch/tools/special_probe.py (measured
+// 2026-10-13) and retuned by tools/duel_balance.cpp (#58). A landing (or a
+// riposte) costs a lost clash's hearts plus the extra.
 struct SpecialRules {
-  static constexpr uint8_t kQuickExtra = 1;   // hearts on top of 1 when a quick special lands
-  static constexpr uint8_t kHeavyExtra = 2;   // ... when a heavy one lands
+  static constexpr uint8_t kQuickExtra = 2;   // hearts on top of a clash's when a quick special lands: 4, two clashes' worth
+  static constexpr uint8_t kHeavyExtra = 4;   // ... a heavy one: 6, a whole unassisted pet
   static constexpr uint8_t extra(Windup w) { return w == Windup::Heavy ? kHeavyExtra : kQuickExtra; }
+  static constexpr uint8_t hearts(Windup w) { return uint8_t(DuelRules::kClashHearts + extra(w)); }
+};
+
+// What the powers do, in hearts (duel_powers.cpp; the costs are powers.def's).
+struct PowerRules {
+  static constexpr uint8_t kZapHearts = 2;     // zap: on top of the landing
+  static constexpr uint8_t kMendHearts = 2;    // mend: grown back after the landing, never past full
+  static constexpr uint8_t kShellHearts = 2;   // shell: taken off the next hit that lands
 };
 
 // One locked choice. `byPet` marks a turn the kid let run out, or a turn the
@@ -288,20 +318,44 @@ struct BattleId {
 
 // The handicap: skill, not level. Each card carries its kid's prowess, a
 // running mean of how well that kid has been playing (duel_book.h). Inside a
-// dead band nobody gets help; past it the weaker side gets one extra heart per
-// step, at most two. The stronger side never loses anything, and a kid who
-// improves earns the help away.
+// dead band nobody gets help; past it the weaker side gets one step of help
+// per kStep points, at most kMaxAssistSteps, each worth kAssistStepHearts
+// extra hearts. The stronger side never loses anything, and a kid who improves
+// earns the help away. The stakes' fairness gate and the whisper's brightness
+// count steps; the hearts are what resolve() and the gauge use.
 struct Assist {
   static constexpr uint8_t kDeadBand = 24, kStep = 32;
-  static constexpr uint8_t hearts(uint8_t mine, uint8_t theirs) {
+  static constexpr uint8_t steps(uint8_t mine, uint8_t theirs) {
     if (theirs <= mine + kDeadBand) return 0;
-    const uint8_t steps = uint8_t((theirs - mine - kDeadBand) / kStep + 1);
-    return steps > DuelRules::kMaxAssistHearts ? DuelRules::kMaxAssistHearts : steps;
+    const uint8_t n = uint8_t((theirs - mine - kDeadBand) / kStep + 1);
+    return n > DuelRules::kMaxAssistSteps ? DuelRules::kMaxAssistSteps : n;
+  }
+  static constexpr uint8_t hearts(uint8_t mine, uint8_t theirs) {
+    return uint8_t(steps(mine, theirs) * DuelRules::kAssistStepHearts);
   }
 };
-static_assert(Assist::hearts(128, 140) == 0 && Assist::hearts(100, 140) == 1 && Assist::hearts(20, 250) == 2 &&
-                  Assist::hearts(250, 20) == 0,
-              "only the weaker side gets help, and at most two hearts");
+static_assert(Assist::steps(128, 140) == 0 && Assist::steps(100, 140) == 1 && Assist::steps(20, 250) == 2 &&
+                  Assist::steps(250, 20) == 0,
+              "only the weaker side gets help, and at most two steps");
+
+// What two badges must agree on to duel: the roster (species.def and
+// powers.def, rosterHash) and every rule above. It rides in the `roster` field
+// of every beacon and State (duel_wire.h), so a badge on other rules is greyed
+// out in the lobby, never matched, and its States are ignored: a mixed pair
+// refuses to fight instead of resolving one battle two ways. 0.7 badges send
+// plain rosterHash() there, which this differs from (test_duel_resolve).
+constexpr uint16_t duelRulesHash() {
+  uint32_t h = fnvByte(fnvByte(2166136261u, uint8_t(rosterHash())), uint8_t(rosterHash() >> 8));
+  const uint8_t rules[] = {DuelRules::kRulesVersion, DuelRules::kHearts,          DuelRules::kClashHearts,
+                           DuelRules::kMaxAssistSteps, DuelRules::kAssistStepHearts, DuelRules::kElementHeadStart,
+                           DuelRules::kSparkPerTurn,
+                           DuelRules::kRallySpark,   DuelRules::kMaxTurns,        SpecialRules::kQuickExtra,
+                           SpecialRules::kHeavyExtra, PowerRules::kZapHearts,     PowerRules::kMendHearts,
+                           PowerRules::kShellHearts, Assist::kDeadBand,           Assist::kStep,
+                           kMeterMax};
+  for (uint8_t b : rules) h = fnvByte(h, b);
+  return uint16_t(h ^ (h >> 16));
+}
 
 // Replays every turn with both moves known, from turn 0, every call (at most
 // 15 turns: microseconds). Before turn 0: hearts = kHearts + Assist::hearts,
@@ -380,7 +434,7 @@ uint8_t duelContext(const Outcome&, Side me, const BattleCard& theirs);
 // the friend's landing turn it is the counter of the landing it foresees.
 struct Lean { Stance stance; uint8_t whisper; Windup special = Windup::None; };
 Lean petChoice(const DuelSkill&, const Outcome&, Side me, const BattleCard& mine, const BattleCard& theirs,
-               uint8_t assistHearts, uint32_t seed);
+               uint8_t assistSteps, uint32_t seed);
 // After each resolved turn: the friend's shown stance makes every one of my
 // three stances' payoff known, so all three cells of the context learn.
 void learnTurn(DuelSkill&, const Outcome&, Side me, const BattleCard& theirs, uint8_t turn);

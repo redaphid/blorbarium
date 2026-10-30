@@ -14,6 +14,11 @@
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/debug_verbs.h"   // here, so the dependency finder links lib/debugble
 #include "feeding_badge.h"
+#include "../../src/hw/turn_yes.h"
+// wifiota::Consent is header only. Named through a macro, so PlatformIO's
+// dependency finder does not link lib/wifiota (and lib/ota, lib/paint with it) into this suite.
+#define BLORB_CONSENT_H "../../lib/wifiota/include/wifiota/consent.h"
+#include BLORB_CONSENT_H
 
 using namespace blorb;
 using namespace feedingtest;
@@ -173,7 +178,7 @@ TEST(KnockKnock, InFightModeAKnockKnockStillFeedsHim) {
   }
 }
 
-// A question owns BOOT (the update's "Turn me around!", the debug unlock's),
+// A question owns BOOT (the update's "Tip me on my side!", the debug unlock's),
 // and the knock knock is BOOT's twin: it answers nothing and feeds nobody.
 // Until 2026-10-21 the shell passed it to the Dish, which dropped a pellet
 // behind the update's screen, where it rotted unseen.
@@ -184,7 +189,156 @@ TEST(KnockKnock, AQuestionOnTheScreenTakesTheKnockKnock) {
   EXPECT_EQ(asked.pellets, 0);
   EXPECT_FALSE(asked.oneMore) << "nor does \"one more\" light under the question";
   b.asking = false;
+  b.run(hw::Feel::kAnswerTailMs);   // the answer's tail is the question's too (Question.*)
   EXPECT_EQ(b.knock({0, 300}).pellets, 1) << "once it is answered, a knock knock feeds him";
+}
+
+// The owner, 2026-10-29: the Wi-Fi question's turn also opened fight mode;
+// the duel took the radio and the provision failed ("provision refused: the
+// radio is in a duel"), and the phone heard only "couldn't connect". Now the
+// turn that answers is the question's: held upside down through the question
+// and past it, then let back, fight mode never opens, and the yes is taken.
+namespace {
+
+struct Asked {
+  wifiota::Consent consent;
+  hw::TurnYes turn;
+  bool answered = false;
+};
+
+// The kid tips the badge onto its side (what the words ask: "Tip me on my
+// side!", the side hold's pose) 2 s into the question, holds it `holdMs`, lets it back.
+void turnToAnswer(Badge& b, Asked& q, uint32_t holdMs, Pose pose = Pose::SideLeft) {
+  b.asks = [&q](uint32_t) { return q.consent.asking(); };
+  b.felt = [&q, &b](const hw::Felt& f, uint32_t at) {
+    q.consent.tick(at);
+    if (q.turn.sample(q.consent.asking(), f.rot, b.shell.home(), at)) q.answered = q.consent.yes(at);
+  };
+  q.consent.ask(b.ms);
+  b.run(2000);
+  b.hand.turnMs = 400;
+  b.hand.pose = pose;
+  b.run(holdMs);
+  b.hand.pose = Pose::Held;
+  b.run(4000);
+}
+
+}  // namespace
+
+TEST(Question, TheWifiQuestionsTurnNeverOpensFightModeAndTheProvisionGoesOn) {
+  for (uint8_t home : {kHomeUp, kHomeDown})
+    for (uint32_t hold : {1500u, 3000u, 6000u}) {   // let back at once, inside the tail, long after
+      Badge b(home);
+      b.hungry(Fx::zero());   // up for a fight: a hungry pet is refused one, which would prove nothing
+      Asked q;
+      turnToAnswer(b, q, hold);
+      EXPECT_TRUE(q.answered) << "the turn said yes, home " << int(home) << " hold " << hold;
+      EXPECT_TRUE(q.consent.granted()) << "the phone may send its network";
+      EXPECT_FALSE(b.dish->duelActive()) << "no fight mode: the radio stays Wi-Fi's, home " << int(home) << " hold " << hold;
+      EXPECT_STREQ(b.dish->fightState(), "off") << "home " << int(home) << " hold " << hold;
+      EXPECT_EQ(b.count.fired >> stim::hang.v & 1, 0u) << "the pet never felt the hang";
+      EXPECT_FALSE(b.creature().body().asleep) << "nor the side hold, which tucks him in";
+    }
+}
+
+// A kid who turns it upside down instead (the old "Turn me around!"): no
+// yes (that is the hang's gesture), and still no fight mode while it asks.
+TEST(Question, UpsideDownNeverAnswersNorOpensFightModeWhileItAsks) {
+  for (uint8_t home : {kHomeUp, kHomeDown}) {
+    Badge b(home);
+    b.hungry(Fx::zero());
+    Asked q;
+    turnToAnswer(b, q, 3000, Pose::UpsideDown);
+    EXPECT_FALSE(q.answered) << "home " << int(home);
+    EXPECT_FALSE(b.dish->duelActive()) << "home " << int(home);
+  }
+}
+
+// The update's question is answered by the same turn through the same shell.
+TEST(Question, TheUpdatesTurnNeverOpensFightMode) {
+  for (uint8_t home : {kHomeUp, kHomeDown}) {
+    Badge b(home);
+    b.hungry(Fx::zero());
+    bool asking = true, yes = false;
+    hw::TurnYes turn;
+    b.asks = [&](uint32_t) { return asking; };
+    b.felt = [&](const hw::Felt& f, uint32_t at) {
+      if (turn.sample(asking, f.rot, b.shell.home(), at)) yes = true, asking = false;   // ota::Session::press: the question goes
+    };
+    b.run(2000);
+    b.hand.turnMs = 400;
+    b.hand.pose = Pose::SideRight;
+    b.run(5000);
+    b.hand.pose = Pose::Held;
+    b.run(4000);
+    EXPECT_TRUE(yes) << "home " << int(home);
+    EXPECT_FALSE(b.creature().body().asleep) << "the side hold never tucked him in, home " << int(home);
+    EXPECT_FALSE(b.dish->duelActive()) << "home " << int(home);
+  }
+}
+
+// The pet keeps his gestures: once the question is long gone and the badge
+// was let back, a hang opens fight mode as ever.
+TEST(Question, AfterTheQuestionAndTheTailTheHangIsHisAgain) {
+  Badge b(kHomeUp);
+  b.hungry(Fx::zero());
+  Asked q;
+  turnToAnswer(b, q, 3000);
+  ASSERT_FALSE(b.dish->duelActive());
+  b.hand.pose = Pose::UpsideDown;
+  b.run(4500);
+  b.hand.pose = Pose::Held;
+  b.run(2000);
+  EXPECT_TRUE(b.dish->duelActive()) << "a hang after the question is the pet's";
+}
+
+// And the knock knock and the press are the question's for the tail too.
+TEST(Question, AKnockKnockJustAfterTheAnswerFeedsNobody) {
+  Badge b(kHomeUp);
+  b.asking = true;
+  b.run(500);
+  b.asking = false;
+  EXPECT_EQ(b.knock({0, 300}, 600).pellets, 0) << "inside kAnswerTailMs: the question's";
+  b.run(2000);
+  EXPECT_EQ(b.knock({0, 300}).pellets, 1);
+}
+
+// The owner, 2026-10-29: while "Join Wi-Fi? Tip me on my side!" showed, the
+// pet said his teach_fight line over it. While any question shows he says
+// nothing: the line under way is cut, none starts, the phone's is dropped,
+// and none is kept to burst out once it goes.
+TEST(Question, HeSaysNothingWhileItShowsAndKeepsNothingForAfter) {
+  Badge b(kHomeUp);
+  const auto speaking = [&b] { return b.dish->appearance().thinking; };
+  b.dish->think(thought::teach_fight);
+  ASSERT_TRUE(speaking()) << "a line under way";
+  wifiota::Consent consent;
+  b.asks = [&consent](uint32_t) { return consent.asking(); };
+  consent.ask(b.ms);
+  b.run(100);
+  EXPECT_FALSE(speaking()) << "cut by the question";
+  b.dish->think(thought::teach_fight);
+  EXPECT_FALSE(speaking()) << "nothing starts under it";
+  b.dish->say("HELLO FROM THE PHONE");
+  EXPECT_FALSE(speaking()) << "the phone's line too";
+  EXPECT_FALSE(runUntil(b, speaking, wifiota::Consent::kAskMs - 1000)) << "never, while it asks";
+  consent.end();
+  EXPECT_FALSE(runUntil(b, speaking, 3000)) << "nothing kept for after: no line bursts out when it goes";
+  b.dish->think(thought::teach_fight);
+  EXPECT_TRUE(speaking()) << "his own again once it is gone";
+}
+
+// The update's question too, through the same shell (main.cpp feel()'s
+// `asking`): over minutes in which he would have spoken, not a word.
+TEST(Question, TheUpdatesQuestionHushesHimAsLongAsItShows) {
+  Badge quiet(kHomeUp), control(kHomeUp);
+  const auto speaking = [](Badge& b) { return [&b] { return b.dish->appearance().thinking; }; };
+  constexpr uint32_t kMinutes = 8 * 60 * 1000;
+  ASSERT_TRUE(runUntil(control, [&] { return !speaking(control)(); }, kMinutes)) << "whatever he was saying ends";
+  EXPECT_TRUE(runUntil(control, speaking(control), kMinutes)) << "the same pet with no question speaks in that time";
+  quiet.asking = true;
+  quiet.run(100);   // the question's first samples reach him
+  EXPECT_FALSE(runUntil(quiet, speaking(quiet), kMinutes)) << "with one, never";
 }
 
 // A dark badge (low power) is woken by the knocks, and nobody feeds him
@@ -193,7 +347,7 @@ TEST(KnockKnock, AQuestionOnTheScreenTakesTheKnockKnock) {
 TEST(KnockKnock, ADarkBadgeIsLitAndNeverFedInTheDark) {
   for (uint8_t home : {kHomeUp, kHomeDown}) {
     Badge b(home);
-    b.policy.sleepNow();
+    b.policy.sleepNow(0);
     b.run(1000);
     ASSERT_TRUE(b.policy.low());
     const Count c = b.knock({0, 300});
@@ -290,7 +444,63 @@ TEST(Show, TheBiteIsAChompAndHisBellyRises) {
   const FeedView f = feedOf(b);
   EXPECT_FALSE(f.rotten);
   EXPECT_GT(f.fullness, f.fullnessFrom) << "fuller after the bite";
-  EXPECT_LT(f.meterMs, 400);
+  EXPECT_EQ(f.meterMs, f.chompMs) << "the meter shows from the bite";
+}
+
+// ---- home at run time (src/hw/home.h): set from NVS at boot, or by DEBUG home ----------
+
+// A shell built at one home and told the other at boot feels every sample
+// exactly as one built at that home: the screen's frame, the hang, the side
+// hold. So a universal release on a badge whose NVS says "down" is the flip build.
+TEST(Home, AShellToldItsHomeAtRunTimeFeelsAsOneBuiltThere) {
+  for (uint8_t told : {kHomeUp, kHomeDown}) {
+    ::power::Policy pa, pb;
+    hw::Feel built(kR0, told, pa);
+    hw::Feel set(kR0, told == kHomeUp ? kHomeDown : kHomeUp, pb);
+    set.setHome(told);
+    EXPECT_EQ(set.home(), told);
+    int hangs = 0, sides = 0;
+    // Held at either home, upside down, on each side, face up, tipped: 2 s of each.
+    const int16_t poses[][3] = {{0, 1000, 0}, {0, -1000, 0}, {1000, 0, 0}, {-1000, 0, 0}, {0, 0, 1000}, {0, 700, 700}};
+    uint32_t ms = 0;
+    for (const auto& p : poses)
+      for (int i = 0; i < 100; ++i, ms += 20) {
+        BodySample s;
+        s.ax = p[0], s.ay = p[1], s.az = p[2];
+        const hw::Felt a = built.sample(s, ms, false), b = set.sample(s, ms, false);
+        ASSERT_EQ(a.screen.ax, b.screen.ax) << "home " << int(told) << " at " << ms;
+        ASSERT_EQ(a.screen.ay, b.screen.ay);
+        ASSERT_EQ(a.screen.az, b.screen.az);
+        ASSERT_EQ(a.screen.invertedDown, b.screen.invertedDown);
+        ASSERT_EQ(a.screen.sideDown, b.screen.sideDown);
+        ASSERT_EQ(a.rot, b.rot);
+        hangs += a.screen.invertedDown, sides += a.screen.sideDown;
+      }
+    EXPECT_GT(hangs, 0) << "the hang was felt, home " << int(told);
+    EXPECT_GT(sides, 0) << "the side hold was felt, home " << int(told);
+  }
+}
+
+// The hang is upside down from whichever home the badge was told: USB-C up is
+// the hang on a flipped badge, and the right way up on any other.
+TEST(Home, TheHangFollowsTheHomeTold) {
+  for (uint8_t told : {kHomeUp, kHomeDown}) {
+    ::power::Policy p;
+    hw::Feel shell(kR0, kHomeUp, p);
+    shell.setHome(told);
+    // Gravity along +y settles rotation 2 (USB-C up), along -y rotation 0 (orient.h, ORIENT_R0 = 1).
+    bool hungUsbUp = false, hungUsbDown = false;
+    uint32_t ms = 0;
+    for (int16_t y : {int16_t(1000), int16_t(-1000)})
+      for (int i = 0; i < 100; ++i, ms += 20) {
+        BodySample s;
+        s.ay = y;
+        const hw::Felt f = shell.sample(s, ms, false);
+        if (i > 60) (y > 0 ? hungUsbUp : hungUsbDown) |= f.screen.invertedDown;
+      }
+    EXPECT_EQ(hungUsbUp, told == kHomeDown) << "home " << int(told);
+    EXPECT_EQ(hungUsbDown, told == kHomeUp) << "home " << int(told);
+  }
 }
 
 int main(int argc, char** argv) {

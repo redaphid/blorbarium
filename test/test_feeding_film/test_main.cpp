@@ -94,6 +94,45 @@ void filmRefused(const std::string& dir, const std::string& name, Badge& b, uint
   shoot(b, dir, name);
 }
 
+// The pantry, as <name>_<n>_<moment>: full, four feeds draining it, a knock
+// knock on it empty (the shake, and his thought), then the next pellet coming back.
+void filmPantry(const std::string& dir, const std::string& name) {
+  Badge b(kHomeDown);
+  b.frameMs = 20;
+  b.keepPantryFull = false;
+  b.hungry(Fx::ratio(3, 10));   // peckish: no "I'M FULL!", and in no hurry to eat
+  int n = 0;
+  auto shot = [&](const std::string& moment) { shoot(b, dir, name + "_" + std::to_string(n++) + "_" + moment); };
+  shot("full");
+  for (int feed = 1; feed <= 4; ++feed) {
+    knockKnock(b);
+    runUntil(b, [&] { return dropped(b); }, 2000);
+    b.run(200);
+    shot("feed" + std::to_string(feed) + "_draining");
+    b.run(1500);
+    shot("feed" + std::to_string(feed) + "_left" + std::to_string(4 - feed));
+  }
+  knockKnock(b);
+  runUntil(b, [&] { return b.count.presses > 0; }, 2000);
+  b.run(80);
+  shot("empty_knock_shake");
+  b.run(400);
+  shot("empty_thought_food");
+  b.run(600);
+  shot("empty_thought_no");
+  b.run(800);
+  shot("empty_thought_sad");
+  b.run(2000);
+  // The next pellet halfway back, then back.
+  const uint32_t refill = b.creature().phenotype().habitat.refillTicks;
+  b.dish->habitat().pantryTick -= refill / 2;
+  b.run(200);
+  shot("refilling_half");
+  b.dish->habitat().pantryTick -= refill / 2;
+  b.run(300);
+  shot("refilled_one");
+}
+
 }  // namespace
 
 TEST(Film, DumpWhenAsked) {
@@ -103,6 +142,7 @@ TEST(Film, DumpWhenAsked) {
   filmFed(dir, "grungo", std::nullopt, "adult");
   filmFed(dir, "puffkin", SpeciesId{2}, "adult");
   filmFed(dir, "mudge_hatchling", SpeciesId{5}, "hatchling");
+  filmPantry(dir, "pantry");
   {
     Badge b(kHomeDown);
     b.hungry(Fx::zero());

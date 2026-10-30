@@ -17,7 +17,7 @@ Labels used throughout: **measured** (a command run on 2026-10-13, or a number f
 5. **A turn:** tilt to Pounce, Guard or Trick, then knock to lock. BOOT fires the power when the meter holds its cost, a shake makes the pet foretell the friend's move, and a double knock sends a cheer. After 10 s the pet picks.
 6. **Resolution** is one pure function, `resolve(cardA, cardB, seed, stakes, movesA, movesB)`. It is integer and mirror-symmetric, and it replays from turn 0 every time.
 7. **Each device writes only its own move log.** Every packet carries the whole log, and the receiver keeps the longest consistent prefix. The mortal verdict rides as the winner's last log entry. Loss, duplicates and reordering only delay a turn. The stakes and the rematch number are part of the battle id.
-8. **The wheel** is two rock-paper-scissors cycles. Stances: Pounce > Trick > Guard. Elements: Splash > Spark > Sprout. Nine powers are tuned by one cost column. Measured in a model where powers fire as soon as the meter is full: every species wins 0.450 to 0.546.
+8. **The wheel** is two rock-paper-scissors cycles. Stances: Pounce > Trick > Guard. Elements: Splash > Spark > Sprout. Nine powers are tuned by one cost column. Measured in a model where powers fire as soon as the meter is full: every species wins 0.450 to 0.546. Since rules 2 (#58, "Shorter duels") three lost clashes down a pet, each taking two hearts: a median of 5 turns, every species 0.486 to 0.526 through `resolve()`.
 9. **Death is a choice, never luck.** No wound ever kills: every wound is clamped below the pet's own lethal level, less a margin as big as his own drop injury. A mortal loser is downed. Only the winner's kid decides, by holding BOOT 3 s to finish, or knocking (or letting 15 s pass on their own device) to spare.
 10. **Death means something.** The fallen leaves remains and a clutch, and its line swears a vendetta: newborns seeded to fight the victor's kind, and the debt on the hatch marquee. The victor takes a trophy, a scar and the `slayer` feat. A spared pet owes a life, and the book keeps the dark ledger across generations.
 11. **Fairness** is skill-based. The kid who has been playing worse gets up to two extra hearts and a brighter "whisper" of what the pet has read. Level, age and breeding add no strength. Mortal duels are refused unless the two kids are close in skill.
@@ -102,7 +102,7 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 3. **The lobby.** Ready friends appear as their species' faces on the rim, up to four. Only friends heard at -62 dBm or louder count (about arm's length, an estimate that unit D12 sets on a desk). A different roster greys the friend out ("they speak another frog").
 4. **Matching needs both kids, and each device decides alone.** Either each kid tilts toward the other's face and knocks, so each beacon's `wants` names the other. Or the kids **clink**: they knock the two devices together, both knocks land within 300 ms, and each is the other's only coincident knocker. Both devices apply the same rule to the same beacons, so no "accept" message exists.
 5. **Greeting.** The VS splash plays until the friend's first State packet arrives. A one-sided match falls back to the lobby within 2 s. After 60 s in the lobby with no match, the radio goes off.
-6. **Stakes.** Both kids tilt to a tier on the rim and see both pets' skulls (each pet's forecast at that tier). Tiers a pet or the fairness rule forbids are greyed, with the reason as a picture: a cradle for "too young", a balance for "not a fair fight", a skull for "a scrap could kill him". Each pet's risk is drawn on its own device as pictures, not words: the pet itself on the tier glyph, a bandage over him for Scrap, and for Mortal a skull that fills as far as the worst case would bring him. The friend's pet gets the same pictures in the friend's corner. Each kid confirms with their tier's gesture. Spar is a knock, Scrap a BOOT press, and Mortal a BOOT hold of 3 s while a skull fills. The duel runs at `agreedStakes(mine, theirs)`, the lower of the two, which both screens show before turn 0. Either kid can always pull it down to a Spar. A choice is frozen once confirmed. Until turn 0 the pair is matched without the stakes in its id, and from turn 0 the id carries them. A State that already names the agreed tier's id counts as the peer's confirm, so a lost confirm packet cannot strand the step. Each side's hold progress travels in its State, so both screens show both skulls filling. Nothing is applied to either pet without this step.
+6. **Stakes.** Both kids tilt to a tier on the rim and see both pets' skulls (each pet's forecast at that tier). Tiers a pet or the fairness rule forbids are greyed, with the reason as a picture: a cradle for "too young", a balance for "not a fair fight", a skull for "a scrap could kill him". Each pet's risk is drawn on its own device as pictures, not words: the pet itself on the tier glyph, a bandage over him for Scrap, and for Mortal a skull that fills as far as the worst case would bring him. The friend's pet gets the same pictures in the friend's corner. The picker is the turn's own (the owner, 2026-10-27: "It should use tilting like the battles"): Spar sits toward the kid, where an upright badge already leans, Scrap to the left and Mortal to the right; the tier under the tilt grows in a reticle and the pet leans to it, the rim ring runs 10 s, and a knock (or a BOOT press) locks Spar or Scrap. Mortal locks only with a BOOT hold of 3 s (or the badge held on its side) while a skull fills. When the ring runs out the tier under the tilt locks itself, an unheld Mortal as Scrap, and a badge never tilted fights a Spar. The duel runs at `agreedStakes(mine, theirs)`, the lower of the two, which both screens show before turn 0. Either kid can always pull it down to a Spar. A choice is frozen once confirmed. Until turn 0 the pair is matched without the stakes in its id, and from turn 0 the id carries them. A State that already names the agreed tier's id counts as the peer's confirm, so a lost confirm packet cannot strand the step. Each side's hold progress travels in its State, so both screens show both skulls filling. Nothing is applied to either pet without this step.
 
 ### One turn
 
@@ -120,7 +120,7 @@ While a duel is open, BOOT is the duel's in every phase, the hold included (`kHo
 
 "Captured" stimuli are the duel's, so the pet does not flinch at every lock-in knock. A `static_assert` in `duel_session.h` keeps shake, BOOT hold, drop and lid out of the turn's capture mask. The one exception is the BOOT hold in Staking and Mercy, where the hold is the confirm or the Finish. Taking it there means a mortal confirm does not also tuck the pet in. `DuelInput` carries the button's level (`bootDown`) so a 3 s hold can be timed.
 
-The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill and its lean, and the screen celebrates it ("Gilly picked!"). A 6-year-old who only watches still plays a whole battle. Once both stances are known the turn reveals: both stances pop up, the "beats" arrow shows, and the bonk plays with hearts flying, which takes 3 s. A full battle is a median of 12 turns (measured in the probe), so about 2 to 3 minutes (arithmetic).
+The rim ring is a 10 s timer. When it runs out the pet chooses, from its Skill and its lean, and the screen celebrates it ("Gilly picked!"). A 6-year-old who only watches still plays a whole battle. Once both stances are known the turn reveals: both stances pop up, the "beats" arrow shows, and the bonk plays with hearts flying, which takes 3 s. A full battle was a median of 12 turns in the probe and 8 through `resolve()` with queued specials; since rules 2 ("Shorter duels") it is a median of 5 and a p90 of 6, about a minute (arithmetic).
 
 ### Ending, friends, rematch and the friend egg
 
@@ -147,7 +147,7 @@ Owner (2026-10-13): "Maybe have a dark souls esque queued special move." A power
 
 **Landing.** On the landing turn the hidden stance meets the friend's stance:
 
-- **It lands.** If the landing stance beats the friend's or ties it, the friend loses 1 heart plus the extra (quick +1, heavy +2), and the power fires.
+- **It lands.** If the landing stance beats the friend's or ties it, the friend loses a clash's hearts plus the extra (quick +1, heavy +2; since rules 2 a clash is 2 hearts and the extras +2 and +4, "Shorter duels"), and the power fires.
 - **Riposted.** If the friend's stance beats the landing stance, the special is turned against its owner: he takes 1 + the extra, and the power does not fire.
 - **It whiffs.** A friend under Hush dodges it. And a countered Foresee whiffs instead of backfiring, because Grungo saw the counter coming.
 
@@ -191,6 +191,58 @@ Two other Foresee rules were measured and rejected: an always-counter landing (G
 - **The balance gate.** Unchanged bounds (species 430 to 570 permille, pairs 300 to 700). D4 re-measures with specials through the real `resolve()`, adding a **Queuer** player (queues whenever it can, heavy half the time, staggers a bracing friend) to the Random, Habit, Reader and Pet players. That includes the autopilot: `petChoice` decides whether the pet queues on a timed-out turn, from its Skill and its mood (high pluck or mettle queues heavy).
 - **The prowess fold.** A kid-picked special counts as a picked turn. A landed special counts as a won turn, a riposted one as a lost turn.
 
+## Shorter duels (#58)
+
+Owner (2026-10-22): "rebalance the duels so they take fewer turns. maybe hurt more." The answer is rules version 2 (`DuelRules::kRulesVersion` in `duel.h`): **three lost clashes down a pet instead of five, and every hit takes two hearts.** All the numbers `resolve()` plays by are now in one place, `duel.h`'s `DuelRules`, `SpecialRules` and `PowerRules`, beside `powers.def`'s cost column, which did not change.
+
+| Rule (`duel.h`) | 0.7 (rules 1) | Now (rules 2) | In lost clashes |
+|---|---|---|---|
+| `kHearts` | 5 | 6 | 3 (was 5) |
+| `kClashHearts`: a lost clash, a stagger | 1 | **2** | 1 |
+| `kQuickExtra`: a quick landing or riposte is the clash's hearts plus this | +1 (2 in all) | +2 (**4** in all) | 2 (was 2 of 5) |
+| `kHeavyExtra` | +2 (3 in all) | +4 (**6** in all) | 3: a whole unassisted pet |
+| `kZapHearts`, `kMendHearts`, `kShellHearts` | 1 each | 2 each | 1 each, as before |
+| `kAssistStepHearts` x `kMaxAssistSteps` | 1 x 2 | **2** x 2 | 1 a step, at most 2 (was 1 of 5 a step) |
+| `kSparkPerTurn` (the rally `kRallySpark` stays 1) | 1 | **2** | specials come round in a shorter duel |
+| `kElementHeadStart`, `kMaxTurns`, `kMeterMax`, the costs | 1, 15, 6, as listed | unchanged | |
+
+Every number is even, so the duel plays like three hearts and one a hit, but a hit takes two hearts off the gauge (it *looks* like it hurts more) and the half-hit resolution stays free for future tuning. The stakes table is untouched: its wounds are per heart lost, so a lost clash now wounds twice as hard (Scrap 0.12, Mortal 0.18), while a whole lost duel adds about what it did (six hearts at 0.06 is 0.36, clamped to Scrap's 0.35; at 0.09 it is 0.54 under Mortal's 0.60).
+
+**The target.** About half the turns was the proposal; the measured floor is the median at 5 and p90 at 6 (from 8 and 11), 37 percent and 45 percent shorter, about a minute of fighting at the 10 s timer. Two hits to down a pet (four hearts, `tools/duel_balance.cpp` sweep, 600 a pair) does reach a median of 4, but there the specials stop paying: the wind-up turn costs half a pet to a Trick, a kid who queues at every chance loses to one who never queues, 0.463, and zap, mend and shell no longer change anything. Three hits is the shortest duel where a special is still worth a press (0.546) and a power still moves its species. A 2.5-hit pool (five hearts, two a hit) measured median 5 and p90 7 with a wider wheel, so it buys nothing.
+
+**Measured** (`tools/duel_balance.cpp 800 pairs`, Random v Random 800 a pair; 0.7 rules from `integration` fc2cd0a, rules 2 from this branch; the tier rows are 200 a pair; the stakes reach `resolve()` only as whether a side at 0 is downed, and the tiers measure the same):
+
+| | 0.7 median / p90 turns | rules 2 median / p90 |
+|---|---|---|
+| Spar, Scrap, Mortal (each) | 8 / 11 | **5 / 6** |
+| Random v Random, all 100 pairings | 8 / 11, pairings' medians 7 to 9, worst pairing's p90 13 | 5 / 6, pairings' medians 4 to 5, worst p90 7 |
+| Queuer v Queuer | 8 / 11 | 5 / 6 |
+| Both pets on autopilot | 8 / 11 | 5 / 6 |
+| Parent (reader) v kid, any help | 7 to 9 / 10 to 12 | 4 to 6 / 6 to 8 |
+
+| Win rates | 0.7 | rules 2 |
+|---|---|---|
+| Random v Random, species | 0.452 (Mothwick) to 0.539 (Puffkin) | **0.486 to 0.526** |
+| Random v Random, worst pairing | Fizz over Mothwick 0.606 | Mudge over Fizz 0.599; **all 100 within 0.40 to 0.60** |
+| Queuer v Queuer, species | 0.390 (Mothwick) to 0.574 (Puffkin) | **0.472 to 0.534** |
+| Queuer v Queuer, worst pairing | Puffkin over Mothwick 0.699 | Mossby over Fizz 0.379 (0.621) |
+| Both on autopilot, worst pairing (200 a pair, about 0.035 noise) | Mudge over Gilly 0.755 | Grungo over Mossby 0.778 |
+| A kid who queues (Random) v one who never does (Plain) | 0.572 | 0.545 |
+| Specials per battle (Random), landed / riposted / staggered | 2.80, 0.587 / 0.151 / 0.232 | 2.10, 0.545 / 0.112 / 0.162 |
+
+| Parent (reader) against, by assist steps | 0.7: 0 / 1 / 2 | rules 2: 0 / 1 / 2 |
+|---|---|---|
+| a habit kid | 0.753 / 0.695 / 0.645 | 0.608 / 0.535 / 0.467 |
+| a kid who follows the whisper half the time | 0.461 / 0.368 / 0.285 | 0.477 / 0.365 / 0.286 |
+| a pet on autopilot | 0.227 / 0.145 / 0.078 | 0.307 / 0.166 / 0.121 |
+| a queuer | 0.552 / 0.457 / 0.379 | 0.573 / 0.441 / 0.354 |
+
+Reading them. Shorter duels are luckier, so the wheel tightened: no species and no pairing of the probe's players is past 0.40 to 0.60, and the queuers' Mothwick and Mudge problem (0.390, 0.411) is gone. A reading parent has fewer turns to read, so a habit-bound kid is beaten less (0.608 from 0.753). The whisper and the assist still do what they did: following the pet half the time still holds the parent to even, and each assist step still takes about 0.07 to 0.11 off the parent's rate, which is why a step is now a whole lost clash's worth of hearts (at one heart a step, the second step was worth nothing: seven and eight hearts both take four hits). The autopilot is a little less of a wall against a reader (0.307 from 0.227) and is still the stronger side. The shortest duels are where a pet lands its special: a heavy from full downs an unassisted pet, and a riposted heavy downs its owner, which is the queued special's gamble at its sharpest.
+
+**The gate** (`test_duel_resolve`, `tools/duel_balance.cpp`): Random v Random at 800 a pair, every species 450 to 550 permille and every pairing 380 to 620 (the 0.40 to 0.60 the rules were tuned to, plus a standard error); median 4 to 5 turns and p90 at most 7; a kid who queues beats one who never does (at least 520); each assist step takes at least 40 permille off a reading parent, and a kid following the whisper half the time holds him to 520 or under. The comparison with `special_probe.py`'s species rates is retired: the probe plays the 0.7 rules.
+
+**Two badges on different rules never fight.** Both devices compute the battle, so a badge on rules 1 and one on rules 2 would resolve one battle two ways. Every beacon and State carries `duelRulesHash()` (`duel.h`) in its `roster` field: `rosterHash()` folded with `kRulesVersion` and every rule above. A 0.7 badge sends plain `rosterHash()` there (5381). Each side greys the other out in the lobby (`DuelView::Peer::compatible`), never claims him, and ignores his States, so a mixed pair stays in fight mode until it times out, and a mixed room pairs each badge with its own kind. `kWireVersion` is unchanged, because the frames are the same bytes and a version byte refused in `decode()` would hide the friend instead of greying him. `test_duel_session`'s `MixedRules` cases build an old-rules badge at the wire (`FakeAir::translate`) and check all three. Bump `kRulesVersion` for any change to how `resolve()` plays a turn that no constant captures; a changed constant changes the hash by itself.
+
 ## Stakes
 
 ### The ladder
@@ -204,7 +256,7 @@ Two other Foresee rules were measured and rejected: an always-counter landing (G
 | A side at 0 hearts | faints, naps | faints, naps | **downed**: the winner's verdict |
 | Can this duel kill? | no | no: every wound is clamped | only by the winner's Finish |
 | Youngest pet allowed | Baby | Child | Adult |
-| Fairness gate (assist hearts at most) | 2 | 2 | **1** |
+| Fairness gate (assist steps at most; a step is `kAssistStepHearts`) | 2 | 2 | **1** |
 | Kids' own picked turns, each, at least | 0 | 0 | **30** |
 | Head-to-head (3 or more duels between the lines) | any | the lower side won at least 1 in 4 | the lower side won at least 1 in 4 |
 | For-keeps duels between the same two lines | any | 1 a pet-day (Scrap and Mortal together) | 1 a pet-day (Scrap and Mortal together) |
@@ -274,7 +326,7 @@ What his line keeps:
 1. A dozing side (Spore Puff) has no stance this turn. It loses the clash and deals nothing.
 2. **Specials** ("The queued special"). A side bracing on a wind-up turn plays Brace. A side whose special lands this turn plays its hidden landing stance, and its power fires only if the special lands. Gadget draws the power it becomes from Tinker's own luck. BeforeClash handlers read both original stances. A landing Foresee turns into the counter of the friend's stance, and if it is countered anyway it whiffs. Dash and Lantern win head bonks. Lantern dazzles. Hush starts.
 3. **Clash.** `beats()` decides. Equal stances are a head bonk, which a side with bonk turns left wins.
-4. **Damage.** One heart goes to the clash loser. OnDamage handlers only add hits (Zap).
+4. **Damage.** A clash's hearts (`kClashHearts`: one in rules 1, two since rules 2) go to the clash loser. OnDamage handlers only add hits (Zap).
 5. **Block.** Block handlers only take hits away: Shell absorbs one, Hush cancels a lost clash, and a dazzled winner's hit misses on its luck. Splitting adding from taking away keeps both sides' handlers in one phase from reading what the other just wrote, which the mirror property needs (Zap against Shell).
 6. **After.** AfterDamage handlers run (Mend, Spores). Then sparks: +1 to each side that is not dozing, +1 more to the clash loser (the rally), capped at 6. The turn counters tick down. Nothing rewards the winner, because every winner reward snowballed in the probe.
 7. **End.** A side at 0 hearts faints, and the battle ends. Both at 0 is a draw.
@@ -428,7 +480,7 @@ The owner's ruling removed "never kills". What remains binding, and where each r
 
 All in `pio test -e native` in WSL `survivor`, except the sim film.
 
-1. **`test_species`** (D3): nine viable starters, each expressing its own species and power; no SpeciesGene expresses grungo; the `d30f00d1` fixture unchanged; the nest holds one egg per element.
+1. **`test_species`** (D3): nine viable starters, each expressing its own species and power; no SpeciesGene expresses grungo; the starter fixture unchanged; the nest holds one egg per element.
 2. **`test_duel_resolve`** (D4): golden battles (fixed cards, seed and logs give a fixed `Outcome::hash`); the mirror property over 10,000 random battles; prefix monotonicity (resolving N+1 turns never changes turns 0 to N); a short meter plays plain; hearts stay within 0 to max; one case per power, including Gadget's draw and the two-turn counters.
 3. **`test_duel_wire`** (D6): round trips; the size asserts; a fuzz of 1,000,000 random buffers (decode never crashes; a bad CRC is refused); a newer version refused.
 4. **`test_duel_session`** (D6): two sessions on one `Ether` with seeded weather (30 percent drop, 10 percent doubles, 20 percent reorder, up to 0.8 s late). Over 1,000 seeds both Meetings exist, name the same `BattleId` and `outcomeHash`, and mirror `me`. Silence fizzles both within 20 s. A lid on one side ends both. A late packet from bout n never reaches bout n+1. A peer under -62 dBm is never matched, and a declining one is never matched. Only the coincident pair of three devices matches on a clink. `closedDeviceIsDeaf` holds. A refused `Air::open` (OTA) leaves the session closed. The genome swap completes at 30 percent loss and fizzles cleanly when cut off.
@@ -579,7 +631,7 @@ Only product calls. Each has the default this design ships. Your ruling that pet
 4. **Who decides each device's species?** Default: each kid picks from a nest of three (one per element), rolled from the MAC. The alternative is that you pin one species per device over the cable before handing them out (`DEBUG found <id>`), so the family covers all nine.
 5. **Friend eggs: yes?** Default: yes, after both kids hug, one waiting at a time, never picked by the clutch timeout.
 6. **Hybrids** (one species' body with another's power): fine? Default: yes.
-7. **May grungo `d30f00d1` receive the duel feeling genes once, on his first duel, recorded in his lineage?** Default: yes. Without it, wounds, scars and death still apply, but his chemistry does not react to duels.
+7. **May a pet from before species receive the duel feeling genes once, on his first duel, recorded in his lineage?** Default: yes. Without it, wounds, scars and death still apply, but his chemistry does not react to duels.
 8. **Scars:** for one life, or heritable as a family mark? Default: one life. The lineage remembers them in words. A heritable scar would be a mark gene added at the Birth, and v2 parts (A11) could carry it.
 9. **Vendetta:** three generations or until avenged? Default: yes. Longer feuds are one number.
 10. **Pulling the cable to save a downed pet:** allowed, as "fled"? Default: yes. The alternative is saving a pending verdict across reboots, which is more code and a death that waits on a power cut.

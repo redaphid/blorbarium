@@ -15,6 +15,7 @@
 // clock as a ring round the glass (docs/notes/duel-hud.md). Every state a kid
 // must read has a shape, not only a colour: a lost heart is an empty track, a
 // locked stance's reticle closes, a forbidden tier is struck through.
+#include <cstddef>
 #include <cstdint>
 #include "blorb/appearance.h"
 #include "blorb/duel.h"
@@ -29,7 +30,7 @@ namespace paint {
 // The beat of the duel the screen is on.
 enum class DuelAct : uint8_t {
   Meeting,    // VS: both pets bounce into their corners
-  Staking,    // three tiers on the rim; each pet wears his risk: a feather, a plaster, a skull filled to his forecast
+  Staking,    // three tiers where a tilt points, picked as a stance is; each pet wears his risk: a feather, a plaster, a skull
   Choosing,   // stance glyphs at 9, 3 and 6 o'clock (tilt left, right, toward you); the rim ring is the timer
   Clash,      // the reveal: both stances pop, each pet plays his stance, the loser is hit (or heads bonk)
   Mercy,      // Mortal: the loser is down; the skull over him fills with the winner's hold
@@ -85,11 +86,26 @@ RimHint rimHint(const blorb::BootHint&);
 // The hint at its place on the rim, for any screen (the dish draws it too).
 void drawBootHint(Canvas240&, const RimHint&);
 
+// Fight mode's scrolling line (Appearance::lobby), as the dish draws it:
+// what it is doing, why a friend it hears cannot pair (one of the two needs
+// an update, or his pet is not ready), the time left, and how to stop.
+inline constexpr size_t kLobbyTextMax = 128;
+void lobbyText(const blorb::Appearance&, char* out, size_t n);
+
 // How long until the badge sleeps (docs/power.md): a 1 px arc one pixel in
 // from the rim, clockwise from the top, `permille` of the way round. Full
 // at any input, shrinking to nothing as the idle timeout runs out. Over
 // everything else: main.cpp draws it last.
 void drawIdleBar(Canvas240&, uint16_t permille);
+// The reminder's rim (src/main.cpp): the idle bar's ring, all of it, in a warm
+// glow `level` bright (0..255), so the board can pulse it.
+void drawRimPulse(Canvas240&, uint8_t level);
+
+// A hard shake dismissed something (#35): a white ring sweeps out from the
+// middle and fades, kDismissedMs long, `ageMs` into it. UINT16_MAX or past
+// it: nothing.
+constexpr uint16_t kDismissedMs = 300;
+void drawDismissed(Canvas240&, uint16_t ageMs);
 
 struct DuelScene {
   DuelAct act = DuelAct::Meeting;

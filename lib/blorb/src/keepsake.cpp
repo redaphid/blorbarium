@@ -99,8 +99,13 @@ void chunk(Out& o, Chunk tag, Body&& body) {
 
 // ---- pieces with public fields ----------------------------------------------------
 
+// The still run and whether a wall clock set the phase follow, where an older
+// reader stops, and only when either is set, so a clock that has neither
+// encodes as format 1 always has; one written before them reads as never set
+// (no night until a phone's TIME) and touched at the save.
 void putClock(Out& o, const PetClock& c) {
   o.u32(c.petTicks), o.u32(uint32_t(c.phaseOffsetTicks)), o.u32(c.darkRunTicks), o.u32(c.entrainedTicks);
+  if (c.stillRunTicks || c.aligned) o.u32(c.stillRunTicks), o.u8(c.aligned);
 }
 PetClock getClock(In& in) {
   PetClock c;
@@ -108,10 +113,44 @@ PetClock getClock(In& in) {
   c.phaseOffsetTicks = int32_t(in.u32());
   c.darkRunTicks = in.u32();
   c.entrainedTicks = in.u32();
+  if (in.n - in.at >= 5) {
+    c.stillRunTicks = in.u32();
+    c.aligned = in.u8() != 0;
+  }
   return c;
 }
 
 void putRng(Out& o, const Rng& r) { for (uint32_t w : r.s) o.u32(w); }
+
+// His idle (idle.h): the act and how far in, and when each last began, by id,
+// so a firmware with more idles keeps the cooldowns it knows.
+bool played(const IdleState& s) {
+  if (s.now != idles::none || s.last != idles::none || s.greet || s.greetedAt) return true;
+  for (uint32_t at : s.startedAt) if (at) return true;
+  return false;
+}
+void putIdle(Out& o, const IdleState& s) {
+  o.u8(s.now.v), o.u16(s.ticks), o.u16(s.length), o.u8(s.last.v), o.fx(s.anchor.x), o.fx(s.anchor.y);
+  o.u8(uint8_t(kIdleCount));
+  for (size_t i = 0; i < kIdleCount; ++i) o.u8(IDLES[i].id.v), o.u32(s.startedAt[i]);
+  o.u8(s.greet), o.u32(s.greetedAt);
+}
+IdleState getIdle(In& in) {
+  IdleState s;
+  s.now = IdleId{in.u8()};
+  s.ticks = in.u16();
+  s.length = in.u16();
+  s.last = IdleId{in.u8()};
+  s.anchor = DishPos{in.fx(), in.fx()};
+  for (uint8_t n = in.u8(), i = 0; i < n; ++i) {
+    const uint8_t id = in.u8();
+    const uint32_t at = in.u32();
+    if (id < kIdleCount) s.startedAt[id] = at;
+  }
+  if (in.n - in.at >= 5) s.greet = in.u8() != 0, s.greetedAt = in.u32();
+  if (!idleInfo(s.now)) s.now = idles::none;
+  return s;
+}
 Rng getRng(In& in) {
   Rng r{};
   for (uint32_t& w : r.s) w = in.u32();
@@ -429,6 +468,14 @@ struct Keepsake::Codec {
         o.u8(c->face_.current.v), o.u8(c->face_.previous.v), o.fx(c->face_.intensity), o.u32(c->face_.sinceTick);
         putSenseOut(o, c->pendingSelf_);
         putRng(o, c->rng_);
+        // After the rng, where an older reader stops, and only once he has
+        // played, so a pet from before idles encodes as it always has.
+        const bool picky = c->picky_.refusedAt || c->picky_.sniff;   // a turn-down of rot, after the idle
+        // His day (#61), after the turn-down, and only once set.
+        const bool day = c->idle_.wokeAt || c->idle_.dayAt || c->idle_.pace != 100;
+        if (played(c->idle_) || picky || day) putIdle(o, c->idle_);
+        if (picky || day) o.u32(c->picky_.refusedAt), o.u16(c->picky_.sniff);
+        if (day) o.u32(c->idle_.wokeAt), o.u32(c->idle_.dayAt), o.u8(c->idle_.pace);
       });
       chunk(o, Chunk::Genome, [&] { o.raw(c->genome_.bytes().data(), c->genome_.bytes().size()); });
       chunk(o, Chunk::Chemistry, [&] {
@@ -505,6 +552,10 @@ struct Keepsake::Codec {
     c.face_.sinceTick = in.u32();
     c.pendingSelf_ = getSenseOut(in);
     c.rng_ = getRng(in);
+    if (in.at < in.n) c.idle_ = getIdle(in);
+    if (in.n - in.at >= 6) c.picky_.refusedAt = in.u32(), c.picky_.sniff = in.u16();
+    if (in.n - in.at >= 9) c.idle_.wokeAt = in.u32(), c.idle_.dayAt = in.u32(), c.idle_.pace = in.u8();
+    if (!c.idle_.pace) c.idle_.pace = 100;
     for (Fx& v : c.chem_.chem) v = chem->fx();
     for (Fx& v : c.chem_.locus) v = chem->fx();
     getBrain(*brain, c.brain_);
@@ -626,6 +677,7 @@ uint32_t Snapshot::hash() const {
   }, occupant);
   mix(habitat.hash());
   mix(clock.petTicks), mix(uint32_t(clock.phaseOffsetTicks)), mix(clock.darkRunTicks), mix(clock.entrainedTicks);
+  mix(clock.stillRunTicks), mix(uint32_t(clock.aligned));
   h = fnv1a(settings.name, sizeof settings.name, h);
   mix(uint32_t(settings.lineageId)), mix(uint32_t(settings.lineageId >> 32)), mix(settings.speciesSeed);
   mix(settings.brightness);

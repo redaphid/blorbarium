@@ -77,7 +77,29 @@ class Board {
   virtual bool net(std::string_view args, char* report, size_t n) { (void)args, (void)report, (void)n; return false; }
   // Once the reply has gone: save, then restart (quiet: the radio stays dark).
   virtual bool reboot(bool quiet) { (void)quiet; return false; }
+
+  // ---- What the cable reads and runs (CLAUDE.md: one badge, three
+  // transports). A board without a cable (the default) answers ERR 501.
+  // The recent log, oldest first, masked (rdebug::maskSecrets), in the
+  // board's own buffer until the next call. nullopt: no log kept here.
+  virtual std::optional<std::string_view> log() { return std::nullopt; }
+  // One of the cable's `DEBUG` lines (without "DEBUG "), run as the cable
+  // runs it: what it printed, masked, in the board's own buffer until the
+  // next call. nullopt: no cable verbs here.
+  virtual std::optional<std::string_view> serial(std::string_view line) { (void)line; return std::nullopt; }
 };
+
+// The reach of one of the cable's `DEBUG` lines (src/main.cpp runDebug),
+// as the debug link's verbs have theirs: what only reads is Look; the
+// screen's own settings Show; a nap or a check due now Write; everything
+// that moves the pet, poses the body, sets a network, points an update
+// elsewhere or restarts is Harm, and so is any verb this table does not
+// know. Wi-Fi's remote debug runs the same lines behind the owner's token
+// with the same trial and update refusals (src/remote_debug.h).
+Reach serialReach(std::string_view line);
+// Why a verb of `reach` may not run now (sealed, on trial, an update), or nullptr.
+struct Refusal { uint16_t code; const char* text; };
+std::optional<Refusal> refuseFor(Reach reach, bool sealed, bool onTrial, bool otaActive);
 
 class Console {
  public:

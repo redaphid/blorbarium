@@ -128,6 +128,7 @@ TEST(Sealed, StateTellsTheSite) {
   phone.inbound.emplace_back("#1 STATE");
   dish.tick(0, phone);
   EXPECT_NE(phaseLine(phone).find(" sealed=1"), std::string::npos) << phaseLine(phone);
+  EXPECT_NE(phaseLine(phone).find(" species=none"), std::string::npos) << "the egg in RAM is a placeholder, not him";
 
   blorbtest::MemStorage fresh;
   Dish open(fresh, 7, kLineage);

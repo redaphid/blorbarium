@@ -1,6 +1,7 @@
 #include "debugble/jump.h"
 
 #include <variant>
+#include "blorb/registry.h"
 
 namespace debugble {
 
@@ -58,6 +59,28 @@ Jump die(blorb::Dish& dish, bool eggs, const Warp& warp) {
     if (!k) break;   // the pick's timeout outran the vigil: an egg is laid, which is still a valid dish
   }
   dish.flush();
+  return Jump::Done;
+}
+
+std::optional<blorb::ChemId> chemNamed(std::string_view w) {
+  for (const blorb::DriveInfo& d : blorb::DRIVES)
+    if (w == d.name) return blorb::driveChem(d.id);
+  // A chemical by its number, as twists take them: 1 to 3 digits.
+  std::optional<unsigned> number;
+  if (!w.empty() && w.size() <= 3 && w.find_first_not_of("0123456789") == std::string_view::npos) {
+    number = 0;
+    for (char ch : w) *number = *number * 10 + unsigned(ch - '0');
+  }
+  for (const blorb::ChemInfo& c : blorb::CHEMICALS)
+    if (number ? c.id.v == *number : w == c.name) return c.id;
+  return std::nullopt;
+}
+
+Jump setChems(blorb::Dish& dish, const ChemSet* sets, size_t n) {
+  blorb::Creature* c = std::get_if<blorb::Creature>(&dish.occupant());
+  if (!c) return Jump::NoCreature;
+  for (size_t i = 0; i < n; ++i) c->inject(sets[i].chem, sets[i].level);
+  dish.markDirty();
   return Jump::Done;
 }
 

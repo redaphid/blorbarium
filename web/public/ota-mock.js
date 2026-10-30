@@ -18,11 +18,19 @@
   }
 
   // Whether Chrome's chooser lists a device for these filters: any one filter
-  // whose every part matches (services AND name AND namePrefix).
+  // whose every part matches (services AND name AND namePrefix AND
+  // manufacturerData). ad.manufacturerData: {companyId: Uint8Array of the data after it}.
   function chooserMatches(filters, ad) {
+    const maker = (m) => {
+      const data = (ad.manufacturerData || {})[m.companyIdentifier];
+      const prefix = m.dataPrefix || [];
+      return !!data && data.length >= prefix.length &&
+        [...prefix].every((b, i) => ((data[i] ^ b) & (m.mask ? m.mask[i] : 0xff)) === 0);
+    };
     return filters.some((f) => (!f.services || f.services.every((u) => ad.services.includes(u))) &&
       (f.name === undefined || f.name === ad.name) &&
-      (f.namePrefix === undefined || (ad.name || "").startsWith(f.namePrefix)));
+      (f.namePrefix === undefined || (ad.name || "").startsWith(f.namePrefix)) &&
+      (f.manufacturerData === undefined || f.manufacturerData.every(maker)));
   }
 
   // faults: drop (lose the link once near 40%), gaps (lose three data writes),

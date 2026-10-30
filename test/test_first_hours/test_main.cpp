@@ -38,8 +38,9 @@ namespace {
 constexpr uint32_t kMinuteMs = 60000;
 constexpr uint32_t kTicksPerSec = 1000 / kTickMs;
 
-enum class Owner : uint8_t { Nobody, Seated };
-const char* ownerName(Owner o) { return o == Owner::Nobody ? "nobody" : "seated"; }
+// Tucked: face down on the tray table the whole time (lidded: bedtime).
+enum class Owner : uint8_t { Nobody, Seated, Tucked };
+const char* ownerName(Owner o) { return o == Owner::Nobody ? "nobody" : o == Owner::Seated ? "seated" : "tucked"; }
 
 // A seated passenger: glances every 3 to 10 minutes and does one gentle thing.
 // Never a shake, a drop or a face-down tuck.
@@ -152,26 +153,10 @@ struct Report {
 
 // A badge flashed with 0.4.0 on 2026-10-15: founded from foundingGenome040
 // with the pet clock at 00:00, lived `adoptAfterH` on 0.4.0, then updated
-// over the air and adopted to its table species (Dish::adoptSpecies). On
-// 0.7.0 the species founder still had the Gift recipe's sleep, energy, face
-// and egg bytes (giftSleep); from 0.7.1 adoption writes FirstHours'.
-struct FieldPet { double adoptAfterH = 1.0; bool giftSleep = false, retune = false; };
-
-// The recipe bytes FirstHours retunes, as the species' Gift recipe has them.
-void keepGiftRecipe(Dish& dish, SpeciesId species, uint32_t seed) {
-  GenomeBuilder gift, first;
-  authorStarter(gift, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::Gift);
-  authorStarter(first, speciesInfo(species).starter, seed, kNeglectCanKill, Recipe::FirstHours);
-  const Genome g = *gift.build(), f = *first.build();
-  struct Edit { GeneUid uid; uint8_t at, value; };
-  std::vector<Edit> edits;
-  g.forEach([&](const GeneView& v) {
-    const std::optional<GeneView> w = f.find(v.header.uid);
-    for (uint8_t i = 0; w && i < v.header.len; ++i)
-      if (w->body[i] != v.body[i]) edits.push_back({v.header.uid, i, v.body[i]});
-  });
-  for (const Edit& e : edits) dish.editGene(e.uid, e.at, e.value);
-}
+// over the air and adopted to its table species (Dish::adoptSpecies).
+// Adoption keeps 0.4.0's own recipe numbers (founding_040.h kRecipe040), so
+// he sleeps as 0.4.0 founded him.
+struct FieldPet { double adoptAfterH = 1.0; };
 
 double pm(Fx v) { return double(v.raw) / double(Fx::kOne); }
 
@@ -186,9 +171,7 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
   FakeRtc rtc;   // a flat battery: never any wall time
   uint32_t ms = 0;
   rtc.poweredMs = &ms;
-  // FIRST_HOURS_GIFT=1: the Gift recipe (starterGenome), what an unpicked nest still founds.
-  const Genome founder = field ? foundingGenome040(seed)
-                         : std::getenv("FIRST_HOURS_GIFT") ? starterGenome(seed) : starterGenomeOf(species, seed);
+  const Genome founder = field ? foundingGenome040(seed) : starterGenomeOf(species, seed);
   DishOptions opt;
   opt.rtc = &rtc;
   opt.founder = &founder;
@@ -224,15 +207,13 @@ Report live(SpeciesId species, uint32_t seed, Owner owner, double hours, const F
 
   const uint32_t endMs = uint32_t(hours * 60 * kMinuteMs);
   for (; ms < endMs; ms += kSampleMs) {
-    const BodySample s = owner == Owner::Seated ? who.next(ms, dish, a) : still();
+    const BodySample s = owner == Owner::Seated ? who.next(ms, dish, a) : owner == Owner::Tucked ? faceDown() : still();
     dish.sample(s, ms);
     dish.tick(ms, link);
     if (!adopted && ms >= uint32_t(field->adoptAfterH * 60 * kMinuteMs) &&
         dish.adoptSpecies(species, paint::bandsFor(species)) != Dish::Adoption::NotYet) {
       adopted = true;
-      if (field->giftSleep) keepGiftRecipe(dish, species, seed);
       log("ADOPTED");
-      if (field->retune && dish.retuneFirstHours(species) == Dish::Adoption::Adopted) log("RETUNED");
     }
     if (dish.tickCount() == lastTick) continue;
     lastTick = dish.tickCount();
@@ -447,7 +428,6 @@ TEST(FirstHours, ANoPhoneBoardFoundsIntoMorningAndAReplugKeepsIt) {
 // night-sleeper of each voice length, alone and with a seated owner. Each run
 // is six pet hours from a fresh founding with no phone and no wall time.
 TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   for (SpeciesId sp : {SpeciesId{0}, SpeciesId{1}, SpeciesId{5}, SpeciesId{7}})
     for (Owner o : {Owner::Nobody, Owner::Seated}) {
       const Report r = live(sp, 0x5EED0000u, o, 6.0);
@@ -459,38 +439,46 @@ TEST(FirstHours, AFreshPetPlaysThroughHisFirstSixHours) {
       EXPECT_LE(r.longestThoughtGapMin, 6) << at;
       EXPECT_GE(r.distinctLines, 40u) << at;
       EXPECT_LE(r.topLineCount * 8, r.thoughts) << "no line is an eighth of what he says: " << at;
-      EXPECT_GE(r.naps, 1u) << at;
-      EXPECT_LE(r.asleepH, 2.5) << "naps, not the whole flight: " << at;
-      EXPECT_LE(r.longestSleepMin, 60) << at;
       EXPECT_GE(r.faceChanges, 3u) << at;
       EXPECT_LT(r.injuryMax, 0.1) << at;
+      // With no clock he has no night of his own (2026-10-21, sleep-idle.md):
+      // looked at every few minutes he is awake all through it, and left
+      // alone on the tray table it goes dim for him after 45 minutes and he
+      // goes to bed. (The floors were naps >= 1, asleep <= 2.5 h and no sleep
+      // over 60 minutes for both, from the pet night his clock used to keep.)
       if (o == Owner::Seated) {
+        EXPECT_LE(r.asleepH, 0.5) << "awake while he is being looked at: " << at;
+        EXPECT_LE(r.longestSleepMin, 30) << at;
         EXPECT_GE(r.bites, 2u) << at;
         EXPECT_EQ(r.starvingMin, 0) << at;
       } else {
-        EXPECT_GE(r.hungerMax, 0.5) << "hungry by the time anyone looks again: " << at;
+        EXPECT_GE(r.naps, 1u) << "left alone, he goes to bed: " << at;
+        EXPECT_GE(r.firstSleepMin, 45) << "not before it is dim: " << at;
+        // Peckish, not at the feed hint: asleep his hunger waits for him to
+        // wake (creature.cpp restMetabolism), so a pet put down is not
+        // starving when he is picked up again.
+        EXPECT_GE(r.hungerMax, 0.25) << "peckish by the time anyone looks again: " << at;
+        EXPECT_LT(r.hungerMax, 0.8) << "and nowhere near starving: " << at;
       }
     }
 }
 
 // The badges in the field (FIELD_PETS_SWEEP=1): each table species, 0.4.0's
 // founding and an adoption after FIELD_PETS_ADOPT_H (1), FIELD_PETS_HOURS (12)
-// of powered time, both owners, as adopted on 0.7.0 and on 0.7.1. Per hour:
-// minutes asleep, lines awake, lines asleep.
+// of powered time, both owners. Per hour: minutes asleep, lines awake, lines
+// asleep.
 TEST(Sweep, FieldPetsHourByHour) {
   if (!std::getenv("FIELD_PETS_SWEEP")) GTEST_SKIP() << "FIELD_PETS_SWEEP=1 runs it";
   const char* h = std::getenv("FIELD_PETS_HOURS");
   const char* adopt = std::getenv("FIELD_PETS_ADOPT_H");
   const double hours = h ? std::atof(h) : 12.0;
   for (size_t sp = 1; sp < kSpeciesCount; ++sp)
-    for (int v : {0, 1, 2})
+    if (inRegularCast(SPECIES[sp].id))
       for (Owner o : {Owner::Nobody, Owner::Seated}) {
         FieldPet f;
-        f.giftSleep = v < 2;
-        f.retune = v == 1;
         if (adopt) f.adoptAfterH = std::atof(adopt);
         Report r = live(SPECIES[sp].id, 0x5EED0000u, o, hours, &f);
-        r.species += v == 0 ? "@070" : v == 1 ? "@070+retune" : "@071";
+        r.species += "@040";
         std::printf("%s\n", row(r).c_str());
         std::printf("  hour   :");
         for (int i = 0; i < int(hours); ++i) std::printf(" %4d", i);
@@ -506,15 +494,15 @@ TEST(Sweep, FieldPetsHourByHour) {
       }
 }
 
-// The badges 0.4.0 founded sleep through most of their first night (pet
+// The badges 0.4.0 founded slept through most of their first night (pet
 // 00:00 at founding, no phone to say otherwise), and the owner saw no text
-// until a phone woke him. Asleep, he murmurs: every few minutes, in his voice.
+// until a phone woke him. With no clock there is no such night any more
+// (sleep-idle.md); a pet tucked in face down sleeps instead. Asleep, he
+// murmurs: every few minutes, in his voice.
 TEST(FieldPets, ASleepingPetStillTalks) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
-  FieldPet f;
-  f.giftSleep = true;   // adopted on 0.7.0, the longest sleeper
+  FieldPet f;   // adopted, sleeping by 0.4.0's numbers: the longest sleeper
   for (SpeciesId sp : {SpeciesId{1}, SpeciesId{5}, SpeciesId{7}}) {
-    const Report r = live(sp, 0x5EED0000u, Owner::Nobody, 8.0, &f);
+    const Report r = live(sp, 0x5EED0000u, Owner::Tucked, 8.0, &f);
     const std::string at = row(r);
     ASSERT_GE(r.asleepH, 4.0) << "the night this guards: " << at;
     double asleepLines = 0;

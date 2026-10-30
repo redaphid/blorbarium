@@ -1,4 +1,77 @@
-# Updating the firmware over Bluetooth
+# Updating the firmware
+
+**The owner's rule:** "Automatic updates should never be switched off. It will
+be my only access to the pets when I'm gone." No setting, verb, crash count or
+battery reading stops a badge checking for updates; a crash inside a check
+backs off to 4 h at most, and a bad image rolls itself back.
+
+## Pre-flight: before the owner leaves
+
+Every badge updates itself over Wi-Fi from the live site, unattended
+(docs/wifi-ota.md). For that, each one needs **one cable flash** of a build
+that trusts the current signing key and keeps its own home (upright or
+flipped) in NVS, plus a Wi-Fi network it can reach.
+
+**The flash station does all of it, a badge a minute:**
+
+    uv run scripts/flash_station.py prep     # once: builds badge128 into outputs/station/, says what the site serves
+    uv run scripts/flash_station.py          # plug badges in one at a time; one PASS/FAIL line each
+
+For each CH343 badge that appears (the Flipper and anything else are never
+touched) it writes the badge128 image as a normal upload does (the pet and NVS
+stay) at 115200 baud (the owner: always; faster rates failed on some boards),
+checks the boot version, feeds the pet (`DEBUG chem hunger|pain|injury 0`; an
+egg has nothing to feed), sets the home (`DEBUG home down` on the flipped
+5C94094497, 5C94094999 and 5C94095003, `up` on the rest; the home lives in NVS,
+which releases never touch), gives it the Wi-Fi in `.env` (`ssid=`, `password=`;
+never printed), and runs one OTA check against the live manifest, which must
+say `up_to_date`. So `prep` from the commit that is live: the badges and the
+site then agree, and every later release is an upgrade. `-v` prints each
+badge's console (masked); `--include-present` also does a badge already plugged in.
+
+By hand, the same steps: `./flash.sh --once` (every badge: one image, at 115200 baud),
+`DEBUG home down` on the flipped three (expect `home rot=0 (USB-C down, nvs ...)`),
+`uv run scripts/test/wifi_provision.py --port /dev/ttyACM0 --check`.
+
+**Another network later, no laptop:** on Android Chrome (or desktop
+Chrome/Edge; not iPhone Safari, which has no Web Bluetooth) open
+https://blorb.hypnodroid.com, connect the badge, open the **Wi-Fi** card and
+type the network. The badge asks "Join Wi-Fi? Tip me on my side!": turn it or
+press its button. Up to three networks are kept, newest first.
+
+After that a badge checks by itself when it has been dark and alone for a
+minute, every 6 h, and costs nothing in the car (no network: one 2 s scan,
+backing off to every 8 h).
+
+## Away from home: releasing
+
+One command on the owner's laptop (it holds `~/.config/blorbarium/ota-signing-key.pem`;
+needs `npx wrangler` logged in to the Cloudflare account):
+
+    # bump kFirmwareVersion (lib/blorb/include/blorb/protocol.h) past the live one, commit, then:
+    uv run --with cryptography python tools/ota_release.py ship --prefix lcd128-test   # try it first
+    #   on a badge on the cable: DEBUG ota check https://blorb.hypnodroid.com/fw/lcd128-test/manifest.json
+    uv run --with cryptography python tools/ota_release.py ship                         # live: every badge
+    git add web/public/fw/lcd128/manifest.json && git commit -m "Release x.y.z" && git push
+
+`ship` builds `badge128`, signs it and publishes the image, then the manifest,
+to the bucket the site serves `/fw/` from. It is **one image for upright and
+flipped badges** (the flip is per badge, in NVS); it refuses to release
+`badge128_flip` (it would turn every upright badge upside down) and
+`badge128_pm` (too little RAM for its Wi-Fi trial). Badges install it at their
+next check (within about 6 h at home), restart only while dark and alone, and
+keep it only after reaching the site again over Wi-Fi with the same pet;
+otherwise they roll back by themselves within 5 minutes and try it again at
+the next check, three times in all, then never (release a newer one). A bad signature, hash, truncated or stalled
+download changes nothing and is retried at the next check.
+
+- **Kill switch:** add `"auto": false` to the live manifest and publish it:
+  no badge installs anything unattended.
+- **Current version on the site:** `curl https://blorb.hypnodroid.com/fw/lcd128/manifest.json`.
+
+The rest of this document is the Bluetooth update path and the trial in detail.
+
+## Updating over Bluetooth
 
 The website can put a new firmware on a dish over Bluetooth, from Android
 Chrome, with no cable and no Wi-Fi. These dishes belong to children, so the
@@ -147,12 +220,21 @@ not on trial and not busy, writes a save, opens the inactive slot and moves to
 `idle last=save_failed`. A `DEBUG press` over the serial cable answers too: the
 cable is a hand on the dish.
 
-**Turn me around.** The children cannot use the button, so the question
-says "Turn me around!" and a turn of the badge answers it exactly as a
+**Tip me on my side.** The children cannot use the button, so the question
+says "Tip me on my side!" and a turn of the badge answers it exactly as a
 press does (`src/hw/turn_yes.h`, `[ota] turned: yes` on the cable). The turn
-is the screen's own settled rotation, a quarter turn held 0.4 s with jolts
-ignored, so it only registers while the badge is held up, not lying flat.
-A turn in the first 1.5 s was already under way and is not a yes. The
+is the screen's own settled rotation coming to rest a quarter turn from
+home, onto either side, held 0.6 s with jolts ignored: exactly what the words
+say. Upside down is not a yes: that is the hang, fight mode's gesture
+(0.7.34 and before took any turn and said "Turn me around!", and kids turned
+it upside down). It only registers while the badge is held on edge, not
+lying flat. A turn in the first 1.5 s was already under way and is
+not a yes. The turn is the question's: while a question shows, for 2 s after
+it goes, and until the badge is let back after that, neither the hang nor the
+side hold reaches the pet (no fight mode, no tucking in), nor does any press
+(`hw::Feel::kAnswerTailMs`; owner, 2026-10-29: the Wi-Fi question's turn
+opened fight mode, a duel took the radio, and the phone heard only
+"couldn't connect"). The
 debug link's HANG turns it too, but HANG needs the unlock, which needs a
 hand on the badge.
 
@@ -319,12 +401,12 @@ tool itself died still owns its update. A session this laptop did not begin
 (a phone's, or a Wi-Fi install on firmware that has one) is reported and
 never aborted.
 
-It pushes only signed releases: the site's manifest by default, or one
-copied from soul (`--manifest`, or `--image` with its manifest beside it).
-The signing key stays on soul, so from the laptop there is no new build, no
-re-signed version or flags, no re-push of the version a badge already runs,
-and no downgrade unless soul signed it with `--allow-older`. It checks the
-signature against `src/hw/ota_pubkey.h` before it connects.
+It pushes only signed releases: the site's manifest by default, or a local
+one (`--manifest`, or `--image` with its manifest beside it). It never signs
+anything itself, so it makes no new build, re-signs no version or flags,
+re-pushes no version a badge already runs, and downgrades nothing that was
+not signed with `--allow-older` (see "The key"). It checks the signature
+against `src/hw/ota_pubkey.h` before it connects.
 
 ## Release layout
 
@@ -521,7 +603,10 @@ so a cable flash always takes priority over an update.
    ```
 
    The tool refuses a tree with uncommitted changes, so the image is a
-   commit's. It builds `badge128` and checks the following:
+   commit's. It builds `badge128`, the one image for upright and flipped
+   badges (it refuses `badge128_flip` and `badge128_pm`; on this laptop set
+   `BLORB_PIO=~/Worktrees/blorbarium/pio`, the one-at-a-time wrapper, or build
+   through it first and pass `--no-build`) and checks the following:
    - `src/hw/ota_pubkey.h` holds this key's public half.
    - The image's own stamp (`kReleaseStamp` in `src/main.cpp`: version,
      board, save format and commit) agrees with `protocol.h`, the board and
@@ -572,12 +657,24 @@ inside the repo. It writes the public half to `src/hw/ota_pubkey.h`.
 `.gitignore` also refuses `*signing-key*`. If the key already exists,
 `keygen` keeps it and rewrites only the header.
 
-The key in `src/hw/ota_pubkey.h` was made on 2026-10-13 on the desk machine,
-by the session that built this feature. **Back it up somewhere safe.** Every
-dish built from this tree trusts only that key. If the key is lost, the next
-update to every dish goes over a cable, with firmware built against a new key.
-If the key leaks, its holder can make images that the dishes accept, although
-each install still needs a hand on the button.
+The key in `src/hw/ota_pubkey.h` was made on 2026-10-22 on the owner's Linux
+laptop (`keygen`, mode 600 at `~/.config/blorbarium/ota-signing-key.pem`), and
+releases are signed and published (`release`, then `publish` to R2) from that
+laptop. The SHA-256 of its 65-byte public point is
+`73d466ffb9a30f435fe53fabda50c2e374b86fdb2a06da2907dab78eb479f7aa`.
+It replaced the 2026-10-13 key, which stayed on the desk machine `soul` and is
+out of reach (owner, 2026-10-22: "I have no access to soul. We can reflash the
+badges again for OTA if we need a new key"). So a badge running 0.7.12 or
+older trusts only the old key and refuses every release signed with this one
+(`BAD_SIGNATURE`): each needs one cable flash of firmware built from this
+tree (0.7.13 or later), and after that it updates over the air again.
+
+**Back the key up somewhere safe.** Every dish built from this tree trusts
+only it. If it is lost, the next update to every dish goes over a cable, with
+firmware built against a new key. If it leaks, its holder can make images the
+dishes accept: over Bluetooth each install still needs a hand on the button,
+but over Wi-Fi (docs/wifi-ota.md) a dish installs a signed newer image by
+itself, from the site's manifest only (pinned TLS roots).
 
 On Windows the file's 0600 mode is not enforced, so the key is only as private
 as the user's home directory.

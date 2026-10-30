@@ -1,5 +1,7 @@
 #include "blorb/thoughts.h"
 
+#include "blorb/pack_lines.h"
+
 #include <cstring>
 #include <variant>
 #include "blorb/appearance.h"
@@ -56,8 +58,8 @@ bool datedHeirloom(const Observed& o, bool fearOnly, uint16_t& num) {
 
 Rng seededFor(uint32_t life, uint32_t tick, uint64_t salt = 0) { return Rng::seeded(((uint64_t(life) << 32) | tick) ^ salt); }
 
-// The owner's local clock, only once a phone's TIME has given it this boot:
-// a wall-clock line never guesses.
+// The owner's local clock, only once a phone's TIME (or a Wi-Fi window's
+// clock, Dish::netTime) has given it this boot: a wall-clock line never guesses.
 constexpr uint32_t kSecondsPerDay = 86400;
 std::optional<uint32_t> hourNow(const Observed& o) {
   if (!o.phone.localNow) return std::nullopt;
@@ -98,6 +100,26 @@ bool ancestor_fear(const Observed& o, uint16_t& num) { return level(o, drive::fe
 bool heirloom(const Observed& o, uint16_t& num) { return awake(o) && doing(o, action::rest) && datedHeirloom(o, false, num); }
 bool foreseen(const Observed& o, uint16_t& num) { return datedHeirloom(o, false, num); }
 bool bored(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::boredom) >= kHigh; }
+// Playing on his own (idle.h), this idle now.
+bool playingIdle(const Observed& o, IdleId which) { return awake(o) && o.c.playing() && o.c.idle().now == which; }
+bool singing(const Observed& o, uint16_t&) { return playingIdle(o, idles::sing); }
+bool dancing(const Observed& o, uint16_t&) { return playingIdle(o, idles::dance); }
+bool chasing_tail(const Observed& o, uint16_t&) { return playingIdle(o, idles::chase_tail); }
+bool digging(const Observed& o, uint16_t&) { return playingIdle(o, idles::dig); }
+bool peeking(const Observed& o, uint16_t&) { return playingIdle(o, idles::peek); }
+bool shadow_boxing(const Observed& o, uint16_t&) { return playingIdle(o, idles::shadow_box); }
+bool juggling(const Observed& o, uint16_t&) { return playingIdle(o, idles::juggle); }
+bool daydreaming(const Observed& o, uint16_t&) { return playingIdle(o, idles::daydream); }
+bool stargazing(const Observed& o, uint16_t&) { return playingIdle(o, idles::stargaze); }
+bool sneezing(const Observed& o, uint16_t&) { return playingIdle(o, idles::sneeze); }
+bool refusing_rot(const Observed& o, uint16_t&) { return awake(o) && o.c.picky().showing(o.c.stats().ageTicks); }
+bool booing(const Observed& o, uint16_t&) {
+  return playingIdle(o, idles::boo) && o.c.idle().ticks * 100u >= o.c.idle().length * 55u;   // as he pops up
+}
+bool hiccuping(const Observed& o, uint16_t&) { return playingIdle(o, idles::hiccup); }
+bool zooming(const Observed& o, uint16_t&) { return playingIdle(o, idles::zoomies); }
+bool discovering(const Observed& o, uint16_t&) { return playingIdle(o, idles::discover); }
+bool hiding(const Observed& o, uint16_t&) { return playingIdle(o, idles::hide); }
 bool held(const Observed& o, uint16_t&) { return sense(o, locus::held) >= kHalf && sense(o, locus::cradled) < kHalf; }
 bool cradled(const Observed& o, uint16_t&) { return sense(o, locus::cradled) >= kHalf; }
 // Upside down is the hang's pose: the badge turned half round from home
@@ -112,6 +134,7 @@ bool upside_down(const Observed& o, uint16_t&) { return awake(o) && sense(o, loc
 bool drowsy(const Observed& o, uint16_t&) { return awake(o) && level(o, drive::sleepiness) >= kHigh; }
 bool dreaming(const Observed& o, uint16_t&) { return o.c.body().asleep && o.c.body().dreaming; }
 bool dozing(const Observed& o, uint16_t&) { return o.c.body().asleep; }
+bool grown(const Observed&, uint16_t&) { return false; }   // said by the Dish as he grows, never chosen
 bool young(const Observed& o, uint16_t&) { return o.c.stats().ageTicks < PetClock::kDayTicks; }   // his first day: when the teaching lines run
 bool foreseeing(const Observed& o, uint16_t&) { return doing(o, action::foresee); }
 bool sees_pellet(const Observed& o, uint16_t&) { return doing(o, action::foresee) && anyPellet(o); }
@@ -121,10 +144,10 @@ bool sees_famine(const Observed& o, uint16_t&) {
 }
 bool phone_near(const Observed& o, uint16_t&) { return sense(o, locus::owner_near) >= kHalf; }
 bool missing_you(const Observed& o, uint16_t&) { return level(o, drive::loneliness) >= kHalf; }
-// No battery: the phone is his only clock, so after half a day of play without
-// one he asks for it, rarely, in his own voice rather than a nagging banner.
+// After half a day of play without a phone (a Wi-Fi window's clock is no
+// visit: Dish::phoneAwayTicks) he asks for it, rarely, in his own voice rather than a nagging banner.
 bool phone_long_gone(const Observed& o, uint16_t&) { return awake(o) && o.phone.awayTicks >= Thinker::kMissPhoneTicks; }
-// What a phone adds. Each holds only once the phone has given it.
+// What a phone adds (the wall clock, a Wi-Fi window too). Each holds only once given.
 bool wall_hour(const Observed& o, uint16_t& num) {
   const std::optional<uint32_t> h = hourNow(o);
   if (!h) return false;
@@ -180,35 +203,24 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
                    const Words& words) {
   const ThoughtInfo* t = thoughtInfo(id);
   const char* text = t ? t->text : "";
-  uint8_t mine = 0;
-  for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
+  // The site's lines for him (#59), when its pack has some for this thought: only those, as written.
+  const PackLines* pack = packLines();
+  uint8_t mine = pack ? pack->count(id) : 0;
   if (mine) {
-    uint8_t want = uint8_t(pick % mine);
-    for (const SpeciesLine& l : SPECIES_LINES)
-      if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
-    pick = uint8_t(pick / mine);   // so the frame is not tied to which line was drawn
-  }
-  uint8_t own = 0;
-  if (!mine)
-    for (const VoicedLine& l : VOICED_LINES) own += l.thought == id && l.voice == voice;
-  if (own) {
-    uint8_t want = uint8_t(pick % own);
-    for (const VoicedLine& l : VOICED_LINES)
-      if (l.thought == id && l.voice == voice && want-- == 0) { text = l.text; break; }
+    text = pack->line(id, uint8_t(pick % mine));
+  } else {
+    for (const SpeciesLine& l : SPECIES_LINES) mine += l.thought == id && l.species == species;
+    if (mine) {   // his own line, in his own voice already: said as written
+      uint8_t want = uint8_t(pick % mine);
+      for (const SpeciesLine& l : SPECIES_LINES)
+        if (l.thought == id && l.species == species && want-- == 0) { text = l.text; break; }
+    }
   }
   const VoiceInfo* v = nullptr;
-  for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
-  const FrameInfo* f = nullptr;
-  if (v && !own) {
-    uint8_t frames = 0;
-    for (const FrameInfo& row : FRAMES) frames += row.voice == voice;
-    uint8_t want = uint8_t(pick % frames);
-    for (const FrameInfo& row : FRAMES)
-      if (row.voice == voice && want-- == 0) { f = &row; break; }
-  }
+  if (!mine)
+    for (const VoiceInfo& row : VOICES) if (row.id == voice) v = &row;
   size_t n = 0;
   auto put = [&](char c) { if (n + 1 < kThoughtLineCap) out[n++] = c; };
-  if (f) for (const char* s = f->prefix; *s; ++s) put(*s);
   const size_t body = n;
   for (const char* s = text; *s; ++s) {
       if (*s == kNameMark || *s == kTaughtMark) {
@@ -224,19 +236,12 @@ size_t thoughtLine(ThoughtId id, uint16_t num, VoiceId voice, uint8_t pick, char
   }
   // A terse voice stops at the first sentence's end (an ellipsis is not one),
   // but says what the owner taught him whole.
-  if (v && v->firstOnly && !own && !std::strchr(text, kTaughtMark))
+  if (v && v->firstOnly && !std::strchr(text, kTaughtMark))
     for (size_t i = body; i + 1 < n; ++i)
       if ((out[i] == '.' || out[i] == '!' || out[i] == '?') && out[i + 1] == ' ' && (i == body || out[i - 1] != '.')) {
         n = i + 1;
         break;
       }
-  // A suffix's own leading stop gives way to the line's ("PELLET!" + ". MINE." -> "PELLET! MINE.").
-  if (f) {
-    const char* s = f->suffix;
-    if (n > body && (out[n - 1] == '.' || out[n - 1] == '!' || out[n - 1] == '?'))
-      while (*s == '.' || *s == ',') ++s;
-    for (; *s; ++s) put(*s);
-  }
   out[n] = 0;
   return n;
 }
@@ -317,9 +322,16 @@ constexpr BallAnswer kVerdicts[] = {
     {"NO.", 1}, {"NO WAY.", 1}, {"MY ANSWER IS NO.", 1}, {"DO NOT COUNT ON IT.", 1},
     {"MAYBE.", 2}, {"CANNOT SAY YET.", 2}, {"THE MIST IS THICK.", 2}, {"ASK AGAIN LATER.", 2},
 };
-const char* drawVerdict(Rng& rng) {
+const char* drawVerdict(Rng& rng, SpeciesId species) {
   const uint32_t roll = rng.below(100);
   const uint8_t kind = roll < 45 ? 0 : roll < 75 ? 1 : 2;
+  uint8_t mine = 0;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) mine += v.species == species && v.kind == kind;
+  if (mine) {
+    uint32_t want = rng.below(mine);
+    for (const SpeciesVerdict& v : SPECIES_VERDICTS)
+      if (v.species == species && v.kind == kind && want-- == 0) return v.text;
+  }
   const char* pool[4];
   uint8_t n = 0;
   for (const BallAnswer& v : kVerdicts)
@@ -364,7 +376,7 @@ void Thinker::start(const Creature& c, const Lineage& lineage, const FromPhone& 
 void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& clock, const Lineage& lineage,
                    uint32_t tick, bool shook, const FromPhone& phone) {
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
-  if (c.stats().ageTicks < kWarmUpTicks) return;
+  if (c.stats().ageTicks < kWarmUpTicks || hushed_) return;
   const Observed o{c, habitat, clock, heirlooms_, tick, phone};
   // A foretelling lands when its trance ends. In the trance he is silent:
   // the line he was saying is already cut and no thought starts. The phone's
@@ -377,6 +389,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
     } else {
       const Trance t = *trance_;
       trance_.reset();
+      ++foretold_;   // the answer lands: a prophecy he told
       Rng rng = seededFor(life_, tick, kOracleSalt);
       return start(c, lineage, phone, t.pick, tick, rng, t.verdict);
     }
@@ -402,7 +415,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
       if (p) {
         if (fortune) fortuneDay_ = day;
         now_.reset();
-        trance_ = Trance{tick + kTranceTicks, *p, verdict ? drawVerdict(rng) : nullptr};
+        trance_ = Trance{tick + kTranceTicks, *p, verdict ? drawVerdict(rng, c.phenotype().species.body) : nullptr};
         return;
       }
     }
@@ -437,7 +450,7 @@ void Thinker::step(const Creature& c, const Habitat& habitat, const PetClock& cl
 void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, const PetClock& clock,
                     const Lineage& lineage, uint32_t tick, const FromPhone& phone) {
   const ThoughtInfo* info = thoughtInfo(id);
-  if (!info || (startsWith(info->whenName, "taught") && !(phone.taught && phone.taught->count))) return;
+  if (!info || hushed_ || (startsWith(info->whenName, "taught") && !(phone.taught && phone.taught->count))) return;
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   uint16_t num = 0;
   info->when(Observed{c, habitat, clock, heirlooms_, tick, phone}, num);
@@ -447,12 +460,20 @@ void Thinker::force(ThoughtId id, const Creature& c, const Habitat& habitat, con
 }
 
 void Thinker::say(std::string_view line, const Creature& c, const Lineage& lineage, uint32_t tick) {
+  if (hushed_) return;   // dropped, never kept for after
   if (c.genome().hash() != life_ || c.generation() != lifeGeneration_) meet(c, lineage, tick);
   const size_t n = std::min(line.size(), kMaxSaidText);
   trance_.reset();
   Shown s{Spoken::said, ThoughtId{}, tick, passTicks(n), {}};
   std::copy(line.begin(), line.begin() + n, s.line);
   now_ = s;
+}
+
+void Thinker::hush(bool on, uint32_t tick) {
+  if (on == hushed_) return;
+  hushed_ = on;
+  if (on) return now_.reset(), trance_.reset();
+  quietUntil_ = tick + kQuietTicks + seededFor(life_, tick).below(kQuietJitterTicks);
 }
 
 void Thinker::show(Appearance& a, uint32_t tick) const {

@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "blorb/registry.h"
+#include "carried.h"
 #include "duel/duel_art.h"
 #include "figure.h"
 #include "lively.h"
@@ -43,9 +44,8 @@ constexpr int kHatchlingWide = kOne * 116 / 100, kHatchlingTall = kOne * 90 / 10
 constexpr int kElderSat = 96;                    // x/128
 constexpr int kMinScale = kOne / 16;
 constexpr int kEggLean = kOne * 16 / 100;        // shear at full wobble
-constexpr int kClutchGapPx = 66;
-constexpr int kClutchEggPx = 72;                 // three eggs side by side, each this tall
 constexpr int kAwayPct = 82;                     // his size at the rim, of his size at home
+constexpr int kCarrySpillQ4 = 4 * 16;            // a carried lean may take him this far past his travel circle
 constexpr uint8_t kHaloTeal[3] = {64, 236, 214};
 constexpr uint8_t kSparkWhite[3] = {200, 255, 248};
 constexpr uint16_t kPulseTicks = 8;              // 1.25 Hz at 10 ticks a second
@@ -53,16 +53,24 @@ constexpr int kPulse[kPulseTicks] = {256, 242, 208, 174, 160, 174, 208, 242};
 constexpr uint16_t kSparkOrbitTicks = 30;
 constexpr int kSparkMax = 6;
 constexpr Fx kSparkGlow = Fx::ratio(6, 10);
-constexpr int kMaxPips = 12;
-constexpr uint8_t kPipColour[3] = {214, 150, 70};
 constexpr uint8_t kHintColour[3] = {240, 226, 190};
 constexpr uint8_t kMarqueeColour[3] = {255, 206, 96};
 
-// The empty band above his head, under the pantry pips: the sibling's label
+// The empty band above his head, under the pantry bar: the sibling's label
 // strip (38 px/s, FreeSans 9pt) on the disc's chord there, the ink fading out
 // over the last pixels toward the rim.
 constexpr int kMarqueeFeather = 20;
 constexpr Marquee kMarqueeStrip = {-76, 0, 20, 38, kMarqueeFeather};
+
+// The version tag: FreeSans 9pt (the smallest font there is), centred at the
+// bottom of the glass, its digits on rows 217..229: under his shadow at home
+// and every idle prop (they sit at his feet or above), just inside the rim
+// band. At the right rim a moth's wing hid it (0.7.29 on the badge), so it is
+// drawn after him now. The care hint's glyph (rows 205..229) shares the spot:
+// while it shows, the tag does not.
+// A pale teal a little lighter than the dish there, dimmed with the night as the dish is.
+constexpr int kTagMidX = 120, kTagMidY = 225;
+constexpr uint8_t kTagColour[3] = {44, 84, 80};
 
 constexpr int floorDiv(int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); }
 constexpr int ceilDiv(int64_t a, int64_t b) { return -floorDiv(-a, b); }
@@ -281,6 +289,29 @@ bool sameFrame(const FrameRef& a, const FrameRef& b) {
   for (int e = 0; e < imin(a.eyeCount, 2); ++e)
     if (a.eyes[e].x != b.eyes[e].x || a.eyes[e].y != b.eyes[e].y || a.eyes[e].r != b.eyes[e].r) return false;
   return true;
+}
+
+// The box round a frame's opaque pixels, from its origin: `lo` its top left,
+// `hi` one past its bottom right. Both zero when nothing in it is drawn. The
+// last frame's is kept: he walks on one resting body, and the placing memo
+// asks again each step.
+void opaqueBox(const FrameRef& f, Pt& lo, Pt& hi) {
+  static FrameRef last{};
+  static Pt lastLo{}, lastHi{};
+  if (last.rle && sameFrame(last, f)) { lo = lastLo, hi = lastHi; return; }
+  lo = hi = Pt{};
+  last = f, lastLo = lastHi = Pt{};
+  if (!drawable(f)) return;
+  int x0 = f.w, x1 = -1, y0 = f.h, y1 = -1;
+  RowReader rows(f);
+  for (int y = 0; y < f.h; ++y) {
+    const uint8_t* row = rows.seek(y);
+    for (int x = 0; x < f.w; ++x)
+      if (row[x]) x0 = imin(x0, x), x1 = imax(x1, x), y0 = imin(y0, y), y1 = imax(y1, y);
+  }
+  if (x1 < 0) return;
+  lo = {x0 - f.originX, y0 - f.originY}, hi = {x1 + 1 - f.originX, y1 + 1 - f.originY};
+  lastLo = lo, lastHi = hi;
 }
 
 // Each frame's rows are walked once and every transform visits that row's
@@ -861,6 +892,9 @@ ScarLayer scarsOn(const Appearance& a, const SpritePack& pack, int scale, uint8_
   return placeScars(a.scars, pack.body(blorb::pose::idle, a.stage, 0), pal, count, scale, newest, newStrength);
 }
 
+uint16_t shellColour(const SpritePack&, const Colours&);
+void hatchBurst(Canvas240&, const Appearance&, uint16_t shell, int cx, int cy);
+
 void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
@@ -894,6 +928,8 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     Place p;
     Pt q{};   // p before rounding (Q4)
     int maxLift = 0;
+    Pt lo{}, hi{};   // the resting body's opaque pixels, frame px from its origin: the top left, past the right
+    int midX = 0;    // his middle, frame px from its origin, Q4: under his eyes, else the box's
   };
   static Memo memos[2];
   static uint8_t newest = 0;
@@ -913,7 +949,7 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     const int64_t pct = 100 * int64_t(Fx::kOne) - (100 - kAwayPct) * away;   // x100, Q16
     int k = imax(kMinScale, int(int64_t(a.scalePct) * kOne * pct / (100 * 100 * int64_t(Fx::kOne))));
     Xf base{k, k, 0, 0};
-    if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+    if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
       base.kx = k * kHatchlingWide / kOne;
       base.ky = k * kHatchlingTall / kOne;
     }
@@ -939,6 +975,13 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
     m.p = placeAt(at, m.d, base);
     m.q = standQ4(at, m.d);
     m.maxLift = imin(kHopMaxPx * base.ky / kOne, headroom(figure, m.p, kMarginQ4));
+    opaqueBox(bodies[0], m.lo, m.hi);
+    m.midX = (m.lo.x + m.hi.x) * 8;
+    if (const int eyes = imin(bodies[0].eyeCount, 2)) {
+      int ex = 0;
+      for (int e = 0; e < eyes; ++e) ex += bodies[0].eyes[e].x;
+      m.midX = ex * 16 / eyes + 8 - bodies[0].originX * 16;
+    }
     return m;
   };
   const Memo& here = placed(a.at);
@@ -972,17 +1015,36 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const FrameRef& body = bodies[1];
   const int foot = footHalfW(body, base.kx);
   spots_.him = true, spots_.x = p.x, spots_.y = p.y, spots_.top = p.y - body.originY * base.ky / kOne;
+  spots_.left = p.x + floorDiv(int64_t(here.lo.x) * base.kx, kOne), spots_.right = p.x + floorDiv(int64_t(here.hi.x) * base.kx, kOne);
+  spots_.crown = p.y + floorDiv(int64_t(here.lo.y) * base.ky, kOne);
+  spots_.mid = p.x + floorDiv(int64_t(here.midX) * base.kx, 16 * int64_t(kOne));
   drawItems(a, cv, d, p, foot, false);
 
   Motion m = motionOf(a, maxLift);
   const Lively live = livelyOf(a, maxLift - m.lift);
-  shadow(cv, p, foot, m.lift + live.lift, maxLift);
-  p.xf = {imax(1, base.kx * m.wide / kOne), imax(1, base.ky * m.tall / kOne), m.lift + live.lift, 0};
+  // Carried about (carried.cpp): a slide and lean against the badge's
+  // acceleration, and now and then a reaction to the ride, on top of the idle layer.
+  const Carried carry = carriedOf(a);
+  const int carryLift = imin(carry.lift, imax(0, maxLift - m.lift - live.lift));
+  if (carry.dxQ4 || carry.dyQ4) {
+    // Held to the travel circle his envelope fits in, give or take a few
+    // pixels (a lean is a moment), so a slide never puts him off the glass.
+    int64_t qx = int64_t(p.x) * 16 + carry.dxQ4, qy = int64_t(p.y) * 16 + carry.dyQ4;
+    const int64_t cx = qx + d.x - kSide * 8, cy = qy + d.y - kSide * 8;
+    const int64_t travel = imax(0, kSide * 8 - d.r) + kCarrySpillQ4, r = isqrt(uint64_t(cx * cx + cy * cy));
+    if (r > travel) qx = kSide * 8 + cx * travel / r - d.x, qy = kSide * 8 + cy * travel / r - d.y;
+    p.x = floorDiv(qx + 8, 16), p.y = floorDiv(qy + 8, 16);
+  }
+  shadow(cv, p, foot, m.lift + live.lift + carryLift, maxLift);
+  // An idle's squash (lively.h) and the ride's (carried.h), both on his motion's.
+  p.xf = {imax(1, base.kx * m.wide / kOne * (1024 + live.wide) / 1024 * carry.wide / kOne),
+          imax(1, base.ky * m.tall / kOne * (1024 + live.tall) / 1024 * carry.tall / kOne),
+          m.lift + live.lift + carryLift, 0};
   if (body.h && a.lively) {
     // His breath and sway, from his feet: the height and lean are a share of the frame as drawn.
     const int tallPx = imax(1, body.h * p.xf.ky / kOne);
     p.xf.ky += live.breathQ4 * kOne / (16 * body.h);
-    p.xf.shear = live.swayQ4 * kOne / (16 * tallPx);
+    p.xf.shear = (live.swayQ4 + carry.shearQ4) * kOne / (16 * tallPx);
   } else if (body.h) {
     p.xf.ky += breathPx(a) * kOne / body.h;
   }
@@ -994,14 +1056,32 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 
   // His face, a pixel to the side when his eyes wander (the idle layer).
   Place look = p;
-  look.x += live.gazeX;
+  look.x += live.gazeX + carry.gaze;
+  look.y += live.gazeY;
   FaceShown face = faceFor(a);
+  if (carry.face && !eyesGlow(a)) face = {carry.expr, carry.expr, 256};
   FrameRef now = pack.face(face.now, a.stage);
   if (face.mix < 256) blit(cv, pack.face(face.from, a.stage), look, col, 256, spots, &scars);
   blit(cv, now, look, col, face.mix, spots, &scars);
   halo(cv, a, pack, now.eyeCount ? now : body, look);
   pelletInMouth(cv, pack, a, now, now.eyeCount ? now : body, look);
   drawItems(a, cv, d, p, foot, true);
+  if (a.hatchedMs < Appearance::kHatchBurstMs)   // the shell flying off him
+    hatchBurst(cv, a, shellColour(pack, col), p.x, p.y - p.xf.lift - body.originY * p.xf.ky / kOne / 2);
+  if (carry.active) {
+    CarrySpots at;
+    at.x = p.x, at.y = p.y - p.xf.lift, at.top = p.y - p.xf.lift - body.originY * p.xf.ky / kOne;
+    at.halfW = body.w * p.xf.kx / kOne / 2;
+    const FrameRef& eyes = now.eyeCount ? now : body;
+    at.eyes = uint8_t(imin(eyes.eyeCount, 2));
+    for (int e = 0; e < at.eyes; ++e) {
+      const Pt c = project(look.xf, eyes, eyes.eyes[e].x * 16 + 8, eyes.eyes[e].y * 16 + 8);
+      at.ex[e] = look.x + floorDiv(c.x + 8, 16), at.ey[e] = look.y + floorDiv(c.y + 8, 16);
+      at.er[e] = eyes.eyes[e].r * look.xf.kx / kOne;
+    }
+    at.glowing = eyesGlow(a);
+    drawCarried(cv, a, at);
+  }
 }
 
 // The egg's rock: 8/64 of a turn a tick on poseTick (which an egg never moves,
@@ -1009,6 +1089,231 @@ void drawCreature(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
 int eggShear(const Appearance& a, Fx wobble, int lean) {
   const int angleQ8 = a.lively ? livelyRockQ8(a) : int(a.poseTick) * 8 * 256;
   return lean * unit256(wobble) / 256 * sin64q(angleQ8) / kOne;
+}
+
+// ---- an egg shaken open (Egg::shaken), and the shell flying off him ----------------
+//
+// Drawn in code over any pack's egg art, so every species cracks alike, and
+// only round its dome and down its sides: never over the baby curled in its
+// middle (where the packs' shell and baby share colours, so it goes by
+// where, not by colour). The cracks grow with
+// its progress: a hairline round its dome, then cracks running down its
+// sides, more of them, and last its crown coming away in holes, chips of it
+// jumping off while a hand shakes it. A shaken egg jiggles too.
+
+constexpr int kCrackInk[3] = {24, 20, 16};   // the pack's outline ink
+constexpr int kHoleInk[3] = {44, 32, 40};    // the dark inside, through a hole in the shell
+constexpr int kEggJigglePx = 3;              // side to side at the hardest shake
+constexpr int kJiggleMs = 70;                // one way, then the other
+constexpr int kChipHopMs = 420;              // a chip's jump off the shell and back
+constexpr int kBurstChips = 10;
+
+// Crack paths, Q8 across the egg: u from its left edge to its right on that
+// row, v from its top to its bottom. Each grows from its first point, from
+// `from` (the egg's progress, Q8) over the next quarter.
+struct CrackPath { uint8_t n, from; uint8_t uv[7][2]; };
+constexpr CrackPath kCracks[] = {
+    {7, 0, {{8, 70}, {48, 52}, {88, 72}, {128, 50}, {168, 72}, {208, 52}, {248, 70}}},   // the hairline, round the dome
+    {3, 64, {{8, 70}, {22, 106}, {10, 140}}},
+    {3, 64, {{248, 70}, {232, 110}, {246, 146}}},
+    {3, 128, {{10, 140}, {26, 176}, {16, 208}}},
+    {3, 128, {{246, 146}, {228, 184}, {242, 214}}},
+    {3, 128, {{128, 50}, {112, 30}, {130, 10}}},
+};
+// Where the crown comes away (Q8, as the cracks), in the last quarter.
+constexpr uint8_t kHoles[3][2] = {{88, 46}, {168, 46}, {128, 26}};
+// The baby inside sits below this much of the egg (Q8) and in from its sides
+// by this much of a row (Q8): no crack goes there.
+constexpr int kDomeQ8 = 84, kSideQ8 = 40;
+
+uint16_t ink565(const int (&c)[3]) { return to565(Rgb{c[0], c[1], c[2]}); }
+
+void putPx(Canvas240& cv, int x, int y, uint16_t c, int alpha) {
+  if (x < 0 || y < 0 || x >= kSide || y >= kSide || alpha <= 0) return;
+  uint16_t& px = cv.px[y * kSide + x];
+  px = alpha >= 256 ? c : blend(px, c, alpha);
+}
+
+// The lightest colour of a pack's shell, as `col` tints it: the chips' colour.
+uint16_t shellColour(const SpritePack& pack, const Colours& col) {
+  uint16_t count = 0;
+  pack.palette(count);
+  int best = -1;
+  uint16_t c = to565(Rgb{220, 236, 200});
+  for (int i = 1; i < imin(count, 256); ++i) {
+    if (col.region[i] != blorb::region::shell.v) continue;
+    const uint16_t v = col.base[i];
+    const int lum = ((v >> 11) & 31) * 2 + ((v >> 5) & 63) + (v & 31);
+    if (lum > best) best = lum, c = v;
+  }
+  return c;
+}
+
+// A shard of shell about `size` px: the shell's colour inside the ink.
+void chip(Canvas240& cv, int x, int y, int size, uint16_t shell, int alpha, int turn) {
+  const uint16_t ink = ink565(kCrackInk);
+  for (int dy = -1; dy <= size; ++dy)
+    for (int dx = -1; dx <= size; ++dx) {
+      const int skew = turn & 1 ? dy / 2 : -dy / 2;
+      const bool cut = dy == size - 1 && dx == (turn & 2 ? 0 : size - 1);   // a corner off: a shard, not a square
+      const bool in = dx >= 0 && dx < size && dy >= 0 && dy < size && !cut;
+      putPx(cv, x + dx + skew, y + dy, in ? shell : ink, alpha);
+    }
+}
+
+// The egg's frame, row by row: its opaque pixels' leftmost and rightmost (-1:
+// none), and the egg's own top and bottom: the rows a third of its widest
+// across, so an antenna or a curl of art above it is not its dome.
+struct EggRows {
+  static constexpr int kMax = 320;
+  int16_t left[kMax], right[kMax];
+  int top = -1, bottom = -1;
+};
+
+// Worked out again only when the frame changes (three a pack): kept between draws.
+const EggRows& eggRows(const FrameRef& f) {
+  static FrameRef last{};
+  static EggRows e;
+  if (last.rle && sameFrame(last, f)) return e;
+  last = f;
+  e.top = e.bottom = -1;
+  const uint8_t* p = f.rle;
+  const int rows = imin(f.h, EggRows::kMax);
+  int widest = 0;
+  for (int y = 0; y < rows; ++y) {
+    int lo = -1, hi = -1;
+    for (int x = 0; x < f.w; x += p[0], p += 2)
+      if (p[1]) hi = imin(x + p[0], f.w) - 1, lo = lo < 0 ? x : lo;
+    e.left[y] = int16_t(lo), e.right[y] = int16_t(hi);
+    widest = imax(widest, hi - lo + 1);
+  }
+  for (int y = 0; y < rows; ++y)
+    if (e.left[y] >= 0 && 3 * (e.right[y] - e.left[y] + 1) >= widest) e.top = e.top < 0 ? y : e.top, e.bottom = y;
+  return e;
+}
+
+// Where cracks may go: the egg's dome and its sides, never the baby's middle.
+struct OnShell {
+  const FrameRef& f;
+  const EggRows& e;
+  const Place& p;
+  Canvas240& cv;
+  bool shell(int x, int y) const {
+    if (y < e.top || y > e.bottom || x < e.left[y] || x > e.right[y]) return false;
+    if ((y - e.top) * 256 <= kDomeQ8 * (e.bottom - e.top)) return true;
+    const int in = imax(3, (e.right[y] - e.left[y]) * kSideQ8 / 256);
+    return x - e.left[y] < in || e.right[y] - x < in;
+  }
+  Pt canvas(int x, int y) const {
+    const Pt q = project(p.xf, f, x * 16 + 8, y * 16 + 8);
+    return {p.x + floorDiv(q.x + 8, 16), p.y + floorDiv(q.y + 8, 16)};
+  }
+  // A frame pixel inked, if it is shell.
+  void put(int x, int y, uint16_t c, int alpha) const {
+    if (!shell(x, y)) return;
+    const Pt at = canvas(x, y);
+    putPx(cv, at.x, at.y, c, alpha);
+  }
+  // A Q8 point on the egg, in frame pixels.
+  Pt point(int u, int v) const {
+    int y = e.top + (e.bottom - e.top) * v / 256;
+    while (y > e.top && e.left[y] < 0) --y;
+    return {e.left[y] + (e.right[y] - e.left[y]) * u / 256, y};
+  }
+};
+
+// A crack from a to b (frame pixels), `wide` px, its lit lip a pixel under it.
+void crackLine(const OnShell& s, Pt a, Pt b, int wide, int alpha) {
+  const uint16_t ink = ink565(kCrackInk), lip = to565(Rgb{236, 244, 220});
+  const int dx = iabs(b.x - a.x), dy = -iabs(b.y - a.y), sx = a.x < b.x ? 1 : -1, sy = a.y < b.y ? 1 : -1;
+  const bool flat = dx > -dy;
+  for (int pass = 0; pass < 2; ++pass) {
+    int x = a.x, y = a.y, err = dx + dy;
+    for (;;) {
+      if (pass == 0) s.put(x + (flat ? 0 : wide), y + (flat ? wide : 0), lip, alpha / 2);
+      else
+        for (int w = 0; w < wide; ++w) s.put(x + (flat ? 0 : w), y + (flat ? w : 0), ink, alpha);
+      if (x == b.x && y == b.y) break;
+      const int e2 = 2 * err;
+      if (e2 >= dy) err += dy, x += sx;
+      if (e2 <= dx) err += dx, y += sy;
+    }
+  }
+}
+
+// The first `grown` (Q8) of a path's length.
+void crackPath(const OnShell& s, const Pt* pts, int n, int grown, int wide, int alpha) {
+  int total = 0;
+  for (int i = 1; i < n; ++i) total += iabs(pts[i].x - pts[i - 1].x) + iabs(pts[i].y - pts[i - 1].y);
+  int left = total * grown / 256;
+  for (int i = 1; i < n && left > 0; ++i) {
+    const int len = iabs(pts[i].x - pts[i - 1].x) + iabs(pts[i].y - pts[i - 1].y);
+    Pt to = pts[i];
+    if (len > left)
+      to = {pts[i - 1].x + (pts[i].x - pts[i - 1].x) * left / len, pts[i - 1].y + (pts[i].y - pts[i - 1].y) * left / len};
+    crackLine(s, pts[i - 1], to, wide, alpha);
+    left -= len;
+  }
+}
+
+int grownQ8(int progress, int from) { return imax(0, imin(256, (progress - from) * 4)); }   // each over a quarter
+
+void eggCracks(Canvas240& cv, const Appearance& a, const FrameRef& f, const Place& p, uint16_t shell, int ms) {
+  const int prog = unit256(a.eggProgress);
+  if (prog <= 0 || !drawable(f)) return;
+  const EggRows& e = eggRows(f);
+  if (e.top < 0 || e.bottom <= e.top) return;
+  const OnShell s{f, e, p, cv};
+  for (const CrackPath& c : kCracks) {
+    const int grown = grownQ8(prog, c.from);
+    if (!grown) continue;
+    Pt pts[7];
+    for (int i = 0; i < c.n; ++i) pts[i] = s.point(c.uv[i][0], c.uv[i][1]);
+    // The hairline is a pixel, then gapes as the egg gives.
+    const bool hairline = c.from == 0 && prog < 64;
+    crackPath(s, pts, c.n, grown, c.from == 0 && !hairline ? 2 : 1, hairline ? 200 : 256);
+  }
+  // The crown coming away: holes into the dark, one by one...
+  const int away = grownQ8(prog, 192);
+  if (!away) return;
+  const int tall = e.bottom - e.top;
+  const uint16_t hole = ink565(kHoleInk), ink = ink565(kCrackInk);
+  for (int h = 0; h < 3; ++h) {
+    if (away <= h * 64) continue;
+    const int r = 1 + tall * (2 + h % 2) * imin(256, away - h * 64 + 64) / (80 * 256);
+    const Pt c = s.point(kHoles[h][0], kHoles[h][1]);
+    for (int dy = -r; dy <= r; ++dy)
+      for (int dx = -2 * r; dx <= 2 * r; ++dx) {
+        const int d2 = dx * dx + 4 * dy * dy, jag = ((dx * 7 + dy * 3 + h) & 3) * r;   // wider than tall, jagged
+        const int rr = 4 * r * r - jag;
+        if (d2 <= rr) s.put(c.x + dx, c.y + dy, d2 >= rr - 6 * r ? ink : hole, 256);
+      }
+  }
+  // ...and its chips jumping off them with the shake.
+  const int shaken = unit256(a.eggShaken);
+  if (!shaken) return;
+  for (int h = 0; h < 3; ++h) {
+    if (away <= h * 64) continue;
+    const Pt at = s.point(kHoles[h][0], kHoles[h][1]), c = s.canvas(at.x, at.y);
+    const int ph = (ms + h * 137) % kChipHopMs;   // each chip on its own beat
+    const int hop = ph * (kChipHopMs - ph) / (kChipHopMs * kChipHopMs / 16) * (4 + 10 * shaken / 256) / 4;
+    const int side = (h - 1) * 4 + (h == 0 ? -1 : 1) * ph * 6 / kChipHopMs;
+    chip(cv, c.x + side, c.y - 3 - hop, 3 + tall / 50, shell, 256, h + ms / kChipHopMs);
+  }
+}
+
+// He just hatched: the shell bursts off him and falls away, fading.
+void hatchBurst(Canvas240& cv, const Appearance& a, uint16_t shell, int cx, int cy) {
+  const int t = a.hatchedMs, T = Appearance::kHatchBurstMs;   // ms
+  const int alpha = t < T * 3 / 5 ? 256 : 256 * (T - t) / (T * 2 / 5);   // whole, then fading as they fall
+  for (int i = 0; i < kBurstChips; ++i) {
+    const uint32_t r = mix32(a.lifeSeed, uint32_t(i));
+    const int angle = (i * 64 / kBurstChips + int(r % 5)) & 63;
+    const int speed = 110 + int(r >> 8) % 60;   // px a second
+    const int vx = speed * sin64(angle + 16) / kOne, vy = speed * sin64(angle) / kOne - 70;
+    const int x = cx + vx * t / 1000, y = cy + vy * t / 1000 + 160 * t / 1000 * t / 1000;   // and falling
+    chip(cv, x, y, 4 + i % 3, shell, alpha, i + t / 150);
+  }
 }
 
 void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
@@ -1019,9 +1324,15 @@ void drawEgg(const Appearance& a, const SpritePack& pack, Canvas240& cv) {
   const Disc d = envelope({&f, 1, &f, 1, variants, 2}, middle(f, Xf{}), 0);
   Place p = placeAt(a.at, d, Xf{});
   drawItems(a, cv, d, p, footHalfW(f, kOne), false);
-  Fx shake = a.wobble + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
+  // Rocking as it nears hatching, rocked harder by a hand shaking it, and
+  // jiggling side to side with that hand.
+  const int ms = a.lively ? int(a.liveMs % 1000000) : int(a.poseTick) * 100;
+  const int shaken = unit256(a.eggShaken);
+  Fx shake = a.wobble + a.eggShaken + (a.eggProgress >= Fx::ratio(2, 3) ? Fx::ratio(3, 10) : Fx::zero());
   p.xf.shear = eggShear(a, shake, kEggLean);
+  if (shaken) p.x += (ms / kJiggleMs % 2 ? 1 : -1) * (1 + (kEggJigglePx - 1) * shaken / 256);
   blit(cv, f, p, col, 256, nullptr);
+  eggCracks(cv, a, f, p, shellColour(pack, col), ms);
   halo(cv, a, pack, f, p);
   drawItems(a, cv, d, p, footHalfW(f, kOne), true);
 }
@@ -1045,32 +1356,6 @@ void fill(Canvas240& cv, int x0, int y0, int x1, int y1, const Rgb& c, int alpha
       uint16_t& px = cv.px[y * kSide + x];
       px = alpha >= 256 ? c565 : blend(px, c565, alpha);
     }
-}
-
-// Each egg in its own species' art: a friend egg can be another species' than
-// the parent whose clutch it joins.
-void drawClutch(const Appearance& a, Canvas240& cv) {
-  const int n = imin(a.eggCount, blorb::kMaxClutch);
-  const Rgb cream{kHintColour[0], kHintColour[1], kHintColour[2]};
-  for (int i = 0; i < n; ++i) {
-    const SpritePack& pack = packFor(a.eggs[i].species);
-    const FrameRef f = pack.egg(Fx::zero());
-    Tint tints[blorb::kRegionCount]{};
-    tints[blorb::region::skin.v] = a.eggs[i].skin;
-    tints[blorb::region::cloak.v] = a.eggs[i].cloak;
-    tints[blorb::region::shell.v] = a.eggs[i].shell;
-    Colours& col = scratchColours();
-    buildColours(pack, tints, false, 0, col);
-    Place p;
-    p.xf.kx = p.xf.ky = imin(kOne, kOne * kClutchEggPx / imax(1, f.h));
-    p.x = kSide / 2 + (2 * i - (n - 1)) * kClutchGapPx / 2;
-    p.y = kSide / 2 + (f.originY - f.h / 2) * p.xf.ky / kOne;
-    bool chosen = i == a.cursor;
-    if (chosen) p.xf.shear = eggShear(a, Fx::ratio(1, 3), kEggLean);
-    blit(cv, f, p, col, 256, nullptr);
-    if (chosen)
-      for (int row = 0; row < 6; ++row) fill(cv, p.x - row, p.y + 5 + row, p.x + row + 1, p.y + 6 + row, cream, 256);
-  }
 }
 
 bool inDish(int x, int y) {
@@ -1231,18 +1516,6 @@ void mask(Canvas240& cv) {
   }
 }
 
-// Pantry pellets as pips along the top of the rim.
-void pips(Canvas240& cv, uint8_t pantry) {
-  const int n = imin(pantry, kMaxPips);
-  const Rgb c{kPipColour[0], kPipColour[1], kPipColour[2]};
-  for (int k = 0; k < n; ++k) {
-    int dx = (2 * k - (n - 1)) * 9 / 2;
-    int x = kSide / 2 + dx, y = kSide / 2 - int(isqrt(uint64_t(108 * 108 - dx * dx)));
-    fill(cv, x - 1, y - 2, x + 1, y + 2, c, 256);
-    fill(cv, x - 2, y - 1, x + 2, y + 1, c, 256);
-  }
-}
-
 // 9x9 gesture glyphs, drawn at 2x: what the body should do, and how many
 // knocks it takes -- a dot per knock under the glyph (controls.h), so a child
 // can learn knock once versus knock knock by counting, not reading.
@@ -1344,9 +1617,41 @@ void noFightStrip(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
-// Fight mode keeps the dish, so it has to say what it is doing: a line saying
-// it is looking for a fight (or connecting, or why not yet), the time until it
-// gives up, how to stop, and a sonar ring pulsing out to the rim.
+}  // namespace
+
+// Fight mode's line: looking for a fight (or connecting, or why not yet), the
+// time until it gives up, and how to stop. A friend heard who can never pair
+// is said in words: on other duel rules, one of the two badges needs an
+// update; on these rules but not up for it, his pet is not ready. Only when
+// nobody heard could pair, so a room with one ready friend just looks.
+void lobbyText(const blorb::Appearance& a, char* s, size_t n) {
+  const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
+  const unsigned blocked = unsigned(a.lobbyOtherRules) + a.lobbyNotReady;
+  const bool nobodyPairs = a.lobbyFriends > 0 && blocked >= a.lobbyFriends;
+  if (a.lobbyConnecting)
+    std::snprintf(s, n, "FIGHT FOUND! GET READY...  ");
+  else if (a.lobbyDecline == blorb::Decline::Resting) {
+    const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
+    std::snprintf(s, n, "FIGHT MODE - RESTING %u:%02u  HEARD %u  HOLD ME UPSIDE DOWN TO STOP  ", rest / 60, rest % 60,
+                  unsigned(a.lobbyFriends));
+  } else if (a.lobbyDecline != blorb::Decline::None)
+    std::snprintf(s, n, "FIGHT MODE - %s  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ", notReady(a.lobbyDecline),
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+  else if (nobodyPairs && a.lobbyOtherRules)
+    std::snprintf(s, n, "FIGHT MODE - FOUND A FRIEND, BUT ONE OF YOU NEEDS AN UPDATE TO FIGHT  %u:%02u  "
+                  "HOLD ME UPSIDE DOWN TO STOP  ", secs / 60, secs % 60);
+  else if (nobodyPairs)
+    std::snprintf(s, n, "FIGHT MODE - FOUND A FRIEND, BUT THEIR PET IS NOT READY  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
+                  secs / 60, secs % 60);
+  else
+    std::snprintf(s, n, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
+                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+}
+
+namespace {
+
+// Fight mode keeps the dish, so it has to say what it is doing (lobbyText),
+// and a sonar ring pulses out to the rim.
 void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   const uint16_t colour = to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]});
   constexpr uint32_t kPulseMs = 1200;
@@ -1371,20 +1676,8 @@ void lobbyLine(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   Marquee strip = kMarqueeStrip;
   if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
   dimBand(cv, strip);
-  char s[112];
-  const unsigned secs = unsigned((a.lobbyTicksLeft + 9) / 10);
-  if (a.lobbyConnecting)
-    std::snprintf(s, sizeof s, "FIGHT FOUND! GET READY...  ");
-  else if (a.lobbyDecline == blorb::Decline::Resting) {
-    const unsigned rest = unsigned((a.restTicksLeft + 9) / 10);
-    std::snprintf(s, sizeof s, "FIGHT MODE - RESTING %u:%02u  HEARD %u  HOLD ME UPSIDE DOWN TO STOP  ", rest / 60, rest % 60,
-                  unsigned(a.lobbyFriends));
-  } else if (a.lobbyDecline != blorb::Decline::None)
-    std::snprintf(s, sizeof s, "FIGHT MODE - %s  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ", notReady(a.lobbyDecline),
-                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
-  else
-    std::snprintf(s, sizeof s, "FIGHT MODE - LOOKING FOR A FIGHT...  HEARD %u  %u:%02u  HOLD ME UPSIDE DOWN TO STOP  ",
-                  unsigned(a.lobbyFriends), secs / 60, secs % 60);
+  char s[kLobbyTextMax];
+  lobbyText(a, s, sizeof s);
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, colour, nowMs);
 }
 
@@ -1545,7 +1838,19 @@ void rimTokens(Canvas240& cv, const Appearance& a) {
   if (a.vendetta) drawArt(cv, duel_art::kVendetta, kVendettaAt[0], kVendettaAt[1], kTokenPct, 256);
 }
 
+const char* versionTag_ = nullptr;   // setVersionTag()
+
+void versionTag(Canvas240& cv, Fx night) {
+  if (!versionTag_ || !*versionTag_) return;
+  const int lit = 256 - (blorb::clamp01(night).raw >> 17);   // as background() dims the dish
+  const uint16_t ink = to565({kTagColour[0] * lit / 256, kTagColour[1] * lit / 256, kTagColour[2] * lit / 256});
+  drawString(cv, kFreeSans9pt7b, versionTag_, kTagMidX - textWidth(kFreeSans9pt7b, versionTag_) / 2, kTagMidY, ink,
+             Clip{0, 0, kSide, kSide, 0});
+}
+
 }  // namespace
+
+void setVersionTag(const char* s) { versionTag_ = s; }
 
 void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int alpha, int fillRows) {
   if (!drawable(f)) return;
@@ -1565,6 +1870,29 @@ void drawArt(Canvas240& cv, const FrameRef& f, int x, int y, int scalePct, int a
   blit(cv, g, p, artColours(), alpha, nullptr);
 }
 
+// One egg of a clutch in its own species' art and colours (a friend egg can
+// be another species' than the parent whose clutch it joins), its middle at
+// (cx, cy), heightPx tall, rocked by `shear` (Q12) about its foot.
+void drawEggPreview(Canvas240& cv, const blorb::EggPreview& e, int cx, int cy, int heightPx, int shear, int alpha) {
+  const SpritePack& pack = packFor(e.species);
+  const FrameRef f = pack.egg(Fx::zero());
+  if (!f.h || heightPx <= 0) return;
+  Tint tints[blorb::kRegionCount]{};
+  tints[blorb::region::skin.v] = e.skin;
+  tints[blorb::region::cloak.v] = e.cloak;
+  tints[blorb::region::shell.v] = e.shell;
+  Colours& col = scratchColours();
+  buildColours(pack, tints, false, 0, col);
+  Place p;
+  p.xf.kx = p.xf.ky = imax(kMinScale, kOne * heightPx / f.h);
+  p.xf.shear = shear;
+  p.x = cx;
+  p.y = cy + (f.originY - f.h / 2) * p.xf.ky / kOne;
+  blit(cv, f, p, col, alpha, nullptr);
+}
+
+int eggArtHeight(blorb::SpeciesId species) { return packFor(species).egg(Fx::zero()).h; }
+
 void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, const Figure& fig) {
   Mottle mottle{a.lifeSeed, 0};
   int8_t spotHue = 0;
@@ -1579,7 +1907,7 @@ void drawFigure(const Appearance& a, const SpritePack& pack, Canvas240& cv, cons
     }
   const int k = imax(kMinScale, int(int64_t(a.scalePct) * fig.scalePct * kOne / 10000));
   Xf base{k, k, 0, 0};
-  if (a.stage == Stage::Baby || a.stage == Stage::Child) {
+  if (a.stage == Stage::Baby) {   // a hatchling is squat; a child stands up (#aging)
     base.kx = k * kHatchlingWide / kOne;
     base.ky = k * kHatchlingTall / kOne;
   }
@@ -1628,15 +1956,27 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
     return phaseEnd(Phase::Mask);
   }
   switch (a.kind) {
-    case Kind::Creature: drawCreature(a, pack, cv); break;
-    case Kind::Egg: drawEgg(a, pack, cv); break;
-    case Kind::Remains: drawRemains(a, pack, cv); break;
-    case Kind::Clutch: drawClutch(a, cv); break;
+    case Kind::Creature:
+      drawCreature(a, pack, cv);
+      drawIdleProps(cv, a, spots_);   // idle_props.cpp: what he plays with
+      break;
+    case Kind::Egg:
+      // Just kept from a clutch: the chosen moment first (clutch.cpp), then the egg.
+      if (!drawChosen(a, cv)) drawEgg(a, pack, cv);
+      break;
+    case Kind::Remains:
+      drawRemains(a, pack, cv);
+      drawVigilEggs(a, cv);   // the eggs on their way
+      break;
+    case Kind::Clutch: drawClutchPicker(a, cv); break;
   }
   phaseEnd(Phase::Figure);
-  pips(cv, a.pantry);
+  hungerCookies(cv, a);   // feeding.cpp: how full he is, five cookies up the left rim (like hearts)
   rimTokens(cv, a);
   hint(cv, a);
+  // Over him and his props: nothing covers it. Not with the care hint (the
+  // same spot), not on a clutch to pick from, not in fight mode.
+  if (!a.hasHint && a.kind != Kind::Clutch && !a.dueling && !a.lobby) versionTag(cv, a.night);
   phaseEnd(Phase::Rim);
   // Low when he stands high in the dish, so the line never crosses his face.
   if (a.lobby) lobbyLine(cv, a, nowMs);
@@ -1700,6 +2040,11 @@ void drawIdleBar(Canvas240& cv, uint16_t permille) {
   const uint16_t c = to565({120, 150, 150});
   for (const IdleLit& p : kIdleLit.px)
     if (permille >= p.from) cv.px[p.at] = c;
+}
+
+void drawRimPulse(Canvas240& cv, uint8_t level) {
+  const uint16_t c = to565({uint8_t(255 * level / 255), uint8_t(190 * level / 255), uint8_t(70 * level / 255)});
+  for (const IdleLit& p : kIdleLit.px) cv.px[p.at] = c;
 }
 
 }  // namespace paint

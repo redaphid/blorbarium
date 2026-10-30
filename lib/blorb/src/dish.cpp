@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "blorb/founding.h"
 #include "blorb/friend_egg.h"
+#include "blorb/tilt_aim.h"
 #include <cstring>
 #include <utility>
 
@@ -68,6 +69,23 @@ bool fired(const SenseOut& s, StimId id) {
   return false;
 }
 
+// The badge was moved or touched this tick: a gesture of the body's own
+// (never the phone's), or more motion than a table's. A badge lying still
+// reads under 5 mg off gravity (senses.cpp), the motion locus about 0.01; a
+// hand holding it shakes it past 15 mg.
+constexpr Fx kHandledMotion = Fx::ratio(3, 100);
+bool handled(const SenseOut& s) {
+  for (uint8_t i = 0; i < s.stimCount; ++i) {
+    const StimId id = s.stimuli[i];
+    if (id.v >= 64 || (s.remote & (uint64_t(1) << id.v))) continue;
+    for (const StimInfo& row : STIMULI)
+      if (row.id == id && row.source == StimSource::Body) return true;
+  }
+  for (uint8_t i = 0; i < s.lociCount; ++i)
+    if (s.loci[i].locus == locus::motion && s.loci[i].value >= kHandledMotion) return true;
+  return false;
+}
+
 void copyName(char (&to)[16], const char* from) {
   std::memset(to, 0, sizeof to);
   for (size_t i = 0; i + 1 < sizeof to && from[i]; ++i) to[i] = from[i];
@@ -82,6 +100,7 @@ constexpr const char* kAdoptedFile = "adopted.flag";   // beside the keepsake, n
 Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions options)
     : store_(store), keep_(store), rtc_(options.rtc), air_(options.air), hatchNeedsPhone_(options.hatchNeedsPhone) {
   const Genome founder = options.founder ? *options.founder : starterGenome(speciesSeed);
+  mac_ = options.mac;
   live_.rng = Rng::seeded(speciesSeed);
   live_.settings.lineageId = lineageId;
   live_.settings.speciesSeed = speciesSeed;
@@ -104,6 +123,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
     live_.seq = 0;
     tick_ = lastSaveTick_ = lastWallCheckTick_ = live_.clock.petTicks;
     boot_ = loaded == SlotState::FellBack ? Boot::FellBack : Boot::Resumed;
+    resumeStats(false);
     return;
   }
   // No readable snapshot: the line goes on from the newest genome the log can rebuild.
@@ -114,6 +134,7 @@ Dish::Dish(Storage& store, uint32_t speciesSeed, uint64_t lineageId, DishOptions
   live_.clock.phaseOffsetTicks = int32_t(uint32_t(options.foundingHour % 24) * kTicksPerHour);
   copyName(live_.settings.name, lineage_.currentName());
   live_.occupant = latest ? Egg(Offspring{std::move(*latest), {}}, generation, 0) : Egg(Offspring{founder, {}}, 0, 0);
+  resumeStats(true);
   save();
 }
 
@@ -124,8 +145,11 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   // ends was measured from BOOT's raw level by the samples before this one.
   lastFired_ = 0;
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
-  if (s.knockWaiting && !knockWaitWas_) knockAim_ = detectors_.aim.aim();   // the first knock: what it aims at
+  arming_.sample(s.ax, s.ay, s.az, nowMs);
+  watchChoice(nowMs);
+  if (s.knockWaiting && !knockWaitWas_) knockAim_ = armedAim();   // the first knock: what it aims at
   knockWaitWas_ = s.knockWaiting;
+  thinker_.hush(s.asked, tick_);   // a question on the screen: he says nothing
   for (uint8_t i = before; i < pending_.stimCount; ++i) {
     const StimId f = pending_.stimuli[i];
     if (f.v < 64) lastFired_ |= uint64_t(1) << f.v;
@@ -140,13 +164,77 @@ void Dish::sample(const BodySample& s, uint32_t nowMs) {
   }
   cues_.sample(s, detectors_.side.holding(), nowMs);
   feed_.sample(s, (lastFired_ >> stim::button.v) & 1, nowMs);
+  carry_.sample(s, nowMs, carryContext(s));
+  // The picker's aim as of this sample (AimDetector), by the rule the next
+  // tick keeps by (pickEgg): while a knock waits, the aim it was made at;
+  // turned onto a side, the aim from before the turn, as a heavy special's.
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool picking = k && k->sinceDeath >= Clutch::kVigilTicks && k->count > 1;
+  int8_t egg = -1;
+  if (picking) {
+    int8_t aim = knockWaitWas_ && knockAim_ >= 0 ? knockAim_ : armedAim();
+    if (kSideHoldHolds && detectors_.side.holding() && sideWas_) aim = tiltAim(sideTilt_[0], sideTilt_[1]);
+    egg = eggAt(aim, k->count);
+  }
+  clutchShow_.sample(s, egg, picking, nowMs);
+}
+
+// What the carry show (carry_show.h) needs to know beyond the sample: whether
+// he can react at all (awake at home, not fighting or eating), whether a
+// gesture is under way or just spoke, and who he is.
+CarryContext Dish::carryContext(const BodySample& s) const {
+  CarryContext c;
+  const auto fired = [&](StimId id) { return id.v < 64 && ((lastFired_ >> id.v) & 1); };
+  c.posing = s.sideDown || s.invertedDown || detectors_.side.holding() || detectors_.hang.charge() > Fx::zero();
+  c.shook = fired(stim::shake);
+  c.gestured = fired(stim::button) || fired(stim::button_hold) || fired(stim::button_double) || fired(stim::hang) ||
+               fired(stim::knock) || fired(stim::double_knock);
+  c.poseWord = fired(stim::button_hold) || fired(stim::hang);
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  if (!cr) return c;
+  c.canReact = !sealed() && !duel_.active() && !cr->body().asleep && cr->body().mouth == Mouthful::Nothing &&
+               !detectors_.lid.lidded();
+  c.species = cr->phenotype().species.body.v;
+  c.seed = cr->genome().hash();
+  return c;
+}
+
+void Dish::forceCarry(Carry k) {
+  const Creature* cr = std::get_if<Creature>(&live_.occupant);
+  carry_.force(k, nowMs_, cr ? cr->genome().hash() : 0);
+}
+
+// A choice screen (the eggs, a duel) opens unarmed: a hand's move arms the
+// aim (tilt_aim.h AimArming), so a badge left lying never chooses. Called on
+// every sample and before every tick reads the aim, so a screen that opens on
+// a tick (the vigil's end, a duel) is unarmed from that tick on.
+void Dish::watchChoice(uint32_t ms) {
+  const Clutch* k = std::get_if<Clutch>(&live_.occupant);
+  const bool choosing = (k && k->sinceDeath + 1 >= Clutch::kVigilTicks && k->count > 1) || duel_.active();
+  if (choosing && !choosing_) arming_.open();
+  choosing_ = choosing;
+  armed_ = choosing && arming_.armed(ms);
 }
 
 void Dish::tick(uint32_t nowMs, Link& link) {
   if (int32_t(nowMs - nowMs_) > 0) nowMs_ = nowMs;
+  // A nap: everything but the last second is lived coarsely, now. Not in a
+  // duel, whose turns need every tick; the last second runs as usual below.
+  if (ticking_ && int32_t(nowMs - lastTickMs_) >= int32_t(kNapLiveMs) && !duel_.active()) {
+    const uint32_t ticks = (nowMs - lastTickMs_) / kTickMs - kMaxTicksPerCall;
+    lastTickMs_ += ticks * kTickMs;   // all of it, even past the cap: the rest is dropped, not ticked
+    catchUp(ticks);
+    lastCatchUp_.awaySeconds = 0;   // powered: never an absence
+  }
+  ticking_ = true;
   for (int n = 0; n < kMaxTicksPerCall && nowMs - lastTickMs_ >= kTickMs; ++n) {
     lastTickMs_ += kTickMs;
     runOneTick(link);
+    if (++secondTicks_ == kTicksPerSecond) {   // the analytics' powered clock and its day buckets
+      secondTicks_ = 0;
+      stats_.analytics.second(wallNow());
+      if (duel_.active()) stats_.analytics.add(anx::dueling);
+    }
   }
   while (std::optional<std::string_view> line = link.readLine()) proto_.handle(*line, *this, link);
   proto_.pump(*this, link, tick_);
@@ -168,20 +256,36 @@ void Dish::runOneTick(Link& link) {
     ++tick_;
     return;
   }
-  live_.clock.advance(detectors_.lid.lidded());
+  // The pet hours are believed while they are the wall's (senses.h PetClock).
+  live_.clock.trusted = live_.clock.aligned && wallKnown_;
+  const bool wasDim = live_.clock.dim(), touched = handled(out);
+  live_.clock.advance(detectors_.lid.lidded(), touched);
   detectors_.tick(TickContext{live_.clock, link.connected(), tick_}, out);
   for (uint8_t i = 0; i < out.lociCount; ++i) {
     if (out.loci[i].locus == locus::tilt_x) tiltX_ = out.loci[i].value;
     if (out.loci[i].locus == locus::tilt_y) tiltY_ = out.loci[i].value;
   }
+  stats_.gestures(out, detectors_.side.holding(), detectors_.aim.aim());   // the hands, before anything takes a stimulus
   routeBoot(bootContext(), out);
+  // A hard shake dismisses anything modal before the tick runs (#35): fight
+  // mode before a duel has started, an ask waiting on an update, why no
+  // fight, a refusal's words. Never a duel. It still reaches him.
+  const bool hardShake = fired(out, stim::shake) && !(out.remote & duelStimBit(stim::shake)) && detectors_.motion.vigorous();
+  if (hardShake) {
+    const DishDuel::Refusal& r = duel_.refusal();
+    const bool refusalShown = r.any && (tick_ - r.tick < kEchoTicks || (r.kind != NoFight::None && tick_ - r.tick < kNoFightTicks));
+    bool any = duel_.dismiss(air_, tick_, refusalShown);
+    any = feed_.dismiss(lastTickMs_) || any;
+    if (any) dismissedAtMs_ = lastTickMs_, dismissed_ = true;
+  }
   const uint16_t petDay = uint16_t(live_.clock.petTicks / PetClock::kDayTicks);
   const bool side = kSideHoldHolds && detectors_.side.holding();
   // The duel reads the aim (AimDetector) as the tilt at its sector's middle,
   // so DuelInput::from finds the same sector; a knock locks the aim it was
   // made at, not where the hand drifted while it was decided.
   const bool knocked = fired(out, stim::knock) || fired(out, stim::double_knock);
-  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : detectors_.aim.aim();
+  watchChoice(lastTickMs_);
+  const int8_t aim = knocked && knockAim_ >= 0 ? knockAim_ : armedAim();
   constexpr Fx kMid = Fx::ratio(1, 2), kLean = Fx::ratio(1, 4);
   const Fx tiltX = aim == 0 ? kMid + kLean : aim == 1 ? kMid - kLean : kMid;
   const Fx tiltY = aim == 2 ? kMid - kLean : aim == 3 ? kMid + kLean : kMid;
@@ -196,14 +300,29 @@ void Dish::runOneTick(Link& link) {
   sideWas_ = side;
   tiltHist_[tick_ % kAimHistory][0] = tiltX, tiltHist_[tick_ % kAimHistory][1] = tiltY;
   const Fx aimX = side ? sideTilt_[0] : tiltX, aimY = side ? sideTilt_[1] : tiltY;
-  if (duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(), live_.settings.lineageId, petDay, tick_)
-          .save)
-    save();
+  // The time running out locks the aim only when a hand moved the badge in
+  // this turn (#24): one left lying tilted since before it chooses nothing.
+  bool aimMoved = true;
+  if (duel_.active()) {
+    const int16_t turn = duel_.choosingTurn();
+    if (turn != turnSeen_) turnSeen_ = turn, turnFromMs_ = lastTickMs_;
+    aimMoved = arming_.movedSince(turnFromMs_);
+  }
+  const DuelStepped stepped = duel_.step(live_.occupant, lineage_, air_, out, aimX, aimY, cues_.holding(),
+                                         live_.settings.lineageId, petDay, tick_, aimMoved);
+  if (stepped.met && duel_.lastMeeting()) {
+    stats_.met(*duel_.lastMeeting(), tick_ - battleStart_);
+    battleStart_ = tick_;   // a rematch is timed from here
+  }
+  countDuel();
+  if (fired(out, stim::duel_fainted)) stats_.fainted();
+  if (stepped.save) save();
   if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
     const HabitatRules& rules = c->phenotype().habitat;
     if (fired(out, stim::button)) {
       const bool dropped = live_.habitat.dropPellet(rules, live_.rng, tick_, out);
       feed_.pressed(lastTickMs_, dropped, tick_, c->body().asleep, c->chemistry().drive(drive::hunger));
+      stats_.fed(dropped, c->body().asleep, c->chemistry().drive(drive::hunger));
     }
     // Face down is bedtime, always (owner, 2026-10-19): the lid puts him to
     // sleep whatever his genes make of it, unless a duel holds him.
@@ -211,25 +330,44 @@ void Dish::runOneTick(Link& link) {
         !duel_.active())
       c->force(action::sleep);
     c->keepAsleep(detectors_.lid.lidded() && !duel_.active());
-    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out);
+    // A long untouched stretch put him to bed; the hand that ends it gets him
+    // up, unless it is the wall's night (he goes back to sleep).
+    if (wasDim && touched && c->body().asleep && !live_.clock.night()) c->rouse();
+    live_.habitat.step(rules, tiltX_, tiltY_, c->body().at, tick_, out,
+                       c->chemistry().drive(drive::hunger) >= kEatsRotAt);   // rot is food only to the starving
     Stage before = c->stage();
     const Mouthful mouth = c->body().mouth;
     const Fx hunger = c->chemistry().drive(drive::hunger);
     c->tick(out, live_.habitat, behaviours_, tick_);
-    if (mouth == Mouthful::Nothing && c->body().mouth != Mouthful::Nothing)   // a bite, for the eyes
+    if (mouth == Mouthful::Nothing && c->body().mouth != Mouthful::Nothing) {   // a bite, for the eyes
       feed_.ate(lastTickMs_, c->body().mouth == Mouthful::RottenPellet, hunger);
-    if (c->stage() != before) eventDirty_ = true;
+      stats_.bitten(c->body().mouth == Mouthful::RottenPellet);
+    }
+    stats_.lived(*c, 1);
+    if (c->stage() != before) eventDirty_ = statsUrgent_ = true, grewTo_ = c->stage();
     if (c->dead()) onDeath(*c);
-    else thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
+    else {
+      if (grewTo_) showGrowth(*c);
+      const uint32_t foretold = thinker_.foretold();
+      thinker_.step(*c, live_.habitat, live_.clock, lineage_, tick_, fired(out, stim::shake), fromPhone());
+      if (thinker_.foretold() != foretold) stats_.foretold();
+    }
   } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
-    if (!hatchWaits() && e->tick(out)) onHatch(*e);
+    // Shaking hatches it, phone or none (owner, 2026-10-27): ADOPT and
+    // FREEHATCH only let time incubate it as well.
+    const uint8_t cracked = e->crackStage();
+    bool ready = e->shaken(shakeHatch_.step(hardShake, detectors_.motion.swinging()), hatchWaits());
+    if (e->crackStage() > cracked) eventDirty_ = true;   // a crack made is kept over a replug
+    if (!ready && !hatchWaits()) ready = e->tick(out);
+    if (ready) onHatch(*e);
   } else {
     Clutch& k = std::get<Clutch>(live_.occupant);
     if (k.previewed < k.count) {
       const std::optional<FriendEgg> egg = k.friendSlot ? FriendEggStore::load(store_) : std::nullopt;
       k.derivePreviewStep(egg ? &*egg : nullptr);
     }
-    if (std::optional<uint8_t> i = k.tick(out)) onPicked(k, *i);
+    // The tilt picker's aim, as the duel's: a knock's own, or from before a turn onto a side.
+    if (std::optional<uint8_t> i = k.tick(out, tiltAim(aimX, aimY))) onPicked(k, *i);
   }
   ++tick_;
 }
@@ -296,7 +434,10 @@ void Dish::routeBoot(BootContext ctx, SenseOut& out) {
 }
 
 void Dish::onDeath(Creature& c) {
+  grewTo_.reset();   // his growing up goes with him
   lineage_.recordDeath(c, lineage_.currentName(), tick_, duel_.book().featsThisLife(c.generation()));
+  stats_.died(c.cause(), c.stats().ageTicks);
+  statsUrgent_ = true;
   Unlocks u = unlocksFor(lineage_.legacyFeats());
   Clutch k = c.layClutch(u.clutchSize, u.wildBonus, tick_);
   // A hug's egg waits in friend.egg for this clutch (friend_egg.h).
@@ -313,6 +454,9 @@ bool Dish::onPicked(Clutch& k, uint8_t i) {
   Egg egg(childOf(k, i, friendEgg ? &*friendEgg : nullptr), k.generation, tick_);
   if (friendEgg && !FriendEggStore::consume(store_)) return false;
   lineage_.recordBirth(egg, k, i, tick_);
+  clutchShow_.kept(k, i, nowMs_);   // before the egg replaces it: its eggs, for the chosen moment
+  stats_.laid(k.generation);   // the egg carries its parent's life, and its grandparent's
+  statsUrgent_ = true;
   live_.occupant = std::move(egg);
   eventDirty_ = true;
   return true;
@@ -324,7 +468,8 @@ void Dish::onHatch(Egg& e) {
   live_.habitat = Habitat{};
   live_.habitat.pantry = born.phenotype().habitat.pantrySize;
   live_.habitat.pantryTick = tick_;
-  eventDirty_ = true;
+  eventDirty_ = statsUrgent_ = true;
+  hatchedAtMs_ = nowMs_, hatched_ = true;
 }
 
 bool Dish::pick(uint8_t egg) {
@@ -398,7 +543,7 @@ Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
   char was[16], now[16];
   speciesLineName(kGrungo, was);
   speciesLineName(species, now);
-  if (std::strcmp(lineage_.currentName(), was) == 0) rename(now);
+  if (std::strcmp(was, now) != 0 && std::strcmp(lineage_.currentName(), was) == 0) rename(now);
   // A rerun after a power cut may find the Rename on the log and the old name in the save.
   copyName(live_.settings.name, lineage_.currentName());
   eventDirty_ = true;
@@ -406,26 +551,83 @@ Dish::Adoption Dish::adoptSpecies(SpeciesId species, const LookBands& bands) {
   return Adoption::Adopted;
 }
 
-Dish::Adoption Dish::retuneFirstHours(SpeciesId species) {
-  if (readOnly_) return Adoption::NotNeeded;
-  Creature* c = std::get_if<Creature>(&live_.occupant);
-  if (!c) return Adoption::NotYet;
-  if (!store_.writable() || duel_.active()) return Adoption::NotYet;
-  if (!blorb::retuneFirstHours(*c, species, live_.settings.speciesSeed)) return Adoption::NotNeeded;
-  lineage_.recordEdit(c->generation(), c->genome());
-  eventDirty_ = true;
-  save();
-  return Adoption::Adopted;
+// Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
+bool Dish::flush() {
+  if (readOnly_) return true;
+  statsUrgent_ = true;
+  return save();
 }
 
-// Read-only (a newer firmware's keepsake) has nothing of its own to save, and the newer save is safe as it is.
-bool Dish::flush() { return readOnly_ || save(); }
-
 bool Dish::save() {
-  if (!keep_.save(live_)) return false;   // an event save stays urgent and retries on the next tick() call
+  if (!keep_.save(live_)) {   // an event save stays urgent and retries on the next tick() call
+    stats_.analytics.add(anx::save_failed);
+    return false;
+  }
   lastSaveTick_ = tick_;
   eventDirty_ = false;
+  saveStatsDue();
   return true;
+}
+
+// The life stats ride the keepsake's saves: only when one lands, and of those
+// only every kSaveEveryTicks unless a life event or a flush asked. A refused
+// write (an image on trial) is tried again at the next save.
+void Dish::saveStatsDue() {
+  if (statsUrgent_ || tick_ - statsSavedTick_ >= Stats::kSaveEveryTicks) saveStats();
+}
+
+bool Dish::saveStats() {
+  if (readOnly_ || !stats_.save(store_)) return false;
+  statsSavedTick_ = tick_;
+  statsUrgent_ = false;
+  return true;
+}
+
+bool Dish::ackStats(uint32_t seq) {
+  if (!stats_.analytics.ack(seq)) return false;
+  statsUrgent_ = true;   // what the server has need not be sent again after a reboot
+  saveStats();           // a refused write is tried again at the next keepsake save
+  return true;
+}
+
+// The duel as the analytics see it: fight mode opened, an ask refused, each
+// turn as it resolves, and why a battle or fight mode ended. The view is only
+// built while a duel is open (and on the tick it closes). Out of line, so its
+// view never widens runOneTick's frame under the deeper paths it calls.
+[[gnu::noinline]] void Dish::countDuel() {
+  const DishDuel::Refusal& r = duel_.refusal();
+  if (r.any && r.tick != refusedTick_ && (r.why != Decline::None || r.kind != NoFight::None)) stats_.fightRefused();
+  if (r.any) refusedTick_ = r.tick;
+  const bool active = duel_.active();
+  if (active && !duelWas_) {
+    stats_.fightOpened();
+    battleStart_ = tick_;
+  }
+  if (active || duelWas_) {
+    const DuelView v = duel_.view(tick_);
+    if (!v.hasLast) seenTurn_ = 0xFF;
+    else if (v.lastTurn != seenTurn_) stats_.turn(v.last), seenTurn_ = v.lastTurn;
+    if (uint8_t(v.ended) != seenEnd_) {
+      seenEnd_ = uint8_t(v.ended);
+      stats_.duelEnded(seenEnd_);
+    }
+  }
+  duelWas_ = active;
+}
+
+// The life a record belongs to: the egg's or the creature's, or a clutch's dead parent's.
+[[gnu::noinline]] void Dish::resumeStats(bool fresh) {
+  const Occupant& o = live_.occupant;
+  const Clutch* k = std::get_if<Clutch>(&o);
+  const uint16_t gen = k ? uint16_t(k->generation ? k->generation - 1 : 0)
+                         : std::holds_alternative<Egg>(o) ? std::get<Egg>(o).generation() : std::get<Creature>(o).generation();
+  std::optional<Stats::Loaded> stored = Stats::load(store_);
+  const bool same = stored && stored->life && stored->life->lineageId == live_.settings.lineageId &&
+                    stored->life->generation == gen;
+  stats_.resume(std::move(stored), live_.settings.lineageId, gen);
+  stats_.analytics.add(anx::boots);
+  statsSavedTick_ = tick_;
+  statsUrgent_ = fresh || !same;   // a new record is written with the first save
 }
 
 Appearance Dish::appearance() const {
@@ -456,10 +658,17 @@ Appearance Dish::appearance() const {
     a.lobby = true;
     a.lobbyConnecting = v.phase == DuelPhase::Greeting;
     a.lobbyFriends = v.heardCount;
+    a.lobbyOtherRules = v.otherRules, a.lobbyNotReady = v.notReady;
     a.lobbyTicksLeft = v.fightTicksLeft;
     a.lobbyDecline = v.myDecline;
   }
   feedView(a);
+  if (std::holds_alternative<Creature>(live_.occupant)) a.carry = carry_.view(nowMs_);
+  if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
+  a.clutch = clutchShow_.view(nowMs_, a.eggs, a.eggCount);
+  // A shaken egg jiggles with the hand, and the shell flies off as he hatches.
+  if (a.kind == Appearance::Kind::Egg) a.eggShaken = clamp01(Fx::ratio(detectors_.motion.hardSamples(), 2 * MotionDetector::kVigorSamples));
+  if (hatched_ && nowMs_ - hatchedAtMs_ < Appearance::kHatchBurstMs) a.hatchedMs = uint16_t(nowMs_ - hatchedAtMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
   if (r.any && tick_ - r.tick < kEchoTicks) a.declined = r.why, a.refused = true, a.refusedTicks = uint16_t(tick_ - r.tick);
@@ -486,7 +695,7 @@ Appearance Dish::appearance() const {
 int8_t Dish::liveAim() const {
   if (kSideHoldHolds && detectors_.side.holding()) return duel_.view(tick_).aim;
   if (knockWaitWas_ && knockAim_ >= 0) return knockAim_;
-  return detectors_.aim.aim();
+  return armedAim();
 }
 
 DuelView Dish::duelView() const {
@@ -538,7 +747,7 @@ std::optional<uint32_t> Dish::localNow() const {
 FromPhone Dish::fromPhone() const { return FromPhone{phoneAwayTicks(), localNow(), lineage_.named(), &taught_}; }
 
 uint32_t Dish::phoneAwayTicks() const {
-  uint32_t since = live_.wall ? live_.wall->tick : 0;
+  uint32_t since = phoneSince_ ? *phoneSince_ : live_.wall ? live_.wall->tick : 0;
   if (lastPhoneTick_) since = std::max(since, *lastPhoneTick_);   // a catch-up re-anchors after the phone spoke
   return tick_ - since;
 }
@@ -546,14 +755,17 @@ uint32_t Dish::phoneAwayTicks() const {
 void Dish::checkWall() {
   lastWallCheckTick_ = tick_;
   std::optional<uint32_t> now;
-  bool welcome = false;
+  bool welcome = false, phoneSpoke = false;
+  const uint32_t phoneSince = tick_ - phoneAwayTicks();
   // Every source is read, so a phone reading behind a working RTC is spent, not kept for later.
-  for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_)}) {
+  for (TimeSource* source : {rtc_, static_cast<TimeSource*>(&phone_), static_cast<TimeSource*>(&net_)}) {
     if (!source) continue;
     std::optional<uint32_t> t = source->unixSeconds();
     if (t && source == &phone_) {
       welcome = phoneAwayTicks() >= Thinker::kMissPhoneTicks;
       lastPhoneTick_ = tick_;
+      phoneSince_.reset();
+      phoneSpoke = true;
     }
     if (!now) now = t;
   }
@@ -578,16 +790,30 @@ void Dish::checkWall() {
         longAbsence(*c);
         lastCatchUp_.hurt = true;
       }
+      stats_.away(lastCatchUp_.awaySeconds, lastCatchUp_.hurt);
     }
   }
+  // A re-anchor no phone was part of leaves the phone's absence where it was.
+  if (!phoneSpoke) phoneSince_ = phoneSince;
   live_.wall = WallAnchor{*now, tick_};
   if (!readOnly_) save();
   if (welcome) welcomePhone();
 }
 
+void Dish::netTime(uint32_t unixSeconds, std::optional<int16_t> tzMinutes) {
+  net_.set(unixSeconds);
+  checkWall();
+  const std::optional<int16_t> zone = zone_ ? zone_ : tzMinutes;
+  if (!zone) return;   // no zone: the wall is known, the pet hours keep the phase they had
+  // After any catch-up the pet tick stands for this wall time, so the day snaps here (as TIME).
+  live_.clock.alignToWall(unixSeconds, *zone);
+  zone_ = zone;
+}
+
 void Dish::forgetWall() {
   wallKnown_ = false;
   live_.wall.reset();
+  phoneSince_.reset();
   lastCatchUp_ = CatchUp{};
   eventDirty_ = true;
 }
@@ -603,6 +829,22 @@ void Dish::welcomePhone() {
   thinker_.say(lastCatchUp_.hurt ? "YOU LEFT ME. I AM HUNGRY." : "THE GLOWING ONE RETURNS!", *c, lineage_, tick_);
 }
 
+// He grew: he glows, as the phone's treat makes him, and says so, plain (no
+// voice frame, no pack line). Only with a hand on him in the last while, so
+// the screen is lit and a kid is looking: a stage reached in a nap or in the
+// night waits for the next touch. Never over a duel or the search for one.
+void Dish::showGrowth(Creature& c) {
+  constexpr uint32_t kSeenTicks = 20 * kTicksPerSecond;
+  if (*grewTo_ != c.stage()) return grewTo_.reset();   // not his any more
+  if (duel_.active() || duel_.searching() || duel_.pending() || live_.clock.stillRunTicks >= kSeenTicks) return;
+  const ThoughtId id = *grewTo_ == Stage::Child   ? thought::grew_child
+                       : *grewTo_ == Stage::Adult ? thought::grew_adult
+                                                  : thought::grew_elder;
+  grewTo_.reset();
+  c.inject(chem::vision, c.chemistry().chem[chem::vision.v] + kWelcomeVision);
+  thinker_.say(thoughtInfo(id)->text, c, lineage_, tick_);
+}
+
 // Nobody is there: no gestures, no feeding, no brain. The chemistry runs
 // coarse, stages express as their loci fire, the pantry refills, and a death
 // takes the normal path. An egg incubates and hatches; a clutch's vigil runs
@@ -611,6 +853,8 @@ void Dish::catchUp(uint32_t ticks) {
   if (sealed()) return;
   const uint64_t cap = uint64_t(kMaxCatchUpSteps) * kCatchUpStride;
   lastCatchUp_ = CatchUp{uint32_t(std::min<uint64_t>(ticks, cap)), uint32_t(ticks > cap ? ticks - cap : 0)};
+  // Nobody there: once the badge would have gone dim, ticked, he would be in bed.
+  uint64_t still = live_.clock.stillRunTicks;
   for (uint32_t left = lastCatchUp_.ticks; left > 0;) {
     uint32_t n = std::min(left, kCatchUpStride);
     if (Creature* c = std::get_if<Creature>(&live_.occupant)) {
@@ -618,12 +862,17 @@ void Dish::catchUp(uint32_t ticks) {
       SenseOut senses;
       detectors_.day.tick(TickContext{live_.clock, false, tick_}, senses);
       live_.habitat.step(c->phenotype().habitat, kLevel, kLevel, c->body().at, tick_ + n - 1, senses);
-      c->tickCoarse(senses, n, tick_);
+      const Stage was = c->stage();
+      c->tickCoarse(senses, n, tick_, still >= PetClock::kDimAfterTicks);
+      still += n;
+      if (c->stage() != was) grewTo_ = c->stage();
+      stats_.lived(*c, n, false);
       tick_ += n;
       if (c->dead()) onDeath(*c);
     } else if (Egg* e = std::get_if<Egg>(&live_.occupant)) {
       bool ready = false;
       uint32_t i = 0;
+      if (hatchWaits()) i = n = left;   // he holds still until adopted, as when powered
       while (i < n && !ready) {
         ready = e->tick(SenseOut{});
         ++i;

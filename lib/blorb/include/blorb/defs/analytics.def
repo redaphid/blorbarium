@@ -1,0 +1,86 @@
+// Analytics (#50, analytics.h, docs/life-stats.md): how the badge itself is
+// doing, for the owner to improve the system. Cheap aggregates only: each
+// event is one increment of the open day's bucket, nothing is logged.
+//
+// As life_stats.def: a row's position is its slot in the file, so rows are
+// only ever added at the end (a retired one keeps its slot and name).
+//   Count  a plain count, saturating at 2^32 - 1
+//   Secs   seconds
+//
+// Who counts: (e) the engine, inside the Dish, natively tested; (f) the
+// firmware, main.cpp; (w) the Wi-Fi updater, on the wifi-ota-2 branch (0 here).
+//
+// BLORB_ANALYTIC(slot, name, unit)
+// ---- power and resets (f) ----
+BLORB_ANALYTIC( 0, awake,            Secs)    // the panel lit
+BLORB_ANALYTIC( 1, low_power,        Secs)    // dark, the pet living on
+BLORB_ANALYTIC( 2, light_sleep,      Secs)    // of low power, the chip light-sleeping (badge128_pm)
+BLORB_ANALYTIC( 3, wakes,            Count)   // low power ended
+BLORB_ANALYTIC( 4, lows,             Count)   // low power began
+BLORB_ANALYTIC( 5, boots,            Count)   // (e) the Dish came up and read this file
+BLORB_ANALYTIC( 6, reset_power_on,   Count)   // esp_reset_reason() at each boot, one row per reason
+BLORB_ANALYTIC( 7, reset_software,   Count)   // ESP.restart(): an update, WIPE, REBOOT
+BLORB_ANALYTIC( 8, reset_panic,      Count)   // a crash
+BLORB_ANALYTIC( 9, reset_int_wdt,    Count)
+BLORB_ANALYTIC(10, reset_task_wdt,   Count)
+BLORB_ANALYTIC(11, reset_wdt,        Count)
+BLORB_ANALYTIC(12, reset_brownout,   Count)   // the battery sagged
+BLORB_ANALYTIC(13, reset_other,      Count)
+// ---- frames (f) ----
+BLORB_ANALYTIC(14, frames,           Count)   // drawn and sent
+BLORB_ANALYTIC(15, frames_same,      Count)   // skipped: nothing on screen changed
+// ---- the kid's hands (e), as life_stats counts them, but by day and across lives ----
+BLORB_ANALYTIC(16, presses,          Count)
+BLORB_ANALYTIC(17, knock_knocks,     Count)
+BLORB_ANALYTIC(18, knocks,           Count)
+BLORB_ANALYTIC(19, double_presses,   Count)
+BLORB_ANALYTIC(20, holds,            Count)
+BLORB_ANALYTIC(21, side_holds,       Count)
+BLORB_ANALYTIC(22, hangs,            Count)
+BLORB_ANALYTIC(23, shakes,           Count)
+BLORB_ANALYTIC(24, tilts,            Count)
+BLORB_ANALYTIC(25, cradles,          Count)
+BLORB_ANALYTIC(26, phone_visits,     Count)
+BLORB_ANALYTIC(27, pellets,          Count)
+BLORB_ANALYTIC(28, feed_refused,     Count)   // a press that fed nobody: empty, asleep or full
+// ---- duels (e) ----
+BLORB_ANALYTIC(29, fight_opens,      Count)   // fight mode entered
+BLORB_ANALYTIC(30, fight_refused,    Count)   // an ask that did not open it (an egg, too sleepy, an update...)
+BLORB_ANALYTIC(31, battles,          Count)   // fought to the friends screen
+BLORB_ANALYTIC(32, turns,            Count)   // rounds resolved, in every battle
+BLORB_ANALYTIC(33, turns_by_pet,     Count)   // ...whose stance the pet picked (the kid let the turn time out)
+BLORB_ANALYTIC(34, pounces,          Count)   // my stance as played, a turn
+BLORB_ANALYTIC(35, guards,           Count)
+BLORB_ANALYTIC(36, tricks,           Count)
+BLORB_ANALYTIC(37, specials,         Count)   // my special committed
+BLORB_ANALYTIC(38, specials_landed,  Count)
+BLORB_ANALYTIC(39, won,              Count)
+BLORB_ANALYTIC(40, lost,             Count)
+BLORB_ANALYTIC(41, drawn,            Count)
+BLORB_ANALYTIC(42, fizzled,          Count)
+BLORB_ANALYTIC(43, spars,            Count)
+BLORB_ANALYTIC(44, scraps,           Count)
+BLORB_ANALYTIC(45, mortals,          Count)
+BLORB_ANALYTIC(46, end_lid,          Count)   // why a duel ended early, from its EndReason
+BLORB_ANALYTIC(47, end_dropped,      Count)
+BLORB_ANALYTIC(48, end_wandered,     Count)   // the friend went out of range
+BLORB_ANALYTIC(49, end_lobby_timeout, Count)  // fight mode found nobody
+BLORB_ANALYTIC(50, end_conflict,     Count)
+BLORB_ANALYTIC(51, end_fled,         Count)
+BLORB_ANALYTIC(52, dueling,          Secs)    // fight mode open
+// ---- links and updates ----
+BLORB_ANALYTIC(53, ble_connects,     Count)   // (f) a phone connected
+BLORB_ANALYTIC(54, ota_begun,        Count)   // (f) an update over Bluetooth started
+BLORB_ANALYTIC(55, ota_kept,         Count)   // (f) a new image passed its trial
+BLORB_ANALYTIC(56, ota_rolled_back,  Count)   // (f) an image on trial booted the old one again
+BLORB_ANALYTIC(57, ota_failed,       Count)   // (f) an update ended without installing
+BLORB_ANALYTIC(58, wifi_windows,     Count)   // (w) a window opened
+BLORB_ANALYTIC(59, wifi_joined,      Count)   // (w) ...and joined a network
+BLORB_ANALYTIC(60, wifi_failed,      Count)   // (w) ...and failed (scan, join, GET)
+BLORB_ANALYTIC(61, wifi_installed,   Count)   // (w) an update over Wi-Fi installed
+BLORB_ANALYTIC(62, uploads,          Count)   // (w) stats posted and acknowledged
+// ---- errors ----
+BLORB_ANALYTIC(63, save_failed,      Count)   // (e) a keepsake save that did not land
+BLORB_ANALYTIC(64, stats_save_failed, Count)  // (e) this file's
+BLORB_ANALYTIC(65, imu_missing,      Count)   // (f) a boot that found no IMU
+BLORB_ANALYTIC(66, gestures_silent,  Count)   // (f) a gesture that spoke and showed nothing (DEBUG latency's silent)

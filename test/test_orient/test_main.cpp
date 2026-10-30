@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "blorb/senses.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "../../src/hw/orient.h"
+#include "../../src/hw/home.h"
 
 namespace {
 
@@ -123,6 +124,67 @@ TEST(Orient, TheRotationsLagAfterATurnBackIsNoSide) {
     EXPECT_FALSE(up.sideways(kHeld[kHome], kHome)) << "at " << t;
   }
   EXPECT_TRUE(lagged);
+}
+
+// ---- home, per badge (src/hw/home.h) ------------------------------------------------
+
+using hw::home::atBoot;
+using hw::home::kDown;
+using hw::home::kUp;
+
+// A normal release on a badge never told: USB-C up, as every badge was.
+TEST(Home, AReleaseOnABadgeNeverToldIsUpAndWritesNothing) {
+  const hw::home::AtBoot h = atBoot(std::nullopt, kUp);
+  EXPECT_EQ(h.rot, kUp);
+  EXPECT_FALSE(h.write);
+  EXPECT_STREQ(h.why, "default");
+}
+
+// The three flipped badges: their first boot of a flip build that knows NVS
+// writes "down", so the next release, built up, keeps them down.
+TEST(Home, AFlipBuildMigratesItselfOnce) {
+  const hw::home::AtBoot first = atBoot(std::nullopt, kDown);
+  EXPECT_EQ(first.rot, kDown);
+  EXPECT_TRUE(first.write);
+  EXPECT_STREQ(first.why, "migrated");
+  const hw::home::AtBoot again = atBoot(kDown, kDown);
+  EXPECT_EQ(again.rot, kDown);
+  EXPECT_FALSE(again.write) << "written once, not every boot";
+  const hw::home::AtBoot release = atBoot(kDown, kUp);
+  EXPECT_EQ(release.rot, kDown) << "a universal release keeps a flipped badge flipped";
+  EXPECT_FALSE(release.write);
+}
+
+// What the badge was told wins over how it was built, either way round.
+TEST(Home, StoredWinsOverTheBuild) {
+  EXPECT_EQ(atBoot(kUp, kDown).rot, kUp) << "DEBUG home up on a flip build stays up";
+  EXPECT_FALSE(atBoot(kUp, kDown).write) << "and is not overwritten by the migration";
+  EXPECT_EQ(atBoot(kDown, kUp).rot, kDown);
+}
+
+// A stored byte that is neither home (a torn write, a future value) is no home:
+// the build decides, and a flip build writes its own over it.
+TEST(Home, AStoredByteThatIsNoHomeIsIgnored) {
+  for (uint8_t junk : {uint8_t(1), uint8_t(3), uint8_t(0xff)}) {
+    EXPECT_EQ(atBoot(junk, kUp).rot, kUp);
+    EXPECT_FALSE(atBoot(junk, kUp).write);
+    EXPECT_EQ(atBoot(junk, kDown).rot, kDown);
+    EXPECT_TRUE(atBoot(junk, kDown).write);
+  }
+  EXPECT_EQ(atBoot(std::nullopt, 1).rot, kUp) << "a build flag that is no home falls back to up";
+}
+
+TEST(Home, ParsesTheCablesWords) {
+  EXPECT_EQ(hw::home::parse("up"), kUp);
+  EXPECT_EQ(hw::home::parse("down"), kDown);
+  EXPECT_EQ(hw::home::parse("2"), kUp);
+  EXPECT_EQ(hw::home::parse("0"), kDown);
+  EXPECT_FALSE(hw::home::parse("1"));
+  EXPECT_FALSE(hw::home::parse("Down"));
+  EXPECT_FALSE(hw::home::parse(""));
+  EXPECT_FALSE(hw::home::parse(nullptr));
+  EXPECT_STREQ(hw::home::name(kDown), "down");
+  EXPECT_STREQ(hw::home::name(kUp), "up");
 }
 
 }  // namespace

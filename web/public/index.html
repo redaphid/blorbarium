@@ -207,6 +207,19 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
     </div>
   </section>
 
+  <!-- Wi-Fi: Improv over the same connection (improv.js, docs/wifi-ota.md).
+       Shown only for a dish that has the Improv service. -->
+  <section id="wifiBox" hidden>
+    <h2>Wi-Fi</h2>
+    <p class="hint">Give the dish your home Wi-Fi (it remembers up to three). When it is left alone at home with its screen off, it checks for updates now and then and installs them by itself. Away from those networks it never tries.</p>
+    <form id="wifiForm" autocomplete="off">
+      <input id="wifiSsid" name="ssid" maxlength="32" placeholder="Network name" aria-label="Wi-Fi network name" required>
+      <input id="wifiPassword" name="password" type="password" maxlength="64" placeholder="Password" aria-label="Wi-Fi password" autocomplete="new-password">
+      <button type="submit">Connect to Wi-Fi</button>
+    </form>
+    <p class="hint" id="wifiHint" role="status">The password goes to the dish and nowhere else.</p>
+  </section>
+
   <section id="drivesBox" hidden>
     <h2>How he feels</h2>
     <ul class="drives" id="drives"></ul>
@@ -371,6 +384,7 @@ footer { text-align: center; font-size: 0.8rem; color: var(--muted); }
 </main>
 
 <script src="ota.js"></script>
+<script src="improv.js"></script>
 <script src="debug.js"></script>
 <script>
 "use strict";
@@ -390,6 +404,10 @@ const STAGES = ["baby", "child", "adult", "elder"];
 const NAME_RE = /^[A-Za-z0-9_-]{1,15}$/;
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
+// ?b=<mac>: an NFC sticker's link to one badge (docs/nfc.md); badgeNames, the
+// names it may advertise without its id, fill in as the page learns them.
+const badge = BlorbOta.parseBadge(params.get("b"));
+const badgeNames = [];
 
 // key=value pairs out of a reply line
 function kv(text) {
@@ -516,8 +534,8 @@ class BleTransport {
   }
   // The only chooser: every later open() is to this same device, whatever it advertises then.
   async pick(wide) {
-    const filters = BlorbOta.chooserFilters(params.get("d"), wide);
-    this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS] });
+    const filters = BlorbOta.chooserFilters(params.get("d"), wide, badge, badgeNames);
+    this.device = await navigator.bluetooth.requestDevice({ filters, optionalServices: [NUS, BlorbImprov.SERVICE] });
     this.device.addEventListener("gattserverdisconnected", () => this.onDrop(this));
   }
   close() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
@@ -531,6 +549,9 @@ class BleTransport {
       this.feed = lineReader((line) => this.onLine(line));
       tx.addEventListener("characteristicvaluechanged", this.notify);
       await gattRetry(this.device, () => tx.startNotifications());
+      // Firmware before Wi-Fi has no Improv service: then the page offers no Wi-Fi.
+      const improv = await gattRetry(this.device, () => server.getPrimaryService(BlorbImprov.SERVICE)).catch(() => null);
+      this.improv = improv && new BlorbImprov.Client(improv, (op) => gattRetry(this.device, op));
       globalThis.BlorbDebug?.attach(svc);   // ?debug=true: the debug link's panel (debug.js); it waits its turn
     } catch (e) {
       // Never leave a half-open link holding the dish's one connection.
@@ -585,10 +606,12 @@ function mockDish(name = "blorb-7a3f", renamed = null) {
 let mockAds = null, mockChooserOpens = 0;
 function mockRadio() {
   mockAds ||= (params.get("nearby") || "").split(",").filter(Boolean).map((entry) => {
-    const [names, kind = "dish"] = entry.split(":");
+    const [named, kind = "dish"] = entry.split(":");
+    const [names, mac] = named.split("@");   // mossby@d40592771b3c: a dish that advertises its id (docs/ble.md)
     const [name, renamed] = names.split(">");
     const dish = kind === "dish" ? mockDish(name, renamed) : null;
-    return { dish, services: kind === "plain" ? [] : [NUS], get name() { return dish ? dish.name : name; } };
+    const manufacturerData = mac ? { [BlorbOta.COMPANY]: Uint8Array.from(mac.match(/../g), (h) => parseInt(h, 16)) } : {};
+    return { dish, manufacturerData, services: kind === "plain" ? [] : [NUS], get name() { return dish ? dish.name : name; } };
   });
   return mockAds;
 }
@@ -635,6 +658,15 @@ class MockTransport {
       for (let k = 0; k < len; k++) bytes.push((i * 37 + k * 11) & 255);
     });
     this.genome = new Uint8Array(bytes);
+    // Improv, pretend: the password "wrong" cannot join.
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    this.improv = {
+      join: async (ssid, password) => {
+        await pause(1500);
+        if (password === "wrong") throw Object.assign(new Error("IMPROV_ERROR_3"), { code: BlorbImprov.ERROR.unableToConnect });
+        return `https://blorb.hypnodroid.com/?d=${this.name}`;
+      },
+    };
   }
   async write(text) {
     if (!this.dish.connected) throw new Error("disconnected");
@@ -867,6 +899,7 @@ async function session({ offer = true } = {}) {
   ui.show("another", true);
   ui.show("nameBox", true);
   ui.show("sayBox", true);
+  ui.show("wifiBox", !!transport.improv);
   await link.send("HASH").then((r) => { $("dishHash").textContent = kv(r.ok).hash || "?"; }).catch(() => {});
   await loadGenome().catch((e) => {
     debugLog("err", `GENOME failed: ${e.message}`);
@@ -1134,7 +1167,7 @@ async function connect(wide = false) {
       globalThis.BlorbDebug?.attachMock(transport.dish);
     } else if (params.has("mock")) {
       ui.status("connecting", "Choose the dish…");
-      const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide));
+      const ad = await mockChoose(BlorbOta.chooserFilters(params.get("d"), wide, badge, badgeNames));
       if (!ad.dish) throw new Error("no UART service");
       mine = transport = new MockTransport(onDrop, ad.dish);
       globalThis.BlorbDebug?.attachMock(transport.dish);
@@ -1163,6 +1196,27 @@ async function connect(wide = false) {
 // Every hint in a section, so one added later resets with the rest.
 const FRESH = { name: $("name").textContent, meta: $("meta").textContent, hints: [...document.querySelectorAll("main section .hint")].map((el) => [el, el.textContent]) };
 
+// ?b=: say whose Blorb the link finds, and ask the site which name it
+// advertises (for firmware older than its id) now, at load: the chooser must
+// open inside the button press's user activation, so nothing waits then.
+if (badge) {
+  const title = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const looking = (who) => {
+    FRESH.meta = `Looking for ${who ? `${who}'s Blorb` : `your Blorb (blorb-${badge.tail})`}. Bring your phone close and connect.`;
+    if (!transport) $("meta").textContent = FRESH.meta;
+  };
+  const table = badge.mac && BlorbOta.BADGES[badge.mac];
+  if (table) badgeNames.push(table);
+  looking(table && title(table));
+  if (badge.mac && !params.has("mock")) {
+    fetch(`/api/ble-name?mac=${badge.mac}`).then((r) => (r.ok ? r.json() : null)).then((b) => {
+      if (!b) return;
+      if (b.name && !badgeNames.includes(b.name)) badgeNames.push(b.name);
+      if (b.pet || b.name) looking(b.pet ? String(b.pet).replace(/_/g, " ") : title(b.name));
+    }).catch(() => {});
+  }
+}
+
 // Let this dish go and put the page back as it loads. Its drop is ignored.
 function leave() {
   const old = transport;
@@ -1179,6 +1233,7 @@ function leave() {
   ui.show("doing", false);
   $("nameInput").disabled = false;
   $("nameForm").querySelector("button").disabled = false;
+  $("wifiPassword").value = "";
   for (const [el, text] of FRESH.hints) {
     el.textContent = text;
     el.dataset.tone = "";
@@ -1242,6 +1297,30 @@ $("nameForm").addEventListener("submit", async (e) => {
     }
     hint.dataset.tone = "err";
     hint.textContent = `The dish said no (${err.message}).`;
+  }
+});
+
+// --- Wi-Fi (improv.js) ---
+
+function wifiTell(tone, text) { $("wifiHint").dataset.tone = tone; $("wifiHint").textContent = text; }
+
+$("wifiForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ssid = $("wifiSsid").value, password = $("wifiPassword").value;
+  const improv = transport && transport.improv;
+  if (!improv || !ssid) return;
+  wifiTell("", `Asking the dish…`);
+  try {
+    await improv.join(ssid, password, { onAsk: () => wifiTell("", "Say yes on the dish: turn it around (or press its button) while it asks \u201cJoin Wi-Fi?\u201d") });
+    $("wifiPassword").value = "";
+    wifiTell("ok", `The dish joined "${ssid}" and remembers it. Left alone at home, it updates itself.`);
+  } catch (err) {
+    debugLog("err", `improv join: ${err.message}`);
+    wifiTell("err", err.field ? "The network name is 1 to 32 letters, the password up to 64."
+      : err.code === BlorbImprov.ERROR.unableToConnect ? `The dish couldn't join "${ssid}". Check the password, and that the dish is in reach of the router.`
+      : err.code === BlorbImprov.ERROR.notAuthorized ? "Nobody said yes on the dish. Try again, and turn the dish around when it asks \u201cJoin Wi-Fi?\u201d"
+      : err.code === "TIMEOUT" ? "The dish didn't answer. If it is in a fight, try again once it's over."
+      : `Something went wrong (${err.message}). Try again.`);
   }
 });
 

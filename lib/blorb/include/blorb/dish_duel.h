@@ -21,8 +21,8 @@ namespace blorb {
 // The tilts that aim, as one IMU reading held still (milli-g, the device frame
 // the Dish is handed, after the panel's rotation): what DuelInput::from reads
 // as aim 0 Pounce (tilt left), 1 Guard (right), 2 Trick (toward the kid) and
-// 3 the lobby's fourth friend (away). In Staking the first three are Spar,
-// Scrap and Mortal. A bot or a tool holds one of these to aim;
+// 3 the lobby's fourth friend (away). In Staking they are Scrap (left),
+// Mortal (right) and Spar (toward the kid): tierAimed (duel_session.h). A bot or a tool holds one of these to aim;
 // test_two_dishes holds each through the real detectors and checks the aim.
 struct AimTilt { int8_t aim; int16_t ax, ay, az; };
 inline constexpr AimTilt kAimTilt[4] = {
@@ -50,6 +50,7 @@ BootHint bootHint(BootContext, const DuelView*);
 // What one tick of the duel asks of the Dish.
 struct DuelStepped {
   bool save = false;        // a wound, a scar, a downing, a fall, a graft, a meeting: save the keepsake now
+  bool met = false;         // a battle ended and is in the book (DishDuel::lastMeeting)
 };
 
 class DishDuel {
@@ -73,10 +74,11 @@ class DishDuel {
   //  5 fight mode between fights: the pet's card refreshed, his readiness
   //    rechecked every tick; a pet who is no creature any more leaves it
   DuelStepped step(Occupant&, Lineage&, Air*, SenseOut& raw, Fx tiltX, Fx tiltY, bool bootDown,
-                   uint64_t lineageId, uint16_t petDay, uint32_t tick);
+                   uint64_t lineageId, uint16_t petDay, uint32_t tick, bool aimMoved = true);
 
   bool active() const { return session_.active(); }
   DuelView view(uint32_t tick) const { return session_.view(tick); }
+  int16_t choosingTurn() const { return session_.choosingTurn(); }
   const DuelBook& book() const { return book_; }
   // The newest battle this boot recorded, for a log line that two boards'
   // logs can be compared by (its outcomeHash).
@@ -93,6 +95,12 @@ class DishDuel {
   // routing says so, and the screen shows why.
   void refuse(NoFight, uint32_t tick, const char* gate = nullptr, bool hang = false);
   bool searching() const { return session_.searching(); }
+  // A hard shake dismisses what fight mode puts on the screen before a duel
+  // has started (#35): the lobby, a pair greeting, the stakes picker (the
+  // friend hears it as leaving), an ask waiting on an update, and why no fight
+  // (refusalShown: the Dish is showing it). Never a duel: once the stakes are
+  // agreed a shake is the prophecy. True when it dismissed anything.
+  bool dismiss(Air*, uint32_t tick, bool refusalShown);
   bool takeDiag(char (&out)[DiagLines::kLine]) { return diag_.take(out); }
   const char* lastGate() const { return lastGate_; }
   // Fight mode asked for while an update held the radio: it opens by itself

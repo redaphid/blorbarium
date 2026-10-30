@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include "blorb/species.h"
+#include "blorb/tilt_aim.h"
 
 namespace blorb {
 namespace {
@@ -13,7 +14,6 @@ using Special = TurnReport::Special;
 // woundFor's own clamp is turned off here: the Dish's Creature::wound clamps
 // to woundRoom, which only the Dish can read.
 constexpr Fx kNoClamp = Fx::one();
-constexpr Fx kAimDeadZone = Fx::ratio(15, 100);
 
 constexpr uint8_t u8(Stakes s) { return uint8_t(s); }
 uint8_t fill(uint16_t ticks, uint16_t of) { return uint8_t(std::min<uint32_t>(255, uint32_t(ticks) * 255 / of)); }
@@ -63,25 +63,19 @@ DuelInput DuelInput::from(const SenseOut& raw, uint64_t remote, Fx tiltX, Fx til
     else if (s.v == stim::lid_down.v) in.lid = true;
     else if (s.v == stim::dropped.v) in.dropped = true;
   }
-  // The loci read 0.5 level. tilt_x above it raises the +x edge, so things
-  // roll left: that is "tilt left". tilt_y below it rolls them toward the
-  // kid's edge: "toward you". D12 confirms both on the board.
-  const Fx dx = tiltX - Fx::ratio(1, 2), dy = tiltY - Fx::ratio(1, 2);
-  const Fx ax = dx < Fx::zero() ? -dx : dx, ay = dy < Fx::zero() ? -dy : dy;
-  if (ax >= kAimDeadZone || ay >= kAimDeadZone)
-    in.aim = ax >= ay ? (dx > Fx::zero() ? 0 : 1) : (dy < Fx::zero() ? 2 : 3);
+  in.aim = tiltAim(tiltX, tiltY);   // the tilt picker (tilt_aim.h), which the clutch shares
   return in;
 }
 
 Ceiling pairCeiling(const Ceiling& pet, const BattleCard& mine, const BattleCard& theirs, uint32_t myManualTurns,
                     DuelBook::HeadToHead h2h, uint8_t forKeepsToday) {
   Ceiling c = pet;
-  const uint8_t assist = std::max(Assist::hearts(mine.prowess, theirs.prowess), Assist::hearts(theirs.prowess, mine.prowess));
+  const uint8_t assist = std::max(Assist::steps(mine.prowess, theirs.prowess), Assist::steps(theirs.prowess, mine.prowess));
   const uint16_t lower = std::min(h2h.myWins, h2h.theirWins);
   const bool lopsided = h2h.duels >= kHeadToHeadMin && uint32_t(lower) * 1000 < uint32_t(kHeadToHeadFloor) * h2h.duels;
   for (uint8_t tier = u8(Stakes::Scrap); tier <= u8(Stakes::Mortal) && tier <= u8(c.top); ++tier) {
     const StakesRule& r = rule(Stakes(tier));
-    if (assist > r.maxAssistHearts || myManualTurns < r.minManualTurns || (r.headToHead && lopsided) ||
+    if (assist > r.maxAssistSteps || myManualTurns < r.minManualTurns || (r.headToHead && lopsided) ||
         forKeepsToday >= kForKeepsPerPairPerDay) {
       c.top = Stakes(tier - 1);
       break;
@@ -181,11 +175,15 @@ std::optional<uint8_t> DuelSession::claim(Lobby& l, uint32_t tick) {
     return false;   // whom he claims is out of my hearing: take him at his word
   };
   const auto open = [&](const Lobby::Seen& s) {
-    return s.beacon.roster == rosterHash() && s.beacon.decline == Decline::None &&
+    return s.beacon.roster == duelRulesHash() && s.beacon.decline == Decline::None &&
            (s.beacon.wants.none() || s.beacon.wants == self_ || pending(s)) && (!setup_.pin || s.addr == setup_.pin->peer);
   };
+  // A rematch's pinned lobby claims its friend even before it hears him: he
+  // may still be on the friends screen, where he beacons nothing, and my
+  // claim in a beacon is how he learns I asked if my State saying so was lost
+  // (#54: under loss he waited out his friends screen alone).
   const auto want = [&](std::optional<uint8_t> i) {
-    const PeerAddr to = i ? l.seen[*i].addr : PeerAddr{};
+    const PeerAddr to = i ? l.seen[*i].addr : setup_.pin && setup_.decline == Decline::None ? setup_.pin->peer : PeerAddr{};
     if (to != l.wants) l.wantsSince = tick;
     l.wants = to;
   };
@@ -276,14 +274,18 @@ void DuelSession::lobbyTick(Lobby& l, Air& air, const DuelInput& in, uint32_t ti
     return;
   }
   if (tick - l.lastBeacon >= T::kBeaconEvery) {
-    beacon(air, l.wants);
+    // Back from a rematch both asked for, I name the friend at once, before I
+    // hear him: he may still be on the friends screen, and if the last State
+    // that carried my ask was lost, my beacon claiming him is his yes (#58: a
+    // storm left one side waiting out the friends screen alone).
+    beacon(air, l.wants.none() && setup_.pin ? setup_.pin->peer : l.wants);
     l.lastBeacon = tick;
   }
 }
 
 void DuelSession::beacon(Air& air, PeerAddr wants) {
   BeaconPacket p;
-  p.roster = rosterHash();
+  p.roster = duelRulesHash();
   p.nonce = setup_.nonce;
   p.wants = wants;
   p.seq = ++beaconSeq_;
@@ -368,7 +370,7 @@ void DuelSession::onState(Battle& b, const StatePacket& st, uint32_t tick) {
 
 void DuelSession::sendState(Battle& b, Air& air, uint32_t tick, const Farewell* f, bool leaving) {
   StatePacket st;
-  st.roster = rosterHash();
+  st.roster = duelRulesHash();
   st.battle = b.battle;
   st.nonce = setup_.nonce;
   st.chosen = b.chosen;
@@ -404,7 +406,7 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
     const std::optional<Packet> p = decode(d->bytes, d->len);
     if (!p) continue;
     if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
-      if (st->roster == rosterHash() && sameBout(b, st->battle)) onState(b, *st, tick);
+      if (st->roster == duelRulesHash() && sameBout(b, st->battle)) onState(b, *st, tick);
     } else if (const BeaconPacket* bp = std::get_if<BeaconPacket>(&*p)) {
       // A beacon newer than the one that locked us: still claiming me in this
       // pairing, or searching again (they gave up on it), which ends it here too.
@@ -442,23 +444,31 @@ void DuelSession::battleTick(Battle& b, Air& air, const DuelInput& in, uint32_t 
 }
 
 void DuelSession::stake(Battle& b, const DuelInput& in, uint32_t tick) {
-  // BOOT alone picks the stakes, never a tilt or a knock: a press steps to the
-  // next tier this pair may enter (Spar, Scrap, Mortal, Spar), a 3 s hold
-  // locks the pick, and after kStakeAutoTicks it locks itself. Mortal is only
-  // ever agreed with the hold: unheld, it locks as Scrap, the tier its press
-  // already agreed to on the way past.
+  // Picked as a stance is (the owner, 2026-10-27: "It should use tilting like
+  // the battles"): tilt to aim at a tier, knock to lock it. A BOOT press or a
+  // knock knock locks too. Mortal is only ever agreed with the 3 s hold (BOOT,
+  // or turned onto a side, which keeps the aim from before the turn), so no
+  // knock or press reaches it. A tier this pair may not enter is never picked:
+  // the pick stays on the last one it may, and a knock there locks nothing.
+  // When the rim ring runs out the picked tier locks itself, an unheld Mortal
+  // as Scrap (a hold under way finishes first); never aimed, that is Spar.
   if (!b.confirmed) {
-    if (in.press || in.doublePress) {
-      const uint8_t next = uint8_t(u8(b.chosen) + 1);
-      b.chosen = next > u8(b.pair.top) ? Stakes::Spar : Stakes(next);
+    const int8_t aimed = tierAimed(in.aim);
+    const bool barred = aimed > int8_t(u8(b.pair.top));
+    if (aimed >= 0 && !barred && Stakes(aimed) != b.chosen) {
+      b.chosen = Stakes(aimed);
       b.holdTicks = 0;
     }
+    // A knock at a struck-through tier locks nothing, not even the last pick.
+    const bool lock = in.knock || in.doubleKnock || in.press || in.doublePress;
+    if (lock && !barred && b.chosen != Stakes::Mortal) b.confirmed = true;
     if (in.bootDown) {
       if (++b.holdTicks >= kFinishHoldTicks) b.confirmed = true;
     } else {
       b.holdTicks = 0;
     }
-    if (!b.confirmed && tick - b.phaseTick >= T::kStakeAutoTicks) {
+    const bool holding = b.chosen == Stakes::Mortal && b.holdTicks > 0;
+    if (!b.confirmed && !holding && tick - b.phaseTick >= T::kStakeAutoTicks) {
       if (b.chosen == Stakes::Mortal) b.chosen = Stakes::Scrap;
       b.confirmed = true;
     }
@@ -551,7 +561,12 @@ bool DuelSession::play(Battle& b, Air& air, const DuelInput& in, uint32_t tick, 
       if (aim >= 0 && in.hold && specialFits(b, Windup::Heavy)) locked = b.mine.appendSpecial(Windup::Heavy, Stance(aim));
       else if (aim >= 0 && in.press && specialFits(b, Windup::Quick)) locked = b.mine.appendSpecial(Windup::Quick, Stance(aim));
       else if (aim >= 0 && in.knock) locked = b.mine.append(Move{Stance(aim)});
-      if (!locked && tick - b.chooseTick >= T::kChooseTicks) {
+      // Time is up. Tilted, the aimed stance locks, as a knock would lock it
+      // (the owner: "just tilting it and waiting until the time runs out
+      // should select the action"); level, the pet picks, as it always has.
+      if (!locked && aim >= 0 && in.aimMoved && tick - b.chooseTick >= T::chooseTicks(o.resolved))
+        locked = b.mine.append(Move{Stance(aim)});
+      if (!locked && tick - b.chooseTick >= T::chooseTicks(o.resolved)) {
         const Lean l = petChoice(b.skill, o, b.me, setup_.card, b.theirs, assistFor(b, me), b.battle.seed);
         locked = l.special != Windup::None && specialFits(b, l.special) && b.mine.appendSpecial(l.special, l.stance, true);
         if (!locked) locked = b.mine.append(Move{l.stance, false, true});
@@ -726,7 +741,7 @@ void DuelSession::farewellTick(Farewell& f, Air& air, const DuelInput& in, uint3
     const std::optional<Packet> p = decode(d->bytes, d->len);
     if (!p) continue;
     if (const StatePacket* st = std::get_if<StatePacket>(&*p)) {
-      if (st->roster != rosterHash() || st->battle != b.battle) continue;
+      if (st->roster != duelRulesHash() || st->battle != b.battle) continue;
       b.lastHeard = tick;
       f.theyAsked = f.theyAsked || st->rematch;
       theyLeft = theyLeft || st->leaving;
@@ -834,6 +849,12 @@ void DuelSession::closeWith(Air& air, EndReason why, bool goodbye) {
 
 // ---- the view -----------------------------------------------------------------------
 
+int16_t DuelSession::choosingTurn() const {
+  const Battle* b = std::get_if<Battle>(&state_);
+  if (!b || b->phase != DuelPhase::Choosing || b->revealing || b->outcome.over()) return -1;
+  return b->mine.count() == b->outcome.resolved ? int16_t(b->outcome.resolved) : int16_t(-1);
+}
+
 DuelView DuelSession::view(uint32_t tick) const {
   DuelView v;
   if (const Closed* c = std::get_if<Closed>(&state_)) {
@@ -853,7 +874,12 @@ DuelView DuelSession::view(uint32_t tick) const {
     for (uint8_t i = 0; i < v.peerCount; ++i) {
       const Lobby::Seen& s = l->seen[i];
       v.peers[i] = DuelView::Peer{s.beacon.card.species, s.beacon.card.look, s.beacon.decline, s.beacon.wants == self_,
-                                  l->wants == s.addr, s.beacon.roster == rosterHash()};
+                                  l->wants == s.addr, s.beacon.roster == duelRulesHash()};
+    }
+    for (uint8_t i = 0; i < l->count; ++i) {
+      const BeaconPacket& b = l->seen[i].beacon;
+      if (b.roster != duelRulesHash()) ++v.otherRules;
+      else if (b.decline != Decline::None) ++v.notReady;
     }
     return v;
   }
@@ -905,9 +931,17 @@ DuelView DuelSession::view(uint32_t tick) const {
     } else if (!o.over()) {
       v.phaseTicks = uint16_t(tick - b.chooseTick);
       const uint32_t spent = tick - b.chooseTick;
-      v.chooseTicksLeft = uint16_t(spent >= T::kChooseTicks ? 0 : T::kChooseTicks - spent);
-      v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, v.assistHearts[0], b.battle.seed);
+      v.chooseTicks = T::chooseTicks(o.resolved);
+      v.chooseTicksLeft = uint16_t(spent >= v.chooseTicks ? 0 : v.chooseTicks - spent);
+      v.lean = petChoice(b.skill, o, b.me, setup_.card, b.theirs, Assist::steps(setup_.card.prowess, b.theirs.prowess),
+                         b.battle.seed);
     }
+  }
+  if (b.phase == DuelPhase::Staking && !b.confirmed) {
+    // The rim ring runs as a turn's does, until the pick locks itself.
+    const uint32_t spent = tick - b.phaseTick;
+    v.chooseTicks = T::kStakeAutoTicks;
+    v.chooseTicksLeft = uint16_t(spent >= T::kStakeAutoTicks ? 0 : T::kStakeAutoTicks - spent);
   }
   v.aim = aim_;
   if (b.phase == DuelPhase::Mercy) {

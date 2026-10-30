@@ -7,11 +7,14 @@
 #include <NimBLEDevice.h>
 
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 
+#include "blorb/ble_id.h"
+#include "blorb/ble_name.h"
 #include "blorb/notify_queue.h"
 #include "blorb/rx_lines.h"
 #include "blorb/seams.h"
@@ -34,11 +37,13 @@ class NusLink : public blorb::Link {
   static constexpr const char* kTx = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";   // the badge notifies
   static constexpr const char* kOtaData = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";   // update images (docs/ota.md)
 
-  // `name` goes in the scan response, which has room for 29 characters; the
-  // advertisement itself carries the flags and the service UUID (21 of its
-  // 31 bytes). `otaData` takes the update's image writes, when the firmware
+  // `name` (the pet's, blorb/ble_name.h) is the GAP device name and goes in
+  // the scan response; the advertisement itself carries the flags, the
+  // service UUID and `mac`, the badge's durable id (blorb/ble_id.h): all 31 of
+  // its bytes. `otaData` takes the update's image writes, when the firmware
   // has updates.
-  const char* begin(const char* name, NimBLECharacteristicCallbacks* otaData = nullptr) {
+  const char* begin(const char* name, const uint8_t mac[blorb::bleid::kMacBytes],
+                    NimBLECharacteristicCallbacks* otaData = nullptr) {
     std::snprintf(name_, sizeof name_, "%s", name);
     NimBLEDevice::init(name_);
     NimBLEDevice::setMTU(247);
@@ -54,17 +59,64 @@ class NusLink : public blorb::Link {
     nus->start();
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(kService);
+    const auto id = blorb::bleid::payload(mac);
+    adv->setManufacturerData(id.data(), id.size());   // the advertisement is now full
     adv->enableScanResponse(true);
-    adv->setName(name_);
-    adv->setMinInterval(160);
-    adv->setMaxInterval(240);
+    if (serve_) serve_(server, adv);   // it may add a UUID to the scan response (scanAlso), never ahead of the name
+    applyScan();
+    adv->setMinInterval(kFastMin);
+    adv->setMaxInterval(kFastMax);
     adv->start();
     return name_;
   }
 
   bool connected() override { return up_; }
+  const char* name() const { return name_; }   // what the badge advertises now
+
+  // On the loop, whenever the pet's name changes (a rename, an old pet
+  // adopting his board's species): the GAP name and the scan response take
+  // the new one, and advertising restarts so the next scan hears it. False
+  // if nothing changed, or Bluetooth is off.
+  bool rename(const char* name) {
+    if (!NimBLEDevice::isInitialized() || !NimBLEDevice::getServer() || std::strncmp(name, name_, sizeof name_ - 1) == 0)
+      return false;
+    std::snprintf(name_, sizeof name_, "%s", name);
+    NimBLEDevice::setDeviceName(name_);
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    const bool was = adv->isAdvertising();
+    if (was) adv->stop();
+    applyScan();
+    if (was && !advHeld_) adv->start();   // otherwise poll() starts it once nothing holds it
+    return true;
+  }
+
+  // Before begin(), from serve(): a 128-bit service UUID for the scan
+  // response (Improv's), after the name and only if it fits beside it.
+  void scanAlso(const NimBLEUUID& uuid) { scanUuid_ = uuid, scanHasUuid_ = true; }
+  struct ScanShape {
+    size_t bytes, nameChars;
+    bool uuid, set;
+  };
+  // The scan response, built whole: the name, then scanAlso's UUID if it fits
+  // beside it (blorb/ble_name.h: a name of up to 11 characters). Not from
+  // adv->getScanData(): NimBLE-Arduino's returns the ADVERTISEMENT
+  // (m_advData), already full with the badge's id, so the UUID never fit and
+  // every badge to 0.7.33 left it out (owner, 2026-10-29). NimBLE keeps what
+  // is set here and sets it again at every start().
+  ScanShape applyScan() {
+    NimBLEAdvertisementData scan;
+    scan.setName(name_);
+    const size_t len = std::strlen(name_);
+    const bool uuid = scanHasUuid_ && blorb::blename::uuidFits(len);
+    if (uuid) scan.addServiceUUID(scanUuid_);
+    const bool set = NimBLEDevice::getAdvertising()->setScanResponseData(scan);
+    return {scan.getPayload().size(), len, uuid, set};
+  }
   // Before begin(): one more thing to add to the service, given it as it is built.
   void extend(std::function<void(NimBLEService*)> more) { extend_ = std::move(more); }
+  // Before begin(): another service on this server, and what it adds to the
+  // advertising once the name is in (Improv Wi-Fi, src/hw/improv_ble.h).
+  void serve(std::function<void(NimBLEServer*, NimBLEAdvertising*)> more) { serve_ = std::move(more); }
   // A line another characteristic heard (the debug link): this phone speaks.
   void spoke() { squatters_.spoke(); }
   // While this is true (an update in progress) a quiet connection is never dropped.
@@ -142,7 +194,71 @@ class NusLink : public blorb::Link {
     return done;
   }
 
-  // Advertising restarts if it ever stops, and the interval is asked for once per connection.
+ public:
+  // Wi-Fi's TLS handshake (src/wifi_ota.h) holds advertising off while it
+  // runs, so the radio's time and the controller's buffers are the handshake's:
+  // only ever with no phone connected. Released, it restarts at the next poll.
+  void holdAdvertising(bool hold) { hold_(kHeldWifi, hold); }
+  // The nap (main.cpp): no advertising while the chip light-sleeps, so the
+  // radio has nothing to do. Only ever with no phone connected.
+  void napAdvertising(bool hold) { hold_(kHeldNap, hold); }
+  // Dark: advertise about once a second instead of every 100-150 ms. A phone
+  // still finds it in a second or two; the radio wakes a tenth as often.
+  void slowAdvertising(bool slow) {
+    if (slow == slow_ || !NimBLEDevice::getServer()) return;
+    slow_ = slow;
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->setMinInterval(slow ? kSlowMin : kFastMin);
+    adv->setMaxInterval(slow ? kSlowMax : kFastMax);
+    if (adv->isAdvertising()) adv->stop(), adv->start();   // the new interval takes at the next start
+    Serial.printf("[hw] ble adv %s\n", slow ? "slow (1.0-1.3 s)" : "fast (100-150 ms)");
+  }
+  bool advertisingSlow() const { return slow_; }
+  bool advertisingHeld() const { return advHeld_; }
+
+  // A Wi-Fi join a phone or a hand asked for (Improv, `DEBUG ota check`):
+  // Bluetooth and Wi-Fi do not share the radio through the join, its DHCP
+  // and its check-in (owner, 2026-10-29). The phone is let go once its reply
+  // has had kPauseReplyMs to leave, and nothing advertises until the window
+  // is over. A clean pause: the stack stays up (NimBLE's deinit panicked
+  // mid-session, and a deinit(true) frees the link's static callbacks).
+  static constexpr uint32_t kPauseReplyMs = 600;
+  void pauseForWifi(bool on) {
+    if (on == paused_) return;
+    paused_ = on;
+    pauseAt_ = millis() + kPauseReplyMs;
+    hold_(kHeldJoin, on);
+    Serial.printf("[hw] ble %s\n", on ? "pauses for a Wi-Fi join: the phone is let go, no advertising until it is over"
+                                      : "back after the Wi-Fi join: advertising");
+  }
+  bool pausedForWifi() const { return paused_; }
+  // Paused, and quiet: no phone, nothing advertising.
+  bool quietForWifi() const {
+    NimBLEServer* server = NimBLEDevice::getServer();
+    return paused_ && (!server || liveConnections(server) == 0) && !NimBLEDevice::getAdvertising()->isAdvertising();
+  }
+
+ private:
+  // Advertising intervals, in 0.625 ms: Apple's 152.5..211.25 ms pair, and its 1022.5..1285 ms one.
+  static constexpr uint16_t kFastMin = 160, kFastMax = 240, kSlowMin = 1636, kSlowMax = 2056;
+  static constexpr uint8_t kHeldWifi = 1, kHeldNap = 2, kHeldJoin = 4;
+  void hold_(uint8_t why, bool hold) {
+    const uint8_t was = held_;
+    held_ = hold ? uint8_t(held_ | why) : uint8_t(held_ & ~why);
+    if (held_ == was) return;
+    advHeld_ = held_ != 0;
+    if (advHeld_ && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
+    lastPoll_ = millis() - 250;   // a release restarts it at once
+  }
+  uint8_t held_ = 0;
+  bool slow_ = false, paused_ = false;
+  uint32_t pauseAt_ = 0;
+
+ public:
+
+ private:
+
+  // Advertising restarts if it ever stops (unless Wi-Fi holds it), and the interval is asked for once per connection.
   void poll() {
     const uint32_t now = millis();
     if (now - lastPoll_ < 250) return;
@@ -163,12 +279,20 @@ class NusLink : public blorb::Link {
       loggedDrop_ = lastDrop_;
       Serial.printf("[hw] ble drop h=%u reason=0x%x\n", unsigned(loggedDrop_ >> 16), unsigned(loggedDrop_ & 0xffff));
     }
+    // Paused for a Wi-Fi join: the phone goes once its reply has left.
+    if (paused_ && int32_t(now - pauseAt_) >= 0 && liveConnections(server) > 0) {
+      Serial.printf("[hw] ble drop h=%u reason=a Wi-Fi join (the phone may come back once it is over)\n", unsigned(conn_));
+      for (uint16_t h : server->getPeerDevices()) server->disconnect(h);
+      pauseAt_ = now + 1000;   // once a second at most
+    }
+    // Held: nothing advertises, even what NimBLE restarts on a disconnect (advertiseOnDisconnect).
+    if (advHeld_ && NimBLEDevice::getAdvertising()->isAdvertising()) NimBLEDevice::getAdvertising()->stop();
     // Live by the host's own table, not NimBLE-Arduino's peer list: a peer the
     // host dropped without a DISCONNECT event must not keep the dish invisible.
     const bool live = liveConnections(server) > 0;
     if (!live) {
       up_ = false;
-      if (!NimBLEDevice::getAdvertising()->isAdvertising()) {
+      if (!advHeld_ && !NimBLEDevice::getAdvertising()->isAdvertising()) {
         if (server->getConnectedCount()) Serial.println("[hw] ble: a stale peer, advertising again");
         NimBLEDevice::getAdvertising()->start();
       }
@@ -239,7 +363,9 @@ class NusLink : public blorb::Link {
     }
   };
 
-  char name_[16] = "";
+  char name_[blorb::blename::kMax + 1] = "";
+  NimBLEUUID scanUuid_;
+  bool scanHasUuid_ = false;
   NimBLECharacteristic* tx_ = nullptr;
   RxCb rxCb_{this};
   ServerCb serverCb_{this};
@@ -253,7 +379,9 @@ class NusLink : public blorb::Link {
   blorb::Squatters squatters_;        // the loop's only
   std::function<bool()> keep_;
   std::function<void(NimBLEService*)> extend_;
+  std::function<void(NimBLEServer*, NimBLEAdvertising*)> serve_;
   bool advLogged_ = false;
+  bool advHeld_ = false;
   volatile bool up_ = false, paramsAsked_ = false;
   volatile uint16_t mtu_ = 23, conn_ = 0, itvl_ = 0, timeout_ = 0;
   volatile uint32_t connAt_ = 0;

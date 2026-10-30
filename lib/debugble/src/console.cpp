@@ -1,5 +1,6 @@
 #include "debugble/console.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <variant>
 #include "blorb/registry.h"
@@ -52,13 +53,6 @@ const Row* rowNamed(const Row (&rows)[N], std::string_view w) {
   for (const Row& r : rows)
     if (n ? r.id.v == *n : w == r.name) return &r;
   return nullptr;
-}
-
-std::optional<blorb::ChemId> chemNamed(std::string_view w) {
-  for (const blorb::DriveInfo& d : blorb::DRIVES)
-    if (w == d.name) return blorb::driveChem(d.id);
-  if (const blorb::ChemInfo* c = rowNamed(blorb::CHEMICALS, w)) return c->id;
-  return std::nullopt;
 }
 
 // Any species this firmware has a row for.
@@ -114,11 +108,8 @@ void Console::handle(std::string_view line, uint32_t connection, uint32_t nowMs,
   if (!verb) return reply.err(400, "NO_VERB");
   for (const VerbInfo& v : VERBS) {
     if (*verb != v.verb) continue;
-    if (v.reach >= Reach::Write) {
-      if (dish.sealed()) return reply.err(409, "SEALED");
-      if (board_.onTrial()) return reply.err(409, "TRIAL");
-      if (board_.otaActive()) return reply.err(409, "OTA_ACTIVE");
-    }
+    if (const std::optional<Refusal> no = refuseFor(v.reach, dish.sealed(), board_.onTrial(), board_.otaActive()))
+      return reply.err(no->code, no->text);
     if (v.reach == Reach::Harm && !unlock_.isOpen(connection)) return reply.err(423, "LOCKED");
     Call call{*this, board_, dish, connection, nowMs};
     return v.run(call, args, reply);
@@ -136,6 +127,73 @@ void Console::tick(uint32_t nowMs, std::optional<uint32_t> live, blorb::Link& ou
     case Unlock::Event::Lapsed: out.writeLine("! DEBUG unlock=lapsed"); break;
     case Unlock::Event::None: break;
   }
+}
+
+std::optional<Refusal> refuseFor(Reach reach, bool sealed, bool onTrial, bool otaActive) {
+  if (reach < Reach::Write) return std::nullopt;
+  if (sealed) return Refusal{409, "SEALED"};
+  if (onTrial) return Refusal{409, "TRIAL"};
+  if (otaActive) return Refusal{409, "OTA_ACTIVE"};
+  return std::nullopt;
+}
+
+namespace {
+
+// The cable's verbs and their reach (src/main.cpp runDebug). `bare`: the
+// reach with no argument, where that differs (a look at what it sets).
+struct SerialVerb {
+  const char* verb;
+  Reach reach;
+  std::optional<Reach> bare = std::nullopt;
+};
+constexpr SerialVerb kSerial[] = {
+    {"home", Reach::Harm, Reach::Look},        // home up|down: which way is up, kept in NVS
+    {"marquee", Reach::Show},
+    {"trace", Reach::Show},
+    {"fps", Reach::Show, Reach::Look},
+    {"lcd", Reach::Show, Reach::Look},
+    {"cores", Reach::Show, Reach::Look},
+    {"smooth", Reach::Show, Reach::Look},
+    {"latency", Reach::Show, Reach::Look},
+    {"shot", Reach::Look},
+    {"nap", Reach::Write},
+    {"hang", Reach::Harm}, {"side", Reach::Harm}, {"knock", Reach::Harm}, {"cradle", Reach::Harm},
+    {"shake", Reach::Harm}, {"ride", Reach::Harm}, {"carry", Reach::Harm}, {"pickup", Reach::Harm},
+    {"chem", Reach::Harm}, {"sleepiness", Reach::Harm}, {"tidy", Reach::Harm}, {"net", Reach::Harm},
+    {"warp", Reach::Harm}, {"duel", Reach::Harm}, {"air", Reach::Harm}, {"wpa3", Reach::Harm},
+    {"reboot", Reach::Harm}, {"bletest", Reach::Harm}, {"press", Reach::Harm}, {"double", Reach::Harm},
+    {"lean", Reach::Harm}, {"species", Reach::Harm}, {"found", Reach::Harm}, {"hatch", Reach::Harm},
+    {"die", Reach::Harm}, {"stage", Reach::Harm},
+};
+
+std::string_view nextWord(std::string_view& s) {
+  while (!s.empty() && s.front() == ' ') s.remove_prefix(1);
+  size_t n = 0;
+  while (n < s.size() && s[n] != ' ') ++n;
+  const std::string_view w = s.substr(0, n);
+  s.remove_prefix(n);
+  return w;
+}
+
+}  // namespace
+
+Reach serialReach(std::string_view line) {
+  const std::string_view verb = nextWord(line);
+  const std::string_view arg = nextWord(line);
+  if (verb == "power") {   // as the link's POWER: a look bare or `stats`, else the screen's own setting
+    return arg.empty() || arg == "stats" ? Reach::Look : arg == "nap" ? Reach::Write : Reach::Show;
+  }
+  if (verb == "wifi") {   // a look at the networks; `due` a check; set, forget, verify and the rest Harm
+    if (arg.empty() || arg == "status" || arg == "list") return Reach::Look;
+    return arg == "due" ? Reach::Write : Reach::Harm;
+  }
+  if (verb == "ota") {   // a check of the site's manifest now; another URL is Harm
+    const std::string_view url = nextWord(line);
+    return arg == "check" && url.empty() ? Reach::Write : Reach::Harm;
+  }
+  for (const SerialVerb& v : kSerial)
+    if (verb == v.verb) return arg.empty() && v.bare ? *v.bare : v.reach;
+  return Reach::Harm;   // a verb this table does not know: the most careful reach
 }
 
 // ---- verbs ------------------------------------------------------------------------------
@@ -293,8 +351,7 @@ void verb_warp(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
 }
 
 void verb_chem(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
-  struct Set { blorb::ChemId chem; blorb::Fx level; };
-  Set sets[kMaxChems];
+  ChemSet sets[kMaxChems];
   size_t n = 0;
   // Every pair is read before one is applied, so a refused line changes nothing.
   while (std::optional<std::string_view> w = a.word()) {
@@ -302,13 +359,10 @@ void verb_chem(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
     if (!permille || n == kMaxChems) return r.err(400, "BAD_ARGS");
     const std::optional<blorb::ChemId> chem = chemNamed(*w);
     if (!chem) return r.err(416, "OUT_OF_RANGE");
-    sets[n++] = Set{*chem, blorb::Fx::ratio(int32_t(*permille), 1000)};
+    sets[n++] = ChemSet{*chem, blorb::Fx::ratio(int32_t(*permille), 1000)};
   }
   if (n == 0) return r.err(400, "BAD_ARGS");
-  blorb::Creature* cr = creatureOf(c.dish);
-  if (!cr) return r.err(409, "NO_CREATURE");
-  for (size_t i = 0; i < n; ++i) cr->inject(sets[i].chem, sets[i].level);
-  c.dish.markDirty();
+  if (setChems(c.dish, sets, n) != Jump::Done) return r.err(409, "NO_CREATURE");
   r.ok("%u", unsigned(n));
 }
 
@@ -488,6 +542,77 @@ void verb_reboot(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
   if (!a.done() || (w && *w != "quiet")) return r.err(400, "BAD_ARGS");
   if (!c.board.reboot(bool(w))) return r.err(500, "REBOOT_FAILED");
   r.ok("rebooting quiet=%d", int(bool(w)));
+}
+
+// ---- the cable's own: its log, its Wi-Fi, its DEBUG lines --------------------------------
+
+namespace {
+
+constexpr uint32_t kLogLinesDefault = 40, kLogLinesMax = 120;
+constexpr size_t kPiece = 180;   // of a line, a reply line at most (Reply's 200 bytes with "#id + ")
+
+// `text`'s lines, the last `most` of them (all: 0), each as one reply line or
+// more (a long one in pieces). Returns how many lines it had.
+uint32_t sendLines(std::string_view text, uint32_t most, blorb::Reply& r) {
+  uint32_t total = 0;
+  for (size_t at = 0; at < text.size();) {
+    const size_t end = text.find('\n', at);
+    if (end != at) ++total;
+    if (end == std::string_view::npos) break;
+    at = end + 1;
+  }
+  uint32_t skip = most && total > most ? total - most : 0, sent = 0;
+  for (size_t at = 0; at < text.size();) {
+    size_t end = text.find('\n', at);
+    if (end == std::string_view::npos) end = text.size();
+    std::string_view l = text.substr(at, end - at);
+    at = end + 1;
+    if (!l.empty() && l.back() == '\r') l.remove_suffix(1);
+    if (l.empty()) continue;
+    if (skip) {
+      --skip;
+      continue;
+    }
+    ++sent;
+    for (size_t p = 0; p < l.size(); p += kPiece) r.line("%.*s", int(std::min(kPiece, l.size() - p)), l.data() + p);
+  }
+  return sent;
+}
+
+}  // namespace
+
+void verb_log(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  const std::optional<uint32_t> n = optNumber(a, 1, kLogLinesMax, kLogLinesDefault);
+  if (!n || !a.done()) return r.err(400, "BAD_ARGS");
+  const std::optional<std::string_view> log = c.board.log();
+  if (!log) return r.err(501, "NOT_ON_BOARD");
+  const uint32_t sent = sendLines(*log, *n, r);
+  r.unsaved().ok("lines=%u", unsigned(sent));
+}
+
+void verb_wifi(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  if (!a.done()) return r.err(400, "BAD_ARGS");
+  const std::optional<std::string_view> out = c.board.serial("wifi");
+  if (!out) return r.err(501, "NOT_ON_BOARD");
+  const uint32_t sent = sendLines(*out, 0, r);
+  r.unsaved().ok("lines=%u", unsigned(sent));
+}
+
+void verb_debug(Console::Call& c, blorb::Args& a, blorb::Reply& r) {
+  std::string_view line = a.rest;
+  while (!line.empty() && line.front() == ' ') line.remove_prefix(1);
+  while (!line.empty() && line.back() == ' ') line.remove_suffix(1);
+  if (line == "DEBUG" || (line.size() >= 6 && line.substr(0, 6) == "DEBUG ")) line.remove_prefix(line.size() > 5 ? 6 : 5);   // as the cable takes it
+  if (line.empty()) return r.err(400, "BAD_ARGS");
+  const Reach reach = serialReach(line);
+  if (const std::optional<Refusal> no = refuseFor(reach, c.dish.sealed(), c.board.onTrial(), c.board.otaActive()))
+    return r.err(no->code, no->text);
+  if (reach == Reach::Harm && !c.console.unlock().isOpen(c.connection)) return r.err(423, "LOCKED");
+  const std::optional<std::string_view> out = c.board.serial(line);
+  if (!out) return r.err(501, "NOT_ON_BOARD");
+  const uint32_t sent = sendLines(*out, 0, r);
+  if (reach < Reach::Write) r.unsaved();
+  r.ok("reach=%s lines=%u", kReaches[uint8_t(reach)], unsigned(sent));
 }
 
 }  // namespace debugble

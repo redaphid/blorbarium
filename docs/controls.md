@@ -41,13 +41,14 @@ spares, a shake tells the future, a cuddle hugs, a turn answers an update.
 | Mercy, winner | spare | 3 s: Finish | |
 | Mercy, downed | plead | | |
 | Friends | ask for a rematch | 3 s: hug (a friend egg) | back to searching |
-| Clutch | the next egg | 1.2 s: keep this egg | |
+| Clutch (tilt toward an egg) | keep the egg tilted toward | 1.2 s: keep it | |
 | Egg / remains | peek / a flower | | |
 
 Two changes of meaning came with it: a knock knock in a clutch used to keep
-the egg and now moves on (keeping is for good, so it is a hold), and in a
+the egg and moved on instead (keeping is for good, so it was a hold), and in a
 turn a knock knock throws a quick special when one fits (it still cheers
-when one does not).
+when one does not). Since 2026-10-21 the clutch is picked as a duel aims
+(below, "Choosing an egg"): tilt toward an egg, then knock.
 
 ## Why these three
 
@@ -107,7 +108,7 @@ while awake is the way to add one later.
 - **The rotation lagged a turn back** by about 1.5 s (`orient.h`'s settle
   and smoothing): found on badge 1, a 1 s turn held at 2.4 s, after the kid
   had let go. The poses no longer read the rotation (`src/hw/poses.h`), so
-  a turn back lets go within two samples; the update's "Turn me around!"
+  a turn back lets go within two samples; the update's "Tip me on my side!"
   still reads it.
 - **While turned onto a side, the duel's aim is the aim from before the
   turn** (the tilt of 1.5 s before), since turning him tips the tilt: a
@@ -118,7 +119,7 @@ while awake is the way to add one later.
   decided 0.4-0.6 s later, then feeds him on a lit screen
   (`test_feeding` `KnockKnock.ADarkBadgeIsLitAndNeverFedInTheDark`).
 - **A question owns the knock knock as it owns BOOT**: while the update asks
-  "Turn me around!" (or the debug unlock asks), a knock knock answers
+  "Tip me on my side!" (or the debug unlock asks), a knock knock answers
   nothing and feeds nobody (`hw/feel.h`). Until 2026-10-21 it dropped a
   pellet behind the update's screen, where it rotted unseen.
 
@@ -143,20 +144,28 @@ feet or behind him, and it goes into his mouth:
 | When | What shows |
 |---|---|
 | The second knock lands | as it rings out (`KnockSense::knockKnock`, ~0.1 s), before the knock knock is even decided: a small ring round the rim's pellet glyph, and a cookie springs out of it and waits there (none if the pantry is empty) |
-| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry's pip goes |
+| A pellet leaves the pantry | that cookie is tossed, its shadow waiting below, and lands in a puff; the pantry bar drains a step, a chunk flying off |
 | It lies in the dish | as a cookie; one that would lie on, under or behind him, or by his feet, is set down beside him, clear of his body |
 | He bites it | it is at his mouth (held up by his eyes when a species' mouth is tagged low, as the octopus's), a bite out of it each third of the chew; a burst and crumbs, YUM! and three hearts (rotten: grey-green, YUCK) |
 | Any of these | his belly: a meter up the left rim, its level 1 - hunger, rising as he eats |
 | He is full (hunger under 0.15) | he says I'M FULL! in a bubble. The cookie still lies there |
 | He is asleep | ZZZ... in a bubble. The cookie waits for him |
-| The pantry is empty | ALL GONE! in a bubble; the pantry's empty slots shake at the top, the next one filling like a clock |
+| The pantry is empty | no words: a thought bubble beside his head plays emoji drawn in code: the food he wants pops in, a red NO slams over it, then a sad face (four variants in turn: a drumstick; the food then an empty plate; an empty jar; another food, with a tear); the pantry bar shakes hard and flashes red |
+| Always | the pantry: a bar on the rim from ten to twelve o'clock, a cookie at its start, filled to the pellets left, green full through yellow and amber to red, the next pellet's return a lighter sliver past the fill |
 
 The first version (2026-10-21, 94e22a3) flashed a gold ring round the whole
 rim on the second knock ("a little much, and didn't help me understand I was
 feeding it") and said a refusal in pictures: the owner, knocking until the
 pantry was empty, read its grey cookie and hourglass as "two emojis, the
 globe and something else". Both are gone: the knock brings a cookie, and a
-refusal is words (checked against the font, `test_paint` `Font.*`).
+refusal is words (checked against the font, `test_paint` `Font.*`). Then
+the owner: "For that 'all gone', it needs to be an obvious icon and not
+text. For the 6 year old." A jar drawn for it read as a blue box or a
+battery, so (owner: "a mini animation with a couple obvious emojis in a
+thought bubble") it is the emoji thought, and the pantry's pips became a
+bar "that goes down upon feeding, and changes color green->red". The
+emoji and the bubble are `paint/emoji.h` (`drawEmoji`, `drawThought`,
+`drawThoughtFrames`), for the pet's inner state too (#19).
 
 **The food art's seam** is `paint::drawFood` (`lib/paint/src/feeding.cpp`,
 declared in `lib/paint/src/figure.h`): every cookie on screen goes through
@@ -178,6 +187,79 @@ starving pet that eats it later is poisoned); where the engine drops it (a
 random spot within 0.6 of the middle, then it rolls downhill, to the bottom
 rim when the badge is held upright); and his mouth opening toward it (pose
 art).
+
+## Choosing an egg, as the kid sees it
+
+Owner, 2026-10-21: "It also was difficult for me to understand how to pick an
+egg." Then: "Use the same mechanism as we do in fights: tilt the badge. Make
+the egg choices next to the selection egg ... reacting more quickly, with
+more frames, making the delay between user gesture and action as low as
+possible."
+
+What it was (`bash scripts/test/clutch_film.sh`, `outputs/egg-ux/strip_*_before.png`):
+
+- **The vigil** is 30 minutes of his remains fading to nothing, with a
+  flower glyph at 1 o'clock (a knock knock lays a flower). Nothing says eggs
+  are coming, or when; for the last minutes the dish is empty.
+- **The eggs** then lie in a row, all one size. The one "selected" is marked
+  by a 6 px cream caret under it, and nothing else (it did not even rock: the
+  clutch's Appearance had no pose clock).
+- **Next egg** was a knock knock, which nothing on screen said: the rim's
+  glyph at 1 o'clock was an arrow, and its "one more" glow lit there, far
+  from the eggs. The caret moved about 0.6 s after the second knock.
+- **Keep** was a turn onto a side held 1.2 s (about 2.5 s with the turn's
+  settle), and its ring filled round that same "next" arrow.
+- **Kept**, the eggs vanished and one big egg was there: no moment, no
+  sign which one it was.
+- **How many** showed (all were drawn); **what differs** was only colour;
+  **nothing done**: 30 minutes after the vigil the egg under the caret (the
+  first, unless moved) is kept, silently, and a clutch of one is laid as the
+  vigil ends.
+
+What it is now (`blorb/clutch_show.h`, `lib/paint/src/clutch.cpp`; the engine
+rule is `pickEgg` in `creature.h`, the shared aim is `blorb/tilt_aim.h`):
+
+| When | What shows |
+|---|---|
+| The vigil | the eggs on their way, small under the remains, clearer as it ends |
+| The eggs come out | they lie where a duel's stances do: left, right and (a third) toward the kid. Level, a little badge in the middle leans toward each egg in turn, its chevron to that egg lit, and TILT TO PICK; the last egg tilted toward (the one the timeout keeps) glows as the duel's lean does |
+| A tilt reaches an egg | that sample (`AimDetector`, two samples into a lean), not the next tick: the egg grows toward the middle (an eased 140 ms slide, every frame drawn), rocks, the duel's reticle rings it, the others dim, the duel's knock taps beside it and the words say KNOCK TO KEEP. Until he has tilted from one egg to another the words take turns with TILT TO PICK, since a badge held upright already leans toward the near egg |
+| The knuckle lands | as it lands (`BodySample::knockWaiting`, ~0.6 s before a lone knock is decided) the ring starts filling, orange, as the duel's hold ring does |
+| The egg is kept | the ring closes lime (a locked stance's), sparks fly, the others fade and drop away, and the egg glides to the middle and becomes the egg screen's egg (2.4 s in all, `ClutchShow::kChosenMs`) |
+
+The rules (`pickEgg`): the aim (`AimDetector`, the duel's) at each tick
+makes the egg there the cursor; while tilted toward an egg, a knock keeps it
+(the egg it was made at, as a knock locks a duel's stance), and so do a
+knock knock, a BOOT press or a hold (a side hold keeps the egg tilted toward
+before the turn, as a heavy special lands where the kid aimed). Level or tilted
+away, nothing is kept: a knock knock out of habit feeds no egg into a choice.
+The timeout still keeps the cursor after 30 minutes, never a friend egg. The
+clutch's seeds, the eggs they hatch and the friend egg's rules are untouched.
+
+**A badge left lying chooses nothing** (`tilt_aim.h` `AimArming`, shared by
+the eggs and the duel). On a board (2026-10-21) a puffkin left lying tilted on
+a desk with its eggs out kept one within 20 minutes, nobody near it: a stray
+jolt read as the knock on an aim no hand had made. Now a choice screen (the
+eggs, fight mode and the duel) opens unarmed, so a pose the badge already lay
+in points at nothing. A hand arms it by moving the badge: gravity 250 mg away
+from where it rested, on two steady samples running (a jolt is not steady), which
+any tilt into a lean or turn onto a side is. It stays armed 20 s after the
+last move. Unarmed, every reader of the aim sees level: the screen points at
+nothing, no knock, knock knock, press or hold selects, a side hold of a badge
+already on its side keeps nothing, and the timeouts keep only what an armed
+aim chose (the clutch: the cursor egg after 30 minutes, as before).
+
+Caveat for a try with a kid: as in a duel, a badge **held upright** in a hand
+is tilted toward the kid (the near egg, a duel's Trick) as far as it can be,
+so with three eggs the near one is aimed until the badge is laid back like a
+tray. The words take turns until he has tilted between eggs, so the tilt is
+taught before the knock.
+
+The rim's hint for the clutch is now the check (a press keeps), with no hold
+ring (the hold also keeps). Previews: `bash scripts/test/clutch_film.sh`
+films a death to the next hatch, on this checkout and on the commit before
+the picker driven the old way, into `outputs/egg-ux/`
+(`strip_<pet>_before.png`, `strip_<pet>_after.png`).
 
 ## He teaches them
 

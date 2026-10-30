@@ -45,6 +45,11 @@ inline const char* name(St s) {
 }
 constexpr uint32_t flag(Ctl c) { return uint32_t(1) << uint8_t(c); }
 
+// Told of each event as it closes (analytics, src/analytics_fw.h): its stages
+// in 0.1 ms after In (Recorder::kNone where not reached), and whether it was
+// silent. Outside Recorder, so DEBUG latency clear never drops it.
+inline void (*onFinish)(Ctl, const uint16_t* tenthsMs, bool silent) = nullptr;
+
 class Recorder {
  public:
   static constexpr uint8_t kKeep = 16;              // the last this many of each control, for p50/p95/max
@@ -205,6 +210,7 @@ class Recorder {
     d.words += spoke;
     if ((spoke || felt) && !acked) ++d.noAck;
     if ((spoke || felt) && !acked && !shown) ++d.silent;
+    if (onFinish) onFinish(c, row, (spoke || felt) && !acked && !shown);
   }
   Open open_[kCtls]{};
   Done done_[kCtls]{};

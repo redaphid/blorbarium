@@ -8,10 +8,13 @@
 // renders it byte-identically run after run.
 #include <cstdint>
 #include "blorb/boot.h"
+#include "blorb/carry_show.h"
+#include "blorb/clutch_show.h"
 #include "blorb/creature.h"
 #include "blorb/duel_card.h"
 #include "blorb/feed_show.h"
 #include "blorb/habitat.h"
+#include "blorb/idle.h"
 #include "blorb/registry.h"
 #include "blorb/senses.h"
 #include "blorb/species.h"
@@ -23,6 +26,13 @@ namespace blorb {
 // Foresee action runs, glow is at least this, whatever the genes say. Genes
 // make it brighter and tint it; they cannot make it invisible.
 constexpr Fx kForeseeGlowFloor = Fx::ratio(6, 10);
+
+// How he feels, as his posture shows it (paint/lively.cpp): perky when
+// content, slumped when bored, drooping and watching the glass when lonely,
+// heavy when sleepy, fidgety when hungry, hunched when hurting. Each 0..255,
+// rising from nothing as its drive passes its mark, so his posture moves as
+// smoothly as his drives do, never a jump at a tick.
+struct Moods { uint8_t content = 0, bored = 0, lonely = 0, sleepy = 0, hungry = 0, hurting = 0; };
 
 struct Appearance {
   // Kind selects the stage art: Egg, Creature (with `stage`: Baby/Child =
@@ -68,6 +78,16 @@ struct Appearance {
   uint8_t markCount = 0;
 
   bool asleep = false, dreaming = false, calling = false;
+  // Playing on his own (idle.h): which idle, how far in and how long it runs.
+  // paint/lively.cpp moves him through it, paint's idle props draw its prop.
+  IdleId idle = idles::none;
+  uint16_t idleTicks = 0, idleLength = 0;
+  uint8_t idlePace = 100;           // percent: how briskly he plays it (idle.h idlePace), his age, genes and mood
+  // His body's genes as his motion shows them (#61): bulk (size gene base,
+  // 128 = as ever) a bigger one breathes and sways slower; squash (size
+  // gene squash) how far his idles squash and stretch him.
+  uint8_t bulk = 128, squash = 128;
+  Moods moods{};
   Mouthful mouth = Mouthful::Nothing;   // drawn at his mouth, as the dish item it was
   Fx injury{}, wobble{};
   Fx night{};                       // 0..1 background tint from the pet clock
@@ -89,12 +109,28 @@ struct Appearance {
   // Feeding as the eyes see it (feed_show.h): the knock knock heard, the
   // pellet's flight, a refusal and why, the chomp, and his belly. Ages in ms.
   FeedView feed{};
+  // Carried about (carry_show.h): his lean against the badge's acceleration,
+  // and now and then a reaction to the ride (paint's carried.cpp). Ages in ms.
+  CarryView carry{};
+  // A hard shake dismissed something (#35) this long ago, ms: the screen's
+  // whoosh (paint::drawDismissed). UINT16_MAX: none to show.
+  uint16_t dismissedMs = UINT16_MAX;
 
   // Egg, remains and clutch
   Fx eggProgress{};                 // whole -> cracking -> hatching
+  // How hard a hand is shaking the egg right now, 0..1 (Egg::shaken): it
+  // jiggles with it, and chips of shell jump off once it is coming apart.
+  Fx eggShaken{};
+  // He hatched this long ago, ms: the shell flying off him (paint). UINT16_MAX: not lately.
+  static constexpr uint16_t kHatchBurstMs = 1200;
+  uint16_t hatchedMs = UINT16_MAX;
   Fx remainsFade{};                 // 0..1 through the vigil
   EggPreview eggs[kMaxClutch]{};
   uint8_t eggCount = 0, cursor = 0;
+  // Choosing an egg as the eyes see it (clutch_show.h): the egg the tilt
+  // points at and the slide to it, a knock landing on it, the hints' clock,
+  // and the chosen moment (drawn over the egg screen, from `eggs`). Ages in ms.
+  ClutchView clutch{};
 
   // Care hint: the gesture that relieves the most pressing unmet drive (care.def).
   bool hasHint = false;
@@ -132,6 +168,7 @@ struct Appearance {
   // until it gives up.
   bool lobby = false, lobbyConnecting = false;
   uint8_t lobbyFriends = 0;
+  uint8_t lobbyOtherRules = 0, lobbyNotReady = 0;   // of lobbyFriends: DuelView::otherRules, notReady
   uint16_t lobbyTicksLeft = 0;
   Decline lobbyDecline = Decline::None;
   // A hang filling up, 0..1 (the hanging locus): paint draws it as a red
@@ -153,6 +190,7 @@ struct Appearance {
   DishPos from{};                   // where he stood a tick ago ...
   uint16_t behind = 0;              // ... and how far he is drawn still on the way from it to `at`, 0..256
   uint16_t poseSub = 0, exprSub = 0;   // 1/256 ticks past poseTick and exprTicks, 0..255
+  uint16_t idleSub = 0;             // 1/256 ticks past idleTicks
   bool lively = false;              // breath and the idle layer drawn on liveMs (paint/tween.h)
   uint32_t liveMs = 0;              // the screen's clock: wall ms run at the screen's speed
   uint16_t ahead = 0;               // walking: drawn this far (0..256 of a step) on past `at`, at the step from `from`

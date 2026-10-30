@@ -18,12 +18,22 @@
 #include "blorb/habitat.h"
 #include "blorb/mutate.h"
 #include "blorb/senses.h"
+#include "blorb/idle.h"
 #include "blorb/species.h"
 #include "blorb/stakes.h"
+#include "blorb/traits.h"
 
 namespace blorb {
 
 struct EggRules { uint32_t incubateTicks; Fx warmthBoost; uint8_t hatchBurstDreams; };
+
+// Starving: hunger this high and he eats a rotten pellet (actions.h Picky).
+// It is where the starter's kStarving receptor (starter_genome.cpp, hunger
+// 0.8) starts turning hunger into injury: below it going without hurts him
+// less than a rotten bite (0.4 toxin, most of it injury within minutes), so
+// he waits for a fresh one; past it he is already being hurt, and rot feeds
+// him. A pet left with only rot still eats it in the end, and is poisoned.
+constexpr Fx kEatsRotAt = Fx::ratio(8, 10);
 
 // What gene expression built. Grows at each stage; never shrinks in a life.
 struct Phenotype {
@@ -48,6 +58,7 @@ struct Phenotype {
   Size size{};
   Oracle oracle{};
   SpeciesTraits species{};             // body, power and knack (species.h); grungo until a species gene says otherwise
+  Traits traits{};                     // what the genes make him, against the recipe (traits.h); behaviour reads it
   uint8_t expressedStages = 0;         // bitmask of Stage; makes expressStage idempotent
 };
 
@@ -97,7 +108,11 @@ class Creature {
   // The unpowered catch-up (DEVIATIONS.md 3): `ticks` of chemistry in one
   // coarse step. Sense loci only, no stimuli, brain or behaviour; stages
   // express as their loci fire and the die locus still ends the life.
-  void tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick);
+  // `resting`: nobody has touched the badge for as long as it takes to go dim
+  // (PetClock::kDimAfterTicks), so ticked he would be in bed by now: his
+  // belly runs at its sleeping pace (creature.cpp restMetabolism).
+  void tickCoarse(const SenseOut& senses, uint32_t ticks, uint32_t tick, bool resting = false);
+  bool resting() const;   // asleep or in the dark: his belly runs at its sleeping pace
 
   bool dead() const;
   DeathCause cause() const;
@@ -116,6 +131,15 @@ class Creature {
   const LifeStats& stats() const { return stats_; }
   const FaceState& face() const { return face_; }
   ActionId action() const { return action_; }
+  // His idle, while he plays one (idle.h) over a rest; idles::none otherwise.
+  const IdleState& idle() const { return idle_; }
+  const Picky& picky() const { return picky_; }
+  bool playing() const { return !actionDone_ && idle_.active(); }
+  // What STATE says he is doing: the idle he plays, else the action's name.
+  const char* doing() const;
+  // The part of his day (#61, idle.h DayPart): the wall's hour when a phone set
+  // it, else how long since he woke; the dark is his night.
+  DayPart dayPart() const;
   uint32_t hash() const;               // chem, loci, W, body, tick: the replay check
 
   void inject(ChemId, Fx);             // sim scripts, tests and the prophecy_treat twist; clamps to 0..1
@@ -125,6 +149,10 @@ class Creature {
   // Ends his sleep at the next tick, as a stimulus that wakes would (a
   // double press for a fight). Not saved.
   void wake() { wakeAsked_ = true; }
+  // Gets him up at the next tick as a kid's hand does (a knock, a pick-up):
+  // awake, his sleepiness down under the nap's onset and, where it is light,
+  // the night's melatonin gone, so he stays up. Not while lidded. Not saved.
+  void rouse() { rouseAsked_ = true; }
   // Face down (the lid): a sleep keeps going whatever his sleep gate says, so
   // bedtime is bedtime for every pet's genes. The Dish sets it every tick
   // from the lid; not saved.
@@ -176,9 +204,12 @@ class Creature {
   bool actionDone_ = false;            // its behaviour finished and stopped; the brain picks next
   std::optional<ActionId> forced_;     // force(), applied at the next tick
   bool wakeAsked_ = false;             // wake(), applied at the next tick
+  bool rouseAsked_ = false;            // rouse(), applied at the next tick
   bool keepAsleep_ = false;            // keepAsleep(): not saved, not hashed
   SenseOut pendingSelf_;               // self-stimuli fired this tick, applied next tick
   Rng rng_{};
+  IdleState idle_;                     // saved after the occupant record's rng (keepsake.cpp)
+  Picky picky_;                        // saved after the idle
 };
 
 class Egg {
@@ -187,6 +218,20 @@ class Egg {
   // Time incubates it; held or cradled adds warmthBoost; a knock wobbles it.
   // True once ready; the Dish then hatches it in place.
   bool tick(const SenseOut&);
+  // A hand shaking it hatches it, no phone needed (owner, 2026-10-27): each
+  // tick of hard shaking (`shaking`, the Dish's ShakeHatch) cracks it
+  // 1/kShakeTicks of the way, so about four seconds of shaking in all hatch
+  // it, in one go or in several. Left alone while `settle` (time is not
+  // incubating it), a crack half made closes again gently, kSettleTicks for a
+  // whole stage, but never below the last stage reached: the cracks a kid made
+  // stay. The progress is the saved incubation, so they stay over a replug
+  // too. True once ready; the Dish then hatches it in place.
+  static constexpr uint16_t kShakeTicks = 40;
+  static constexpr uint16_t kSettleTicks = 50;
+  static constexpr uint8_t kCrackStages = 4;   // whole, a hairline, cracked all over, shell coming away
+  bool shaken(bool shaking, bool settle);
+  // The crack stage its progress has reached, 0..kCrackStages (ready).
+  uint8_t crackStage() const;
   const Genome& genome() const { return child_.genome; }
   const MutationDiff& diff() const { return child_.diff; }
   uint16_t generation() const { return generation_; }
@@ -230,9 +275,11 @@ struct Clutch {
   uint32_t friendSeed = 0;
 
   Offspring child(uint8_t i) const;    // pure; runs mutate() with its viability retries
-  // Body choice: Button or Knock moves the cursor, ButtonHold or DoubleKnock
-  // picks; the timeout picks the cursor. Returns the chosen index once.
-  std::optional<uint8_t> tick(const SenseOut&);
+  // Body choice (pickEgg): `aim` is the tilt picker's sector this tick
+  // (tilt_aim.h, -1 level); the egg it points at becomes the cursor, and a
+  // knock, a knock knock or a hold keeps it. The timeout picks the cursor.
+  // Returns the chosen index once.
+  std::optional<uint8_t> tick(const SenseOut&, int8_t aim = -1);
   // One egg per call (one mutate and dry run, about 30 ms estimated), called
   // once per tick during the vigil, so death never stalls a frame. Idempotent.
   // The friend slot previews the cross only when given its friend egg;
@@ -240,10 +287,19 @@ struct Clutch {
   void derivePreviewStep(const FriendEgg* = nullptr);
 };
 
-// The egg gestures, one rule for a clutch and the founding nest (founding.h):
-// Button or Knock moves the cursor, ButtonHold or DoubleKnock keeps the egg
-// under it. One egg needs no choice. The kept index, or nullopt.
-std::optional<uint8_t> pickEgg(const SenseOut&, uint8_t& cursor, uint8_t count);
+// Where the eggs lie, as the tilt picker's sectors (tilt_aim.h): egg 0 to
+// the left, egg 1 to the right, egg 2 toward the kid (a duel's Pounce, Guard
+// and Trick). The egg a tilt points at, or -1 (level, away, or no egg there).
+inline int8_t eggAt(int8_t aim, uint8_t count) { return aim >= 0 && aim < count && aim < 3 ? aim : -1; }
+
+// The egg gestures, one rule for a clutch and the founding nest (founding.h),
+// the duel's way of picking (owner, 2026-10-21: "Use the same mechanism as we
+// do in fights: tilt the badge"): tilt toward an egg and it is the cursor;
+// while it is tilted toward, a knock keeps it, as a knock locks a stance, and
+// so do a knock knock or BOOT (a press) and a hold, as they lock a special.
+// Level, nothing is kept: the cursor is the last egg tilted toward (the
+// timeout's). One egg needs no choice. The kept index, or nullopt.
+std::optional<uint8_t> pickEgg(const SenseOut&, int8_t aim, uint8_t& cursor, uint8_t count);
 
 using Occupant = std::variant<Egg, Creature, Clutch>;
 

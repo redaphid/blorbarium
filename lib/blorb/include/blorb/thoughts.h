@@ -43,7 +43,7 @@ Heirlooms heirloomsOf(const Genome&, const Lineage&);
 // still thinks and foretells on his own clock. None is saved with him or hashed.
 struct FromPhone {
   uint32_t awayTicks = 0;             // powered ticks since a phone last gave the time
-  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME this boot
+  std::optional<uint32_t> localNow;   // the owner's local wall time, seconds since 1970: a TIME (or a Wi-Fi window's clock) this boot
   bool named = false;                 // the owner chose his name (TWIST rename)
   const Taught* taught = nullptr;     // what the owner taught him to say (TWIST teach)
 };
@@ -87,13 +87,6 @@ inline constexpr ThoughtInfo THOUGHTS[] = {
 inline constexpr size_t kThoughtCount = countOf(THOUGHTS);
 const ThoughtInfo* thoughtInfo(ThoughtId);
 
-struct VoicedLine { ThoughtId thought; VoiceId voice; const char* text; };
-inline constexpr VoicedLine VOICED_LINES[] = {
-#define BLORB_LINE(t, v, text) {thought::t, voice::v, text},
-#include "blorb/defs/thought_lines.def"
-#undef BLORB_LINE
-};
-
 // A species' own lines for a row (species_lines.def, written by
 // tools/personality.py from personalities/<species>.txt).
 struct SpeciesLine { SpeciesId species; ThoughtId thought; const char* text; };
@@ -104,10 +97,21 @@ inline constexpr SpeciesLine SPECIES_LINES[] = {
   {SpeciesId{0xFF}, ThoughtId{0xFF}, ""},   // keeps the array non-empty when no species has lines
 };
 
+// A species' own answers to a shake (species_verdicts.def, written by
+// tools/personality.py from the verdict_* sections of personalities/<species>.txt):
+// kind 0 yes, 1 no, 2 not yet. They stand in for the ball's plain ones, kind
+// by kind, so a frog's YES is his own and not every pet's.
+struct SpeciesVerdict { SpeciesId species; uint8_t kind; const char* text; };
+inline constexpr SpeciesVerdict SPECIES_VERDICTS[] = {
+#define BLORB_SPECIES_VERDICT(sid, sp, kind, text) {SpeciesId{sid}, kind, text},
+#include "blorb/defs/species_verdicts.def"
+#undef BLORB_SPECIES_VERDICT
+  {SpeciesId{0xFF}, 0xFF, ""},   // keeps the array non-empty when no species has verdicts
+};
+
 // ---- the text ---------------------------------------------------------------------
 constexpr size_t kMaxThoughtText = 30;
-constexpr size_t kMaxFrameText = 22;          // a voice's prefix and suffix together
-constexpr size_t kMaxVoicedText = kMaxThoughtText + kMaxFrameText;   // a row of thought_lines.def
+constexpr size_t kMaxVoicedText = 52;          // the room a said line has before its mark grows it
 constexpr size_t kMaxNameText = 15;           // the saved name's 16 bytes
 constexpr size_t kMaxTaughtText = kMaxThoughtText;
 constexpr uint8_t kUrgentThought = 7;
@@ -153,14 +157,12 @@ constexpr bool writable(const char* text, size_t max, const char* when) {
 constexpr bool thoughtsWritable() {
   for (const ThoughtInfo& t : THOUGHTS)
     if (!writable(t.text, kMaxThoughtText, t.whenName)) return false;
-  for (const VoicedLine& l : VOICED_LINES)
-    if (!writable(l.text, kMaxVoicedText, whenOf(l.thought))) return false;
   for (const SpeciesLine& l : SPECIES_LINES)
     if (l.species.v != 0xFF && !writable(l.text, kMaxThoughtText, whenOf(l.thought))) return false;
-  for (const FrameInfo& f : FRAMES) {
-    for (const char* s = f.prefix; *s; ++s) if (!inFont(*s)) return false;
-    for (const char* s = f.suffix; *s; ++s) if (!inFont(*s)) return false;
-    if (textLen(f.prefix) + textLen(f.suffix) > kMaxFrameText) return false;
+  for (const SpeciesVerdict& v : SPECIES_VERDICTS) {
+    if (v.species.v == 0xFF) continue;
+    if (v.kind > 2 || !writable(v.text, kMaxThoughtText, "")) return false;
+    for (const char* s = v.text; *s; ++s) if (isMark(*s)) return false;
   }
   return true;
 }
@@ -172,37 +174,33 @@ constexpr bool speciesLinesNameTheirSpecies() {
 #define BLORB_SPECIES_LINE(sid, sp, t, text)   if (sid >= kSpeciesCount || !sameName(SPECIES[sid].name, #sp)) return false;
 #include "blorb/defs/species_lines.def"
 #undef BLORB_SPECIES_LINE
-  return true;
-}
-constexpr bool everyVoiceFramed() {
-  for (const VoiceInfo& v : VOICES) {
-    bool framed = false;
-    for (const FrameInfo& f : FRAMES) framed = framed || f.voice == v.id;
-    if (!framed) return false;
-  }
+#define BLORB_SPECIES_VERDICT(sid, sp, kind, text)   if (sid >= kSpeciesCount || !sameName(SPECIES[sid].name, #sp)) return false;
+#include "blorb/defs/species_verdicts.def"
+#undef BLORB_SPECIES_VERDICT
   return true;
 }
 static_assert(idsUnique(THOUGHTS), "thoughts.def has a duplicate id");
 static_assert(kThoughtCount <= 255, "the Thinker indexes rows by a byte");
-static_assert(thoughtsWritable(), "a line or a voice frame is too long, has two marks, a mark its condition does not "
+static_assert(thoughtsWritable(), "a line is too long, has two marks, a mark its condition does not "
                                   "give, or a character the font lacks");
-static_assert(everyVoiceFramed(), "every voice needs at least one BLORB_FRAME");
-static_assert(speciesLinesNameTheirSpecies(), "species_lines.def: an id and a name disagree with species.def; rerun tools/personality.py build");
+static_assert(speciesLinesNameTheirSpecies(), "species_lines.def or species_verdicts.def: an id and a name disagree "
+                                              "with species.def; rerun tools/personality.py build");
 
 // What a line's '@' and '*' stand for: his name and one taught line, in the font.
 struct Words { std::string_view name, taught; };
 
 // The line as said, its mark replaced: '#' by `num`, '@' and '*' by `words`.
 // If his species has its own lines for the row (species_lines.def), one of
-// them stands in for the row's text and the voice's own lines. Otherwise: one
-// of the voice's own lines for the row (thought_lines.def) if it has any, else
-// the row's text. Anything but a voice's own line is cut to the first sentence
-// if the voice is terse, inside one of the voice's frames. `pick` chooses
-// among them, modulo their count. Returns the length.
+// them is said exactly as written: his file is already his voice, so no terse
+// cut shortens it. Otherwise the row's shared text, which a terse voice cuts to
+// its first sentence. Nothing ever wraps or reshapes a line: no voice frame,
+// prefix, suffix or voice's own rewrite (the owner removed "THE REEDS SAY:",
+// "... SO IT IS." and the voices' versions of shared lines).
+// `pick` chooses among them, modulo their count. Returns the length.
 // The one mark grows a line most as a taught line ('#' is 5 digits, '@' a name).
 constexpr size_t kThoughtLineCap = kMaxVoicedText + (kMaxTaughtText - 1) + 1;
 static_assert(kMaxTaughtText >= kMaxNameText && kMaxTaughtText >= 5);
-// kSharedOnly is no species: the shared and voiced lines alone, as tests and
+// kSharedOnly is no species: the shared lines alone, as tests and
 // previews want them whatever lines the species files hold.
 inline constexpr SpeciesId kSharedOnly{0xFE};
 size_t thoughtLine(ThoughtId, uint16_t num, VoiceId, uint8_t pick, char* out, SpeciesId = kSharedOnly,
@@ -227,6 +225,10 @@ struct ThoughtPick { ThoughtId id; uint16_t num; };
 // The prophecy a shake brings, by the oracle gene's topic weights; rows still
 // cooling down (readyAt, per row, nullable) are skipped. Nullopt if none holds.
 std::optional<ThoughtPick> chooseProphecy(const Observed&, const uint32_t* readyAt, Rng&);
+// The ball's bare answer to a shake: yes, no or not yet (45 / 30 / 25), in
+// the species' own words when his file gives that kind (SPECIES_VERDICTS),
+// else the ball's plain ones.
+const char* drawVerdict(Rng&, SpeciesId);
 
 class Thinker {
  public:
@@ -242,10 +244,19 @@ class Thinker {
   // The phone's line (already in the font, at most kMaxSaidText): it starts
   // now over anything showing, and no thought or prophecy cuts it short.
   void say(std::string_view line, const Creature&, const Lineage&, uint32_t tick);
+  // A question on the screen (the update's, Wi-Fi's, the debug unlock's):
+  // he says nothing (owner, 2026-10-29: his teach_fight line came up over
+  // "Join Wi-Fi?"). What he was saying is cut, nothing starts, and nothing
+  // is kept to say after: a line meant for meanwhile (the phone's, a
+  // welcome, a growth) is dropped. Once it goes, the usual quiet gap.
+  void hush(bool on, uint32_t tick);
+  bool hushed() const { return hushed_; }
   // Fills the Appearance's line. While he prophesies he wears the foresee
   // face and glow, and the shake's hop does not show; while he says the
   // phone's line he wears the croak face.
   void show(Appearance&, uint32_t tick) const;
+  // Foretellings told (a shake's trance ended in its answer) since boot: the life stats count them (life_tally.h).
+  uint32_t foretold() const { return foretold_; }
 
   static constexpr uint32_t kMissPhoneTicks = 12 * kTicksPerHour;      // powered time without a phone before he asks for one
   static constexpr uint32_t kTranceTicks = 12;                         // a shake's trance: the swirl before the answer lands
@@ -270,6 +281,8 @@ class Thinker {
   uint32_t fortuneDay_ = 0xFFFFFFFFu;                   // the pet day whose first foretelling is still owed
   std::optional<Shown> now_;
   std::optional<Trance> trance_;
+  uint32_t foretold_ = 0;
+  bool hushed_ = false;
 };
 
 }  // namespace blorb

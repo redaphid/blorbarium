@@ -122,6 +122,39 @@ TEST(Pacing, AtMostTenTicksPerCallAndTicksFollowTime) {
   EXPECT_EQ(paced.tickCount(), 99u) << "50 Hz calls up to 9,980 ms: a tick at every whole 100 ms after 0";
 }
 
+// The nap (src/main.cpp): the chip sleeps up to a minute, then catches the pet
+// up in one go, Dish::tick until the clock is within a tick. Two hours of that
+// leave him exactly where ticking every 100 ms would: the same tick, age and
+// hunger, hatched at the same tick, with no tick lost or doubled.
+TEST(NapCatchUp, LongSleepsThenCatchUpMatchTickingAwake) {
+  Box awake, napped;
+  awake.boot(), napped.boot();
+  const uint32_t end = 2 * 3600 * 1000;
+  for (awake.ms = 0; awake.ms < end;) {
+    awake.ms += kTickMs;
+    awake.dish->tick(awake.ms, awake.link);
+  }
+  uint32_t rng = 9, wakes = 0, hatchedAt = 0;
+  while (napped.ms < end) {
+    rng = rng * 1664525u + 1013904223u;
+    // A minute, or a hand's wake partway (any ms, not on a tick).
+    napped.ms = std::min(end, napped.ms + (rng % 4 ? 60000u : 1 + rng % 60000u));
+    while (napped.ms - napped.dish->lastTickMs() >= kTickMs) napped.dish->tick(napped.ms, napped.link);
+    ++wakes;
+    EXPECT_LT(napped.ms - napped.dish->lastTickMs(), kTickMs) << "caught up at every wake: no stall to see";
+    if (!hatchedAt && std::holds_alternative<Creature>(napped.dish->occupant())) hatchedAt = napped.dish->tickCount();
+  }
+  ASSERT_GT(wakes, 100u);
+  EXPECT_EQ(napped.dish->tickCount(), awake.dish->tickCount());
+  EXPECT_EQ(napped.dish->tickCount(), end / kTickMs);
+  EXPECT_EQ(napped.dish->lastTickMs(), awake.dish->lastTickMs());
+  ASSERT_TRUE(std::holds_alternative<Creature>(awake.dish->occupant()));
+  ASSERT_TRUE(std::holds_alternative<Creature>(napped.dish->occupant()));
+  EXPECT_GT(hatchedAt, 0u);
+  EXPECT_EQ(napped.creature().stats().ageTicks, awake.creature().stats().ageTicks);
+  EXPECT_EQ(napped.creature().genome().hash(), awake.creature().genome().hash());
+}
+
 TEST(Saving, EveryFiveMinutesAndAtOnceOnAnEvent) {
   Box box(starterGenome(7));
   box.boot();
@@ -243,7 +276,6 @@ TEST(Boot, ANewerFormatIsSealedAndWritesNothing) {
 // The same genome, seed and script give the same Dish hash after 24 pet hours.
 // The device prints its own from HASH after the same feed (unit 20).
 TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
-  GTEST_SKIP() << "broken by the global sleep cut (genes.cpp kSleepinessNum/Den, 2026-10-19): still a problem, not re-blessed";
   // 0xdca5e44a until a chosen sleep needed the gate open past kSleepOnset
   // (docs/notes/first-hours.md: 8a7f68fc) and the shake landed on its fifth
   // reversal, a tick later (rel-senses: c848b73d); both together: e8e58739.
@@ -252,8 +284,23 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // the marble cut: no marble rolls in the dish, nothing chases it, and the
   // starter genome is two genes shorter. (An interim reading of 22246b02
   // came from incremental builds on a mirror carrying stale objects;
-  // from-scratch builds agree on c1a2eec8.)
-  constexpr uint32_t kCommitted = 0xc1a2eec8u;
+  // from-scratch builds agree on c1a2eec8.) c74fada3 with sleep-idle
+  // (docs/notes/sleep-idle.md): no night with no clock, the still run and
+  // the pet clock's two new fields in the hash, a hand rousing him, his idles
+  // over a rest (their rng draws, drives, faces) and the 2/5 sleep cut.
+  // ea029709 once rot is refused unless he is starving (#21): food_near counts
+  // only what he would eat, and he sniffs rot and turns away. 6fce18b3 with
+  // the one starter recipe (#36): Dish(.., 7) founds starterGenome(7), now the
+  // recipe every board founds from (sleep as pressure, a 15-minute egg).
+  // d349a3b4 with the day's activities (#61, docs/notes/day-activities.md):
+  // the parts of his day, the Feel acts, his age, genes and traits leaning
+  // his idles, the pace, and when he woke in the hash. 5a623961 with the food
+  // economy (test_economy): a pellet leaves hunger at most 0.2 and energy at
+  // least 0.5, and resting (asleep or dark) his belly runs slow. With those
+  // two rules switched off the routine still gives 43e1405e. 33cc0d3a once
+  // shaking cracks an egg open (test_shake_hatch): the routine's first shake
+  // lands on the egg and hatches him a little sooner.
+  constexpr uint32_t kCommitted = 0x33cc0d3au;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -264,7 +311,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=c1a2eec8 tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=33cc0d3a tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a
@@ -312,7 +359,7 @@ TEST(Lifecycle, body_only_full_life) {
       diedAt = d->at;
     } else if (auto* b = std::get_if<Birth>(&e)) {
       ++births;
-      EXPECT_EQ(b->chosen, 1) << "the owner moved the cursor once, then held";
+      EXPECT_EQ(b->chosen, 1) << "the owner tilted toward the right egg, then held BOOT tilted there";
       EXPECT_EQ(b->clutchSize, 3);
       bornAt = b->at;
     }

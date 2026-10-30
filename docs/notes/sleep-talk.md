@@ -10,9 +10,15 @@ Branch `rel-sleep` (from origin/main 9b4000d, 0.7.2). The owner, on 0.7.1 with t
 - 12 h of powered time, no phone, no wall time, with the seated and nobody owners from first-hours.md.
 
 There are three variants:
-- `@070`: adopted on 0.7.0, whose species founder still had the Gift recipe's sleep bytes, which adoption never rewrites;
+- `@070`: adopted on 0.7.0, which kept 0.4.0's own sleep bytes (adoption never runs twice);
 - `@071`: adopted on 0.7.1 or later, with the FirstHours bytes;
 - `@070+retune`: adopted on 0.7.0, then given this branch's retune.
+
+Update 2026-10-21 (issue #36): there is one starter recipe now, and the
+retune below is gone, along with the variants above. Adoption leaves a 0.4.0
+pet's own sleep bytes as they are (founding.h `adoptSpecies`); a pet that
+still sleeps by them keeps them. `Sweep.FieldPetsHourByHour` runs one
+variant, `@040`.
 
 ## The cause
 
@@ -30,8 +36,8 @@ The FirstHours retune alone would not have fixed it. `@071` pets, which already 
 |---|---|---|
 | thoughts.def rows 124-131, situation `dozing` (thoughts.cpp: asleep, dreaming or not) | snore, mumble, dream_chase, dream_feast, dream_flight, sleep_count, sleep_warm, dream_rain. Priority 0, cooldown 1800 s. | A sleeping pet murmurs every few minutes. At 2700 s the eight rows burned out and left 15-minute gaps; at 1800 s the longest gap is 6 to 13 min. The lead asked for these rows on the owner's behalf (the pet-personality skill says a new row needs the owner's OK). |
 | personalities/_shared.txt and all nine species files | one shared line per row, and two lines per row in each species' voice (144 species lines, written by a subagent and checked with `personality.py say all`). `tools/personality.py build` regenerated species_lines.def and said_lines.inc. | "In each species' voice". With two lines per row, a long sleep repeats less. |
-| founding.h/.cpp `retuneFirstHours`, `Dish::retuneFirstHours` | An adopted pet of `species` (not grungo) whose bytes, everywhere the Gift and FirstHours recipes differ, still hold the Gift values, takes the FirstHours bytes. This covers sleep pressure, energy, the happy face and the egg. It is recorded as a lineage Checkpoint and saved. In any other case it changes nothing. | 0.7.0 adopted with the Gift bytes and adoption never runs twice. The result is byte for byte the genome 0.7.1's adoption gives the same pet. |
-| main.cpp `adoptTableSpecies` | After adoption settles, the retune is asked once a second until it settles. | It runs under the same rules as adoption: never on an OTA trial (the trial's pet mark sees him as the old image saved him), never for a MAC outside the table, never for row 0 (the gift grungo: `species` is grungo). |
+| founding.h/.cpp `retuneFirstHours`, `Dish::retuneFirstHours` (removed 2026-10-21, issue #36) | An adopted pet whose bytes, everywhere 0.4.0's numbers and FirstHours differ, still held 0.4.0's, took the FirstHours bytes: sleep pressure, energy, the happy face and the egg. Recorded as a lineage Checkpoint and saved. | 0.7.0 adopted with 0.4.0's bytes and adoption never runs twice. |
+| main.cpp `adoptTableSpecies` (now `adoptBoardSpecies`, without the retune) | After adoption settled, the retune was asked once a second until it settled. | It ran under the same rules as adoption: never on an OTA trial (the trial's pet mark sees him as the old image saved him). |
 
 ## Numbers (seed 0x5EED0000, 12 h, from `Sweep.FieldPetsHourByHour`)
 
@@ -54,6 +60,6 @@ Hours asleep out of 12: day species 9.8 (`@070`) -> 8.3 (`@070+retune`, identica
 
 ## Evidence
 
-- Native: 803 cases, 800 passed, 3 skipped, exit 0. That includes the new `Retune.*` (5 tests in test_adopt_species) and `FieldPets.ASleepingPetStillTalks` (at least 12 lines an hour asleep, no asleep silence over 15 min, on a `@070` mossby, mudge and hushwing).
+- Native: 803 cases, 800 passed, 3 skipped, exit 0. That included `Retune.*` (5 tests in test_adopt_species, removed with the retune) and `FieldPets.ASleepingPetStillTalks` (at least 12 lines an hour asleep, no asleep silence over 15 min, on a `@070` mossby, mudge and hushwing).
 - Sim: 22 of 22 frames match, nothing re-blessed.
 - badge128 builds.

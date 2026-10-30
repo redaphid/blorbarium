@@ -25,6 +25,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "blorb/creature.h"
 #include "blorb/knocks.h"
 #include "blorb/senses.h"
 #include "blorb/dish_duel.h"
@@ -114,7 +115,7 @@ struct Lat {
 };
 
 struct Result {
-  int kk = 0, singles = 0, holds = 0, hangs = 0, shakes = 0;
+  int kk = 0, singles = 0, holds = 0, hangs = 0, shakes = 0, dismissals = 0;
   std::string poses;   // each pose the shell held, and for how long: S1.42 a side 1.42 s, H.. upside down
   int heard = 0, oneMore = 0, rings = 0, charges = 0;
   Lat kkAck, kkWord, sideAck, sideWord, hangAck, hangWord;
@@ -178,7 +179,7 @@ Result play(const Segment& seg) {
       const StimId s = out.stimuli[i];
       if (s == stim::double_knock) ++r.kk;
       if (s == stim::knock) ++r.singles;
-      if (s == stim::shake) ++r.shakes;
+      if (s == stim::shake) ++r.shakes, r.dismissals += d.motion.vigorous();
       if (s == stim::button_hold) {
         ++r.holds;
         if (run.since(1, t)) r.sideWord.add(ms - t);
@@ -236,6 +237,11 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
     ASSERT_NE(w, nullptr) << s.label;
     if (w->holds >= 0) EXPECT_EQ(r.holds, w->holds) << s.label;
     if (w->hangs >= 0) EXPECT_EQ(r.hangs, w->hangs) << s.label;
+    // A shake that would dismiss what is on the screen (#35): only a hard
+    // one. Of the recordings' three Shakes, the pick-up from face down (L2)
+    // is not one; the shake (9) and the vigorous carrying (8) are.
+    const bool shaken = s.label.rfind("8_", 0) == 0 || s.label.rfind("9_", 0) == 0;
+    if (!shaken) EXPECT_EQ(r.dismissals, 0) << s.label << ": a dismissal nobody meant";
   }
   // Sample time, ms, p50/p95/max: from the decisive moment to what the next
   // frame can show (ack), and to the word the engine gets (word).
@@ -252,6 +258,50 @@ TEST(Controls, EveryRecordingAcknowledgedFastAndNothingFiresThatTheHandsDidNotMe
   // ...and the words take about as long as they did (kSideHoldMs, kHangHoldMs).
   EXPECT_GE(all.sideWord.pct(50), 1900u);
   EXPECT_GE(all.hangWord.pct(50), 1100u);
+}
+
+// ---- shaking an egg open (Egg::shaken), against the same hands ----------------------
+
+// Every recording replayed into an egg waiting on a phone, as the badge runs
+// it: the shell, every detector, the ShakeHatch at each 100 ms tick, the egg
+// settling when not shaken. Everyday handling (picked up, carried, set down
+// hard, pocketed, upside down), knocks, turns and hangs never crack it; the
+// recordings' one real shake starts it cracking and is well short of a hatch.
+TEST(ShakeHatch, OnTheRecordingsOnlyTheShakeCracksTheEgg) {
+  const std::vector<Segment> segs = loadHands();
+  ASSERT_GE(segs.size(), 15u);
+  for (const Segment& seg : segs) {
+    ::power::Policy policy;
+    hw::Feel shell(kR0, kHome, policy);
+    Detectors d;
+    ShakeHatch hand;
+    Egg egg(Offspring{starterGenome(7), {}}, 0, 0);
+    SenseOut out;
+    bool shook = false;
+    int ticks = 0, shaking = 0, stage = 0, n = 0;
+    auto feed = [&](uint32_t ms, const BodySample& b) {
+      out.clear();
+      d.sample(shell.sample(b, ms, false).screen, ms, out);
+      for (uint8_t i = 0; i < out.stimCount; ++i) shook = shook || out.stimuli[i] == stim::shake;
+      if (++n % 5) return;   // the body tick, every fifth sample
+      const bool counts = hand.step(shook && d.motion.vigorous(), d.motion.swinging());
+      shook = false;
+      ++ticks, shaking += counts;
+      EXPECT_FALSE(egg.shaken(counts, true)) << seg.label << ": hatched";
+      stage = std::max<int>(stage, egg.crackStage());
+    };
+    uint32_t last = 0;
+    for (const auto& [ms, b] : seg.samples) feed(ms, b), last = ms;
+    BodySample still = seg.samples.back().second;
+    still.hasPeak = false;
+    for (uint32_t ms = last + 20; ms <= last + 2000; ms += 20) feed(ms, still);
+    std::printf("[ hatch ] %-26s %5d ticks, %3d shaking, crack stage %d\n", seg.label.c_str(), ticks, shaking, stage);
+    if (seg.label.rfind("9_", 0) == 0) {
+      EXPECT_GT(shaking, 0) << "the shake counts";
+    } else {
+      EXPECT_EQ(stage, 0) << seg.label << ": cracked by hands that were not shaking it";
+    }
+  }
 }
 
 // ---- the badge's harness (src/latency.h), driven by hand ---------------------------
@@ -500,6 +550,162 @@ TEST(Aim, AThumpOntoAnAimIsTheAimAtOnce) {
   EXPECT_GT(ringing, 0u) << "the step rang like a knock";
   ASSERT_GT(aimedAt, 0u);
   EXPECT_LE(aimedAt - 1500, 40u) << "the aim " << aimedAt - 1500 << " ms after the step (" << ringing << " ringing samples)";
+}
+
+// ---- the nap: does a hand on a napping badge wake it? -------------------------------
+//
+// The owner, 2026-10-28: a napping badge picked up stayed dark (a badge's nap
+// counted 7 IMU wakes, and not one lit it); only BOOT woke it. The nap
+// (main.cpp "The nap") as these recordings would meet it: the IMU in wake on
+// motion at 21 Hz, its pin firing on a change past 64 mg (napq::kWomMg) from
+// one of its samples to the next; each pin wake opens 2 s (napq::kListenMs)
+// of the 50 Hz senses, the IMU back at 250 Hz as awake (so: the recording's
+// own samples, from 60 ms after the pin), the shell and the power policy
+// deciding; a listen with no hand naps again. Each wake is counted, and the
+// badge put straight back to sleep to try the next pin.
+struct NapRun {
+  int pins = 0, wakes = 0, woken = 0;   // woken: pins whose listen lit it
+  std::vector<uint32_t> after;          // ms from each pin to its wake
+  std::vector<uint32_t> at;             // each wake, ms into the segment
+  bool pressed = false;                 // a motion wake let a press or a knock through
+};
+
+NapRun napThrough(const Segment& seg, uint32_t fromMs = 0, uint32_t toMs = UINT32_MAX) {
+  constexpr int kWomMg = 64;
+  constexpr uint32_t kOdrMs = 48, kListenMs = 2000, kResumeMs = 60;
+  ::power::Policy policy;
+  hw::Feel shell(kR0, kHome, policy);
+  const uint32_t t0 = seg.samples.front().first;
+  BodySample first = seg.samples.front().second;
+  first.hasPeak = false;
+  for (uint32_t t = t0 - 5000; t < t0; t += 20) shell.sample(first, t, false);   // lying as it was found
+  policy.sleepNow(t0, true);
+  NapRun r;
+  BodySample odr = first, before = first;
+  uint32_t odrAt = t0, pinAt = 0, listenUntil = t0;
+  bool lit = false;
+  for (const auto& [ms, b] : seg.samples) {
+    const uint32_t in = ms - t0;
+    if (in < fromMs || in >= toMs) continue;
+    bool fresh = false;
+    if (ms - odrAt >= kOdrMs) before = odr, odr = b, odrAt = ms, fresh = true;
+    if (int32_t(listenUntil - ms) <= 0) {   // asleep: only the pin
+      if (fresh && (std::abs(odr.ax - before.ax) > kWomMg || std::abs(odr.ay - before.ay) > kWomMg ||
+                    std::abs(odr.az - before.az) > kWomMg))
+        ++r.pins, pinAt = ms, listenUntil = ms + kResumeMs + kListenMs, lit = false;
+      continue;
+    }
+    if (ms - pinAt < kResumeMs) continue;
+    const hw::Felt f = shell.sample(b, ms, false);
+    if (policy.low()) continue;
+    ++r.wakes, r.at.push_back(in);
+    if (!lit) ++r.woken, r.after.push_back(ms - pinAt), lit = true;
+    if (policy.why() != ::power::Why::Button && policy.why() != ::power::Why::Tap)
+      r.pressed = r.pressed || f.screen.buttonDown || f.screen.tapCode;
+    policy.sleepNow(ms, true);
+    listenUntil = ms;
+  }
+  return r;
+}
+
+uint32_t pctOf(std::vector<uint32_t> v, int p) {
+  if (v.empty()) return 0;
+  std::sort(v.begin(), v.end());
+  return v[std::min(v.size() - 1, (v.size() * p + 99) / 100 - 1)];
+}
+
+// Held in a hand (knocked, turned, hung, carried, wiggled): nearly every time
+// the pin wakes it, the listen hears the hand. Before 2026-10-28 the policy
+// woke only on a 7 degree drift or two hard jolts, and in this same model
+// slept through 101 of the 769 pins of these segments (a badge held still,
+// or lifted level); now it misses 10 of 909.
+TEST(NapWake, AHandOnANappingBadgeWakesIt) {
+  const std::vector<Segment> segs = loadHands();
+  int pins = 0, woken = 0;
+  std::vector<uint32_t> after;
+  for (const Segment& s : segs) {
+    const bool hand = s.label.rfind("1_", 0) == 0 || s.label.rfind("2b_", 0) == 0 || s.label.rfind("3_", 0) == 0 ||
+                      s.label.rfind("4_", 0) == 0 || s.label.rfind("5_", 0) == 0 || s.label.rfind("6_", 0) == 0 ||
+                      s.label.rfind("7_", 0) == 0 || s.label.rfind("8_", 0) == 0 || s.label.rfind("L4_", 0) == 0;
+    if (!hand) continue;
+    const NapRun r = napThrough(s);
+    std::printf("[ nap ] %-26s pins %3d, woke on %3d (%3d%%), pin to light p50 %4u p95 %4u ms\n", s.label.c_str(), r.pins,
+                r.woken, r.pins ? r.woken * 100 / r.pins : 0, pctOf(r.after, 50), pctOf(r.after, 95));
+    EXPECT_GE(r.woken * 100, r.pins * 85) << s.label;
+    EXPECT_FALSE(r.pressed) << s.label << ": a motion wake is not a press";
+    pins += r.pins, woken += r.woken;
+    after.insert(after.end(), r.after.begin(), r.after.end());
+  }
+  std::printf("[ nap ] in a hand: %d of %d pins lit it; pin to light p50 %u p95 %u max %u ms\n", woken, pins,
+              pctOf(after, 50), pctOf(after, 95), pctOf(after, 100));
+  EXPECT_GE(woken * 100, pins * 95);
+  EXPECT_LE(pctOf(after, 50), 1100u) << "a hand holding it still: about a second";
+  EXPECT_LE(pctOf(after, 95), 1600u) << "always inside the 2 s listen";
+}
+
+// Lying on a table, then picked up: the pick-up lights it at once (a stir,
+// not a tilt's drift or a shake's jolts). L1: lying 140 s, picked up; L4:
+// picked up and held level; 6: in a hand before its turns.
+TEST(NapWake, APickUpLightsItInAFewTenthsOfASecond) {
+  const std::vector<Segment> segs = loadHands();
+  for (const auto& [label, from] : {std::pair<const char*, uint32_t>{"L1_", 135000}, {"L4_", 0}, {"6_", 0}}) {
+    const Segment* s = nullptr;
+    for (const Segment& x : segs)
+      if (x.label.rfind(label, 0) == 0) s = &x;
+    ASSERT_NE(s, nullptr) << label;
+    const NapRun r = napThrough(*s, from);
+    ASSERT_GT(r.woken, 0) << s->label;
+    std::printf("[ nap ] %-26s picked up: lit %u ms after the pin\n", s->label.c_str(), r.after.front());
+    EXPECT_LE(r.after.front(), 600u) << s->label;
+  }
+}
+
+// Lying still, napping, while the desk it is on is typed on, bumped, leaned
+// on and has cups set down (T2), or simply left (L1's first 139 s, L2's 77 s):
+// the pin may wake it, the listen hears no hand, and it naps on.
+TEST(NapWake, AStillBadgeAndABumpedDeskStayDark) {
+  const std::vector<Segment> segs = loadHands();
+  for (const auto& [label, to] :
+       {std::pair<const char*, uint32_t>{"T2_", UINT32_MAX}, {"L1_", 139000}, {"L2_", 77000}}) {
+    const Segment* s = nullptr;
+    for (const Segment& x : segs)
+      if (x.label.rfind(label, 0) == 0) s = &x;
+    ASSERT_NE(s, nullptr) << label;
+    const NapRun r = napThrough(*s, 0, to);
+    std::printf("[ nap ] %-26s still: %d pins, %d wakes\n", s->label.c_str(), r.pins, r.wakes);
+    EXPECT_EQ(r.wakes, 0) << s->label << " woke at " << (r.at.empty() ? 0 : r.at.front()) << " ms";
+  }
+}
+
+// Dark but not yet napping, the senses run at 50 Hz all along: the same
+// hands wake it, and the same still desk does not.
+TEST(DarkWake, TheDeskNeverWakesADarkBadgeAndAHandAlwaysDoes) {
+  const std::vector<Segment> segs = loadHands();
+  for (const Segment& s : segs) {
+    const bool still = s.label.rfind("T2_", 0) == 0;
+    const bool held = s.label.rfind("8_", 0) == 0 || s.label.rfind("L4_", 0) == 0 || s.label.rfind("2b_", 0) == 0;
+    if (!still && !held) continue;
+    ::power::Policy policy;
+    hw::Feel shell(kR0, kHome, policy);
+    const uint32_t t0 = s.samples.front().first;
+    for (uint32_t t = t0 - 5000; t < t0; t += 20) shell.sample(s.samples.front().second, t, false);
+    policy.sleepNow(t0);
+    uint32_t woke = 0;
+    for (const auto& [ms, b] : s.samples) {
+      shell.sample(b, ms, false);
+      if (!policy.low()) {
+        woke = ms - t0 + 1;
+        break;
+      }
+    }
+    std::printf("[ dark ] %-26s %s %u ms\n", s.label.c_str(), woke ? "woke after" : "stayed dark", woke ? woke - 1 : 0);
+    if (still) {
+      EXPECT_EQ(woke, 0u) << s.label;
+    } else {
+      EXPECT_GT(woke, 0u) << s.label;
+      EXPECT_LE(woke - 1, 2000u) << s.label;
+    }
+  }
 }
 
 TEST(Latency, ARawAimIsTheDuelsSectors) {

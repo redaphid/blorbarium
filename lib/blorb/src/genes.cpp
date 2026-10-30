@@ -83,9 +83,12 @@ void describe_chem(const GeneView& v, Describe& d) {
 }
 
 // Sleep, made rarer for every pet at once (owner, 2026-10-19: "make sleep much
-// less frequent ... globally"). Whatever a genome says, what makes sleepiness
-// (the awake tonic's emitters, melatonin's reaction into it) works at this
-// fraction when the genes are expressed. The genome's bytes are untouched,
+// less frequent ... globally"). Whatever a genome says, the emitters that make
+// sleepiness (the awake tonic) work at this fraction when the genes are
+// expressed. Melatonin's reaction into sleepiness runs at its genes' rate
+// again (2026-10-21): it only flows in the dark, and the dark now needs
+// evidence (PetClock: the wall's night, lidded, or a long untouched stretch),
+// so a night he gets is slept through rather than dozed in and out of. The genome's bytes are untouched,
 // so lineages, friend eggs and hashes of genomes are unchanged; a tuck-in
 // (a stimulus) and face-down bedtime still put him to bed.
 constexpr int32_t kSleepinessNum = 2, kSleepinessDen = 5;
@@ -98,7 +101,6 @@ void express_reaction(const GeneView& v, Phenotype& p) {
   auto g = decode<ReactionGene>(v);
   if (!reactionExpresses(ChemId{g.a}, ChemId{g.b})) return;   // stakes.h: a swoon feeds nothing
   Fx rate = perApplication(g.rate, 0);
-  if (makesSleepiness(ChemId{g.c}) || makesSleepiness(ChemId{g.d})) rate = sleepier(rate);
   p.chem.reactions.push_back(Reaction{ChemId{g.a}, ChemId{g.b}, ChemId{g.c}, ChemId{g.d}, g.qa, g.qb, g.qc, g.qd, rate});
 }
 void describe_reaction(const GeneView& v, Describe& d) {
@@ -420,6 +422,7 @@ void expressStage(const Genome& genome, Stage stage, uint32_t legacyFeats, Pheno
     if (info && v.header.len == info->bodyLen && expressedAt(v.header, stage, legacyFeats)) info->express(v, p);
   });
   p.species = speciesTraitsOf(genome, p.expressedStages, legacyFeats);
+  p.traits = traitsOf(genome, p.expressedStages, legacyFeats);
   p.oracle.voice = speciesInfo(p.species.body).starter.voice;
 }
 

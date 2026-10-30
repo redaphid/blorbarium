@@ -67,6 +67,8 @@ struct Beat { const char* moment; uint16_t frames; void (*tweak)(DuelScene&, int
 void noTweak(DuelScene&, int) {}
 void stakeHold(DuelScene& s, int t) {
   s.me.chose = s.them.chose = blorb::Stakes::Mortal;
+  s.aim = 1;   // tilted right, at the skull
+  s.ticksLeft = uint16_t(t < 30 ? 90 - t * 2 : 0);
   s.me.ceiling = blorb::Stakes::Mortal;
   s.me.hold = uint8_t(t * 255 / 30 < 255 ? t * 255 / 30 : 255);
   s.me.confirmed = t >= 30;
@@ -144,7 +146,7 @@ int film(const std::string& dir, blorb::SpeciesId mine, blorb::SpeciesId theirs,
 int main(int argc, char** argv) {
   std::string moment = "meeting", out = "duel.bmp", filmDir;
   blorb::SpeciesId mine = blorb::kGrungo, theirs = blorb::kGrungo;
-  int ticks = -1, aim = -2, sub = -1, smooth = 0;   // --aim: the stance under the tilt (-1 none), else the moment's own
+  int ticks = -1, aim = -2, sub = -1, smooth = 0;   // --aim: the stance (or, staking, the tier) under the tilt (-1 none), else the moment's own
   int hearts = -1, theirHearts = -1;
   for (int i = 1; i < argc; ++i) {
     const std::string a = argv[i];
@@ -171,6 +173,13 @@ int main(int argc, char** argv) {
   DuelScene s = blorbtest::duelScene(moment.c_str(), mine, theirs);
   if (ticks >= 0) s.ticks = uint16_t(ticks);
   if (aim >= -1) s.aim = int8_t(aim);
+  // Staking picks as the session does: the tier under the tilt, if he may enter it, not yet locked.
+  const int tier = blorb::tierAimed(s.aim);
+  if (aim >= -1 && s.act == paint::DuelAct::Staking && tier >= 0 && tier <= int(s.me.ceiling)) {
+    s.me.chose = blorb::Stakes(tier);
+    s.me.confirmed = false;
+    if (s.me.chose != blorb::Stakes::Mortal) s.me.hold = 0;
+  }
   if (hearts >= 0) s.me.hearts = uint8_t(hearts);
   if (theirHearts >= 0) s.them.hearts = uint8_t(theirHearts);
   if (sub >= 0) between(s, sub);

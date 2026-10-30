@@ -30,6 +30,19 @@ test("with no ?d=, the chooser lists a dish by its old name or its species, and 
   assert.ok(filters.every((f) => f.services && f.services[0] === NUS));
 });
 
+// After 0.7.42 a dish advertises its pet's name, which may be one the owner
+// chose: the badge's id (company 0xFFFF, from 0.7.33) finds it whatever it is.
+test("with no ?d=, the chooser lists a dish by its id whatever its pet is called", () => {
+  const filters = chooserFilters(null);
+  const id = { 0xffff: Uint8Array.from([0xd4, 0x05, 0x92, 0x77, 0x1b, 0x30]) };
+  for (const name of ["zorp_v", "mudge", "grungo_the_16th", "blorb-1b30"]) {
+    assert.ok(chooserMatches(filters, { name, services: [NUS], manufacturerData: id }), `${name} not listed`);
+  }
+  assert.ok(!chooserMatches(filters, { name: "zorp_v", services: [NUS] }), "a renamed UART device without the id listed");
+  assert.ok(!chooserMatches(filters, { name: "zorp_v", services: [], manufacturerData: id }), "the id without the UART service listed");
+  assert.ok(!chooserMatches(filters, { name: "zorp_v", services: [NUS], manufacturerData: { 0x004c: id[0xffff] } }), "another company listed");
+});
+
 test("?d= names one dish exactly, in either form", () => {
   for (const want of ["blorb-1b3c", "mossby"]) {
     const filters = chooserFilters(want);
