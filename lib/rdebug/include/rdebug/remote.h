@@ -115,6 +115,22 @@ size_t writeChunked(const uint8_t* p, size_t n, size_t chunk, Write&& write, Pau
   return done;
 }
 
+// Before each piece of a body: what is still in flight (lwIP's unacked TCP
+// segments, the Wi-Fi driver's TX copies) is internal RAM, and a whole 4.7 KB
+// report handed over at once took it to 6.7 KB on Midge (0.7.43's soak), where
+// the AES engine's DMA buffer for the next record failed ("esp-aes: Failed to
+// allocate memory") and the report did not go. So each piece waits, `step` ms
+// at a time, until free() is back to kPaceFloor, at most kPaceMaxMs: a slow
+// link is slowed, never stopped. Returns the ms waited.
+constexpr uint32_t kPaceFloor = 14 * 1024, kPaceMaxMs = 2000, kPaceStepMs = 20;
+template <class Free, class Sleep>
+uint32_t pace(Free&& free, Sleep&& sleep, uint32_t floor = kPaceFloor, uint32_t maxMs = kPaceMaxMs,
+              uint32_t step = kPaceStepMs) {
+  uint32_t waited = 0;
+  while (free() < floor && waited < maxMs) sleep(step), waited += step;
+  return waited;
+}
+
 // ---- commands ----------------------------------------------------------------
 
 // The allowlist. Nothing else is ever run.

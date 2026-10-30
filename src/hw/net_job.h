@@ -88,12 +88,15 @@ class ChunkedTls : public WiFiClientSecure {
     return rdebug::writeChunked(
         p, n, rdebug::kWriteChunk,
         [this](const uint8_t* q, size_t k) {
+          pacedMs += rdebug::pace([] { return uint32_t(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)); },
+                                  [](uint32_t ms) { vTaskDelay(pdMS_TO_TICKS(ms)); });
           const size_t took = WiFiClientSecure::write(q, k);
           NetLow::sample(netLow.io);
           return took;
         },
         [] { vTaskDelay(pdMS_TO_TICKS(100)); });
   }
+  static inline volatile uint32_t pacedMs = 0;   // rdebug::pace's waits, all bodies since boot
 };
 
 class NetJob {

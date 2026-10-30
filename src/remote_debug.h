@@ -290,7 +290,8 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
   if (!done) {
     ++reportFails;
     m->sentResults = 0;
-    return say("remote: the report did not go (%s); the next window sends a fresh one", error);
+    return say("remote: the report did not go (%s); the next window sends a fresh one (paced %u ms since boot)", error,
+               unsigned(hw::ChunkedTls::pacedMs));
   }
   ++reports;
   std::memmove(m->results, m->results + m->sentResults, sizeof(Result) * (m->nResults - m->sentResults));
@@ -306,7 +307,8 @@ static void arrived(bool done, const char* text, size_t len, const char* error) 
     if (!got[i].ok) result(got[i].id, false, "%s: %s", rdebug::verbName(got[i].verb), got[i].why);
     else m->pending[m->nPending++] = got[i];
   }
-  say("remote: report home; %u command%s", unsigned(n), n == 1 ? "" : "s");
+  say("remote: report home; %u command%s (paced %u ms since boot)", unsigned(n), n == 1 ? "" : "s",
+      unsigned(hw::ChunkedTls::pacedMs));
 }
 
 // ---- the commands, once the window has closed ------------------------------------------

@@ -194,6 +194,25 @@ TEST(WriteChunked, APartialWriteCarriesOn) {
   for (size_t k : sizes) EXPECT_LE(k, 1024u);
 }
 
+TEST(Pace, WaitsForRamToComeBackBeforeThePiece) {
+  std::vector<uint32_t> free{9000, 11000, 13000, 15000, 20000};
+  size_t i = 0;
+  uint32_t slept = 0;
+  const uint32_t waited = rdebug::pace([&] { return free[i < free.size() - 1 ? i : free.size() - 1]; },
+                                       [&](uint32_t ms) { slept += ms, ++i; });
+  EXPECT_EQ(i, 3u) << "three steps, until 15000 is over the floor";
+  EXPECT_EQ(waited, 3 * rdebug::kPaceStepMs);
+  EXPECT_EQ(slept, waited);
+  EXPECT_EQ(rdebug::pace([] { return 30000u; }, [](uint32_t) { FAIL() << "enough RAM: no wait"; }), 0u);
+}
+
+TEST(Pace, ASlowLinkIsSlowedNeverStopped) {
+  uint32_t slept = 0;
+  const uint32_t waited = rdebug::pace([] { return 6000u; }, [&](uint32_t ms) { slept += ms; });
+  EXPECT_EQ(waited, rdebug::kPaceMaxMs);
+  EXPECT_EQ(slept, rdebug::kPaceMaxMs);
+}
+
 // ---- the screenshot (rdebug/shot.h) ----
 
 // tools/shot.py's decoder, here: base64 lines to PackBits to pixels.
