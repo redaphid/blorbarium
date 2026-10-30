@@ -6,10 +6,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { hexToBytes, rawSheet, parseGenome } from "../src/genome.js";
-import { traitSheet } from "../src/traits.js";
+import { traitSheet, REGION_WORDS, regionWords } from "../src/traits.js";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/genomes.json", import.meta.url)));
 const baselines = JSON.parse(readFileSync(new URL("../src/baselines.json", import.meta.url)));
+const catalog = JSON.parse(readFileSync(new URL("../src/catalog.json", import.meta.url)));
+const SPECIES = Object.values(catalog.tables.species).map((s) => s.name);
+const REGIONS = Object.values(catalog.tables.regions);
 
 test("the decoder reads every fixture genome as the engine does", () => {
   assert.equal(fixtures.length, 20);
@@ -51,4 +54,41 @@ test("the trait sheet says how this pet differs from its species", () => {
   assert.match(heir.text, /ancestor/i);
   const a = sheet("mudge-a").text, b = sheet("mudge-b").text;
   assert.notEqual(a, b);
+});
+
+// The owner (2026-10-30): "the pets seem like they all think they have cloaks".
+// Region ids are the firmware's colour slots, not body parts; the sheet the AI
+// reads names what each slot is on that species' art.
+test("every colour region has a plain name on every species in the catalog", () => {
+  assert.ok(SPECIES.length >= 10 && REGIONS.includes("cloak"));
+  for (const species of SPECIES) {
+    for (const region of REGIONS) {
+      const words = REGION_WORDS[species]?.[region];
+      assert.equal(typeof words, "string", `${species} ${region} has no words`);
+      assert.ok(words.trim().length > 0, `${species} ${region}`);
+      assert.doesNotMatch(words, /cloak/i, `${species} ${region}`);
+      assert.equal(regionWords(species, region), words);
+    }
+  }
+  assert.doesNotMatch(regionWords("someday", "cloak"), /cloak/i);   // a species not mapped yet
+});
+
+test("no species' trait sheet says cloak, whatever its colour genes do", () => {
+  const sheet = (raw) => traitSheet(raw, { generation: 2, name: "Blip" }).text;
+  for (const f of fixtures) assert.doesNotMatch(sheet(rawSheet(hexToBytes(f.genome), { stage: f.raw.stage })), /cloak/i, f.id);
+  for (const species of SPECIES) {
+    const f = fixtures.find((x) => x.raw.species === species);
+    for (const stage of Object.keys(baselines[species])) {
+      const raw = rawSheet(hexToBytes(f.genome), { stage });
+      const base = baselines[species][stage];
+      for (const region of REGIONS) {
+        // That region alone shifted round the wheel and brighter, plus a second gene for it.
+        const shifted = base.palette.map((p) => (p.region === region ? { ...p, hue: p.hue + 40, val: p.val + 30 } : p));
+        const extra = { ...(base.palette.find((p) => p.region === region) ?? base.palette[0]), region };
+        const text = sheet({ ...raw, palette: [...shifted, extra], marks: base.marks, size: base.size });
+        assert.doesNotMatch(text, /cloak/i, `${species} ${stage} ${region}`);
+        assert.ok(text.includes(REGION_WORDS[species][region]), `${species} ${stage} ${region}: ${text}`);
+      }
+    }
+  }
 });

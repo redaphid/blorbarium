@@ -4,7 +4,7 @@
 // which made it. The audience and voice guidance is creative direction only:
 // what is checked is mechanical (validate.js).
 import catalog from "./catalog.json" with { type: "json" };
-import { MAX_TEXT, MIN_LINES, MAX_LINES } from "./validate.js";
+import { MAX_TEXT, MIN_LINES, MAX_LINES, promptName } from "./validate.js";
 
 const FONT_RULE = `Only capital letters A-Z, digits 0-9, spaces and these marks: . , ! ? - ' : (no other punctuation, no quotes, no emoji).`;
 // The owner (2026-10-27): no line wrapped in a voice frame, and never the word
@@ -25,10 +25,15 @@ function styleSamples(species, n = 8) {
   return all.filter((_, i) => i % step === 0).slice(0, n);
 }
 
-function situationList(batch) {
+// An example naming a part only grungo has (his hood) is shown to grungo alone;
+// any other species gets one that fits any body.
+const OWN_EXAMPLE = { hooded: { only: "grungo", other: "I AM NOT HIDING. I AM BEING VERY STILL." } };
+const example = (s, species) => (OWN_EXAMPLE[s.name] && OWN_EXAMPLE[s.name].only !== species ? OWN_EXAMPLE[s.name].other : s.shared);
+
+function situationList(batch, species) {
   return batch.map((s) => {
     const mark = s.mark === "#" ? " (may use one # for the number)" : s.mark === "@" ? " (may use one @ for his name)" : "";
-    return `- ${s.name}: ${s.meaning}${mark} Example: ${s.shared}`;
+    return `- ${promptName(s.name)}: ${s.meaning}${mark} Example: ${example(s, species)}`;
   }).join("\n");
 }
 
@@ -98,7 +103,7 @@ Hard rules for every line (a line that breaks one is thrown away):
 - Not a copy of the example line, and no two lines the same.
 
 Situations (name: when he says it; the old generic example):
-${situationList(batch)}
+${situationList(batch, input.species)}
 
 Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every situation above, each keyed by its name exactly as written.` },
       ];
@@ -145,7 +150,7 @@ Rules for every line:
 - Not a copy of the example line.
 
 Situations (name: when he says it; example):
-${situationList(batch)}
+${situationList(batch, input.species)}
 
 Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}} with every situation above, each keyed by its name exactly as written.` },
       ];
@@ -191,9 +196,9 @@ export function retryMessages(messages, reply, failures, stillNeeded, structural
     { role: "assistant", content: typeof reply === "string" ? reply : JSON.stringify(reply) },
     { role: "user", content:
 `Some lines could not be used:
-${[...structural.slice(0, 10).map((s) => `- ${s}`), ...failures.slice(0, 40).map((f) => `- ${f.situation}: "${f.text}" ${f.why}`)].join("\n") || "- (the reply was missing situations or was not the JSON asked for)"}
+${[...structural.slice(0, 10).map((s) => `- ${s}`), ...failures.slice(0, 40).map((f) => `- ${promptName(f.situation)}: "${f.text}" ${f.why}`)].join("\n") || "- (the reply was missing situations or was not the JSON asked for)"}
 
-Write new lines for these situations only, keyed by exactly these names: ${stillNeeded.join(", ")}.
+Write new lines for these situations only, keyed by exactly these names: ${stillNeeded.map(promptName).join(", ")}.
 Same rules: at most ${MAX_TEXT} characters, only A-Z 0-9 space . , ! ? - ' : (plus # or @ only where marked), no repeats, no lead-in or tag wrapped round a line, never the word DISH.
 Reply as JSON: {"lines": {"situation_name": ["LINE", "LINE"], ...}}` },
   ];

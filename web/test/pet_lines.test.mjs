@@ -240,3 +240,25 @@ test("a signed pack verifies with the public key, and a changed line does not", 
   const pack = await (await post(env, { mac: MAC, genome: fixtures[14].genome })).json();
   assert.ok(await verifyPack(pack.text, pack.sig, pub));
 });
+
+// The owner (2026-10-30): "the pets seem like they all think they have cloaks".
+// Nothing the model reads gives a pet a hood or cloak his species' art lacks:
+// not the trait sheet (traits.test.mjs), not grungo's "hooded" situation.
+test("no prompt gives a pet without one a hood or a cloak, and a scared line still lands in hooded", async () => {
+  const { traitSheet } = await import("../src/traits.js");
+  const { rawSheet, hexToBytes } = await import("../src/genome.js");
+  for (const f of fixtures) {
+    const traits = traitSheet(rawSheet(hexToBytes(f.genome), { stage: f.raw.stage }), { generation: f.generation });
+    const input = { bible: "B", traits, species: f.raw.species, dice: {}, name: "", history: "" };
+    for (const [v, p] of Object.entries(PROMPTS)) {
+      const text = [...p.bible(input), ...p.lines(input, SITUATIONS)].map((m) => m.content).join("\n");
+      if (f.raw.species === "grungo") assert.match(text, /HOODED/, `${v}: grungo keeps his hood`);
+      else assert.doesNotMatch(text, /cloak|\bhood/i, `${v} ${f.id}`);
+      assert.doesNotMatch(text, /^- hooded:/m, `${v} ${f.id}: the id is not shown`);
+      assert.match(text, /^- scared: He is fairly frightened\./m, `${v} ${f.id}`);
+    }
+  }
+  const r = checkLines({ lines: { scared: ["EEK. NOPE. EEK.", "I AM A ROCK NOW"] } }, ["hooded"], { species: "mudge" });
+  assert.deepEqual(r.accepted, { hooded: ["EEK. NOPE. EEK.", "I AM A ROCK NOW"] });
+  assert.deepEqual(r.missing, []);
+});

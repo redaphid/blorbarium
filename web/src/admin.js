@@ -22,6 +22,8 @@
 //   POST /api/badge/actions/:id                  {mac, ok, result}: what applying it did
 import { readBody as readDebugBody } from "./debug.js";
 import { health, reports, queueCommand, checkCommand } from "./reports.js";
+import { hexToBytes, rawSheet } from "./genome.js";
+import { traitSheet } from "./traits.js";
 
 // debug: remote debug's commands (reports.js), handed over only in the reply to a Wi-Fi report.
 const KINDS = new Set(["line_pack", "ota", "settings", "command", "debug"]);
@@ -93,12 +95,24 @@ async function badgeDetail(db, mac) {
   return { badge, creatures, actions, uploads, installs, debugKinds: kinds };
 }
 
+function currentTraits(c) {
+  try {
+    const raw = rawSheet(hexToBytes(c.genome_hex), { stage: c.stage ?? "adult", feats: c.feats ?? 0 });
+    return traitSheet(raw, { generation: c.generation ?? 1, name: c.name ?? "" }).text;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function creatureDetail(db, id) {
   const c = parseRow(await db.prepare("SELECT * FROM creatures WHERE id = ?1").bind(id).first());
   if (!c) return null;
   const all = async (sql) => (await db.prepare(sql).bind(id).all()).results.map(parseRow);
   return {
     creature: c,
+    // creature.traits is the sheet stored at first sight; traitsNow is what the
+    // next generation reads (app.js generateFor builds it fresh from the genes).
+    traitsNow: currentTraits(c),
     personalities: await all("SELECT * FROM personalities WHERE creature_id = ?1 ORDER BY version DESC"),
     packs: await all("SELECT * FROM packs WHERE creature_id = ?1 ORDER BY version DESC"),
     stats: await all("SELECT * FROM life_stats WHERE creature_id = ?1 ORDER BY id DESC LIMIT 30"),

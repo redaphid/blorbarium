@@ -40,6 +40,9 @@ test("badge and creature detail hold genes, traits, versions and provenance", as
   assert.equal(c.body.creature.raw.species, fixtures[0].raw.species);
   assert.equal(c.body.personalities.length, 1);
   assert.ok(c.body.packs[0].provenance.model);
+  // The sheet the next generation reads, built from his genes now (the stored one is from first sight).
+  assert.match(c.body.traitsNow, /^- /);
+  assert.doesNotMatch(c.body.traitsNow, /cloak/i);
 });
 
 test("regenerating from an edited bible makes a new version, skips call 1, and can push it", async () => {

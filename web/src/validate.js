@@ -15,6 +15,13 @@ const FRIENDLY = { "’": "'", "‘": "'", "…": "...", "–": "-", "—": "-",
 
 export const SITUATIONS = catalog.situations;
 const BY_NAME = Object.fromEntries(SITUATIONS.map((s) => [s.name, s]));
+// Situation ids the model sees under another name. "hooded" is grungo's word
+// (he pulls his hood up when scared); asked for by that name, every species
+// wrote himself a hood or a cloak (the owner, 2026-10-30). The pack keeps the id.
+const PROMPT_NAME = { hooded: "scared" };
+const FROM_PROMPT = Object.fromEntries(Object.entries(PROMPT_NAME).map(([id, n]) => [n, id]));
+export const promptName = (name) => PROMPT_NAME[name] ?? name;
+export const fromPromptName = (name) => FROM_PROMPT[name] ?? name;
 
 // Case and typographic quotes are the font's business, not the model's: fixed, not failed.
 export function normalise(text) {
@@ -67,7 +74,7 @@ export function checkLines(parsed, asked, { species, kept = {}, avoid = null } =
   // A key is the situation's name; a stray mark, bracket or case around it is forgiven.
   const byKey = {};
   for (const key of Object.keys(lines)) {
-    const name = String(key).toLowerCase().replace(/\s*[\[(][^\])]*[\])]\s*$/, "").trim();
+    const name = fromPromptName(String(key).toLowerCase().replace(/\s*[\[(][^\])]*[\])]\s*$/, "").trim());
     if (asked.includes(name)) byKey[name] = lines[key];
     else structural.push(`"${key}" is not one of the situations asked for`);
   }
@@ -76,7 +83,7 @@ export function checkLines(parsed, asked, { species, kept = {}, avoid = null } =
     let got = byKey[name];
     if (typeof got === "string") got = [got];
     if (!Array.isArray(got)) {
-      if (got !== undefined) structural.push(`"${name}" is not a list of lines`);
+      if (got !== undefined) structural.push(`"${promptName(name)}" is not a list of lines`);
       continue;
     }
     const ok = [...(kept[name] ?? [])];

@@ -28,6 +28,30 @@ const CHEM = {
 };
 const STAGE_WORD = { baby: "a newly hatched baby", child: "a child", adult: "a grown-up", elder: "an elder" };
 
+// What each colour region (regions.def) is on each species' art, in words. The
+// region ids are the firmware's names for a sprite's colour slots ("cloak" is
+// the second body colour, named after grungo's hood), not body parts: written
+// straight into the sheet they made every pet think he wore a cloak (the owner,
+// 2026-10-30). Read off each pack's labelled Body and Egg frames
+// (pets/<s>/<s>_pack.h; pets/<s>/art/pack.json); "shell" is the egg's own colour
+// on every species, so mossby's real shell is his skin region.
+const SAME = { eye: "eyes", mouth: "mouth", glow: "foreseeing eye glow", shell: "egg" };
+export const REGION_WORDS = {
+  grungo: { ...SAME, skin: "green skin", belly: "belly", cloak: "hood and cape", shell: "egg jelly" },
+  mossby: { ...SAME, skin: "striped shell", belly: "foot", cloak: "face" },
+  puffkin: { ...SAME, skin: "coral fluff", belly: "fluffy face and belly", cloak: "feet" },
+  gilly: { ...SAME, skin: "pink skin", belly: "tummy", cloak: "frilly gills" },
+  mothwick: { ...SAME, skin: "fuzzy body", belly: "neck ruff", cloak: "wings" },
+  mudge: { ...SAME, skin: "blue body", belly: "cream face and belly", cloak: "fins" },
+  fizz: { ...SAME, skin: "golden body", belly: "face", cloak: "wings" },
+  hushwing: { ...SAME, skin: "downy feathers", belly: "white face and chest", cloak: "wings, ear tufts and talons", mouth: "beak" },
+  tinker: { ...SAME, skin: "grey fur", belly: "cream face and tummy", cloak: "aviator cap, braces and tail rings" },
+  octopus: { ...SAME, skin: "ink-dark skin", belly: "pale highlights", cloak: "shadowy edges" },
+};
+// A species with no entry yet still never shows a region id: a neutral word.
+const NEUTRAL = { ...SAME, skin: "main colour", belly: "lighter colour", cloak: "second colour" };
+export const regionWords = (species, region) => REGION_WORDS[species]?.[region] ?? NEUTRAL[region] ?? "colouring";
+
 function degree(delta, step, words) {
   // words: [much less, less, same, more, much more]
   if (delta <= -2 * step) return words[0];
@@ -117,8 +141,9 @@ export function traitSheet(raw, { generation = 1, name = "" } = {}) {
   for (const p of raw.palette) {
     seen[p.region] = (seen[p.region] ?? 0) + 1;
     const b = baseRegion[p.region];
+    const part = regionWords(raw.species, p.region);
     if (!b || seen[p.region] > (base.palette.filter((x) => x.region === p.region).length)) {
-      looks.push(`an extra ${p.region} colour gene (a two-tone ${p.region})`);
+      looks.push(`an extra colour gene for his ${part} (two-tone ${part})`);
       continue;
     }
     const hueDeg = Math.round(((p.hue - b.hue) * 360) / 256);
@@ -126,7 +151,7 @@ export function traitSheet(raw, { generation = 1, name = "" } = {}) {
     if (Math.abs(hueDeg) >= 8) bits.push(`${Math.abs(hueDeg) >= 30 ? "a clearly different" : "a slightly different"} shade (${hueDeg > 0 ? "+" : "-"}${Math.abs(hueDeg)} degrees round the colour wheel)`);
     if (p.val - b.val >= 12) bits.push("brighter"); else if (b.val - p.val >= 12) bits.push("darker");
     if (p.sat - b.sat >= 12) bits.push("more vivid"); else if (b.sat - p.sat >= 12) bits.push("more washed-out");
-    if (bits.length) looks.push(`${p.region}: ${bits.join(", ")} than the usual ${raw.species}`);
+    if (bits.length) looks.push(`his ${part}: ${bits.join(", ")} than the usual ${raw.species}'s`);
   }
   for (const m of raw.marks) {
     const b = base.marks.find((x) => x.layer === m.layer);
