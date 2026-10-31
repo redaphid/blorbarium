@@ -430,7 +430,8 @@ static void bench() {
 
 // A frame drawn from the same inputs as the last one drawn is the same bytes
 // (paint::draw is pure in the Appearance, and the clock only moves fight
-// mode's line and pulse, the no-fight strip and the amber's words), so it is
+// mode's line and pulse, the no-fight strip, the egg's shake prompt and the
+// amber's words), so it is
 // not drawn or sent: between his 100 ms ticks, most of them. Not while an
 // overlay (the update's screen, the debug unlock) or a duel's scene (not in
 // the Appearance) is up, nor when the panel needs every row again.
@@ -439,7 +440,9 @@ static blorb::Appearance last;
 static uint16_t lastIdle = 0;
 static bool valid = false;
 static bool same(const blorb::Appearance& a, uint16_t idleBar, bool overlay) {
-  if (!valid || overlay || boardStale() || a.dueling || a.lobby || a.sealed || a.noFight != blorb::NoFight::None) return false;
+  if (!valid || overlay || boardStale() || a.dueling || a.lobby || a.sealed || a.noFight != blorb::NoFight::None ||
+      paint::eggPrompt(a))
+    return false;
   // Byte for byte: equal bytes are equal values (padding can only make two equal frames look different).
   return idleBar == lastIdle && std::memcmp(static_cast<const void*>(&a), static_cast<const void*>(&last), sizeof a) == 0;
 }
@@ -1246,7 +1249,7 @@ void setup() {
   // morning, not into seven hours of pet night (docs/notes/first-hours.md).
   options.foundingHour = blorb::kUnaskedFoundingHour;
   // An egg's clock waits for the page's ADOPT (the debug link's FREEHATCH
-  // lifts it); a few seconds of shaking hatch it with no phone at all.
+  // lifts it); a second or two of shaking hatch it with no phone at all.
   options.hatchNeedsPhone = true;
 #else
   options.sealed = simSealed;

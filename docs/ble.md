@@ -171,8 +171,8 @@ by newer firmware (an update rolled back) is sealed the same way and says
 
 A board that ships with `hatchNeedsPhone` holds its egg's clock still, with
 no incubation by time, until the owner adopts it. A phone is never needed to
-hatch it: a few seconds of hard shaking crack it open and hatch it, adopted
-or not (`Egg::shaken`, test/test_shake_hatch). Connecting, `TIME` and
+hatch it: about a second and a half of hard shaking cracks it open and hatches it, adopted
+or not (`Egg::shaken`, test/test_shake_hatch), and while it waits the strip above it scrolls "SHAKE TO CRACK ME OPEN!" and its variants (`paint::eggPrompt`). Connecting, `TIME` and
 flashing do not count; only `ADOPT` does (the page's Adopt button). It is
 kept in its own file (`adopted.flag`) beside the keepsake, so a replug does
 not ask again, and a wipe clears it. `ADOPT status` only reports. `ERR 409

@@ -59,6 +59,14 @@ class SpritePack {
 // then the round mask.
 void draw(const blorb::Appearance&, const SpritePack&, Canvas240&, uint32_t nowMs);
 
+// What an egg says on the marquee strip while it waits for a hand to shake it
+// open (owner, 2026-10-30: "it needs to marquee 'shake to crack me open' or
+// variants"): the prompts one after another, a ring that goes round above the
+// egg, giving way to fight mode's words and a thought. nullptr when there is
+// no egg to shake (not Appearance::shakeMe, hatched, a clutch, the chosen
+// moment, sealed).
+const char* eggPrompt(const blorb::Appearance&);
+
 // The firmware version, tiny and dim at the bottom of the glass, drawn over
 // him (never with the care hint, a clutch, fight mode or the amber): an adult
 // looking closely reads it, a kid never notices it. The firmware sets it once

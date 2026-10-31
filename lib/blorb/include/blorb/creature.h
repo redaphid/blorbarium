@@ -220,13 +220,14 @@ class Egg {
   bool tick(const SenseOut&);
   // A hand shaking it hatches it, no phone needed (owner, 2026-10-27): each
   // tick of hard shaking (`shaking`, the Dish's ShakeHatch) cracks it
-  // 1/kShakeTicks of the way, so about four seconds of shaking in all hatch
-  // it, in one go or in several. Left alone while `settle` (time is not
+  // 1/kShakeTicks of the way, so about a second and a half of shaking in all
+  // hatch it, in one go or in several (owner, 2026-10-30: a third of the 40
+  // ticks, about four seconds, it took before). Left alone while `settle` (time is not
   // incubating it), a crack half made closes again gently, kSettleTicks for a
   // whole stage, but never below the last stage reached: the cracks a kid made
   // stay. The progress is the saved incubation, so they stay over a replug
   // too. True once ready; the Dish then hatches it in place.
-  static constexpr uint16_t kShakeTicks = 40;
+  static constexpr uint16_t kShakeTicks = 12;
   static constexpr uint16_t kSettleTicks = 50;
   static constexpr uint8_t kCrackStages = 4;   // whole, a hairline, cracked all over, shell coming away
   bool shaken(bool shaking, bool settle);

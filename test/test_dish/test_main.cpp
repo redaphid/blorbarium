@@ -299,8 +299,9 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   // least 0.5, and resting (asleep or dark) his belly runs slow. With those
   // two rules switched off the routine still gives 43e1405e. 33cc0d3a once
   // shaking cracks an egg open (test_shake_hatch): the routine's first shake
-  // lands on the egg and hatches him a little sooner.
-  constexpr uint32_t kCommitted = 0x33cc0d3au;
+  // lands on the egg and hatches him a little sooner. dcb5ae11 once a third
+  // of the shaking does it (Egg::kShakeTicks 40 -> 12): sooner still.
+  constexpr uint32_t kCommitted = 0xdcb5ae11u;
   MemStorage a, b;
   Dish first(a, 7, kLineage), second(b, 7, kLineage);
   uint32_t h = dayOfRoutine(first);
@@ -311,7 +312,7 @@ TEST(Replay, TwentyFourHoursOfTheSameRoutineGiveTheCommittedHash) {
   ScriptedLink phone;
   phone.inbound.push_back("#7 HASH");
   first.tick(24 * 3600 * 1000u - kSampleMs, phone);
-  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=33cc0d3a tick=863999"})) << "what the device prints";
+  EXPECT_EQ(phone.sent, (std::vector<std::string>{"#7 OK hash=dcb5ae11 tick=863999"})) << "what the device prints";
 }
 
 // Hatch, every stage, death, the clutch pick and the next hatch, with a

@@ -5,12 +5,18 @@
 //
 // The firmware's eggs wait on a phone's ADOPT for their clock
 // (DishOptions::hatchNeedsPhone), so these run with it set, as the badge
-// does: time alone never hatches them; a few seconds of hard shaking does,
+// does: time alone never hatches them; a second or two of hard shaking does,
 // cracking it on the way; a pick-up, a knock or a bump never starts it.
+// (Owner, 2026-10-30: "the 'shake to crack the egg' thing needs to be like
+// 1/3 the time": Egg::kShakeTicks 40 -> 12, a long shake 4.2 s -> 1.4 s.)
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <optional>
+#include <string>
 #include <variant>
 #include "blorb/dish.h"   // first, so PlatformIO's dependency finder links lib/blorb
 #include "blorb/founding.h"
@@ -118,11 +124,11 @@ struct Badge {
     ASSERT_TRUE(egg()) << "time alone never hatches it";
     EXPECT_EQ(theEgg().progress(), was);
   }
-  // Shaken until it hatches, with no phone: a few seconds, and he is out.
+  // Shaken until it hatches, with no phone: a second or two, and he is out.
   void shakeItOpen() {
     const uint32_t took = shakeUntilHatched(1000);
     ASSERT_FALSE(egg()) << "shaking hatched it";
-    EXPECT_LE(took, 8000u);
+    EXPECT_LE(took, 2000u);
     EXPECT_FALSE(dish->adopted()) << "no phone ever adopted it";
   }
 };
@@ -140,7 +146,7 @@ TEST(Egg, kShakeTicksOfShakingHatchIt) {
 
 TEST(Egg, ACrackHalfMadeClosesGentlyButTheStagesReachedStay) {
   Egg e(Offspring{starterGenome(7), {}}, 0, 0);
-  for (int i = 0; i < 4; ++i) e.shaken(true, true);
+  for (int i = 0; i < Egg::kShakeTicks / Egg::kCrackStages - 1; ++i) e.shaken(true, true);
   EXPECT_EQ(e.crackStage(), 0);
   const Fx made = e.progress();
   e.shaken(false, true);
@@ -149,7 +155,7 @@ TEST(Egg, ACrackHalfMadeClosesGentlyButTheStagesReachedStay) {
   for (int i = 0; i < 1000; ++i) e.shaken(false, true);
   EXPECT_EQ(e.progress(), Fx::zero()) << "a few shakes short of a crack heal";
 
-  for (int i = 0; i < Egg::kShakeTicks / 2 + 3; ++i) e.shaken(true, true);
+  for (int i = 0; i < Egg::kShakeTicks / 2 + 1; ++i) e.shaken(true, true);
   EXPECT_EQ(e.crackStage(), 2);
   for (int i = 0; i < 1000; ++i) e.shaken(false, true);
   EXPECT_EQ(e.crackStage(), 2) << "the cracks a kid made stay";
@@ -175,21 +181,24 @@ TEST(ShakeHatch, TimeAloneNeverHatchesItAndAPhoneIsNotNeeded) {
   ASSERT_TRUE(b.egg()) << "the clock still waits on a phone";
   EXPECT_EQ(b.theEgg().progress(), Fx::zero());
   const uint32_t took = b.shakeUntilHatched(1000);
+  std::printf("[ measure ] 1 s bursts: %u ms\n", unsigned(took));
   EXPECT_FALSE(b.egg()) << "shaking hatched it";
   EXPECT_FALSE(b.dish->adopted()) << "with no phone";
-  // A few seconds of real shaking, not one shake: never under 3 s, never over 8.
-  EXPECT_GE(took, 3000u);
-  EXPECT_LE(took, 8000u);
+  // A second or two of real shaking (it was three before 2026-10-30).
+  EXPECT_LE(took, 2000u);
 }
 
-TEST(ShakeHatch, OneLongShakeHatchesItInAboutFourSeconds) {
+// A third of the 4.2 s it took before 2026-10-30 (kShakeTicks 40 -> 12): one
+// shake kept up, about a second and a half, still more than one swing.
+TEST(ShakeHatch, OneLongShakeHatchesItInAThirdOfTheOldTime) {
   Badge b;
   b.boot();
   uint32_t shaken = 0;
   while (b.egg() && shaken < 20000) b.shake(100), shaken += 100;
+  std::printf("[ measure ] one long shake: %u ms\n", unsigned(shaken));
   EXPECT_FALSE(b.egg());
-  EXPECT_GE(shaken, 4000u);
-  EXPECT_LE(shaken, 5500u);
+  EXPECT_GE(shaken, 1200u);
+  EXPECT_LE(shaken, 1600u) << "about a third of the old 4200 ms";
 }
 
 // The egg cracks as it is shaken: the screen sees its progress climb and the
@@ -199,12 +208,14 @@ TEST(ShakeHatch, TheEggCracksAsItIsShakenAndKeepsItsCracks) {
   Badge b;
   b.boot();
   EXPECT_EQ(b.dish->appearance().eggProgress, Fx::zero());
-  b.shake(800);
+  b.shake(400);
   Appearance a = b.dish->appearance();
   EXPECT_GT(a.eggProgress, Fx::zero()) << "a crack begins";
   EXPECT_GT(a.eggShaken, Fx::ratio(1, 2)) << "and it jiggles with the hand";
-  b.shake(1600);
+  b.rest(2000);   // the swing dies away (ShakeHatch::kLapseTicks)
+  ASSERT_TRUE(b.egg()) << "a short shake, short of a hatch";
   const uint8_t stage = b.theEgg().crackStage();
+  std::printf("[ measure ] 400 ms of shaking: crack stage %d\n", stage);
   EXPECT_GE(stage, 2);
   b.rest(60 * 1000);
   EXPECT_EQ(b.theEgg().crackStage(), stage) << "kept";
@@ -301,6 +312,127 @@ TEST(ShakeHatch, AnAdoptedEggStillHatchesOnItsClock) {
   EXPECT_FALSE(b.dish->hatchWaits());
   b.rest(16 * 60 * 1000);
   EXPECT_FALSE(b.egg());
+}
+
+// ---- the egg asks to be shaken (owner, 2026-10-30) ----------------------------------------
+//
+// "It needs to marquee 'shake to crack me open' or variants": while he is an
+// egg, the strip above him goes round with the prompts, one after another,
+// clear of the egg and its cracks; once he hatches it is gone.
+
+namespace {
+
+constexpr uint16_t kPromptInk = uint16_t((255 >> 3) << 11 | (206 >> 2) << 5 | 96 >> 3);   // draw.cpp's kMarqueeColour
+
+std::unique_ptr<paint::Canvas240> frame(const Appearance& a, uint32_t nowMs) {
+  auto cv = std::make_unique<paint::Canvas240>();
+  paint::draw(a, paint::packFor(a.species), *cv, nowMs);
+  return cv;
+}
+// The marquee's ink on the strip's rows (draw.cpp kMarqueeStrip: 20 rows, 76
+// above the middle, or below it when he stands high) and on every other row.
+struct Ink { int strip = 0, elsewhere = 0; };
+Ink promptInk(const paint::Canvas240& cv, const Appearance& a) {
+  const int mid = a.at.y < Fx::zero() ? 120 + 76 : 120 - 76;
+  Ink n;
+  for (int y = 0; y < 240; ++y)
+    for (int x = 0; x < 240; ++x)
+      if (cv.px[y * 240 + x] == kPromptInk) ++(y >= mid - 10 && y < mid + 10 ? n.strip : n.elsewhere);
+  return n;
+}
+int stripChanged(const paint::Canvas240& p, const paint::Canvas240& q, const Appearance& a) {
+  const int mid = a.at.y < Fx::zero() ? 120 + 76 : 120 - 76;
+  int n = 0;
+  for (int y = mid - 10; y < mid + 10; ++y)
+    for (int x = 0; x < 240; ++x) n += p.px[y * 240 + x] != q.px[y * 240 + x];
+  return n;
+}
+void dump(const char* name, const paint::Canvas240& cv) {
+  const char* dir = std::getenv("PAINT_DUMP");
+  if (!dir) return;
+  FILE* f = std::fopen((std::string(dir) + "/" + name + ".ppm").c_str(), "wb");
+  if (!f) return;
+  std::fprintf(f, "P6\n240 240\n255\n");
+  for (uint16_t px : cv.px) {
+    const int r = (px >> 11) & 31, g = (px >> 5) & 63, bl = px & 31;
+    const uint8_t rgb[3] = {uint8_t(r << 3 | r >> 2), uint8_t(g << 2 | g >> 4), uint8_t(bl << 3 | bl >> 2)};
+    std::fwrite(rgb, 1, 3, f);
+  }
+  std::fclose(f);
+}
+
+}  // namespace
+
+// The words: the owner's, said plain, in the strip's capitals.
+TEST(EggPrompt, ThePromptsAreTheOwnersWordsSaidPlain) {
+  Appearance a;
+  a.kind = Appearance::Kind::Egg;
+  a.shakeMe = true;   // as the Dish sets it for every egg
+  const char* p = paint::eggPrompt(a);
+  ASSERT_NE(p, nullptr);
+  const std::string s = p;
+  EXPECT_NE(s.find("SHAKE TO CRACK ME OPEN"), std::string::npos) << s;
+  EXPECT_NE(s.find("SHAKE ME!"), std::string::npos) << s;
+  EXPECT_NE(s.find("CRACK ME OPEN, SHAKE SHAKE"), std::string::npos) << s;
+  for (char c : s) EXPECT_FALSE(c >= 'a' && c <= 'z') << s;
+  EXPECT_EQ(s.find("SAYS"), std::string::npos) << s;
+  EXPECT_EQ(s.find("DISH"), std::string::npos) << s;
+  // Nothing to shake: no prompt.
+  for (Appearance::Kind k : {Appearance::Kind::Creature, Appearance::Kind::Remains, Appearance::Kind::Clutch}) {
+    a.kind = k;
+    EXPECT_EQ(paint::eggPrompt(a), nullptr);
+  }
+}
+
+// On the badge: from the moment he is an egg the strip goes round with the
+// prompts, through the shaking; the moment he hatches it stops.
+TEST(EggPrompt, TheEggMarqueesThePromptUntilItHatches) {
+  Badge b;
+  b.boot();
+  ASSERT_TRUE(b.egg());
+  Appearance a = b.dish->appearance();
+  ASSERT_NE(paint::eggPrompt(a), nullptr);
+  auto now = frame(a, 0), later = frame(a, 700);
+  dump("egg_prompt", *now);
+  const Ink ink = promptInk(*now, a);
+  EXPECT_GT(ink.strip, 60) << "the prompt is on the strip";
+  EXPECT_LT(ink.elsewhere, 20) << "and only there: never over the egg";
+  EXPECT_GT(stripChanged(*now, *later, a), 60) << "it goes round";
+
+  // Still there while a hand shakes it, cracks and all.
+  b.shake(300);
+  ASSERT_TRUE(b.egg());
+  a = b.dish->appearance();
+  EXPECT_GT(a.eggShaken, Fx::zero());
+  ASSERT_NE(paint::eggPrompt(a), nullptr);
+  auto shaking = frame(a, 1000);
+  dump("egg_prompt_shaking", *shaking);
+  EXPECT_GT(promptInk(*shaking, a).strip, 60);
+
+  // Hatched: gone, even while the shell flies off him.
+  b.shakeUntilHatched(500, 0);
+  ASSERT_FALSE(b.egg());
+  a = b.dish->appearance();
+  EXPECT_EQ(paint::eggPrompt(a), nullptr);
+  if (!a.thinking && !a.lobby && a.noFight == NoFight::None) {
+    auto out = frame(a, 2000);
+    dump("hatched", *out);
+    EXPECT_LT(promptInk(*out, a).strip, 10) << "the strip is quiet";
+  }
+}
+
+// A double press on an egg says why there is no fight in its place, then the
+// prompt comes back.
+TEST(EggPrompt, FightModesWordsTakeTheStripThenThePromptComesBack) {
+  Appearance a;
+  a.kind = Appearance::Kind::Egg;
+  a.shakeMe = true;   // as the Dish sets it for every egg
+  a.noFight = NoFight::Egg;
+  auto refused = frame(a, 0);
+  a.noFight = NoFight::None;
+  auto prompt = frame(a, 0);
+  EXPECT_GT(stripChanged(*refused, *prompt, a), 60) << "one line at a time";
+  EXPECT_GT(promptInk(*prompt, a).strip, 60);
 }
 
 // ---- every way a badge comes to hold an egg ---------------------------------------------------

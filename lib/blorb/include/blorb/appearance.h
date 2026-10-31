@@ -121,6 +121,9 @@ struct Appearance {
   // How hard a hand is shaking the egg right now, 0..1 (Egg::shaken): it
   // jiggles with it, and chips of shell jump off once it is coming apart.
   Fx eggShaken{};
+  // The egg waits for a hand to shake it open (the Dish sets it for every
+  // egg it holds): the marquee strip asks for it (paint::eggPrompt).
+  bool shakeMe = false;
   // He hatched this long ago, ms: the shell flying off him (paint). UINT16_MAX: not lately.
   static constexpr uint16_t kHatchBurstMs = 1200;
   uint16_t hatchedMs = UINT16_MAX;

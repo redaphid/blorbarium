@@ -1598,7 +1598,7 @@ const char* notReady(blorb::Decline d) {
 const char* noFightLine(blorb::NoFight n) {
   using N = blorb::NoFight;
   switch (n) {
-    case N::Egg: return "STILL AN EGG - HATCHING SOON";
+    case N::Egg: return "STILL AN EGG - SHAKE ME OPEN";
     case N::Nest: return "PICK AN EGG FIRST";
     case N::Remains: return "NOT NOW";
     case N::TooSleepy: return "ZZZ... TOO SLEEPY TO FIGHT";
@@ -1617,7 +1617,25 @@ void noFightStrip(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
   drawMarqueeAt(cv, strip, kFreeSans9pt7b, s, to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}), nowMs);
 }
 
+// The egg asking to be shaken open (owner, 2026-10-30), on the thought
+// line's strip, clear of the egg and its cracks: eggPrompt's ring, the
+// prompts one after another, going round for as long as he is an egg.
+void eggPromptStrip(Canvas240& cv, const blorb::Appearance& a, uint32_t nowMs) {
+  Marquee strip = kMarqueeStrip;
+  if (a.at.y < Fx::zero()) strip.dy = -strip.dy;
+  dimBand(cv, strip);
+  drawMarqueeAt(cv, strip, kFreeSans9pt7b, eggPrompt(a), to565({kMarqueeColour[0], kMarqueeColour[1], kMarqueeColour[2]}),
+                nowMs);
+}
+
 }  // namespace
+
+const char* eggPrompt(const blorb::Appearance& a) {
+  if (a.kind != Kind::Egg || !a.shakeMe || a.sealed) return nullptr;
+  // Just kept from a clutch: the chosen moment has the screen to itself (clutch.cpp).
+  if (a.clutch.chosen >= 0 && a.clutch.chosenMs != blorb::ClutchView::kNever) return nullptr;
+  return "SHAKE TO CRACK ME OPEN!   SHAKE ME!   CRACK ME OPEN, SHAKE SHAKE!   SHAKE ME OPEN!   ";
+}
 
 // Fight mode's line: looking for a fight (or connecting, or why not yet), the
 // time until it gives up, and how to stop. A friend heard who can never pair
@@ -1982,6 +2000,7 @@ void draw(const blorb::Appearance& a, const SpritePack& pack, Canvas240& cv, uin
   if (a.lobby) lobbyLine(cv, a, nowMs);
   else if (a.noFight != blorb::NoFight::None) noFightStrip(cv, a, nowMs);
   else if (a.thinking && a.line[0]) thoughtLine(cv, a, a.at.y < Fx::zero());
+  else if (eggPrompt(a)) eggPromptStrip(cv, a, nowMs);
   phaseEnd(Phase::Text);
   if (a.lobby && !a.lobbyConnecting) searchingRing(cv, nowMs);   // gone the moment a pair locks
   else if (a.hangCharge > Fx::zero()) hangRing(cv, a.hangCharge);   // a hang filling up, short of the lobby

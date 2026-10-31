@@ -667,7 +667,10 @@ Appearance Dish::appearance() const {
   if (dismissed_ && nowMs_ - dismissedAtMs_ < 1000) a.dismissedMs = uint16_t(nowMs_ - dismissedAtMs_);
   a.clutch = clutchShow_.view(nowMs_, a.eggs, a.eggCount);
   // A shaken egg jiggles with the hand, and the shell flies off as he hatches.
-  if (a.kind == Appearance::Kind::Egg) a.eggShaken = clamp01(Fx::ratio(detectors_.motion.hardSamples(), 2 * MotionDetector::kVigorSamples));
+  if (a.kind == Appearance::Kind::Egg) {
+    a.eggShaken = clamp01(Fx::ratio(detectors_.motion.hardSamples(), 2 * MotionDetector::kVigorSamples));
+    a.shakeMe = true;   // shaking hatches every egg, adopted or not
+  }
   if (hatched_ && nowMs_ - hatchedAtMs_ < Appearance::kHatchBurstMs) a.hatchedMs = uint16_t(nowMs_ - hatchedAtMs_);
   if (echo_ != BootAct::Nothing && tick_ - echoTick_ < kEchoTicks) a.echo = echo_, a.echoTicks = uint16_t(tick_ - echoTick_);
   const DishDuel::Refusal& r = duel_.refusal();
